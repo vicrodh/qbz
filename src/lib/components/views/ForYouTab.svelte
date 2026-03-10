@@ -1,6 +1,7 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
-  import { Music, User, Loader2, ArrowRight, Heart, Play, Share2 } from 'lucide-svelte';
+  import { Music, User, Loader2, ArrowRight, Heart, Play, Share2, UserPlus } from 'lucide-svelte';
   import { cachedSrc } from '$lib/actions/cachedImage';
   import { t } from '$lib/i18n';
   import HorizontalScrollRow from '../HorizontalScrollRow.svelte';
@@ -9,9 +10,10 @@
   import { formatDuration, formatQuality, getQobuzImage, getQobuzImageForSize } from '$lib/adapters/qobuzAdapters';
   import { resolveArtistImage } from '$lib/stores/customArtistImageStore';
   import { isBlacklisted as isArtistBlacklisted } from '$lib/stores/artistBlacklistStore';
+  import { toggleArtistFavorite } from '$lib/stores/artistFavoritesStore';
   import { setPlaybackContext } from '$lib/stores/playbackContextStore';
   import type { OfflineCacheStatus } from '$lib/stores/offlineCacheState';
-  import type { DisplayTrack, QobuzArtist } from '$lib/types';
+  import type { DisplayTrack, QobuzArtist, PageArtistResponse, PageArtistTrack } from '$lib/types';
 
   interface AlbumCardData {
     id: string;
@@ -128,13 +130,183 @@
     onNavigateTopQ,
   }: Props = $props();
 
+  interface SimilarArtistsPage {
+    items: QobuzArtist[];
+    total: number;
+    offset: number;
+    limit: number;
+  }
+
+  interface SuggestedArtist {
+    id: number;
+    name: string;
+    image?: string;
+    isFavoriting: boolean;
+  }
+
+  interface SpotlightData {
+    artistId: number;
+    artistName: string;
+    artistImage?: string;
+    topTracks: PageArtistTrack[];
+    category?: string;
+  }
+
   // For You-specific state
   let failedArtistImages = $state<Set<number>>(new Set());
   let radioLoading = $state<string | null>(null); // album ID currently creating radio
 
+  // Phase 2: Artists to Follow
+  let suggestedArtists = $state<SuggestedArtist[]>([]);
+  let loadingSuggestedArtists = $state(false);
+  let forYouLoaded = $state(false);
+
+  // Phase 2: Spotlight
+  let spotlightData = $state<SpotlightData | null>(null);
+  let loadingSpotlight = $state(false);
+  let spotlightRadioLoading = $state(false);
+
   // Radio Stations: use recent albums as radio seeds
   // Take first 8 recent albums as potential radio stations
   const radioAlbums = $derived(recentAlbums.slice(0, 8));
+
+  // Load Phase 2 sections when component mounts (once)
+  onMount(() => {
+    if (!forYouLoaded) {
+      forYouLoaded = true;
+      loadArtistsToFollow();
+      loadSpotlight();
+    }
+  });
+
+  async function loadArtistsToFollow() {
+    if (topArtists.length === 0) return;
+    loadingSuggestedArtists = true;
+
+    try {
+      // Get favorite artist IDs to filter out already-followed
+      const favoriteIds = new Set(
+        await invoke<number[]>('v2_get_cached_favorite_artists')
+      );
+
+      // Get similar artists for top 3 artists
+      const seedArtists = topArtists.slice(0, 3);
+      const allSimilar: QobuzArtist[] = [];
+
+      const results = await Promise.allSettled(
+        seedArtists.map(seed =>
+          invoke<SimilarArtistsPage>('v2_get_similar_artists', {
+            artistId: seed.id,
+            limit: 6,
+            offset: 0
+          })
+        )
+      );
+
+      for (const result of results) {
+        if (result.status === 'fulfilled') {
+          allSimilar.push(...result.value.items);
+        }
+      }
+
+      // Deduplicate, filter out favorites and seed artists
+      const seedIds = new Set(topArtists.map(a => a.id));
+      const seen = new Set<number>();
+      const filtered: SuggestedArtist[] = [];
+
+      for (const artist of allSimilar) {
+        if (seen.has(artist.id) || favoriteIds.has(artist.id) || seedIds.has(artist.id)) continue;
+        seen.add(artist.id);
+        filtered.push({
+          id: artist.id,
+          name: artist.name,
+          image: resolveArtistImage(artist.name, getQobuzImageForSize(artist.image, 'small')),
+          isFavoriting: false
+        });
+        if (filtered.length >= 10) break;
+      }
+
+      suggestedArtists = filtered;
+    } catch (err) {
+      console.error('Failed to load suggested artists:', err);
+    } finally {
+      loadingSuggestedArtists = false;
+    }
+  }
+
+  async function handleFollowArtist(artistId: number) {
+    const idx = suggestedArtists.findIndex(a => a.id === artistId);
+    if (idx === -1) return;
+    suggestedArtists[idx].isFavoriting = true;
+
+    try {
+      await toggleArtistFavorite(artistId);
+      // Remove from suggestions after favoriting
+      suggestedArtists = suggestedArtists.filter(a => a.id !== artistId);
+    } catch (err) {
+      console.error('Failed to follow artist:', err);
+      suggestedArtists[idx].isFavoriting = false;
+    }
+  }
+
+  async function loadSpotlight() {
+    if (topArtists.length === 0) return;
+    loadingSpotlight = true;
+
+    try {
+      // Pick a random artist from top artists
+      const randomIdx = Math.floor(Math.random() * Math.min(topArtists.length, 5));
+      const seed = topArtists[randomIdx];
+
+      const response = await invoke<PageArtistResponse>('v2_get_artist_page', {
+        artistId: seed.id
+      });
+
+      let artistImage: string | undefined;
+      if (response.images?.portrait) {
+        const { hash, format } = response.images.portrait;
+        artistImage = `https://static.qobuz.com/images/artists/covers/medium/${hash}.${format}`;
+      }
+      artistImage = resolveArtistImage(response.name.display, artistImage || '');
+
+      spotlightData = {
+        artistId: response.id,
+        artistName: response.name.display,
+        artistImage,
+        topTracks: (response.top_tracks || []).slice(0, 5),
+        category: response.artist_category
+      };
+    } catch (err) {
+      console.error('Failed to load spotlight:', err);
+    } finally {
+      loadingSpotlight = false;
+    }
+  }
+
+  async function handleSpotlightRadio() {
+    if (!spotlightData || spotlightRadioLoading) return;
+    spotlightRadioLoading = true;
+    try {
+      await invoke('v2_create_qobuz_artist_radio', {
+        artistId: spotlightData.artistId,
+        artistName: spotlightData.artistName
+      });
+    } catch (err) {
+      console.error('Failed to create spotlight radio:', err);
+    } finally {
+      spotlightRadioLoading = false;
+    }
+  }
+
+  function getSpotlightTrackQuality(track: PageArtistTrack): string {
+    const bitDepth = track.audio_info?.maximum_bit_depth;
+    const sampleRate = track.audio_info?.maximum_sampling_rate;
+    return formatQuality(
+      (bitDepth ?? 16) > 16,
+      bitDepth,
+      sampleRate
+    );
+  }
 
   async function handleRadioPlay(albumId: string, albumTitle: string) {
     if (radioLoading) return;
@@ -481,6 +653,188 @@
       <div class="spacer"></div>
     {/snippet}
   </HorizontalScrollRow>
+{/if}
+
+<!-- Artists to Follow -->
+{#if loadingSuggestedArtists}
+  <div class="skeleton-section">
+    <div class="skeleton-title"></div>
+    <div class="skeleton-row">
+      {#each { length: 5 } as _}<div class="skeleton-artist"></div>{/each}
+    </div>
+  </div>
+{:else if suggestedArtists.length > 0}
+  <div class="section">
+    <div class="section-header">
+      <h2 class="section-title">{$t('home.artistsToFollow')}</h2>
+      <p class="section-subtitle">{$t('home.artistsToFollowDesc')}</p>
+    </div>
+    <div class="artists-follow-row">
+      {#each suggestedArtists as artist (artist.id)}
+        <div class="follow-artist-card">
+          <button class="follow-artist-image-btn" onclick={() => onArtistClick?.(artist.id)}>
+            <div class="artist-image-wrapper">
+              <div class="artist-image-placeholder">
+                <User size={48} />
+              </div>
+              {#if !failedArtistImages.has(artist.id) && artist.image}
+                <img
+                  use:cachedSrc={artist.image}
+                  alt={artist.name}
+                  class="artist-image"
+                  loading="lazy"
+                  decoding="async"
+                  onerror={() => handleArtistImageError(artist.id)}
+                />
+              {/if}
+            </div>
+          </button>
+          <button class="follow-artist-name-btn" onclick={() => onArtistClick?.(artist.id)}>
+            <span class="follow-artist-name">{artist.name}</span>
+            <span class="follow-artist-label">{$t('home.spotlightArtist')}</span>
+          </button>
+          <button
+            class="follow-btn"
+            class:loading={artist.isFavoriting}
+            onclick={() => handleFollowArtist(artist.id)}
+            disabled={artist.isFavoriting}
+          >
+            {#if artist.isFavoriting}
+              <Loader2 size={14} class="spinner" />
+            {:else}
+              <UserPlus size={14} />
+            {/if}
+            <span>{$t('home.followArtist')}</span>
+          </button>
+        </div>
+      {/each}
+    </div>
+  </div>
+{/if}
+
+<!-- Spotlight -->
+{#if loadingSpotlight}
+  <div class="skeleton-section">
+    <div class="skeleton-title"></div>
+    <div class="skeleton-spotlight">
+      <div class="skeleton-spotlight-hero"></div>
+      <div class="skeleton-tracks">
+        {#each { length: 3 } as _}<div class="skeleton-track"></div>{/each}
+      </div>
+    </div>
+  </div>
+{:else if spotlightData}
+  <div class="section spotlight-section">
+    <div class="section-header">
+      <h2 class="section-title">{$t('home.spotlight')}</h2>
+      <p class="section-subtitle">{$t('home.spotlightDesc')}</p>
+    </div>
+
+    <!-- Spotlight Hero -->
+    <div class="spotlight-hero">
+      <button class="spotlight-hero-image-btn" onclick={() => onArtistClick?.(spotlightData!.artistId)}>
+        <div class="spotlight-image">
+          {#if spotlightData.artistImage}
+            <img
+              use:cachedSrc={spotlightData.artistImage}
+              alt={spotlightData.artistName}
+              class="spotlight-img"
+              loading="lazy"
+              decoding="async"
+            />
+          {:else}
+            <div class="spotlight-placeholder">
+              <User size={64} />
+            </div>
+          {/if}
+        </div>
+      </button>
+      <div class="spotlight-info">
+        {#if spotlightData.category}
+          <span class="spotlight-category">{$t('home.spotlightArtist')}</span>
+        {/if}
+        <h3 class="spotlight-name">{spotlightData.artistName}</h3>
+        <div class="spotlight-actions">
+          <button class="spotlight-action-btn spotlight-play" onclick={() => handleSpotlightRadio()} disabled={spotlightRadioLoading}>
+            {#if spotlightRadioLoading}
+              <Loader2 size={18} class="spinner" />
+            {:else}
+              <Play size={18} />
+            {/if}
+          </button>
+          <button class="spotlight-action-btn" onclick={() => onArtistClick?.(spotlightData!.artistId)}>
+            <User size={18} />
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Spotlight Top Tracks -->
+    {#if spotlightData.topTracks.length > 0}
+      <div class="spotlight-tracks">
+        <h4 class="spotlight-tracks-title">{$t('home.topTracks')}</h4>
+        <div class="track-list compact">
+          {#each spotlightData.topTracks as track, index (track.id)}
+            {@const isThisActiveTrack = activeTrackId === track.id}
+            <TrackRow
+              trackId={track.id}
+              number={index + 1}
+              title={track.title}
+              artist={track.artist?.name?.display || spotlightData.artistName}
+              album={track.album?.title}
+              duration={track.duration ? formatDuration(track.duration) : ''}
+              quality={getSpotlightTrackQuality(track)}
+              isPlaying={isPlaybackActive && isThisActiveTrack}
+              isActiveTrack={isThisActiveTrack}
+              compact={true}
+              onPlay={onTrackPlay ? () => onTrackPlay({
+                id: track.id,
+                title: track.title,
+                artist: track.artist?.name?.display || spotlightData!.artistName,
+                album: track.album?.title,
+                albumArt: track.album?.image?.small,
+                albumId: track.album?.id,
+                artistId: track.artist?.id || spotlightData!.artistId,
+                duration: track.duration ? formatDuration(track.duration) : '',
+                durationSeconds: track.duration ?? 0
+              }) : undefined}
+              menuActions={{
+                onGoToAlbum: track.album?.id && onTrackGoToAlbum ? () => onTrackGoToAlbum(track.album!.id) : undefined,
+                onGoToArtist: onArtistClick ? () => onArtistClick(track.artist?.id || spotlightData!.artistId) : undefined,
+                onShowInfo: onTrackShowInfo ? () => onTrackShowInfo(track.id) : undefined
+              }}
+            />
+          {/each}
+        </div>
+      </div>
+    {/if}
+
+    <!-- Spotlight Radio Card -->
+    <div class="spotlight-extras">
+      <button class="spotlight-radio-card" onclick={() => handleSpotlightRadio()}>
+        <div class="spotlight-radio-visual">
+          {#if spotlightData.artistImage}
+            <img
+              use:cachedSrc={spotlightData.artistImage}
+              alt={spotlightData.artistName}
+              class="spotlight-radio-img"
+              loading="lazy"
+              decoding="async"
+            />
+          {/if}
+          <img
+            src="/image_radio_shadows.png"
+            alt=""
+            class="radio-card-shadow"
+          />
+          <span class="spotlight-radio-name">{spotlightData.artistName}</span>
+          <span class="radio-card-label">{$t('home.radioLabel')}</span>
+        </div>
+        <div class="spotlight-radio-title">{spotlightData.artistName}</div>
+        <div class="spotlight-radio-subtitle">{$t('home.andMore')}</div>
+      </button>
+    </div>
+  </div>
 {/if}
 
 <!-- Empty state -->
@@ -941,5 +1295,275 @@
   @keyframes spin {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
+  }
+
+  /* ---- Artists to Follow ---- */
+  .artists-follow-row {
+    display: flex;
+    gap: 20px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+  }
+
+  .artists-follow-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  .follow-artist-card {
+    flex-shrink: 0;
+    width: 140px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .follow-artist-image-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+  }
+
+  .follow-artist-name-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    color: inherit;
+  }
+
+  .follow-artist-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 140px;
+  }
+
+  .follow-artist-label {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .follow-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border: 1px solid var(--border-primary);
+    border-radius: 20px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 150ms ease, border-color 150ms ease;
+    white-space: nowrap;
+  }
+
+  .follow-btn:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--text-muted);
+  }
+
+  .follow-btn.loading {
+    opacity: 0.6;
+    cursor: wait;
+  }
+
+  /* ---- Spotlight ---- */
+  .spotlight-section {
+    gap: 16px;
+  }
+
+  .spotlight-hero {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .spotlight-hero-image-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .spotlight-image {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    overflow: hidden;
+    background: var(--bg-secondary);
+  }
+
+  .spotlight-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .spotlight-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+  }
+
+  .spotlight-info {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .spotlight-category {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .spotlight-name {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+    line-height: 1.2;
+  }
+
+  .spotlight-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 4px;
+  }
+
+  .spotlight-action-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 1px solid var(--border-primary);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 150ms ease;
+  }
+
+  .spotlight-action-btn:hover {
+    background: var(--bg-tertiary);
+  }
+
+  .spotlight-action-btn.spotlight-play {
+    background: var(--text-primary);
+    color: var(--bg-primary);
+    border-color: var(--text-primary);
+  }
+
+  .spotlight-action-btn.spotlight-play:hover {
+    opacity: 0.9;
+  }
+
+  .spotlight-tracks {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .spotlight-tracks-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin: 0;
+  }
+
+  .spotlight-extras {
+    display: flex;
+    gap: 16px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .spotlight-extras::-webkit-scrollbar {
+    display: none;
+  }
+
+  .spotlight-radio-card {
+    flex-shrink: 0;
+    width: 180px;
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0;
+    text-align: left;
+    color: inherit;
+  }
+
+  .spotlight-radio-visual {
+    position: relative;
+    width: 180px;
+    height: 180px;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 8px;
+  }
+
+  .spotlight-radio-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .spotlight-radio-name {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #fff;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+    pointer-events: none;
+  }
+
+  .spotlight-radio-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .spotlight-radio-subtitle {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  /* ---- Skeleton additions ---- */
+  .skeleton-spotlight {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .skeleton-spotlight-hero {
+    width: 100%;
+    height: 120px;
+    border-radius: 8px;
+    background: var(--bg-tertiary);
   }
 </style>
