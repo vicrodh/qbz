@@ -27,7 +27,7 @@ impl Performer {
 /// # Examples
 ///
 /// ```
-/// use crate::api::performers::parse_performers;
+/// use qbz_nix_lib::api::performers::parse_performers;
 ///
 /// let performers = parse_performers("John Coltrane, Saxophone, MainArtist - McCoy Tyner, Piano");
 /// assert_eq!(performers.len(), 2);
