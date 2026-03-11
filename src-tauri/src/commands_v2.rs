@@ -10871,7 +10871,7 @@ pub async fn v2_factory_reset(
     offline: State<'_, crate::offline::OfflineState>,
     offline_cache: State<'_, crate::offline_cache::OfflineCacheState>,
     lyrics: State<'_, crate::lyrics::LyricsState>,
-    musicbrainz: State<'_, crate::musicbrainz::MusicBrainzSharedState>,
+    musicbrainz: State<'_, MusicBrainzSharedState>,
     listenbrainz: State<'_, crate::listenbrainz::ListenBrainzSharedState>,
     listenbrainz_v2: State<'_, ListenBrainzV2State>,
     musicbrainz_v2: State<'_, MusicBrainzV2State>,

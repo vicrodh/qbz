@@ -504,6 +504,19 @@ impl AudioBackend for PipeWireBackend {
 
         log::info!("[PipeWire Backend] Output stream created successfully at {}Hz", effective_rate);
 
+        // Re-apply clock.force-rate AFTER stream creation.
+        // When resuming after PipeWire dropped the stream during pause,
+        // the graph may have reverted to the DAC's default rate (e.g. 44100).
+        // The pre-stream force-rate can be ignored if no streams were active.
+        // Re-applying now that the stream exists forces PipeWire to reconfigure
+        // the graph at the correct rate.
+        if effective_rate != 44100 && effective_rate != 48000 {
+            let _ = Command::new("pw-metadata")
+                .args(["-n", "settings", "0", "clock.force-rate", &effective_rate.to_string()])
+                .output();
+            log::info!("[PipeWire Backend] Re-applied clock.force-rate={}Hz after stream creation", effective_rate);
+        }
+
         Ok(mixer_sink)
     }
 
