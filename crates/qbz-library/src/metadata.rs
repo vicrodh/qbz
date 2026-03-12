@@ -106,35 +106,52 @@ impl MetadataExtractor {
             .filter(|t| !t.is_empty())
             .collect();
 
-        for (i, token) in tokens.iter().enumerate() {
-            let has_digits = token.chars().any(|c| c.is_ascii_digit());
-            if (*token == "disc" || *token == "disk" || *token == "cd") && (has_digits || tokens.get(i + 1).map_or(false, |t| t.chars().all(|c| c.is_ascii_digit()))) {
-                return true;
-            }
-            if token.starts_with("disc") {
-                let rest = &token[4..];
-                if !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit()) {
-                    return true;
-                }
-            }
-            if token.starts_with("disk") {
-                let rest = &token[4..];
-                if !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit()) {
-                    return true;
-                }
-            }
-            if token.starts_with("cd") {
-                let rest = &token[2..];
-                if !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit()) {
-                    return true;
-                }
-            }
-            if *token == "bonus" && tokens.get(i + 1).map_or(false, |t| *t == "disc" || *t == "disk" || *t == "cd") {
-                return true;
-            }
+        // Must contain at least one disc-related token
+        let has_disc_token = tokens.iter().any(|token| {
+            *token == "disc" || *token == "disk" || *token == "cd"
+                || (token.starts_with("disc") && token[4..].chars().all(|c| c.is_ascii_digit()) && !token[4..].is_empty())
+                || (token.starts_with("disk") && token[4..].chars().all(|c| c.is_ascii_digit()) && !token[4..].is_empty())
+                || (token.starts_with("cd") && token[2..].chars().all(|c| c.is_ascii_digit()) && !token[2..].is_empty())
+        });
+
+        if !has_disc_token {
+            return false;
         }
 
-        false
+        // A genuine disc folder name consists ONLY of disc-related tokens,
+        // digits, and common modifiers like "bonus". If other words remain
+        // after filtering these out, the name is an album title that happens
+        // to contain "Disc 1" etc., not a standalone disc folder.
+        // Examples that ARE disc folders: "Disc 1", "CD2", "Bonus Disc", "disc01"
+        // Examples that are NOT: "Relaxation Disc1", "Now 75 - CD1",
+        //   "100 Popular Classics, Disc 1"
+        let has_extra_words = tokens.iter().any(|token| {
+            // Pure digits are fine
+            if token.chars().all(|c| c.is_ascii_digit()) {
+                return false;
+            }
+            // Disc keywords are fine
+            if *token == "disc" || *token == "disk" || *token == "cd" {
+                return false;
+            }
+            // Disc+number compounds are fine (disc1, cd02, etc.)
+            for prefix in &["disc", "disk", "cd"] {
+                if token.starts_with(prefix) {
+                    let rest = &token[prefix.len()..];
+                    if !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit()) {
+                        return false;
+                    }
+                }
+            }
+            // Common disc folder modifiers are fine
+            if matches!(*token, "bonus" | "extra" | "side" | "part") {
+                return false;
+            }
+            // Anything else means this is not a pure disc folder
+            true
+        });
+
+        !has_extra_words
     }
 
     fn disc_number_from_name(name: &str) -> Option<u32> {
@@ -834,5 +851,51 @@ mod tests {
             MetadataExtractor::infer_track_number_from_filename(Path::new("/music/00 - Intro.flac")),
             None
         );
+    }
+
+    #[test]
+    fn test_is_disc_folder_true() {
+        // Pure disc folders
+        assert!(MetadataExtractor::is_disc_folder("Disc 1"));
+        assert!(MetadataExtractor::is_disc_folder("disc 2"));
+        assert!(MetadataExtractor::is_disc_folder("Disc1"));
+        assert!(MetadataExtractor::is_disc_folder("disc01"));
+        assert!(MetadataExtractor::is_disc_folder("CD 1"));
+        assert!(MetadataExtractor::is_disc_folder("CD1"));
+        assert!(MetadataExtractor::is_disc_folder("cd2"));
+        assert!(MetadataExtractor::is_disc_folder("Disk 3"));
+        assert!(MetadataExtractor::is_disc_folder("Bonus Disc"));
+        assert!(MetadataExtractor::is_disc_folder("Bonus Disc 1"));
+        assert!(MetadataExtractor::is_disc_folder("Extra CD 2"));
+        assert!(MetadataExtractor::is_disc_folder("Side Disc 1"));
+    }
+
+    #[test]
+    fn test_is_disc_folder_false_album_names() {
+        // Album names containing disc/cd keywords — NOT disc folders (issue #147)
+        assert!(!MetadataExtractor::is_disc_folder("100 Popular Classics, Disc 1"));
+        assert!(!MetadataExtractor::is_disc_folder("100 Popular Classics_ Best Loved Works of the Great Composers, Disc 1"));
+        assert!(!MetadataExtractor::is_disc_folder("Relaxation Disc1"));
+        assert!(!MetadataExtractor::is_disc_folder("Now 75 - CD1"));
+        assert!(!MetadataExtractor::is_disc_folder("Match of the Day - The Album CD1"));
+        assert!(!MetadataExtractor::is_disc_folder("20 Blues Greats"));
+        assert!(!MetadataExtractor::is_disc_folder("The Beatles"));
+        assert!(!MetadataExtractor::is_disc_folder("Abbey Road"));
+    }
+
+    #[test]
+    fn test_album_root_dir_album_with_disc_in_name() {
+        // Issue #147: album names containing "Disc N" should NOT be treated as disc folders
+        let path = Path::new("/music/Various Artists/100 Popular Classics, Disc 1/01 - Track.flac");
+        let root = MetadataExtractor::album_root_dir(path).unwrap();
+        assert_eq!(root, Path::new("/music/Various Artists/100 Popular Classics, Disc 1"));
+
+        let path = Path::new("/music/Various Artists/Relaxation Disc1/01 - Track.flac");
+        let root = MetadataExtractor::album_root_dir(path).unwrap();
+        assert_eq!(root, Path::new("/music/Various Artists/Relaxation Disc1"));
+
+        let path = Path::new("/music/Various Artists/Now 75 - CD1/01 - Track.flac");
+        let root = MetadataExtractor::album_root_dir(path).unwrap();
+        assert_eq!(root, Path::new("/music/Various Artists/Now 75 - CD1"));
     }
 }
