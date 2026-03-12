@@ -1,0 +1,30 @@
+name: Redirect PRs to pre-release
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened]
+
+jobs:
+  redirect:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+
+            // Change base branch from main to pre-release
+            await github.rest.pulls.update({
+              ...context.repo,
+              pull_number: pr.number,
+              base: 'pre-release'
+            });
+
+            await github.rest.issues.createComment({
+              ...context.repo,
+              issue_number: pr.number,
+              body: `Base branch changed from \`main\` to \`pre-release\` automatically.\n\nIn this project, \`main\` is reserved for tagged releases. All PRs should target \`pre-release\` for integration testing first. Thanks!`
+            });
