@@ -42,19 +42,15 @@
   let isInitialized = false;
 
   // Linebed parameters
-  const NUM_BANDS = 190; // viz:spectral sends 190 bands
+  const NUM_BANDS = 512; // Backend sends 512 log-scaled bands (4096-point FFT)
   const NUM_LINES = 120; // Dense terrain (musicvid.org uses 200 with WebGL, 120 is Canvas 2D safe)
   const SMOOTHING = 0.03; // Temporal smoothing (musicvid: smoothingTimeConstant 0.03)
 
-  // Spectrum processing params — scaled for 190 bins (musicvid uses 1024 visual bins)
+  // Spectrum processing params — scaled for 512 bins
   // musicvid: 9 points / 1024 bins = 0.88% width per pass
-  // ours:     5 points / 190 bins  = 2.6% width per pass (comparable ratio)
-  const SMOOTHING_PASSES = 2;
-  const SMOOTHING_POINTS = 5;
-  // Power-law reduced: musicvid maps 647→1024 bins (upsampling) at 2.5.
-  // We map 190→190 (no upsampling) — 2.5 stretches 33 bass bins to 50% width
-  // creating a uniform plateau. 1.5 keeps more frequency diversity visible.
-  const SPECTRUM_POWER = 1.5;
+  // ours:     9 points / 512 bins  = 1.76% width per pass (close match)
+  const SMOOTHING_PASSES = 3;
+  const SMOOTHING_POINTS = 9;
 
   // Variable exponential transform (musicvid: Exponential settings)
   // Bass gets higher exponent = sharper peaks; treble gets lower = softer
@@ -105,21 +101,8 @@
     return result;
   }
 
-  // Power-law frequency redistribution (from musicvid.org transformToVisualBins)
-  // Remaps linear FFT bins so bass frequencies get more visual width.
-  // Without this, all energy clusters in the first ~30 bins (left side).
-  function transformToVisualBins(data: Float32Array): Float32Array {
-    const result = new Float32Array(NUM_BANDS);
-    for (let i = 0; i < NUM_BANDS; i++) {
-      const bin = Math.pow(i / NUM_BANDS, SPECTRUM_POWER) * (NUM_BANDS - 1);
-      const binFloor = Math.floor(bin);
-      const binCeil = Math.min(binFloor + 1, NUM_BANDS - 1);
-      const frac = bin - binFloor;
-      // Linear interpolation between neighboring bins for smoothness
-      result[i] = data[binFloor] * (1 - frac) + data[binCeil] * frac;
-    }
-    return result;
-  }
+  // NOTE: No power-law redistribution needed — backend already outputs
+  // log-scaled bands (20 Hz → 20 kHz, logarithmic spacing).
 
   // Normalize spectrum to [0, 1] range — required before exponential transform.
   // Without normalization, exponents 3-6 produce wrong results.
@@ -223,28 +206,28 @@
         const bytes = new Uint8Array(payload);
         const floats = new Float32Array(bytes.buffer);
         if (floats.length === NUM_BANDS) {
-          // Pipeline matches musicvid.org's SpectrumAnalyser transform chain:
-          // temporal → combineBins → normalize → tail → exponential → smoothing
+          // Pipeline: temporal → normalize → tail → exponential → smoothing
+          // (No power-law needed — backend bands are already log-scaled)
 
           // 1. Temporal smoothing (smoothingTimeConstant: 0.03)
           for (let i = 0; i < NUM_BANDS; i++) {
             smoothedData[i] = smoothedData[i] * SMOOTHING + floats[i] * (1 - SMOOTHING);
           }
 
-          // 2. Power-law frequency redistribution (combineBins / spectrumScale: 2.5)
-          const visualBins = transformToVisualBins(smoothedData);
+          // 2. Copy for processing (don't mutate smoothedData)
+          const processed = new Float32Array(smoothedData);
 
           // 3. Normalize to [0,1] (enableNormalizeTransform)
-          normalizeSpectrum(visualBins);
+          normalizeSpectrum(processed);
 
           // 4. Head margin (enableTailTransform — headMargin: 7)
-          applyTailTransform(visualBins);
+          applyTailTransform(processed);
 
           // 5. Variable exponential (enableExponentialTransform — exponents 3→6)
-          applyExponentialTransform(visualBins);
+          applyExponentialTransform(processed);
 
           // 6. Spatial smoothing (enableSmoothingTransform — 3 passes, 9 points)
-          const finalSpectrum = smoothSpectrum(visualBins);
+          const finalSpectrum = smoothSpectrum(processed);
 
           // Push processed snapshot into history every frame for fluid scrolling
           history[historyIndex].set(finalSpectrum);

@@ -44,10 +44,10 @@ impl SpectralAnalyzer {
         smoothing_factor: f32,
     ) -> Self {
         let clamped_fft = match fft_size {
-            512 | 1024 | 2048 => fft_size,
+            512 | 1024 | 2048 | 4096 | 8192 => fft_size,
             _ => 1024,
         };
-        let clamped_bands = num_bands.clamp(48, 192);
+        let clamped_bands = num_bands.clamp(48, 1024);
         let clamped_rate = update_rate_hz.clamp(20, 60);
         let clamped_smoothing = smoothing_factor.clamp(0.0, 0.98);
 
@@ -122,14 +122,15 @@ impl SpectralAnalyzer {
                 count += 1;
             }
 
-            // RMS energy + soft compression for a stable visual dynamic range.
+            // RMS energy with linear scaling — no power compression so the
+            // frontend's exponential transform has full dynamic range to work with.
             let rms = if count > 0 {
                 (sum / count as f32).sqrt()
             } else {
                 0.0
             };
-            let compressed = (rms * 18.0).powf(0.55).clamp(0.0, 1.0);
-            self.bands_raw[band_idx] = compressed;
+            let scaled = (rms * 25.0).clamp(0.0, 1.0);
+            self.bands_raw[band_idx] = scaled;
         }
 
         // Exponential smoothing with fast attack / slower release.

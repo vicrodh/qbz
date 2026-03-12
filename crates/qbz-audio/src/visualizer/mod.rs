@@ -22,8 +22,9 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 /// Number of frequency bins to send to frontend
 pub const NUM_BARS: usize = 16;
 
-/// FFT size (must be power of 2)
-pub const FFT_SIZE: usize = 1024;
+/// FFT size (must be power of 2). 4096 gives ~10.7 Hz bin resolution at 44.1 kHz,
+/// enabling detailed spectral analysis for visualizers like Linebed.
+pub const FFT_SIZE: usize = 4096;
 
 /// Target frames per second for visualization updates
 pub const TARGET_FPS: u64 = 30;
