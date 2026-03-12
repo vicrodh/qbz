@@ -901,6 +901,10 @@
       triggerSearchFocus();
       return;
     }
+    // Set homeTab when navigating to a specific home tab (Discover menu)
+    if (view === 'home' && (itemId === 'home' || itemId === 'editorPicks' || itemId === 'forYou')) {
+      homeTab = itemId;
+    }
     navTo(view as ViewType, itemId);
   }
 
