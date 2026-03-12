@@ -301,6 +301,8 @@ struct QconnectRemoteSyncState {
     last_renderer_queue_item_id: Option<u64>,
     last_renderer_next_queue_item_id: Option<u64>,
     last_renderer_track_id: Option<u64>,
+    last_renderer_next_track_id: Option<u64>,
+    last_renderer_playing_state: Option<i32>,
     last_applied_queue_version: Option<(u64, u64)>,
     /// Session topology — stored from session management events (types 81-87).
     session: QconnectSessionState,
@@ -374,6 +376,11 @@ impl QconnectEventSink for TauriQconnectEventSink {
                     .current_track
                     .as_ref()
                     .map(|item| item.track_id);
+                sync_state.last_renderer_next_track_id = renderer_state
+                    .next_track
+                    .as_ref()
+                    .map(|item| item.track_id);
+                sync_state.last_renderer_playing_state = renderer_state.playing_state;
             }
             QconnectAppEvent::QueueUpdated(queue_state) => {
                 if let Err(err) = materialize_remote_queue_to_corebridge(
@@ -953,13 +960,23 @@ async fn materialize_remote_queue_to_corebridge(
     sync_state: &Arc<Mutex<QconnectRemoteSyncState>>,
     queue_state: &QConnectQueueState,
 ) -> Result<(), String> {
-    let (renderer_queue_item_id, renderer_track_id, should_skip) = {
+    let (
+        renderer_queue_item_id,
+        renderer_track_id,
+        renderer_next_queue_item_id,
+        renderer_next_track_id,
+        renderer_playing_state,
+        should_skip,
+    ) = {
         let mut state = sync_state.lock().await;
         let queue_version = (queue_state.version.major, queue_state.version.minor);
         if state.last_applied_queue_version == Some(queue_version) {
             (
                 state.last_renderer_queue_item_id,
                 state.last_renderer_track_id,
+                state.last_renderer_next_queue_item_id,
+                state.last_renderer_next_track_id,
+                state.last_renderer_playing_state,
                 true,
             )
         } else {
@@ -967,6 +984,9 @@ async fn materialize_remote_queue_to_corebridge(
             (
                 state.last_renderer_queue_item_id,
                 state.last_renderer_track_id,
+                state.last_renderer_next_queue_item_id,
+                state.last_renderer_next_track_id,
+                state.last_renderer_playing_state,
                 false,
             )
         }
@@ -982,12 +1002,15 @@ async fn materialize_remote_queue_to_corebridge(
     }
 
     log::info!(
-        "[QConnect] materialize_remote_queue: version={}.{} items={} renderer_qid={:?} renderer_tid={:?}",
+        "[QConnect] materialize_remote_queue: version={}.{} items={} renderer_qid={:?} renderer_tid={:?} renderer_next_qid={:?} renderer_next_tid={:?} playing_state={:?}",
         queue_state.version.major,
         queue_state.version.minor,
         queue_state.queue_items.len(),
         renderer_queue_item_id,
-        renderer_track_id
+        renderer_track_id,
+        renderer_next_queue_item_id,
+        renderer_next_track_id,
+        renderer_playing_state
     );
 
     let bridge_guard = core_bridge.read().await;
@@ -1039,23 +1062,68 @@ async fn materialize_remote_queue_to_corebridge(
         return Err("remote queue materialization produced zero playable tracks".to_string());
     }
 
-    // Resolve start index from renderer state if known; otherwise preserve
-    // the current cursor position in CoreBridge (avoid resetting to 0 on
-    // every incremental queue update — that was causing the auto-scroll bug).
+    // Resolve start index from remote state first, then from the local playback
+    // cursor only if that track is still part of the remote queue.
+    let current_playback_track_id = match bridge.get_playback_state().track_id {
+        0 => None,
+        track_id => Some(track_id),
+    };
     let mut start_index =
         resolve_remote_start_index(queue_state, renderer_queue_item_id, renderer_track_id);
     if start_index.is_none() {
-        // Preserve current cursor position when no renderer track is known.
-        let (_, current_idx) = bridge.get_all_queue_tracks().await;
-        start_index = current_idx;
+        start_index = resolve_remote_start_index(queue_state, renderer_next_queue_item_id, renderer_next_track_id)
+            .map(|index| index.saturating_sub(1));
+    }
+    if start_index.is_none() {
+        start_index = current_playback_track_id.and_then(|track_id| {
+            queue_state
+                .queue_items
+                .iter()
+                .position(|item| item.track_id == track_id)
+        });
+    }
+    if start_index.is_none() && !queue_tracks.is_empty() {
+        start_index = Some(0);
     }
     log::info!(
-        "[QConnect] materialize_remote_queue: setting queue with {} tracks, start_index={:?}",
+        "[QConnect] materialize_remote_queue: setting queue with {} tracks, start_index={:?}, local_track_id={:?}",
         queue_tracks.len(),
-        start_index
+        start_index,
+        current_playback_track_id
     );
     bridge.set_queue(queue_tracks, start_index).await;
     bridge.set_shuffle(queue_state.shuffle_mode).await;
+
+    let local_track_missing_from_remote = current_playback_track_id
+        .map(|track_id| {
+            !queue_state
+                .queue_items
+                .iter()
+                .any(|item| item.track_id == track_id)
+        })
+        .unwrap_or(true);
+
+    if let Some(index) = start_index {
+        if local_track_missing_from_remote {
+            log::info!(
+                "[QConnect] materialize_remote_queue: aligning queue cursor to remote index {}",
+                index
+            );
+            let _ = bridge.play_index(index).await;
+        }
+    }
+
+    if current_playback_track_id.is_some()
+        && current_playback_track_id != renderer_track_id
+        && local_track_missing_from_remote
+        && matches!(renderer_playing_state, Some(PLAYING_STATE_STOPPED | PLAYING_STATE_UNKNOWN))
+    {
+        log::info!(
+            "[QConnect] materialize_remote_queue: stopping stale local playback track {:?} after remote queue replacement",
+            current_playback_track_id
+        );
+        let _ = bridge.stop();
+    }
 
     Ok(())
 }

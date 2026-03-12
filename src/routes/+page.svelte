@@ -864,6 +864,7 @@
   const showQconnectDevDiagnostics = import.meta.env.DEV;
   const QCONNECT_DIAGNOSTIC_LOG_LIMIT = 200;
   let qconnectSessionPersistenceSkipLogged = false;
+  let lastQconnectReportSkipSignature = '';
 
   // Playlist Modal State (from uiStore subscription)
   let isPlaylistModalOpen = $state(false);
@@ -980,6 +981,36 @@
     payload: Record<string, unknown>
   ): void {
     pushQobuzConnectDiagnostic(`qconnect:report_playback_state:${source}`, 'info', payload);
+  }
+
+  function shouldSkipQconnectPlaybackReport(currentTrackId: number | null | undefined): boolean {
+    if (currentTrackId == null || !qobuzConnectQueueSnapshot) {
+      lastQconnectReportSkipSignature = '';
+      return false;
+    }
+
+    const remoteQueueContainsTrack =
+      qobuzConnectQueueSnapshot.queue_items.some((item) => item.track_id === currentTrackId) ||
+      qobuzConnectQueueSnapshot.autoplay_items.some((item) => item.track_id === currentTrackId);
+
+    if (remoteQueueContainsTrack || qobuzConnectRendererSnapshot?.current_track?.track_id != null) {
+      lastQconnectReportSkipSignature = '';
+      return false;
+    }
+
+    const skipSignature = `${currentTrackId}:${qobuzConnectQueueSnapshot.version?.major ?? 0}.${qobuzConnectQueueSnapshot.version?.minor ?? 0}`;
+    if (lastQconnectReportSkipSignature !== skipSignature) {
+      lastQconnectReportSkipSignature = skipSignature;
+      pushQobuzConnectDiagnostic('qconnect:report_playback_state:skip', 'warn', {
+        reason: 'local_track_not_in_remote_queue',
+        current_track_id: currentTrackId,
+        remote_queue_preview: qobuzConnectQueueSnapshot.queue_items.slice(0, 6),
+        renderer_current: qobuzConnectRendererSnapshot?.current_track ?? null,
+        renderer_next: qobuzConnectRendererSnapshot?.next_track ?? null
+      });
+    }
+
+    return true;
   }
 
   function qobuzConnectAdmissionReasonKey(reason: string): string {
@@ -3593,6 +3624,9 @@
     // Only fires when connected and playing. queue_item_ids auto-filled by backend.
     const qconnectPositionReportInterval = setInterval(() => {
       if (isQobuzConnectConnected && isPlaying && currentTrack) {
+        if (shouldSkipQconnectPlaybackReport(currentTrack?.id ?? null)) {
+          return;
+        }
         // QConnect protocol uses milliseconds for position/duration.
         const positionMs = Math.round((currentTime || 0) * 1000);
         const durationMs = Math.round((duration || 0) * 1000);
@@ -3897,6 +3931,9 @@
         const durationMs = Math.round((playerState.duration || 0) * 1000);
         // Report immediately on play/pause change or track change
         if (wasPlaying !== isPlaying || trackChanged) {
+          if (shouldSkipQconnectPlaybackReport(currentTrack?.id ?? null)) {
+            return;
+          }
           const payload = {
             playingState: playingState,
             currentPosition: positionMs,

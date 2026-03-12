@@ -517,6 +517,11 @@ export async function loadQconnectQueue(
   const qconnectConnected = await isQconnectConnected();
   if (!qconnectConnected) {
     console.warn('[QConnect/LoadQueue] skipped: transport not connected');
+    await emitQconnectDiagnostic('qconnect:queue_load_skipped', 'warn', {
+      reason: 'transport_not_connected',
+      track_count: trackIds.length,
+      start_index: startIndex
+    });
     return false;
   }
 
@@ -526,6 +531,11 @@ export async function loadQconnectQueue(
 
   if (!admission?.accepted) {
     console.warn('[QConnect/LoadQueue] admission rejected: reason=%s', admission?.reason);
+    await emitQconnectDiagnostic('qconnect:queue_load_rejected', 'warn', {
+      reason: admission?.reason ?? 'unknown',
+      track_count: trackIds.length,
+      start_index: startIndex
+    });
     return false;
   }
 
@@ -538,12 +548,31 @@ export async function loadQconnectQueue(
       autoplay_reset: true,
       autoplay_loading: true
     };
+    await emitQconnectDiagnostic('qconnect:queue_load_tracks', 'info', {
+      track_count: trackIds.length,
+      start_index: startIndex,
+      shuffle_mode: shuffleMode,
+      preview_track_ids: trackIds.slice(0, 8),
+      payload
+    });
     console.log('[QConnect/LoadQueue] sending queue_load_tracks');
     await sendQconnectQueueCommandWithAdmission('queue_load_tracks', origin, payload);
     console.log('[QConnect/LoadQueue] SUCCESS');
+    await emitQconnectDiagnostic('qconnect:queue_load_sent', 'info', {
+      track_count: trackIds.length,
+      start_index: startIndex,
+      shuffle_mode: shuffleMode,
+      preview_track_ids: trackIds.slice(0, 8)
+    });
     return true;
   } catch (err) {
     console.error('[QConnect/LoadQueue] FAILED:', err);
+    await emitQconnectDiagnostic('qconnect:queue_load_failed', 'error', {
+      track_count: trackIds.length,
+      start_index: startIndex,
+      shuffle_mode: shuffleMode,
+      error: String(err)
+    });
     return false;
   }
 }
