@@ -20,6 +20,12 @@
     format?: string;
   }
 
+  interface CameraVector {
+    x: number;
+    y: number;
+    z: number;
+  }
+
   let {
     enabled = true,
     artwork = '',
@@ -41,112 +47,166 @@
   let unlisten: UnlistenFn | null = null;
   let isInitialized = false;
 
-  // Linebed parameters
-  const NUM_BANDS = 512; // Backend sends 512 log-scaled bands (4096-point FFT)
-  // Only DISPLAY the first 350 bands (~3.5 kHz). musicvid's spectrumEnd=651
-  // at fftSize=16384 only goes to ~1752 Hz. Bands 350-512 (4-20 kHz) are
-  // treble with almost no energy — displaying them wastes the right half.
-  const DISPLAY_BANDS = 350;
-  const NUM_LINES = 200; // Dense lines — user wants more even if it's a rectangle
-  const SMOOTHING = 0.03; // Temporal smoothing (musicvid: smoothingTimeConstant 0.03)
-
-  // Spectrum processing params — scaled for 512 bins
-  // musicvid: 9 points / 1024 bins = 0.88% width per pass
-  // ours:     9 points / 512 bins  = 1.76% width per pass (close match)
-  const SMOOTHING_PASSES = 3;
-  const SMOOTHING_POINTS = 9;
-
-  // Variable exponential transform — reduced from musicvid's 6/3 because
-  // with per-frame normalization, high exponents crush everything except
-  // the loudest bin. 3.5/1.8 preserves moderate peaks across the spectrum.
-  const SPECTRUM_MAX_EXPONENT = 3.5; // Applied to bass (bin 0)
-  const SPECTRUM_MIN_EXPONENT = 1.8; // Applied to treble (last bin)
-  const SPECTRUM_EXPONENT_SCALE = 2; // Power curve for exponent interpolation
-
-  // Head margin (musicvid: Smoothing > headMargin/tailMargin settings)
+  const INPUT_BANDS = 512;
+  const VISUAL_BANDS = 256;
+  const NUM_LINES = 200;
+  const SMOOTHING = 0.03;
+  const SPECTRUM_HEIGHT = 770;
+  const SPECTRUM_START = 4;
+  const SPECTRUM_END = 460;
+  const SPECTRUM_SCALE = 1.32;
+  const SMOOTHING_PASSES = 1;
+  const SMOOTHING_POINTS = 3;
+  const SPECTRUM_MAX_EXPONENT = 1.35;
+  const SPECTRUM_MIN_EXPONENT = 0.9;
+  const SPECTRUM_EXPONENT_SCALE = 2;
   const HEAD_MARGIN = 7;
+  const TAIL_MARGIN = 0;
   const MIN_MARGIN_WEIGHT = 0.7;
   const MARGIN_DECAY = 1.6;
+  const HEAD_MARGIN_SLOPE = 0.013334120966221101;
+  const TAIL_MARGIN_SLOPE = 1;
+  const VISUAL_HEIGHT_CAP = 84;
+  const HEIGHT_SOFT_CLIP = 3.25;
+  const BIN_AVERAGE_WEIGHT = 0.52;
+  const BIN_PEAK_WEIGHT = 0.48;
 
-  // Ring buffer of spectrum snapshots
+  const LINE_LENGTH = 9;
+  const LINE_SPACING = 20;
+  const WORLD_AMPLITUDE = 2.4;
+  const CAMERA_FOV_DEG = 45;
+  const CAMERA_POSITION: CameraVector = { x: 26.1, y: 1738.6, z: 868.8 };
+  const CAMERA_ROTATION: CameraVector = { x: -0.6543, y: 0.0156, z: 0.012 };
+  const CAMERA_NEAR = 80;
+  const LINE_OPACITY = 0.78;
+  const LINE_WIDTH = 0.82;
+  const PLANE_HALF_WIDTH = ((VISUAL_BANDS - 1) * LINE_LENGTH) / 2;
+  const PLANE_HALF_DEPTH = ((NUM_LINES - 1) * LINE_SPACING) / 2;
+
   const history: Float32Array[] = [];
   for (let i = 0; i < NUM_LINES; i++) {
-    history.push(new Float32Array(NUM_BANDS));
+    history.push(new Float32Array(VISUAL_BANDS));
   }
   let historyIndex = 0;
 
-  // Current smoothed spectrum
-  const smoothedData = new Float32Array(NUM_BANDS);
-
+  const smoothedData = new Float32Array(INPUT_BANDS);
   let lastRenderTime = 0;
-  const FRAME_INTERVAL = getPanelFrameInterval('linebed'); // Default 60fps
+  const FRAME_INTERVAL = getPanelFrameInterval('linebed');
 
-  // Multi-pass moving average smoothing (from musicvid.org AnalyseFunctions.js)
   function smoothSpectrum(data: Float32Array): Float32Array {
     const result = new Float32Array(data.length);
     result.set(data);
     const halfPoints = Math.floor(SMOOTHING_POINTS / 2);
 
     for (let pass = 0; pass < SMOOTHING_PASSES; pass++) {
-      const prev = new Float32Array(result);
+      const previous = new Float32Array(result);
       for (let i = 0; i < result.length; i++) {
         let sum = 0;
         let count = 0;
         for (let j = -halfPoints; j <= halfPoints; j++) {
           const idx = i + j;
-          if (idx >= 0 && idx < prev.length) {
-            sum += prev[idx];
+          if (idx >= 0 && idx < previous.length) {
+            sum += previous[idx];
             count++;
           }
         }
-        result[i] = sum / count;
+        result[i] = count > 0 ? sum / count : 0;
       }
     }
+
     return result;
   }
 
-  // NOTE: No power-law redistribution needed — backend already outputs
-  // log-scaled bands (20 Hz → 20 kHz, logarithmic spacing).
+  function transformToVisualBins(data: Float32Array): Float32Array {
+    const start = Math.max(0, SPECTRUM_START);
+    const end = Math.min(data.length - 1, SPECTRUM_END);
+    const transformed = new Float32Array(VISUAL_BANDS);
 
-  // Normalize spectrum to [0, 1] range — required before exponential transform.
-  // Without normalization, exponents 3-6 produce wrong results.
-  function normalizeSpectrum(data: Float32Array): void {
-    let max = 0;
-    for (let i = 0; i < data.length; i++) {
-      if (data[i] > max) max = data[i];
+    for (let i = 0; i < VISUAL_BANDS; i++) {
+      const segmentStartFraction = i / VISUAL_BANDS;
+      const segmentEndFraction = (i + 1) / VISUAL_BANDS;
+      const scaledStart = Math.pow(segmentStartFraction, SPECTRUM_SCALE);
+      const scaledEnd = Math.pow(segmentEndFraction, SPECTRUM_SCALE);
+      const segmentStart = start + (end - start) * scaledStart;
+      const segmentEnd = start + (end - start) * scaledEnd;
+      const lower = Math.max(start, Math.floor(segmentStart));
+      const upper = Math.min(end, Math.ceil(segmentEnd));
+      let sum = 0;
+      let peak = 0;
+      let count = 0;
+
+      for (let bin = lower; bin <= upper; bin++) {
+        const value = data[bin] ?? 0;
+        sum += value;
+        peak = Math.max(peak, value);
+        count++;
+      }
+
+      const average = count > 0 ? sum / count : 0;
+      transformed[i] = (average * BIN_AVERAGE_WEIGHT + peak * BIN_PEAK_WEIGHT) * SPECTRUM_HEIGHT;
     }
-    if (max > 0) {
-      for (let i = 0; i < data.length; i++) {
-        data[i] /= max;
+
+    return transformed;
+  }
+
+  function applyAverageTransform(data: Float32Array): Float32Array {
+    const firstPass = new Float32Array(data.length);
+    const secondPass = new Float32Array(data.length);
+
+    for (let i = 0; i < data.length; i++) {
+      const previous = i > 0 ? data[i - 1] : data[i];
+      const current = data[i];
+      const next = i < data.length - 1 ? data[i + 1] : data[i];
+
+      if (i === 0 || i === data.length - 1) {
+        firstPass[i] = i === 0 ? current : (previous + current) / 2;
+      } else if (current >= previous && current >= next) {
+        firstPass[i] = current;
+      } else {
+        firstPass[i] = (current + Math.max(previous, next)) / 2;
+      }
+    }
+
+    for (let i = 0; i < firstPass.length; i++) {
+      const previous = i > 0 ? firstPass[i - 1] : firstPass[i];
+      const current = firstPass[i];
+      const next = i < firstPass.length - 1 ? firstPass[i + 1] : firstPass[i];
+
+      if (i === 0 || i === firstPass.length - 1) {
+        secondPass[i] = i === 0 ? current : (previous + current) / 2;
+      } else if (current >= previous && current >= next) {
+        secondPass[i] = current;
+      } else {
+        secondPass[i] = current / 2 + Math.max(previous, next) / 3 + Math.min(previous, next) / 6;
+      }
+    }
+
+    return secondPass;
+  }
+
+  function applyTailTransform(data: Float32Array): void {
+    for (let i = 0; i < data.length; i++) {
+      if (i < HEAD_MARGIN) {
+        data[i] *= HEAD_MARGIN_SLOPE * Math.pow(i + 1, MARGIN_DECAY) + MIN_MARGIN_WEIGHT;
+      } else if (data.length - i <= TAIL_MARGIN) {
+        data[i] *= TAIL_MARGIN_SLOPE * Math.pow(data.length - i, MARGIN_DECAY) + MIN_MARGIN_WEIGHT;
       }
     }
   }
 
-  // Head margin transform (musicvid: tailTransform with headMargin settings).
-  // Reduces the first N bins with a decay curve to avoid harsh bass edge.
-  function applyTailTransform(data: Float32Array): void {
-    for (let i = 0; i < HEAD_MARGIN; i++) {
-      const frac = i / HEAD_MARGIN;
-      const weight = MIN_MARGIN_WEIGHT + (1 - MIN_MARGIN_WEIGHT) * Math.pow(frac, 1 / MARGIN_DECAY);
-      data[i] *= weight;
-    }
-  }
-
-  // Variable exponential transform (musicvid: exponentialTransform).
-  // Bass bins get exponent 6 (very sharp — only peaks survive),
-  // treble bins get exponent 3 (still sharp but less aggressive).
-  // This is what creates "many peaks" instead of "fat mountains".
   function applyExponentialTransform(data: Float32Array): void {
     for (let i = 0; i < data.length; i++) {
-      const fraction = i / data.length;
+      const fraction = i / Math.max(1, data.length - 1);
       const exponent = SPECTRUM_MAX_EXPONENT +
         (SPECTRUM_MIN_EXPONENT - SPECTRUM_MAX_EXPONENT) *
         Math.pow(fraction, SPECTRUM_EXPONENT_SCALE);
-      data[i] = Math.pow(data[i], exponent);
+      const normalized = Math.max(data[i] / SPECTRUM_HEIGHT, 0);
+      const shaped = Math.pow(normalized, exponent);
+      const compressed = 1 - Math.exp(-shaped * HEIGHT_SOFT_CLIP);
+      data[i] = Math.max(Math.min(compressed * VISUAL_HEIGHT_CAP, VISUAL_HEIGHT_CAP), 0.1);
     }
   }
 
-  // Colors from artwork
   let lineColor = $state({ r: 255, g: 255, b: 255 });
 
   function extractColors(imgSrc: string) {
@@ -166,16 +226,17 @@
 
       const colors: { r: number; g: number; b: number; lum: number }[] = [];
       for (let i = 0; i < data.length; i += 4) {
-        const r = data[i], g = data[i + 1], b = data[i + 2];
-        const lum = (r + g + b) / 3;
+        const red = data[i];
+        const green = data[i + 1];
+        const blue = data[i + 2];
+        const lum = (red + green + blue) / 3;
         if (lum > 100 && lum < 240) {
-          colors.push({ r, g, b, lum });
+          colors.push({ r: red, g: green, b: blue, lum });
         }
       }
 
       if (colors.length > 0) {
-        // Pick the brightest suitable color
-        colors.sort((a, b) => b.lum - a.lum);
+        colors.sort((colorA, colorB) => colorB.lum - colorA.lum);
         lineColor = { r: colors[0].r, g: colors[0].g, b: colors[0].b };
       } else {
         lineColor = { r: 255, g: 255, b: 255 };
@@ -200,84 +261,33 @@
 
     try {
       await invoke('v2_set_visualizer_enabled', { enabled: true });
-    } catch (e) {
-      console.error('[Linebed] Failed to enable backend:', e);
+    } catch (error) {
+      console.error('[Linebed] Failed to enable backend:', error);
     }
 
     unlisten = await listen<number[]>('viz:spectral', (event) => {
       const payload = event.payload;
-      if (Array.isArray(payload)) {
-        const bytes = new Uint8Array(payload);
-        const floats = new Float32Array(bytes.buffer);
-        if (floats.length === NUM_BANDS) {
-          // Pipeline: temporal → normalize → tail → exponential → smoothing
-          // (No power-law needed — backend bands are already log-scaled)
+      if (!Array.isArray(payload)) return;
 
-          // 1. Temporal smoothing (smoothingTimeConstant: 0.03)
-          for (let i = 0; i < NUM_BANDS; i++) {
-            smoothedData[i] = smoothedData[i] * SMOOTHING + floats[i] * (1 - SMOOTHING);
-          }
+      const bytes = new Uint8Array(payload);
+      const floats = new Float32Array(bytes.buffer);
+      if (floats.length !== INPUT_BANDS) return;
 
-          // 2. Copy for processing (don't mutate smoothedData)
-          const processed = new Float32Array(smoothedData);
-
-          // 3. Normalize to [0,1] (enableNormalizeTransform)
-          normalizeSpectrum(processed);
-
-          // 4. Head margin (enableTailTransform — headMargin: 7)
-          applyTailTransform(processed);
-
-          // 5. Variable exponential (enableExponentialTransform — exponents 3→6)
-          applyExponentialTransform(processed);
-
-          // 6. Spatial smoothing (enableSmoothingTransform — 3 passes, 9 points)
-          const finalSpectrum = smoothSpectrum(processed);
-
-          // Push processed snapshot into history every frame for fluid scrolling
-          history[historyIndex].set(finalSpectrum);
-          historyIndex = (historyIndex + 1) % NUM_LINES;
-        }
+      for (let i = 0; i < INPUT_BANDS; i++) {
+        smoothedData[i] = smoothedData[i] * SMOOTHING + floats[i] * (1 - SMOOTHING);
       }
+
+      let processed = transformToVisualBins(smoothedData);
+      processed = applyAverageTransform(processed);
+      applyTailTransform(processed);
+      processed = smoothSpectrum(processed);
+      applyExponentialTransform(processed);
+
+      history[historyIndex].set(processed);
+      historyIndex = (historyIndex + 1) % NUM_LINES;
     });
 
     render(0);
-  }
-
-  // Build a smooth curve path through spectrum points
-  function buildSpectrumPath(
-    spectrum: Float32Array,
-    lineLeft: number,
-    currentLineWidth: number,
-    baseY: number,
-    maxAmplitude: number
-  ) {
-    if (!ctx) return;
-
-    ctx.moveTo(lineLeft, baseY);
-
-    for (let p = 0; p < DISPLAY_BANDS; p++) {
-      const xFraction = p / (DISPLAY_BANDS - 1);
-      const xPos = lineLeft + xFraction * currentLineWidth;
-      const amp = spectrum[p];
-      const yPos = baseY - amp * maxAmplitude;
-
-      if (p === 0) {
-        ctx.lineTo(xPos, yPos);
-      } else {
-        // Quadratic curve smoothing between consecutive points
-        const prevFraction = (p - 1) / (DISPLAY_BANDS - 1);
-        const prevX = lineLeft + prevFraction * currentLineWidth;
-        const prevY = baseY - spectrum[p - 1] * maxAmplitude;
-        const cpX = (prevX + xPos) / 2;
-        const cpY = (prevY + yPos) / 2;
-        ctx.quadraticCurveTo(prevX, prevY, cpX, cpY);
-      }
-    }
-
-    // Final point
-    const lastX = lineLeft + currentLineWidth;
-    const lastY = baseY - spectrum[DISPLAY_BANDS - 1] * maxAmplitude;
-    ctx.lineTo(lastX, lastY);
   }
 
   function render(timestamp: number = 0) {
@@ -302,59 +312,68 @@
     if (canvasRef.width !== targetWidth || canvasRef.height !== targetHeight) {
       canvasRef.width = targetWidth;
       canvasRef.height = targetHeight;
-      ctx.scale(dpr, dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     }
 
-    // Clear
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, width, height);
 
-    // Perspective: high viewpoint looking down at a TALL rectangle.
-    // Large vertical spread (lines go from near-top to near-bottom),
-    // contained width. Like a portrait-oriented table seen from above.
+    const focalLength = (height * 0.5) / Math.tan((CAMERA_FOV_DEG * Math.PI) / 360);
+    const cosZ = Math.cos(-CAMERA_ROTATION.z);
+    const sinZ = Math.sin(-CAMERA_ROTATION.z);
+    const cosY = Math.cos(-CAMERA_ROTATION.y);
+    const sinY = Math.sin(-CAMERA_ROTATION.y);
+    const cosX = Math.cos(-CAMERA_ROTATION.x);
+    const sinX = Math.sin(-CAMERA_ROTATION.x);
 
-    // Back line (far, top of canvas) — narrower for more trapezoid effect
-    const backY = height * 0.12;
-    const backLineWidth = width * 0.32;
-
-    // Front line (near, bottom of canvas) — wider base
-    const frontY = height * 0.88;
-    const frontLineWidth = width * 0.88;
-
-    // Draw lines from back to front (painter's algorithm).
     for (let lineIdx = 0; lineIdx < NUM_LINES; lineIdx++) {
-      const bufIdx = (historyIndex - 1 - lineIdx + NUM_LINES * 2) % NUM_LINES;
-      const spectrum = history[bufIdx];
+      const bufferIndex = (historyIndex - 1 - lineIdx + NUM_LINES * 2) % NUM_LINES;
+      const spectrum = history[bufferIndex];
+      const depthFactor = lineIdx / Math.max(1, NUM_LINES - 1);
+      const worldZ = -PLANE_HALF_DEPTH + depthFactor * (PLANE_HALF_DEPTH * 2);
+      const opacity = LINE_OPACITY;
+      const lineWeight = LINE_WIDTH;
 
-      // Moderate depth compression
-      const rawFactor = lineIdx / (NUM_LINES - 1);
-      const depthFactor = Math.pow(rawFactor, 1.4);
-
-      const baseY = backY + (frontY - backY) * depthFactor;
-      const currentLineWidth = backLineWidth + (frontLineWidth - backLineWidth) * depthFactor;
-      const lineLeft = (width - currentLineWidth) / 2;
-
-      // Modest peak height
-      const amplitudeScale = 0.20 + depthFactor * 0.80;
-      const maxAmplitude = height * 0.18 * amplitudeScale;
-
-      // All lines clearly visible
-      const opacity = 0.50 + depthFactor * 0.50;
-
-      // Occlusion pass: fill below the spectrum line with black
       ctx.beginPath();
-      buildSpectrumPath(spectrum, lineLeft, currentLineWidth, baseY, maxAmplitude);
-      ctx.lineTo(lineLeft + currentLineWidth, baseY + 3);
-      ctx.lineTo(lineLeft, baseY + 3);
-      ctx.closePath();
-      ctx.fillStyle = '#000000';
-      ctx.fill();
+      let hasVisiblePoint = false;
 
-      // Stroke pass: draw the spectrum line on top
-      ctx.beginPath();
-      buildSpectrumPath(spectrum, lineLeft, currentLineWidth, baseY, maxAmplitude);
+      for (let bandIndex = 0; bandIndex < VISUAL_BANDS; bandIndex++) {
+        const worldX = bandIndex * LINE_LENGTH - PLANE_HALF_WIDTH;
+        const worldY = spectrum[bandIndex] * WORLD_AMPLITUDE;
 
-      const lineWeight = 0.4 + depthFactor * 0.4;
+        const translatedX = worldX - CAMERA_POSITION.x;
+        const translatedY = worldY - CAMERA_POSITION.y;
+        const translatedZ = worldZ - CAMERA_POSITION.z;
+
+        const rotatedZX = translatedX * cosZ - translatedY * sinZ;
+        const rotatedZY = translatedX * sinZ + translatedY * cosZ;
+        const rotatedZZ = translatedZ;
+
+        const rotatedYX = rotatedZX * cosY + rotatedZZ * sinY;
+        const rotatedYY = rotatedZY;
+        const rotatedYZ = -rotatedZX * sinY + rotatedZZ * cosY;
+
+        const rotatedXX = rotatedYX;
+        const rotatedXY = rotatedYY * cosX - rotatedYZ * sinX;
+        const rotatedXZ = rotatedYY * sinX + rotatedYZ * cosX;
+
+        const depth = -rotatedXZ;
+        if (depth <= CAMERA_NEAR) {
+          hasVisiblePoint = false;
+          continue;
+        }
+
+        const screenX = width * 0.5 + (rotatedXX * focalLength) / depth;
+        const screenY = height * 0.5 - (rotatedXY * focalLength) / depth;
+
+        if (!hasVisiblePoint) {
+          ctx.moveTo(screenX, screenY);
+          hasVisiblePoint = true;
+        } else {
+          ctx.lineTo(screenX, screenY);
+        }
+      }
+
       ctx.strokeStyle = `rgba(${lineColor.r}, ${lineColor.g}, ${lineColor.b}, ${opacity})`;
       ctx.lineWidth = lineWeight;
       ctx.stroke();
@@ -376,8 +395,8 @@
 
     try {
       await invoke('v2_set_visualizer_enabled', { enabled: false });
-    } catch (e) {
-      console.error('[Linebed] Failed to disable backend:', e);
+    } catch (error) {
+      console.error('[Linebed] Failed to disable backend:', error);
     }
 
     isInitialized = false;
