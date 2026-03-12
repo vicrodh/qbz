@@ -46,10 +46,15 @@
   const NUM_LINES = 120; // Dense terrain (musicvid.org uses 200 with WebGL, 120 is Canvas 2D safe)
   const SMOOTHING = 0.03; // Temporal smoothing (musicvid: smoothingTimeConstant 0.03)
 
-  // Spectrum processing params (from musicvid.org SpectrumAnalyser settings)
-  const SMOOTHING_PASSES = 3;
-  const SMOOTHING_POINTS = 9;
-  const SPECTRUM_POWER = 2.5; // Power-law bin mapping (spectrumScale: 2.5)
+  // Spectrum processing params — scaled for 190 bins (musicvid uses 1024 visual bins)
+  // musicvid: 9 points / 1024 bins = 0.88% width per pass
+  // ours:     5 points / 190 bins  = 2.6% width per pass (comparable ratio)
+  const SMOOTHING_PASSES = 2;
+  const SMOOTHING_POINTS = 5;
+  // Power-law reduced: musicvid maps 647→1024 bins (upsampling) at 2.5.
+  // We map 190→190 (no upsampling) — 2.5 stretches 33 bass bins to 50% width
+  // creating a uniform plateau. 1.5 keeps more frequency diversity visible.
+  const SPECTRUM_POWER = 1.5;
 
   // Variable exponential transform (musicvid: Exponential settings)
   // Bass gets higher exponent = sharper peaks; treble gets lower = softer
