@@ -50,6 +50,8 @@
   const SMOOTHING_PASSES = 3;
   const SMOOTHING_POINTS = 9;
   const SPECTRUM_EXPONENT = 0.8; // Exponential transform for peak emphasis
+  const SPECTRUM_POWER = 2.5; // Power-law bin mapping (musicvid.org transformToVisualBins)
+  const TAPER_BANDS = 10; // Edge taper width to eliminate staircase artifact
 
   // Ring buffer of spectrum snapshots
   const history: Float32Array[] = [];
@@ -87,6 +89,32 @@
       }
     }
     return result;
+  }
+
+  // Power-law frequency redistribution (from musicvid.org transformToVisualBins)
+  // Remaps linear FFT bins so bass frequencies get more visual width.
+  // Without this, all energy clusters in the first ~30 bins (left side).
+  function transformToVisualBins(data: Float32Array): Float32Array {
+    const result = new Float32Array(NUM_BANDS);
+    for (let i = 0; i < NUM_BANDS; i++) {
+      const bin = Math.pow(i / NUM_BANDS, SPECTRUM_POWER) * (NUM_BANDS - 1);
+      const binFloor = Math.floor(bin);
+      const binCeil = Math.min(binFloor + 1, NUM_BANDS - 1);
+      const frac = bin - binFloor;
+      // Linear interpolation between neighboring bins for smoothness
+      result[i] = data[binFloor] * (1 - frac) + data[binCeil] * frac;
+    }
+    return result;
+  }
+
+  // Edge tapering — fade amplitude to zero at first/last bands
+  // Eliminates the staircase/square artifact at spectrum edges
+  function applyEdgeTaper(data: Float32Array): void {
+    for (let i = 0; i < TAPER_BANDS; i++) {
+      const factor = i / TAPER_BANDS;
+      data[i] *= factor;
+      data[NUM_BANDS - 1 - i] *= factor;
+    }
   }
 
   // Colors from artwork
@@ -158,8 +186,14 @@
             smoothedData[i] = smoothedData[i] * SMOOTHING + floats[i] * (1 - SMOOTHING);
           }
 
+          // Power-law frequency redistribution (bass gets more visual width)
+          const visualBins = transformToVisualBins(smoothedData);
+
+          // Edge taper (eliminate staircase artifact at edges)
+          applyEdgeTaper(visualBins);
+
           // Apply spatial smoothing (multi-pass moving average)
-          const spatialSmoothed = smoothSpectrum(smoothedData);
+          const spatialSmoothed = smoothSpectrum(visualBins);
 
           // Apply exponential transform for peak emphasis
           for (let i = 0; i < NUM_BANDS; i++) {
