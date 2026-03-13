@@ -154,6 +154,7 @@ const SEEK_SETTLE_TOLERANCE_SECS = 1;
 // Callbacks for track advancement (set by consumer)
 let onTrackEnded: (() => Promise<void>) | null = null;
 let onResumeFromStop: (() => Promise<void>) | null = null;
+let onTogglePlayOverride: (() => Promise<boolean>) | null = null;
 
 // Remote control mode: when active, external service (QConnect) controls playback.
 // Disables gapless interception, auto-advance, and resume-from-stop in the event handler.
@@ -347,6 +348,18 @@ export function hasPendingSessionRestore(): boolean {
  * Toggle play/pause
  */
 export async function togglePlay(): Promise<void> {
+  if (onTogglePlayOverride) {
+    try {
+      const handled = await onTogglePlayOverride();
+      if (handled) {
+        return;
+      }
+    } catch (err) {
+      console.error('Remote toggle playback override failed:', err);
+      return;
+    }
+  }
+
   if (!currentTrack) {
     // After stop, try to resume from the queue's current track
     if (onResumeFromStop) {
@@ -546,6 +559,16 @@ export async function stop(): Promise<void> {
  */
 export function setOnResumeFromStop(callback: () => Promise<void>): void {
   onResumeFromStop = callback;
+}
+
+/**
+ * Optional transport handoff for play/pause.
+ * Returns true when the action was handled outside the local player.
+ */
+export function setOnTogglePlayOverride(
+  callback: (() => Promise<boolean>) | null
+): void {
+  onTogglePlayOverride = callback;
 }
 
 /**
@@ -877,6 +900,7 @@ export function reset(): void {
   seekRequestInFlight = false;
   seekTargetPosition = null;
   seekGuardUntilMs = 0;
+  onTogglePlayOverride = null;
   stopPolling();
   currentTrack = null;
   isPlaying = false;

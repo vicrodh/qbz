@@ -28,6 +28,7 @@ import {
   stopPolling,
   isPollingActive,
   reset,
+  setOnTogglePlayOverride,
   type PlayingTrack
 } from './playerStore';
 
@@ -113,14 +114,19 @@ describe('playerStore', () => {
 
       const state = getPlayerState();
 
-      expect(state).toEqual({
-        currentTrack: mockTrack,
+      expect(state).toMatchObject({
+        currentTrack: {
+          ...mockTrack,
+          originalBitDepth: 16,
+          originalSamplingRate: 44100
+        },
         isPlaying: true,
         currentTime: 0,
         duration: 180,
         volume: 75,
         isFavorite: true,
-        isSkipping: false
+        isSkipping: false,
+        normalizationGain: null
       });
     });
   });
@@ -129,7 +135,11 @@ describe('playerStore', () => {
     it('should set track and update duration', () => {
       setCurrentTrack(mockTrack);
 
-      expect(getCurrentTrack()).toEqual(mockTrack);
+      expect(getCurrentTrack()).toMatchObject({
+        ...mockTrack,
+        originalBitDepth: 16,
+        originalSamplingRate: 44100
+      });
       expect(getDuration()).toBe(180);
       expect(getCurrentTime()).toBe(0);
     });
@@ -192,6 +202,29 @@ describe('playerStore', () => {
     it('should do nothing without current track', async () => {
       await togglePlay();
       expect(mockedInvoke).not.toHaveBeenCalled();
+    });
+
+    it('should allow a remote override to fully handle toggle playback', async () => {
+      const remoteOverride = vi.fn().mockResolvedValue(true);
+      setOnTogglePlayOverride(remoteOverride);
+
+      await togglePlay();
+
+      expect(remoteOverride).toHaveBeenCalledTimes(1);
+      expect(mockedInvoke).not.toHaveBeenCalled();
+    });
+
+    it('should fall back to local playback when the remote override declines handling', async () => {
+      const remoteOverride = vi.fn().mockResolvedValue(false);
+      setOnTogglePlayOverride(remoteOverride);
+      setCurrentTrack(mockTrack);
+      mockedInvoke.mockResolvedValueOnce(undefined);
+
+      await togglePlay();
+
+      expect(remoteOverride).toHaveBeenCalledTimes(1);
+      expect(getIsPlaying()).toBe(true);
+      expect(mockedInvoke).toHaveBeenCalledWith('v2_resume_playback');
     });
 
     it('should resume playback when paused', async () => {

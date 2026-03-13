@@ -359,6 +359,7 @@ fn emit_qconnect_diagnostic(app_handle: &AppHandle, channel: &str, level: &str, 
 pub struct QconnectSessionState {
     pub session_uuid: Option<String>,
     pub active_renderer_id: Option<i32>,
+    pub local_renderer_id: Option<i32>,
     pub renderers: Vec<QconnectRendererInfo>,
 }
 
@@ -382,10 +383,20 @@ struct QconnectRendererReportDebugEvent {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QconnectRendererInfo {
     pub renderer_id: i32,
+    pub device_uuid: Option<String>,
     pub friendly_name: Option<String>,
     pub brand: Option<String>,
     pub model: Option<String>,
     pub device_type: Option<i32>,
+}
+
+fn refresh_local_renderer_id(session: &mut QconnectSessionState) {
+    let local_device_uuid = resolve_qconnect_device_uuid();
+    session.local_renderer_id = session
+        .renderers
+        .iter()
+        .find(|renderer| renderer.device_uuid.as_deref() == Some(local_device_uuid.as_str()))
+        .map(|renderer| renderer.renderer_id);
 }
 
 #[async_trait]
@@ -488,6 +499,10 @@ impl TauriQconnectEventSink {
                         let device_info = payload.get("device_info");
                         state.session.renderers.push(QconnectRendererInfo {
                             renderer_id,
+                            device_uuid: device_info
+                                .and_then(|d| d.get("device_uuid"))
+                                .and_then(Value::as_str)
+                                .map(String::from),
                             friendly_name: device_info
                                 .and_then(|d| d.get("friendly_name"))
                                 .and_then(Value::as_str)
@@ -505,6 +520,7 @@ impl TauriQconnectEventSink {
                                 .and_then(Value::as_i64)
                                 .map(|v| v as i32),
                         });
+                        refresh_local_renderer_id(&mut state.session);
                     }
                 }
             }
@@ -518,12 +534,37 @@ impl TauriQconnectEventSink {
                         .find(|r| r.renderer_id == renderer_id)
                     {
                         let device_info = payload.get("device_info");
+                        if let Some(device_uuid) = device_info
+                            .and_then(|d| d.get("device_uuid"))
+                            .and_then(Value::as_str)
+                        {
+                            existing.device_uuid = Some(device_uuid.to_string());
+                        }
                         if let Some(name) = device_info
                             .and_then(|d| d.get("friendly_name"))
                             .and_then(Value::as_str)
                         {
                             existing.friendly_name = Some(name.to_string());
                         }
+                        if let Some(brand) = device_info
+                            .and_then(|d| d.get("brand"))
+                            .and_then(Value::as_str)
+                        {
+                            existing.brand = Some(brand.to_string());
+                        }
+                        if let Some(model) = device_info
+                            .and_then(|d| d.get("model"))
+                            .and_then(Value::as_str)
+                        {
+                            existing.model = Some(model.to_string());
+                        }
+                        if let Some(device_type) = device_info
+                            .and_then(|d| d.get("device_type"))
+                            .and_then(Value::as_i64)
+                        {
+                            existing.device_type = Some(device_type as i32);
+                        }
+                        refresh_local_renderer_id(&mut state.session);
                     }
                 }
             }
@@ -534,6 +575,7 @@ impl TauriQconnectEventSink {
                         .session
                         .renderers
                         .retain(|r| r.renderer_id != renderer_id);
+                    refresh_local_renderer_id(&mut state.session);
                 }
             }
             "MESSAGE_TYPE_SRVR_CTRL_ACTIVE_RENDERER_CHANGED" => {

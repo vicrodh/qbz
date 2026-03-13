@@ -13,6 +13,7 @@ export type QconnectConnectionStatus = {
 
 export type QconnectRendererInfo = {
   renderer_id: number;
+  device_uuid?: string | null;
   friendly_name?: string | null;
   brand?: string | null;
   model?: string | null;
@@ -22,6 +23,7 @@ export type QconnectRendererInfo = {
 export type QconnectSessionSnapshot = {
   session_uuid?: string | null;
   active_renderer_id?: number | null;
+  local_renderer_id?: number | null;
   renderers: QconnectRendererInfo[];
 };
 
@@ -177,6 +179,19 @@ export function isQconnectRemoteModeActive(
   status: QconnectConnectionStatus
 ): boolean {
   return Boolean(connected || status.transport_connected);
+}
+
+export function isQconnectPeerRendererActive(
+  sessionSnapshot: QconnectSessionSnapshot | null | undefined
+): boolean {
+  const activeRendererId = sessionSnapshot?.active_renderer_id ?? null;
+  const localRendererId = sessionSnapshot?.local_renderer_id ?? null;
+
+  if (activeRendererId == null || localRendererId == null) {
+    return false;
+  }
+
+  return activeRendererId !== localRendererId;
 }
 
 export function evaluateQconnectSessionPersistence(

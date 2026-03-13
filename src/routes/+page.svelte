@@ -190,6 +190,7 @@
     setQueueEnded,
     setOnTrackEnded,
     setOnResumeFromStop,
+    setOnTogglePlayOverride,
     setGaplessGetNextTrackId,
     setOnGaplessTransition,
     togglePlay,
@@ -320,6 +321,7 @@
     evaluateQconnectPlaybackReportSkip,
     evaluateQconnectSessionPersistence,
     fetchQconnectRuntimeState,
+    isQconnectPeerRendererActive,
     isQconnectRemoteModeActive as computeQconnectRemoteModeActive,
     logQconnectPlaybackReport as appendQconnectPlaybackReport,
     qconnectAdmissionReasonKey,
@@ -1045,6 +1047,48 @@
       }
     } finally {
       qobuzConnectRefreshBusy = false;
+    }
+  }
+
+  async function handleQconnectTogglePlayOverride(): Promise<boolean> {
+    if (!isQobuzConnectConnected) {
+      return false;
+    }
+
+    let sessionSnapshot = qobuzConnectSessionSnapshot;
+    let rendererSnapshot = qobuzConnectRendererSnapshot;
+
+    if (!isQconnectPeerRendererActive(sessionSnapshot)) {
+      await refreshQobuzConnectRuntimeState();
+      sessionSnapshot = qobuzConnectSessionSnapshot;
+      rendererSnapshot = qobuzConnectRendererSnapshot;
+    }
+
+    if (!isQconnectPeerRendererActive(sessionSnapshot)) {
+      return false;
+    }
+
+    const nextPlayingState = rendererSnapshot?.playing_state === 2 ? 3 : 2;
+    const diagnosticPayload = {
+      active_renderer_id: sessionSnapshot?.active_renderer_id ?? null,
+      local_renderer_id: sessionSnapshot?.local_renderer_id ?? null,
+      current_playing_state: rendererSnapshot?.playing_state ?? null,
+      requested_playing_state: nextPlayingState
+    };
+
+    pushQobuzConnectDiagnostic('qconnect:toggle_play_handoff', 'info', diagnosticPayload);
+
+    try {
+      await invoke('v2_qconnect_set_player_state', {
+        request: { playing_state: nextPlayingState }
+      });
+      return true;
+    } catch (err) {
+      pushQobuzConnectDiagnostic('qconnect:toggle_play_handoff', 'error', {
+        ...diagnosticPayload,
+        error: String(err)
+      });
+      throw err;
     }
   }
 
@@ -4062,6 +4106,8 @@
       }
     });
 
+    setOnTogglePlayOverride(handleQconnectTogglePlayOverride);
+
     // Gapless: provide callback to get next track ID for pre-queuing
     setGaplessGetNextTrackId(() => {
       // Disable gapless pre-queuing during QConnect: the server controls track transitions.
@@ -4335,6 +4381,7 @@
       unsubscribeLyrics();
       unsubscribeContentSidebar();
       unsubscribeCast();
+      setOnTogglePlayOverride(null);
       stopLyricsWatching();
       stopActiveLineUpdates();
       stopPolling();

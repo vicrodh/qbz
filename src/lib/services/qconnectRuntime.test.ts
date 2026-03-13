@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   evaluateQconnectPlaybackReportSkip,
   evaluateQconnectSessionPersistence,
+  isQconnectPeerRendererActive,
   isQconnectRemoteModeActive,
   type QconnectConnectionStatus
 } from './qconnectRuntime';
@@ -156,5 +157,27 @@ describe('QConnect runtime state helpers', () => {
       nextSkipLogged: true,
       shouldLogSkip: false
     });
+  });
+
+  it('detects when the local renderer is still active', () => {
+    expect(
+      isQconnectPeerRendererActive({
+        session_uuid: 'session-1',
+        active_renderer_id: 11,
+        local_renderer_id: 11,
+        renderers: []
+      })
+    ).toBe(false);
+  });
+
+  it('detects when another peer renderer is active', () => {
+    expect(
+      isQconnectPeerRendererActive({
+        session_uuid: 'session-1',
+        active_renderer_id: 4,
+        local_renderer_id: 11,
+        renderers: []
+      })
+    ).toBe(true);
   });
 });
