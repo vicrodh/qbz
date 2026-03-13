@@ -392,11 +392,62 @@ pub struct QconnectRendererInfo {
 
 fn refresh_local_renderer_id(session: &mut QconnectSessionState) {
     let local_device_uuid = resolve_qconnect_device_uuid();
-    session.local_renderer_id = session
+    if let Some(renderer_id) = session
         .renderers
         .iter()
         .find(|renderer| renderer.device_uuid.as_deref() == Some(local_device_uuid.as_str()))
+        .map(|renderer| renderer.renderer_id)
+    {
+        session.local_renderer_id = Some(renderer_id);
+        return;
+    }
+
+    let local_device_info = default_qconnect_device_info();
+    let local_friendly_name = local_device_info.friendly_name.as_deref();
+    let local_brand = local_device_info.brand.as_deref();
+    let local_model = local_device_info.model.as_deref();
+    let local_device_type = local_device_info.device_type;
+
+    // Some server ADD_RENDERER payloads omit device_uuid for the local renderer.
+    // Fall back to a unique device fingerprint so controller-side handoff logic
+    // can still distinguish local vs peer renderers.
+    if let Some(renderer_id) = find_unique_renderer_id(session, |renderer| {
+        renderer.friendly_name.as_deref() == local_friendly_name
+            && renderer.brand.as_deref() == local_brand
+            && renderer.model.as_deref() == local_model
+            && renderer.device_type == local_device_type
+    }) {
+        session.local_renderer_id = Some(renderer_id);
+        return;
+    }
+
+    if let Some(renderer_id) = find_unique_renderer_id(session, |renderer| {
+        renderer.friendly_name.as_deref() == local_friendly_name
+            && renderer.device_type == local_device_type
+    }) {
+        session.local_renderer_id = Some(renderer_id);
+        return;
+    }
+
+    session.local_renderer_id = None;
+}
+
+fn find_unique_renderer_id(
+    session: &QconnectSessionState,
+    predicate: impl Fn(&QconnectRendererInfo) -> bool,
+) -> Option<i32> {
+    let mut matches = session
+        .renderers
+        .iter()
+        .filter(|renderer| predicate(renderer))
         .map(|renderer| renderer.renderer_id);
+
+    let first = matches.next()?;
+    if matches.next().is_some() {
+        return None;
+    }
+
+    Some(first)
 }
 
 #[async_trait]
@@ -1026,10 +1077,32 @@ impl QconnectServiceState {
 
         let active_renderer_id = session.active_renderer_id;
         let local_renderer_id = session.local_renderer_id;
-        if active_renderer_id.is_none()
-            || local_renderer_id.is_none()
-            || active_renderer_id == local_renderer_id
-        {
+        let early_return_reason = if active_renderer_id.is_none() {
+            Some("missing_active_renderer_id")
+        } else if local_renderer_id.is_none() {
+            Some("missing_local_renderer_id")
+        } else if active_renderer_id == local_renderer_id {
+            Some("active_renderer_is_local")
+        } else {
+            None
+        };
+
+        if let Some(reason) = early_return_reason {
+            emit_qconnect_diagnostic(
+                app_handle,
+                "qconnect:controller_skip_handoff",
+                "info",
+                json!({
+                    "direction": match direction {
+                        QconnectRemoteSkipDirection::Next => "next",
+                        QconnectRemoteSkipDirection::Previous => "previous",
+                    },
+                    "reason": reason,
+                    "active_renderer_id": active_renderer_id,
+                    "local_renderer_id": local_renderer_id,
+                    "renderer_count": session.renderers.len(),
+                }),
+            );
             return Ok(false);
         }
 
@@ -1096,6 +1169,77 @@ impl QconnectServiceState {
             "qconnect:controller_skip_handoff",
             "info",
             diagnostic_payload,
+        );
+
+        Ok(true)
+    }
+
+    async fn toggle_remote_renderer_playback_if_active(
+        &self,
+        app_handle: &AppHandle,
+    ) -> Result<bool, String> {
+        let (app, session) = {
+            let guard = self.inner.lock().await;
+            let Some(runtime) = guard.runtime.as_ref() else {
+                return Ok(false);
+            };
+            let session = runtime.sync_state.lock().await.session.clone();
+            (Arc::clone(&runtime.app), session)
+        };
+
+        let active_renderer_id = session.active_renderer_id;
+        let local_renderer_id = session.local_renderer_id;
+        let early_return_reason = if active_renderer_id.is_none() {
+            Some("missing_active_renderer_id")
+        } else if local_renderer_id.is_none() {
+            Some("missing_local_renderer_id")
+        } else if active_renderer_id == local_renderer_id {
+            Some("active_renderer_is_local")
+        } else {
+            None
+        };
+
+        if let Some(reason) = early_return_reason {
+            emit_qconnect_diagnostic(
+                app_handle,
+                "qconnect:toggle_play_handoff",
+                "info",
+                json!({
+                    "reason": reason,
+                    "active_renderer_id": active_renderer_id,
+                    "local_renderer_id": local_renderer_id,
+                    "renderer_count": session.renderers.len(),
+                }),
+            );
+            return Ok(false);
+        }
+
+        let renderer = app.renderer_state_snapshot().await;
+        let next_playing_state = match renderer.playing_state {
+            Some(PLAYING_STATE_PLAYING) => PLAYING_STATE_PAUSED,
+            _ => PLAYING_STATE_PLAYING,
+        };
+
+        let payload = serde_json::to_value(QconnectSetPlayerStateRequest {
+            playing_state: Some(next_playing_state),
+            current_position: None,
+            current_queue_item: None,
+        })
+        .map_err(|err| format!("serialize toggle_play request: {err}"))?;
+
+        self.send_command(QueueCommandType::CtrlSrvrSetPlayerState, payload)
+            .await?;
+
+        emit_qconnect_diagnostic(
+            app_handle,
+            "qconnect:toggle_play_handoff",
+            "info",
+            json!({
+                "active_renderer_id": active_renderer_id,
+                "local_renderer_id": local_renderer_id,
+                "current_playing_state": renderer.playing_state,
+                "requested_playing_state": next_playing_state,
+            }),
         );
 
         Ok(true)
@@ -2272,6 +2416,17 @@ pub async fn v2_qconnect_set_player_state(
 }
 
 #[tauri::command]
+pub async fn v2_qconnect_toggle_play_if_remote(
+    app_handle: AppHandle,
+    service: State<'_, QconnectServiceState>,
+) -> Result<bool, RuntimeError> {
+    service
+        .toggle_remote_renderer_playback_if_active(&app_handle)
+        .await
+        .map_err(RuntimeError::Internal)
+}
+
+#[tauri::command]
 pub async fn v2_qconnect_skip_next_if_remote(
     app_handle: AppHandle,
     service: State<'_, QconnectServiceState>,
@@ -2920,12 +3075,12 @@ mod tests {
         QconnectFileAudioQualitySnapshot,
         AUDIO_QUALITY_HIRES_LEVEL1,
         build_qconnect_file_audio_quality_snapshot, classify_qconnect_audio_quality,
-        decode_hex_channel, determine_queue_lookup_report_strategy,
-        normalize_volume_to_fraction, parse_subscribe_channels,
+        decode_hex_channel, determine_queue_lookup_report_strategy, find_unique_renderer_id,
+        normalize_volume_to_fraction, parse_subscribe_channels, refresh_local_renderer_id,
         resolve_controller_queue_item_from_snapshots,
         resolve_queue_item_ids_from_queue_state,
         should_skip_renderer_report_due_to_stale_snapshot, QconnectHandoffIntent,
-        QconnectRemoteSkipDirection,
+        QconnectRemoteSkipDirection, QconnectRendererInfo, QconnectSessionState,
         QconnectOutboundCommandType, QconnectTrackOrigin,
     };
     use qconnect_app::{
@@ -3004,6 +3159,98 @@ mod tests {
         assert_eq!(
             QconnectHandoffIntent::from_core(resolve_handoff_intent(qobuz_core_origin)),
             QconnectHandoffIntent::SendToConnect
+        );
+    }
+
+    #[test]
+    fn refreshes_local_renderer_id_from_exact_device_uuid_match() {
+        let local_device_uuid = super::resolve_qconnect_device_uuid();
+        let mut session = QconnectSessionState {
+            renderers: vec![
+                QconnectRendererInfo {
+                    renderer_id: 1,
+                    device_uuid: Some("peer-device".to_string()),
+                    friendly_name: Some("BlitzPhone16ProMax".to_string()),
+                    brand: Some("Apple".to_string()),
+                    model: Some("iPhone".to_string()),
+                    device_type: Some(6),
+                },
+                QconnectRendererInfo {
+                    renderer_id: 6,
+                    device_uuid: Some(local_device_uuid),
+                    friendly_name: Some("QBZ Desktop".to_string()),
+                    brand: Some("QBZ".to_string()),
+                    model: Some("QBZ".to_string()),
+                    device_type: Some(5),
+                },
+            ],
+            ..Default::default()
+        };
+
+        refresh_local_renderer_id(&mut session);
+
+        assert_eq!(session.local_renderer_id, Some(6));
+    }
+
+    #[test]
+    fn refreshes_local_renderer_id_from_unique_fingerprint_when_uuid_missing() {
+        let mut session = QconnectSessionState {
+            renderers: vec![
+                QconnectRendererInfo {
+                    renderer_id: 1,
+                    device_uuid: None,
+                    friendly_name: Some("BlitzPhone16ProMax".to_string()),
+                    brand: Some("Apple".to_string()),
+                    model: Some("iPhone".to_string()),
+                    device_type: Some(6),
+                },
+                QconnectRendererInfo {
+                    renderer_id: 6,
+                    device_uuid: None,
+                    friendly_name: Some("QBZ Desktop".to_string()),
+                    brand: Some("QBZ".to_string()),
+                    model: Some("QBZ".to_string()),
+                    device_type: Some(5),
+                },
+            ],
+            ..Default::default()
+        };
+
+        refresh_local_renderer_id(&mut session);
+
+        assert_eq!(session.local_renderer_id, Some(6));
+    }
+
+    #[test]
+    fn does_not_guess_local_renderer_id_when_fingerprint_is_ambiguous() {
+        let mut session = QconnectSessionState {
+            renderers: vec![
+                QconnectRendererInfo {
+                    renderer_id: 6,
+                    device_uuid: None,
+                    friendly_name: Some("QBZ Desktop".to_string()),
+                    brand: Some("QBZ".to_string()),
+                    model: Some("QBZ".to_string()),
+                    device_type: Some(5),
+                },
+                QconnectRendererInfo {
+                    renderer_id: 9,
+                    device_uuid: None,
+                    friendly_name: Some("QBZ Desktop".to_string()),
+                    brand: Some("QBZ".to_string()),
+                    model: Some("QBZ".to_string()),
+                    device_type: Some(5),
+                },
+            ],
+            ..Default::default()
+        };
+
+        refresh_local_renderer_id(&mut session);
+
+        assert_eq!(session.local_renderer_id, None);
+        assert_eq!(
+            find_unique_renderer_id(&session, |renderer| renderer.device_type == Some(5)),
+            None
         );
     }
 

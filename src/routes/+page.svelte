@@ -321,7 +321,6 @@
     evaluateQconnectPlaybackReportSkip,
     evaluateQconnectSessionPersistence,
     fetchQconnectRuntimeState,
-    isQconnectPeerRendererActive,
     isQconnectRemoteModeActive as computeQconnectRemoteModeActive,
     logQconnectPlaybackReport as appendQconnectPlaybackReport,
     qconnectAdmissionReasonKey,
@@ -1055,37 +1054,10 @@
       return false;
     }
 
-    let sessionSnapshot = qobuzConnectSessionSnapshot;
-    let rendererSnapshot = qobuzConnectRendererSnapshot;
-
-    if (!isQconnectPeerRendererActive(sessionSnapshot)) {
-      await refreshQobuzConnectRuntimeState();
-      sessionSnapshot = qobuzConnectSessionSnapshot;
-      rendererSnapshot = qobuzConnectRendererSnapshot;
-    }
-
-    if (!isQconnectPeerRendererActive(sessionSnapshot)) {
-      return false;
-    }
-
-    const nextPlayingState = rendererSnapshot?.playing_state === 2 ? 3 : 2;
-    const diagnosticPayload = {
-      active_renderer_id: sessionSnapshot?.active_renderer_id ?? null,
-      local_renderer_id: sessionSnapshot?.local_renderer_id ?? null,
-      current_playing_state: rendererSnapshot?.playing_state ?? null,
-      requested_playing_state: nextPlayingState
-    };
-
-    pushQobuzConnectDiagnostic('qconnect:toggle_play_handoff', 'info', diagnosticPayload);
-
     try {
-      await invoke('v2_qconnect_set_player_state', {
-        request: { playing_state: nextPlayingState }
-      });
-      return true;
+      return await invoke<boolean>('v2_qconnect_toggle_play_if_remote');
     } catch (err) {
       pushQobuzConnectDiagnostic('qconnect:toggle_play_handoff', 'error', {
-        ...diagnosticPayload,
         error: String(err)
       });
       throw err;

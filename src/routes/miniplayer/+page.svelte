@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
+  import { invoke } from '@tauri-apps/api/core';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { LogicalSize } from '@tauri-apps/api/dpi';
   import { t } from '$lib/i18n';
@@ -309,6 +310,10 @@
 
   async function handleTogglePlay(): Promise<void> {
     try {
+      const handledRemotely = await invoke<boolean>('v2_qconnect_toggle_play_if_remote');
+      if (handledRemotely) {
+        return;
+      }
       await togglePlay();
     } catch (err) {
       console.error('[MiniPlayer] togglePlay failed:', err);
@@ -385,6 +390,17 @@
   async function handleSkipBack(): Promise<void> {
     const state = getPlayerState();
     if (!state.currentTrack || state.isSkipping) return;
+
+    try {
+      const handledRemotely = await invoke<boolean>('v2_qconnect_skip_previous_if_remote');
+      if (handledRemotely) {
+        return;
+      }
+    } catch (err) {
+      console.error('[MiniPlayer] remote previous handoff failed:', err);
+      return;
+    }
+
     if (state.currentTime > 3) {
       playerSeek(0);
       return;
@@ -408,6 +424,16 @@
   async function handleSkipForward(): Promise<void> {
     const state = getPlayerState();
     if (!state.currentTrack || state.isSkipping) return;
+
+    try {
+      const handledRemotely = await invoke<boolean>('v2_qconnect_skip_next_if_remote');
+      if (handledRemotely) {
+        return;
+      }
+    } catch (err) {
+      console.error('[MiniPlayer] remote next handoff failed:', err);
+      return;
+    }
 
     setIsSkipping(true);
     try {

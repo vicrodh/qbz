@@ -1185,6 +1185,7 @@ pub fn run() {
             qconnect_service::v2_qconnect_send_command_with_admission,
             qconnect_service::v2_qconnect_join_session,
             qconnect_service::v2_qconnect_set_player_state,
+            qconnect_service::v2_qconnect_toggle_play_if_remote,
             qconnect_service::v2_qconnect_skip_next_if_remote,
             qconnect_service::v2_qconnect_skip_previous_if_remote,
             qconnect_service::v2_qconnect_set_active_renderer,
