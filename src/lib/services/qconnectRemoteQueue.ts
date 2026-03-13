@@ -108,6 +108,28 @@ function findTrackIndex(
   return index >= 0 ? index : null;
 }
 
+function isCloudPlaceholderCurrentQueueItem(
+  queueItems: QconnectQueueItemSnapshot[],
+  queueIndex: number | null
+): queueIndex is number {
+  if (queueIndex !== 0) return false;
+
+  const currentItem = queueItems[queueIndex];
+  if (!currentItem) return false;
+  if (currentItem.queue_item_id !== currentItem.track_id) return false;
+
+  return queueItems.slice(1).some((item) => isNonNegativeNumber(item.queue_item_id) && item.queue_item_id < currentItem.queue_item_id);
+}
+
+function resolvedQueueItemId(
+  queueItems: QconnectQueueItemSnapshot[],
+  queueIndex: number
+): number {
+  return isCloudPlaceholderCurrentQueueItem(queueItems, queueIndex)
+    ? 0
+    : queueItems[queueIndex].queue_item_id;
+}
+
 export function resolveQconnectPlayNextInsertAfter(
   queueSnapshot: QconnectQueueSnapshot | null | undefined,
   rendererSnapshot: QconnectRendererSnapshot | null | undefined,
@@ -139,35 +161,38 @@ export function resolveQconnectPlayNextInsertAfter(
     && authoritativeCurrentTrackId !== currentTrack?.track_id;
 
   if (authoritativeTrackDisagreesWithRenderer && authoritativeTrackIndexBeforeNext !== null) {
+    const queueItemId = resolvedQueueItemId(queueItems, authoritativeTrackIndexBeforeNext);
     return {
-      insertAfter: queueItems[authoritativeTrackIndexBeforeNext].queue_item_id,
+      insertAfter: queueItemId,
       strategy: 'authoritative_track_id_before_renderer_next',
       queueIndex: authoritativeTrackIndexBeforeNext,
       nextQueueIndex,
       matchedTrackId: queueItems[authoritativeTrackIndexBeforeNext].track_id,
-      matchedQueueItemId: queueItems[authoritativeTrackIndexBeforeNext].queue_item_id
+      matchedQueueItemId: queueItemId
     };
   }
 
   if (authoritativeTrackDisagreesWithRenderer && authoritativeCurrentTrackIndex !== null) {
+    const queueItemId = resolvedQueueItemId(queueItems, authoritativeCurrentTrackIndex);
     return {
-      insertAfter: queueItems[authoritativeCurrentTrackIndex].queue_item_id,
+      insertAfter: queueItemId,
       strategy: 'authoritative_track_id_match',
       queueIndex: authoritativeCurrentTrackIndex,
       nextQueueIndex,
       matchedTrackId: queueItems[authoritativeCurrentTrackIndex].track_id,
-      matchedQueueItemId: queueItems[authoritativeCurrentTrackIndex].queue_item_id
+      matchedQueueItemId: queueItemId
     };
   }
 
   if (currentQueueIndex !== null) {
+    const queueItemId = resolvedQueueItemId(queueItems, currentQueueIndex);
     return {
-      insertAfter: queueItems[currentQueueIndex].queue_item_id,
+      insertAfter: queueItemId,
       strategy: 'renderer_current_queue_item_id_verified',
       queueIndex: currentQueueIndex,
       nextQueueIndex,
       matchedTrackId: queueItems[currentQueueIndex].track_id,
-      matchedQueueItemId: queueItems[currentQueueIndex].queue_item_id
+      matchedQueueItemId: queueItemId
     };
   }
 
@@ -175,37 +200,40 @@ export function resolveQconnectPlayNextInsertAfter(
     ? findTrackIndexBefore(queueItems, currentTrack?.track_id, nextQueueIndex)
     : null;
   if (trackIndexBeforeNext !== null) {
+    const queueItemId = resolvedQueueItemId(queueItems, trackIndexBeforeNext);
     return {
-      insertAfter: queueItems[trackIndexBeforeNext].queue_item_id,
+      insertAfter: queueItemId,
       strategy: 'queue_track_id_before_renderer_next',
       queueIndex: trackIndexBeforeNext,
       nextQueueIndex,
       matchedTrackId: queueItems[trackIndexBeforeNext].track_id,
-      matchedQueueItemId: queueItems[trackIndexBeforeNext].queue_item_id
+      matchedQueueItemId: queueItemId
     };
   }
 
   const currentTrackIndex = findTrackIndex(queueItems, currentTrack?.track_id);
   if (currentTrackIndex !== null) {
+    const queueItemId = resolvedQueueItemId(queueItems, currentTrackIndex);
     return {
-      insertAfter: queueItems[currentTrackIndex].queue_item_id,
+      insertAfter: queueItemId,
       strategy: 'queue_track_id_match',
       queueIndex: currentTrackIndex,
       nextQueueIndex,
       matchedTrackId: queueItems[currentTrackIndex].track_id,
-      matchedQueueItemId: queueItems[currentTrackIndex].queue_item_id
+      matchedQueueItemId: queueItemId
     };
   }
 
   if (nextQueueIndex !== null && nextQueueIndex > 0) {
     const fallbackIndex = nextQueueIndex - 1;
+    const queueItemId = resolvedQueueItemId(queueItems, fallbackIndex);
     return {
-      insertAfter: queueItems[fallbackIndex].queue_item_id,
+      insertAfter: queueItemId,
       strategy: 'queue_item_before_renderer_next',
       queueIndex: fallbackIndex,
       nextQueueIndex,
       matchedTrackId: queueItems[fallbackIndex].track_id,
-      matchedQueueItemId: queueItems[fallbackIndex].queue_item_id
+      matchedQueueItemId: queueItemId
     };
   }
 

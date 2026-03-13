@@ -661,7 +661,7 @@ pub struct RendererMuteVolumeMessage {
 
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PlaybackPositionMessage {
-    #[prost(uint64, optional, tag = "1")]
+    #[prost(fixed64, optional, tag = "1")]
     pub timestamp: Option<u64>,
     #[prost(int32, optional, tag = "2")]
     pub value: Option<i32>,

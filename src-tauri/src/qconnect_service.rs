@@ -15,7 +15,7 @@ use qconnect_transport_ws::{NativeWsTransport, WsTransportConfig};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tauri::async_runtime::JoinHandle;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
 
@@ -39,8 +39,13 @@ const DEFAULT_QCONNECT_DEVICE_TYPE: i32 = 5; // computer
 const DEFAULT_QCONNECT_SOFTWARE_PREFIX: &str = "qbz";
 const QCONNECT_REMOTE_QUEUE_SOURCE: &str = "qobuz_connect_remote";
 // AudioQuality enum: 0=unknown, 1=mp3, 2=cd, 3=hires_l1, 4=hires_l2(192k), 5=hires_l3(384k)
+const AUDIO_QUALITY_UNKNOWN: i32 = 0;
 const AUDIO_QUALITY_MP3: i32 = 1;
+const AUDIO_QUALITY_CD: i32 = 2;
+const AUDIO_QUALITY_HIRES_LEVEL1: i32 = 3;
 const AUDIO_QUALITY_HIRES_LEVEL2: i32 = 4;
+const AUDIO_QUALITY_HIRES_LEVEL3: i32 = 5;
+const DEFAULT_QCONNECT_CHANNEL_COUNT: i32 = 2;
 // VolumeRemoteControl enum: 0=unknown, 1=not_allowed, 2=allowed
 const VOLUME_REMOTE_CONTROL_ALLOWED: i32 = 2;
 // JoinSessionReason: 0=unknown, 1=controller_request, 2=reconnection
@@ -304,9 +309,18 @@ struct QconnectRemoteSyncState {
     last_renderer_track_id: Option<u64>,
     last_renderer_next_track_id: Option<u64>,
     last_renderer_playing_state: Option<i32>,
+    last_reported_file_audio_quality: Option<QconnectFileAudioQualitySnapshot>,
     last_applied_queue_version: Option<(u64, u64)>,
     /// Session topology — stored from session management events (types 81-87).
     session: QconnectSessionState,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct QconnectFileAudioQualitySnapshot {
+    sampling_rate: i32,
+    bit_depth: i32,
+    nb_channels: i32,
+    audio_quality: i32,
 }
 
 fn queue_payload_track_preview(payload: &Value, key: &str) -> Vec<i64> {
@@ -819,6 +833,47 @@ impl QconnectServiceState {
             .map_err(|err| format!("send renderer report failed: {err}"))
     }
 
+    async fn report_file_audio_quality_if_changed(
+        &self,
+        queue_version: qconnect_app::QueueVersion,
+        audio_quality: QconnectFileAudioQualitySnapshot,
+    ) -> Result<bool, String> {
+        let (app, sync_state) = {
+            let guard = self.inner.lock().await;
+            let Some(runtime) = guard.runtime.as_ref() else {
+                return Err("QConnect service is not running".to_string());
+            };
+            (Arc::clone(&runtime.app), Arc::clone(&runtime.sync_state))
+        };
+
+        {
+            let state = sync_state.lock().await;
+            if state.last_reported_file_audio_quality == Some(audio_quality) {
+                return Ok(false);
+            }
+        }
+
+        let report = RendererReport::new(
+            RendererReportType::RndrSrvrFileAudioQualityChanged,
+            Uuid::new_v4().to_string(),
+            queue_version,
+            serde_json::json!({
+                "sampling_rate": audio_quality.sampling_rate,
+                "bit_depth": audio_quality.bit_depth,
+                "nb_channels": audio_quality.nb_channels,
+                "audio_quality": audio_quality.audio_quality
+            }),
+        );
+
+        app.send_renderer_report_command(report)
+            .await
+            .map_err(|err| format!("send file audio quality report failed: {err}"))?;
+
+        let mut state = sync_state.lock().await;
+        state.last_reported_file_audio_quality = Some(audio_quality);
+        Ok(true)
+    }
+
     /// Update the renderer's internal position from the frontend's actual playback position.
     /// This keeps the QConnect app's renderer state in sync with audio playback so that
     /// subsequent renderer reports (e.g. after pause/resume) include the correct position.
@@ -923,7 +978,7 @@ fn resolve_queue_item_ids_from_queue_state(
         .iter()
         .position(|item| item.track_id == track_id)
     {
-        let current_item = &queue.queue_items[current_index];
+        let current_qid = normalize_current_queue_item_id_from_queue_state(queue, current_index);
         let next_item = if queue.shuffle_mode {
             queue
                 .shuffle_order
@@ -945,7 +1000,7 @@ fn resolve_queue_item_ids_from_queue_state(
         };
 
         return (
-            Some(current_item.queue_item_id),
+            Some(current_qid),
             next_item.map(|item| item.queue_item_id),
             next_item.map(|item| item.track_id),
         );
@@ -1400,6 +1455,90 @@ fn model_track_to_core_queue_track(track: &Track) -> QueueTrack {
 
 fn normalize_volume_to_fraction(volume: i32) -> f32 {
     volume.clamp(0, 100) as f32 / 100.0
+}
+
+fn is_cloud_placeholder_current_queue_item(
+    queue: &QConnectQueueState,
+    current_index: usize,
+) -> bool {
+    let Some(current_item) = queue.queue_items.get(current_index) else {
+        return false;
+    };
+
+    current_index == 0
+        && current_item.queue_item_id == current_item.track_id
+        && queue
+            .queue_items
+            .iter()
+            .skip(1)
+            .any(|item| item.queue_item_id < current_item.queue_item_id)
+}
+
+fn normalize_current_queue_item_id_from_queue_state(
+    queue: &QConnectQueueState,
+    current_index: usize,
+) -> u64 {
+    if is_cloud_placeholder_current_queue_item(queue, current_index) {
+        0
+    } else {
+        queue.queue_items[current_index].queue_item_id
+    }
+}
+
+fn classify_qconnect_audio_quality(sample_rate: u32, bit_depth: u32) -> i32 {
+    if sample_rate == 0 || bit_depth == 0 {
+        AUDIO_QUALITY_UNKNOWN
+    } else if sample_rate >= 384_000 {
+        AUDIO_QUALITY_HIRES_LEVEL3
+    } else if sample_rate >= 192_000 {
+        AUDIO_QUALITY_HIRES_LEVEL2
+    } else if bit_depth > 16 || sample_rate > 48_000 {
+        AUDIO_QUALITY_HIRES_LEVEL1
+    } else if sample_rate >= 44_100 {
+        AUDIO_QUALITY_CD
+    } else {
+        AUDIO_QUALITY_MP3
+    }
+}
+
+fn build_qconnect_file_audio_quality_snapshot(
+    sample_rate: u32,
+    bit_depth: u32,
+    nb_channels: i32,
+) -> Option<QconnectFileAudioQualitySnapshot> {
+    if sample_rate == 0 || bit_depth == 0 {
+        return None;
+    }
+
+    Some(QconnectFileAudioQualitySnapshot {
+        sampling_rate: sample_rate as i32,
+        bit_depth: bit_depth as i32,
+        nb_channels,
+        audio_quality: classify_qconnect_audio_quality(sample_rate, bit_depth),
+    })
+}
+
+async fn resolve_active_playback_audio_quality(
+    app_handle: &AppHandle,
+) -> Option<QconnectFileAudioQualitySnapshot> {
+    if let Some(bridge_state) = app_handle.try_state::<CoreBridgeState>() {
+        if let Some(bridge) = bridge_state.try_get().await {
+            if let Some(snapshot) = build_qconnect_file_audio_quality_snapshot(
+                bridge.player().state.get_sample_rate(),
+                bridge.player().state.get_bit_depth(),
+                DEFAULT_QCONNECT_CHANNEL_COUNT,
+            ) {
+                return Some(snapshot);
+            }
+        }
+    }
+
+    let app_state = app_handle.try_state::<AppState>()?;
+    build_qconnect_file_audio_quality_snapshot(
+        app_state.player.state.get_sample_rate(),
+        app_state.player.state.get_bit_depth(),
+        DEFAULT_QCONNECT_CHANNEL_COUNT,
+    )
 }
 
 async fn bootstrap_remote_presence(
@@ -2057,6 +2196,15 @@ pub async fn v2_qconnect_report_playback_state(
         log::warn!("[QConnect] Failed to report playback state: {err}");
     }
 
+    if let Some(audio_quality) = resolve_active_playback_audio_quality(&app_handle).await {
+        if let Err(err) = service
+            .report_file_audio_quality_if_changed(queue_version, audio_quality)
+            .await
+        {
+            log::warn!("[QConnect] Failed to report file audio quality: {err}");
+        }
+    }
+
     if let Err(err) = app_handle.emit(
         "qconnect:renderer_report_debug",
         &QconnectRendererReportDebugEvent {
@@ -2380,6 +2528,9 @@ fn decode_hex_channel(raw: &str) -> Result<Vec<u8>, String> {
 #[cfg(test)]
 mod tests {
     use super::{
+        QconnectFileAudioQualitySnapshot,
+        AUDIO_QUALITY_HIRES_LEVEL1,
+        build_qconnect_file_audio_quality_snapshot, classify_qconnect_audio_quality,
         decode_hex_channel, determine_queue_lookup_report_strategy,
         normalize_volume_to_fraction, parse_subscribe_channels,
         resolve_queue_item_ids_from_queue_state,
@@ -2518,7 +2669,7 @@ mod tests {
                 Some(123452387),
                 Some(123452387_i32),
                 Some(1),
-                Some(123452387_i32),
+                Some(0),
                 Some(12),
             ),
             Some("queue_lookup_queue_drift"),
@@ -2566,6 +2717,30 @@ mod tests {
     }
 
     #[test]
+    fn normalizes_placeholder_current_queue_item_id_to_zero() {
+        let queue: QConnectQueueState = serde_json::from_value(json!({
+            "version": { "major": 8, "minor": 2 },
+            "queue_items": [
+                { "track_context_uuid": "ctx", "track_id": 126886853, "queue_item_id": 126886853 },
+                { "track_context_uuid": "ctx", "track_id": 123452387, "queue_item_id": 10 },
+                { "track_context_uuid": "ctx", "track_id": 126886854, "queue_item_id": 1 }
+            ],
+            "shuffle_mode": false,
+            "shuffle_order": null,
+            "autoplay_mode": false,
+            "autoplay_loading": false,
+            "autoplay_items": [],
+            "updated_at_ms": 0
+        }))
+        .expect("queue state");
+
+        assert_eq!(
+            resolve_queue_item_ids_from_queue_state(&queue, 126886853),
+            (Some(0), Some(10), Some(123452387)),
+        );
+    }
+
+    #[test]
     fn resolves_next_queue_item_id_from_shuffle_order() {
         let queue: QConnectQueueState = serde_json::from_value(json!({
             "version": { "major": 4, "minor": 1 },
@@ -2586,6 +2761,20 @@ mod tests {
         assert_eq!(
             resolve_queue_item_ids_from_queue_state(&queue, 10),
             (Some(100), Some(200), Some(20)),
+        );
+    }
+
+    #[test]
+    fn classifies_24_bit_streams_as_hires_level1() {
+        assert_eq!(classify_qconnect_audio_quality(44_100, 24), AUDIO_QUALITY_HIRES_LEVEL1);
+        assert_eq!(
+            build_qconnect_file_audio_quality_snapshot(96_000, 24, 2),
+            Some(QconnectFileAudioQualitySnapshot {
+                sampling_rate: 96_000,
+                bit_depth: 24,
+                nb_channels: 2,
+                audio_quality: AUDIO_QUALITY_HIRES_LEVEL1,
+            }),
         );
     }
 }

@@ -55,6 +55,23 @@ describe('resolveQconnectPlayNextInsertAfter', () => {
     });
   });
 
+  it('normalizes the placeholder first queue item id to zero for play next', () => {
+    const queueSnapshot = buildQueueSnapshot([126886853, 123452387, 126886854], [126886853, 10, 1]);
+    const rendererSnapshot: QconnectRendererSnapshot = {
+      current_track: { track_id: 126886853, queue_item_id: 126886853 },
+      next_track: { track_id: 126886854, queue_item_id: 1 }
+    };
+
+    expect(resolveQconnectPlayNextInsertAfter(queueSnapshot, rendererSnapshot)).toEqual({
+      insertAfter: 0,
+      strategy: 'renderer_current_queue_item_id_verified',
+      queueIndex: 0,
+      nextQueueIndex: 2,
+      matchedTrackId: 126886853,
+      matchedQueueItemId: 0
+    });
+  });
+
   it('prefers the authoritative current track when renderer current is stale but still present in queue', () => {
     const queueSnapshot = buildQueueSnapshot([123452387, 123452388, 123452389], [123452387, 1, 2]);
     const rendererSnapshot: QconnectRendererSnapshot = {

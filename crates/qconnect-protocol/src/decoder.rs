@@ -1290,4 +1290,30 @@ mod tests {
         );
         assert_eq!(commands[0].payload["value"], true);
     }
+
+    #[test]
+    fn decodes_official_renderer_state_updated_fixed64_timestamp_frame() {
+        let raw_message = vec![
+            0x08, 0x17, 0xba, 0x01, 0x21, 0x0a, 0x1f, 0x08, 0x02, 0x10, 0x02, 0x1a, 0x0d,
+            0x09, 0xe1, 0x08, 0x7e, 0xe5, 0x9c, 0x01, 0x00, 0x00, 0x10, 0xa1, 0xec, 0x01,
+            0x20, 0xa8, 0x9e, 0x14, 0x2a, 0x04, 0x08, 0x09, 0x10, 0x02, 0x38, 0x0c,
+        ];
+
+        let message = QConnectMessage::decode(raw_message.as_slice()).expect("decode message");
+        let state = message
+            .rndr_srvr_state_updated
+            .as_ref()
+            .and_then(|payload| payload.state.as_ref())
+            .expect("renderer state");
+        let position = state.current_position.as_ref().expect("playback position");
+
+        assert_eq!(
+            message.message_type,
+            Some(QConnectMessageType::MessageTypeRndrSrvrStateUpdated as i32)
+        );
+        assert_eq!(position.timestamp, Some(1_773_376_768_225));
+        assert_eq!(position.value, Some(30_241));
+        assert_eq!(state.current_queue_item_id, None);
+        assert_eq!(state.next_queue_item_id, Some(12));
+    }
 }
