@@ -6,12 +6,12 @@ use std::{
 
 use async_trait::async_trait;
 use qbz_models::{Quality, QueueTrack, Track};
-use qconnect_core::QueueItem;
 use qconnect_app::{
     evaluate_remote_queue_admission, resolve_handoff_intent, HandoffIntent, QConnectQueueState,
     QConnectRendererState, QconnectApp, QconnectAppEvent, QconnectEventSink, QueueCommandType,
     RendererCommand, RendererReport, RendererReportType, TrackOrigin,
 };
+use qconnect_core::QueueItem;
 use qconnect_transport_ws::{NativeWsTransport, WsTransportConfig};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -466,7 +466,9 @@ fn normalize_active_renderer_id(value: Option<i64>) -> Option<i32> {
 
 fn is_peer_renderer_active(session: &QconnectSessionState) -> bool {
     match (session.active_renderer_id, session.local_renderer_id) {
-        (Some(active_renderer_id), Some(local_renderer_id)) => active_renderer_id != local_renderer_id,
+        (Some(active_renderer_id), Some(local_renderer_id)) => {
+            active_renderer_id != local_renderer_id
+        }
         _ => false,
     }
 }
@@ -520,10 +522,12 @@ fn queue_item_snapshot_for_cursor(
     cursor: QconnectOrderedQueueCursor,
 ) -> Option<QueueItem> {
     match cursor {
-        QconnectOrderedQueueCursor::Queue(index) => queue.queue_items.get(index).cloned().map(|mut item| {
-            item.queue_item_id = normalize_current_queue_item_id_from_queue_state(queue, index);
-            item
-        }),
+        QconnectOrderedQueueCursor::Queue(index) => {
+            queue.queue_items.get(index).cloned().map(|mut item| {
+                item.queue_item_id = normalize_current_queue_item_id_from_queue_state(queue, index);
+                item
+            })
+        }
         QconnectOrderedQueueCursor::Autoplay(index) => queue.autoplay_items.get(index).cloned(),
     }
 }
@@ -536,8 +540,8 @@ fn build_session_renderer_snapshot(
     let cursors = ordered_queue_cursors(queue);
     let current_index =
         find_cursor_index_by_queue_item_id(&cursors, queue, renderer_state.current_queue_item_id);
-    let current_track = current_index
-        .and_then(|index| queue_item_snapshot_for_cursor(queue, cursors[index]));
+    let current_track =
+        current_index.and_then(|index| queue_item_snapshot_for_cursor(queue, cursors[index]));
     let next_track = current_index
         .and_then(|index| cursors.get(index + 1).copied())
         .and_then(|cursor| queue_item_snapshot_for_cursor(queue, cursor));
@@ -594,10 +598,8 @@ impl QconnectEventSink for TauriQconnectEventSink {
                     .current_track
                     .as_ref()
                     .map(|item| item.track_id);
-                sync_state.last_renderer_next_track_id = renderer_state
-                    .next_track
-                    .as_ref()
-                    .map(|item| item.track_id);
+                sync_state.last_renderer_next_track_id =
+                    renderer_state.next_track.as_ref().map(|item| item.track_id);
                 sync_state.last_renderer_playing_state = renderer_state.playing_state;
             }
             QconnectAppEvent::QueueUpdated(queue_state) => {
@@ -618,10 +620,7 @@ impl QconnectEventSink for TauriQconnectEventSink {
                 }
             }
             QconnectAppEvent::RendererCommandApplied { command, state } => {
-                log::info!(
-                    "[QConnect] Renderer command applied: {:?}",
-                    command
-                );
+                log::info!("[QConnect] Renderer command applied: {:?}", command);
                 if let Err(err) =
                     apply_renderer_command_to_corebridge(&self.core_bridge, command, state).await
                 {
@@ -640,15 +639,18 @@ impl QconnectEventSink for TauriQconnectEventSink {
 impl TauriQconnectEventSink {
     async fn apply_session_management_event(&self, message_type: &str, payload: &Value) {
         let mut remote_projection_renderer_id: Option<i32> = None;
+        let mut sync_local_playback = false;
         let mut state = self.sync_state.lock().await;
         match message_type {
             "MESSAGE_TYPE_SRVR_CTRL_SESSION_STATE" => {
                 if let Some(uuid) = payload.get("session_uuid").and_then(Value::as_str) {
                     state.session.session_uuid = Some(uuid.to_string());
                 }
-                state.session.active_renderer_id =
-                    normalize_active_renderer_id(payload.get("active_renderer_id").and_then(Value::as_i64));
+                state.session.active_renderer_id = normalize_active_renderer_id(
+                    payload.get("active_renderer_id").and_then(Value::as_i64),
+                );
                 sync_session_renderer_active_flags(&mut state);
+                sync_local_playback = true;
             }
             "MESSAGE_TYPE_SRVR_CTRL_ADD_RENDERER" => {
                 if let Some(renderer_id) = payload.get("renderer_id").and_then(Value::as_i64) {
@@ -749,10 +751,12 @@ impl TauriQconnectEventSink {
                 }
             }
             "MESSAGE_TYPE_SRVR_CTRL_ACTIVE_RENDERER_CHANGED" => {
-                state.session.active_renderer_id =
-                    normalize_active_renderer_id(payload.get("active_renderer_id").and_then(Value::as_i64));
+                state.session.active_renderer_id = normalize_active_renderer_id(
+                    payload.get("active_renderer_id").and_then(Value::as_i64),
+                );
                 sync_session_renderer_active_flags(&mut state);
                 remote_projection_renderer_id = state.session.active_renderer_id;
+                sync_local_playback = true;
             }
             "MESSAGE_TYPE_SRVR_CTRL_RENDERER_STATE_UPDATED" => {
                 let Some(renderer_id) = payload.get("renderer_id").and_then(Value::as_i64) else {
@@ -781,11 +785,13 @@ impl TauriQconnectEventSink {
                     .and_then(|value| value.get("current_queue_item_id"))
                     .and_then(Value::as_i64)
                 {
-                    renderer_state.current_queue_item_id = u64::try_from(current_queue_item_id).ok();
+                    renderer_state.current_queue_item_id =
+                        u64::try_from(current_queue_item_id).ok();
                 }
 
                 renderer_state.updated_at_ms = qconnect_now_ms();
                 remote_projection_renderer_id = Some(renderer_id as i32);
+                sync_local_playback = true;
             }
             "MESSAGE_TYPE_SRVR_CTRL_VOLUME_CHANGED" => {
                 let Some(renderer_id) = payload.get("renderer_id").and_then(Value::as_i64) else {
@@ -851,8 +857,40 @@ impl TauriQconnectEventSink {
         }
         drop(state);
 
+        if sync_local_playback {
+            self.sync_local_playback_for_renderer_ownership().await;
+        }
+
         if let Some(renderer_id) = remote_projection_renderer_id {
             self.sync_active_peer_renderer_projection(renderer_id).await;
+        }
+    }
+
+    async fn sync_local_playback_for_renderer_ownership(&self) {
+        let peer_renderer_active = {
+            let state = self.sync_state.lock().await;
+            is_peer_renderer_active(&state.session)
+        };
+        if !peer_renderer_active {
+            return;
+        }
+
+        let bridge_guard = self.core_bridge.read().await;
+        let Some(bridge) = bridge_guard.as_ref() else {
+            return;
+        };
+
+        let playback_state = bridge.get_playback_state();
+        if playback_state.track_id == 0 {
+            return;
+        }
+
+        log::info!(
+            "[QConnect] Stopping local playback because active renderer is a peer (track_id={})",
+            playback_state.track_id
+        );
+        if let Err(err) = bridge.stop() {
+            log::warn!("[QConnect] Failed to stop local playback after renderer handoff: {err}");
         }
     }
 
@@ -862,13 +900,18 @@ impl TauriQconnectEventSink {
             let Some(active_renderer_id) = state.session.active_renderer_id else {
                 return;
             };
-            if active_renderer_id != renderer_id || state.session.local_renderer_id == Some(active_renderer_id) {
+            if active_renderer_id != renderer_id
+                || state.session.local_renderer_id == Some(active_renderer_id)
+            {
                 return;
             }
 
             (
                 state.last_remote_queue_state.clone(),
-                state.session_renderer_states.get(&active_renderer_id).cloned(),
+                state
+                    .session_renderer_states
+                    .get(&active_renderer_id)
+                    .cloned(),
             )
         };
 
@@ -876,7 +919,8 @@ impl TauriQconnectEventSink {
             return;
         };
 
-        let renderer_snapshot = build_session_renderer_snapshot(&queue_state, Some(&renderer_state));
+        let renderer_snapshot =
+            build_session_renderer_snapshot(&queue_state, Some(&renderer_state));
         {
             let mut state = self.sync_state.lock().await;
             state.last_renderer_queue_item_id = renderer_snapshot
@@ -964,9 +1008,14 @@ impl QconnectServiceState {
                     Ok(event) => {
                         // Check for SESSION_STATE to trigger deferred renderer join
                         if !renderer_joined {
-                            if let qconnect_transport_ws::TransportEvent::InboundQueueServerEvent(ref evt) = event {
+                            if let qconnect_transport_ws::TransportEvent::InboundQueueServerEvent(
+                                ref evt,
+                            ) = event
+                            {
                                 if evt.message_type() == "MESSAGE_TYPE_SRVR_CTRL_SESSION_STATE" {
-                                    if let Some(session_uuid) = evt.payload.get("session_uuid").and_then(|v| v.as_str()) {
+                                    if let Some(session_uuid) =
+                                        evt.payload.get("session_uuid").and_then(|v| v.as_str())
+                                    {
                                         renderer_joined = true;
                                         deferred_renderer_join(&app_for_loop, session_uuid).await;
                                     } else {
@@ -994,11 +1043,19 @@ impl QconnectServiceState {
                             qconnect_transport_ws::TransportEvent::KeepalivePongReceived => {
                                 log::debug!("[QConnect/Transport] Keepalive pong received");
                             }
-                            qconnect_transport_ws::TransportEvent::ReconnectScheduled { attempt, backoff_ms, reason } => {
+                            qconnect_transport_ws::TransportEvent::ReconnectScheduled {
+                                attempt,
+                                backoff_ms,
+                                reason,
+                            } => {
                                 log::warn!("[QConnect/Transport] Reconnect scheduled: attempt={} backoff={}ms reason={}", attempt, backoff_ms, reason);
                             }
                             qconnect_transport_ws::TransportEvent::InboundQueueServerEvent(evt) => {
-                                log::info!("[QConnect] <-- Inbound queue event: {} payload={}", evt.message_type(), evt.payload);
+                                log::info!(
+                                    "[QConnect] <-- Inbound queue event: {} payload={}",
+                                    evt.message_type(),
+                                    evt.payload
+                                );
                                 emit_qconnect_diagnostic(
                                     &app_for_errors,
                                     "qconnect:inbound_queue_event",
@@ -1014,23 +1071,55 @@ impl QconnectServiceState {
                                     }),
                                 );
                             }
-                            qconnect_transport_ws::TransportEvent::InboundRendererServerCommand(cmd) => {
-                                log::info!("[QConnect] <-- Inbound renderer command: {} payload={}", cmd.message_type(), cmd.payload);
+                            qconnect_transport_ws::TransportEvent::InboundRendererServerCommand(
+                                cmd,
+                            ) => {
+                                log::info!(
+                                    "[QConnect] <-- Inbound renderer command: {} payload={}",
+                                    cmd.message_type(),
+                                    cmd.payload
+                                );
                             }
-                            qconnect_transport_ws::TransportEvent::InboundFrameDecoded { cloud_message_type, payload_size } => {
-                                log::info!("[QConnect/Transport] <-- Frame decoded: cloud_type={} size={}", cloud_message_type, payload_size);
+                            qconnect_transport_ws::TransportEvent::InboundFrameDecoded {
+                                cloud_message_type,
+                                payload_size,
+                            } => {
+                                log::info!(
+                                    "[QConnect/Transport] <-- Frame decoded: cloud_type={} size={}",
+                                    cloud_message_type,
+                                    payload_size
+                                );
                             }
-                            qconnect_transport_ws::TransportEvent::InboundPayloadBytes { cloud_message_type, payload } => {
+                            qconnect_transport_ws::TransportEvent::InboundPayloadBytes {
+                                cloud_message_type,
+                                payload,
+                            } => {
                                 log::info!("[QConnect/Transport] <-- Payload bytes: cloud_type={} len={} hex={}", cloud_message_type, payload.len(), hex_preview(payload, 64));
                             }
-                            qconnect_transport_ws::TransportEvent::OutboundSent { message_type, action_uuid } => {
-                                log::info!("[QConnect/Transport] --> Outbound sent: {} uuid={}", message_type, action_uuid);
+                            qconnect_transport_ws::TransportEvent::OutboundSent {
+                                message_type,
+                                action_uuid,
+                            } => {
+                                log::info!(
+                                    "[QConnect/Transport] --> Outbound sent: {} uuid={}",
+                                    message_type,
+                                    action_uuid
+                                );
                             }
-                            qconnect_transport_ws::TransportEvent::TransportError { stage, message } => {
-                                log::error!("[QConnect/Transport] Error: stage={} message={}", stage, message);
+                            qconnect_transport_ws::TransportEvent::TransportError {
+                                stage,
+                                message,
+                            } => {
+                                log::error!(
+                                    "[QConnect/Transport] Error: stage={} message={}",
+                                    stage,
+                                    message
+                                );
                             }
                             qconnect_transport_ws::TransportEvent::InboundReceived(envelope) => {
-                                log::info!("[QConnect/Transport] <-- InboundReceived (JSON envelope)");
+                                log::info!(
+                                    "[QConnect/Transport] <-- InboundReceived (JSON envelope)"
+                                );
                             }
                         }
                         if let Err(err) = app_for_loop.handle_transport_event(event).await {
@@ -1133,6 +1222,22 @@ impl QconnectServiceState {
                 .ok_or_else(|| "QConnect service is not running".to_string())?
         };
 
+        if matches!(command_type, QueueCommandType::CtrlSrvrSetPlayerState) {
+            let state_handle = app.state_handle();
+            let mut state = state_handle.lock().await;
+            let should_clear_transport_pending = state
+                .pending
+                .current()
+                .map(|pending| pending.is_transport_control_action)
+                .unwrap_or(false);
+            if should_clear_transport_pending {
+                log::info!(
+                    "[QConnect] Clearing superseded pending transport control before sending next SET_PLAYER_STATE"
+                );
+                state.pending.clear();
+            }
+        }
+
         let command = app.build_queue_command(command_type, payload).await;
         app.send_queue_command(command)
             .await
@@ -1185,7 +1290,14 @@ impl QconnectServiceState {
 
     async fn effective_remote_renderer_snapshot(
         &self,
-    ) -> Result<Option<(QConnectRendererState, QConnectQueueState, QconnectSessionState)>, String> {
+    ) -> Result<
+        Option<(
+            QConnectRendererState,
+            QConnectQueueState,
+            QconnectSessionState,
+        )>,
+        String,
+    > {
         let (app, sync_state) = {
             let guard = self.inner.lock().await;
             let Some(runtime) = guard.runtime.as_ref() else {
@@ -1267,10 +1379,7 @@ impl QconnectServiceState {
         renderer_state.updated_at_ms = qconnect_now_ms();
     }
 
-    pub async fn send_renderer_report(
-        &self,
-        report: RendererReport,
-    ) -> Result<(), String> {
+    pub async fn send_renderer_report(&self, report: RendererReport) -> Result<(), String> {
         let app = {
             let guard = self.inner.lock().await;
             guard
@@ -1523,16 +1632,13 @@ impl QconnectServiceState {
 
         self.send_command(QueueCommandType::CtrlSrvrSetPlayerState, payload)
             .await?;
-        self.prime_remote_renderer_state(
-            target_queue_item_id,
-            renderer.playing_state,
-            Some(0),
-        )
-        .await;
+        self.prime_remote_renderer_state(target_queue_item_id, renderer.playing_state, Some(0))
+            .await;
         if let Some(target_track_id) = resolution.matched_track_id {
             if let Some(bridge_state) = app_handle.try_state::<CoreBridgeState>() {
                 if let Some(bridge) = bridge_state.try_get().await {
-                    if let Err(err) = align_corebridge_queue_cursor(&bridge, target_track_id).await {
+                    if let Err(err) = align_corebridge_queue_cursor(&bridge, target_track_id).await
+                    {
                         log::warn!(
                             "[QConnect] Failed to align CoreBridge after remote skip handoff: {err}"
                         );
@@ -1684,7 +1790,8 @@ impl QconnectServiceState {
             return Ok(false);
         }
 
-        let deadline = tokio::time::Instant::now() + Duration::from_millis(QCONNECT_PLAY_TRACK_HANDOFF_WAIT_MS);
+        let deadline = tokio::time::Instant::now()
+            + Duration::from_millis(QCONNECT_PLAY_TRACK_HANDOFF_WAIT_MS);
         let poll_interval = Duration::from_millis(QCONNECT_PLAY_TRACK_HANDOFF_POLL_MS);
         let mut attempts: u32 = 0;
         let (last_queue_version, last_queue_track_count) = loop {
@@ -1697,8 +1804,10 @@ impl QconnectServiceState {
                 resolve_queue_item_ids_from_queue_state(&queue, track_id);
 
             if let Some(target_queue_item_id) = resolved_queue_item_id {
-                let target_queue_item_id_i32 = i32::try_from(target_queue_item_id)
-                    .map_err(|_| format!("target queue item id out of range: {target_queue_item_id}"))?;
+                let target_queue_item_id_i32 =
+                    i32::try_from(target_queue_item_id).map_err(|_| {
+                        format!("target queue item id out of range: {target_queue_item_id}")
+                    })?;
 
                 let payload = serde_json::to_value(QconnectSetPlayerStateRequest {
                     playing_state: Some(PLAYING_STATE_PLAYING),
@@ -1877,7 +1986,8 @@ fn ordered_queue_cursors(queue: &QConnectQueueState) -> Vec<QconnectOrderedQueue
         .enumerate()
         .map(|(index, _)| QconnectOrderedQueueCursor::Queue(index))
         .chain(
-            queue.autoplay_items
+            queue
+                .autoplay_items
                 .iter()
                 .enumerate()
                 .map(|(index, _)| QconnectOrderedQueueCursor::Autoplay(index)),
@@ -1890,7 +2000,9 @@ fn queue_item_track_id_for_cursor(
     cursor: QconnectOrderedQueueCursor,
 ) -> Option<u64> {
     match cursor {
-        QconnectOrderedQueueCursor::Queue(index) => queue.queue_items.get(index).map(|item| item.track_id),
+        QconnectOrderedQueueCursor::Queue(index) => {
+            queue.queue_items.get(index).map(|item| item.track_id)
+        }
         QconnectOrderedQueueCursor::Autoplay(index) => {
             queue.autoplay_items.get(index).map(|item| item.track_id)
         }
@@ -1902,12 +2014,13 @@ fn normalized_queue_item_id_for_cursor(
     cursor: QconnectOrderedQueueCursor,
 ) -> Option<u64> {
     match cursor {
-        QconnectOrderedQueueCursor::Queue(index) => {
-            Some(normalize_current_queue_item_id_from_queue_state(queue, index))
-        }
-        QconnectOrderedQueueCursor::Autoplay(index) => {
-            queue.autoplay_items.get(index).map(|item| item.queue_item_id)
-        }
+        QconnectOrderedQueueCursor::Queue(index) => Some(
+            normalize_current_queue_item_id_from_queue_state(queue, index),
+        ),
+        QconnectOrderedQueueCursor::Autoplay(index) => queue
+            .autoplay_items
+            .get(index)
+            .map(|item| item.queue_item_id),
     }
 }
 
@@ -1940,9 +2053,9 @@ fn find_cursor_index_by_track_id(
     track_id: Option<u64>,
 ) -> Option<usize> {
     let track_id = track_id?;
-    cursors.iter().position(|cursor| {
-        queue_item_track_id_for_cursor(queue, *cursor) == Some(track_id)
-    })
+    cursors
+        .iter()
+        .position(|cursor| queue_item_track_id_for_cursor(queue, *cursor) == Some(track_id))
 }
 
 fn find_cursor_index_by_track_id_before(
@@ -1970,14 +2083,26 @@ fn resolve_current_cursor_index_from_snapshots(
     renderer: &QConnectRendererState,
     cursors: &[QconnectOrderedQueueCursor],
 ) -> (Option<usize>, &'static str) {
-    let current_queue_index =
-        find_cursor_index_by_queue_item_id(cursors, queue, renderer.current_track.as_ref().map(|item| item.queue_item_id));
+    let current_queue_index = find_cursor_index_by_queue_item_id(
+        cursors,
+        queue,
+        renderer
+            .current_track
+            .as_ref()
+            .map(|item| item.queue_item_id),
+    );
     if current_queue_index.is_some() {
-        return (current_queue_index, "renderer_current_queue_item_id_verified");
+        return (
+            current_queue_index,
+            "renderer_current_queue_item_id_verified",
+        );
     }
 
-    let next_queue_index =
-        find_cursor_index_by_queue_item_id(cursors, queue, renderer.next_track.as_ref().map(|item| item.queue_item_id));
+    let next_queue_index = find_cursor_index_by_queue_item_id(
+        cursors,
+        queue,
+        renderer.next_track.as_ref().map(|item| item.queue_item_id),
+    );
     let track_index_before_next = next_queue_index.and_then(|next_index| {
         find_cursor_index_by_track_id_before(
             cursors,
@@ -1987,11 +2112,17 @@ fn resolve_current_cursor_index_from_snapshots(
         )
     });
     if track_index_before_next.is_some() {
-        return (track_index_before_next, "queue_track_id_before_renderer_next");
+        return (
+            track_index_before_next,
+            "queue_track_id_before_renderer_next",
+        );
     }
 
-    let current_track_index =
-        find_cursor_index_by_track_id(cursors, queue, renderer.current_track.as_ref().map(|item| item.track_id));
+    let current_track_index = find_cursor_index_by_track_id(
+        cursors,
+        queue,
+        renderer.current_track.as_ref().map(|item| item.track_id),
+    );
     if current_track_index.is_some() {
         return (current_track_index, "queue_track_id_match");
     }
@@ -2021,10 +2152,8 @@ fn resolve_controller_queue_item_from_snapshots(
         };
     }
 
-    let (current_index, current_strategy) =
+    let (current_index, _current_strategy) =
         resolve_current_cursor_index_from_snapshots(queue, renderer, &cursors);
-    let restart_current = matches!(direction, QconnectRemoteSkipDirection::Previous)
-        && renderer.current_position_ms.unwrap_or(0) > 3_000;
 
     let (target_index, strategy) = match direction {
         QconnectRemoteSkipDirection::Next => {
@@ -2046,9 +2175,7 @@ fn resolve_controller_queue_item_from_snapshots(
             }
         }
         QconnectRemoteSkipDirection::Previous => {
-            if restart_current {
-                (current_index, current_strategy)
-            } else if let Some(current_index) = current_index {
+            if let Some(current_index) = current_index {
                 if current_index > 0 {
                     (Some(current_index - 1), "queue_item_before_current")
                 } else {
@@ -2160,7 +2287,8 @@ async fn apply_renderer_command_to_corebridge(
                 if current_pos_secs.abs_diff(target_secs) > 2 {
                     log::info!(
                         "[QConnect] SetState seek: current={}s target={}s",
-                        current_pos_secs, target_secs
+                        current_pos_secs,
+                        target_secs
                     );
                     bridge.seek(target_secs)?;
                 }
@@ -2178,8 +2306,12 @@ async fn apply_renderer_command_to_corebridge(
                 bridge.set_volume(normalize_volume_to_fraction(resolved))?;
             }
         }
-        RendererCommand::SetActive { .. }
-        | RendererCommand::SetMaxAudioQuality { .. }
+        RendererCommand::SetActive { active } => {
+            if !*active {
+                bridge.stop()?;
+            }
+        }
+        RendererCommand::SetMaxAudioQuality { .. }
         | RendererCommand::SetLoopMode { .. }
         | RendererCommand::SetShuffleMode { .. } => {}
     }
@@ -2303,8 +2435,12 @@ async fn materialize_remote_queue_to_corebridge(
     let mut start_index =
         resolve_remote_start_index(queue_state, renderer_queue_item_id, renderer_track_id);
     if start_index.is_none() {
-        start_index = resolve_remote_start_index(queue_state, renderer_next_queue_item_id, renderer_next_track_id)
-            .map(|index| index.saturating_sub(1));
+        start_index = resolve_remote_start_index(
+            queue_state,
+            renderer_next_queue_item_id,
+            renderer_next_track_id,
+        )
+        .map(|index| index.saturating_sub(1));
     }
     if start_index.is_none() {
         start_index = current_playback_track_id.and_then(|track_id| {
@@ -2348,7 +2484,10 @@ async fn materialize_remote_queue_to_corebridge(
     if current_playback_track_id.is_some()
         && current_playback_track_id != renderer_track_id
         && local_track_missing_from_remote
-        && matches!(renderer_playing_state, Some(PLAYING_STATE_STOPPED | PLAYING_STATE_UNKNOWN))
+        && matches!(
+            renderer_playing_state,
+            Some(PLAYING_STATE_STOPPED | PLAYING_STATE_UNKNOWN)
+        )
     {
         log::info!(
             "[QConnect] materialize_remote_queue: stopping stale local playback track {:?} after remote queue replacement",
@@ -2629,7 +2768,10 @@ async fn bootstrap_remote_presence(
     // 2. Ask for current queue state from server
     let ask_queue_payload = serde_json::json!({});
     let ask_queue_command = app
-        .build_queue_command(QueueCommandType::CtrlSrvrAskForQueueState, ask_queue_payload)
+        .build_queue_command(
+            QueueCommandType::CtrlSrvrAskForQueueState,
+            ask_queue_payload,
+        )
         .await;
     let ask_action_uuid = app
         .send_queue_command(ask_queue_command)
@@ -2982,8 +3124,9 @@ pub async fn v2_qconnect_play_track_if_remote(
     app_handle: AppHandle,
     service: State<'_, QconnectServiceState>,
 ) -> Result<bool, RuntimeError> {
-    let track_id = u64::try_from(trackId)
-        .map_err(|_| RuntimeError::Internal(format!("invalid track id for remote handoff: {trackId}")))?;
+    let track_id = u64::try_from(trackId).map_err(|_| {
+        RuntimeError::Internal(format!("invalid track id for remote handoff: {trackId}"))
+    })?;
     service
         .play_remote_renderer_track_if_active(track_id, &app_handle)
         .await
@@ -3162,7 +3305,8 @@ pub async fn v2_qconnect_report_playback_state(
     } else {
         "renderer_snapshot".to_string()
     };
-    let (renderer_current_track_id, _renderer_next_track_id) = service.get_renderer_track_ids().await;
+    let (renderer_current_track_id, _renderer_next_track_id) =
+        service.get_renderer_track_ids().await;
     let current_track_id_u64 = current_track_id
         .filter(|track_id| *track_id > 0)
         .map(|track_id| track_id as u64);
@@ -3186,9 +3330,8 @@ pub async fn v2_qconnect_report_playback_state(
     // from the stale renderer cursor after a queue mutation (insert/reorder).
     let mut queue_lookup_report_strategy: Option<&'static str> = None;
     if let Some(track_id) = current_track_id_u64 {
-        let (queue_current_qid, queue_next_qid) = service
-            .resolve_queue_item_ids_by_track_id(track_id)
-            .await;
+        let (queue_current_qid, queue_next_qid) =
+            service.resolve_queue_item_ids_by_track_id(track_id).await;
         let queue_current_qid_i32 = queue_current_qid.and_then(|qid| i32::try_from(qid).ok());
         let queue_next_qid_i32 = queue_next_qid.and_then(|next_qid| i32::try_from(next_qid).ok());
 
@@ -3216,16 +3359,15 @@ pub async fn v2_qconnect_report_playback_state(
     }
 
     let queue_version = service.get_queue_version().await;
-    let should_report_queue_item_ids = requested_current_qid.is_some()
-        || queue_lookup_report_strategy.is_some();
+    let should_report_queue_item_ids =
+        requested_current_qid.is_some() || queue_lookup_report_strategy.is_some();
 
-    let should_skip_due_to_stale_renderer =
-        should_skip_renderer_report_due_to_stale_snapshot(
-            current_track_id,
-            requested_current_qid,
-            resolved_current_qid,
-            renderer_current_track_id,
-        );
+    let should_skip_due_to_stale_renderer = should_skip_renderer_report_due_to_stale_snapshot(
+        current_track_id,
+        requested_current_qid,
+        resolved_current_qid,
+        renderer_current_track_id,
+    );
 
     if should_skip_due_to_stale_renderer {
         resolution_strategy = "suppressed_stale_renderer_snapshot_mismatch".to_string();
@@ -3636,16 +3778,14 @@ fn decode_hex_channel(raw: &str) -> Result<Vec<u8>, String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        QconnectFileAudioQualitySnapshot,
-        AUDIO_QUALITY_HIRES_LEVEL1,
         build_qconnect_file_audio_quality_snapshot, classify_qconnect_audio_quality,
         decode_hex_channel, determine_queue_lookup_report_strategy, find_unique_renderer_id,
         normalize_volume_to_fraction, parse_subscribe_channels, refresh_local_renderer_id,
-        resolve_controller_queue_item_from_snapshots,
-        resolve_queue_item_ids_from_queue_state,
-        should_skip_renderer_report_due_to_stale_snapshot, QconnectHandoffIntent,
-        QconnectRemoteSkipDirection, QconnectRendererInfo, QconnectSessionState,
-        QconnectOutboundCommandType, QconnectTrackOrigin,
+        resolve_controller_queue_item_from_snapshots, resolve_queue_item_ids_from_queue_state,
+        should_skip_renderer_report_due_to_stale_snapshot, QconnectFileAudioQualitySnapshot,
+        QconnectHandoffIntent, QconnectOutboundCommandType, QconnectRemoteSkipDirection,
+        QconnectRendererInfo, QconnectSessionState, QconnectTrackOrigin,
+        AUDIO_QUALITY_HIRES_LEVEL1,
     };
     use qconnect_app::{
         resolve_handoff_intent, QConnectQueueState, QConnectRendererState, QueueCommandType,
@@ -3976,11 +4116,17 @@ mod tests {
         assert_eq!(snapshot.playing_state, Some(super::PLAYING_STATE_PLAYING));
         assert_eq!(snapshot.current_position_ms, Some(19_999));
         assert_eq!(
-            snapshot.current_track.as_ref().map(|item| (item.track_id, item.queue_item_id)),
+            snapshot
+                .current_track
+                .as_ref()
+                .map(|item| (item.track_id, item.queue_item_id)),
             Some((126886862, 0)),
         );
         assert_eq!(
-            snapshot.next_track.as_ref().map(|item| (item.track_id, item.queue_item_id)),
+            snapshot
+                .next_track
+                .as_ref()
+                .map(|item| (item.track_id, item.queue_item_id)),
             Some((25584418, 1)),
         );
     }
@@ -4011,7 +4157,10 @@ mod tests {
 
     #[test]
     fn classifies_24_bit_streams_as_hires_level1() {
-        assert_eq!(classify_qconnect_audio_quality(44_100, 24), AUDIO_QUALITY_HIRES_LEVEL1);
+        assert_eq!(
+            classify_qconnect_audio_quality(44_100, 24),
+            AUDIO_QUALITY_HIRES_LEVEL1
+        );
         assert_eq!(
             build_qconnect_file_audio_quality_snapshot(96_000, 24, 2),
             Some(QconnectFileAudioQualitySnapshot {
@@ -4099,7 +4248,7 @@ mod tests {
             ),
             super::QconnectControllerQueueItemResolution {
                 target_queue_item_id: Some(0),
-                strategy: "renderer_current_queue_item_id_verified",
+                strategy: "restart_current_queue_item",
                 queue_index: Some(0),
                 matched_track_id: Some(126886853),
                 matched_queue_item_id: Some(0),
@@ -4128,6 +4277,48 @@ mod tests {
             "current_track": { "track_context_uuid": "ctx", "track_id": 123452387, "queue_item_id": 10 },
             "next_track": { "track_context_uuid": "ctx", "track_id": 126886854, "queue_item_id": 1 },
             "current_position_ms": 2_000,
+            "playing_state": 2,
+            "updated_at_ms": 0
+        }))
+        .expect("renderer state");
+
+        assert_eq!(
+            resolve_controller_queue_item_from_snapshots(
+                &queue,
+                &renderer,
+                QconnectRemoteSkipDirection::Previous,
+            ),
+            super::QconnectControllerQueueItemResolution {
+                target_queue_item_id: Some(0),
+                strategy: "queue_item_before_current",
+                queue_index: Some(0),
+                matched_track_id: Some(126886853),
+                matched_queue_item_id: Some(0),
+            }
+        );
+    }
+
+    #[test]
+    fn resolves_remote_previous_to_prior_item_even_mid_track() {
+        let queue: QConnectQueueState = serde_json::from_value(json!({
+            "version": { "major": 8, "minor": 2 },
+            "queue_items": [
+                { "track_context_uuid": "ctx", "track_id": 126886853, "queue_item_id": 126886853 },
+                { "track_context_uuid": "ctx", "track_id": 123452387, "queue_item_id": 10 },
+                { "track_context_uuid": "ctx", "track_id": 126886854, "queue_item_id": 1 }
+            ],
+            "shuffle_mode": false,
+            "shuffle_order": null,
+            "autoplay_mode": false,
+            "autoplay_loading": false,
+            "autoplay_items": [],
+            "updated_at_ms": 0
+        }))
+        .expect("queue state");
+        let renderer: QConnectRendererState = serde_json::from_value(json!({
+            "current_track": { "track_context_uuid": "ctx", "track_id": 123452387, "queue_item_id": 10 },
+            "next_track": { "track_context_uuid": "ctx", "track_id": 126886854, "queue_item_id": 1 },
+            "current_position_ms": 64_000,
             "playing_state": 2,
             "updated_at_ms": 0
         }))

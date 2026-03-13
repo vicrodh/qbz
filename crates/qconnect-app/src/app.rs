@@ -122,6 +122,10 @@ where
                 command.command_type,
                 QueueCommandType::CtrlSrvrAskForQueueState
             ),
+            is_transport_control_action: matches!(
+                command.command_type,
+                QueueCommandType::CtrlSrvrSetPlayerState
+            ),
             concurrency_error: false,
             sent_at_ms: now_ms(),
         };
@@ -226,6 +230,20 @@ where
                     state.pending.correlate(event.action_uuid.as_deref()),
                     PendingCorrelation::Matched
                 ) {
+                    state.pending.clear().map(|pending| pending.uuid)
+                } else if matches!(
+                    event.event_type,
+                    QueueEventType::SrvrCtrlRendererStateUpdated
+                ) && state
+                    .pending
+                    .current()
+                    .map(|pending| pending.is_transport_control_action)
+                    .unwrap_or(false)
+                {
+                    // Transport control SET_PLAYER_STATE commands do not get a
+                    // dedicated action_uuid ack. The first renderer state update is
+                    // the practical completion signal; otherwise rapid next/previous
+                    // presses stay blocked behind a stale pending slot.
                     state.pending.clear().map(|pending| pending.uuid)
                 } else {
                     None
@@ -357,9 +375,7 @@ where
             .await;
 
         if is_echo {
-            log::debug!(
-                "[QConnect] Skipping echo SET_STATE (no playing_state or current_track)"
-            );
+            log::debug!("[QConnect] Skipping echo SET_STATE (no playing_state or current_track)");
             return Ok(());
         }
 
@@ -1056,6 +1072,71 @@ mod tests {
                 event,
                 QconnectAppEvent::SessionManagementEvent { message_type, .. }
                 if message_type == "MESSAGE_TYPE_SRVR_CTRL_ACTIVE_RENDERER_CHANGED"
+            )
+        }));
+    }
+
+    #[tokio::test]
+    async fn renderer_state_update_completes_transport_control_pending_without_action_uuid() {
+        let (app, sink, _transport, _events_rx) = build_connected_app().await;
+        let command = app
+            .build_queue_command(
+                QueueCommandType::CtrlSrvrSetPlayerState,
+                json!({
+                    "playing_state": 2,
+                    "current_position": 0,
+                    "current_queue_item": {
+                        "queue_version": { "major": 1, "minor": 1 },
+                        "id": 1
+                    }
+                }),
+            )
+            .await;
+        let pending_uuid = app
+            .send_queue_command(command)
+            .await
+            .expect("send set-player-state command");
+
+        app.apply_server_event(QueueServerEvent {
+            event_type: QueueEventType::SrvrCtrlRendererStateUpdated,
+            action_uuid: None,
+            queue_version: Some(QueueVersion::new(1, 1)),
+            payload: json!({
+                "renderer_id": 1,
+                "status": 1,
+                "player_state": {
+                    "playing_state": 2,
+                    "current_position": 1234,
+                    "current_queue_item_id": 1
+                }
+            }),
+        })
+        .await
+        .expect("apply renderer-state-updated event");
+
+        let second_command = app
+            .build_queue_command(
+                QueueCommandType::CtrlSrvrSetPlayerState,
+                json!({
+                    "playing_state": 2,
+                    "current_position": 0,
+                    "current_queue_item": {
+                        "queue_version": { "major": 1, "minor": 1 },
+                        "id": 2
+                    }
+                }),
+            )
+            .await;
+
+        app.send_queue_command(second_command)
+            .await
+            .expect("transport control pending should clear after renderer-state update");
+
+        let events = sink.snapshot().await;
+        assert!(events.iter().any(|event| {
+            matches!(
+                event,
+                QconnectAppEvent::PendingActionCompleted { uuid } if uuid == &pending_uuid
             )
         }));
     }

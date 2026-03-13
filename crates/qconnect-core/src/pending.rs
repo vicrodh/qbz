@@ -8,6 +8,8 @@ pub struct PendingQueueAction {
     pub queue_version_ref: QueueVersion,
     pub emit_result_event: bool,
     pub is_ask_for_state_action: bool,
+    #[serde(default)]
+    pub is_transport_control_action: bool,
     pub concurrency_error: bool,
     pub sent_at_ms: u64,
 }
