@@ -14,6 +14,7 @@ import {
   addToQueue,
   type BackendQueueTrack
 } from '$lib/stores/queueStore';
+import { getPlayerState } from '$lib/stores/playerStore';
 import { addTrackToFavorites } from '$lib/services/playbackService';
 import { openPlaylistModal } from '$lib/stores/uiStore';
 import { showToast as storeShowToast, type ToastType } from '$lib/stores/toastStore';
@@ -123,7 +124,10 @@ async function resolveQconnectPlayNextInsertAfterFromSnapshots(): Promise<Qconne
 
   const queueSnapshot = queueSnapshotResult.status === 'fulfilled' ? queueSnapshotResult.value : null;
   const rendererSnapshot = rendererSnapshotResult.status === 'fulfilled' ? rendererSnapshotResult.value : null;
-  const resolution = resolveQconnectPlayNextInsertAfter(queueSnapshot, rendererSnapshot);
+  const localCurrentTrackId = getPlayerState().currentTrack?.id ?? null;
+  const resolution = resolveQconnectPlayNextInsertAfter(queueSnapshot, rendererSnapshot, {
+    authoritativeCurrentTrackId: localCurrentTrackId
+  });
 
   const snapshotError = [
     queueSnapshotResult.status === 'rejected'

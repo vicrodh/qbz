@@ -64,6 +64,10 @@ export type QconnectPlayNextAnchorResolution = {
   matchedQueueItemId: number | null;
 };
 
+type QconnectPlayNextResolutionOptions = {
+  authoritativeCurrentTrackId?: number | null;
+};
+
 function isPositiveNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0;
 }
@@ -102,11 +106,13 @@ function findTrackIndex(
 
 export function resolveQconnectPlayNextInsertAfter(
   queueSnapshot: QconnectQueueSnapshot | null | undefined,
-  rendererSnapshot: QconnectRendererSnapshot | null | undefined
+  rendererSnapshot: QconnectRendererSnapshot | null | undefined,
+  options: QconnectPlayNextResolutionOptions = {}
 ): QconnectPlayNextAnchorResolution {
   const queueItems = queueSnapshot?.queue_items ?? [];
   const currentTrack = rendererSnapshot?.current_track ?? null;
   const nextTrack = rendererSnapshot?.next_track ?? null;
+  const authoritativeCurrentTrackId = options.authoritativeCurrentTrackId;
 
   if (queueItems.length === 0) {
     return {
@@ -121,6 +127,34 @@ export function resolveQconnectPlayNextInsertAfter(
 
   const currentQueueIndex = findQueueIndexByQueueItemId(queueItems, currentTrack?.queue_item_id);
   const nextQueueIndex = findQueueIndexByQueueItemId(queueItems, nextTrack?.queue_item_id);
+  const authoritativeTrackIndexBeforeNext = nextQueueIndex !== null
+    ? findTrackIndexBefore(queueItems, authoritativeCurrentTrackId, nextQueueIndex)
+    : null;
+  const authoritativeCurrentTrackIndex = findTrackIndex(queueItems, authoritativeCurrentTrackId);
+  const authoritativeTrackDisagreesWithRenderer = isPositiveNumber(authoritativeCurrentTrackId)
+    && authoritativeCurrentTrackId !== currentTrack?.track_id;
+
+  if (authoritativeTrackDisagreesWithRenderer && authoritativeTrackIndexBeforeNext !== null) {
+    return {
+      insertAfter: queueItems[authoritativeTrackIndexBeforeNext].queue_item_id,
+      strategy: 'authoritative_track_id_before_renderer_next',
+      queueIndex: authoritativeTrackIndexBeforeNext,
+      nextQueueIndex,
+      matchedTrackId: queueItems[authoritativeTrackIndexBeforeNext].track_id,
+      matchedQueueItemId: queueItems[authoritativeTrackIndexBeforeNext].queue_item_id
+    };
+  }
+
+  if (authoritativeTrackDisagreesWithRenderer && authoritativeCurrentTrackIndex !== null) {
+    return {
+      insertAfter: queueItems[authoritativeCurrentTrackIndex].queue_item_id,
+      strategy: 'authoritative_track_id_match',
+      queueIndex: authoritativeCurrentTrackIndex,
+      nextQueueIndex,
+      matchedTrackId: queueItems[authoritativeCurrentTrackIndex].track_id,
+      matchedQueueItemId: queueItems[authoritativeCurrentTrackIndex].queue_item_id
+    };
+  }
 
   if (currentQueueIndex !== null) {
     return {
