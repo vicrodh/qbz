@@ -279,6 +279,10 @@
     updateLastfmNowPlaying,
     cleanup as cleanupPlayback
   } from '$lib/services/playbackService';
+  import {
+    isPlaybackSourceLocal,
+    resolvePlaybackSource
+  } from '$lib/services/playbackSource';
 
   import {
     queueTrackNext,
@@ -2168,8 +2172,8 @@
 
   // Helper to play a track from the queue (with offline skip support)
   async function playQueueTrack(track: BackendQueueTrack, skippedIds = new Set<number>(), gaplessTransition = false) {
-    const source = track.source ?? (track.is_local ? 'local' : 'qobuz');
-    const isLocal = source !== 'qobuz' || isLocalTrack(track.id);
+    const source = resolvePlaybackSource(track);
+    const isLocal = isPlaybackSourceLocal(source, isLocalTrack(track.id));
 
     // In offline mode, check if track is available
     if (offlineStatus.isOffline && !isLocal) {

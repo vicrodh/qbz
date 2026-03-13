@@ -11,6 +11,10 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { getUserItem, setUserItem } from '$lib/utils/userStorage';
+import {
+  isPlaybackSourceLocal,
+  resolvePlaybackSource
+} from '$lib/services/playbackSource';
 
 /**
  * Get the preferred streaming quality from localStorage
@@ -278,12 +282,11 @@ export async function playTrack(
         console.log('Auto-skipping to next track:', next.title);
         // Small delay to let the toast be visible
         setTimeout(() => {
-          const nextSource = (next.source === 'plex' || next.source === 'local' || next.source === 'qobuz')
-            ? next.source
-            : (next.is_local ? 'local' : 'qobuz');
+          const nextSource = resolvePlaybackSource(next);
+          const nextIsLocal = isPlaybackSourceLocal(nextSource, next.is_local ?? false);
           const nextSamplingRate = next.sample_rate == null
             ? undefined
-            : (next.is_local || nextSource === 'plex')
+            : nextIsLocal
               ? next.sample_rate / 1000
               : next.sample_rate;
           playTrack({
@@ -299,9 +302,9 @@ export async function playTrack(
             bitDepth: next.bit_depth || undefined,
             samplingRate: nextSamplingRate,
             source: nextSource,
-            isLocal: next.is_local
+            isLocal: nextIsLocal
           }, {
-            isLocal: next.is_local ?? false,
+            isLocal: nextIsLocal,
             source: nextSource,
             showLoadingToast: true,
             showSuccessToast: true

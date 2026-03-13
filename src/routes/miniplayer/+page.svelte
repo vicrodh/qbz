@@ -55,6 +55,10 @@
     handleKeydown as keybindingHandler
   } from '$lib/stores/keybindingsStore';
   import { playTrack } from '$lib/services/playbackService';
+  import {
+    isPlaybackSourceLocal,
+    resolvePlaybackSource
+  } from '$lib/services/playbackSource';
 
   let playerState = $state<PlayerState>(getPlayerState());
   let queueState = $state<QueueState>(getQueueState());
@@ -312,8 +316,8 @@
   }
 
   async function playQueueTrack(track: BackendQueueTrack): Promise<void> {
-    const source = track.source ?? (track.is_local ? 'local' : 'qobuz');
-    const isLocal = source !== 'qobuz';
+    const source = resolvePlaybackSource(track);
+    const isLocal = isPlaybackSourceLocal(source, track.is_local ?? false);
     const quality = isLocal
       ? 'Local'
       : track.bit_depth && track.sample_rate
