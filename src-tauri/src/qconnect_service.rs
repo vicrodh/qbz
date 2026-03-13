@@ -314,6 +314,7 @@ struct QconnectRemoteSyncState {
     last_renderer_playing_state: Option<i32>,
     last_reported_file_audio_quality: Option<QconnectFileAudioQualitySnapshot>,
     last_applied_queue_version: Option<(u64, u64)>,
+    last_remote_queue_state: Option<QConnectQueueState>,
     /// Session topology — stored from session management events (types 81-87).
     session: QconnectSessionState,
     session_renderer_states: HashMap<i32, QconnectSessionRendererState>,
@@ -600,6 +601,10 @@ impl QconnectEventSink for TauriQconnectEventSink {
                 sync_state.last_renderer_playing_state = renderer_state.playing_state;
             }
             QconnectAppEvent::QueueUpdated(queue_state) => {
+                {
+                    let mut sync_state = self.sync_state.lock().await;
+                    sync_state.last_remote_queue_state = Some(queue_state.clone());
+                }
                 if let Err(err) = materialize_remote_queue_to_corebridge(
                     &self.core_bridge,
                     &self.sync_state,
@@ -634,6 +639,7 @@ impl QconnectEventSink for TauriQconnectEventSink {
 
 impl TauriQconnectEventSink {
     async fn apply_session_management_event(&self, message_type: &str, payload: &Value) {
+        let mut remote_projection_renderer_id: Option<i32> = None;
         let mut state = self.sync_state.lock().await;
         match message_type {
             "MESSAGE_TYPE_SRVR_CTRL_SESSION_STATE" => {
@@ -746,6 +752,7 @@ impl TauriQconnectEventSink {
                 state.session.active_renderer_id =
                     normalize_active_renderer_id(payload.get("active_renderer_id").and_then(Value::as_i64));
                 sync_session_renderer_active_flags(&mut state);
+                remote_projection_renderer_id = state.session.active_renderer_id;
             }
             "MESSAGE_TYPE_SRVR_CTRL_RENDERER_STATE_UPDATED" => {
                 let Some(renderer_id) = payload.get("renderer_id").and_then(Value::as_i64) else {
@@ -778,6 +785,7 @@ impl TauriQconnectEventSink {
                 }
 
                 renderer_state.updated_at_ms = qconnect_now_ms();
+                remote_projection_renderer_id = Some(renderer_id as i32);
             }
             "MESSAGE_TYPE_SRVR_CTRL_VOLUME_CHANGED" => {
                 let Some(renderer_id) = payload.get("renderer_id").and_then(Value::as_i64) else {
@@ -840,6 +848,67 @@ impl TauriQconnectEventSink {
                 renderer_state.updated_at_ms = qconnect_now_ms();
             }
             _ => {}
+        }
+        drop(state);
+
+        if let Some(renderer_id) = remote_projection_renderer_id {
+            self.sync_active_peer_renderer_projection(renderer_id).await;
+        }
+    }
+
+    async fn sync_active_peer_renderer_projection(&self, renderer_id: i32) {
+        let (queue_state, renderer_state) = {
+            let state = self.sync_state.lock().await;
+            let Some(active_renderer_id) = state.session.active_renderer_id else {
+                return;
+            };
+            if active_renderer_id != renderer_id || state.session.local_renderer_id == Some(active_renderer_id) {
+                return;
+            }
+
+            (
+                state.last_remote_queue_state.clone(),
+                state.session_renderer_states.get(&active_renderer_id).cloned(),
+            )
+        };
+
+        let (Some(queue_state), Some(renderer_state)) = (queue_state, renderer_state) else {
+            return;
+        };
+
+        let renderer_snapshot = build_session_renderer_snapshot(&queue_state, Some(&renderer_state));
+        {
+            let mut state = self.sync_state.lock().await;
+            state.last_renderer_queue_item_id = renderer_snapshot
+                .current_track
+                .as_ref()
+                .map(|item| item.queue_item_id);
+            state.last_renderer_next_queue_item_id = renderer_snapshot
+                .next_track
+                .as_ref()
+                .map(|item| item.queue_item_id);
+            state.last_renderer_track_id = renderer_snapshot
+                .current_track
+                .as_ref()
+                .map(|item| item.track_id);
+            state.last_renderer_next_track_id = renderer_snapshot
+                .next_track
+                .as_ref()
+                .map(|item| item.track_id);
+            state.last_renderer_playing_state = renderer_snapshot.playing_state;
+        }
+
+        let bridge_guard = self.core_bridge.read().await;
+        let Some(bridge) = bridge_guard.as_ref() else {
+            return;
+        };
+
+        let Some(current_track) = renderer_snapshot.current_track.as_ref() else {
+            return;
+        };
+
+        if let Err(err) = align_corebridge_queue_cursor(bridge, current_track.track_id).await {
+            log::warn!("[QConnect] Failed to sync peer renderer cursor into CoreBridge: {err}");
         }
     }
 }
@@ -1460,6 +1529,17 @@ impl QconnectServiceState {
             Some(0),
         )
         .await;
+        if let Some(target_track_id) = resolution.matched_track_id {
+            if let Some(bridge_state) = app_handle.try_state::<CoreBridgeState>() {
+                if let Some(bridge) = bridge_state.try_get().await {
+                    if let Err(err) = align_corebridge_queue_cursor(&bridge, target_track_id).await {
+                        log::warn!(
+                            "[QConnect] Failed to align CoreBridge after remote skip handoff: {err}"
+                        );
+                    }
+                }
+            }
+        }
 
         emit_qconnect_diagnostic(
             app_handle,
@@ -1476,7 +1556,7 @@ impl QconnectServiceState {
         app_handle: &AppHandle,
     ) -> Result<bool, String> {
         let remote_context = self.effective_remote_renderer_snapshot().await?;
-        let Some((renderer, _, session)) = remote_context else {
+        let Some((renderer, queue, session)) = remote_context else {
             let (active_renderer_id, local_renderer_id, renderer_count, reason) = {
                 let guard = self.inner.lock().await;
                 let Some(runtime) = guard.runtime.as_ref() else {
@@ -1518,11 +1598,25 @@ impl QconnectServiceState {
             Some(PLAYING_STATE_PLAYING) => PLAYING_STATE_PAUSED,
             _ => PLAYING_STATE_PLAYING,
         };
+        let current_position = renderer
+            .current_position_ms
+            .and_then(|value| i32::try_from(value).ok());
+        let current_queue_item = renderer.current_track.as_ref().and_then(|item| {
+            i32::try_from(item.queue_item_id).ok().map(|queue_item_id| {
+                QconnectSetPlayerStateQueueItemPayload {
+                    queue_version: Some(QconnectQueueVersionPayload {
+                        major: queue.version.major,
+                        minor: queue.version.minor,
+                    }),
+                    id: Some(queue_item_id),
+                }
+            })
+        });
 
         let payload = serde_json::to_value(QconnectSetPlayerStateRequest {
             playing_state: Some(next_playing_state),
-            current_position: None,
-            current_queue_item: None,
+            current_position,
+            current_queue_item,
         })
         .map_err(|err| format!("serialize toggle_play request: {err}"))?;
 
@@ -1540,6 +1634,8 @@ impl QconnectServiceState {
                 "local_renderer_id": local_renderer_id,
                 "current_playing_state": renderer.playing_state,
                 "requested_playing_state": next_playing_state,
+                "current_position": current_position,
+                "current_queue_item_id": renderer.current_track.as_ref().map(|item| item.queue_item_id),
             }),
         );
 
@@ -1625,6 +1721,15 @@ impl QconnectServiceState {
                     Some(0),
                 )
                 .await;
+                if let Some(bridge_state) = app_handle.try_state::<CoreBridgeState>() {
+                    if let Some(bridge) = bridge_state.try_get().await {
+                        if let Err(err) = align_corebridge_queue_cursor(&bridge, track_id).await {
+                            log::warn!(
+                                "[QConnect] Failed to align CoreBridge after remote play-track handoff: {err}"
+                            );
+                        }
+                    }
+                }
 
                 emit_qconnect_diagnostic(
                     app_handle,

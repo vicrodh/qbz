@@ -909,6 +909,7 @@
   let sessionPersistEnabled = $state(false);
   let radioLoading = $state(false);
   let qconnectRemoteClockMs = $state(Date.now());
+  let qconnectRemoteProjectedTrackId = $state<number | null>(null);
 
   const qconnectPeerRendererActive = $derived(
     isQconnectPeerRendererActive(qobuzConnectSessionSnapshot)
@@ -1029,6 +1030,92 @@
     isQobuzConnectConnected = nextConnected;
   }
 
+  function mapBackendQueueTrackToPlayingTrack(track: BackendQueueTrack): PlayingTrack {
+    const rawRate = track.sample_rate ?? undefined;
+    const normalizedRate = rawRate == null
+      ? undefined
+      : (track.is_local || track.source === 'plex')
+        ? rawRate / 1000
+        : rawRate;
+
+    return {
+      id: track.id,
+      title: track.title,
+      artist: track.artist,
+      album: track.album,
+      artwork: track.artwork_url || '',
+      duration: track.duration_secs,
+      quality: track.hires ? 'Hi-Res' : 'CD Quality',
+      bitDepth: track.bit_depth ?? undefined,
+      samplingRate: normalizedRate,
+      isLocal: track.is_local,
+      source: track.source ?? undefined,
+      albumId: track.album_id ?? undefined,
+      artistId: track.artist_id ?? undefined,
+      parental_warning: track.parental_warning ?? undefined
+    };
+  }
+
+  async function syncQconnectRemoteProjection(
+    rendererSnapshot: QconnectRendererSnapshot | null | undefined,
+    peerRendererActive: boolean
+  ): Promise<void> {
+    if (!peerRendererActive) {
+      qconnectRemoteProjectedTrackId = null;
+      return;
+    }
+
+    await syncQueueState();
+    const state = await getBackendQueueState();
+    if (!state) {
+      return;
+    }
+
+    if (state.shuffle && state.current_track && state.total_tracks > 0) {
+      queueRemainingTracks = state.total_tracks - 1;
+    } else if (state.current_index !== null && state.total_tracks > 0) {
+      queueRemainingTracks = state.total_tracks - state.current_index - 1;
+    } else {
+      queueRemainingTracks = state.total_tracks;
+    }
+
+    historyTracks = state.history.map((track) => ({
+      id: String(track.id),
+      artwork: track.artwork_url || '',
+      title: track.title,
+      artist: track.artist,
+      duration: formatDuration(track.duration_secs),
+      trackId: track.id
+    }));
+
+    const remoteTrack = state.current_track;
+    const remoteTrackId = remoteTrack?.id ?? null;
+
+    if (remoteTrack) {
+      currentTrack = mapBackendQueueTrackToPlayingTrack(remoteTrack);
+      duration = remoteTrack.duration_secs;
+    } else if (!rendererSnapshot?.current_track) {
+      currentTrack = null;
+      duration = 0;
+    }
+
+    if (rendererSnapshot?.playing_state != null) {
+      isPlaying = rendererSnapshot.playing_state === 2;
+    }
+    if (rendererSnapshot?.current_position_ms != null) {
+      currentTime = Math.max(0, rendererSnapshot.current_position_ms / 1000);
+    }
+
+    if (remoteTrackId !== qconnectRemoteProjectedTrackId) {
+      qconnectRemoteProjectedTrackId = remoteTrackId;
+      if (remoteTrackId == null) {
+        isFavorite = false;
+      } else {
+        isFavorite = await checkTrackFavorite(remoteTrackId);
+      }
+    }
+  }
+
   async function refreshQobuzConnectStatus(): Promise<void> {
     try {
       const runtimeState = await fetchQconnectRuntimeState();
@@ -1043,6 +1130,7 @@
       qobuzConnectQueueSnapshot = null;
       qobuzConnectRendererSnapshot = null;
       qobuzConnectSessionSnapshot = null;
+      qconnectRemoteProjectedTrackId = null;
       return;
     }
 
@@ -1051,6 +1139,8 @@
     qobuzConnectQueueSnapshot = runtimeState.queueSnapshot;
     qobuzConnectRendererSnapshot = runtimeState.rendererSnapshot;
     qobuzConnectSessionSnapshot = runtimeState.sessionSnapshot;
+    const peerRendererActive = isQconnectPeerRendererActive(runtimeState.sessionSnapshot);
+    await syncQconnectRemoteProjection(runtimeState.rendererSnapshot, peerRendererActive);
 
     if (runtimeState.snapshotError) {
       pushQobuzConnectDiagnostic('snapshot', 'warn', runtimeState.snapshotError);
@@ -1066,6 +1156,8 @@
       qobuzConnectQueueSnapshot = runtimeState.queueSnapshot;
       qobuzConnectRendererSnapshot = runtimeState.rendererSnapshot;
       qobuzConnectSessionSnapshot = runtimeState.sessionSnapshot;
+      const peerRendererActive = isQconnectPeerRendererActive(runtimeState.sessionSnapshot);
+      await syncQconnectRemoteProjection(runtimeState.rendererSnapshot, peerRendererActive);
       if (runtimeState.snapshotError) {
         pushQobuzConnectDiagnostic('snapshot', 'warn', runtimeState.snapshotError);
       }
@@ -1080,7 +1172,11 @@
     }
 
     try {
-      return await invoke<boolean>('v2_qconnect_toggle_play_if_remote');
+      const handledRemotely = await invoke<boolean>('v2_qconnect_toggle_play_if_remote');
+      if (handledRemotely) {
+        await refreshQobuzConnectRuntimeState();
+      }
+      return handledRemotely;
     } catch (err) {
       pushQobuzConnectDiagnostic('qconnect:toggle_play_handoff', 'error', {
         error: String(err)
@@ -2165,6 +2261,7 @@
     try {
       const handledRemotely = await invoke<boolean>('v2_qconnect_skip_previous_if_remote');
       if (handledRemotely) {
+        await refreshQobuzConnectRuntimeState();
         return;
       }
     } catch (err) {
@@ -2204,6 +2301,7 @@
     try {
       const handledRemotely = await invoke<boolean>('v2_qconnect_skip_next_if_remote');
       if (handledRemotely) {
+        await refreshQobuzConnectRuntimeState();
         return;
       }
     } catch (err) {
@@ -3909,14 +4007,18 @@
     let prevTrackId: number | null = null;
     const unsubscribePlayer = subscribePlayer(() => {
       const playerState = getPlayerState();
+      const remotePeerActive = qconnectPeerRendererActive;
       const wasPlaying = isPlaying;
+      volume = playerState.volume;
+      normalizationGain = playerState.normalizationGain;
+      if (remotePeerActive) {
+        return;
+      }
       currentTrack = playerState.currentTrack;
       isPlaying = playerState.isPlaying;
       currentTime = playerState.currentTime;
       duration = playerState.duration;
-      volume = playerState.volume;
       isFavorite = playerState.isFavorite;
-      normalizationGain = playerState.normalizationGain;
       const allowLocalSessionPersistence = shouldPersistLocalSession();
 
       // Save position during playback (debounced to every 5s)
