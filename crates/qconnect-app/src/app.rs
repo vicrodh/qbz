@@ -220,6 +220,24 @@ where
         // Session management events bypass the queue reducer entirely.
         // They provide session topology info (renderers, active renderer, etc.)
         if event.event_type.is_session_management() {
+            let completed_uuid = {
+                let mut state = self.state.lock().await;
+                if matches!(
+                    state.pending.correlate(event.action_uuid.as_deref()),
+                    PendingCorrelation::Matched
+                ) {
+                    state.pending.clear().map(|pending| pending.uuid)
+                } else {
+                    None
+                }
+            };
+
+            if let Some(uuid) = completed_uuid {
+                self.sink
+                    .on_event(QconnectAppEvent::PendingActionCompleted { uuid })
+                    .await;
+            }
+
             self.sink
                 .on_event(QconnectAppEvent::SessionManagementEvent {
                     message_type: event.message_type().to_string(),
@@ -988,6 +1006,58 @@ mod tests {
                 .any(|event| matches!(event, QconnectAppEvent::QueueUpdated(_))),
             "ignored late queue error should not mutate queue"
         );
+    }
+
+    #[tokio::test]
+    async fn matching_session_management_event_completes_pending_action() {
+        let (app, sink, _transport, _events_rx) = build_connected_app().await;
+        let command = app
+            .build_queue_command(
+                QueueCommandType::CtrlSrvrSetActiveRenderer,
+                json!({ "active_renderer_id": 1 }),
+            )
+            .await;
+        let pending_uuid = app
+            .send_queue_command(command)
+            .await
+            .expect("send set-active-renderer command");
+
+        let matching_event = QueueServerEvent {
+            event_type: QueueEventType::SrvrCtrlActiveRendererChanged,
+            action_uuid: Some(pending_uuid.clone()),
+            queue_version: Some(QueueVersion::new(1, 1)),
+            payload: json!({ "active_renderer_id": 1 }),
+        };
+
+        app.apply_server_event(matching_event)
+            .await
+            .expect("apply active-renderer-changed event");
+
+        let second_command = app
+            .build_queue_command(
+                QueueCommandType::CtrlSrvrQueueLoadTracks,
+                json!({ "track_ids": [101, 102] }),
+            )
+            .await;
+
+        app.send_queue_command(second_command)
+            .await
+            .expect("pending action should be cleared by matching session event");
+
+        let events = sink.snapshot().await;
+        assert!(events.iter().any(|event| {
+            matches!(
+                event,
+                QconnectAppEvent::PendingActionCompleted { uuid } if uuid == &pending_uuid
+            )
+        }));
+        assert!(events.iter().any(|event| {
+            matches!(
+                event,
+                QconnectAppEvent::SessionManagementEvent { message_type, .. }
+                if message_type == "MESSAGE_TYPE_SRVR_CTRL_ACTIVE_RENDERER_CHANGED"
+            )
+        }));
     }
 
     #[tokio::test]
