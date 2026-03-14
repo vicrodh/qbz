@@ -156,6 +156,10 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
         let queue = self.queue.write().await;
         queue.set_shuffle(enabled);
         self.emit(CoreEvent::ShuffleChanged { enabled }).await;
+        self.emit(CoreEvent::QueueUpdated {
+            state: queue.get_state(),
+        })
+        .await;
     }
 
     /// Set shuffle mode using an authoritative order.
@@ -163,6 +167,10 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
         let queue = self.queue.write().await;
         queue.set_shuffle_with_order(enabled, shuffle_order);
         self.emit(CoreEvent::ShuffleChanged { enabled }).await;
+        self.emit(CoreEvent::QueueUpdated {
+            state: queue.get_state(),
+        })
+        .await;
     }
 
     /// Toggle shuffle and return new state
@@ -173,6 +181,10 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
         queue.set_shuffle(new_enabled);
         self.emit(CoreEvent::ShuffleChanged {
             enabled: new_enabled,
+        })
+        .await;
+        self.emit(CoreEvent::QueueUpdated {
+            state: queue.get_state(),
         })
         .await;
         new_enabled

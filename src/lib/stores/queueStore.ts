@@ -239,18 +239,12 @@ export async function syncQueueState(): Promise<void> {
  */
 export async function toggleShuffle(): Promise<{ success: boolean; enabled: boolean }> {
   const newState = !isShuffle;
-  isShuffle = newState;
-  notifyListeners();
 
   try {
     await invoke('v2_toggle_shuffle');
-    await syncQueueState();
     return { success: true, enabled: newState };
   } catch (err) {
     console.error('Failed to set shuffle:', err);
-    // Revert on error
-    isShuffle = !newState;
-    notifyListeners();
     return { success: false, enabled: !newState };
   }
 }
@@ -490,11 +484,9 @@ export async function startQueueEventListener(): Promise<void> {
 
     const shuffleChangedUnlisten = await listen<boolean>('queue:shuffle-changed', (event) => {
       console.log('[Queue] Received queue:shuffle-changed event:', event.payload);
-      isShuffle = event.payload;
-      notifyListeners();
-      syncQueueState().catch(err =>
-        console.error('[Queue] Failed to sync queue after queue:shuffle-changed event:', err)
-      );
+      // Shuffle changes must be reflected by the authoritative queue:updated
+      // payload, not by forcing a local resync that can capture an
+      // intermediate non-authoritative order.
     });
 
     const repeatChangedUnlisten = await listen<string>('queue:repeat-changed', (event) => {

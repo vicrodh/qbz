@@ -179,57 +179,34 @@ describe('queueStore', () => {
   });
 
   describe('toggleShuffle', () => {
-    it('should toggle shuffle on', async () => {
-      mockedInvoke
-        .mockResolvedValueOnce(undefined)
-        .mockResolvedValueOnce({
-          current_track: null,
-          current_index: null,
-          upcoming: [],
-          history: [],
-          shuffle: true,
-          repeat: 'Off',
-          total_tracks: 0
-        });
+    it('should request shuffle on without mutating local state optimistically', async () => {
+      mockedInvoke.mockResolvedValueOnce(undefined);
 
       const result = await toggleShuffle();
 
       expect(result).toEqual({ success: true, enabled: true });
-      expect(getIsShuffle()).toBe(true);
+      expect(getIsShuffle()).toBe(false);
       expect(mockedInvoke).toHaveBeenCalledWith('v2_toggle_shuffle');
+      expect(mockedInvoke).toHaveBeenCalledTimes(1);
     });
 
-    it('should toggle shuffle off', async () => {
-      // First toggle on
-      mockedInvoke
-        .mockResolvedValueOnce(undefined)
-        .mockResolvedValueOnce({
-          current_track: null,
-          current_index: null,
-          upcoming: [],
-          history: [],
-          shuffle: true,
-          repeat: 'Off',
-          total_tracks: 0
-        });
-      await toggleShuffle();
+    it('should request shuffle off from the current authoritative state', async () => {
+      mockedInvoke.mockResolvedValueOnce({
+        current_track: null,
+        current_index: null,
+        upcoming: [],
+        history: [],
+        shuffle: true,
+        repeat: 'Off',
+        total_tracks: 0
+      });
+      await syncQueueState();
 
-      // Then toggle off
-      mockedInvoke
-        .mockResolvedValueOnce(undefined)
-        .mockResolvedValueOnce({
-          current_track: null,
-          current_index: null,
-          upcoming: [],
-          history: [],
-          shuffle: false,
-          repeat: 'Off',
-          total_tracks: 0
-        });
+      mockedInvoke.mockResolvedValueOnce(undefined);
       const result = await toggleShuffle();
 
       expect(result).toEqual({ success: true, enabled: false });
-      expect(getIsShuffle()).toBe(false);
+      expect(getIsShuffle()).toBe(true);
     });
 
     it('should revert on error', async () => {
@@ -363,32 +340,13 @@ describe('queueStore', () => {
       expect(getRepeatMode()).toBe('all');
     });
 
-    it('should sync queue state after queue:shuffle-changed', async () => {
+    it('should ignore queue:shuffle-changed until queue:updated arrives', async () => {
       const eventHandlers = new Map<string, (event: { payload: unknown }) => void>();
       mockedListen.mockImplementation(async (eventName, handler) => {
         eventHandlers.set(String(eventName), handler as (event: { payload: unknown }) => void);
         return () => {
           eventHandlers.delete(String(eventName));
         };
-      });
-
-      mockedInvoke.mockResolvedValueOnce({
-        current_track: null,
-        current_index: 0,
-        upcoming: [
-          {
-            id: 7,
-            title: 'Shuffled Track',
-            artist: 'Artist',
-            album: 'Album',
-            duration_secs: 220,
-            artwork_url: null
-          }
-        ],
-        history: [],
-        shuffle: true,
-        repeat: 'Off',
-        total_tracks: 10
       });
 
       await startQueueEventListener();
@@ -398,11 +356,10 @@ describe('queueStore', () => {
 
       shuffleChanged?.({ payload: true });
       await Promise.resolve();
-      await Promise.resolve();
 
-      expect(mockedInvoke).toHaveBeenCalledWith('v2_get_queue_state');
-      expect(getIsShuffle()).toBe(true);
-      expect(getQueue().map(track => track.id)).toEqual(['7']);
+      expect(mockedInvoke).not.toHaveBeenCalledWith('v2_get_queue_state');
+      expect(getIsShuffle()).toBe(false);
+      expect(getQueue()).toEqual([]);
     });
   });
 });
