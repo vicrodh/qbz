@@ -2540,9 +2540,13 @@ async fn materialize_remote_queue_to_corebridge(
         start_index,
         current_playback_track_id
     );
-    bridge.set_queue(queue_tracks, start_index).await;
     bridge
-        .set_shuffle_with_order(queue_state.shuffle_mode, queue_state.shuffle_order.clone())
+        .set_queue_with_order(
+            queue_tracks,
+            start_index,
+            queue_state.shuffle_mode,
+            queue_state.shuffle_order.clone(),
+        )
         .await;
 
     let local_track_missing_from_remote = current_playback_track_id

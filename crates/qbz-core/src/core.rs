@@ -228,6 +228,22 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
         .await;
     }
 
+    /// Replace queue contents and playback order atomically.
+    pub async fn set_queue_with_order(
+        &self,
+        tracks: Vec<QueueTrack>,
+        start_index: Option<usize>,
+        shuffle_enabled: bool,
+        shuffle_order: Option<Vec<usize>>,
+    ) {
+        let queue = self.queue.write().await;
+        queue.set_queue_with_order(tracks, start_index, shuffle_enabled, shuffle_order);
+        self.emit(CoreEvent::QueueUpdated {
+            state: queue.get_state(),
+        })
+        .await;
+    }
+
     /// Remove a track by index
     pub async fn remove_track(&self, index: usize) -> Option<QueueTrack> {
         let queue = self.queue.write().await;

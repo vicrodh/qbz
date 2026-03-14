@@ -169,6 +169,19 @@ impl CoreBridge {
         self.core.set_queue(tracks, start_index).await
     }
 
+    /// Set the entire queue and playback order atomically.
+    pub async fn set_queue_with_order(
+        &self,
+        tracks: Vec<QueueTrack>,
+        start_index: Option<usize>,
+        shuffle_enabled: bool,
+        shuffle_order: Option<Vec<usize>>,
+    ) {
+        self.core
+            .set_queue_with_order(tracks, start_index, shuffle_enabled, shuffle_order)
+            .await
+    }
+
     /// Remove a track by index
     pub async fn remove_track(&self, index: usize) -> Option<QueueTrack> {
         self.core.remove_track(index).await

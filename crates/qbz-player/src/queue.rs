@@ -149,6 +149,56 @@ impl QueueManager {
         }
     }
 
+    /// Replace the queue and playback order in a single atomic update.
+    /// This avoids emitting an intermediate locally reshuffled state before an
+    /// authoritative remote shuffle order has been applied.
+    pub fn set_queue_with_order(
+        &self,
+        new_tracks: Vec<QueueTrack>,
+        start_index: Option<usize>,
+        shuffle_enabled: bool,
+        shuffle_order: Option<Vec<usize>>,
+    ) {
+        let mut state = self.state.lock().unwrap();
+        state.tracks = new_tracks;
+        state.current_index = start_index;
+        state.history.clear();
+        state.shuffle = shuffle_enabled;
+
+        if !shuffle_enabled {
+            state.shuffle_order.clear();
+            state.shuffle_position = 0;
+            return;
+        }
+
+        if let Some(order) =
+            shuffle_order.filter(|order| Self::is_valid_shuffle_order(order, state.tracks.len()))
+        {
+            state.shuffle_order = order;
+            if let Some(curr_idx) = state.current_index {
+                if let Some(pos) = state.shuffle_order.iter().position(|&idx| idx == curr_idx) {
+                    state.shuffle_position = pos;
+                } else {
+                    state.shuffle_position = 0;
+                }
+            } else {
+                state.shuffle_position = 0;
+            }
+            return;
+        }
+
+        Self::regenerate_shuffle_order_internal(&mut state);
+
+        if let Some(curr_idx) = state.current_index {
+            if let Some(pos) = state.shuffle_order.iter().position(|&idx| idx == curr_idx) {
+                if pos != 0 {
+                    state.shuffle_order.swap(0, pos);
+                }
+                state.shuffle_position = 0;
+            }
+        }
+    }
+
     /// Clear the queue
     pub fn clear(&self) {
         let mut state = self.state.lock().unwrap();
@@ -1095,5 +1145,24 @@ mod tests {
         assert!(state.shuffle);
         assert_eq!(state.shuffle_order.len(), 4);
         assert_eq!(state.shuffle_order[0], 1);
+    }
+
+    #[test]
+    fn test_set_queue_with_order_applies_authoritative_shuffle_before_snapshot() {
+        let queue = QueueManager::new();
+        let tracks = (1..=5).map(create_test_track).collect::<Vec<_>>();
+
+        queue.set_queue_with_order(tracks, Some(0), true, Some(vec![0, 3, 1, 4, 2]));
+
+        let state = queue.get_state();
+        assert!(state.shuffle);
+        assert_eq!(
+            state
+                .upcoming
+                .iter()
+                .map(|track| track.id)
+                .collect::<Vec<_>>(),
+            vec![4, 2, 5, 3]
+        );
     }
 }
