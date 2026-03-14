@@ -17,7 +17,6 @@ use qbz_models::{
 };
 use qconnect_app::QueueCommandType;
 use qconnect_app::{QConnectQueueState, QConnectRendererState};
-use qconnect_core::build_shuffle_order;
 
 use crate::api::models::{
     DynamicSuggestRequest, DynamicSuggestResponse, DynamicTrackToAnalyse, PlaylistDuplicateResult,
@@ -6080,7 +6079,7 @@ pub async fn v2_toggle_shuffle(
             .await
             .map_err(RuntimeError::Internal)?;
         let next_enabled = !queue.shuffle_mode;
-        apply_qconnect_shuffle_mode(qconnect.inner(), bridge.inner(), &queue, next_enabled).await?;
+        apply_qconnect_shuffle_mode(qconnect.inner(), &queue, next_enabled).await?;
         return Ok(next_enabled);
     }
 
@@ -6107,7 +6106,7 @@ pub async fn v2_set_shuffle(
             .queue_snapshot()
             .await
             .map_err(RuntimeError::Internal)?;
-        apply_qconnect_shuffle_mode(qconnect.inner(), bridge.inner(), &queue, enabled).await?;
+        apply_qconnect_shuffle_mode(qconnect.inner(), &queue, enabled).await?;
         return Ok(());
     }
 
@@ -6142,13 +6141,12 @@ pub async fn v2_clear_queue(
 
 async fn apply_qconnect_shuffle_mode(
     qconnect: &QconnectServiceState,
-    bridge: &CoreBridgeState,
     queue: &QConnectQueueState,
     enabled: bool,
 ) -> Result<(), RuntimeError> {
     let renderer = qconnect.renderer_snapshot().await.unwrap_or_default();
     let shuffle_seed = enabled.then(|| rand::random::<u32>() & (i32::MAX as u32));
-    let (pivot_queue_item_id, pivot_index) = resolve_qconnect_shuffle_pivot(queue, &renderer);
+    let pivot_queue_item_id = resolve_qconnect_shuffle_pivot(queue, &renderer);
 
     qconnect
         .send_command(
@@ -6165,18 +6163,6 @@ async fn apply_qconnect_shuffle_mode(
         )
         .await
         .map_err(RuntimeError::Internal)?;
-
-    let bridge = bridge.get().await;
-    let shuffle_order = if enabled {
-        Some(build_shuffle_order(
-            queue.queue_items.len(),
-            u64::from(shuffle_seed.unwrap_or(0)),
-            pivot_index,
-        ))
-    } else {
-        None
-    };
-    bridge.set_shuffle_with_order(enabled, shuffle_order).await;
     Ok(())
 }
 
@@ -6191,29 +6177,30 @@ fn qconnect_loop_mode_from_repeat_mode(mode: RepeatMode) -> i32 {
 fn resolve_qconnect_shuffle_pivot(
     queue: &QConnectQueueState,
     renderer: &QConnectRendererState,
-) -> (Option<u64>, Option<usize>) {
+) -> Option<u64> {
     let Some(current_track) = renderer.current_track.as_ref() else {
-        return (None, None);
+        return None;
     };
 
-    if let Some(index) = queue
+    if queue
         .queue_items
         .iter()
         .position(|item| item.queue_item_id == current_track.queue_item_id)
+        .is_some()
     {
-        return (Some(current_track.queue_item_id), Some(index));
+        return Some(current_track.queue_item_id);
     }
 
-    if let Some((index, item)) = queue
+    if let Some((_, item)) = queue
         .queue_items
         .iter()
         .enumerate()
         .find(|(_, item)| item.track_id == current_track.track_id)
     {
-        return (Some(item.queue_item_id), Some(index));
+        return Some(item.queue_item_id);
     }
 
-    (None, None)
+    None
 }
 
 #[cfg(test)]
@@ -6249,9 +6236,8 @@ mod tests {
             ..Default::default()
         };
 
-        let (queue_item_id, pivot_index) = resolve_qconnect_shuffle_pivot(&queue, &renderer);
+        let queue_item_id = resolve_qconnect_shuffle_pivot(&queue, &renderer);
         assert_eq!(queue_item_id, Some(11));
-        assert_eq!(pivot_index, Some(1));
     }
 
     #[test]
@@ -6265,9 +6251,8 @@ mod tests {
             ..Default::default()
         };
 
-        let (queue_item_id, pivot_index) = resolve_qconnect_shuffle_pivot(&queue, &renderer);
+        let queue_item_id = resolve_qconnect_shuffle_pivot(&queue, &renderer);
         assert_eq!(queue_item_id, Some(22));
-        assert_eq!(pivot_index, Some(2));
     }
 }
 
