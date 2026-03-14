@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  resolveQconnectQueueDisplayItems,
   resolveQconnectPlayNextInsertAfter,
   type QconnectQueueSnapshot,
   type QconnectRendererSnapshot
@@ -15,10 +16,37 @@ function buildQueueSnapshot(trackIds: number[], queueItemIds: number[]): Qconnec
       track_context_uuid: `ctx-${index + 1}`
     })),
     shuffle_mode: false,
+    shuffle_order: null,
     autoplay_mode: false,
     autoplay_items: []
   };
 }
+
+describe('resolveQconnectQueueDisplayItems', () => {
+  it('returns queue items in shuffle order when the snapshot provides one', () => {
+    const queueSnapshot: QconnectQueueSnapshot = {
+      ...buildQueueSnapshot([101, 102, 103, 104], [1, 2, 3, 4]),
+      shuffle_mode: true,
+      shuffle_order: [0, 2, 3, 1]
+    };
+
+    expect(resolveQconnectQueueDisplayItems(queueSnapshot).map((item) => item.track_id)).toEqual([
+      101, 103, 104, 102
+    ]);
+  });
+
+  it('falls back to raw queue items when shuffle order is invalid', () => {
+    const queueSnapshot: QconnectQueueSnapshot = {
+      ...buildQueueSnapshot([201, 202, 203], [11, 12, 13]),
+      shuffle_mode: true,
+      shuffle_order: [0, 99, 1]
+    };
+
+    expect(resolveQconnectQueueDisplayItems(queueSnapshot).map((item) => item.track_id)).toEqual([
+      201, 202, 203
+    ]);
+  });
+});
 
 describe('resolveQconnectPlayNextInsertAfter', () => {
   it('prefers a renderer queue_item_id that exists in the queue snapshot', () => {

@@ -16,6 +16,7 @@
     QconnectRendererTrackSnapshot,
     QconnectRendererSnapshot
   } from '$lib/services/qconnectRemoteQueue';
+  import { resolveQconnectQueueDisplayItems } from '$lib/services/qconnectRemoteQueue';
 
   interface QconnectRendererInfo {
     renderer_id: number;
@@ -182,8 +183,8 @@
     return `track ${track.track_id} / qid ${track.queue_item_id}`;
   }
 
-  function queuePreview(queueItems: QconnectQueueItemSnapshot[] | null | undefined): QconnectQueueItemSnapshot[] {
-    return (queueItems ?? []).slice(0, 6);
+  function queuePreview(queueSnapshotValue: QconnectQueueSnapshot | null | undefined): QconnectQueueItemSnapshot[] {
+    return resolveQconnectQueueDisplayItems(queueSnapshotValue).slice(0, 6);
   }
 </script>
 
@@ -349,7 +350,7 @@
           <span class="preview-label">{$t('qconnect.queuePreviewTitle')}</span>
           {#if queueSnapshot && queueSnapshot.queue_items.length > 0}
             <div class="preview-list">
-              {#each queuePreview(queueSnapshot.queue_items) as queueItem, index (queueItem.queue_item_id)}
+              {#each queuePreview(queueSnapshot) as queueItem, index (queueItem.queue_item_id)}
                 <div class="preview-row">
                   <span class="preview-index">{index + 1}.</span>
                   <span class="preview-track">{formatTrackRef(queueItem)}</span>

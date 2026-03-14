@@ -8,6 +8,7 @@ export type QconnectQueueSnapshot = {
   version?: { major: number; minor: number };
   queue_items: QconnectQueueItemSnapshot[];
   shuffle_mode: boolean;
+  shuffle_order?: number[] | null;
   autoplay_mode: boolean;
   autoplay_items: QconnectQueueItemSnapshot[];
 };
@@ -128,6 +129,25 @@ function resolvedQueueItemId(
   return isCloudPlaceholderCurrentQueueItem(queueItems, queueIndex)
     ? 0
     : queueItems[queueIndex].queue_item_id;
+}
+
+export function resolveQconnectQueueDisplayItems(
+  queueSnapshot: QconnectQueueSnapshot | null | undefined
+): QconnectQueueItemSnapshot[] {
+  const queueItems = queueSnapshot?.queue_items ?? [];
+  const shuffleOrder = queueSnapshot?.shuffle_order ?? null;
+
+  if (!queueSnapshot?.shuffle_mode || !Array.isArray(shuffleOrder) || shuffleOrder.length === 0) {
+    return queueItems;
+  }
+
+  const ordered = shuffleOrder
+    .map((queueIndex) => (
+      Number.isInteger(queueIndex) && queueIndex >= 0 ? queueItems[queueIndex] ?? null : null
+    ))
+    .filter((queueItem): queueItem is QconnectQueueItemSnapshot => queueItem !== null);
+
+  return ordered.length === queueItems.length ? ordered : queueItems;
 }
 
 export function resolveQconnectPlayNextInsertAfter(
