@@ -5,7 +5,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use qbz_models::{Quality, QueueTrack, Track};
+use qbz_models::{Quality, QueueTrack, RepeatMode, Track};
 use qconnect_app::{
     evaluate_remote_queue_admission, resolve_handoff_intent, HandoffIntent, QConnectQueueState,
     QConnectRendererState, QconnectApp, QconnectAppEvent, QconnectEventSink, QueueCommandType,
@@ -315,6 +315,7 @@ struct QconnectRemoteSyncState {
     last_reported_file_audio_quality: Option<QconnectFileAudioQualitySnapshot>,
     last_applied_queue_state: Option<QConnectQueueState>,
     last_remote_queue_state: Option<QConnectQueueState>,
+    session_loop_mode: Option<i32>,
     /// Session topology — stored from session management events (types 81-87).
     session: QconnectSessionState,
     session_renderer_states: HashMap<i32, QconnectSessionRendererState>,
@@ -396,6 +397,31 @@ fn qconnect_now_ms() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_millis() as u64)
         .unwrap_or(0)
+}
+
+fn qconnect_repeat_mode_from_loop_mode(loop_mode: i32) -> Option<RepeatMode> {
+    match loop_mode {
+        0 => Some(RepeatMode::Off),
+        1 => Some(RepeatMode::All),
+        2 => Some(RepeatMode::One),
+        _ => None,
+    }
+}
+
+async fn apply_remote_loop_mode_to_corebridge(
+    core_bridge: &Arc<RwLock<Option<CoreBridge>>>,
+    loop_mode: i32,
+) -> Result<(), String> {
+    let repeat_mode = qconnect_repeat_mode_from_loop_mode(loop_mode)
+        .ok_or_else(|| format!("unsupported qconnect loop mode: {loop_mode}"))?;
+
+    let bridge_guard = core_bridge.read().await;
+    let Some(bridge) = bridge_guard.as_ref() else {
+        return Err("core bridge is not initialized yet".to_string());
+    };
+
+    bridge.set_repeat_mode(repeat_mode).await;
+    Ok(())
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -561,6 +587,7 @@ fn queue_item_snapshot_for_cursor(
 fn build_session_renderer_snapshot(
     queue: &QConnectQueueState,
     renderer_state: Option<&QconnectSessionRendererState>,
+    session_loop_mode: Option<i32>,
 ) -> QConnectRendererState {
     let renderer_state = renderer_state.cloned().unwrap_or_default();
     let cursors = ordered_queue_cursors(queue);
@@ -582,7 +609,7 @@ fn build_session_renderer_snapshot(
         volume_delta: None,
         muted: renderer_state.muted,
         max_audio_quality: renderer_state.max_audio_quality,
-        loop_mode: renderer_state.loop_mode,
+        loop_mode: renderer_state.loop_mode.or(session_loop_mode),
         shuffle_mode: renderer_state.shuffle_mode,
         updated_at_ms: renderer_state.updated_at_ms,
     }
@@ -592,9 +619,14 @@ fn build_effective_renderer_snapshot(
     queue: &QConnectQueueState,
     base_renderer_state: &QConnectRendererState,
     session_renderer_state: Option<&QconnectSessionRendererState>,
+    session_loop_mode: Option<i32>,
 ) -> QConnectRendererState {
     let Some(session_renderer_state) = session_renderer_state else {
-        return base_renderer_state.clone();
+        let mut renderer_snapshot = base_renderer_state.clone();
+        if let Some(loop_mode) = session_loop_mode {
+            renderer_snapshot.loop_mode = Some(loop_mode);
+        }
+        return renderer_snapshot;
     };
 
     let mut renderer_snapshot = base_renderer_state.clone();
@@ -617,7 +649,7 @@ fn build_effective_renderer_snapshot(
     if let Some(max_audio_quality) = session_renderer_state.max_audio_quality {
         renderer_snapshot.max_audio_quality = Some(max_audio_quality);
     }
-    if let Some(loop_mode) = session_renderer_state.loop_mode {
+    if let Some(loop_mode) = session_renderer_state.loop_mode.or(session_loop_mode) {
         renderer_snapshot.loop_mode = Some(loop_mode);
     }
     if let Some(shuffle_mode) = session_renderer_state.shuffle_mode {
@@ -628,7 +660,8 @@ fn build_effective_renderer_snapshot(
     }
 
     if session_renderer_state.current_queue_item_id.is_some() {
-        let session_snapshot = build_session_renderer_snapshot(queue, Some(session_renderer_state));
+        let session_snapshot =
+            build_session_renderer_snapshot(queue, Some(session_renderer_state), session_loop_mode);
         if session_snapshot.current_track.is_some() {
             renderer_snapshot.current_track = session_snapshot.current_track;
             renderer_snapshot.next_track = session_snapshot.next_track;
@@ -725,6 +758,7 @@ impl TauriQconnectEventSink {
     async fn apply_session_management_event(&self, message_type: &str, payload: &Value) {
         let mut remote_projection_renderer_id: Option<i32> = None;
         let mut sync_local_playback = false;
+        let mut apply_loop_mode: Option<i32> = None;
         let mut state = self.sync_state.lock().await;
         match message_type {
             "MESSAGE_TYPE_SRVR_CTRL_SESSION_STATE" => {
@@ -734,6 +768,22 @@ impl TauriQconnectEventSink {
                 state.session.active_renderer_id = normalize_active_renderer_id(
                     payload.get("active_renderer_id").and_then(Value::as_i64),
                 );
+                if let Some(loop_mode) = payload
+                    .get("loop_mode")
+                    .and_then(Value::as_i64)
+                    .and_then(|value| i32::try_from(value).ok())
+                {
+                    state.session_loop_mode = Some(loop_mode);
+                    apply_loop_mode = Some(loop_mode);
+                }
+                if let (Some(active_renderer_id), Some(loop_mode)) =
+                    (state.session.active_renderer_id, state.session_loop_mode)
+                {
+                    let renderer_state =
+                        ensure_session_renderer_state(&mut state, active_renderer_id);
+                    renderer_state.loop_mode = Some(loop_mode);
+                    renderer_state.updated_at_ms = qconnect_now_ms();
+                }
                 sync_session_renderer_active_flags(&mut state);
                 sync_local_playback = true;
             }
@@ -839,6 +889,15 @@ impl TauriQconnectEventSink {
                 state.session.active_renderer_id = normalize_active_renderer_id(
                     payload.get("active_renderer_id").and_then(Value::as_i64),
                 );
+                if let (Some(active_renderer_id), Some(loop_mode)) =
+                    (state.session.active_renderer_id, state.session_loop_mode)
+                {
+                    let renderer_state =
+                        ensure_session_renderer_state(&mut state, active_renderer_id);
+                    renderer_state.loop_mode = Some(loop_mode);
+                    renderer_state.updated_at_ms = qconnect_now_ms();
+                }
+                apply_loop_mode = state.session_loop_mode;
                 sync_session_renderer_active_flags(&mut state);
                 remote_projection_renderer_id = state.session.active_renderer_id;
                 sync_local_playback = true;
@@ -930,17 +989,26 @@ impl TauriQconnectEventSink {
                 else {
                     return;
                 };
-                let Some(active_renderer_id) = state.session.active_renderer_id else {
-                    return;
-                };
-
-                let renderer_state = ensure_session_renderer_state(&mut state, active_renderer_id);
-                renderer_state.loop_mode = Some(loop_mode);
-                renderer_state.updated_at_ms = qconnect_now_ms();
+                state.session_loop_mode = Some(loop_mode);
+                apply_loop_mode = Some(loop_mode);
+                if let Some(active_renderer_id) = state.session.active_renderer_id {
+                    let renderer_state =
+                        ensure_session_renderer_state(&mut state, active_renderer_id);
+                    renderer_state.loop_mode = Some(loop_mode);
+                    renderer_state.updated_at_ms = qconnect_now_ms();
+                }
             }
             _ => {}
         }
         drop(state);
+
+        if let Some(loop_mode) = apply_loop_mode {
+            if let Err(err) =
+                apply_remote_loop_mode_to_corebridge(&self.core_bridge, loop_mode).await
+            {
+                log::warn!("[QConnect] Failed to apply remote loop mode to CoreBridge: {err}");
+            }
+        }
 
         if sync_local_playback {
             self.sync_local_playback_for_renderer_ownership().await;
@@ -980,7 +1048,7 @@ impl TauriQconnectEventSink {
     }
 
     async fn sync_active_renderer_projection(&self, renderer_id: i32) {
-        let (queue_state, renderer_state, should_align_corebridge) = {
+        let (queue_state, renderer_state, session_loop_mode, should_align_corebridge) = {
             let state = self.sync_state.lock().await;
             let Some(active_renderer_id) = state.session.active_renderer_id else {
                 return;
@@ -995,6 +1063,7 @@ impl TauriQconnectEventSink {
                     .session_renderer_states
                     .get(&active_renderer_id)
                     .cloned(),
+                state.session_loop_mode,
                 state.session.local_renderer_id != Some(active_renderer_id),
             )
         };
@@ -1004,7 +1073,7 @@ impl TauriQconnectEventSink {
         };
 
         let renderer_snapshot =
-            build_session_renderer_snapshot(&queue_state, Some(&renderer_state));
+            build_session_renderer_snapshot(&queue_state, Some(&renderer_state), session_loop_mode);
         {
             let mut state = self.sync_state.lock().await;
             cache_renderer_snapshot(&mut state, &renderer_snapshot);
@@ -1390,8 +1459,12 @@ impl QconnectServiceState {
             .session_renderer_states
             .get(&active_renderer_id)
             .cloned();
-        let renderer =
-            build_effective_renderer_snapshot(&queue, &base_renderer, renderer_state.as_ref());
+        let renderer = build_effective_renderer_snapshot(
+            &queue,
+            &base_renderer,
+            renderer_state.as_ref(),
+            state.session_loop_mode,
+        );
 
         Ok(Some((renderer, queue, session)))
     }
@@ -2404,14 +2477,18 @@ async fn apply_renderer_command_to_corebridge(
                 bridge.set_volume(normalize_volume_to_fraction(resolved))?;
             }
         }
+        RendererCommand::SetLoopMode { loop_mode } => {
+            let resolved_loop_mode = renderer_state.loop_mode.unwrap_or(*loop_mode);
+            let repeat_mode = qconnect_repeat_mode_from_loop_mode(resolved_loop_mode)
+                .ok_or_else(|| format!("unsupported qconnect loop mode: {resolved_loop_mode}"))?;
+            bridge.set_repeat_mode(repeat_mode).await;
+        }
         RendererCommand::SetActive { active } => {
             if !*active {
                 bridge.stop()?;
             }
         }
-        RendererCommand::SetMaxAudioQuality { .. }
-        | RendererCommand::SetLoopMode { .. }
-        | RendererCommand::SetShuffleMode { .. } => {}
+        RendererCommand::SetMaxAudioQuality { .. } | RendererCommand::SetShuffleMode { .. } => {}
     }
 
     Ok(())
@@ -4147,6 +4224,7 @@ mod tests {
         QconnectRendererInfo, QconnectSessionState, QconnectTrackOrigin,
         AUDIO_QUALITY_HIRES_LEVEL1,
     };
+    use qbz_models::RepeatMode;
     use qconnect_app::{
         resolve_handoff_intent, QConnectQueueState, QConnectRendererState, QueueCommandType,
     };
@@ -4418,6 +4496,23 @@ mod tests {
     }
 
     #[test]
+    fn maps_qconnect_loop_mode_to_repeat_mode() {
+        assert_eq!(
+            super::qconnect_repeat_mode_from_loop_mode(0),
+            Some(RepeatMode::Off)
+        );
+        assert_eq!(
+            super::qconnect_repeat_mode_from_loop_mode(1),
+            Some(RepeatMode::All)
+        );
+        assert_eq!(
+            super::qconnect_repeat_mode_from_loop_mode(2),
+            Some(RepeatMode::One)
+        );
+        assert_eq!(super::qconnect_repeat_mode_from_loop_mode(99), None);
+    }
+
+    #[test]
     fn resolves_current_and_next_queue_item_ids_from_queue_order() {
         let queue: QConnectQueueState = serde_json::from_value(json!({
             "version": { "major": 4, "minor": 1 },
@@ -4491,7 +4586,7 @@ mod tests {
             ..Default::default()
         };
 
-        let snapshot = super::build_session_renderer_snapshot(&queue, Some(&renderer_state));
+        let snapshot = super::build_session_renderer_snapshot(&queue, Some(&renderer_state), None);
 
         assert_eq!(snapshot.active, Some(true));
         assert_eq!(snapshot.playing_state, Some(super::PLAYING_STATE_PLAYING));
@@ -4510,6 +4605,31 @@ mod tests {
                 .map(|item| (item.track_id, item.queue_item_id)),
             Some((25584418, 1)),
         );
+    }
+
+    #[test]
+    fn session_renderer_snapshot_uses_session_loop_mode_when_renderer_loop_mode_missing() {
+        let queue: QConnectQueueState = serde_json::from_value(json!({
+            "version": { "major": 10, "minor": 1 },
+            "queue_items": [
+                { "track_context_uuid": "ctx", "track_id": 126886862, "queue_item_id": 126886862 }
+            ],
+            "shuffle_mode": false,
+            "shuffle_order": null,
+            "autoplay_mode": false,
+            "autoplay_loading": false,
+            "autoplay_items": [],
+            "updated_at_ms": 0
+        }))
+        .expect("queue state");
+
+        let snapshot = super::build_session_renderer_snapshot(
+            &queue,
+            Some(&super::QconnectSessionRendererState::default()),
+            Some(2),
+        );
+
+        assert_eq!(snapshot.loop_mode, Some(2));
     }
 
     #[test]
@@ -4556,8 +4676,12 @@ mod tests {
             ..Default::default()
         };
 
-        let snapshot =
-            super::build_effective_renderer_snapshot(&queue, &base_renderer, Some(&renderer_state));
+        let snapshot = super::build_effective_renderer_snapshot(
+            &queue,
+            &base_renderer,
+            Some(&renderer_state),
+            None,
+        );
 
         assert_eq!(snapshot.current_position_ms, Some(15_000));
         assert_eq!(snapshot.updated_at_ms, 222);

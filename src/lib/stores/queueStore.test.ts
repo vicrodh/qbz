@@ -220,20 +220,37 @@ describe('queueStore', () => {
   });
 
   describe('toggleRepeat', () => {
-    it('should cycle through repeat modes', async () => {
+    it('should request the next repeat mode without mutating local state optimistically', async () => {
       mockedInvoke.mockResolvedValue(undefined);
 
       // off -> all
       let result = await toggleRepeat();
       expect(result.mode).toBe('all');
+      expect(getRepeatMode()).toBe('off');
 
       // all -> one
+      const eventHandlers = new Map<string, (event: { payload: unknown }) => void>();
+      mockedListen.mockImplementation(async (eventName, handler) => {
+        eventHandlers.set(String(eventName), handler as (event: { payload: unknown }) => void);
+        return () => {
+          eventHandlers.delete(String(eventName));
+        };
+      });
+      await startQueueEventListener();
+      eventHandlers.get('queue:repeat-changed')?.({ payload: 'all' });
+      await Promise.resolve();
+
       result = await toggleRepeat();
       expect(result.mode).toBe('one');
+      expect(getRepeatMode()).toBe('all');
 
       // one -> off
+      eventHandlers.get('queue:repeat-changed')?.({ payload: 'one' });
+      await Promise.resolve();
+
       result = await toggleRepeat();
       expect(result.mode).toBe('off');
+      expect(getRepeatMode()).toBe('one');
     });
 
     it('should not change mode on error', async () => {
@@ -360,6 +377,26 @@ describe('queueStore', () => {
       expect(mockedInvoke).not.toHaveBeenCalledWith('v2_get_queue_state');
       expect(getIsShuffle()).toBe(false);
       expect(getQueue()).toEqual([]);
+    });
+
+    it('should apply repeat mode from queue:repeat-changed', async () => {
+      const eventHandlers = new Map<string, (event: { payload: unknown }) => void>();
+      mockedListen.mockImplementation(async (eventName, handler) => {
+        eventHandlers.set(String(eventName), handler as (event: { payload: unknown }) => void);
+        return () => {
+          eventHandlers.delete(String(eventName));
+        };
+      });
+
+      await startQueueEventListener();
+
+      const repeatChanged = eventHandlers.get('queue:repeat-changed');
+      expect(repeatChanged).toBeDefined();
+
+      repeatChanged?.({ payload: 'one' });
+      await Promise.resolve();
+
+      expect(getRepeatMode()).toBe('one');
     });
   });
 });

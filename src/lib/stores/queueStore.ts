@@ -259,8 +259,6 @@ export async function toggleRepeat(): Promise<{ success: boolean; mode: RepeatMo
 
   try {
     await invoke('v2_set_repeat_mode', { mode: v2Mode });
-    repeatMode = nextMode;
-    notifyListeners();
     return { success: true, mode: nextMode };
   } catch (err) {
     console.error('Failed to set repeat:', err);

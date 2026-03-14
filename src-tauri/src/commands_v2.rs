@@ -6054,6 +6054,7 @@ pub async fn v2_set_repeat_mode(
             )
             .await
             .map_err(RuntimeError::Internal)?;
+        return Ok(());
     }
 
     let bridge = bridge.get().await;
