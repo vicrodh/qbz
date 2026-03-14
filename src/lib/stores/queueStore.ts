@@ -133,6 +133,46 @@ function formatDuration(seconds: number): string {
 let isOfflineMode = false;
 let tracksWithLocalCopies = new Set<number>();
 
+function normalizeRepeatMode(value: string): RepeatMode {
+  const normalized = value.toLowerCase();
+  if (normalized === 'all' || normalized === 'one') {
+    return normalized;
+  }
+  return 'off';
+}
+
+async function applyBackendQueueState(queueState: BackendQueueState): Promise<void> {
+  const trackIds = queueState.upcoming.map(track => track.id);
+
+  let localCopies = new Set<number>();
+  if (isOfflineMode && trackIds.length > 0) {
+    try {
+      const localIds = await invoke<number[]>('v2_playlist_get_tracks_with_local_copies', {
+        trackIds
+      });
+      localCopies = new Set(localIds);
+      tracksWithLocalCopies = localCopies;
+    } catch {
+      // Ignore errors, assume all available
+    }
+  }
+
+  queue = queueState.upcoming.map(track => ({
+    id: String(track.id),
+    artwork: track.artwork_url || '',
+    title: track.title,
+    artist: track.artist,
+    duration: formatDuration(track.duration_secs),
+    available: !isOfflineMode || localTrackIds.has(track.id) || localCopies.has(track.id),
+    parental_warning: track.parental_warning ?? false
+  }));
+
+  queueTotalTracks = queueState.total_tracks;
+  isShuffle = queueState.shuffle;
+  repeatMode = normalizeRepeatMode(queueState.repeat);
+  notifyListeners();
+}
+
 /**
  * Set offline mode state for queue availability checking
  */
@@ -188,39 +228,7 @@ export async function updateLocalCopiesSet(): Promise<void> {
 export async function syncQueueState(): Promise<void> {
   try {
     const queueState = await invoke<BackendQueueState>('v2_get_queue_state');
-
-    // Get track IDs for local copy check
-    const trackIds = queueState.upcoming.map(track => track.id);
-
-    // Check local copies if in offline mode
-    let localCopies = new Set<number>();
-    if (isOfflineMode && trackIds.length > 0) {
-      try {
-        const localIds = await invoke<number[]>('v2_playlist_get_tracks_with_local_copies', {
-          trackIds
-        });
-        localCopies = new Set(localIds);
-        tracksWithLocalCopies = localCopies;
-      } catch {
-        // Ignore errors, assume all available
-      }
-    }
-
-    // Convert backend queue tracks to frontend format
-    queue = queueState.upcoming.map(track => ({
-      id: String(track.id),
-      artwork: track.artwork_url || '',
-      title: track.title,
-      artist: track.artist,
-      duration: formatDuration(track.duration_secs),
-      available: !isOfflineMode || localTrackIds.has(track.id) || localCopies.has(track.id),
-      parental_warning: track.parental_warning ?? false
-    }));
-
-    queueTotalTracks = queueState.total_tracks;
-    isShuffle = queueState.shuffle;
-    repeatMode = queueState.repeat.toLowerCase() as RepeatMode;
-    notifyListeners();
+    await applyBackendQueueState(queueState);
   } catch (err) {
     console.error('Failed to sync queue state:', err);
   }
@@ -459,7 +467,7 @@ export function reset(): void {
 
 // ============ Event Listeners ============
 
-let queueEventUnlisten: UnlistenFn | null = null;
+let queueEventUnlisteners: UnlistenFn[] = [];
 
 interface QueueStateEvent {
   shuffle: boolean;
@@ -470,19 +478,48 @@ interface QueueStateEvent {
  * Start listening for queue state events from backend (e.g., shuffle/repeat changes from remote control)
  */
 export async function startQueueEventListener(): Promise<void> {
-  if (queueEventUnlisten) return;
+  if (queueEventUnlisteners.length > 0) return;
 
   try {
-    queueEventUnlisten = await listen<QueueStateEvent>('queue:state', (event) => {
-      console.log('[Queue] Received queue state event:', event.payload);
-      // Update local state directly from event
-      isShuffle = event.payload.shuffle;
-      repeatMode = event.payload.repeat.toLowerCase() as RepeatMode;
-      notifyListeners();
-      // Queue ordering may have changed (e.g. shuffle toggled remotely).
-      syncQueueState().catch(err => console.error('[Queue] Failed to sync queue after queue:state event:', err));
+    const queueUpdatedUnlisten = await listen<BackendQueueState>('queue:updated', (event) => {
+      console.log('[Queue] Received queue:updated event:', event.payload);
+      applyBackendQueueState(event.payload).catch(err =>
+        console.error('[Queue] Failed to apply queue:updated event:', err)
+      );
     });
-    console.log('[Queue] Started listening for queue state events');
+
+    const shuffleChangedUnlisten = await listen<boolean>('queue:shuffle-changed', (event) => {
+      console.log('[Queue] Received queue:shuffle-changed event:', event.payload);
+      isShuffle = event.payload;
+      notifyListeners();
+      syncQueueState().catch(err =>
+        console.error('[Queue] Failed to sync queue after queue:shuffle-changed event:', err)
+      );
+    });
+
+    const repeatChangedUnlisten = await listen<string>('queue:repeat-changed', (event) => {
+      console.log('[Queue] Received queue:repeat-changed event:', event.payload);
+      repeatMode = normalizeRepeatMode(event.payload);
+      notifyListeners();
+    });
+
+    const queueStateUnlisten = await listen<QueueStateEvent>('queue:state', (event) => {
+      console.log('[Queue] Received queue:state event:', event.payload);
+      isShuffle = event.payload.shuffle;
+      repeatMode = normalizeRepeatMode(event.payload.repeat);
+      notifyListeners();
+      syncQueueState().catch(err =>
+        console.error('[Queue] Failed to sync queue after queue:state event:', err)
+      );
+    });
+
+    queueEventUnlisteners = [
+      queueUpdatedUnlisten,
+      shuffleChangedUnlisten,
+      repeatChangedUnlisten,
+      queueStateUnlisten
+    ];
+    console.log('[Queue] Started listening for queue events');
   } catch (err) {
     console.error('[Queue] Failed to start queue event listener:', err);
   }
@@ -492,9 +529,11 @@ export async function startQueueEventListener(): Promise<void> {
  * Stop listening for queue state events
  */
 export function stopQueueEventListener(): void {
-  if (queueEventUnlisten) {
-    queueEventUnlisten();
-    queueEventUnlisten = null;
-    console.log('[Queue] Stopped listening for queue state events');
+  if (queueEventUnlisteners.length > 0) {
+    for (const unlisten of queueEventUnlisteners) {
+      unlisten();
+    }
+    queueEventUnlisteners = [];
+    console.log('[Queue] Stopped listening for queue events');
   }
 }

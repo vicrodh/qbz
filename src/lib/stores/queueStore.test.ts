@@ -4,6 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import {
   subscribe,
   getQueue,
@@ -16,16 +17,20 @@ import {
   clearLocalTrackIds,
   reset,
   syncQueueState,
+  startQueueEventListener,
+  stopQueueEventListener,
   toggleShuffle,
   toggleRepeat,
   type BackendQueueTrack
 } from './queueStore';
 
 const mockedInvoke = vi.mocked(invoke);
+const mockedListen = vi.mocked(listen);
 
 describe('queueStore', () => {
   beforeEach(() => {
     // Reset store state between tests
+    stopQueueEventListener();
     reset();
     vi.clearAllMocks();
   });
@@ -135,7 +140,8 @@ describe('queueStore', () => {
         title: 'Song 1',
         artist: 'Artist',
         duration: '3:00',
-        available: true
+        available: true,
+        parental_warning: false
       });
       expect(getQueue()[1].duration).toBe('4:00');
       expect(getQueueTotalTracks()).toBe(5);
@@ -174,7 +180,17 @@ describe('queueStore', () => {
 
   describe('toggleShuffle', () => {
     it('should toggle shuffle on', async () => {
-      mockedInvoke.mockResolvedValueOnce(undefined);
+      mockedInvoke
+        .mockResolvedValueOnce(undefined)
+        .mockResolvedValueOnce({
+          current_track: null,
+          current_index: null,
+          upcoming: [],
+          history: [],
+          shuffle: true,
+          repeat: 'Off',
+          total_tracks: 0
+        });
 
       const result = await toggleShuffle();
 
@@ -185,11 +201,31 @@ describe('queueStore', () => {
 
     it('should toggle shuffle off', async () => {
       // First toggle on
-      mockedInvoke.mockResolvedValueOnce(undefined);
+      mockedInvoke
+        .mockResolvedValueOnce(undefined)
+        .mockResolvedValueOnce({
+          current_track: null,
+          current_index: null,
+          upcoming: [],
+          history: [],
+          shuffle: true,
+          repeat: 'Off',
+          total_tracks: 0
+        });
       await toggleShuffle();
 
       // Then toggle off
-      mockedInvoke.mockResolvedValueOnce(undefined);
+      mockedInvoke
+        .mockResolvedValueOnce(undefined)
+        .mockResolvedValueOnce({
+          current_track: null,
+          current_index: null,
+          upcoming: [],
+          history: [],
+          shuffle: false,
+          repeat: 'Off',
+          total_tracks: 0
+        });
       const result = await toggleShuffle();
 
       expect(result).toEqual({ success: true, enabled: false });
@@ -271,6 +307,102 @@ describe('queueStore', () => {
       reset();
 
       expect(listener).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('queue events', () => {
+    it('should apply authoritative queue order from queue:updated', async () => {
+      const eventHandlers = new Map<string, (event: { payload: unknown }) => void>();
+      mockedListen.mockImplementation(async (eventName, handler) => {
+        eventHandlers.set(String(eventName), handler as (event: { payload: unknown }) => void);
+        return () => {
+          eventHandlers.delete(String(eventName));
+        };
+      });
+
+      await startQueueEventListener();
+
+      const queueUpdated = eventHandlers.get('queue:updated');
+      expect(queueUpdated).toBeDefined();
+
+      queueUpdated?.({
+        payload: {
+          current_track: null,
+          current_index: 0,
+          upcoming: [
+            {
+              id: 22,
+              title: 'Remote First',
+              artist: 'Artist',
+              album: 'Album',
+              duration_secs: 180,
+              artwork_url: null
+            },
+            {
+              id: 16,
+              title: 'Remote Second',
+              artist: 'Artist',
+              album: 'Album',
+              duration_secs: 200,
+              artwork_url: null
+            }
+          ],
+          history: [],
+          shuffle: true,
+          repeat: 'All',
+          total_tracks: 36
+        }
+      });
+
+      await Promise.resolve();
+
+      expect(getQueue().map(track => track.id)).toEqual(['22', '16']);
+      expect(getQueue().map(track => track.title)).toEqual(['Remote First', 'Remote Second']);
+      expect(getQueueTotalTracks()).toBe(36);
+      expect(getIsShuffle()).toBe(true);
+      expect(getRepeatMode()).toBe('all');
+    });
+
+    it('should sync queue state after queue:shuffle-changed', async () => {
+      const eventHandlers = new Map<string, (event: { payload: unknown }) => void>();
+      mockedListen.mockImplementation(async (eventName, handler) => {
+        eventHandlers.set(String(eventName), handler as (event: { payload: unknown }) => void);
+        return () => {
+          eventHandlers.delete(String(eventName));
+        };
+      });
+
+      mockedInvoke.mockResolvedValueOnce({
+        current_track: null,
+        current_index: 0,
+        upcoming: [
+          {
+            id: 7,
+            title: 'Shuffled Track',
+            artist: 'Artist',
+            album: 'Album',
+            duration_secs: 220,
+            artwork_url: null
+          }
+        ],
+        history: [],
+        shuffle: true,
+        repeat: 'Off',
+        total_tracks: 10
+      });
+
+      await startQueueEventListener();
+
+      const shuffleChanged = eventHandlers.get('queue:shuffle-changed');
+      expect(shuffleChanged).toBeDefined();
+
+      shuffleChanged?.({ payload: true });
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(mockedInvoke).toHaveBeenCalledWith('v2_get_queue_state');
+      expect(getIsShuffle()).toBe(true);
+      expect(getQueue().map(track => track.id)).toEqual(['7']);
     });
   });
 });
