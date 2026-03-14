@@ -15,6 +15,7 @@ use qbz_models::{
     PlaylistTag, Quality, QueueState, QueueTrack as CoreQueueTrack, RepeatMode, SearchResultsPage,
     Track, UserSession,
 };
+use qconnect_app::QueueCommandType;
 
 use crate::api::models::{
     DynamicSuggestRequest, DynamicSuggestResponse, DynamicTrackToAnalyse, PlaylistDuplicateResult,
@@ -55,6 +56,7 @@ use crate::offline::OfflineState;
 use crate::offline_cache::OfflineCacheState;
 use crate::playback_context::{ContentSource, ContextType, PlaybackContext};
 use crate::plex::{PlexMusicSection, PlexPlayResult, PlexServerInfo, PlexTrack};
+use crate::qconnect_service::QconnectServiceState;
 use crate::reco_store::{HomeResolved, HomeSeeds, RecoEventInput, RecoState};
 use crate::runtime::{
     CommandRequirement, DegradedReason, RuntimeError, RuntimeEvent, RuntimeManagerState,
@@ -6079,12 +6081,21 @@ pub async fn v2_set_shuffle(
 #[tauri::command]
 pub async fn v2_clear_queue(
     bridge: State<'_, CoreBridgeState>,
+    qconnect: State<'_, QconnectServiceState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), RuntimeError> {
     runtime
         .manager()
         .check_requirements(CommandRequirement::RequiresUserSession)
         .await?;
+
+    if qconnect.status().await.transport_connected {
+        qconnect
+            .send_command(QueueCommandType::CtrlSrvrClearQueue, serde_json::json!({}))
+            .await
+            .map_err(RuntimeError::Internal)?;
+    }
+
     let bridge = bridge.get().await;
     bridge.clear_queue().await;
     Ok(())
