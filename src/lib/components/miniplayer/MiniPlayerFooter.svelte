@@ -71,9 +71,11 @@
   let isDraggingSeek = $state(false);
   let isDraggingVolume = $state(false);
   let volumePopoverOpen = $state(false);
+  let dragPreviewTime = $state<number | null>(null);
   let microTrackOverflow = $state(0);
 
-  const progress = $derived(duration > 0 ? Math.max(0, Math.min(100, (currentTime / duration) * 100)) : 0);
+  const effectiveTime = $derived(dragPreviewTime ?? currentTime);
+  const progress = $derived(duration > 0 ? Math.max(0, Math.min(100, (effectiveTime / duration) * 100)) : 0);
   const tickerSpeed = 40;
   const microTrackOffset = $derived(microTrackOverflow > 0 ? `-${microTrackOverflow + 16}px` : '0px');
   const microTrackDuration = $derived(microTrackOverflow > 0 ? `${(microTrackOverflow + 16) / tickerSpeed}s` : '0s');
@@ -108,7 +110,7 @@
     if (!targetRef || duration <= 0) return;
     const rect = targetRef.getBoundingClientRect();
     const percentage = Math.max(0, Math.min(100, ((event.clientX - rect.left) / rect.width) * 100));
-    onSeek(Math.round((percentage / 100) * duration));
+    dragPreviewTime = Math.round((percentage / 100) * duration);
   }
 
   function updateVolume(event: MouseEvent): void {
@@ -139,8 +141,12 @@
   }
 
   function handleMouseUp(): void {
+    if (isDraggingSeek && dragPreviewTime !== null) {
+      onSeek(dragPreviewTime);
+    }
     isDraggingSeek = false;
     isDraggingVolume = false;
+    dragPreviewTime = null;
   }
 
   $effect(() => {
@@ -225,7 +231,7 @@
     </div>
 
     <div class="times">
-      <span>{formatTime(currentTime)}</span>
+      <span>{formatTime(effectiveTime)}</span>
       <span>{formatTime(duration)}</span>
     </div>
   {/if}

@@ -81,8 +81,10 @@
   let volumeRef: HTMLDivElement | null = $state(null);
   let isDraggingProgress = $state(false);
   let isDraggingVolume = $state(false);
+  let dragPreviewTime = $state<number | null>(null);
 
-  const progress = $derived((currentTime / duration) * 100 || 0);
+  const effectiveTime = $derived(dragPreviewTime ?? currentTime);
+  const progress = $derived((effectiveTime / duration) * 100 || 0);
 
   function formatTime(seconds: number): string {
     if (!seconds || !isFinite(seconds)) return '0:00';
@@ -100,7 +102,7 @@
     if (progressRef) {
       const rect = progressRef.getBoundingClientRect();
       const percentage = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
-      onSeek(Math.round((percentage / 100) * duration));
+      dragPreviewTime = Math.round((percentage / 100) * duration);
     }
   }
 
@@ -124,8 +126,12 @@
   }
 
   function handleMouseUp() {
+    if (isDraggingProgress && dragPreviewTime !== null) {
+      onSeek(dragPreviewTime);
+    }
     isDraggingProgress = false;
     isDraggingVolume = false;
+    dragPreviewTime = null;
   }
 
   $effect(() => {
@@ -228,7 +234,7 @@
 
       <!-- Center: Time + Playback + Time -->
       <div class="playback-group">
-        <span class="time-text">{formatTime(currentTime)}</span>
+        <span class="time-text">{formatTime(effectiveTime)}</span>
 
         <button
           class="control-btn nav"
