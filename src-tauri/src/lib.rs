@@ -1235,6 +1235,8 @@ pub fn run() {
             qconnect_service::v2_qconnect_stop_if_remote,
             qconnect_service::v2_qconnect_toggle_shuffle_if_remote,
             qconnect_service::v2_qconnect_cycle_repeat_if_remote,
+            qconnect_service::v2_qconnect_set_autoplay_mode_if_remote,
+            qconnect_service::v2_qconnect_autoplay_load_tracks_if_remote,
             qconnect_service::v2_qconnect_set_active_renderer,
             qconnect_service::v2_qconnect_set_volume,
             qconnect_service::v2_qconnect_set_loop_mode,

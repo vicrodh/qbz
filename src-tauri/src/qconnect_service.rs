@@ -2317,6 +2317,73 @@ impl QconnectServiceState {
         Ok(true)
     }
 
+    async fn set_autoplay_mode_if_remote(
+        &self,
+        enabled: bool,
+        app_handle: &AppHandle,
+    ) -> Result<bool, String> {
+        let remote_context = self.effective_remote_renderer_snapshot().await?;
+        let Some((_renderer, _queue, session)) = remote_context else {
+            return Ok(false);
+        };
+
+        let payload = json!({
+            "autoplay_mode": enabled,
+            "autoplay_reset": true,
+            "autoplay_loading": false
+        });
+        self.send_command(QueueCommandType::CtrlSrvrSetAutoplayMode, payload)
+            .await?;
+
+        emit_qconnect_diagnostic(
+            app_handle,
+            "qconnect:set_autoplay_mode_handoff",
+            "info",
+            json!({
+                "active_renderer_id": session.active_renderer_id,
+                "local_renderer_id": session.local_renderer_id,
+                "autoplay_mode": enabled,
+            }),
+        );
+
+        Ok(true)
+    }
+
+    async fn autoplay_load_tracks_if_remote(
+        &self,
+        track_ids: Vec<u32>,
+        app_handle: &AppHandle,
+    ) -> Result<bool, String> {
+        let remote_context = self.effective_remote_renderer_snapshot().await?;
+        let Some((_renderer, _queue, session)) = remote_context else {
+            return Ok(false);
+        };
+
+        if track_ids.is_empty() {
+            return Ok(true); // nothing to load, but handled remotely
+        }
+
+        let payload = json!({
+            "track_ids": track_ids,
+            "context_uuid": uuid::Uuid::new_v4().to_string()
+        });
+        self.send_command(QueueCommandType::CtrlSrvrAutoplayLoadTracks, payload)
+            .await?;
+
+        emit_qconnect_diagnostic(
+            app_handle,
+            "qconnect:autoplay_load_tracks_handoff",
+            "info",
+            json!({
+                "active_renderer_id": session.active_renderer_id,
+                "local_renderer_id": session.local_renderer_id,
+                "track_count": track_ids.len(),
+            }),
+        );
+
+        Ok(true)
+    }
+
     async fn stop_if_remote(
         &self,
         app_handle: &AppHandle,
@@ -4129,6 +4196,30 @@ pub async fn v2_qconnect_mute_if_remote(
 ) -> Result<bool, RuntimeError> {
     service
         .mute_if_remote(value, &app_handle)
+        .await
+        .map_err(RuntimeError::Internal)
+}
+
+#[tauri::command]
+pub async fn v2_qconnect_set_autoplay_mode_if_remote(
+    enabled: bool,
+    app_handle: AppHandle,
+    service: State<'_, QconnectServiceState>,
+) -> Result<bool, RuntimeError> {
+    service
+        .set_autoplay_mode_if_remote(enabled, &app_handle)
+        .await
+        .map_err(RuntimeError::Internal)
+}
+
+#[tauri::command]
+pub async fn v2_qconnect_autoplay_load_tracks_if_remote(
+    track_ids: Vec<u32>,
+    app_handle: AppHandle,
+    service: State<'_, QconnectServiceState>,
+) -> Result<bool, RuntimeError> {
+    service
+        .autoplay_load_tracks_if_remote(track_ids, &app_handle)
         .await
         .map_err(RuntimeError::Internal)
 }
