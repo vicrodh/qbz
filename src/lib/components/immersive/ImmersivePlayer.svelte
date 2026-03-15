@@ -72,6 +72,7 @@
     onSkipForward?: () => void;
     onSeek: (time: number) => void;
     onVolumeChange: (volume: number) => void;
+    onToggleMute: () => void;
     onToggleShuffle: () => void;
     onToggleRepeat: () => void;
     onToggleFavorite: () => void;
@@ -127,6 +128,7 @@
     onSkipForward,
     onSeek,
     onVolumeChange,
+    onToggleMute,
     onToggleShuffle,
     onToggleRepeat,
     onToggleFavorite,
@@ -777,6 +779,7 @@
       {isInfinitePlay}
       {onToggleInfinitePlay}
       {onVolumeChange}
+      {onToggleMute}
       {isFullscreen}
       {isMaximized}
       onClose={handleExitImmersive}

@@ -14,6 +14,7 @@
     setVolume as playerSetVolume,
     setIsSkipping,
     stop as stopPlayback,
+    toggleMute,
     startPolling,
     stopPolling,
     type PlayerState
@@ -523,6 +524,7 @@
     onSkipForward={handleSkipForward}
     onSeek={playerSeek}
     onVolumeChange={playerSetVolume}
+    onToggleMute={toggleMute}
     onToggleShuffle={handleToggleShuffle}
     onToggleRepeat={handleToggleRepeat}
     onQueueTrackPlay={(trackId) => {

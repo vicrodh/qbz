@@ -22,6 +22,7 @@
     onSkipForward: () => void;
     onSeek: (time: number) => void;
     onVolumeChange: (volume: number) => void;
+    onToggleMute: () => void;
     onToggleShuffle: () => void;
     onToggleRepeat: () => void;
     onSurfaceChange?: (surface: MiniPlayerSurface) => void;
@@ -50,6 +51,7 @@
     onSkipForward,
     onSeek,
     onVolumeChange,
+    onToggleMute,
     onToggleShuffle,
     onToggleRepeat,
     onSurfaceChange,
@@ -69,12 +71,9 @@
   let isDraggingSeek = $state(false);
   let isDraggingVolume = $state(false);
   let volumePopoverOpen = $state(false);
-  let isMuted = $state(false);
-  let previousVolume = $state(75);
   let microTrackOverflow = $state(0);
 
   const progress = $derived(duration > 0 ? Math.max(0, Math.min(100, (currentTime / duration) * 100)) : 0);
-  const displayVolume = $derived(isMuted ? 0 : volume);
   const tickerSpeed = 40;
   const microTrackOffset = $derived(microTrackOverflow > 0 ? `-${microTrackOverflow + 16}px` : '0px');
   const microTrackDuration = $derived(microTrackOverflow > 0 ? `${(microTrackOverflow + 16) / tickerSpeed}s` : '0s');
@@ -118,21 +117,6 @@
     const percentage = Math.max(0, Math.min(100, ((event.clientX - rect.left) / rect.width) * 100));
     const nextVolume = Math.round(percentage);
     onVolumeChange(nextVolume);
-    if (nextVolume > 0) {
-      isMuted = false;
-    }
-  }
-
-  function toggleMute(): void {
-    if (isMuted) {
-      isMuted = false;
-      onVolumeChange(previousVolume || 75);
-      return;
-    }
-
-    previousVolume = volume;
-    isMuted = true;
-    onVolumeChange(0);
   }
 
   function handleDocumentMouseDown(event: MouseEvent): void {
@@ -296,9 +280,9 @@
         title={$t('player.volume')}
         aria-label={$t('player.volume')}
       >
-        {#if displayVolume === 0}
+        {#if volume === 0}
           <VolumeX size={micro ? 10 : compact ? 15 : 18} strokeWidth={2.25} />
-        {:else if displayVolume < 50}
+        {:else if volume < 50}
           <Volume1 size={micro ? 10 : compact ? 15 : 18} strokeWidth={2.25} />
         {:else}
           <Volume2 size={micro ? 10 : compact ? 15 : 18} strokeWidth={2.25} />
@@ -308,7 +292,7 @@
       {#if volumePopoverOpen}
         <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
         <div class="volume-popover" role="group" aria-label={$t('player.volume')} onmousedown={(event) => event.stopPropagation()}>
-          <button class="ctrl-btn mute-btn" onclick={toggleMute} title={isMuted ? $t('player.unmute') : $t('player.mute')}>
+          <button class="ctrl-btn mute-btn" onclick={onToggleMute} title={volume === 0 ? $t('player.unmute') : $t('player.mute')}>
             <VolumeX size={micro ? 10 : 14} strokeWidth={2.25} />
           </button>
 
@@ -321,15 +305,15 @@
             }}
             role="slider"
             tabindex="0"
-            aria-valuenow={Math.round(displayVolume)}
+            aria-valuenow={Math.round(volume)}
             aria-valuemin={0}
             aria-valuemax={100}
           >
-            <div class="volume-level" style="width: {displayVolume}%"></div>
-            <div class="volume-thumb" style="left: {displayVolume}%" class:visible={isDraggingVolume}></div>
+            <div class="volume-level" style="width: {volume}%"></div>
+            <div class="volume-thumb" style="left: {volume}%" class:visible={isDraggingVolume}></div>
           </div>
 
-          <span class="volume-value">{displayVolume}</span>
+          <span class="volume-value">{volume}</span>
         </div>
       {/if}
     </div>

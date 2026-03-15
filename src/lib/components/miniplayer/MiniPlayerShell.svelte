@@ -36,6 +36,7 @@
     onSkipForward: () => void;
     onSeek: (time: number) => void;
     onVolumeChange: (volume: number) => void;
+    onToggleMute: () => void;
     onToggleShuffle: () => void;
     onToggleRepeat: () => void;
     onQueueTrackPlay?: (trackId: string) => void;
@@ -71,6 +72,7 @@
     onSkipForward,
     onSeek,
     onVolumeChange,
+    onToggleMute,
     onToggleShuffle,
     onToggleRepeat,
     onQueueTrackPlay,
@@ -136,6 +138,7 @@
     onSkipForward={onSkipForward}
     onSeek={onSeek}
     onVolumeChange={onVolumeChange}
+    onToggleMute={onToggleMute}
     onToggleShuffle={onToggleShuffle}
     onToggleRepeat={onToggleRepeat}
     onSurfaceChange={onSurfaceChange}

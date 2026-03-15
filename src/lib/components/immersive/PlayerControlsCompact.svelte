@@ -39,6 +39,7 @@
     onToggleFavorite: () => void;
     onToggleInfinitePlay?: () => void;
     onVolumeChange: (volume: number) => void;
+    onToggleMute: () => void;
     // Window controls
     isFullscreen?: boolean;
     isMaximized?: boolean;
@@ -67,6 +68,7 @@
     onToggleFavorite,
     onToggleInfinitePlay,
     onVolumeChange,
+    onToggleMute,
     isFullscreen = false,
     isMaximized = false,
     onClose,
@@ -79,11 +81,8 @@
   let volumeRef: HTMLDivElement | null = $state(null);
   let isDraggingProgress = $state(false);
   let isDraggingVolume = $state(false);
-  let isMuted = $state(false);
-  let previousVolume = $state(75);
 
   const progress = $derived((currentTime / duration) * 100 || 0);
-  const displayVolume = $derived(isMuted ? 0 : volume);
 
   function formatTime(seconds: number): string {
     if (!seconds || !isFinite(seconds)) return '0:00';
@@ -116,18 +115,6 @@
       const percentage = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
       const newVolume = Math.round(percentage);
       onVolumeChange(newVolume);
-      if (newVolume > 0) isMuted = false;
-    }
-  }
-
-  function toggleMute() {
-    if (isMuted) {
-      isMuted = false;
-      onVolumeChange(previousVolume || 75);
-    } else {
-      previousVolume = volume;
-      isMuted = true;
-      onVolumeChange(0);
     }
   }
 
@@ -281,10 +268,10 @@
         <div class="volume-group">
           <button
             class="control-btn"
-            onclick={toggleMute}
-            title={isMuted ? 'Unmute' : 'Mute'}
+            onclick={onToggleMute}
+            title={volume === 0 ? 'Unmute' : 'Mute'}
           >
-            {#if isMuted || displayVolume === 0}
+            {#if volume === 0}
               <VolumeX size={12} />
             {:else}
               <Volume2 size={12} />
@@ -296,12 +283,12 @@
             onmousedown={handleVolumeMouseDown}
             role="slider"
             tabindex="0"
-            aria-valuenow={displayVolume}
+            aria-valuenow={volume}
             aria-valuemin={0}
             aria-valuemax={100}
           >
             <div class="volume-track">
-              <div class="volume-fill" style="width: {displayVolume}%"></div>
+              <div class="volume-fill" style="width: {volume}%"></div>
             </div>
           </div>
         </div>

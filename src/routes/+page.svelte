@@ -205,6 +205,7 @@
     getPlayerState,
     getVolume,
     resyncPersistedVolume,
+    toggleMute,
     type PlayingTrack,
     type PlayerState
   } from '$lib/stores/playerStore';
@@ -5564,6 +5565,7 @@
         onSeek={handleSeek}
         {volume}
         onVolumeChange={handleVolumeChange}
+        onToggleMute={toggleMute}
         {isShuffle}
         onToggleShuffle={toggleShuffle}
         {repeatMode}
