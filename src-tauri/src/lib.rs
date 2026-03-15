@@ -1230,6 +1230,7 @@ pub fn run() {
             qconnect_service::v2_qconnect_play_track_if_remote,
             qconnect_service::v2_qconnect_skip_next_if_remote,
             qconnect_service::v2_qconnect_skip_previous_if_remote,
+            qconnect_service::v2_qconnect_stop_if_remote,
             qconnect_service::v2_qconnect_toggle_shuffle_if_remote,
             qconnect_service::v2_qconnect_cycle_repeat_if_remote,
             qconnect_service::v2_qconnect_set_active_renderer,

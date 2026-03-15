@@ -2238,6 +2238,56 @@ impl QconnectServiceState {
 
         Ok(true)
     }
+
+    async fn stop_if_remote(
+        &self,
+        app_handle: &AppHandle,
+    ) -> Result<bool, String> {
+        let remote_context = self.effective_remote_renderer_snapshot().await?;
+        let Some((renderer, queue, session)) = remote_context else {
+            return Ok(false);
+        };
+
+        let current_position = renderer
+            .current_position_ms
+            .and_then(|value| i32::try_from(value).ok());
+        let current_queue_item = renderer.current_track.as_ref().and_then(|item| {
+            i32::try_from(item.queue_item_id).ok().map(|queue_item_id| {
+                QconnectSetPlayerStateQueueItemPayload {
+                    queue_version: Some(QconnectQueueVersionPayload {
+                        major: queue.version.major,
+                        minor: queue.version.minor,
+                    }),
+                    id: Some(queue_item_id),
+                }
+            })
+        });
+
+        let payload = serde_json::to_value(QconnectSetPlayerStateRequest {
+            playing_state: Some(PLAYING_STATE_STOPPED),
+            current_position,
+            current_queue_item,
+        })
+        .map_err(|err| format!("serialize stop request: {err}"))?;
+
+        self.send_command(QueueCommandType::CtrlSrvrSetPlayerState, payload)
+            .await?;
+        self.prime_remote_renderer_playing_state(PLAYING_STATE_STOPPED)
+            .await;
+
+        emit_qconnect_diagnostic(
+            app_handle,
+            "qconnect:stop_handoff",
+            "info",
+            json!({
+                "active_renderer_id": session.active_renderer_id,
+                "local_renderer_id": session.local_renderer_id,
+                "current_position": current_position,
+            }),
+        );
+
+        Ok(true)
+    }
 }
 
 fn resolve_queue_item_ids_from_queue_state(
@@ -3976,6 +4026,17 @@ pub async fn v2_qconnect_skip_previous_if_remote(
 ) -> Result<bool, RuntimeError> {
     service
         .skip_previous_if_remote(&app_handle)
+        .await
+        .map_err(RuntimeError::Internal)
+}
+
+#[tauri::command]
+pub async fn v2_qconnect_stop_if_remote(
+    app_handle: AppHandle,
+    service: State<'_, QconnectServiceState>,
+) -> Result<bool, RuntimeError> {
+    service
+        .stop_if_remote(&app_handle)
         .await
         .map_err(RuntimeError::Internal)
 }

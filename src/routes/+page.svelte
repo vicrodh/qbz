@@ -4408,9 +4408,17 @@
           case 'previous':
             await handleSkipBack();
             break;
-          case 'stop':
-            await stopPlayback();
+          case 'stop': {
+            try {
+              const handledRemotely = await invoke<boolean>('v2_qconnect_stop_if_remote');
+              if (!handledRemotely) {
+                await stopPlayback();
+              }
+            } catch {
+              await stopPlayback();
+            }
             break;
+          }
           case 'seek': {
             const direction = payload.direction === 'backward' ? -1 : 1;
             const target = playerState.currentTime + direction * MEDIA_SEEK_FALLBACK_SECS;
