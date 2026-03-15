@@ -309,6 +309,27 @@
     }
   }
 
+  async function handleVolumeChange(newVolume: number): Promise<void> {
+    try {
+      const handledRemotely = await invoke<boolean>('v2_qconnect_set_volume_if_remote', { volume: newVolume });
+      if (handledRemotely) return;
+    } catch {
+      // Fall through to local
+    }
+    playerSetVolume(newVolume);
+  }
+
+  async function handleToggleMute(): Promise<void> {
+    const currentlyMuted = playerState.volume === 0;
+    try {
+      const handledRemotely = await invoke<boolean>('v2_qconnect_mute_if_remote', { value: !currentlyMuted });
+      if (handledRemotely) return;
+    } catch {
+      // Fall through to local
+    }
+    await toggleMute();
+  }
+
   async function handleTogglePlay(): Promise<void> {
     try {
       const handledRemotely = await invoke<boolean>('v2_qconnect_toggle_play_if_remote');
@@ -523,8 +544,8 @@
     onSkipBack={handleSkipBack}
     onSkipForward={handleSkipForward}
     onSeek={playerSeek}
-    onVolumeChange={playerSetVolume}
-    onToggleMute={toggleMute}
+    onVolumeChange={handleVolumeChange}
+    onToggleMute={handleToggleMute}
     onToggleShuffle={handleToggleShuffle}
     onToggleRepeat={handleToggleRepeat}
     onQueueTrackPlay={(trackId) => {

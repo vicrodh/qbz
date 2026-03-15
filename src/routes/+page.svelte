@@ -2195,10 +2195,35 @@
     playerSeek(time);
   }
 
-  function handleVolumeChange(newVolume: number) {
+  async function handleVolumeChange(newVolume: number) {
+    try {
+      const handledRemotely = await invoke<boolean>('v2_qconnect_set_volume_if_remote', { volume: newVolume });
+      if (handledRemotely) return;
+    } catch {
+      // Fall through to local
+    }
+
     playerSetVolume(newVolume);
     // Report volume change to QConnect server when acting as renderer
     if (isQobuzConnectConnected) {
+      invoke('v2_qconnect_report_volume', { volume: newVolume }).catch(() => {});
+    }
+  }
+
+  async function handleToggleMute() {
+    // Determine current mute state from volume
+    const currentlyMuted = volume === 0;
+    try {
+      const handledRemotely = await invoke<boolean>('v2_qconnect_mute_if_remote', { value: !currentlyMuted });
+      if (handledRemotely) return;
+    } catch {
+      // Fall through to local
+    }
+
+    await toggleMute();
+    // Report volume change to QConnect server when acting as renderer
+    if (isQobuzConnectConnected) {
+      const newVolume = getVolume();
       invoke('v2_qconnect_report_volume', { volume: newVolume }).catch(() => {});
     }
   }
@@ -4443,7 +4468,7 @@
               const newVolume = Math.round(normalized * 100);
               // Only update if volume actually changed (prevents MPRIS feedback loop)
               if (newVolume !== volume) {
-                await playerSetVolume(newVolume);
+                await handleVolumeChange(newVolume);
               }
             }
             break;
@@ -5573,7 +5598,7 @@
         onSeek={handleSeek}
         {volume}
         onVolumeChange={handleVolumeChange}
-        onToggleMute={toggleMute}
+        onToggleMute={handleToggleMute}
         {isShuffle}
         onToggleShuffle={toggleShuffle}
         {repeatMode}

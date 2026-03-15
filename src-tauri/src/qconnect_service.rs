@@ -2239,6 +2239,73 @@ impl QconnectServiceState {
         Ok(true)
     }
 
+    async fn set_volume_if_remote(
+        &self,
+        volume: i32,
+        app_handle: &AppHandle,
+    ) -> Result<bool, String> {
+        let remote_context = self.effective_remote_renderer_snapshot().await?;
+        let Some((_renderer, _queue, session)) = remote_context else {
+            return Ok(false);
+        };
+
+        let payload = serde_json::to_value(QconnectSetVolumeRequest {
+            renderer_id: session.active_renderer_id,
+            volume: Some(volume),
+            volume_delta: None,
+        })
+        .map_err(|err| format!("serialize set_volume request: {err}"))?;
+
+        self.send_command(QueueCommandType::CtrlSrvrSetVolume, payload)
+            .await?;
+
+        emit_qconnect_diagnostic(
+            app_handle,
+            "qconnect:set_volume_handoff",
+            "info",
+            json!({
+                "active_renderer_id": session.active_renderer_id,
+                "local_renderer_id": session.local_renderer_id,
+                "volume": volume,
+            }),
+        );
+
+        Ok(true)
+    }
+
+    async fn mute_if_remote(
+        &self,
+        value: bool,
+        app_handle: &AppHandle,
+    ) -> Result<bool, String> {
+        let remote_context = self.effective_remote_renderer_snapshot().await?;
+        let Some((_renderer, _queue, session)) = remote_context else {
+            return Ok(false);
+        };
+
+        let payload = serde_json::to_value(QconnectMuteVolumeRequest {
+            renderer_id: session.active_renderer_id,
+            value,
+        })
+        .map_err(|err| format!("serialize mute_volume request: {err}"))?;
+
+        self.send_command(QueueCommandType::CtrlSrvrMuteVolume, payload)
+            .await?;
+
+        emit_qconnect_diagnostic(
+            app_handle,
+            "qconnect:mute_handoff",
+            "info",
+            json!({
+                "active_renderer_id": session.active_renderer_id,
+                "local_renderer_id": session.local_renderer_id,
+                "mute": value,
+            }),
+        );
+
+        Ok(true)
+    }
+
     async fn stop_if_remote(
         &self,
         app_handle: &AppHandle,
@@ -4026,6 +4093,31 @@ pub async fn v2_qconnect_skip_previous_if_remote(
 ) -> Result<bool, RuntimeError> {
     service
         .skip_previous_if_remote(&app_handle)
+        .await
+        .map_err(RuntimeError::Internal)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_qconnect_set_volume_if_remote(
+    volume: i32,
+    app_handle: AppHandle,
+    service: State<'_, QconnectServiceState>,
+) -> Result<bool, RuntimeError> {
+    service
+        .set_volume_if_remote(volume, &app_handle)
+        .await
+        .map_err(RuntimeError::Internal)
+}
+
+#[tauri::command]
+pub async fn v2_qconnect_mute_if_remote(
+    value: bool,
+    app_handle: AppHandle,
+    service: State<'_, QconnectServiceState>,
+) -> Result<bool, RuntimeError> {
+    service
+        .mute_if_remote(value, &app_handle)
         .await
         .map_err(RuntimeError::Internal)
 }
