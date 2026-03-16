@@ -792,6 +792,25 @@ impl QconnectEventSink for TauriQconnectEventSink {
                 cache_renderer_snapshot(&mut sync_state, renderer_state);
             }
             QconnectAppEvent::QueueUpdated(queue_state) => {
+                log::info!(
+                    "[QConnect][diag] QueueUpdated: items={} shuffle_mode={} shuffle_order={:?} version={}.{}",
+                    queue_state.queue_items.len(),
+                    queue_state.shuffle_mode,
+                    queue_state.shuffle_order,
+                    queue_state.version.major,
+                    queue_state.version.minor,
+                );
+                if queue_state.shuffle_mode {
+                    let valid = queue_state.shuffle_order.as_ref()
+                        .map(|o| is_valid_ordered_queue_shuffle_order(o, queue_state.queue_items.len()))
+                        .unwrap_or(false);
+                    log::info!(
+                        "[QConnect][diag] shuffle_order valid={} items_len={} order_len={:?}",
+                        valid,
+                        queue_state.queue_items.len(),
+                        queue_state.shuffle_order.as_ref().map(|o| o.len()),
+                    );
+                }
                 {
                     let mut sync_state = self.sync_state.lock().await;
                     sync_state.last_remote_queue_state = Some(queue_state.clone());
@@ -3257,10 +3276,10 @@ fn resolve_remote_start_index(
 
 fn resolve_core_shuffle_order(
     queue_state: &QConnectQueueState,
-    renderer_queue_item_id: Option<u64>,
-    renderer_track_id: Option<u64>,
-    renderer_next_queue_item_id: Option<u64>,
-    renderer_next_track_id: Option<u64>,
+    _renderer_queue_item_id: Option<u64>,
+    _renderer_track_id: Option<u64>,
+    _renderer_next_queue_item_id: Option<u64>,
+    _renderer_next_track_id: Option<u64>,
 ) -> Option<Vec<usize>> {
     if !queue_state.shuffle_mode {
         return None;
@@ -3268,37 +3287,30 @@ fn resolve_core_shuffle_order(
 
     let raw_order = queue_state.shuffle_order.as_ref().filter(|order| {
         is_valid_ordered_queue_shuffle_order(order, queue_state.queue_items.len())
-    })?;
+    });
 
-    let current_index =
-        resolve_remote_start_index(queue_state, renderer_queue_item_id, renderer_track_id);
-    let next_index = resolve_remote_start_index(
-        queue_state,
-        renderer_next_queue_item_id,
-        renderer_next_track_id,
+    if raw_order.is_none() {
+        log::warn!(
+            "[QConnect][diag] resolve_core_shuffle_order: raw_order INVALID or absent, returning None. items={} order={:?}",
+            queue_state.queue_items.len(),
+            queue_state.shuffle_order,
+        );
+        return None;
+    }
+    let raw_order = raw_order.unwrap();
+
+    // Pass the server's shuffle order through as-is.
+    // CoreBridge's set_queue_with_order will find the current track's position
+    // in this order (shuffle_position), preserving the server's concept of
+    // "already played" (before position) vs "upcoming" (after position).
+    // Previously this function reordered to put current first, which destroyed
+    // the played/upcoming split and caused QBZ to show all tracks as upcoming.
+    log::info!(
+        "[QConnect][diag] resolve_core_shuffle_order: passing server order through ({} items)",
+        raw_order.len(),
     );
 
-    let mut ordered = Vec::with_capacity(queue_state.queue_items.len());
-    if let Some(index) = current_index {
-        ordered.push(index);
-    }
-    if let Some(index) = next_index {
-        if !ordered.contains(&index) {
-            ordered.push(index);
-        }
-    }
-    for &index in raw_order {
-        if !ordered.contains(&index) {
-            ordered.push(index);
-        }
-    }
-    for index in 0..queue_state.queue_items.len() {
-        if !ordered.contains(&index) {
-            ordered.push(index);
-        }
-    }
-
-    Some(ordered)
+    Some(raw_order.clone())
 }
 
 async fn align_corebridge_queue_cursor(bridge: &CoreBridge, track_id: u64) -> Result<(), String> {
@@ -5595,6 +5607,8 @@ mod tests {
         }))
         .expect("queue state");
 
+        // Server order is passed through as-is — CoreBridge finds shuffle_position
+        // from current_index, preserving the server's played/upcoming split.
         assert_eq!(
             super::resolve_core_shuffle_order(
                 &queue,
@@ -5603,12 +5617,12 @@ mod tests {
                 Some(8),
                 Some(72930182)
             ),
-            Some(vec![0, 8, 5, 1, 9, 3, 4, 6, 2, 7]),
+            Some(vec![8, 5, 1, 9, 3, 4, 0, 6, 2, 7]),
         );
     }
 
     #[test]
-    fn resolves_core_shuffle_order_keeps_current_first_for_resumed_remote_shuffle() {
+    fn resolves_core_shuffle_order_keeps_server_order_for_resumed_remote_shuffle() {
         let queue: QConnectQueueState = serde_json::from_value(json!({
             "version": { "major": 30, "minor": 2 },
             "queue_items": [
@@ -5631,6 +5645,8 @@ mod tests {
         }))
         .expect("queue state");
 
+        // Server order passed through — CoreBridge uses current_index to find
+        // shuffle_position, so played/upcoming split matches the server.
         assert_eq!(
             super::resolve_core_shuffle_order(
                 &queue,
@@ -5639,7 +5655,7 @@ mod tests {
                 Some(2),
                 Some(43013246)
             ),
-            Some(vec![8, 2, 0, 3, 6, 4, 5, 1, 7]),
+            Some(vec![0, 3, 6, 4, 5, 1, 7, 8, 2]),
         );
     }
 
