@@ -119,6 +119,31 @@ impl PipeWireBackend {
         }
     }
 
+    /// Query the current PipeWire graph sample rate via pw-metadata.
+    fn get_pipewire_current_rate() -> Option<u32> {
+        let output = Command::new("pw-metadata")
+            .args(["-n", "settings", "0", "clock.rate"])
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        // pw-metadata output: "Found "settings" metadata 0\nupdate: id:0 key:'clock.rate' value:'96000' type:''"
+        for line in stdout.lines() {
+            if line.contains("clock.rate") && line.contains("value:") {
+                // Extract value between single quotes after "value:"
+                if let Some(start) = line.find("value:'") {
+                    let after = &line[start + 7..];
+                    if let Some(end) = after.find('\'') {
+                        return after[..end].parse::<u32>().ok();
+                    }
+                }
+            }
+        }
+        None
+    }
+
     /// Find the best fallback sample rate in the same family.
     /// 44.1kHz family: 44100, 88200, 176400, 352800
     /// 48kHz family: 48000, 96000, 192000, 384000
@@ -398,8 +423,9 @@ impl AudioBackend for PipeWireBackend {
         // buffer underruns at sample rates >= 88.2kHz. clock.force-rate alone
         // is sufficient for bit-perfect sample rate switching.
 
-        // Wait for PipeWire to apply the sample rate change
-        std::thread::sleep(std::time::Duration::from_millis(300));
+        // Wait for PipeWire to apply the sample rate change.
+        // USB hubs (e.g. Razer USB4 Dock) may need longer than direct DACs.
+        std::thread::sleep(std::time::Duration::from_millis(500));
 
         // Create a NEW host (will use current default sink)
         log::info!("[PipeWire Backend] Creating fresh CPAL host...");
@@ -562,6 +588,53 @@ impl AudioBackend for PipeWireBackend {
                 "[PipeWire Backend] Re-applied clock.force-rate={}Hz after stream creation",
                 effective_rate
             );
+
+            // Verify PipeWire actually applied the rate.
+            // USB hubs/docks may need extra time for rate switching.
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            if let Some(actual_rate) = Self::get_pipewire_current_rate() {
+                if actual_rate != effective_rate {
+                    log::warn!(
+                        "[PipeWire Backend] Rate mismatch: requested {}Hz but PipeWire reports {}Hz. \
+                         Retrying with longer delay...",
+                        effective_rate,
+                        actual_rate
+                    );
+                    // Give slower USB devices more time, then force again
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+                    let _ = Command::new("pw-metadata")
+                        .args([
+                            "-n",
+                            "settings",
+                            "0",
+                            "clock.force-rate",
+                            &effective_rate.to_string(),
+                        ])
+                        .output();
+                    std::thread::sleep(std::time::Duration::from_millis(200));
+
+                    if let Some(retry_rate) = Self::get_pipewire_current_rate() {
+                        if retry_rate == effective_rate {
+                            log::info!(
+                                "[PipeWire Backend] Rate verified after retry: {}Hz",
+                                retry_rate
+                            );
+                        } else {
+                            log::warn!(
+                                "[PipeWire Backend] Rate still {}Hz after retry (expected {}Hz). \
+                                 Audio may play at wrong speed.",
+                                retry_rate,
+                                effective_rate
+                            );
+                        }
+                    }
+                } else {
+                    log::info!(
+                        "[PipeWire Backend] Rate verified: {}Hz",
+                        actual_rate
+                    );
+                }
+            }
         }
 
         Ok(mixer_sink)
