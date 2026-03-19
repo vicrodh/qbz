@@ -79,7 +79,7 @@ impl PipeWireBackend {
 
     /// Query the DAC's supported sample rates from /proc/asound/cardN/stream0.
     /// Returns None if rates can't be determined (non-USB device, continuous range, etc.)
-    fn get_sink_supported_rates(sink_name: &str) -> Option<Vec<u32>> {
+    pub fn get_sink_supported_rates(sink_name: &str) -> Option<Vec<u32>> {
         let alsa_card = Self::get_alsa_card_for_sink(sink_name)?;
 
         let stream_path = format!("/proc/asound/card{}/stream0", alsa_card);

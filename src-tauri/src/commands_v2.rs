@@ -2380,9 +2380,12 @@ pub fn v2_get_default_device_name(backendType: AudioBackendType) -> Result<Optio
 #[tauri::command]
 #[allow(non_snake_case)]
 pub fn v2_query_dac_capabilities(nodeName: String) -> Result<DacCapabilities, String> {
+    // Default fallback — only used if all detection methods fail
+    let fallback_rates = vec![44100, 48000, 88200, 96000, 176400, 192000];
+
     let mut capabilities = DacCapabilities {
         node_name: nodeName.clone(),
-        sample_rates: vec![44100, 48000, 88200, 96000, 176400, 192000],
+        sample_rates: fallback_rates.clone(),
         formats: vec![
             "S16LE".to_string(),
             "S24LE".to_string(),
@@ -2393,6 +2396,7 @@ pub fn v2_query_dac_capabilities(nodeName: String) -> Result<DacCapabilities, St
         error: None,
     };
 
+    // Try PipeWire backend: get device description and ALSA card for rate detection
     if let Ok(backend) = BackendManager::create_backend(AudioBackendType::PipeWire) {
         if let Ok(devices) = backend.enumerate_devices() {
             if let Some(device) = devices
@@ -2404,6 +2408,33 @@ pub fn v2_query_dac_capabilities(nodeName: String) -> Result<DacCapabilities, St
                     .clone()
                     .or_else(|| Some(device.name.clone()));
             }
+        }
+    }
+
+    // Detect real sample rates from /proc/asound via PipeWire sink -> ALSA card mapping
+    if let Some(rates) =
+        crate::audio::pipewire_backend::PipeWireBackend::get_sink_supported_rates(&nodeName)
+    {
+        log::info!(
+            "[HiFi Wizard] Detected sample rates for {}: {:?}",
+            nodeName,
+            rates
+        );
+        capabilities.sample_rates = rates;
+    } else {
+        // Fallback: try ALSA device ID directly (for ALSA Direct backend)
+        if let Some(rates) = qbz_audio::get_device_supported_rates(&nodeName) {
+            log::info!(
+                "[HiFi Wizard] Detected sample rates via ALSA for {}: {:?}",
+                nodeName,
+                rates
+            );
+            capabilities.sample_rates = rates;
+        } else {
+            log::warn!(
+                "[HiFi Wizard] Could not detect sample rates for {}, using defaults",
+                nodeName
+            );
         }
     }
 
