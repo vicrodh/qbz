@@ -141,8 +141,8 @@
     volumeLocked = false,
   }: Props = $props();
 
-  let progressRef: HTMLDivElement;
-  let volumeRef: HTMLDivElement;
+  let progressRef = $state<HTMLDivElement | null>(null);
+  let volumeRef = $state<HTMLDivElement | null>(null);
   let isDraggingProgress = $state(false);
   let isDraggingVolume = $state(false);
   let showArtworkPreview = $state(false);
@@ -766,13 +766,6 @@
   }
 
   /* Section Separator */
-  .section-separator {
-    width: 1px;
-    height: 20px;
-    background: var(--border-subtle);
-    margin: 0 8px;
-    flex-shrink: 0;
-  }
   /* Queue Button & Icon */
   .queue-btn {
     width: 32px;

@@ -33,7 +33,6 @@ const PLAYING_STATE_PAUSED: i32 = 3;
 const BUFFER_STATE_OK: i32 = 2;
 const QCONNECT_QWS_TOKEN_KIND: &str = "jwt_qws";
 const QCONNECT_QWS_CREATE_TOKEN_PATH: &str = "/qws/createToken";
-const DEFAULT_QCONNECT_DEVICE_NAME: &str = "QBZ Desktop";
 const DEFAULT_QCONNECT_DEVICE_BRAND: &str = "QBZ";
 const DEFAULT_QCONNECT_DEVICE_MODEL: &str = "QBZ";
 const DEFAULT_QCONNECT_DEVICE_TYPE: i32 = 5; // computer

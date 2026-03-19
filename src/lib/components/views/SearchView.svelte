@@ -2526,11 +2526,6 @@
     line-height: 1.3;
   }
 
-  .artist-albums {
-    font-size: 12px;
-    color: var(--text-muted);
-  }
-
   .load-more-container {
     display: flex;
     justify-content: center;

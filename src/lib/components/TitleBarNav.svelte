@@ -141,6 +141,7 @@
       <div
         class="dropdown"
         role="menu"
+        tabindex="-1"
         onmouseenter={keepDiscover}
         onmouseleave={closeDiscoverDelayed}
       >
@@ -192,6 +193,7 @@
       <div
         class="dropdown"
         role="menu"
+        tabindex="-1"
         onmouseenter={keepFavorites}
         onmouseleave={closeFavoritesDelayed}
       >
@@ -251,6 +253,7 @@
       <div
         class="dropdown"
         role="menu"
+        tabindex="-1"
         onmouseenter={keepPurchasesMenu}
         onmouseleave={closePurchasesDelayed}
       >

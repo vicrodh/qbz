@@ -402,9 +402,4 @@
     90%, 100% { transform: translateX(0); }
   }
 
-  .artist-list-meta {
-    font-size: 12px;
-    color: var(--text-muted);
-    margin-top: 2px;
-  }
 </style>

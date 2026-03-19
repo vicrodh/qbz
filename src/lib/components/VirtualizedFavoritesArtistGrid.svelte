@@ -414,11 +414,6 @@
     line-height: 1.3;
   }
 
-  .artist-albums {
-    font-size: 12px;
-    color: var(--text-muted);
-    margin-top: 4px;
-  }
 
   .virtual-header {
     position: relative;
