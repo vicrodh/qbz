@@ -87,6 +87,8 @@ export function getUseSystemTitleBar(): boolean {
  * Hidden when either system title bar is active or hide mode is on
  */
 export function shouldShowTitleBar(): boolean {
+  // macOS always uses native decorations — no custom title bar
+  if (document.documentElement.classList.contains('macos')) return false;
   return !hideTitleBar && !useSystemTitleBar;
 }
 
@@ -95,6 +97,7 @@ export function shouldShowTitleBar(): boolean {
  * Returns 0 if title bar is hidden or system title bar is active, 40 otherwise
  */
 export function getTitleBarHeight(): number {
+  if (document.documentElement.classList.contains('macos')) return 0;
   return (hideTitleBar || useSystemTitleBar) ? 0 : 40;
 }
 

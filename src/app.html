@@ -22,6 +22,22 @@
       /* Hide custom title bar before Svelte hydrates when setting is active */
       html[data-no-titlebar] .titlebar { display: none !important; }
     </style>
+    <script>
+      // Detect macOS for platform-specific CSS and behavior
+      if (/Mac/.test(navigator.platform)) {
+        document.documentElement.classList.add('macos');
+      }
+      // Prevent macOS trackpad pinch-to-zoom and Cmd+scroll zoom in WKWebView.
+      // This is a desktop app, not a web page — accidental zoom breaks the UI.
+      if (/Mac/.test(navigator.platform)) {
+        document.addEventListener('gesturestart', function(e) { e.preventDefault(); });
+        document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
+        document.addEventListener('gestureend', function(e) { e.preventDefault(); });
+        document.addEventListener('wheel', function(e) {
+          if (e.ctrlKey) e.preventDefault();
+        }, { passive: false });
+      }
+    </script>
     <div style="display: contents">%sveltekit.body%</div>
   </body>
 </html>
