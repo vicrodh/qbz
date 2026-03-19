@@ -368,9 +368,12 @@
       </div>
     {:else if initError}
       <div class="error-box">
-        <p>Failed to connect to Qobuz™</p>
+        <p>{$t('auth.connectionFailed')}</p>
         <p class="error-detail">{initError}</p>
-        <button class="retry-btn" onclick={initializeClient}>Retry</button>
+        <div class="timeout-actions">
+          <button class="retry-btn" onclick={initializeClient}>{$t('actions.retry')}</button>
+          <button class="offline-btn" onclick={handleStartOffline}>{$t('offline.startWithoutLogin')}</button>
+        </div>
       </div>
     {:else}
       <div class="login-body">
