@@ -185,7 +185,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0348a1c054491f4bfe6ab86a7b6ab1e44e45d899005de92f58b3df180b36ddaf"
 dependencies = [
  "clipboard-win",
- "image 0.25.9",
+ "image",
  "log",
  "objc2",
  "objc2-app-kit",
@@ -903,12 +903,6 @@ dependencies = [
  "libc",
  "objc",
 ]
-
-[[package]]
-name = "color_quant"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d7b894f5411737b7867f4827955924d7c254fc9f4d91a6aad6b097804b1018b"
 
 [[package]]
 name = "colorchoice"
@@ -2765,19 +2759,6 @@ dependencies = [
 
 [[package]]
 name = "image"
-version = "0.24.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5690139d2f55868e080017335e4b94cb7414274c74f1669c84fb5feba2c9f69d"
-dependencies = [
- "bytemuck",
- "byteorder",
- "color_quant",
- "num-traits",
- "png 0.17.16",
-]
-
-[[package]]
-name = "image"
 version = "0.25.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6506c6c10786659413faa717ceebcb8f70731c0a60cbae39795fdf114519c1a"
@@ -4566,7 +4547,7 @@ version = "0.1.0"
 dependencies = [
  "dirs 5.0.1",
  "glob",
- "image 0.25.9",
+ "image",
  "lofty",
  "log",
  "rusqlite",
@@ -4609,7 +4590,7 @@ dependencies = [
  "filetime",
  "futures-util",
  "glob",
- "image 0.25.9",
+ "image",
  "keyring",
  "lazy_static",
  "lofty",
@@ -4752,12 +4733,12 @@ dependencies = [
 
 [[package]]
 name = "qrcode-generator"
-version = "4.1.9"
+version = "5.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d06cb9646c7a14096231a2474d7f21e5e8c13de090c68d13bde6157cfe7f159"
+checksum = "faf0051849b5465059b75f59d388c7318aad6554701b74ecf02afc2573b0306c"
 dependencies = [
  "html-escape",
- "image 0.24.9",
+ "image",
  "qrcodegen",
 ]
 
