@@ -64,11 +64,14 @@ use crate::runtime::{
     RuntimeStatus,
 };
 use crate::AppState;
+#[cfg(target_os = "linux")]
 use ashpd::desktop::notification::{Notification as PortalNotification, NotificationProxy};
+#[cfg(target_os = "linux")]
 use ashpd::desktop::Icon;
 use md5::{Digest, Md5};
 use std::collections::HashSet;
 use std::fs;
+#[cfg(target_os = "linux")]
 use std::io::{Cursor, Write};
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -285,6 +288,7 @@ fn limit_quality_for_device(quality: Quality, max_sample_rate: Option<u32>) -> Q
 
 /// Probe sample rate from FLAC audio data by reading the STREAMINFO header.
 /// Returns None for non-FLAC data or data too short to parse.
+#[cfg(target_os = "linux")]
 fn probe_flac_sample_rate(data: &[u8]) -> Option<u32> {
     // FLAC format: "fLaC" magic + metadata blocks
     // First block is always STREAMINFO (34 bytes)
@@ -624,9 +628,12 @@ fn v2_teardown_type_alias_state<S>(state: &Arc<Mutex<Option<S>>>) {
     }
 }
 
+#[cfg(target_os = "linux")]
 const PORTAL_NOTIFICATION_ICON_MAX_EDGE: u32 = 512;
+#[cfg(target_os = "linux")]
 const PORTAL_NOTIFICATION_ICON_MAX_BYTES: usize = 4 * 1024 * 1024;
 
+#[cfg(target_os = "linux")]
 fn v2_get_notification_artwork_cache_dir() -> Result<PathBuf, String> {
     let cache_dir = dirs::cache_dir()
         .ok_or_else(|| "Could not find cache directory".to_string())?
@@ -638,6 +645,7 @@ fn v2_get_notification_artwork_cache_dir() -> Result<PathBuf, String> {
     Ok(cache_dir)
 }
 
+#[cfg(target_os = "linux")]
 fn v2_resolve_local_artwork(url: &str) -> Option<PathBuf> {
     if let Some(path) = url.strip_prefix("file://") {
         return Some(PathBuf::from(path));
@@ -649,6 +657,7 @@ fn v2_resolve_local_artwork(url: &str) -> Option<PathBuf> {
     None
 }
 
+#[cfg(target_os = "linux")]
 fn v2_cache_notification_artwork(url: &str) -> Result<PathBuf, String> {
     if let Some(local_path) = v2_resolve_local_artwork(url) {
         if local_path.exists() {
@@ -689,6 +698,7 @@ fn v2_cache_notification_artwork(url: &str) -> Result<PathBuf, String> {
     Ok(cache_path)
 }
 
+#[cfg(target_os = "linux")]
 fn v2_prepare_notification_icon_bytes(path: &std::path::Path) -> Result<Vec<u8>, String> {
     let source_image = image::open(path)
         .map_err(|e| format!("Failed to decode artwork image {:?}: {}", path, e))?;
@@ -2412,29 +2422,32 @@ pub fn v2_query_dac_capabilities(nodeName: String) -> Result<DacCapabilities, St
     }
 
     // Detect real sample rates from /proc/asound via PipeWire sink -> ALSA card mapping
-    if let Some(rates) =
-        crate::audio::pipewire_backend::PipeWireBackend::get_sink_supported_rates(&nodeName)
+    #[cfg(target_os = "linux")]
     {
-        log::info!(
-            "[HiFi Wizard] Detected sample rates for {}: {:?}",
-            nodeName,
-            rates
-        );
-        capabilities.sample_rates = rates;
-    } else {
-        // Fallback: try ALSA device ID directly (for ALSA Direct backend)
-        if let Some(rates) = qbz_audio::get_device_supported_rates(&nodeName) {
+        if let Some(rates) =
+            crate::audio::pipewire_backend::PipeWireBackend::get_sink_supported_rates(&nodeName)
+        {
             log::info!(
-                "[HiFi Wizard] Detected sample rates via ALSA for {}: {:?}",
+                "[HiFi Wizard] Detected sample rates for {}: {:?}",
                 nodeName,
                 rates
             );
             capabilities.sample_rates = rates;
         } else {
-            log::warn!(
-                "[HiFi Wizard] Could not detect sample rates for {}, using defaults",
-                nodeName
-            );
+            // Fallback: try ALSA device ID directly (for ALSA Direct backend)
+            if let Some(rates) = qbz_audio::get_device_supported_rates(&nodeName) {
+                log::info!(
+                    "[HiFi Wizard] Detected sample rates via ALSA for {}: {:?}",
+                    nodeName,
+                    rates
+                );
+                capabilities.sample_rates = rates;
+            } else {
+                log::warn!(
+                    "[HiFi Wizard] Could not detect sample rates for {}, using defaults",
+                    nodeName
+                );
+            }
         }
     }
 
@@ -2968,6 +2981,7 @@ pub fn v2_get_qobuz_track_url(trackId: u64) -> Result<String, RuntimeError> {
 }
 
 /// Known .desktop filenames across packaging formats.
+#[cfg(target_os = "linux")]
 const QBZ_DESKTOP_CANDIDATES: &[&str] = &[
     "com.blitzfc.qbz.desktop", // Tauri deb, Flatpak
     "qbz.desktop",             // Arch, AUR, Snap
@@ -2975,6 +2989,7 @@ const QBZ_DESKTOP_CANDIDATES: &[&str] = &[
 ];
 
 /// Search standard directories for the installed QBZ .desktop file.
+#[cfg(target_os = "linux")]
 fn find_qbz_desktop_file() -> String {
     let home = std::env::var("HOME").unwrap_or_default();
     let search_dirs = [
@@ -3000,6 +3015,7 @@ fn find_qbz_desktop_file() -> String {
 }
 
 /// Refresh the desktop MIME database so xdg-open picks up changes.
+#[cfg(target_os = "linux")]
 fn refresh_desktop_database() {
     // User-level applications dir
     if let Some(data_dir) = dirs::data_dir() {
@@ -3019,71 +3035,93 @@ fn refresh_desktop_database() {
 /// Check if QBZ is the default handler for qobuzapp:// links.
 #[tauri::command]
 pub fn v2_check_qobuzapp_handler() -> Result<bool, RuntimeError> {
-    let output = std::process::Command::new("xdg-mime")
-        .args(["query", "default", "x-scheme-handler/qobuzapp"])
-        .output()
-        .map_err(|e| RuntimeError::Internal(format!("Failed to run xdg-mime: {}", e)))?;
+    #[cfg(target_os = "linux")]
+    {
+        let output = std::process::Command::new("xdg-mime")
+            .args(["query", "default", "x-scheme-handler/qobuzapp"])
+            .output()
+            .map_err(|e| RuntimeError::Internal(format!("Failed to run xdg-mime: {}", e)))?;
 
-    let result = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    Ok(QBZ_DESKTOP_CANDIDATES.iter().any(|c| *c == result))
+        let result = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        Ok(QBZ_DESKTOP_CANDIDATES.iter().any(|c| *c == result))
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        // URI handler registration is Linux-only (xdg-mime)
+        Ok(false)
+    }
 }
 
 /// Register QBZ as the default handler for qobuzapp:// links.
 #[tauri::command]
 pub fn v2_register_qobuzapp_handler() -> Result<bool, RuntimeError> {
-    let desktop_file = find_qbz_desktop_file();
-    log::info!(
-        "[URI Handler] Registering {} for x-scheme-handler/qobuzapp",
-        desktop_file
-    );
+    #[cfg(target_os = "linux")]
+    {
+        let desktop_file = find_qbz_desktop_file();
+        log::info!(
+            "[URI Handler] Registering {} for x-scheme-handler/qobuzapp",
+            desktop_file
+        );
 
-    let status = std::process::Command::new("xdg-mime")
-        .args(["default", &desktop_file, "x-scheme-handler/qobuzapp"])
-        .status()
-        .map_err(|e| RuntimeError::Internal(format!("Failed to run xdg-mime: {}", e)))?;
+        let status = std::process::Command::new("xdg-mime")
+            .args(["default", &desktop_file, "x-scheme-handler/qobuzapp"])
+            .status()
+            .map_err(|e| RuntimeError::Internal(format!("Failed to run xdg-mime: {}", e)))?;
 
-    if !status.success() {
-        log::error!("[URI Handler] xdg-mime default failed");
-        return Ok(false);
+        if !status.success() {
+            log::error!("[URI Handler] xdg-mime default failed");
+            return Ok(false);
+        }
+
+        refresh_desktop_database();
+        log::info!("[URI Handler] Registration complete, desktop database refreshed");
+        Ok(true)
     }
-
-    refresh_desktop_database();
-    log::info!("[URI Handler] Registration complete, desktop database refreshed");
-    Ok(true)
+    #[cfg(not(target_os = "linux"))]
+    {
+        Ok(false)
+    }
 }
 
 /// Remove QBZ as the default handler for qobuzapp:// links.
 #[tauri::command]
 pub fn v2_deregister_qobuzapp_handler() -> Result<bool, RuntimeError> {
-    let mimeapps = dirs::config_dir()
-        .ok_or_else(|| RuntimeError::Internal("No config dir found".to_string()))?
-        .join("mimeapps.list");
+    #[cfg(target_os = "linux")]
+    {
+        let mimeapps = dirs::config_dir()
+            .ok_or_else(|| RuntimeError::Internal("No config dir found".to_string()))?
+            .join("mimeapps.list");
 
-    if !mimeapps.exists() {
-        return Ok(true); // Nothing to remove
+        if !mimeapps.exists() {
+            return Ok(true); // Nothing to remove
+        }
+
+        let content = std::fs::read_to_string(&mimeapps)
+            .map_err(|e| RuntimeError::Internal(format!("Failed to read mimeapps.list: {}", e)))?;
+
+        let filtered: String = content
+            .lines()
+            .filter(|line| !line.starts_with("x-scheme-handler/qobuzapp="))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        // Preserve trailing newline if original had one
+        let filtered = if content.ends_with('\n') && !filtered.ends_with('\n') {
+            format!("{}\n", filtered)
+        } else {
+            filtered
+        };
+
+        std::fs::write(&mimeapps, filtered)
+            .map_err(|e| RuntimeError::Internal(format!("Failed to write mimeapps.list: {}", e)))?;
+
+        refresh_desktop_database();
+        Ok(true)
     }
-
-    let content = std::fs::read_to_string(&mimeapps)
-        .map_err(|e| RuntimeError::Internal(format!("Failed to read mimeapps.list: {}", e)))?;
-
-    let filtered: String = content
-        .lines()
-        .filter(|line| !line.starts_with("x-scheme-handler/qobuzapp="))
-        .collect::<Vec<_>>()
-        .join("\n");
-
-    // Preserve trailing newline if original had one
-    let filtered = if content.ends_with('\n') && !filtered.ends_with('\n') {
-        format!("{}\n", filtered)
-    } else {
-        filtered
-    };
-
-    std::fs::write(&mimeapps, filtered)
-        .map_err(|e| RuntimeError::Internal(format!("Failed to write mimeapps.list: {}", e)))?;
-
-    refresh_desktop_database();
-    Ok(true)
+    #[cfg(not(target_os = "linux"))]
+    {
+        Ok(true)
+    }
 }
 
 #[tauri::command]
@@ -11209,60 +11247,91 @@ pub async fn v2_show_track_notification(
         artist
     );
 
-    let mut lines = Vec::new();
-    let mut line1_parts = Vec::new();
-    if !artist.is_empty() {
-        line1_parts.push(artist.clone());
-    }
-    if !album.is_empty() {
-        line1_parts.push(album.clone());
-    }
-    if !line1_parts.is_empty() {
-        lines.push(line1_parts.join(" • "));
-    }
+    let body_text = {
+        let separator = if cfg!(target_os = "macos") { " \u{00b7} " } else { " \u{2022} " };
+        let mut lines = Vec::new();
+        let mut line1_parts = Vec::new();
+        if !artist.is_empty() {
+            line1_parts.push(artist.clone());
+        }
+        if !album.is_empty() {
+            line1_parts.push(album.clone());
+        }
+        if !line1_parts.is_empty() {
+            lines.push(line1_parts.join(separator));
+        }
 
-    let quality = v2_format_notification_quality(bit_depth, sample_rate);
-    if !quality.is_empty() {
-        lines.push(quality);
-    }
+        let quality = v2_format_notification_quality(bit_depth, sample_rate);
+        if !quality.is_empty() {
+            lines.push(quality);
+        }
 
-    let body_text = lines.join("\n");
-    let mut notification = PortalNotification::new(&title).body(Some(body_text.as_str()));
+        lines.join("\n")
+    };
 
-    if let Some(ref url_str) = artwork_url {
-        let url_clone = url_str.clone();
-        let prepared = tokio::task::spawn_blocking(move || -> Result<Vec<u8>, String> {
-            let path = v2_cache_notification_artwork(&url_clone)?;
-            v2_prepare_notification_icon_bytes(&path)
-        })
-        .await;
+    #[cfg(target_os = "linux")]
+    {
+        let mut notification = PortalNotification::new(&title)
+            .body(Some(body_text.as_str()));
 
-        match prepared {
-            Ok(Ok(icon_bytes)) => {
-                log::info!("Notification artwork prepared: {} bytes", icon_bytes.len());
-                notification = notification.icon(Icon::Bytes(icon_bytes));
+        if let Some(ref url_str) = artwork_url {
+            let url_clone = url_str.clone();
+            let prepared = tokio::task::spawn_blocking(move || -> Result<Vec<u8>, String> {
+                let path = v2_cache_notification_artwork(&url_clone)?;
+                v2_prepare_notification_icon_bytes(&path)
+            })
+            .await;
+
+            match prepared {
+                Ok(Ok(icon_bytes)) => {
+                    log::info!("Notification artwork prepared: {} bytes", icon_bytes.len());
+                    notification = notification.icon(Icon::Bytes(icon_bytes));
+                }
+                Ok(Err(e)) => {
+                    log::warn!("Could not prepare notification artwork icon: {}", e);
+                }
+                Err(e) => {
+                    log::warn!("Notification artwork preparation task failed: {}", e);
+                }
             }
-            Ok(Err(e)) => {
-                log::warn!("Could not prepare notification artwork icon: {}", e);
+        }
+
+        match NotificationProxy::new().await {
+            Ok(proxy) => {
+                if let Err(e) = proxy.add_notification("track-now-playing", notification).await {
+                    log::warn!("Could not show notification via XDG portal: {}", e);
+                }
             }
             Err(e) => {
-                log::warn!("Notification artwork preparation task failed: {}", e);
+                log::warn!("XDG notification portal unavailable: {}", e);
             }
         }
     }
 
-    match NotificationProxy::new().await {
-        Ok(proxy) => {
-            if let Err(e) = proxy
-                .add_notification("track-now-playing", notification)
-                .await
+    #[cfg(target_os = "macos")]
+    {
+        let _ = &artwork_url; // macOS notify-rust doesn't support custom artwork
+
+        tokio::task::spawn_blocking(move || {
+            // Set the bundle identifier so macOS delivers notifications to this app
+            // (without this, mac-notification-sys tries to find "use_default" app)
+            let _ = notify_rust::set_application("com.blitzfc.qbz");
+            if let Err(e) = notify_rust::Notification::new()
+                .summary(&title)
+                .body(&body_text)
+                .show()
             {
-                log::warn!("Could not show notification via XDG portal: {}", e);
+                log::warn!("Failed to show macOS notification: {}", e);
             }
-        }
-        Err(e) => {
-            log::warn!("XDG notification portal unavailable: {}", e);
-        }
+        })
+        .await
+        .ok();
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    {
+        let _ = (&body_text, &artwork_url);
+        log::info!("Desktop notifications not implemented on this platform");
     }
 
     Ok(())
