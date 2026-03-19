@@ -79,15 +79,6 @@ Download from [Releases](https://github.com/vicrodh/qbz/releases): `chmod +x QBZ
 
 ## Features
 
-### Qobuz Connect
-
-Multi-device playback control using Qobuz's real-time streaming protocol.
-
-- **Renderer mode** — receive playback commands from your phone, tablet, or web player
-- **Controller mode** — control remote devices from QBZ
-- Server-authoritative queue sync across all devices
-- Bidirectional transport: play, pause, skip, seek, shuffle, repeat, volume
-
 ### Audio and Playback
 
 - **Bit-perfect playback** with DAC passthrough and per-track sample rate switching (44.1–192 kHz)
@@ -107,6 +98,15 @@ Multi-device playback control using Qobuz's real-time streaming protocol.
 - **Local library** — directory scanning, metadata extraction, CUE sheets, SQLite indexing
 - Tag editor with sidecar storage (preserves original files)
 - Virtualized lists for large libraries
+
+### Qobuz Connect
+
+Multi-device playback control using Qobuz's real-time streaming protocol.
+
+- **Renderer mode** — receive playback commands from your phone, tablet, or web player
+- **Controller mode** — control remote devices from QBZ
+- Server-authoritative queue sync across all devices
+- Bidirectional transport: play, pause, skip, seek, shuffle, repeat, volume
 
 ### Casting
 
@@ -257,6 +257,10 @@ If QBZ crashes on startup: `qbz --reset-graphics`
 - **Hi-Res seeking** — seeking in tracks >96kHz can take 10-20s (decoder must scan from start). Use prev/next for instant navigation.
 - **ALSA Direct** — exclusive access blocks other apps. Use DAC/amplifier physical volume control.
 - **PipeWire bit-perfect in Flatpak** — limited by sandbox. Use ALSA Direct or native packages.
+
+## Documentation
+
+User guides, audio configuration, integrations, and troubleshooting: **[QBZ Wiki](https://github.com/vicrodh/qbz/wiki)** (work in progress).
 
 ## Open Source
 
