@@ -3933,14 +3933,14 @@
     {/if}
     <div class="setting-row">
       <div class="setting-info">
-        <span class="setting-label">{$t('settings.audio.exclusiveMode')}</span>
+        <span class="setting-label">{$t('settings.audio.exclusiveMode')} <span class="help-tip" title={$t('settings.audio.exclusiveModeHelp')}>(?)</span></span>
         <span class="setting-desc">{exclusiveModeTooltipOverride ?? $t('settings.audio.exclusiveModeDesc')}</span>
       </div>
       <Toggle enabled={exclusiveMode} onchange={handleExclusiveModeChange} disabled={exclusiveModeDisabled} />
     </div>
     <div class="setting-row">
       <div class="setting-info">
-        <span class="setting-label">{$t('settings.audio.dacPassthrough')}</span>
+        <span class="setting-label">{$t('settings.audio.dacPassthrough')} <span class="help-tip" title={$t('settings.audio.dacPassthroughHelp')}>(?)</span></span>
         <span class="setting-desc">{dacPassthroughTooltipOverrideKey ? $t(dacPassthroughTooltipOverrideKey) : $t('settings.audio.dacPassthroughDesc')}</span>
       </div>
       <Toggle enabled={dacPassthrough} onchange={handleDacPassthroughChange} disabled={dacPassthroughDisabled} />
@@ -3961,7 +3961,7 @@
     {#if dacPassthrough && selectedBackend === 'PipeWire'}
     <div class="setting-row">
       <div class="setting-info">
-        <span class="setting-label">{$t('settings.audio.pwForceBitperfect')}</span>
+        <span class="setting-label">{$t('settings.audio.pwForceBitperfect')} <span class="help-tip" title={$t('settings.audio.pwForceBitperfectHelp')}>(?)</span></span>
         <span class="setting-desc">{$t('settings.audio.pwForceBitperfectDesc')}</span>
       </div>
       <Toggle enabled={pwForceBitperfect} onchange={handlePwForceBitperfectChange} />
@@ -6369,6 +6369,19 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
   .setting-label {
     font-size: 14px;
     color: var(--text-secondary);
+  }
+
+  .help-tip {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    cursor: help;
+    opacity: 0.6;
+    transition: opacity 150ms ease;
+  }
+
+  .help-tip:hover {
+    opacity: 1;
+    color: var(--accent-primary);
   }
 
   .setting-with-description {
