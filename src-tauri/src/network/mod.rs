@@ -115,6 +115,7 @@ impl MountCache {
 }
 
 /// Classify a filesystem type into MountKind
+#[cfg(target_os = "linux")]
 fn classify_fs_type(fs_type: &str, source: &str) -> MountKind {
     let fs_lower = fs_type.to_lowercase();
 
@@ -192,6 +193,7 @@ fn classify_fs_type(fs_type: &str, source: &str) -> MountKind {
 }
 
 /// Parse /proc/self/mountinfo and return mount information
+#[cfg(target_os = "linux")]
 fn parse_mount_info() -> Result<Vec<MountInfo>, String> {
     let content = fs::read_to_string("/proc/self/mountinfo")
         .map_err(|e| format!("Failed to read /proc/self/mountinfo: {}", e))?;
@@ -209,6 +211,7 @@ fn parse_mount_info() -> Result<Vec<MountInfo>, String> {
 
 /// Parse a single line from /proc/self/mountinfo
 /// Format: mount_id parent_id major:minor root mount_point mount_options ... - fs_type mount_source super_options
+#[cfg(target_os = "linux")]
 fn parse_mount_line(line: &str) -> Option<MountInfo> {
     let parts: Vec<&str> = line.split_whitespace().collect();
 
@@ -245,6 +248,7 @@ fn parse_mount_line(line: &str) -> Option<MountInfo> {
 }
 
 /// Unescape mount path (handles \040 for space, etc.)
+#[cfg(target_os = "linux")]
 fn unescape_mount_path(path: &str) -> String {
     let mut result = String::with_capacity(path.len());
     let mut chars = path.chars().peekable();
@@ -417,7 +421,12 @@ pub mod commands {
     }
 }
 
-#[cfg(test)]
+#[cfg(not(target_os = "linux"))]
+fn parse_mount_info() -> Result<Vec<MountInfo>, String> {
+    Ok(Vec::new())
+}
+
+#[cfg(all(test, target_os = "linux"))]
 mod tests {
     use super::*;
 
