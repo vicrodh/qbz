@@ -577,6 +577,16 @@ mod tests {
     /// Returns true if the config directory is writable (required for encryption salt).
     /// NixOS sandbox builds and CI environments lack a writable HOME.
     fn has_writable_config_dir() -> bool {
+        // Nix build sandbox sets HOME to /homeless-shelter
+        if let Ok(home) = std::env::var("HOME") {
+            if home.contains("homeless-shelter") || home.contains("/nix/store") {
+                return false;
+            }
+        }
+        // Also skip if NIX_BUILD_TOP is set (nix-build sandbox)
+        if std::env::var("NIX_BUILD_TOP").is_ok() {
+            return false;
+        }
         if let Some(path) = dirs::config_dir() {
             let test_dir = path.join("qbz");
             if std::fs::create_dir_all(&test_dir).is_ok() {
