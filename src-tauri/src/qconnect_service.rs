@@ -3928,6 +3928,22 @@ async fn deferred_renderer_join(
     }
 
     log::info!("[QConnect] Deferred renderer join complete for session {session_uuid}");
+
+    // Re-request session state so the server sends an updated renderer list
+    // (including ourselves). Without this, the frontend may not see QBZ as a
+    // renderer until the next reconnect cycle.
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    let refresh_payload = serde_json::json!({});
+    let refresh_command = app
+        .build_queue_command(
+            QueueCommandType::CtrlSrvrAskForQueueState,
+            refresh_payload,
+        )
+        .await;
+    if let Ok(action_uuid) = app.send_queue_command(refresh_command).await {
+        clear_pending_if_matches(app, &action_uuid).await;
+        log::info!("[QConnect] Re-requested session state after renderer join");
+    }
 }
 
 async fn clear_pending_if_matches(
