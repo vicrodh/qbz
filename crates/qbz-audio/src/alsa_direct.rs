@@ -7,10 +7,13 @@
 use alsa::pcm::{Access, Format, HwParams, PCM};
 #[cfg(target_os = "linux")]
 use alsa::{Direction, ValueOr};
+#[cfg(target_os = "linux")]
 use std::sync::atomic::AtomicBool;
+#[cfg(target_os = "linux")]
 use std::sync::{Arc, Mutex};
 
 /// Direct ALSA PCM stream for hw: devices
+#[cfg(target_os = "linux")]
 pub struct AlsaDirectStream {
     pcm: Arc<Mutex<PCM>>,
     #[allow(dead_code)]
@@ -21,9 +24,16 @@ pub struct AlsaDirectStream {
     device_id: String,
 }
 
+#[cfg(not(target_os = "linux"))]
+pub struct AlsaDirectStream {
+    sample_rate: u32,
+    channels: u16,
+    device_id: String,
+}
+
+#[cfg(target_os = "linux")]
 impl AlsaDirectStream {
     /// Create new ALSA direct stream
-    #[cfg(target_os = "linux")]
     pub fn new(device_id: &str, sample_rate: u32, channels: u16) -> Result<Self, String> {
         log::info!(
             "[ALSA Direct] Opening device: {} ({}Hz, {}ch)",
@@ -127,7 +137,6 @@ impl AlsaDirectStream {
     }
 
     /// Write audio samples to ALSA (auto-converts from i16 based on detected format)
-    #[cfg(target_os = "linux")]
     pub fn write(&self, samples_i16: &[i16]) -> Result<(), String> {
         let pcm = self.pcm.lock().unwrap();
         let frames = samples_i16.len() / self.channels as usize;
@@ -296,7 +305,6 @@ impl AlsaDirectStream {
     ///
     /// f32 has 24 bits of significand, so 24-bit audio is preserved losslessly.
     /// This is the primary write path for the f32 pipeline.
-    #[cfg(target_os = "linux")]
     pub fn write_f32(&self, samples_f32: &[f32]) -> Result<(), String> {
         let pcm = self.pcm.lock().unwrap();
         let frames = samples_f32.len() / self.channels as usize;
@@ -469,7 +477,6 @@ impl AlsaDirectStream {
     }
 
     /// Drain and stop playback
-    #[cfg(target_os = "linux")]
     pub fn drain(&self) -> Result<(), String> {
         log::info!("[ALSA Direct] Draining PCM");
         let pcm = self.pcm.lock().unwrap();
@@ -478,7 +485,6 @@ impl AlsaDirectStream {
     }
 
     /// Stop PCM immediately (prepare for next playback)
-    #[cfg(target_os = "linux")]
     pub fn stop(&self) -> Result<(), String> {
         log::info!("[ALSA Direct] Stopping PCM");
         let pcm = self.pcm.lock().unwrap();
@@ -510,7 +516,6 @@ impl AlsaDirectStream {
     /// - Mixer API fails
     ///
     /// NOTE: Failure doesn't break playback, just means volume can't be controlled.
-    #[cfg(target_os = "linux")]
     pub fn set_hardware_volume(&self, volume: f32) -> Result<(), String> {
         use alsa::mixer::SelemChannelId::*;
         use alsa::mixer::{Mixer, SelemId};
