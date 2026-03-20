@@ -99,6 +99,8 @@ parts:
       - curl
       # alsa-utils for aplay command (device enumeration)
       - alsa-utils
+      # unzip needed by mupdf-sys build (ODT template extraction)
+      - unzip
     stage-packages:
       - libwebkit2gtk-4.1-0
       - libgtk-3-0
