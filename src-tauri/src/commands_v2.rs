@@ -2452,6 +2452,14 @@ pub fn v2_query_dac_capabilities(nodeName: String) -> Result<DacCapabilities, St
         }
     }
 
+    #[cfg(not(target_os = "linux"))]
+    {
+        log::info!(
+            "[HiFi Wizard] Hardware sample rate detection not yet implemented on this platform for {}",
+            nodeName
+        );
+    }
+
     Ok(capabilities)
 }
 
