@@ -169,6 +169,7 @@ pub fn update_media_controls_metadata(
 
 /// DEPRECATED: KWin SSD hack removed — caused double titlebar + CPU spike.
 /// Kept temporarily for the cleanup block that removes stale rules.
+#[cfg(target_os = "linux")]
 #[allow(dead_code)]
 fn setup_kwin_window_rule() -> Result<(), String> {
     let config_path = dirs::config_dir()
@@ -297,6 +298,7 @@ fn setup_kwin_window_rule() -> Result<(), String> {
 }
 
 /// Remove the KWin window rule for QBZ when system title bar is disabled.
+#[cfg(target_os = "linux")]
 #[allow(dead_code)]
 fn remove_kwin_window_rule() {
     // Find and remove QBZ rule from kwinrulesrc
