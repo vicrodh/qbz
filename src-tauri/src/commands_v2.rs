@@ -11313,9 +11313,8 @@ pub async fn v2_show_track_notification(
     {
         let _ = &artwork_url; // macOS notify-rust doesn't support custom artwork
 
+        // Fire-and-forget: notification delivery shouldn't block track playback response
         tokio::task::spawn_blocking(move || {
-            // Set the bundle identifier so macOS delivers notifications to this app
-            // (without this, mac-notification-sys tries to find "use_default" app)
             let _ = notify_rust::set_application("com.blitzfc.qbz");
             if let Err(e) = notify_rust::Notification::new()
                 .summary(&title)
@@ -11324,9 +11323,7 @@ pub async fn v2_show_track_notification(
             {
                 log::warn!("Failed to show macOS notification: {}", e);
             }
-        })
-        .await
-        .ok();
+        });
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
