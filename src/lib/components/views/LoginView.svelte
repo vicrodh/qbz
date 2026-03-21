@@ -150,7 +150,14 @@
     } catch (err) {
       console.error('Failed to initialize client:', err);
       clearTimeoutTimer();
-      initError = formatErrorMessage(err);
+      // runtime_bootstrap returns Err(RuntimeDegraded) when bundle extraction
+      // fails (no network). Detect this and show connection error with offline button.
+      const errStr = typeof err === 'object' && err !== null ? JSON.stringify(err) : String(err);
+      if (errStr.includes('BundleExtractionFailed') || errStr.includes('Network error')) {
+        initError = $t('auth.connectionFailed');
+      } else {
+        initError = formatErrorMessage(err);
+      }
     } finally {
       if (!isTimedOut) {
         isInitializing = false;
