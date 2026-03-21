@@ -4,6 +4,11 @@
 //! allowing users to choose their preferred audio stack.
 
 use rodio::MixerDeviceSink;
+#[cfg(not(target_os = "linux"))]
+use rodio::{
+    cpal::traits::{DeviceTrait, HostTrait},
+    DeviceSinkBuilder,
+};
 use serde::{Deserialize, Serialize};
 
 /// Supported audio backends
@@ -26,12 +31,20 @@ pub enum AudioBackendType {
     /// - Similar to PipeWire but older
     /// - Fallback for systems without PipeWire
     Pulse,
+
+    /// System default backend (non-Linux platforms)
+    /// - Uses CPAL default host (CoreAudio on macOS, WASAPI on Windows)
+    /// - Automatic device selection via OS audio system
+    SystemDefault,
 }
 
 impl Default for AudioBackendType {
     fn default() -> Self {
-        // PipeWire is the modern default on Linux
-        AudioBackendType::PipeWire
+        if cfg!(target_os = "linux") {
+            AudioBackendType::PipeWire
+        } else {
+            AudioBackendType::SystemDefault
+        }
     }
 }
 
@@ -255,8 +268,7 @@ impl BackendManager {
 
         #[cfg(not(target_os = "linux"))]
         {
-            // On non-Linux, only PipeWire backend (which uses CPAL default)
-            backends.push(AudioBackendType::PipeWire);
+            backends.push(AudioBackendType::SystemDefault);
         }
 
         backends
@@ -266,8 +278,26 @@ impl BackendManager {
     pub fn create_backend(backend_type: AudioBackendType) -> BackendResult<Box<dyn AudioBackend>> {
         match backend_type {
             AudioBackendType::PipeWire => {
-                let backend = crate::pipewire_backend::PipeWireBackend::new()?;
-                Ok(Box::new(backend))
+                #[cfg(target_os = "linux")]
+                {
+                    let backend = crate::pipewire_backend::PipeWireBackend::new()?;
+                    Ok(Box::new(backend))
+                }
+                #[cfg(not(target_os = "linux"))]
+                {
+                    log::info!("PipeWire not available on this platform, using system default audio");
+                    Ok(Box::new(CpalDefaultBackend::new()?))
+                }
+            }
+            AudioBackendType::SystemDefault => {
+                #[cfg(not(target_os = "linux"))]
+                {
+                    Ok(Box::new(CpalDefaultBackend::new()?))
+                }
+                #[cfg(target_os = "linux")]
+                {
+                    Err("SystemDefault backend is not available on Linux; use PipeWire, ALSA, or Pulse".to_string())
+                }
             }
             AudioBackendType::Alsa => {
                 #[cfg(target_os = "linux")]
@@ -281,8 +311,15 @@ impl BackendManager {
                 }
             }
             AudioBackendType::Pulse => {
-                let backend = crate::pulse_backend::PulseBackend::new()?;
-                Ok(Box::new(backend))
+                #[cfg(target_os = "linux")]
+                {
+                    let backend = crate::pulse_backend::PulseBackend::new()?;
+                    Ok(Box::new(backend))
+                }
+                #[cfg(not(target_os = "linux"))]
+                {
+                    Err("PulseAudio backend only available on Linux".to_string())
+                }
             }
         }
     }
@@ -307,5 +344,102 @@ impl BackendManager {
             .output()
             .map(|o| o.status.success())
             .unwrap_or(false)
+    }
+}
+
+/// CPAL default backend for non-Linux platforms (macOS CoreAudio, Windows WASAPI).
+/// Uses the system default audio device via CPAL without any platform-specific commands.
+#[cfg(not(target_os = "linux"))]
+pub struct CpalDefaultBackend {
+    host: rodio::cpal::Host,
+}
+
+#[cfg(not(target_os = "linux"))]
+impl CpalDefaultBackend {
+    pub fn new() -> BackendResult<Self> {
+        Ok(Self {
+            host: rodio::cpal::default_host(),
+        })
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+impl AudioBackend for CpalDefaultBackend {
+    fn backend_type(&self) -> AudioBackendType {
+        AudioBackendType::SystemDefault
+    }
+
+    fn enumerate_devices(&self) -> BackendResult<Vec<AudioDevice>> {
+        let default_device = self
+            .host
+            .default_output_device()
+            .ok_or_else(|| "No default output device found".to_string())?;
+
+        let default_name = default_device
+            .description()
+            .map(|desc| desc.name().to_string())
+            .unwrap_or_else(|_| "Default Output".to_string());
+
+        let mut devices = Vec::new();
+        for device in self
+            .host
+            .output_devices()
+            .map_err(|e| format!("Failed to enumerate output devices: {}", e))?
+        {
+            let name = device
+                .description()
+                .map(|desc| desc.name().to_string())
+                .unwrap_or_else(|_| "Unknown Device".to_string());
+            let is_default = name == default_name;
+            devices.push(AudioDevice {
+                id: name.clone(),
+                name,
+                description: None,
+                is_default,
+                max_sample_rate: None,
+                supported_sample_rates: None,
+                device_bus: None,
+                is_hardware: false,
+            });
+        }
+
+        Ok(devices)
+    }
+
+    fn create_output_stream(&self, config: &BackendConfig) -> BackendResult<MixerDeviceSink> {
+        let device = if let Some(ref device_id) = config.device_id {
+            self.host
+                .output_devices()
+                .map_err(|e| format!("Failed to enumerate devices: {}", e))?
+                .find(|d| {
+                    d.description()
+                        .map(|desc| desc.name() == device_id.as_str())
+                        .unwrap_or(false)
+                })
+                .ok_or_else(|| format!("Device '{}' not found", device_id))?
+        } else {
+            self.host
+                .default_output_device()
+                .ok_or_else(|| "No default output device found".to_string())?
+        };
+
+        let mixer_sink = DeviceSinkBuilder::from_device(device)
+            .map_err(|e| format!("Failed to create device sink builder: {}", e))?
+            .open_stream()
+            .map_err(|e| format!("Failed to create output stream: {}", e))?;
+
+        Ok(mixer_sink)
+    }
+
+    fn is_available(&self) -> bool {
+        self.host.default_output_device().is_some()
+    }
+
+    fn description(&self) -> &'static str {
+        "System Audio - Default audio output"
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }

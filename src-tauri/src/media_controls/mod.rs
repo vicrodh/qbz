@@ -119,7 +119,7 @@ impl MediaControlsManager {
                 };
 
                 if let Err(e) = controls.set_playback(playback) {
-                    log::debug!("Failed to set playback state: {}", e);
+                    log::debug!("Failed to set playback state: {:?}", e);
                 }
             }
         }
@@ -139,7 +139,7 @@ impl MediaControlsManager {
                 };
 
                 if let Err(e) = controls.set_playback(playback) {
-                    log::debug!("Failed to set playback state: {}", e);
+                    log::debug!("Failed to set playback state: {:?}", e);
                 }
             }
         }
@@ -150,7 +150,7 @@ impl MediaControlsManager {
         if let Ok(mut guard) = self.controls.lock() {
             if let Some(controls) = guard.as_mut() {
                 if let Err(e) = controls.set_playback(MediaPlayback::Stopped) {
-                    log::debug!("Failed to set stopped state: {}", e);
+                    log::debug!("Failed to set stopped state: {:?}", e);
                 }
             }
         }

@@ -476,6 +476,7 @@
   // Title Bar State (from titleBarStore subscription)
   let showTitleBar = $state(shouldShowTitleBar());
   let showWindowControls = $state(getShowWindowControls());
+  const isMacOS = typeof document !== 'undefined' && document.documentElement.classList.contains('macos');
 
   // Search Bar Location State
   let searchBarLocationPref = $state(getSearchBarLocation());
@@ -4770,6 +4771,10 @@
   <LoginView onLoginSuccess={handleLoginSuccess} onStartOffline={handleStartOffline} />
 {:else}
   <div class="app" class:no-titlebar={!showTitleBar} class:floating={isWindowFloating}>
+    <!-- macOS: drag region for window movement (overlay title bar has no native drag area) -->
+    {#if !showTitleBar && isMacOS}
+      <div class="macos-drag-region" data-tauri-drag-region></div>
+    {/if}
     <!-- Custom Title Bar (CSD) -->
     {#if showTitleBar}
       <TitleBar
@@ -5894,6 +5899,17 @@
   .app.no-titlebar .content-area,
   .app.no-titlebar .main-content {
     height: calc(100vh - 104px); /* Only 104px NowPlayingBar, no title bar */
+  }
+
+  /* macOS: invisible drag region for window movement (overlay title bar) */
+  :global(html.macos) .macos-drag-region {
+    height: 28px;
+    width: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 9999;
+    -webkit-app-region: drag;
   }
 
   .view-error {

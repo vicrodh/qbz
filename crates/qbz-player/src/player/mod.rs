@@ -2003,6 +2003,7 @@ impl Player {
                             drop(stream_opt.take());
                             *pause_suspend_deadline = None;
                             // Reset PipeWire clock if bit-perfect was active
+                            #[cfg(target_os = "linux")]
                             if thread_settings
                                 .lock()
                                 .ok()
@@ -2454,6 +2455,7 @@ impl Player {
                                 drop(stream_opt.take());
                                 pause_suspend_deadline = None;
                                 // Reset PipeWire clock if bit-perfect was active
+                                #[cfg(target_os = "linux")]
                                 if thread_settings
                                     .lock()
                                     .ok()

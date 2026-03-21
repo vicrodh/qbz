@@ -169,6 +169,7 @@ pub fn update_media_controls_metadata(
 
 /// DEPRECATED: KWin SSD hack removed — caused double titlebar + CPU spike.
 /// Kept temporarily for the cleanup block that removes stale rules.
+#[cfg(target_os = "linux")]
 #[allow(dead_code)]
 fn setup_kwin_window_rule() -> Result<(), String> {
     let config_path = dirs::config_dir()
@@ -297,6 +298,7 @@ fn setup_kwin_window_rule() -> Result<(), String> {
 }
 
 /// Remove the KWin window rule for QBZ when system title bar is disabled.
+#[cfg(target_os = "linux")]
 #[allow(dead_code)]
 fn remove_kwin_window_rule() {
     // Find and remove QBZ rule from kwinrulesrc
@@ -418,7 +420,12 @@ fn should_use_main_window_transparency() -> bool {
 
 #[cfg(not(target_os = "linux"))]
 fn should_use_main_window_transparency() -> bool {
-    true
+    // On macOS, transparent WKWebView causes severe rendering performance issues
+    // (every frame must be composited through the transparent background).
+    // Default to opaque unless explicitly requested.
+    std::env::var("QBZ_FORCE_TRANSPARENT_WINDOWS")
+        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
+        .unwrap_or(false)
 }
 
 pub fn run() {
@@ -552,6 +559,7 @@ pub fn run() {
     // No qdbus6 reconfigure call here — KWin picks it up on next restart, and
     // users affected can run `qdbus6 org.kde.KWin /KWin reconfigure` manually or
     // just restart their session. This block does nothing if the rule is absent.
+    #[cfg(target_os = "linux")]
     {
         if let Some(path) = dirs::config_dir().map(|d| d.join("kwinrulesrc")) {
             if let Ok(content) = std::fs::read_to_string(&path) {
@@ -725,7 +733,8 @@ pub fn run() {
                 "Main window transparency: {} (override with QBZ_FORCE_TRANSPARENT_WINDOWS=1 or QBZ_FORCE_OPAQUE_WINDOWS=1)",
                 main_window_transparent
             );
-            let main_window = tauri::WebviewWindowBuilder::new(
+            #[allow(unused_mut)]
+            let mut builder = tauri::WebviewWindowBuilder::new(
                 app,
                 "main",
                 tauri::WebviewUrl::App(std::path::PathBuf::from("index.html")),
@@ -733,11 +742,24 @@ pub fn run() {
             .title("QBZ")
             .inner_size(saved_win_width, saved_win_height)
             .min_inner_size(800.0, 600.0)
-            .decorations(use_system_titlebar)
+            .decorations(if cfg!(target_os = "macos") { true } else { use_system_titlebar })
             .transparent(main_window_transparent)
             .resizable(true)
-            .zoom_hotkeys_enabled(true)
-            .build()
+            .zoom_hotkeys_enabled(true);
+
+            // macOS: use overlay title bar style so content extends behind the title bar,
+            // and set background color to match the app theme
+            #[cfg(target_os = "macos")]
+            {
+                use tauri::TitleBarStyle;
+                use tauri::window::Color;
+                builder = builder
+                    .title_bar_style(TitleBarStyle::Overlay)
+                    .hidden_title(true)
+                    .background_color(Color(0x0f, 0x0f, 0x0f, 0xff));
+            }
+
+            let main_window = builder.build()
             .map_err(|e| {
                 log::error!("Failed to create main window: {}", e);
                 e
