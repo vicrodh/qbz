@@ -76,6 +76,16 @@ Download from [Releases](https://github.com/vicrodh/qbz/releases): `sudo dnf ins
 
 > Requires glibc 2.38+ (Fedora 39+, openSUSE Tumbleweed).
 
+### Gentoo
+
+```bash
+eselect repository add qbz-overlay git https://github.com/vicrodh/qbz-overlay.git
+emerge --sync qbz-overlay
+emerge media-sound/qbz-bin    # prebuilt binary
+# or
+emerge media-sound/qbz        # build from source
+```
+
 ### AppImage
 
 Download from [Releases](https://github.com/vicrodh/qbz/releases): `chmod +x QBZ.AppImage && ./QBZ.AppImage`
@@ -207,6 +217,12 @@ sudo dnf install webkit2gtk4.1-devel gtk3-devel alsa-lib-devel \
 ```bash
 sudo pacman -S webkit2gtk-4.1 gtk3 alsa-lib libappindicator-gtk3 \
   librsvg openssl pkg-config
+```
+
+**Gentoo:**
+```bash
+sudo emerge net-libs/webkit-gtk:4.1 x11-libs/gtk+:3 media-libs/alsa-lib \
+  dev-libs/libappindicator:3 gnome-base/librsvg dev-libs/openssl virtual/pkgconfig
 ```
 
 ### Build
