@@ -48,7 +48,7 @@ jobs:
 
       - name: Clone overlay repo
         env:
-          OVERLAY_PAT: ${{ secrets.OVERLAY_PAT }}
+          OVERLAY_PAT: ${{ secrets.APT_REPO_TOKEN }}
         run: |
           git clone "https://x-access-token:${OVERLAY_PAT}@github.com/vicrodh/qbz-overlay.git" /tmp/qbz-overlay
           cd /tmp/qbz-overlay
