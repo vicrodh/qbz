@@ -25,6 +25,26 @@ pub struct DeveloperSettingsStore {
 }
 
 impl DeveloperSettingsStore {
+    /// Lightweight read-only open for startup (before Tauri state).
+    pub fn new_readonly() -> Result<Self, String> {
+        let db_path = dirs::data_dir()
+            .ok_or("Could not determine data directory")?
+            .join("qbz")
+            .join("developer_settings.db");
+
+        if !db_path.exists() {
+            return Err("Developer settings DB does not exist yet".to_string());
+        }
+
+        let conn = Connection::open_with_flags(
+            &db_path,
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )
+        .map_err(|e| format!("Failed to open developer settings database (readonly): {}", e))?;
+
+        Ok(Self { conn })
+    }
+
     pub fn new() -> Result<Self, String> {
         let data_dir = dirs::data_dir()
             .ok_or("Could not determine data directory")?

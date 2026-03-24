@@ -363,10 +363,33 @@ fn remove_kwin_window_rule() {
 
 #[cfg(target_os = "linux")]
 fn apply_linux_webkit_workarounds() {
+    // Priority: env vars > saved settings > safe defaults
+    let env_hw_accel = std::env::var("QBZ_HARDWARE_ACCEL")
+        .ok()
+        .map(|v| {
+            let n = v.trim().to_ascii_lowercase();
+            n == "1" || n == "true" || n == "yes"
+        });
+
+    let env_force_dmabuf = std::env::var("QBZ_FORCE_DMABUF")
+        .ok()
+        .map(|v| {
+            let n = v.trim().to_ascii_lowercase();
+            n == "1" || n == "true" || n == "yes"
+        });
+
+    let env_disable_dmabuf = std::env::var("QBZ_DISABLE_DMABUF")
+        .ok()
+        .map(|v| {
+            let n = v.trim().to_ascii_lowercase();
+            n == "1" || n == "true" || n == "yes"
+        });
+
+    // Legacy env var support
     let force_gpu = std::env::var("QBZ_WEBKIT_FORCE_GPU")
-        .map(|value| {
-            let normalized = value.trim().to_ascii_lowercase();
-            normalized == "1" || normalized == "true" || normalized == "yes"
+        .map(|v| {
+            let n = v.trim().to_ascii_lowercase();
+            n == "1" || n == "true" || n == "yes"
         })
         .unwrap_or(false);
 
@@ -375,18 +398,50 @@ fn apply_linux_webkit_workarounds() {
         return;
     }
 
+    // Read saved settings from DB (lightweight, no Tauri state needed)
+    let (saved_hw_accel, _saved_force_dmabuf) = config::graphics_settings::GraphicsSettingsStore::new_readonly()
+        .and_then(|store| store.get_settings())
+        .map(|s| (s.hardware_acceleration, false))
+        .unwrap_or((false, false));
+
+    let saved_dev_force_dmabuf = config::developer_settings::DeveloperSettingsStore::new_readonly()
+        .and_then(|store| store.get_settings())
+        .map(|s| s.force_dmabuf)
+        .unwrap_or(false);
+
+    // Resolve: env var wins, then saved setting, then safe default (off)
+    let hw_accel = env_hw_accel.unwrap_or(saved_hw_accel);
+    let force_dmabuf = env_force_dmabuf.unwrap_or(saved_dev_force_dmabuf);
+    let disable_dmabuf = env_disable_dmabuf.unwrap_or(false);
+
+    log::info!(
+        "Graphics startup: hw_accel={}, force_dmabuf={}, disable_dmabuf={}",
+        hw_accel, force_dmabuf, disable_dmabuf
+    );
+
+    // DMA-BUF renderer
     if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
-        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
-        log::warn!(
-            "Enabled WEBKIT_DISABLE_DMABUF_RENDERER=1 (stability workaround for Linux WebKit/EGL teardown)"
-        );
+        if force_dmabuf {
+            // User explicitly wants DMA-BUF — don't disable it
+            log::info!("DMA-BUF renderer: enabled (user setting)");
+        } else if disable_dmabuf || !hw_accel {
+            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+            log::info!("DMA-BUF renderer: disabled (safety default)");
+        } else {
+            // hw_accel=true but force_dmabuf=false: disable for stability
+            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+            log::info!("DMA-BUF renderer: disabled (hw_accel on but dmabuf not forced)");
+        }
     }
 
+    // Compositing mode — only disable if hardware acceleration is off
     if std::env::var_os("WEBKIT_DISABLE_COMPOSITING_MODE").is_none() {
-        std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
-        log::warn!(
-            "Enabled WEBKIT_DISABLE_COMPOSITING_MODE=1 (stability workaround for Linux WebKit/EGL teardown)"
-        );
+        if hw_accel {
+            log::info!("Compositing mode: enabled (hardware acceleration on)");
+        } else {
+            std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
+            log::info!("Compositing mode: disabled (hardware acceleration off)");
+        }
     }
 }
 

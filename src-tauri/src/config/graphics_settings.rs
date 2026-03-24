@@ -81,6 +81,27 @@ pub struct GraphicsSettingsStore {
 }
 
 impl GraphicsSettingsStore {
+    /// Lightweight read-only open for startup (before Tauri state).
+    /// Opens existing DB without creating tables/running migrations.
+    pub fn new_readonly() -> Result<Self, String> {
+        let db_path = dirs::data_dir()
+            .ok_or("Could not determine data directory")?
+            .join("qbz")
+            .join("graphics_settings.db");
+
+        if !db_path.exists() {
+            return Err("Graphics settings DB does not exist yet".to_string());
+        }
+
+        let conn = Connection::open_with_flags(
+            &db_path,
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )
+        .map_err(|e| format!("Failed to open graphics settings database (readonly): {}", e))?;
+
+        Ok(Self { conn })
+    }
+
     pub fn new() -> Result<Self, String> {
         let data_dir = dirs::data_dir()
             .ok_or("Could not determine data directory")?
