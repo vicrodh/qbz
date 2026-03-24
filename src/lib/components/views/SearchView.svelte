@@ -1143,7 +1143,7 @@
         class:active={activeTab === 'all'}
         onclick={() => handleTabChange('all')}
       >
-        <span>All</span>
+        <span>{$t('search.all')}</span>
       </button>
       <button
         class="tab"
@@ -1171,7 +1171,7 @@
         class:active={activeTab === 'playlists'}
         onclick={() => handleTabChange('playlists')}
       >
-        <span>Playlists</span>
+        <span>{$t('search.playlists')}</span>
       </button>
     </div>
 
@@ -1184,7 +1184,7 @@
             checked={filterType === 'MainArtist'}
             onchange={() => setFilter('MainArtist')}
           />
-          <span>Artist</span>
+          <span>{$t('search.mainArtist')}</span>
         </label>
         <label class="filter-option">
           <input
@@ -1193,7 +1193,7 @@
             checked={filterType === 'Performer'}
             onchange={() => setFilter('Performer')}
           />
-          <span>Performer</span>
+          <span>{$t('search.performer')}</span>
         </label>
         <label class="filter-option">
           <input
@@ -1202,7 +1202,7 @@
             checked={filterType === 'Composer'}
             onchange={() => setFilter('Composer')}
           />
-          <span>Composer</span>
+          <span>{$t('search.composer')}</span>
         </label>
         <label class="filter-option">
           <input
@@ -1211,7 +1211,7 @@
             checked={filterType === 'Label'}
             onchange={() => setFilter('Label')}
           />
-          <span>Label</span>
+          <span>{$t('search.label')}</span>
         </label>
         <label class="filter-option">
           <input
@@ -1220,7 +1220,7 @@
             checked={filterType === 'ReleaseName'}
             onchange={() => setFilter('ReleaseName')}
           />
-          <span>Release</span>
+          <span>{$t('search.releaseName')}</span>
         </label>
 
         <button
@@ -1261,7 +1261,7 @@
         <div class="top-section">
           <div class="most-popular">
             <div class="section-header">
-              <h3><Crown size={18} color="gold" /> Most Popular</h3>
+              <h3><Crown size={18} color="gold" /> {$t('search.mostPopular')}</h3>
             </div>
             <div class="most-popular-wrapper">
               {#if allResults.most_popular?.type === 'artists'}
@@ -1508,7 +1508,7 @@
 
           <div class="artists-section">
             <div class="section-header">
-              <h3>Artists</h3>
+              <h3>{$t('search.artists')}</h3>
               <div class="carousel-controls">
                 <button 
                   class="carousel-btn" 
@@ -1527,7 +1527,7 @@
                   <ChevronRight size={20} />
                 </button>
                 <button class="view-all-link" onclick={() => handleTabChange('artists')}>
-                  View all ({allResults.artists.total})
+                 {$t('search.viewAll')} ({allResults.artists.total})
                 </button>
               </div>
             </div>
@@ -1573,7 +1573,7 @@
           {#if allResults.albums.items.length > 0}
             <div class="albums-section">
               <div class="section-header">
-                <h3>Albums</h3>
+                <h3>{$t('search.albums')}</h3>
                 <div class="carousel-controls">
                   <button 
                     class="carousel-btn" 
@@ -1592,7 +1592,7 @@
                     <ChevronRight size={20} />
                   </button>
                   <button class="view-all-link" onclick={() => handleTabChange('albums')}>
-                    View all ({allResults.albums.total})
+                    {$t('search.viewAll')} ({allResults.albums.total})
                   </button>
                 </div>
               </div>
@@ -1651,9 +1651,9 @@
           {#if allResults.tracks.items.length > 0}
             <div class="tracks-section">
               <div class="section-header">
-                <h3>Tracks</h3>
+                <h3>{$t('search.tracks')}</h3>
                 <button class="view-all-link" onclick={() => handleTabChange('tracks')}>
-                  View all ({allResults.tracks.total})
+                  {$t('search.viewAll')} ({allResults.tracks.total})
                 </button>
               </div>
               <div class="tracks-list-compact">
@@ -1769,9 +1769,9 @@
         {#if allResults.playlists && allResults.playlists.items.length > 0}
           <div class="playlists-section">
             <div class="section-header">
-              <h3>Playlists</h3>
+              <h3>{$t('search.playlists')}</h3>
               <button class="view-all-link" onclick={() => handleTabChange('playlists')}>
-                View all ({allResults.playlists.total})
+                {$t('search.viewAll')} ({allResults.playlists.total})
               </button>
             </div>
             <div class="playlists-preview-grid">

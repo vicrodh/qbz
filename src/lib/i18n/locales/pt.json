@@ -100,10 +100,18 @@
     "recentSearches": "Buscas Recentes",
     "clearHistory": "Limpar Histórico",
     "startTyping": "Comece a digitar para buscar no Qobuz™",
+    "composer": "Compositor",
+    "label": "Selo",
+    "mainArtist": "Artista Principal",
+    "mostPopular": "Mais populares",
     "noAlbumsFor": "Nenhum álbum encontrado para \"{query}\"",
     "noTracksFor": "Nenhuma faixa encontrada para \"{query}\"",
     "noArtistsFor": "Nenhum artista encontrado para \"{query}\"",
     "noPlaylistsFor": "Nenhuma playlist encontrada para \"{query}\"",
+    "performer": "Intérprete",
+    "playlists": "Playlists",
+    "releaseName": "Nome do lançamento",
+    "viewAll": "Ver tudo",
     "viewMore": "Ver mais"
   },
   "label": {

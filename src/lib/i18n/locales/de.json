@@ -97,10 +97,18 @@
     "recentSearches": "Letzte Suchanfragen",
     "clearHistory": "Verlauf löschen",
     "startTyping": "Beginne zu tippen, um Qobuz™ zu durchsuchen",
+    "composer": "Komponist:in",
+    "label": "Label",
+    "mainArtist": "Künstler:in",
+    "mostPopular": "Top-Ergebnis",
     "noAlbumsFor": "Keine Alben gefunden für \"{query}\"",
     "noTracksFor": "Keine Titel gefunden für \"{query}\"",
     "noArtistsFor": "Keine Künstler gefunden für \"{query}\"",
     "noPlaylistsFor": "Keine Playlists gefunden für \"{query}\"",
+    "performer": "Weitere Interpret:innen",
+    "playlists": "Playlists",
+    "releaseName": "Album-/Track-Name",
+    "viewAll": "Alle sehen",
     "viewMore": "Mehr anzeigen"
   },
   "label": {

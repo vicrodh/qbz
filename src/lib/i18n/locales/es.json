@@ -100,10 +100,18 @@
     "recentSearches": "Búsquedas Recientes",
     "clearHistory": "Limpiar Historial",
     "startTyping": "Escribe para buscar en Qobuz™",
+    "composer": "Compositor",
+    "label": "Sello",
+    "mainArtist": "Artista Principal",
+    "mostPopular": "Lo más escuchado",
     "noAlbumsFor": "No se encontraron álbumes para \"{query}\"",
     "noTracksFor": "No se encontraron pistas para \"{query}\"",
     "noArtistsFor": "No se encontraron artistas para \"{query}\"",
     "noPlaylistsFor": "No se encontraron listas para \"{query}\"",
+    "performer": "Intérprete",
+    "playlists": "Playlists",
+    "releaseName": "Nombre Publicación",
+    "viewAll": "Ver todo",
     "viewMore": "Ver más"
   },
   "label": {

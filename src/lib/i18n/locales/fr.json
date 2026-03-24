@@ -97,10 +97,18 @@
     "recentSearches": "Recherches récentes",
     "clearHistory": "Effacer l'historique",
     "startTyping": "Commencez à taper pour rechercher sur Qobuz™",
+    "composer": "Compositeur",
+    "label": "Label",
+    "mainArtist": "Artiste principal",
+    "mostPopular": "Plus populaire",
     "noAlbumsFor": "Aucun album trouvé pour « {query} »",
     "noTracksFor": "Aucune piste trouvée pour « {query} »",
     "noArtistsFor": "Aucun artiste trouvé pour « {query} »",
     "noPlaylistsFor": "Aucune playlist trouvée pour « {query} »",
+    "performer": "Interprète",
+    "playlists": "Playlists",
+    "releaseName": "Nom / Titre",
+    "viewAll": "Voir tout",
     "viewMore": "Voir plus"
   },
   "label": {
