@@ -2143,15 +2143,12 @@ fn spawn_v2_prefetch_with_hw_check(
                 let bridge_guard = bridge_clone.read().await;
                 let bridge = bridge_guard.as_ref().ok_or("CoreBridge not initialized")?;
                 let stream_url = bridge.get_stream_url(track_id, effective_quality).await?;
-                drop(bridge_guard);
-
-                let data = download_audio(&stream_url.url).await?;
-                Ok::<Vec<u8>, String>(data)
+                download_with_backoff(&stream_url.url, track_id, effective_quality, bridge).await
             }
             .await;
 
             match result {
-                Ok(data) => {
+                Ok((data, _url)) => {
                     // Small delay before cache insertion to avoid potential race with audio thread
                     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
                     cache_clone.insert(track_id, data);
@@ -2159,71 +2156,10 @@ fn spawn_v2_prefetch_with_hw_check(
                 }
                 Err(e) => {
                     log::warn!(
-                        "[V2/PREFETCH] Failed for track {} (attempt 1): {}",
+                        "[V2/PREFETCH] Failed for track {} after all retries: {}",
                         track_id,
                         e
                     );
-                    // Retry with fresh URL — CDN edge may have returned EOF
-                    log::info!(
-                        "[V2/PREFETCH] Retrying track {} with fresh URL...",
-                        track_id
-                    );
-                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-                    let retry_result = async {
-                        let bridge_guard = bridge_clone.read().await;
-                        let bridge = bridge_guard.as_ref().ok_or("CoreBridge not initialized")?;
-                        let stream_url = bridge.get_stream_url(track_id, effective_quality).await?;
-                        drop(bridge_guard);
-                        download_audio(&stream_url.url).await
-                    }
-                    .await;
-                    match retry_result {
-                        Ok(data) => {
-                            cache_clone.insert(track_id, data);
-                            log::info!(
-                                "[V2/PREFETCH] Complete for track {} (retry succeeded)",
-                                track_id
-                            );
-                        }
-                        Err(e2) => {
-                            // Both attempts at current quality failed — try lower quality
-                            if let Some(fallback_q) = effective_quality.lower() {
-                                log::warn!(
-                                    "[V2/PREFETCH] Retry also failed for track {}: {}. Trying quality fallback to {}",
-                                    track_id, e2, fallback_q.label()
-                                );
-                                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-                                let fallback_result = async {
-                                    let bridge_guard = bridge_clone.read().await;
-                                    let bridge = bridge_guard
-                                        .as_ref()
-                                        .ok_or("CoreBridge not initialized")?;
-                                    let stream_url =
-                                        bridge.get_stream_url(track_id, fallback_q).await?;
-                                    log::info!(
-                                        "[V2/PREFETCH] Quality fallback: {} → {} (format_id={})",
-                                        effective_quality.label(),
-                                        fallback_q.label(),
-                                        stream_url.format_id
-                                    );
-                                    drop(bridge_guard);
-                                    download_audio(&stream_url.url).await
-                                }
-                                .await;
-                                match fallback_result {
-                                    Ok(data) => {
-                                        cache_clone.insert(track_id, data);
-                                        log::info!("[V2/PREFETCH] Complete for track {} (quality fallback succeeded)", track_id);
-                                    }
-                                    Err(e3) => {
-                                        log::warn!("[V2/PREFETCH] Quality fallback also failed for track {}: {}", track_id, e3);
-                                    }
-                                }
-                            } else {
-                                log::warn!("[V2/PREFETCH] Failed for track {} (attempt 2, no lower quality): {}", track_id, e2);
-                            }
-                        }
-                    }
                 }
             }
 
