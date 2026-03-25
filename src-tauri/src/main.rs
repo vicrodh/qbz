@@ -477,13 +477,14 @@ fn main() {
             // Default path: v1.1.9 targeted mitigations
 
             // --- Compositing mode ---
-            // NVIDIA on Wayland has protocol errors with compositing.
-            // AMD/Intel on native Wayland can handle compositing fine.
+            // NVIDIA-only on Wayland has protocol errors with compositing.
+            // Hybrid Intel+NVIDIA and AMD systems can handle compositing fine
+            // (WebKit uses the iGPU, not the dGPU).
             // If user forced DMA-BUF on, they want full GPU — skip compositing disable too.
-            if is_wayland && !force_x11 && has_nvidia && !has_amd && !force_dmabuf {
+            if is_wayland && !force_x11 && has_nvidia && !has_amd && !has_intel && !force_dmabuf {
                 std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
                 qbz_nix_lib::logging::log_startup(
-                    "[QBZ] Wayland+NVIDIA: compositing mode disabled (prevents protocol errors)",
+                    "[QBZ] Wayland+NVIDIA-only: compositing mode disabled (prevents protocol errors)",
                 );
             } else if is_wayland && !force_x11 {
                 qbz_nix_lib::logging::log_startup("[QBZ] Wayland: compositing mode enabled");
@@ -499,13 +500,13 @@ fn main() {
                     "[QBZ] User override: DMA-BUF renderer forced OFF (QBZ_DISABLE_DMABUF=1)",
                 );
                 std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
-            } else if is_wayland && !force_x11 && has_nvidia && !has_amd {
-                // NVIDIA on Wayland: disable DMA-BUF (Error 71 protocol error)
+            } else if is_wayland && !force_x11 && has_nvidia && !has_amd && !has_intel {
+                // NVIDIA-only on Wayland: disable DMA-BUF (Error 71 protocol error)
                 qbz_nix_lib::logging::log_startup(
-                    "[QBZ] Wayland+NVIDIA: DMA-BUF renderer disabled (prevents Error 71)",
+                    "[QBZ] Wayland+NVIDIA-only: DMA-BUF renderer disabled (prevents Error 71)",
                 );
                 std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
-            } else if has_nvidia && !is_wayland {
+            } else if has_nvidia && !has_intel && !has_amd && !is_wayland {
                 // X11 + NVIDIA: disable DMA-BUF only (keeps full compositing)
                 qbz_nix_lib::logging::log_startup("[QBZ] NVIDIA on X11: DMA-BUF renderer disabled");
                 std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
