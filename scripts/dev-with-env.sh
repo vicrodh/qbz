@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Development script that loads .env variables before building
 
 set -a

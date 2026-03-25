@@ -2,13 +2,13 @@
 //!
 //! Unified interface for different playback backends:
 //! - Rodio (PipeWire, Pulse, ALSA via CPAL) - uses rodio::Sink
-//! - ALSA Direct (hw: devices) - bypasses rodio, writes directly to ALSA PCM
+//! - Direct (hw: on Linux, /dev/dspX on FreeBSD) - bypasses rodio entirely
 //!
-//! ALSA Direct uses a single long-lived writer thread with a source queue
-//! to enable gapless playback. When one source ends, the next is picked up
-//! seamlessly without interrupting the PCM stream.
+//! The Direct variant uses a single long-lived writer thread with a source
+//! queue to enable gapless playback.  When one source ends the next is picked
+//! up seamlessly without interrupting the hardware stream.
 
-use qbz_audio::AlsaDirectStream;
+use qbz_audio::DirectAudioStream;
 use rodio::{mixer::Mixer, Player as RodioPlayer, Source};
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -68,9 +68,10 @@ impl SourceQueue {
 pub enum PlaybackEngine {
     /// Rodio-based (PipeWire, Pulse, ALSA via CPAL)
     Rodio { sink: RodioPlayer },
-    /// Direct ALSA (hw: devices, bit-perfect) with gapless source queue
-    AlsaDirect {
-        stream: Arc<AlsaDirectStream>,
+    /// Direct hardware stream (AlsaDirectStream on Linux, OssDirectStream on FreeBSD).
+    /// Bit-perfect, gapless via an internal source queue.
+    Direct {
+        stream: Arc<dyn DirectAudioStream>,
         is_playing: Arc<AtomicBool>,
         should_stop: Arc<AtomicBool>,
         position_frames: Arc<AtomicU64>,
@@ -90,9 +91,12 @@ impl PlaybackEngine {
         Ok(Self::Rodio { sink })
     }
 
-    /// Create ALSA Direct engine with gapless source queue.
-    /// Spawns a single writer thread that lives for the engine's lifetime.
-    pub fn new_alsa_direct(stream: Arc<AlsaDirectStream>, hardware_volume: bool) -> Self {
+    /// Create a Direct hardware engine with gapless source queue.
+    ///
+    /// Works with any `DirectAudioStream` implementation (ALSA on Linux,
+    /// OSS on FreeBSD).  Spawns a single writer thread for the engine's
+    /// lifetime.
+    pub fn new_direct(stream: Arc<dyn DirectAudioStream>, hardware_volume: bool) -> Self {
         let is_playing = Arc::new(AtomicBool::new(false));
         let should_stop = Arc::new(AtomicBool::new(false));
         let position_frames = Arc::new(AtomicU64::new(0));
@@ -100,7 +104,6 @@ impl PlaybackEngine {
         let source_queue = Arc::new(SourceQueue::new());
         let source_transition = Arc::new(AtomicBool::new(false));
 
-        // Spawn the single long-lived writer thread
         let handle = {
             let stream_c = stream.clone();
             let playing_c = is_playing.clone();
@@ -112,7 +115,7 @@ impl PlaybackEngine {
             let channels = stream.channels();
 
             thread::spawn(move || {
-                alsa_writer_thread(
+                direct_writer_thread(
                     stream_c,
                     playing_c,
                     stop_c,
@@ -125,7 +128,7 @@ impl PlaybackEngine {
             })
         };
 
-        Self::AlsaDirect {
+        Self::Direct {
             stream,
             is_playing,
             should_stop,
@@ -150,7 +153,7 @@ impl PlaybackEngine {
                 sink.append(source);
                 Ok(())
             }
-            Self::AlsaDirect {
+            Self::Direct {
                 is_playing,
                 should_stop,
                 position_frames,
@@ -170,9 +173,9 @@ impl PlaybackEngine {
                     should_stop.store(false, Ordering::SeqCst);
                     source_transition.store(false, Ordering::SeqCst);
                     is_playing.store(true, Ordering::SeqCst);
-                    log::info!("[ALSA Direct Engine] First source queued, playback starting");
+                    log::info!("[Direct Engine] First source queued, playback starting");
                 } else {
-                    log::info!("[ALSA Direct Engine] Source queued for gapless transition");
+                    log::info!("[Direct Engine] Source queued for gapless transition");
                 }
 
                 Ok(())
@@ -184,8 +187,8 @@ impl PlaybackEngine {
     pub fn play(&self) {
         match self {
             Self::Rodio { sink } => sink.play(),
-            Self::AlsaDirect { is_playing, .. } => {
-                log::info!("[ALSA Direct Engine] Resume requested");
+            Self::Direct { is_playing, .. } => {
+                log::info!("[Direct Engine] Resume requested");
                 is_playing.store(true, Ordering::SeqCst);
             }
         }
@@ -195,8 +198,8 @@ impl PlaybackEngine {
     pub fn pause(&self) {
         match self {
             Self::Rodio { sink } => sink.pause(),
-            Self::AlsaDirect { is_playing, .. } => {
-                log::info!("[ALSA Direct Engine] Pause requested");
+            Self::Direct { is_playing, .. } => {
+                log::info!("[Direct Engine] Pause requested");
                 is_playing.store(false, Ordering::SeqCst);
             }
         }
@@ -215,7 +218,7 @@ impl PlaybackEngine {
             Self::Rodio { sink } => {
                 sink.stop();
             }
-            Self::AlsaDirect {
+            Self::Direct {
                 stream,
                 is_playing,
                 should_stop,
@@ -225,7 +228,7 @@ impl PlaybackEngine {
                 if should_stop.load(Ordering::SeqCst) {
                     return; // Already stopped
                 }
-                log::info!("[ALSA Direct Engine] Stop requested");
+                log::info!("[Direct Engine] Stop requested");
                 should_stop.store(true, Ordering::SeqCst);
                 is_playing.store(false, Ordering::SeqCst);
 
@@ -234,7 +237,7 @@ impl PlaybackEngine {
                 }
 
                 if let Err(e) = stream.stop() {
-                    log::warn!("[ALSA Direct Engine] Stop failed: {}", e);
+                    log::warn!("[Direct Engine] Stop failed: {}", e);
                 }
             }
         }
@@ -244,21 +247,18 @@ impl PlaybackEngine {
     pub fn set_volume(&self, volume: f32) {
         match self {
             Self::Rodio { sink } => sink.set_volume(volume),
-            Self::AlsaDirect {
+            Self::Direct {
                 stream,
                 hardware_volume,
                 ..
             } => {
                 if *hardware_volume {
-                    #[cfg(target_os = "linux")]
-                    {
-                        if let Err(e) = stream.set_hardware_volume(volume) {
-                            log::warn!("[ALSA Direct Engine] Hardware volume failed: {}", e);
-                        }
+                    if let Err(e) = stream.set_hardware_volume(volume) {
+                        log::warn!("[Direct Engine] Hardware volume failed: {}", e);
                     }
                 } else {
                     log::debug!(
-                        "[ALSA Direct Engine] Hardware volume control disabled (use DAC/amplifier)"
+                        "[Direct Engine] Hardware volume disabled (use DAC/amplifier)"
                     );
                 }
             }
@@ -269,7 +269,7 @@ impl PlaybackEngine {
     pub fn empty(&self) -> bool {
         match self {
             Self::Rodio { sink } => sink.empty(),
-            Self::AlsaDirect {
+            Self::Direct {
                 is_playing,
                 source_queue,
                 ..
@@ -282,7 +282,7 @@ impl PlaybackEngine {
     pub fn take_source_transition(&self) -> bool {
         match self {
             Self::Rodio { .. } => false,
-            Self::AlsaDirect {
+            Self::Direct {
                 source_transition, ..
             } => source_transition
                 .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
@@ -295,7 +295,7 @@ impl PlaybackEngine {
     pub fn position_secs(&self) -> Option<u64> {
         match self {
             Self::Rodio { .. } => None,
-            Self::AlsaDirect {
+            Self::Direct {
                 position_frames,
                 stream,
                 ..
@@ -312,7 +312,7 @@ impl PlaybackEngine {
     pub fn duration_secs(&self) -> Option<u64> {
         match self {
             Self::Rodio { .. } => None,
-            Self::AlsaDirect {
+            Self::Direct {
                 duration_frames,
                 stream,
                 ..
@@ -324,21 +324,21 @@ impl PlaybackEngine {
         }
     }
 
-    /// Check if using ALSA Direct engine
+    /// Check if using the direct hardware engine (ALSA or OSS)
     #[allow(dead_code)]
-    pub fn is_alsa_direct(&self) -> bool {
-        matches!(self, Self::AlsaDirect { .. })
+    pub fn is_direct(&self) -> bool {
+        matches!(self, Self::Direct { .. })
     }
 }
 
-/// Single long-lived writer thread for ALSA Direct.
+/// Single long-lived writer thread for direct hardware streams.
 ///
-/// Continuously reads samples from the current source and writes to ALSA.
-/// When a source ends, seamlessly picks up the next one from the queue
-/// (gapless transition). If no next source is available, drains the ALSA
-/// buffer and waits for the next source or a stop signal.
-fn alsa_writer_thread(
-    stream: Arc<AlsaDirectStream>,
+/// Continuously reads samples from the current source and writes to the
+/// device.  When a source ends, seamlessly picks up the next one from the
+/// queue (gapless transition).  If no next source is available, drains the
+/// hardware buffer and waits for the next source or a stop signal.
+fn direct_writer_thread(
+    stream: Arc<dyn DirectAudioStream>,
     is_playing: Arc<AtomicBool>,
     should_stop: Arc<AtomicBool>,
     position_frames: Arc<AtomicU64>,
@@ -353,12 +353,12 @@ fn alsa_writer_thread(
     let mut current_source: Option<BoxedSampleIter> = None;
     let mut total_frames: u64 = 0;
 
-    log::info!("[ALSA Direct Engine] Writer thread started (gapless-capable)");
+    log::info!("[Direct Engine] Writer thread started (gapless-capable)");
 
     'thread: loop {
         // Check global stop
         if should_stop.load(Ordering::SeqCst) {
-            log::info!("[ALSA Direct Engine] Stop signal, writer thread exiting");
+            log::info!("[Direct Engine] Stop signal, writer thread exiting");
             break 'thread;
         }
 
@@ -370,7 +370,7 @@ fn alsa_writer_thread(
                     current_source = Some(src);
                     total_frames = 0;
                     position_frames.store(0, Ordering::SeqCst);
-                    log::info!("[ALSA Direct Engine] Acquired new source from queue");
+                    log::info!("[Direct Engine] Acquired new source from queue");
                 }
                 None => {
                     // No source available, loop back to check stop
@@ -405,7 +405,7 @@ fn alsa_writer_thread(
         // Write whatever we have to ALSA (even partial chunks on source end)
         if !buffer_f32.is_empty() {
             if let Err(e) = stream.write_f32(&buffer_f32) {
-                log::error!("[ALSA Direct Engine] Write failed: {}", e);
+                log::error!("[Direct Engine] Write failed: {}", e);
                 break 'thread;
             }
 
@@ -417,14 +417,14 @@ fn alsa_writer_thread(
 
         if source_ended {
             log::info!(
-                "[ALSA Direct Engine] Source ended (total frames: {})",
+                "[Direct Engine] Source ended (total frames: {})",
                 total_frames
             );
 
             // Try to get next source immediately (gapless transition)
             match source_queue.try_pop() {
                 Some(next_src) => {
-                    log::info!("[ALSA Direct Engine] Gapless transition to next source");
+                    log::info!("[Direct Engine] Gapless transition to next source");
                     current_source = Some(next_src);
                     total_frames = 0;
                     position_frames.store(0, Ordering::SeqCst);
@@ -434,9 +434,9 @@ fn alsa_writer_thread(
                 }
                 None => {
                     // No next source — this is a natural end of playback
-                    log::info!("[ALSA Direct Engine] No next source, draining ALSA buffer");
+                    log::info!("[Direct Engine] No next source, draining ALSA buffer");
                     if let Err(e) = stream.drain() {
-                        log::warn!("[ALSA Direct Engine] Drain failed: {}", e);
+                        log::warn!("[Direct Engine] Drain failed: {}", e);
                     }
                     current_source = None;
                     is_playing.store(false, Ordering::SeqCst);
@@ -447,7 +447,7 @@ fn alsa_writer_thread(
     }
 
     is_playing.store(false, Ordering::SeqCst);
-    log::info!("[ALSA Direct Engine] Writer thread finished");
+    log::info!("[Direct Engine] Writer thread finished");
 }
 
 impl Drop for PlaybackEngine {

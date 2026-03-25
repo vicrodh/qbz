@@ -12,6 +12,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
+#[cfg(target_os = "freebsd")]
+use libc;
 
 /// Type of mount point
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -120,7 +122,7 @@ fn classify_fs_type(fs_type: &str, source: &str) -> MountKind {
 
     // Network filesystems
     match fs_lower.as_str() {
-        "cifs" | "smb" | "smb3" | "smbfs" => {
+        "cifs" | "smb" | "smb3" | "smbfs" | "fusefs.smbnetfs" => {
             return MountKind::Network(NetworkFs::Cifs);
         }
         "nfs" | "nfs4" | "nfsd" => {
@@ -169,9 +171,12 @@ fn classify_fs_type(fs_type: &str, source: &str) -> MountKind {
 
     // Virtual/pseudo filesystems
     match fs_lower.as_str() {
+        // Linux
         "proc" | "sysfs" | "devtmpfs" | "devpts" | "tmpfs" | "ramfs" | "securityfs" | "debugfs"
         | "tracefs" | "configfs" | "cgroup" | "cgroup2" | "pstore" | "efivarfs" | "bpf"
-        | "autofs" | "mqueue" | "hugetlbfs" | "fusectl" | "overlay" | "squashfs" => {
+        | "autofs" | "mqueue" | "hugetlbfs" | "fusectl" | "overlay" | "squashfs"
+        // FreeBSD
+        | "devfs" | "procfs" | "fdescfs" | "linprocfs" | "linsysfs" | "nullfs" => {
             return MountKind::Virtual;
         }
         _ => {}
@@ -179,9 +184,12 @@ fn classify_fs_type(fs_type: &str, source: &str) -> MountKind {
 
     // Local filesystems
     match fs_lower.as_str() {
+        // Linux
         "ext2" | "ext3" | "ext4" | "xfs" | "btrfs" | "zfs" | "ntfs" | "ntfs3" | "vfat"
         | "fat32" | "exfat" | "hfs" | "hfsplus" | "apfs" | "f2fs" | "jfs" | "reiserfs" | "udf"
-        | "iso9660" | "ufs" => {
+        | "iso9660" | "ufs"
+        // FreeBSD
+        | "msdosfs" | "cd9660" | "hammer" | "hammer2" => {
             return MountKind::Local;
         }
         _ => {}
@@ -191,24 +199,38 @@ fn classify_fs_type(fs_type: &str, source: &str) -> MountKind {
     MountKind::Local
 }
 
-/// Parse /proc/self/mountinfo and return mount information
+/// Parse mount information from the OS.
+/// On Linux: reads /proc/self/mountinfo.
+/// On FreeBSD: calls getmntinfo(3) via libc.
 fn parse_mount_info() -> Result<Vec<MountInfo>, String> {
+    #[cfg(target_os = "linux")]
+    return parse_mount_info_linux();
+
+    #[cfg(target_os = "freebsd")]
+    return parse_mount_info_freebsd();
+
+    #[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
+    Ok(Vec::new())
+}
+
+/// Linux implementation: parse /proc/self/mountinfo
+#[cfg(target_os = "linux")]
+fn parse_mount_info_linux() -> Result<Vec<MountInfo>, String> {
     let content = fs::read_to_string("/proc/self/mountinfo")
         .map_err(|e| format!("Failed to read /proc/self/mountinfo: {}", e))?;
 
     let mut mounts = Vec::new();
-
     for line in content.lines() {
         if let Some(mount) = parse_mount_line(line) {
             mounts.push(mount);
         }
     }
-
     Ok(mounts)
 }
 
 /// Parse a single line from /proc/self/mountinfo
 /// Format: mount_id parent_id major:minor root mount_point mount_options ... - fs_type mount_source super_options
+#[cfg(target_os = "linux")]
 fn parse_mount_line(line: &str) -> Option<MountInfo> {
     let parts: Vec<&str> = line.split_whitespace().collect();
 
@@ -245,6 +267,7 @@ fn parse_mount_line(line: &str) -> Option<MountInfo> {
 }
 
 /// Unescape mount path (handles \040 for space, etc.)
+#[cfg(target_os = "linux")]
 fn unescape_mount_path(path: &str) -> String {
     let mut result = String::with_capacity(path.len());
     let mut chars = path.chars().peekable();
@@ -278,6 +301,48 @@ fn unescape_mount_path(path: &str) -> String {
     }
 
     result
+}
+
+/// FreeBSD implementation: enumerate mounts via getmntinfo(3)
+#[cfg(target_os = "freebsd")]
+fn parse_mount_info_freebsd() -> Result<Vec<MountInfo>, String> {
+    use std::ffi::CStr;
+
+    let mut mntbuf: *mut libc::statfs = std::ptr::null_mut();
+    let count = unsafe { libc::getmntinfo(&mut mntbuf, libc::MNT_NOWAIT) };
+    if count < 0 {
+        return Err("getmntinfo failed".to_string());
+    }
+
+    let entries = unsafe { std::slice::from_raw_parts(mntbuf, count as usize) };
+    let mut mounts = Vec::with_capacity(count as usize);
+
+    for entry in entries {
+        // SAFETY: f_fstypename / f_mntonname / f_mntfromname are null-terminated C strings
+        let fs_type = unsafe { CStr::from_ptr(entry.f_fstypename.as_ptr()) }
+            .to_string_lossy()
+            .to_string();
+        let mount_point = unsafe { CStr::from_ptr(entry.f_mntonname.as_ptr()) }
+            .to_string_lossy()
+            .to_string();
+        let source = unsafe { CStr::from_ptr(entry.f_mntfromname.as_ptr()) }
+            .to_string_lossy()
+            .to_string();
+
+        let kind = classify_fs_type(&fs_type, &source);
+        let accessible =
+            Path::new(&mount_point).exists() && std::fs::metadata(&mount_point).is_ok();
+
+        mounts.push(MountInfo {
+            fs_type,
+            mount_point,
+            source,
+            kind,
+            accessible,
+        });
+    }
+
+    Ok(mounts)
 }
 
 /// Find the mount point for a given path
@@ -442,6 +507,7 @@ mod tests {
         ));
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn test_unescape_mount_path() {
         assert_eq!(unescape_mount_path("/mnt/My\\040Drive"), "/mnt/My Drive");

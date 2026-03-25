@@ -26,12 +26,48 @@ pub enum AudioBackendType {
     /// - Similar to PipeWire but older
     /// - Fallback for systems without PipeWire
     Pulse,
+
+    /// OSS backend (FreeBSD direct hardware access, bit-perfect)
+    /// - Direct /dev/dspX write, no mixing layer
+    /// - Bit-perfect for all supported formats (S32LE, S24LE, S16LE)
+    Oss,
 }
 
 impl Default for AudioBackendType {
     fn default() -> Self {
         // PipeWire is the modern default on Linux
         AudioBackendType::PipeWire
+    }
+}
+
+impl AudioBackendType {
+    /// True for backends that use a direct hardware write path (no rodio/CPAL).
+    /// These require stream recreation on format changes.
+    pub fn is_direct_backend(self) -> bool {
+        matches!(self, AudioBackendType::Alsa | AudioBackendType::Oss)
+    }
+}
+
+/// Platform-agnostic trait for bit-perfect direct hardware audio streams.
+///
+/// Implemented by `AlsaDirectStream` (Linux) and `OssDirectStream` (FreeBSD).
+/// Allows the playback engine to drive either stream without platform conditionals.
+pub trait DirectAudioStream: Send + Sync {
+    /// Write f32 samples (already in the source sample rate / channel count).
+    fn write_f32(&self, samples: &[f32]) -> Result<(), String>;
+    /// Block until the hardware buffer has drained (end-of-track flush).
+    fn drain(&self) -> Result<(), String>;
+    /// Reset / halt the hardware immediately (used on stop).
+    fn stop(&self) -> Result<(), String>;
+    /// Channel count configured for this stream.
+    fn channels(&self) -> u16;
+    /// Sample rate configured for this stream.
+    fn sample_rate(&self) -> u32;
+    /// Device identifier string (e.g. "hw:4,0" or "/dev/dsp1").
+    fn device_id(&self) -> &str;
+    /// Attempt hardware volume control (no-op default — most DACs lack a mixer).
+    fn set_hardware_volume(&self, _volume: f32) -> Result<(), String> {
+        Err("Hardware volume control not supported on this device/platform".to_string())
     }
 }
 
@@ -239,23 +275,23 @@ impl BackendManager {
 
         #[cfg(target_os = "linux")]
         {
-            // PipeWire (check if running)
             if Self::is_pipewire_available() {
                 backends.push(AudioBackendType::PipeWire);
             }
-
-            // ALSA (always available on Linux)
             backends.push(AudioBackendType::Alsa);
-
-            // PulseAudio (check if running)
             if Self::is_pulse_available() {
                 backends.push(AudioBackendType::Pulse);
             }
         }
 
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(target_os = "freebsd")]
         {
-            // On non-Linux, only PipeWire backend (which uses CPAL default)
+            // OSS is the only supported backend on FreeBSD
+            backends.push(AudioBackendType::Oss);
+        }
+
+        #[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
+        {
             backends.push(AudioBackendType::PipeWire);
         }
 
@@ -266,8 +302,15 @@ impl BackendManager {
     pub fn create_backend(backend_type: AudioBackendType) -> BackendResult<Box<dyn AudioBackend>> {
         match backend_type {
             AudioBackendType::PipeWire => {
-                let backend = crate::pipewire_backend::PipeWireBackend::new()?;
-                Ok(Box::new(backend))
+                #[cfg(target_os = "linux")]
+                {
+                    let backend = crate::pipewire_backend::PipeWireBackend::new()?;
+                    Ok(Box::new(backend))
+                }
+                #[cfg(not(target_os = "linux"))]
+                {
+                    Err("PipeWire backend only available on Linux".to_string())
+                }
             }
             AudioBackendType::Alsa => {
                 #[cfg(target_os = "linux")]
@@ -281,17 +324,32 @@ impl BackendManager {
                 }
             }
             AudioBackendType::Pulse => {
-                let backend = crate::pulse_backend::PulseBackend::new()?;
-                Ok(Box::new(backend))
+                #[cfg(target_os = "linux")]
+                {
+                    let backend = crate::pulse_backend::PulseBackend::new()?;
+                    Ok(Box::new(backend))
+                }
+                #[cfg(not(target_os = "linux"))]
+                {
+                    Err("PulseAudio backend only available on Linux".to_string())
+                }
+            }
+            AudioBackendType::Oss => {
+                #[cfg(target_os = "freebsd")]
+                {
+                    let backend = crate::oss_backend::OssBackend::new()?;
+                    Ok(Box::new(backend))
+                }
+                #[cfg(not(target_os = "freebsd"))]
+                {
+                    Err("OSS backend only available on FreeBSD".to_string())
+                }
             }
         }
     }
 
     #[cfg(target_os = "linux")]
     fn is_pipewire_available() -> bool {
-        // Check if PipeWire/PulseAudio is available using pactl
-        // PipeWire provides PulseAudio compatibility, so pactl works for both
-        // This is more reliable than pw-cli, especially in sandboxed environments (Flatpak)
         std::process::Command::new("pactl")
             .arg("info")
             .output()
@@ -301,7 +359,6 @@ impl BackendManager {
 
     #[cfg(target_os = "linux")]
     fn is_pulse_available() -> bool {
-        // Check if PulseAudio is running
         std::process::Command::new("pactl")
             .arg("info")
             .output()

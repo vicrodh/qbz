@@ -565,6 +565,37 @@ impl AlsaDirectStream {
     }
 }
 
+#[cfg(target_os = "linux")]
+impl crate::backend::DirectAudioStream for AlsaDirectStream {
+    fn write_f32(&self, samples: &[f32]) -> Result<(), String> {
+        AlsaDirectStream::write_f32(self, samples)
+    }
+
+    fn drain(&self) -> Result<(), String> {
+        AlsaDirectStream::drain(self)
+    }
+
+    fn stop(&self) -> Result<(), String> {
+        AlsaDirectStream::stop(self)
+    }
+
+    fn channels(&self) -> u16 {
+        AlsaDirectStream::channels(self)
+    }
+
+    fn sample_rate(&self) -> u32 {
+        AlsaDirectStream::sample_rate(self)
+    }
+
+    fn device_id(&self) -> &str {
+        AlsaDirectStream::device_id(self)
+    }
+
+    fn set_hardware_volume(&self, volume: f32) -> Result<(), String> {
+        AlsaDirectStream::set_hardware_volume(self, volume)
+    }
+}
+
 #[cfg(not(target_os = "linux"))]
 impl AlsaDirectStream {
     pub fn new(_device_id: &str, _sample_rate: u32, _channels: u16) -> Result<Self, String> {

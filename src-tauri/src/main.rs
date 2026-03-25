@@ -82,12 +82,14 @@ fn is_intel_gpu() -> bool {
 
 fn main() {
     // CLI flag: --autoconfig-graphics — detect environment and apply optimal settings
+    #[cfg(target_os = "linux")]
     if std::env::args().any(|a| a == "--autoconfig-graphics") {
         qbz_nix_lib::autoconfig_graphics::run();
         return;
     }
 
     // CLI flag: --reset-graphics — resets ALL graphics/composition settings to defaults
+    #[cfg(target_os = "linux")]
     if std::env::args().any(|a| a == "--reset-graphics") {
         eprintln!("[QBZ] Resetting all graphics settings to defaults...");
         let mut errors = Vec::new();
@@ -146,6 +148,7 @@ fn main() {
     }
 
     // CLI flag: --reset-dmabuf — resets the developer force_dmabuf setting and exits
+    #[cfg(target_os = "linux")]
     if std::env::args().any(|a| a == "--reset-dmabuf") {
         match qbz_nix_lib::config::developer_settings::DeveloperSettingsStore::new() {
             Ok(store) => match store.set_force_dmabuf(false) {

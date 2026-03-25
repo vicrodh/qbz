@@ -129,8 +129,22 @@ fn load_or_create_machine_id_fallback() -> Result<Vec<u8>, String> {
 /// Get machine-specific identifier for key derivation
 fn get_machine_id() -> Result<Vec<u8>, String> {
     // Try /etc/machine-id first (Linux)
+    #[cfg(target_os = "linux")]
     if let Ok(id) = fs::read_to_string("/etc/machine-id") {
         let trimmed = id.trim();
+        if !trimmed.is_empty() {
+            return Ok(trimmed.as_bytes().to_vec());
+        }
+    }
+
+    // Try sysctl kern.hostuuid (FreeBSD)
+    #[cfg(target_os = "freebsd")]
+    if let Ok(output) = std::process::Command::new("sysctl")
+        .args(["-n", "kern.hostuuid"])
+        .output()
+    {
+        let uuid = String::from_utf8_lossy(&output.stdout);
+        let trimmed = uuid.trim();
         if !trimmed.is_empty() {
             return Ok(trimmed.as_bytes().to_vec());
         }

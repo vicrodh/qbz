@@ -462,11 +462,11 @@ fn create_output_stream_with_config(
     }
 }
 
-/// Output stream type - either rodio or ALSA Direct
+/// Output stream type
 enum StreamType {
     Rodio(MixerDeviceSink),
-    #[cfg(target_os = "linux")]
-    AlsaDirect(Arc<crate::audio::AlsaDirectStream>),
+    /// Bit-perfect direct hardware stream (ALSA on Linux, OSS on FreeBSD)
+    Direct(Arc<dyn crate::audio::DirectAudioStream>),
 }
 
 /// Try to create output stream using the backend system (if configured)
@@ -515,15 +515,13 @@ fn try_init_stream_with_backend(
         pw_force_bitperfect: audio_settings.pw_force_bitperfect,
     };
 
-    // For ALSA backend with hw: devices, try direct ALSA first (Linux only)
+    // Linux: ALSA hw: / plughw: devices → direct bit-perfect stream
     #[cfg(target_os = "linux")]
     if backend_type == AudioBackendType::Alsa {
-        // Check if device is hw: or plughw:
         if let Some(ref device_id) = config.device_id {
             if crate::audio::AlsaDirectStream::is_hw_device(device_id) {
                 log::info!("Detected hw: device, using ALSA Direct for bit-perfect playback");
 
-                // Downcast backend to AlsaBackend to access try_create_direct_stream
                 if let Some(alsa_backend) = backend
                     .as_any()
                     .downcast_ref::<crate::audio::alsa_backend::AlsaBackend>()
@@ -531,7 +529,9 @@ fn try_init_stream_with_backend(
                     if let Some(result) = alsa_backend.try_create_direct_stream(&config) {
                         return Some(result.map(|(stream, mode)| {
                             log::info!("ALSA Direct stream created with mode: {:?}", mode);
-                            StreamType::AlsaDirect(Arc::new(stream))
+                            StreamType::Direct(
+                                Arc::new(stream) as Arc<dyn crate::audio::DirectAudioStream>
+                            )
                         }));
                     }
                 }
@@ -539,7 +539,25 @@ fn try_init_stream_with_backend(
         }
     }
 
-    // Fallback to regular rodio stream (PipeWire, Pulse, ALSA via CPAL)
+    // FreeBSD: OSS always uses the direct /dev/dspX write path
+    #[cfg(target_os = "freebsd")]
+    if backend_type == AudioBackendType::Oss {
+        if let Some(oss_backend) = backend
+            .as_any()
+            .downcast_ref::<crate::audio::oss_backend::OssBackend>()
+        {
+            if let Some(result) = oss_backend.try_create_direct_stream(&config) {
+                return Some(result.map(|(stream, mode)| {
+                    log::info!("OSS Direct stream created with mode: {:?}", mode);
+                    StreamType::Direct(
+                        Arc::new(stream) as Arc<dyn crate::audio::DirectAudioStream>
+                    )
+                }));
+            }
+        }
+    }
+
+    // Fallback to regular rodio stream (PipeWire, Pulse, ALSA via CPAL on Linux)
     match backend.create_output_stream(&config) {
         Ok(mixer_sink) => {
             log::info!(
@@ -1087,7 +1105,7 @@ impl Player {
                                 .lock()
                                 .ok()
                                 .and_then(|s| s.backend_type)
-                                .map(|b| b == AudioBackendType::Alsa)
+                                .map(|b| b.is_direct_backend())
                                 .unwrap_or(false);
 
                             let needs_new_stream = stream_opt.is_none()
@@ -1380,8 +1398,7 @@ impl Player {
                                         }
                                     }
                                 }
-                                #[cfg(target_os = "linux")]
-                                StreamType::AlsaDirect(alsa_stream) => {
+                                StreamType::Direct(direct_stream) => {
                                     *consecutive_sink_failures = 0;
                                     thread_state.set_stream_error(false);
                                     let hardware_volume = thread_settings
@@ -1389,8 +1406,8 @@ impl Player {
                                         .ok()
                                         .map(|s| s.alsa_hardware_volume)
                                         .unwrap_or(false);
-                                    PlaybackEngine::new_alsa_direct(
-                                        alsa_stream.clone(),
+                                    PlaybackEngine::new_direct(
+                                        direct_stream.clone(),
                                         hardware_volume,
                                     )
                                 }
@@ -1526,7 +1543,7 @@ impl Player {
                                 .lock()
                                 .ok()
                                 .and_then(|s| s.backend_type)
-                                .map(|b| b == AudioBackendType::Alsa)
+                                .map(|b| b.is_direct_backend())
                                 .unwrap_or(false);
 
                             let needs_new_stream = stream_opt.is_none()
@@ -1682,15 +1699,14 @@ impl Player {
                                         }
                                     }
                                 }
-                                #[cfg(target_os = "linux")]
-                                StreamType::AlsaDirect(alsa_stream) => {
+                                StreamType::Direct(direct_stream) => {
                                     let hardware_volume = thread_settings
                                         .lock()
                                         .ok()
                                         .map(|s| s.alsa_hardware_volume)
                                         .unwrap_or(false);
-                                    PlaybackEngine::new_alsa_direct(
-                                        alsa_stream.clone(),
+                                    PlaybackEngine::new_direct(
+                                        direct_stream.clone(),
                                         hardware_volume,
                                     )
                                 }
@@ -1904,15 +1920,14 @@ impl Player {
                                             }
                                         }
                                     }
-                                    #[cfg(target_os = "linux")]
-                                    StreamType::AlsaDirect(alsa_stream) => {
+                                    StreamType::Direct(direct_stream) => {
                                         let hardware_volume = thread_settings
                                             .lock()
                                             .ok()
                                             .map(|s| s.alsa_hardware_volume)
                                             .unwrap_or(false);
-                                        PlaybackEngine::new_alsa_direct(
-                                            alsa_stream.clone(),
+                                        PlaybackEngine::new_direct(
+                                            direct_stream.clone(),
                                             hardware_volume,
                                         )
                                     }
@@ -2039,15 +2054,14 @@ impl Player {
                                         }
                                     }
                                 }
-                                #[cfg(target_os = "linux")]
-                                StreamType::AlsaDirect(alsa_stream) => {
+                                StreamType::Direct(direct_stream) => {
                                     let hardware_volume = thread_settings
                                         .lock()
                                         .ok()
                                         .map(|s| s.alsa_hardware_volume)
                                         .unwrap_or(false);
-                                    PlaybackEngine::new_alsa_direct(
-                                        alsa_stream.clone(),
+                                    PlaybackEngine::new_direct(
+                                        direct_stream.clone(),
                                         hardware_volume,
                                     )
                                 }
