@@ -785,7 +785,12 @@
       "streamBufferDesc": "Start playback faster when track is not in cache. Seeking may be limited during initial buffering.",
       "streamBufferSeconds": "Seconds to buffer before starting playback ({seconds}s)",
       "disableCache": "Disable Playback Cache",
-      "disableCacheDesc": "Disables temporary cache. Not recommended without a fast connection. Offline library tracks always play first."
+      "disableCacheDesc": "Disables temporary cache. Not recommended without a fast connection. Offline library tracks always play first.",
+      "qualityFallback": "When quality retries fail",
+      "qualityFallbackDesc": "What to do when Qobuz servers can't serve the track at any quality",
+      "qualityFallbackAsk": "Ask me",
+      "qualityFallbackAlways": "Always try lowest quality",
+      "qualityFallbackSkip": "Always skip track"
     },
     "appearance": {
       "title": "Appearance",
@@ -2160,5 +2165,14 @@
     "qbzRadio": "QBZ Radio",
     "qobuzRadio": "Qobuz Radio",
     "creating": "Creating radio..."
+  },
+  "qualityFallback": {
+    "title": "Streaming issue",
+    "body": "Qobuz is having trouble serving \"{track}\". All quality levels failed. Try at the lowest available quality?",
+    "tryLower": "Try lower quality",
+    "skip": "Skip track",
+    "rememberChoice": "Remember my choice",
+    "autoRetrying": "Retrying at lower quality...",
+    "autoSkipping": "Skipping track (server issue)..."
   }
 }

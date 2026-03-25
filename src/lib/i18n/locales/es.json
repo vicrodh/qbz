@@ -786,7 +786,12 @@
       "streamBufferDesc": "Inicia la reproducción más rápido cuando la pista no está en caché. La búsqueda puede estar limitada durante el buffering inicial.",
       "streamBufferSeconds": "Segundos a almacenar antes de iniciar reproducción ({seconds}s)",
       "disableCache": "Deshabilitar Caché de Reproducción",
-      "disableCacheDesc": "Deshabilita el caché temporal. No recomendado sin conexión rápida. Las pistas de biblioteca offline siempre se reproducen primero."
+      "disableCacheDesc": "Deshabilita el caché temporal. No recomendado sin conexión rápida. Las pistas de biblioteca offline siempre se reproducen primero.",
+      "qualityFallback": "Cuando fallan los reintentos de calidad",
+      "qualityFallbackDesc": "Que hacer cuando los servidores de Qobuz no pueden servir la pista en ninguna calidad",
+      "qualityFallbackAsk": "Preguntarme",
+      "qualityFallbackAlways": "Siempre intentar calidad mas baja",
+      "qualityFallbackSkip": "Siempre saltar pista"
     },
     "appearance": {
       "title": "Apariencia",
@@ -2161,5 +2166,14 @@
     "qbzRadio": "Radio QBZ",
     "qobuzRadio": "Radio Qobuz",
     "creating": "Creando radio..."
+  },
+  "qualityFallback": {
+    "title": "Problema de streaming",
+    "body": "Qobuz tiene problemas para servir \"{track}\". Todos los niveles de calidad fallaron. Intentar con la calidad mas baja disponible?",
+    "tryLower": "Intentar calidad mas baja",
+    "skip": "Saltar pista",
+    "rememberChoice": "Recordar mi eleccion",
+    "autoRetrying": "Reintentando con calidad mas baja...",
+    "autoSkipping": "Saltando pista (problema del servidor)..."
   }
 }

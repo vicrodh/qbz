@@ -772,7 +772,12 @@
       "streamBufferDesc": "Iniciar reprodução mais rápido quando a faixa não está no cache. A busca pode ser limitada durante o buffer inicial.",
       "streamBufferSeconds": "Segundos de buffer antes de iniciar a reprodução ({seconds}s)",
       "disableCache": "Desativar Cache de Reprodução",
-      "disableCacheDesc": "Desativa o cache temporário. Não recomendado sem uma conexão rápida. Faixas da biblioteca offline sempre são reproduzidas primeiro."
+      "disableCacheDesc": "Desativa o cache temporário. Não recomendado sem uma conexão rápida. Faixas da biblioteca offline sempre são reproduzidas primeiro.",
+      "qualityFallback": "Quando as tentativas de qualidade falham",
+      "qualityFallbackDesc": "O que fazer quando os servidores do Qobuz nao conseguem servir a faixa em nenhuma qualidade",
+      "qualityFallbackAsk": "Perguntar-me",
+      "qualityFallbackAlways": "Sempre tentar qualidade mais baixa",
+      "qualityFallbackSkip": "Sempre pular faixa"
     },
     "appearance": {
       "title": "Aparência",
@@ -2147,5 +2152,14 @@
     "thisDevice": "Este dispositivo",
     "experimentalWarning": "Qobuz Connect é experimental. Bugs são prováveis — por favor reporte-os na seção correspondente.",
     "localLibraryWarning": "Enquanto o Qobuz Connect estiver ativo, a biblioteca local não é compatível devido à incompatibilidade do Qobuz Connect com conteúdo não-Qobuz."
+  },
+  "qualityFallback": {
+    "title": "Problema de streaming",
+    "body": "O Qobuz esta com problemas para servir \"{track}\". Todos os niveis de qualidade falharam. Tentar com a qualidade mais baixa disponivel?",
+    "tryLower": "Tentar qualidade mais baixa",
+    "skip": "Pular faixa",
+    "rememberChoice": "Lembrar minha escolha",
+    "autoRetrying": "Tentando novamente com qualidade mais baixa...",
+    "autoSkipping": "Pulando faixa (problema no servidor)..."
   }
 }

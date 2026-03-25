@@ -735,7 +735,12 @@
       "streamBufferDesc": "Startet die Wiedergabe schneller, wenn der Titel nicht im Cache ist. Vorspulen kann während der initialen Pufferung eingeschränkt sein.",
       "streamBufferSeconds": "Sekunden zum Puffern vor dem Start der Wiedergabe ({seconds}s)",
       "disableCache": "Wiedergabe-Cache deaktivieren",
-      "disableCacheDesc": "Deaktiviert den temporären Cache. Nicht empfohlen ohne schnelle Verbindung. Offline-Bibliothekstitel werden immer zuerst abgespielt."
+      "disableCacheDesc": "Deaktiviert den temporären Cache. Nicht empfohlen ohne schnelle Verbindung. Offline-Bibliothekstitel werden immer zuerst abgespielt.",
+      "qualityFallback": "Wenn Qualitaetswiederholungen fehlschlagen",
+      "qualityFallbackDesc": "Was tun, wenn Qobuz-Server den Titel in keiner Qualitaet bereitstellen koennen",
+      "qualityFallbackAsk": "Mich fragen",
+      "qualityFallbackAlways": "Immer niedrigste Qualitaet versuchen",
+      "qualityFallbackSkip": "Immer Titel ueberspringen"
     },
     "appearance": {
       "title": "Darstellung",
@@ -1941,5 +1946,14 @@
     "thisDevice": "Dieses Gerät",
     "experimentalWarning": "Qobuz Connect ist experimentell. Fehler sind wahrscheinlich — bitte melden Sie diese im entsprechenden Bereich.",
     "localLibraryWarning": "Während Qobuz Connect aktiv ist, ist die lokale Bibliothek nicht kompatibel, da Qobuz Connect keine Nicht-Qobuz-Inhalte unterstützt."
+  },
+  "qualityFallback": {
+    "title": "Streaming-Problem",
+    "body": "Qobuz hat Probleme beim Bereitstellen von \"{track}\". Alle Qualitaetsstufen fehlgeschlagen. Mit der niedrigsten verfuegbaren Qualitaet versuchen?",
+    "tryLower": "Niedrigere Qualitaet versuchen",
+    "skip": "Titel ueberspringen",
+    "rememberChoice": "Meine Wahl merken",
+    "autoRetrying": "Erneuter Versuch mit niedrigerer Qualitaet...",
+    "autoSkipping": "Titel wird uebersprungen (Serverproblem)..."
   }
 }
