@@ -10,6 +10,8 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
+import { get } from 'svelte/store';
+import { t } from '$lib/i18n';
 import { getUserItem, setUserItem } from '$lib/utils/userStorage';
 import {
   isPlaybackSourceLocal,
@@ -87,6 +89,8 @@ export interface PlayTrackOptions {
   showSuccessToast?: boolean;
   /** When true, skip stop_playback and play_track — backend already has audio playing via gapless */
   gaplessTransition?: boolean;
+  /** When true, force lowest available quality (used after QualityExhausted fallback) */
+  forceLowestQuality?: boolean;
 }
 
 export interface MediaMetadata {
@@ -128,7 +132,8 @@ export async function playTrack(
     source = isLocal ? 'local' : 'qobuz',
     showLoadingToast = true,
     showSuccessToast = true,
-    gaplessTransition = false
+    gaplessTransition = false,
+    forceLowestQuality = false
   } = options;
 
   // Set current track in store
@@ -210,7 +215,8 @@ export async function playTrack(
           const result = await invoke<PlayTrackResult>('v2_play_track', {
             trackId: track.id,
             quality: getStreamingQuality(),
-            durationSecs: track.duration ? Math.round(track.duration) : null
+            durationSecs: track.duration ? Math.round(track.duration) : null,
+            forceLowestQuality: forceLowestQuality || null
           });
 
           // Update track format based on actual stream format_id from Qobuz
@@ -334,6 +340,68 @@ export async function playTrack(
         setIsPlaying(false);
       }
       return false;
+    }
+
+    // Check if all quality retries were exhausted (QualityExhausted error)
+    if (errorStr.includes('QualityExhausted:')) {
+      let behavior = 'ask';
+      try {
+        behavior = await invoke<string>('v2_get_quality_fallback_behavior');
+      } catch (prefErr) {
+        console.warn('Failed to get fallback behavior:', prefErr);
+      }
+
+      if (behavior === 'always_fallback') {
+        showToast(get(t)('qualityFallback.autoRetrying'), 'info');
+        setTimeout(() => {
+          playTrack(track, { ...options, forceLowestQuality: true });
+        }, 500);
+        return false;
+      } else if (behavior === 'always_skip') {
+        showToast(get(t)('qualityFallback.autoSkipping'), 'info');
+        const next = await nextTrack();
+        if (next) {
+          setTimeout(() => {
+            const nextSource = resolvePlaybackSource(next);
+            const nextIsLocal = isPlaybackSourceLocal(nextSource, next.is_local ?? false);
+            const nextSamplingRate = next.sample_rate == null
+              ? undefined
+              : nextIsLocal
+                ? next.sample_rate / 1000
+                : next.sample_rate;
+            playTrack({
+              id: next.id,
+              title: next.title,
+              artist: next.artist,
+              album: next.album,
+              duration: next.duration_secs,
+              artwork: next.artwork_url || '',
+              quality: next.hires ? 'Hi-Res' : 'CD Quality',
+              albumId: next.album_id || undefined,
+              artistId: next.artist_id || undefined,
+              bitDepth: next.bit_depth || undefined,
+              samplingRate: nextSamplingRate,
+              source: nextSource,
+              isLocal: nextIsLocal
+            }, {
+              isLocal: nextIsLocal,
+              source: nextSource,
+              showLoadingToast: true,
+              showSuccessToast: true
+            });
+          }, 500);
+        } else {
+          setIsPlaying(false);
+        }
+        return false;
+      } else {
+        // behavior === 'ask' — emit event for modal
+        window.dispatchEvent(new CustomEvent('quality-fallback-prompt', {
+          detail: { trackTitle: track.title, track, options }
+        }));
+        setIsPlaying(false);
+        return false;
+      }
     }
 
     const errorMsg = typeof err === 'object' && err !== null
