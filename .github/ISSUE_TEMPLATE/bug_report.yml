@@ -3,6 +3,16 @@ description: Report something that is not working as expected
 title: "[Bug] "
 labels: ["bug"]
 body:
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Linux
+        - macOS
+    validations:
+      required: true
+
   - type: textarea
     id: description
     attributes:
@@ -42,7 +52,7 @@ body:
     id: version
     attributes:
       label: QBZ version
-      placeholder: e.g. v1.1.20
+      placeholder: e.g. v1.2.0
     validations:
       required: true
 
@@ -55,8 +65,10 @@ body:
         - .deb
         - .rpm
         - AUR
+        - Gentoo overlay
         - Tarball
         - Flatpak
+        - DMG (macOS)
         - Built from source
     validations:
       required: true
@@ -64,28 +76,32 @@ body:
   - type: input
     id: distro
     attributes:
-      label: Distribution
-      placeholder: e.g. Arch Linux, Ubuntu 24.04, Fedora 43
+      label: Distribution / macOS version
+      description: Linux distro or macOS version.
+      placeholder: e.g. Arch Linux, Ubuntu 24.04, Fedora 43, macOS 15.3 Sequoia
 
   - type: input
     id: de
     attributes:
       label: Desktop environment / WM
+      description: Linux only.
       placeholder: e.g. KDE Plasma 6, GNOME 46
 
   - type: dropdown
     id: display
     attributes:
       label: Display server
+      description: Linux only.
       options:
         - Wayland
         - X11
+        - N/A (macOS)
 
   - type: input
     id: gpu
     attributes:
       label: GPU
-      placeholder: e.g. NVIDIA RTX 3070, AMD RX 6600 XT, Intel Iris Xe
+      placeholder: e.g. NVIDIA RTX 3070, AMD RX 6600 XT, Apple M3
 
   - type: dropdown
     id: audio_backend
@@ -95,6 +111,7 @@ body:
         - PipeWire
         - ALSA Direct
         - PulseAudio
+        - System Default (macOS)
         - Auto
 
   - type: input
