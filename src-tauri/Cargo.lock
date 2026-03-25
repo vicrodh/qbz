@@ -3362,8 +3362,6 @@ dependencies = [
 [[package]]
 name = "muda"
 version = "0.17.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "01c1738382f66ed56b3b9c8119e794a2e23148ac8ea214eda86622d4cb9d415a"
 dependencies = [
  "crossbeam-channel",
  "dpi",
@@ -4472,6 +4470,7 @@ dependencies = [
  "async-trait",
  "dirs 5.0.1",
  "ebur128",
+ "libc",
  "log",
  "qbz-models",
  "rodio",
@@ -4593,6 +4592,7 @@ dependencies = [
  "image",
  "keyring",
  "lazy_static",
+ "libc",
  "lofty",
  "log",
  "md-5",
@@ -6498,8 +6498,6 @@ dependencies = [
 [[package]]
 name = "tauri-plugin-single-instance"
 version = "2.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc61e4822b8f74d68278e09161d3e3fdd1b14b9eb781e24edccaabf10c420e8c"
 dependencies = [
  "serde",
  "serde_json",
@@ -7049,8 +7047,6 @@ dependencies = [
 [[package]]
 name = "tray-icon"
 version = "0.21.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5e85aa143ceb072062fc4d6356c1b520a51d636e7bc8e77ec94be3608e5e80c"
 dependencies = [
  "crossbeam-channel",
  "dirs 6.0.0",

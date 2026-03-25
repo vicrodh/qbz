@@ -4,17 +4,29 @@
 //! - MPRIS on Linux (D-Bus based)
 //! - Media key support
 //! - Now playing notifications
+//!
+//! On FreeBSD (and other non-Linux/macOS/Windows platforms) souvlaki's
+//! platform-specific fields (e.g. `dbus_name`) are unavailable, so the
+//! manager degrades to a no-op that compiles cleanly and logs a warning.
 
+#[cfg(target_os = "linux")]
 use serde::Serialize;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
+#[cfg(target_os = "linux")]
+use std::sync::Mutex;
+#[cfg(target_os = "linux")]
+use std::thread;
+use tauri::AppHandle;
+#[cfg(target_os = "linux")]
+use tauri::Emitter;
+
+#[cfg(target_os = "linux")]
 use souvlaki::{
     MediaControlEvent, MediaControls, MediaMetadata, MediaPlayback, PlatformConfig, SeekDirection,
 };
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc, Mutex,
-};
-use std::thread;
-use tauri::{AppHandle, Emitter};
 
 /// Track metadata for media controls
 #[derive(Debug, Clone, Default)]
@@ -26,18 +38,21 @@ pub struct TrackInfo {
     pub cover_url: Option<String>,
 }
 
-/// Media controls manager
+// ──────────────────────────────────────────────────────────────────────────────
+// Linux implementation (MPRIS via souvlaki)
+// ──────────────────────────────────────────────────────────────────────────────
+
+#[cfg(target_os = "linux")]
 pub struct MediaControlsManager {
     controls: Arc<Mutex<Option<MediaControls>>>,
     initialized: Arc<AtomicBool>,
 }
 
+#[cfg(target_os = "linux")]
 impl MediaControlsManager {
-    /// Create a new media controls manager
     pub fn new() -> Self {
-        let controls = Arc::new(Mutex::new(None));
         Self {
-            controls,
+            controls: Arc::new(Mutex::new(None)),
             initialized: Arc::new(AtomicBool::new(false)),
         }
     }
@@ -50,13 +65,11 @@ impl MediaControlsManager {
         let controls_clone = self.controls.clone();
         let app_handle = app.clone();
 
-        // Initialize media controls in a separate thread
-        // (souvlaki requires a window handle on some platforms)
         thread::spawn(move || {
             let config = PlatformConfig {
                 dbus_name: "com.blitzfc.qbz",
                 display_name: "QBZ",
-                hwnd: None, // Not needed on Linux
+                hwnd: None,
             };
 
             match MediaControls::new(config) {
@@ -64,7 +77,6 @@ impl MediaControlsManager {
                     if let Err(e) = mc.attach(move |event: MediaControlEvent| {
                         log::info!("Media control event: {:?}", event);
                         let payload = MediaControlPayload::from(event);
-
                         let _ = app_handle.emit("media:control", &payload);
                     }) {
                         log::error!("Failed to attach media controls handler: {:?}", e);
@@ -87,7 +99,6 @@ impl MediaControlsManager {
         });
     }
 
-    /// Update the currently playing track metadata
     pub fn set_metadata(&self, track: &TrackInfo) {
         if let Ok(mut guard) = self.controls.lock() {
             if let Some(controls) = guard.as_mut() {
@@ -108,7 +119,6 @@ impl MediaControlsManager {
         }
     }
 
-    /// Update playback state
     pub fn set_playback(&self, playing: bool) {
         if let Ok(mut guard) = self.controls.lock() {
             if let Some(controls) = guard.as_mut() {
@@ -125,7 +135,6 @@ impl MediaControlsManager {
         }
     }
 
-    /// Update playback state with progress
     pub fn set_playback_with_progress(&self, playing: bool, position_secs: u64) {
         if let Ok(mut guard) = self.controls.lock() {
             if let Some(controls) = guard.as_mut() {
@@ -145,7 +154,6 @@ impl MediaControlsManager {
         }
     }
 
-    /// Set stopped state (no track playing)
     pub fn set_stopped(&self) {
         if let Ok(mut guard) = self.controls.lock() {
             if let Some(controls) = guard.as_mut() {
@@ -157,6 +165,58 @@ impl MediaControlsManager {
     }
 }
 
+#[cfg(target_os = "linux")]
+impl Default for MediaControlsManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// No-op stub for non-Linux platforms (FreeBSD, macOS, Windows)
+// souvlaki's PlatformConfig has Linux-specific fields (dbus_name) so we can't
+// use it directly.  The stub compiles cleanly and does nothing.
+// ──────────────────────────────────────────────────────────────────────────────
+
+#[cfg(not(target_os = "linux"))]
+pub struct MediaControlsManager {
+    initialized: Arc<AtomicBool>,
+}
+
+#[cfg(not(target_os = "linux"))]
+impl MediaControlsManager {
+    pub fn new() -> Self {
+        Self {
+            initialized: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    pub fn init(&self, _app: AppHandle) {
+        if self.initialized.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        log::info!("Media controls: no-op on this platform (MPRIS not available)");
+    }
+
+    pub fn set_metadata(&self, _track: &TrackInfo) {}
+    pub fn set_playback(&self, _playing: bool) {}
+    pub fn set_playback_with_progress(&self, _playing: bool, _position_secs: u64) {}
+    pub fn set_stopped(&self) {}
+}
+
+#[cfg(not(target_os = "linux"))]
+impl Default for MediaControlsManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Types used only by the Linux implementation (kept Linux-gated to avoid
+// pulling in souvlaki on other platforms)
+// ──────────────────────────────────────────────────────────────────────────────
+
+#[cfg(target_os = "linux")]
 #[derive(Debug, Serialize)]
 struct MediaControlPayload {
     action: String,
@@ -166,6 +226,7 @@ struct MediaControlPayload {
     volume: Option<f64>,
 }
 
+#[cfg(target_os = "linux")]
 impl From<MediaControlEvent> for MediaControlPayload {
     fn from(event: MediaControlEvent) -> Self {
         match event {
@@ -217,6 +278,7 @@ impl From<MediaControlEvent> for MediaControlPayload {
     }
 }
 
+#[cfg(target_os = "linux")]
 impl MediaControlPayload {
     fn action_only(action: &str) -> Self {
         Self {
@@ -229,15 +291,10 @@ impl MediaControlPayload {
     }
 }
 
+#[cfg(target_os = "linux")]
 fn direction_to_string(direction: SeekDirection) -> String {
     match direction {
         SeekDirection::Forward => "forward".to_string(),
         SeekDirection::Backward => "backward".to_string(),
-    }
-}
-
-impl Default for MediaControlsManager {
-    fn default() -> Self {
-        Self::new()
     }
 }

@@ -64,11 +64,14 @@ use crate::runtime::{
     RuntimeStatus,
 };
 use crate::AppState;
+#[cfg(target_os = "linux")]
 use ashpd::desktop::notification::{Notification as PortalNotification, NotificationProxy};
+#[cfg(target_os = "linux")]
 use ashpd::desktop::Icon;
 use md5::{Digest, Md5};
 use std::collections::HashSet;
 use std::fs;
+#[cfg(target_os = "linux")]
 use std::io::{Cursor, Write};
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -360,7 +363,7 @@ async fn download_audio(url: &str) -> Result<Vec<u8>, String> {
     let client = reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(10))
         .timeout(Duration::from_secs(120))
-        .use_native_tls()
+        .use_rustls_tls()
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 
@@ -624,9 +627,12 @@ fn v2_teardown_type_alias_state<S>(state: &Arc<Mutex<Option<S>>>) {
     }
 }
 
+#[cfg(target_os = "linux")]
 const PORTAL_NOTIFICATION_ICON_MAX_EDGE: u32 = 512;
+#[cfg(target_os = "linux")]
 const PORTAL_NOTIFICATION_ICON_MAX_BYTES: usize = 4 * 1024 * 1024;
 
+#[cfg(target_os = "linux")]
 fn v2_get_notification_artwork_cache_dir() -> Result<PathBuf, String> {
     let cache_dir = dirs::cache_dir()
         .ok_or_else(|| "Could not find cache directory".to_string())?
@@ -638,6 +644,7 @@ fn v2_get_notification_artwork_cache_dir() -> Result<PathBuf, String> {
     Ok(cache_dir)
 }
 
+#[cfg(target_os = "linux")]
 fn v2_resolve_local_artwork(url: &str) -> Option<PathBuf> {
     if let Some(path) = url.strip_prefix("file://") {
         return Some(PathBuf::from(path));
@@ -649,6 +656,7 @@ fn v2_resolve_local_artwork(url: &str) -> Option<PathBuf> {
     None
 }
 
+#[cfg(target_os = "linux")]
 fn v2_cache_notification_artwork(url: &str) -> Result<PathBuf, String> {
     if let Some(local_path) = v2_resolve_local_artwork(url) {
         if local_path.exists() {
@@ -689,6 +697,7 @@ fn v2_cache_notification_artwork(url: &str) -> Result<PathBuf, String> {
     Ok(cache_path)
 }
 
+#[cfg(target_os = "linux")]
 fn v2_prepare_notification_icon_bytes(path: &std::path::Path) -> Result<Vec<u8>, String> {
     let source_image = image::open(path)
         .map_err(|e| format!("Failed to decode artwork image {:?}: {}", path, e))?;
@@ -2300,6 +2309,7 @@ pub fn v2_get_available_backends() -> Result<Vec<BackendInfo>, String> {
                 AudioBackendType::PipeWire => "PipeWire",
                 AudioBackendType::Alsa => "ALSA Direct",
                 AudioBackendType::Pulse => "PulseAudio",
+                AudioBackendType::Oss => "OSS Direct",
             };
 
             BackendInfo {
@@ -2412,6 +2422,7 @@ pub fn v2_query_dac_capabilities(nodeName: String) -> Result<DacCapabilities, St
     }
 
     // Detect real sample rates from /proc/asound via PipeWire sink -> ALSA card mapping
+    #[cfg(target_os = "linux")]
     if let Some(rates) =
         crate::audio::pipewire_backend::PipeWireBackend::get_sink_supported_rates(&nodeName)
     {
@@ -2437,6 +2448,8 @@ pub fn v2_query_dac_capabilities(nodeName: String) -> Result<DacCapabilities, St
             );
         }
     }
+    #[cfg(not(target_os = "linux"))]
+    log::debug!("[HiFi Wizard] Sample rate detection not available on this platform, using defaults");
 
     Ok(capabilities)
 }
@@ -7933,6 +7946,8 @@ pub async fn v2_play_track(
     // Smart quality downgrade for ALSA Direct: if the hardware doesn't support
     // the track's sample rate, re-request at a lower quality that IS supported.
     // This avoids resampling and keeps bit-perfect playback.
+    // Linux-only: device_supports_sample_rate reads /proc/asound (ALSA-specific).
+    #[cfg(target_os = "linux")]
     if let Some(ref device_id) = hw_device_id {
         if final_quality == Quality::UltraHiRes {
             let track_rate = (stream_url.sampling_rate * 1000.0) as u32;
@@ -11227,43 +11242,50 @@ pub async fn v2_show_track_notification(
     }
 
     let body_text = lines.join("\n");
-    let mut notification = PortalNotification::new(&title).body(Some(body_text.as_str()));
 
-    if let Some(ref url_str) = artwork_url {
-        let url_clone = url_str.clone();
-        let prepared = tokio::task::spawn_blocking(move || -> Result<Vec<u8>, String> {
-            let path = v2_cache_notification_artwork(&url_clone)?;
-            v2_prepare_notification_icon_bytes(&path)
-        })
-        .await;
+    #[cfg(target_os = "linux")]
+    {
+        let mut notification = PortalNotification::new(&title).body(Some(body_text.as_str()));
 
-        match prepared {
-            Ok(Ok(icon_bytes)) => {
-                log::info!("Notification artwork prepared: {} bytes", icon_bytes.len());
-                notification = notification.icon(Icon::Bytes(icon_bytes));
+        if let Some(ref url_str) = artwork_url {
+            let url_clone = url_str.clone();
+            let prepared = tokio::task::spawn_blocking(move || -> Result<Vec<u8>, String> {
+                let path = v2_cache_notification_artwork(&url_clone)?;
+                v2_prepare_notification_icon_bytes(&path)
+            })
+            .await;
+
+            match prepared {
+                Ok(Ok(icon_bytes)) => {
+                    log::info!("Notification artwork prepared: {} bytes", icon_bytes.len());
+                    notification = notification.icon(Icon::Bytes(icon_bytes));
+                }
+                Ok(Err(e)) => {
+                    log::warn!("Could not prepare notification artwork icon: {}", e);
+                }
+                Err(e) => {
+                    log::warn!("Notification artwork preparation task failed: {}", e);
+                }
             }
-            Ok(Err(e)) => {
-                log::warn!("Could not prepare notification artwork icon: {}", e);
+        }
+
+        match NotificationProxy::new().await {
+            Ok(proxy) => {
+                if let Err(e) = proxy
+                    .add_notification("track-now-playing", notification)
+                    .await
+                {
+                    log::warn!("Could not show notification via XDG portal: {}", e);
+                }
             }
             Err(e) => {
-                log::warn!("Notification artwork preparation task failed: {}", e);
+                log::warn!("XDG notification portal unavailable: {}", e);
             }
         }
     }
 
-    match NotificationProxy::new().await {
-        Ok(proxy) => {
-            if let Err(e) = proxy
-                .add_notification("track-now-playing", notification)
-                .await
-            {
-                log::warn!("Could not show notification via XDG portal: {}", e);
-            }
-        }
-        Err(e) => {
-            log::warn!("XDG notification portal unavailable: {}", e);
-        }
-    }
+    #[cfg(not(target_os = "linux"))]
+    log::debug!("Track notification (no portal on this platform): {} — {}", title, body_text);
 
     Ok(())
 }

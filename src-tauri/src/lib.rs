@@ -12,6 +12,7 @@ pub mod session_lifecycle;
 pub mod tauri_adapter;
 
 pub mod auto_theme;
+#[cfg(target_os = "linux")]
 pub mod autoconfig_graphics;
 
 pub mod api;
@@ -443,7 +444,8 @@ pub fn run() {
     #[cfg(target_os = "linux")]
     apply_linux_webkit_workarounds();
 
-    // Migrate data from old App ID if needed
+    // Migrate data from old App ID if needed (Flatpak/Linux only)
+    #[cfg(target_os = "linux")]
     match flatpak::migrate_app_id_data() {
         Ok(true) => log::info!("App ID migration completed successfully"),
         Ok(false) => log::debug!("No App ID migration needed"),

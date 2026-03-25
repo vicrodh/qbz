@@ -164,6 +164,57 @@ impl QobuzClient {
         }
     }
 
+    /// Re-establish a session using a stored OAuth `user_auth_token`.
+    ///
+    /// Does `POST /user/login` with `X-User-Auth-Token: <token>` and body
+    /// `extra=partner`, identical to step 2 of the full OAuth flow.  Returns
+    /// `Err` if the token is expired or rejected so the caller can fall back
+    /// to email/password login.
+    pub async fn restore_from_oauth_token(&self, token: &str) -> Result<UserSession> {
+        use reqwest::header::{HeaderMap, HeaderValue};
+
+        let app_id = self.app_id().await?;
+        let user_login_url = endpoints::build_url(endpoints::paths::USER_LOGIN);
+
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "X-App-Id",
+            HeaderValue::from_str(&app_id).map_err(|_| ApiError::InvalidAppId)?,
+        );
+        headers.insert(
+            "X-User-Auth-Token",
+            HeaderValue::from_str(token)
+                .map_err(|_| ApiError::AuthenticationError("Invalid OAuth token format".into()))?,
+        );
+
+        log::info!("[OAuth] Restoring session from stored token");
+        let response = self
+            .http
+            .post(&user_login_url)
+            .headers(headers)
+            .header("Content-Type", "text/plain;charset=UTF-8")
+            .body("extra=partner")
+            .send()
+            .await?;
+
+        match response.status() {
+            StatusCode::OK => {
+                let json: Value = response.json().await?;
+                let session = super::auth::parse_login_response(&json)?;
+                *self.session.write().await = Some(session.clone());
+                log::info!("[OAuth] Session restored successfully");
+                Ok(session)
+            }
+            StatusCode::UNAUTHORIZED => Err(ApiError::AuthenticationError(
+                "Stored OAuth token rejected (expired?)".to_string(),
+            )),
+            status => Err(ApiError::ApiResponse(format!(
+                "restore_from_oauth_token: user/login returned {}",
+                status
+            ))),
+        }
+    }
+
     /// Check if logged in
     pub async fn is_logged_in(&self) -> bool {
         self.session.read().await.is_some()
@@ -1299,6 +1350,8 @@ impl QobuzClient {
         log::debug!("Secret obtained, signing request...");
         let signature = sign_get_file_url(track_id, quality.id(), timestamp, &secret);
 
+        let app_id = self.app_id().await?;
+
         log::debug!("Sending stream URL request...");
         let response = self
             .http
@@ -1310,6 +1363,7 @@ impl QobuzClient {
                 ("intent", "stream".to_string()),
                 ("request_ts", timestamp.to_string()),
                 ("request_sig", signature),
+                ("app_id", app_id),
             ])
             .send()
             .await?;

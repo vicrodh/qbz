@@ -889,13 +889,15 @@
   // Show ALSA plugin selector only when ALSA backend is selected (derived)
   let showAlsaPluginSelector = $derived(selectedBackend === 'ALSA Direct');
 
-  // Show hardware volume control only for ALSA Direct + Hw plugin (bit-perfect)
+  // Show hardware volume control for ALSA Direct (hw plugin) or OSS Direct
   let showAlsaHardwareVolume = $derived(
-    selectedBackend === 'ALSA Direct' && selectedAlsaPlugin === 'hw (Direct Hardware)'
+    (selectedBackend === 'ALSA Direct' && selectedAlsaPlugin === 'hw (Direct Hardware)') ||
+    selectedBackend === 'OSS Direct'
   );
 
   // Smart toggle states - auto-disable incompatible features
-  let exclusiveModeDisabled = $derived(selectedBackend === 'PipeWire' || selectedBackend === 'Auto' || selectedBackend === 'PulseAudio');
+  // OSS Direct is inherently exclusive (single opener per /dev/dspX), so the toggle is N/A
+  let exclusiveModeDisabled = $derived(selectedBackend === 'PipeWire' || selectedBackend === 'Auto' || selectedBackend === 'PulseAudio' || selectedBackend === 'OSS Direct');
   let exclusiveModeTooltipOverride = $derived(
     exclusiveModeDisabled
       ? 'Exclusive mode is only available with ALSA Direct backend. PipeWire and PulseAudio are multiplexed audio servers and cannot provide true exclusive access.'
@@ -2497,7 +2499,7 @@
   }
 
   interface BackendInfo {
-    backend_type: 'PipeWire' | 'Alsa' | 'Pulse';
+    backend_type: 'PipeWire' | 'Alsa' | 'Pulse' | 'Oss';
     name: string;
     description: string;
     is_available: boolean;
@@ -2581,7 +2583,7 @@
     }
   }
 
-  async function loadBackendDevices(backendType: 'PipeWire' | 'Alsa' | 'Pulse') {
+  async function loadBackendDevices(backendType: 'PipeWire' | 'Alsa' | 'Pulse' | 'Oss') {
     isLoadingDevices = true;
     try {
       const devices = await invoke<AudioDevice[]>('v2_get_devices_for_backend', { backendType });
@@ -2838,12 +2840,12 @@
       }
     }
 
-    // Gapless not compatible with ALSA Direct
-    if (backendName === 'ALSA Direct') {
+    // Gapless not compatible with direct hardware backends (ALSA Direct, OSS Direct)
+    if (backendName === 'ALSA Direct' || backendName === 'OSS Direct') {
       if (gaplessPlayback) {
         gaplessPlayback = false;
         await invoke('v2_set_audio_gapless_enabled', { enabled: false });
-        console.log('[Audio] Disabled gapless playback (not compatible with ALSA Direct)');
+        console.log('[Audio] Disabled gapless playback (not compatible with direct hardware backends)');
       }
     }
 
@@ -3857,6 +3859,24 @@
             devices={groupedDeviceOptions}
             onchange={handleBackendDeviceChange}
             backend="alsa"
+            wide
+            expandLeft
+          />
+          <button
+            class="help-icon-btn"
+            onclick={handleRefreshDevices}
+            title={$t('settings.audio.refreshDevices')}
+          >
+            <RefreshCw size={16} />
+          </button>
+        </div>
+      {:else if selectedBackend === 'OSS Direct'}
+        <div class="dropdown-with-help">
+          <DeviceDropdown
+            value={outputDevice}
+            devices={groupedDeviceOptions}
+            onchange={handleBackendDeviceChange}
+            backend="oss"
             wide
             expandLeft
           />

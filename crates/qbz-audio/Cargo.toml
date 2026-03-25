@@ -39,3 +39,7 @@ dirs = "5"
 [target.'cfg(target_os = "linux")'.dependencies]
 # ALSA for direct hardware access (bit-perfect)
 alsa = "0.9"
+
+[target.'cfg(target_os = "freebsd")'.dependencies]
+# libc for raw OSS ioctls (/dev/dspX direct access)
+libc = "0.2"

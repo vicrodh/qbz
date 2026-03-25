@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Build QBZ in release mode and run the binary
 # Usage: ./scripts/build-and-run.sh [--skip-build]
 

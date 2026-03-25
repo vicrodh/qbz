@@ -32,10 +32,10 @@
     onchange: (value: string) => void;
     wide?: boolean;
     expandLeft?: boolean;
-    backend?: 'alsa' | 'pipewire' | 'pulse';
+    backend?: 'alsa' | 'pipewire' | 'pulse' | 'oss';
   }
 
-  let { value, devices, onchange, wide = false, expandLeft = false, backend = 'alsa' }: Props = $props();
+  let { value, devices, onchange, wide = false, expandLeft = false, backend = 'alsa' as 'alsa' | 'pipewire' | 'pulse' | 'oss' }: Props = $props();
 
   let isOpen = $state(false);
   let isHovering = $state(false);
@@ -86,6 +86,19 @@
       if (bitPerfect.length > 0) groups.push({ key: 'bitperfect', label: 'Bit-perfect (Hardware / Digital)', devices: bitPerfect });
       if (pluginHw.length > 0) groups.push({ key: 'pluginhw', label: 'Plugin Hardware', devices: pluginHw });
       if (others.length > 0) groups.push({ key: 'others', label: 'Other Outputs', devices: others });
+    } else if (backend === 'oss') {
+      // OSS grouping: default first, then DSP devices (/dev/dsp0, /dev/dsp1, …)
+      const defaults: DeviceOption[] = [];
+      const dspDevices: DeviceOption[] = [];
+      for (const device of devices) {
+        if (device.value === 'System Default' || device.isDefault) {
+          defaults.push(device);
+        } else {
+          dspDevices.push(device);
+        }
+      }
+      if (defaults.length > 0) groups.push({ key: 'defaults', label: 'Defaults', devices: defaults });
+      if (dspDevices.length > 0) groups.push({ key: 'dsp', label: 'DSP Devices (Bit-perfect)', devices: dspDevices });
     } else {
       // PipeWire/PulseAudio grouping: USB Audio, HDMI/DisplayPort, Other Hardware, Virtual
       const defaults: DeviceOption[] = [];

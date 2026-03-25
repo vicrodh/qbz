@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Monitor QBZ resource usage
 # Usage: ./scripts/monitor-resources.sh
 
