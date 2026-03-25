@@ -13,6 +13,11 @@ import { getCachedImageUrl } from '$lib/services/imageCacheService';
 export function cachedSrc(node: HTMLImageElement, url: string | undefined) {
   let currentUrl = url;
 
+  // Force own compositing layer to prevent WebKitGTK 2.50+ texture
+  // eviction during repaints (causes placeholder flash on hover/scroll)
+  node.style.willChange = 'transform';
+  node.style.transform = 'translateZ(0)';
+
   // Hide until resolved so placeholder shows through
   node.style.opacity = '0';
   node.removeAttribute('src');
