@@ -172,6 +172,16 @@
               arminfelder
               <ExternalLink size={10} />
             </button>
+            <button class="contributor-link" onclick={() => handleOpenUrl('https://github.com/afonsojramos')}>
+              <img src="https://github.com/afonsojramos.png?size=28" alt="afonsojramos" class="contributor-avatar" />
+              afonsojramos
+              <ExternalLink size={10} />
+            </button>
+            <button class="contributor-link" onclick={() => handleOpenUrl('https://github.com/GwendalBeaumont')}>
+              <img src="https://github.com/GwendalBeaumont.png?size=28" alt="GwendalBeaumont" class="contributor-avatar" />
+              GwendalBeaumont
+              <ExternalLink size={10} />
+            </button>
           </div>
         </div>
 
