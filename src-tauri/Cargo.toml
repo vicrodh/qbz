@@ -91,7 +91,7 @@ spectrum-analyzer = "1.5"
 ebur128 = "0.1"
 
 # Media controls (MPRIS on Linux)
-souvlaki = "0.7"
+souvlaki = "0.8"
 
 # Desktop notifications → ashpd in [target.linux] deps below
 
