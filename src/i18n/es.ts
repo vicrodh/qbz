@@ -236,6 +236,13 @@ export const es = {
       apiOptional: 'Todas las integraciones son opcionales. La app funciona sin ellas, pero las funciones correspondientes estarán deshabilitadas.',
     },
     buildDisclaimer: 'Si generas tus propios binarios, tú administras las API keys y dependencias de plataforma.',
+    macos: {
+      experimental: 'Experimental',
+      disclaimer: 'QBZ es una aplicacion Linux-first. El soporte para macOS es experimental y limitado.',
+      limitations: 'Funciones como PipeWire, ALSA Direct, casting y control de dispositivos no estan disponibles en macOS.',
+      credit: 'Port de macOS mantenido por',
+      downloadDmg: 'Descargar DMG (Apple Silicon)',
+    },
   },
   audience: {
     title: 'Para quién es',

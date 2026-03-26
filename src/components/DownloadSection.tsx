@@ -44,7 +44,7 @@ type ReleaseData = {
 }
 
 type DownloadItem = {
-  type: 'appimage' | 'flatpak' | 'flathub' | 'deb' | 'rpm' | 'tarball' | 'aur' | 'snap' | 'unknown'
+  type: 'appimage' | 'flatpak' | 'flathub' | 'deb' | 'rpm' | 'tarball' | 'aur' | 'snap' | 'dmg' | 'unknown'
   label: string
   fileName: string
   url: string
@@ -64,7 +64,7 @@ const SNAP_STORE_URL = 'https://snapcraft.io/qbz-player'
 
 /* ── Tabs ─────────────────────────────────────────────────── */
 
-type TabId = 'arch' | 'gentoo' | 'debian' | 'fedora' | 'flatpak' | 'snap' | 'appimage' | 'tarball' | 'source'
+type TabId = 'arch' | 'gentoo' | 'debian' | 'fedora' | 'flatpak' | 'snap' | 'appimage' | 'tarball' | 'macos' | 'source'
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'arch', label: 'Arch' },
@@ -75,6 +75,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'snap', label: 'Snap' },
   { id: 'appimage', label: 'AppImage' },
   { id: 'tarball', label: 'Tarball' },
+  { id: 'macos', label: 'macOS' },
   { id: 'source', label: 'Source' },
 ]
 
@@ -87,6 +88,7 @@ const TAB_TYPES: Record<TabId, DownloadItem['type'][]> = {
   snap: ['snap'],
   appimage: ['appimage'],
   tarball: ['tarball'],
+  macos: ['dmg'],
   source: [],
 }
 
@@ -99,6 +101,7 @@ const TAB_ICONS: Record<TabId, string | null> = {
   snap: '/icons/snapcraft.svg',
   appimage: null,
   tarball: '/icons/tarball.svg',
+  macos: '/icons/apple.svg',
   source: '/icons/rust.svg',
 }
 
@@ -126,6 +129,7 @@ const TYPE_LABELS: Record<DownloadItem['type'], string> = {
   deb: 'Debian/Ubuntu',
   rpm: 'Fedora/RHEL',
   tarball: 'Tarball',
+  dmg: 'macOS (DMG)',
   unknown: 'Download',
 }
 
@@ -136,6 +140,7 @@ const getType = (name: string): DownloadItem['type'] => {
   if (lower.endsWith('.deb')) return 'deb'
   if (lower.endsWith('.rpm')) return 'rpm'
   if (lower.endsWith('.tar.gz') || lower.endsWith('.tgz') || lower.endsWith('.tar.xz')) return 'tarball'
+  if (lower.endsWith('.dmg')) return 'dmg'
   return 'unknown'
 }
 
@@ -159,6 +164,7 @@ const getInstallCmd = (type: DownloadItem['type'], fileName: string): string | u
       const dir = fileName.replace(/\.tar\.(gz|xz)$/, '').replace(/\.tgz$/, '')
       return `tar -xzf ${fileName} && ./${dir}/qbz`
     }
+    case 'dmg': return undefined
     default: return undefined
   }
 }
@@ -467,6 +473,53 @@ function GentooContent() {
   )
 }
 
+function MacOSContent({ downloads }: { downloads: DownloadItem[] }) {
+  const { t } = useTranslation()
+  const dmgItem = downloads.find((item) => item.type === 'dmg')
+
+  return (
+    <div className="download-list">
+      <div className="download-item">
+        <div className="download-item__header">
+          <div className="download-item__info">
+            <span className="download-item__label">{t('downloads.macos.experimental')}</span>
+          </div>
+        </div>
+        <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 8 }}>
+          {t('downloads.macos.disclaimer')}
+        </p>
+        <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 12 }}>
+          {t('downloads.macos.limitations')}
+        </p>
+        {dmgItem && (
+          <>
+            <span className="download-item__file" style={{ display: 'block', marginBottom: 8 }}>
+              {dmgItem.fileName} · {formatBytes(dmgItem.size)}
+            </span>
+            <a
+              className="btn btn-ghost btn-sm"
+              href={dmgItem.url}
+            >
+              {t('downloads.macos.downloadDmg')}
+            </a>
+          </>
+        )}
+        {!dmgItem && (
+          <p style={{ color: 'var(--text-tertiary)', fontSize: '0.9rem' }}>
+            No DMG available in the current release.
+          </p>
+        )}
+        <p style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 16 }}>
+          {t('downloads.macos.credit')}{' '}
+          <a href="https://github.com/afonsojramos" target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}>
+            @afonsojramos
+          </a>
+        </p>
+      </div>
+    </div>
+  )
+}
+
 function SourceContent() {
   const { t } = useTranslation()
   return (
@@ -665,6 +718,8 @@ export function DownloadSection() {
                 <div className="download-list">
                   <GentooContent />
                 </div>
+              ) : activeTab === 'macos' ? (
+                <MacOSContent downloads={allDownloads} />
               ) : tabDownloads.length > 0 ? (
                 <div className="download-list">
                   {activeTab === 'debian' && <AptRepoSection />}
