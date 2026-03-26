@@ -479,7 +479,7 @@ function GentooContent() {
           bottom: 16,
           width: 160,
           height: 'auto',
-          opacity: 0.15,
+          opacity: 0.35,
           pointerEvents: 'none',
         }}
       />
