@@ -294,7 +294,9 @@
     "bookletError": "No se pudo cargar el libreto",
     "bookletFitWidth": "Ajustar al ancho",
     "bookletRotate": "Rotar",
-    "bookletDownload": "Guardar booklet"
+    "bookletDownload": "Guardar booklet",
+    "sameArtist": "Del mismo artista...",
+    "seeFullDiscography": "Ver discografía completa"
   },
   "artist": {
     "albums": "Álbumes",
@@ -437,10 +439,6 @@
     },
     "suggestSongs": "Sugerir canciones para esta lista",
     "suggestionsLargePlaylist": "Esta lista tiene muchas pistas. Presiona el botón para generar sugerencias.",
-    "trackTitle": "Título",
-    "trackAlbum": "Álbum",
-    "trackDuration": "Duración",
-    "trackQuality": "Calidad",
     "label": "Lista",
     "playCount": "Reproducciones"
   },
@@ -649,6 +647,7 @@
     "select": "Seleccionar",
     "cancelSelection": "Cancelar selección",
     "makeAvailableOffline": "Disponible offline",
+    "refreshOfflineCopy": "Actualizar la copia offline",
     "share": "Compartir",
     "viewAlbum": "Ver Álbum",
     "viewArtist": "Ver Artista",
@@ -684,7 +683,8 @@
     "collapse": "Contraer barra lateral",
     "expand": "Expandir barra lateral",
     "moreOptions": "Más opciones",
-    "shareQobuz": "Compartir (Qobuz)"
+    "shareQobuz": "Compartir (Qobuz)",
+    "albumCredits": "Créditos del álbum"
   },
   "settings": {
     "title": "Ajustes",
@@ -2143,5 +2143,11 @@
     "qbzRadio": "Radio QBZ",
     "qobuzRadio": "Radio Qobuz",
     "creating": "Creando radio..."
+  },
+  "tracklist": {
+    "title": "Título",
+    "album": "Album",
+    "duration": "Duración",
+    "quality": "Calidad"
   }
 }
