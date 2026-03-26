@@ -294,7 +294,9 @@
     "bookletError": "Could not load booklet",
     "bookletFitWidth": "Fit to width",
     "bookletRotate": "Rotate",
-    "bookletDownload": "Save booklet"
+    "bookletDownload": "Save booklet",
+    "sameArtist": "By the same artist",
+    "seeFullDiscography": "See full discography"
   },
   "artist": {
     "albums": "Albums",
@@ -436,10 +438,6 @@
     },
     "suggestSongs": "Suggest songs for this playlist",
     "suggestionsLargePlaylist": "This playlist has many tracks. Tap the button to generate suggestions.",
-    "trackTitle": "Title",
-    "trackAlbum": "Album",
-    "trackDuration": "Duration",
-    "trackQuality": "Quality",
     "label": "Playlist",
     "playCount": "Play count"
   },
@@ -648,6 +646,7 @@
     "select": "Select",
     "cancelSelection": "Cancel Selection",
     "makeAvailableOffline": "Make available offline",
+    "refreshOfflineCopy": "Refresh offline copy",
     "share": "Share",
     "viewAlbum": "View Album",
     "viewArtist": "View Artist",
@@ -683,7 +682,8 @@
     "collapse": "Collapse sidebar",
     "expand": "Expand sidebar",
     "moreOptions": "More options",
-    "shareQobuz": "Share (Qobuz)"
+    "shareQobuz": "Share (Qobuz)",
+    "albumCredits": "Album credits"
   },
   "settings": {
     "title": "Settings",
@@ -2142,5 +2142,11 @@
     "qbzRadio": "QBZ Radio",
     "qobuzRadio": "Qobuz Radio",
     "creating": "Creating radio..."
+  },
+  "tracklist": {
+    "title": "Title",
+    "album": "Album",
+    "duration": "Duration",
+    "quality": "Quality"
   }
 }
