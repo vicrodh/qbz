@@ -448,7 +448,7 @@
     <div class="favorites-nav">
       <div class="nav-left">
         <span class="results-count">
-          {filteredArtists.length}{(searchQuery || activeGenreFilters.size > 0) ? ` / ${allArtists.length}` : ''} artists
+          {filteredArtists.length}{(searchQuery || activeGenreFilters.size > 0) ? ` / ${allArtists.length}` : ''} {$t('search.artists').toLowerCase()}
         </span>
       </div>
       <div class="nav-right">
@@ -484,7 +484,7 @@
               class:active-filter={activeGenreFilters.size > 0}
               bind:this={genreFilterBtnEl}
               onclick={() => { showGenrePopup = !showGenrePopup; genreSearchQuery = ''; }}
-              title="Filter by genre"
+              title={$t('genreFilter.title')}
             >
               <Filter size={16} />
               {#if activeGenreFilters.size > 0}
@@ -1271,6 +1271,10 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .genre-name::first-letter {
+    text-transform: capitalize;
   }
 
   .genre-card.selected .genre-name {
