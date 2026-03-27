@@ -318,6 +318,7 @@
     "customImageRemoved": "Image personnalisée supprimée",
     "customImageError": "Erreur lors de la mise à jour de l'image",
     "imageSaved": "Image de l'artiste enregistrée",
+    "labels": "Labels",
     "youMayAlsoLike": "VOUS AIMEREZ AUSSI",
     "dismissRecommendation": "Pas une bonne recommandation",
     "founded": "Fondé :",
@@ -334,7 +335,17 @@
     "sceneStep3": "Vérification de la disponibilité sur Qobuz...",
     "sceneStep4": "Préparation des résultats...",
     "jumpTo": "Aller à",
-    "about": "À propos"
+    "about": "À propos",
+    "artistIsBlacklisted": "Montrer cet artiste dans les recherches, playlists, découvertes, etc.",
+    "artistIsNotBlacklisted": "Masquer cet artiste des recherches, playlists, découvertes, etc.",
+    "manageBlacklistFromSettings": "La liste noire peut être gérée depuis les paramètres de l'application",
+    "blacklistBanner": "Cet artiste est masqué. Sa musique n'apparaîtra pas dans les recherches, radio, ou suggestions.",
+    "search": {
+      "previousResult": "Résulat précédent",
+      "nextResult": "Résultat suivant",
+      "close": "Fermer la recherche",
+      "searchInPage": "Rechercher dans la page"
+    }
   },
   "sort": {
     "sort": "Tri",
@@ -483,7 +494,11 @@
     "moveDown": "Déplacer vers le bas",
     "save": "Enregistrer",
     "saving": "Enregistrement...",
-    "cancel": "Annuler"
+    "cancel": "Annuler",
+    "footer": {
+      "viewCompilationsAndContent": "Pour voir les compilations et d'autres contenus",
+      "goToArtistPage": "aller sur la page de {artist}"
+    }
   },
   "placeholders": {
     "search": "Rechercher...",
@@ -509,7 +524,7 @@
     "queue": "File d'attente",
     "upNext": "À suivre",
     "ofTotal": "de",
-    "remaining": "gauche",
+    "remaining": "restant",
     "history": "Historique",
     "recentlyPlayed": "Récemment écouté",
     "noHistoryYet": "Aucun titre lu pour l'instant",
@@ -662,6 +677,15 @@
     "albumCredits": "Crédits de l'album",
     "radio": {
       "startArtistRadio" : "Lancer la radio de l'artiste"
+    },
+    "previousAlbums": "Albums précédents",
+    "nextAlbums": "Albums suivants",
+    "artistNetwork": "Relations de l'artiste",
+    "hide": {
+      "hideArtist": "Masquer l'artiste",
+      "hideArtistOptions": "Options de masquage",
+      "hiddenArtist": "Artiste masqué",
+      "showArtist": "Montrer l'artiste"
     }
   },
   "settings": {
@@ -896,7 +920,7 @@
           "fullDesc": "Shader acceléré par GPU avec flou animé, changements de couleur et effets de respiration.",
           "lite": "Léger",
           "liteDesc": "Image pre-floutée avec animation CSS fluide. Idéal pour les configurations multi-écrans.",
-          "off": "Desactive",
+          "off": "Désactivé",
           "offDesc": "Couleur sombre unie. Utilisation GPU minimale."
         },
         "blurChangeNote": "Quitter et rouvrir le mode immersif pour appliquer.",
@@ -1555,6 +1579,10 @@
     "expand": "Développer",
     "clearFilter": "Effacer le filtre"
   },
+  "keys": {
+    "enter": "Entrée",
+    "shift": "Maj"
+  },
   "keybindings": {
     "title": "Raccourcis clavier",
     "customize": "Personnaliser les raccourcis",
@@ -1854,13 +1882,13 @@
       "title": "Titre"
     },
     "group": {
-      "off": "Groupe : Désactivé",
-      "alpha": "Groupe : A-Z",
-      "artist": "Groupe : Artiste",
-      "album": "Groupe : Album",
-      "name": "Groupe : Nom",
-      "optionOff": "Desactive",
-      "optionAlpha": "Alphabetique (A-Z)",
+      "off": "Grouper : Désactivé",
+      "alpha": "Grouper : A-Z",
+      "artist": "Grouper : Artiste",
+      "album": "Grouper : Album",
+      "name": "Grouper : Nom",
+      "optionOff": "Désactivé",
+      "optionAlpha": "Alphabétique (A-Z)",
       "optionArtist": "Artiste",
       "optionAlbum": "Album",
       "optionName": "Nom (A-Z)"
