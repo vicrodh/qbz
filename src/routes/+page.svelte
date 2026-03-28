@@ -4148,7 +4148,8 @@
 
       // Save scroll position of the view we're leaving
       if (prevView !== navState.activeView || prevItemId !== navState.activeItemId) {
-        saveScrollPosition(prevView, globalScrollTop, prevItemId);
+        const scrollTopToSave = activeScrollTarget?.scrollTop ?? globalScrollTop
+        saveScrollPosition(prevView, scrollTopToSave, prevItemId);
       }
 
       activeView = navState.activeView;
