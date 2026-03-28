@@ -4,6 +4,7 @@
   import { Disc3, Loader2 } from 'lucide-svelte';
   import AlbumCard from './AlbumCard.svelte';
   import QualityBadge from './QualityBadge.svelte';
+  import { restoreScrollOnBackForward } from '$lib/utils/scrollRestore';
 
   interface FavoriteAlbum {
     id: string;
@@ -256,6 +257,8 @@
       });
       resizeObserver.observe(containerEl);
     }
+
+    restoreScrollOnBackForward(containerEl, (v) => scrollTop = v);
   });
 
   onDestroy(() => {

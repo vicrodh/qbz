@@ -3,6 +3,7 @@
   import { t } from '$lib/i18n';
   import { Mic2 } from 'lucide-svelte';
   import { cachedSrc } from '$lib/actions/cachedImage';
+  import { restoreScrollOnBackForward } from '$lib/utils/scrollRestore';
 
   interface FavoriteArtist {
     id: number;
@@ -191,6 +192,8 @@
       });
       resizeObserver.observe(containerEl);
     }
+
+    restoreScrollOnBackForward(containerEl, (v) => scrollTop = v);
   });
 
   // Observe header sentinel for scroll-past detection

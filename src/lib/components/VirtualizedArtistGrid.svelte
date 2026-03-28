@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { Mic2, Upload } from 'lucide-svelte';
+  import { restoreScrollOnBackForward } from '$lib/utils/scrollRestore';
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   type Artist = any;
@@ -183,6 +184,8 @@
       });
       resizeObserver.observe(containerEl);
     }
+
+    restoreScrollOnBackForward(containerEl, (v) => scrollTop = v);
   });
 
   onDestroy(() => {

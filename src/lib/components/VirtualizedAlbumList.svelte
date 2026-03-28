@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { Disc3 } from 'lucide-svelte';
   import AlbumCard from './AlbumCard.svelte';
+  import { restoreScrollOnBackForward } from '$lib/utils/scrollRestore';
 
   // Types
   interface LocalAlbum {
@@ -229,6 +230,8 @@
       });
       resizeObserver.observe(containerEl);
     }
+
+    restoreScrollOnBackForward(containerEl, (v) => scrollTop = v);
   });
 
   onDestroy(() => {

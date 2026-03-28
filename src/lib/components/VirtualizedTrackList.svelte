@@ -3,6 +3,7 @@
   import TrackRow from './TrackRow.svelte';
   import type { OfflineCacheStatus } from '$lib/stores/offlineCacheState';
   import { isBlacklisted as isArtistBlacklisted } from '$lib/stores/artistBlacklistStore';
+  import { restoreScrollOnBackForward } from '$lib/utils/scrollRestore';
 
   // Use generic types to match whatever caller passes
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -284,6 +285,8 @@
       });
       resizeObserver.observe(containerEl);
     }
+
+    restoreScrollOnBackForward(containerEl, (v) => scrollTop = v);
   });
 
   onDestroy(() => {
