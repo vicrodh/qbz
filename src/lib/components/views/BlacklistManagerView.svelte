@@ -75,7 +75,7 @@
     try {
       const newState = !enabled;
       await setEnabled(newState);
-      showToast(`Blacklist ${newState ? 'enabled' : 'disabled'}`, 'info');
+      showToast($t('toast.blacklist.newState', { values: {"status": newState ? $t('toast.blacklist.enabled') : $t('toast.blacklist.disabled')}}), 'info');
     } catch (err) {
       console.error('Failed to toggle blacklist:', err);
       showToast('Failed to toggle blacklist', 'error');
@@ -105,12 +105,14 @@
 
 <ViewTransition duration={200} distance={12} direction="down">
 <div class="blacklist-manager">
-  <!-- Header -->
-  <div class="header">
+ <div class="top-bar">
     <button class="back-btn" onclick={onBack}>
       <ArrowLeft size={16} />
       <span>{$t('actions.back')}</span>
     </button>
+  </div>
+  <!-- Header -->
+  <div class="header">
     <div class="title-section">
       <Ban size={24} class="title-icon" />
       <h1>{$t('settings.blacklist.title')}</h1>
