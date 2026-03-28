@@ -1,4 +1,4 @@
-export const ZOOM_OPTIONS = ['80%', '85%', '90%', '95%', '100%', '110%', '125%', '150%', '175%'] as const;
+export const ZOOM_OPTIONS = ['50%', '60', '70', '80%', '85%', '90%', '95%', '100%', '110%', '125%', '150%', '175%'] as const;
 
 export const ZOOM_LEVELS = ZOOM_OPTIONS.map((option) => {
   const parsed = Number.parseFloat(option);
