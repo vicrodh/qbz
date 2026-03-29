@@ -527,7 +527,7 @@
       <div class="playlist-info">
         <span>{$t('yourMixes.result.count', { values: { count: filteredTracks.length } })}</span>
         {#if filteredTracks.length > 0}
-          <span class="separator">•</span>
+          <span class="separator">&middot;</span>
           <span>{totalDurationFormatted}</span>
         {/if}
       </div>
