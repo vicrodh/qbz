@@ -216,6 +216,7 @@
     "stats": "{albums} albums • {tracks} titres • {duration} • {size}",
     "scanLibrary": "Analyser la bibliothèque",
     "viewHiddenAlbums": "Voir les albums cachés",
+    "showActiveAlbums": "Show Active Albums",
     "fetchMissingArtwork": "Récupérer les illustrations manquantes",
     "maintenance": "MAINTENANCE",
     "dangerZone": "ZONE DANGER",
@@ -248,12 +249,16 @@
     "noAlbumsFound": "Aucun album trouvé",
     "selectArtist": "Sélectionnez un artiste pour voir ses albums",
     "noTracksInLibrary": "Aucun titre dans la bibliothèque",
-    "editAlbumInfo": "Modifier les informations de l'album",
+    "editAlbumInfo": "Éditer l'album",
     "editAlbumMetadataTitle": "Modifier les métadonnées de l'album pour l'indexation et la recherche dans la bibliothèque locale",
     "hideAlbum": "Masquer cet album de la bibliothèque",
     "hideAlbumHint": "Les albums cachés peuvent être consultés dans Paramètres",
     "localTrackIndicator": "Titre local - disponible uniquement sur cet appareil",
-    "plexTrackIndicator": "Titre Plex - diffusé depuis votre bibliothèque Plex locale"
+    "plexTrackIndicator": "Titre Plex - diffusé depuis votre bibliothèque Plex locale",
+    "refreshMetadata": "Rafraîchir",
+    "albumSettings": "Paramètres de l'album",
+    "albumArtwork": "Pochette de l'album",
+    "uploadCover": "Téléverser"
   },
   "album": {
     "tracks": "titres",
@@ -321,10 +326,12 @@
     "labels": "Labels",
     "youMayAlsoLike": "VOUS AIMEREZ AUSSI",
     "dismissRecommendation": "Pas une bonne recommandation",
-    "founded": "Fondé :",
-    "born": "Naissance :",
+    "founded": "Fondé le :",
+    "disbanded": "Séparé le :",
+    "born": "Date de naissance :",
+    "died": "Date de décès :",
     "foundedIn": "À :",
-    "bornIn": "À :",
+    "bornIn": "Né(e) à :",
     "from": "De :",
     "loadingOrigin": "Chargement de l'origine...",
     "sceneFrom": "Scène de {location}",
@@ -345,7 +352,8 @@
       "nextResult": "Résultat suivant",
       "close": "Fermer la recherche",
       "searchInPage": "Rechercher dans la page"
-    }
+    },
+    "bandProjects": "Bandes et projets"
   },
   "sort": {
     "sort": "Tri",
@@ -409,9 +417,11 @@
     "noPlaylistsFound": "Aucune playlist trouvée",
     "morePlaylists": "{count} autre(s) playlist(s)...",
     "folder": "Dossier",
+    "folders": "Dossiers",
     "noFolder": "Aucun dossier",
     "makePublic": "Rendre la playlist publique",
     "hideFromSidebar": "Masquer de la barre latérale",
+    "showInSidebar": "Montrer dans la barre latérale",
     "createAndAdd": "Créer et ajouter",
     "playlistWithTracks": "{name} ({count} titres)",
     "makeOfflineConfirmTitle": "Rendre la playlist disponible hors ligne",
@@ -439,7 +449,10 @@
     "label": "Playlist",
     "playCount": "Nombre de lectures",
     "copyToLibrary": "Copier dans la bibliothèque",
-    "customArtwork": "Illustration personnalisée"
+    "customArtwork": "Illustration personnalisée",
+    "playlists": "playlists",
+    "dragPlaylists": "Faire glisser les playlists pour les ré-organiser",
+    "dropOntoFolder": "ou faire glisser dans un dossier."
   },
   "favorites": {
     "title": "Favoris",
@@ -619,7 +632,9 @@
       "resampled": "Rééchantillonné par le système",
       "qualityAdjusted": "Qualité ajustée pour compatibilité — bit-perfect, sans rééchantillonnage",
       "fix": "Activez DAC Passthrough ou Mode Exclusif dans les Paramètres"
-    }
+    },
+    "stereo": "Stéréo",
+    "Mono": "Mono"
   },
   "actions": {
     "play": "Lecture",
@@ -686,7 +701,10 @@
       "hideArtistOptions": "Options de masquage",
       "hiddenArtist": "Artiste masqué",
       "showArtist": "Montrer l'artiste"
-    }
+    },
+    "newFolder": "Nouveau dossier",
+    "previousArtists": "Artistes précédents",
+    "nextArtists": "Artistes suivants"
   },
   "settings": {
     "title": "Paramètres",
@@ -954,6 +972,15 @@
         "60": "60 IPS (Élevé)",
         "120": "120 IPS (Ultra)"
       },
+      "miniplayerDefaultView": "Vue par défaut du mini-lecteur",
+      "miniplayerViews": {
+        "remember": "Dernière utilisée",
+        "micro": "Micro",
+        "compact": "Compacte",
+        "artwork": "Artwork",
+        "queue": "Queue",
+        "lyrics": "Paroles"
+      },
       "startupPage": "Page de démarrage",
       "startupPageDesc": "Page à afficher au lancement de l'application",
       "startupPages": {
@@ -1026,7 +1053,7 @@
     "contentFiltering": {
       "title": "Liste noire",
       "artistBlacklist": "Liste noire des artistes",
-      "artistsBlocked": "{count} artistes bloqués",
+      "artistsBlocked": "{count} artiste(s) bloqué(s)",
       "manage": "Gérer",
       "disabled": "désactivé"
     },
@@ -1086,6 +1113,7 @@
       "plexLibraryIntegrationNote": "La musique Plex est intégrée dans la Local Library (même flux file d'attente/lecteur, sans onglet séparé).",
       "plexLocalOnlyDirectPlayNote": "Seules les bibliothèques Plex pointant vers des fichiers locaux sont prises en charge pour garantir le direct play.",
       "remoteControl": "Remote",
+      "remoteControlExperimental": "Expérimental",
       "remoteControlDesc": "Contrôlez QBZ depuis un autre appareil sur le même réseau.",
       "remoteControlEnable": "Activer le contrôle à distance",
       "remoteControlPort": "Port",
@@ -1139,7 +1167,7 @@
       "plexClearButton": "Effacer",
       "plexStatusCacheLoaded": "{count} titres en cache chargés. Actualisation depuis Plex en arrière-plan.",
       "qobuzLinkHandler": "Gestionnaire de liens Qobuz",
-      "qobuzLinkHandlerDesc": "Enregistrer QBZ comme application par defaut pour les liens qobuzapp:// depuis le navigateur.",
+      "qobuzLinkHandlerDesc": "Enregistrer QBZ comme application par défaut pour les liens qobuzapp:// depuis le navigateur.",
       "qobuzLinkHandlerError": "Erreur lors de la mise a jour de l'enregistrement du gestionnaire de liens.",
       "qconnectDeviceName": "Nom de l'appareil",
       "qconnectDeviceNameDesc": "Nom affiché dans Qobuz Connect"
@@ -1184,10 +1212,10 @@
       "uploadError": "Échec du téléversement des logs",
       "uploading": "Téléversement...",
       "bugReportHint": "Vous signalez un bug ? Téléversez les deux onglets et partagez les deux URLs — cela nous aide a résoudre les problèmes plus vite. Merci !",
-      "verboseLogCapture": "Capture de logs detaillee",
-      "verboseLogCaptureDesc": "Capturer tous les logs de console (log/info), pas seulement les erreurs. Utilise plus de memoire.",
-      "verboseLogEnabled": "Capture de logs detaillee activee",
-      "verboseLogDisabled": "Capture de logs detaillee desactivee",
+      "verboseLogCapture": "Capture de logs détaillée",
+      "verboseLogCaptureDesc": "Capturer tous les logs de console (log/info), pas seulement les erreurs. Utilise plus de mémoire.",
+      "verboseLogEnabled": "Capture de logs détaillée activée",
+      "verboseLogDisabled": "Capture de logs détaillée désactivée",
       "qconnectDevTools": "Outils dev Qobuz Connect",
       "qconnectDevToolsShow": "Afficher le bouton du panneau",
       "qconnectDevToolsDesc": "Affiche le bouton de connexion avancée dans la barre du lecteur",
@@ -1209,8 +1237,8 @@
     "blacklist": {
       "title": "Liste noire des artistes",
       "description": "Les artistes sur liste noire sont cachés des résultats de recherche, de la radio, des suggestions et des artistes similaires.",
-      "enabled": "Activé",
-      "disabled": "Désactivé",
+      "enabled": "Activée",
+      "disabled": "Désactivée",
       "clearAll": "Tout effacer",
       "noArtists": "Aucun artiste sur liste noire",
       "noArtistsHint": "Pour mettre un artiste sur liste noire, allez sur sa page et cliquez sur l'icône d'interdiction.",
@@ -1230,6 +1258,8 @@
       "disclaimer": "La bibliothèque hors ligne est un cache de lecture temporaire pour l'écoute hors ligne lorsque vous avez un abonnement Qobuz valide. Vous ne recevez pas de licence pour conserver ou redistribuer le contenu. Si votre abonnement devient invalide, QBZ supprimera tout le contenu mis en cache après 3 jours.",
       "cachedTracks": "Titres hors ligne",
       "cachedTracksDesc": "Titres mis en cache pour lecture hors ligne",
+      "showInLibrary": "Afficher dans la bibliothèque locale",
+      "showInLibraryDesc": "Affiche les morceaux mis en cache hors ligne dans la bibliothèque locale.",
       "clearCache": "Tout effacer",
       "openFolder": "Ouvrir le dossier",
       "repair": "Réparer la bibliothèque hors ligne",
@@ -1281,7 +1311,7 @@
       "noArtworkCached": "Aucune illustration mise en cache",
       "artistVectors": "Vecteurs d'artiste (suggestions)",
       "artworkThumbnails": "Vignettes d'illustrations",
-      "clearAllCaches": "Effacer toutes les caches",
+      "clearAllCaches": "Effacer tout le cache",
       "clearAllCachesDesc": "Efface toutes les données en cache ci-dessus",
       "cachesDesc": "Caches de file d'attente, paroles, illustrations et métadonnées"
     }
@@ -1300,7 +1330,9 @@
     "v2NotInitialized": "Impossible de se connecter à Qobuz. Veuillez redémarrer l'application.",
     "connectionFailed": "Connexion à Qobuz™ échouée. Vérifiez votre réseau et réessayez.",
     "oauthButton": "Se connecter via le navigateur",
-    "oauthLoading": "Ouverture du navigateur..."
+    "oauthLoading": "Ouverture du navigateur...",
+    "activeSubscriptionRequired": "QBZ requiert un abonnement à Qobuz™ actif. Vos identifiants sont directement envoyés à Qobuz™.",
+    "APIUse": "Cette application utilise l'API Qobuz™ mais n'est pas certifiée par Qobuz™."
   },
   "legal": {
     "brandingLineSuffix": "",
@@ -1347,6 +1379,12 @@
     "hoursAgo": "il y a {count}h",
     "daysAgo": "il y a {count}j"
   },
+  "storage": {
+    "B": "o",
+    "KB": "ko",
+    "MB": "Mo",
+    "GB": "Go"
+  },
   "empty": {
     "noAlbums": "Pas encore d'albums",
     "noArtists": "Pas encore d'artistes",
@@ -1384,6 +1422,7 @@
     "loadingAlbum": "Chargement de l'album...",
     "loadingArtist": "Chargement de l'artiste...",
     "loadingPlaylist": "Chargement de la playlist...",
+    "loadingPlaylists": "Chargement des playlists...",
     "loadingTracks": "Chargement des titres...",
     "lookingUp": "Recherche de {name}...",
     "failedLoadAlbum": "Échec du chargement de l'album",
@@ -1485,7 +1524,12 @@
     "failedSaveAutoplay": "Échec de l'enregistrement de la préférence de lecture automatique",
     "failedSaveIconVisibility": "Échec de l'enregistrement de la préférence de visibilité des icônes",
     "failedRepairOffline": "Échec de la réparation de la bibliothèque hors ligne : {error}",
-    "failedOpenCacheFolder": "Échec de l'ouverture du dossier du cache"
+    "failedOpenCacheFolder": "Échec de l'ouverture du dossier du cache",
+    "blacklist": {
+      "newState": "Liste noire {status}",
+      "enabled": "activée",
+      "disabled": "désactivée"
+    } 
   },
   "offline": {
     "title": "Mode hors ligne",
@@ -1498,7 +1542,7 @@
     "manualModeMessage": "Vous avez activé manuellement le mode hors ligne. Votre bibliothèque locale est toujours disponible.",
     "goToLibrary": "Aller à la bibliothèque locale",
     "enableManual": "Activer le mode hors ligne",
-    "enableManualDesc": "Passer manuellement en mode hors ligne même avec Internet",
+    "enableManualDesc": "Passer manuellement en mode hors ligne, même en étant connecté à Internet.",
     "showPartialPlaylists": "Afficher les playlists partielles",
     "showPartialPlaylistsDesc": "Afficher les playlists avec du contenu local en mode hors ligne",
     "status": "Statut",
@@ -1527,7 +1571,7 @@
     "scrobbleTimeLimit": "Last.fm accepte les scrobbles jusqu'à 2 semaines",
     "showNetworkFolders": "Afficher le contenu du dossier réseau",
     "showNetworkFoldersDesc": "Afficher le contenu des dossiers montés en réseau (NAS, Samba, etc.) en mode hors ligne manuel",
-    "checkNow": "Verifier maintenant"
+    "checkNow": "Vérifier maintenant"
   },
   "degraded": {
     "title": "Service degrade",
@@ -1541,7 +1585,9 @@
     "failed": "Échec de la mise en cache (cliquer pour réessayer)"
   },
   "filter": {
-    "all": "Tout"
+    "all": "Tout",
+    "hidden": "Caché",
+    "visible": "Visible"
   },
   "metadata": {
     "editMetadata": "Modifier les métadonnées",
@@ -1906,6 +1952,7 @@
     "loadFailed": "Aucun achat disponible."
   },
   "playlistManager": {
+    "heading": "Gestionnaire de playlist",
     "switchToFlat": "Vue plate",
     "switchToFolders": "Vue dossiers",
     "emptyFolder": "Dossier vide"
@@ -1956,7 +2003,7 @@
     "subtitle": "Depuis vos playlists les plus écoutées",
     "cardDesc": "Découvrez de la musique à partir de vos playlists <strong>les plus écoutées</strong>.",
     "algorithmInfo": "Propulsé par l'algorithme de suggestion Qobuz, alimenté par vos playlists les plus écoutées.",
-    "emptyPlaylists": "Pas encore de playlists ecoutées. Ecoutez des playlists pour créer votre mix !"
+    "emptyPlaylists": "Pas encore de playlists écoutées. Écoutez des playlists pour créer votre mix !"
   },
   "radio": {
     "albumRadio": "Radio de l'album",
