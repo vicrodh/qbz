@@ -318,7 +318,7 @@
         }
 
         const artists = Array.from(artistNames).slice(0, 5);
-        const trackText = `${trackCount} ${trackCount === 1 ? 'Track' : 'Tracks'}`;
+        const trackText = `${trackCount} ${trackCount === 1 ? $t('playlist.track') : $t('playlist.tracks')}`;
 
         if (artists.length > 0) {
           return `${artists.join('\n')}\n${trackText}`;
@@ -329,12 +329,12 @@
       console.debug('Failed to fetch playlist artists:', err);
     }
 
-    return `${trackCount} ${trackCount === 1 ? 'Track' : 'Tracks'}`;
+    return `${trackCount} ${trackCount === 1 ? $t('playlist.track') : $t('playlist.tracks')}`;
   }
 
   // Format track count text with proper plural
   function formatTrackCount(total: number, localCount: number): string {
-    const plural = total === 1 ? 'Track' : 'Tracks';
+    const plural = total === 1 ? $t('playlist.track') : $t('playlist.tracks');
     if (localCount > 0) {
       return `${total} ${plural} (${localCount} local)`;
     }
