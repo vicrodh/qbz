@@ -435,14 +435,14 @@
                 }}
               >
                 <CloudDownload size={14} />
-                <span>Make album available offline</span>
+                <span>{$t('actions.makeAvailableOffline')}</span>
                 <ChevronRight size={14} class="chevron" />
                 {#if downloadOpen}
                   <div class="submenu" bind:this={downloadSubmenuEl} style={downloadSubmenuStyle}>
                     {#if onReDownloadAlbum}
                       <button class="menu-item" onclick={() => handleAction(onReDownloadAlbum)}>
                         <RefreshCw size={14} />
-                        <span>Refresh album offline copy</span>
+                        <span>{$t('actions.refreshOfflineCopy')}</span>
                       </button>
                     {/if}
                   </div>
@@ -451,7 +451,7 @@
             {:else}
               <button class="menu-item" onclick={() => handleAction(onDownload)}>
                 <CloudDownload size={14} />
-                <span>Make album available offline</span>
+                <span>{$t('actions.makeAvailableOffline')}</span>
               </button>
             {/if}
           {/if}

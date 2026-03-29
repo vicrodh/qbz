@@ -1520,9 +1520,9 @@
     const hours = Math.floor(seconds / 3600);
     const mins = Math.floor((seconds % 3600) / 60);
     if (hours > 0) {
-      return `${hours} hr ${mins} min`;
+      return `${hours} ` + $t('time.hours') + ` ${mins} ` + $t('time.minutes');
     }
-    return `${mins} min`;
+    return `${mins} ` + $t('time.minutes');
   }
 
   function resolveArtworkPath(path: string): string {
@@ -2287,10 +2287,10 @@
         {/if}
         <div class="col-number">#</div>
         <div class="col-artwork"></div>
-        <div class="col-title">{$t('playlist.trackTitle')}</div>
-        <div class="col-album">{$t('playlist.trackAlbum')}</div>
-        <div class="col-duration">{$t('playlist.trackDuration')}</div>
-        <div class="col-quality">{$t('playlist.trackQuality')}</div>
+        <div class="col-title">{$t('tracklist.title')}</div>
+        <div class="col-album">{$t('tracklist.album')}</div>
+        <div class="col-duration">{$t('tracklist.duration')}</div>
+        <div class="col-quality">{$t('tracklist.quality')}</div>
         <div class="col-icon"><Heart size={14} /></div>
         <div class="col-icon"><CloudDownload size={14} /></div>
         <div class="col-spacer"></div>

@@ -7,7 +7,7 @@
   import HorizontalScrollRow from '../HorizontalScrollRow.svelte';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackRow from '../TrackRow.svelte';
-  import { formatQuality, getQobuzImageForSize } from '$lib/adapters/qobuzAdapters';
+  import { getQobuzImageForSize } from '$lib/adapters/qobuzAdapters';
   import { replacePlaybackQueue } from '$lib/services/queuePlaybackService';
   import { playTrack } from '$lib/services/playbackService';
   import { playQueueIndex } from '$lib/stores/queueStore';
@@ -735,6 +735,13 @@
 
   function handleArtistImageError(artistId: number) {
     failedArtistImages = new Set([...failedArtistImages, artistId]);
+  }
+
+  function formatQuality(hires?: boolean, maximum_bit_depth?: number, maximum_sampling_rate?: number): string {
+    if (!hires) return $t('quality.cdQuality');
+    const depth = maximum_bit_depth ?? 16;
+    const rate = maximum_sampling_rate ?? 44.1;
+    return `${depth}/${rate}kHz`;
   }
 
   function getTrackQuality(track: DisplayTrack): string {

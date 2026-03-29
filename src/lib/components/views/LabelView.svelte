@@ -799,7 +799,7 @@
     {#if showJumpNav}
       <div class="jump-nav">
         <div class="jump-nav-left">
-          <div class="jump-label">Jump to</div>
+          <div class="jump-label">{$t('artist.jumpTo')}</div>
           <div class="jump-links">
             {#each jumpSections as section}
               <button

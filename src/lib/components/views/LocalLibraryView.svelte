@@ -2218,12 +2218,12 @@
 
   function formatFileSize(bytes: number): string {
     if (bytes >= 1073741824) {
-      return `${(bytes / 1073741824).toFixed(1)} GB`;
+      return `${(bytes / 1073741824).toFixed(1)} ` + $t('storage.GB');
     }
     if (bytes >= 1048576) {
-      return `${(bytes / 1048576).toFixed(1)} MB`;
+      return `${(bytes / 1048576).toFixed(1)} ` + $t('storage.MB');
     }
-    return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / 1024).toFixed(1)} ` + $t('storage.KB');
   }
 
   async function handleHideAlbum(album: LocalAlbum) {
@@ -3237,7 +3237,7 @@
           <p class="meta">
             {#if selectedAlbum.catalog_number}Cat# {selectedAlbum.catalog_number} &bull; {/if}
             {#if selectedAlbum.year}{selectedAlbum.year} &bull; {/if}
-            {selectedAlbum.track_count} tracks &bull;
+            {selectedAlbum.track_count} {$t('library.tracks').toLowerCase()} &bull;
             {formatTotalDuration(selectedAlbum.total_duration_secs)}
           </p>
           {#if albumTracks.length > 0}
@@ -3248,7 +3248,7 @@
               </span>
               <span class="spec-item">{formatBitDepth(firstTrack.bit_depth)}</span>
               <span class="spec-item">{formatSampleRate(firstTrack.sample_rate)}</span>
-              <span class="spec-item">{firstTrack.channels === 2 ? 'Stereo' : firstTrack.channels === 1 ? 'Mono' : `${firstTrack.channels}ch`}</span>
+              <span class="spec-item">{firstTrack.channels === 2 ? $t('quality.stereo') : firstTrack.channels === 1 ? $t('quality.mono') : `${firstTrack.channels}ch`}</span>
             </div>
           {/if}
           {#if selectedAlbum.likely_single_file_album}
@@ -3271,9 +3271,9 @@
       <div class="track-list">
         <div class="track-list-header">
           <div class="col-number">#</div>
-          <div class="col-title">Title</div>
-          <div class="col-duration">Duration</div>
-          <div class="col-quality">Quality</div>
+          <div class="col-title">{$t('tracklist.title')}</div>
+          <div class="col-duration">{$t('tracklist.duration')}</div>
+          <div class="col-quality">{$t('tracklist.quality')}</div>
           <div class="col-spacer"></div>
           <div class="col-spacer"></div>
           <div class="col-spacer"></div>
@@ -3320,7 +3320,7 @@
         <h1>{$t('library.title')}</h1>
         {#if stats}
           <p class="subtitle">
-            {stats.album_count} albums &bull; {stats.track_count} tracks &bull;
+            {stats.album_count} {$t('library.albums').toLowerCase()} &bull; {stats.track_count} {$t('library.tracks').toLowerCase()} &bull;
             {formatTotalDuration(stats.total_duration_secs)} &bull;
             {formatFileSize(stats.total_size_bytes)}
           </p>
@@ -3473,7 +3473,7 @@
 
         <div class="settings-actions">
           <button class="btn btn-secondary" onclick={toggleHiddenAlbumsView}>
-            <span>{showHiddenAlbums ? 'Show Active Albums' : 'View Hidden Albums'}</span>
+            <span>{showHiddenAlbums ? $t('library.showActiveAlbums') : $t('library.viewHiddenAlbums')}</span>
             {#if hiddenAlbums.length > 0}
               <span class="count">({hiddenAlbums.length})</span>
             {/if}
@@ -3501,14 +3501,14 @@
 
         <div class="settings-bottom-row">
           <div class="maintenance-section">
-            <div class="maintenance-label">Maintenance</div>
+            <div class="maintenance-label">{$t('library.maintenance')}</div>
             <button
               class="btn btn-secondary"
               onclick={handleCleanupMissingFiles}
               disabled={cleaningUpMissingFiles}
             >
               <RefreshCw size={14} class={cleaningUpMissingFiles ? 'spinning' : ''} />
-              <span>{cleaningUpMissingFiles ? 'Cleaning up...' : 'Cleanup missing files'}</span>
+              <span>{cleaningUpMissingFiles ? 'Cleaning up...' : $t('library.cleanupMissingFiles')}</span>
             </button>
             {#if cleanupStatus}
               <div class="cleanup-status">{cleanupStatus}</div>
@@ -3518,10 +3518,10 @@
           <div class="settings-divider"></div>
 
           <div class="danger-zone">
-            <div class="danger-zone-label">Danger Zone</div>
+            <div class="danger-zone-label">{$t('library.dangerZone')}</div>
             <button class="danger-btn-small" onclick={(e) => handleClearLibrary(e)} disabled={clearingLibrary}>
               <Trash2 size={12} />
-              <span>{clearingLibrary ? 'Clearing...' : 'Clear Library Database'}</span>
+              <span>{clearingLibrary ? $t('settings.storage.clearing') : $t('library.clearDatabase')}</span>
             </button>
           </div>
         </div>
@@ -3537,21 +3537,21 @@
             class:active={activeTab === 'albums'}
             onclick={() => handleTabChange('albums')}
           >
-            Albums
+            {$t('library.albums')}
           </button>
           <button
             class="jump-link"
             class:active={activeTab === 'artists'}
             onclick={() => handleTabChange('artists')}
           >
-            Artists
+            {$t('library.artists')}
           </button>
           <button
             class="jump-link"
             class:active={activeTab === 'tracks'}
             onclick={() => handleTabChange('tracks')}
           >
-            Tracks
+            {$t('library.tracks')}
           </button>
         </div>
       </div>
@@ -3632,7 +3632,7 @@
                       <div class="album-row-artist">{album.artist}</div>
                       <div class="album-row-meta">
                         {#if album.year}<span>{album.year}</span><span class="separator">•</span>{/if}
-                        <span>{album.track_count} tracks</span>
+                        <span>{album.track_count} {$t('library.tracks')}</span>
                         <span class="separator">•</span>
                         <span>{formatTotalDuration(album.total_duration_secs)}</span>
                         <span class="separator">•</span>
@@ -3667,10 +3667,10 @@
                 title="Group albums"
               >
                 <span>{!albumGroupingEnabled
-                  ? 'Group: Off'
+                  ? $t('purchases.group.off')
                   : albumGroupMode === 'alpha'
-                    ? 'Group: A-Z'
-                    : 'Group: Artist'}</span>
+                    ? $t('purchases.group.alpha')
+                    : $t('purchases.group.artist')}</span>
               </button>
               {#if showGroupMenu}
                 <div class="dropdown-menu">
@@ -3679,21 +3679,21 @@
                     class:selected={!albumGroupingEnabled}
                     onclick={() => { albumGroupingEnabled = false; showGroupMenu = false; }}
                   >
-                    Off
+                    {$t('purchases.group.optionOff')}
                   </button>
                   <button
                     class="dropdown-item"
                     class:selected={albumGroupingEnabled && albumGroupMode === 'alpha'}
                     onclick={() => { albumGroupMode = 'alpha'; albumGroupingEnabled = true; showGroupMenu = false; }}
                   >
-                    Alphabetical (A-Z)
+                    {$t('purchases.group.optionAlpha')}
                   </button>
                   <button
                     class="dropdown-item"
                     class:selected={albumGroupingEnabled && albumGroupMode === 'artist'}
                     onclick={() => { albumGroupMode = 'artist'; albumGroupingEnabled = true; showGroupMenu = false; }}
                   >
-                    Artist
+                    {$t('purchases.group.optionArtist')}
                   </button>
                 </div>
               {/if}
@@ -3742,7 +3742,7 @@
                       <label class="filter-checkbox">
                         <input type="checkbox" bind:checked={filterCdQuality} />
                         <span class="checkmark"></span>
-                        <span class="label-text">CD Quality</span>
+                        <span class="label-text">{$t('quality.cdQuality')}</span>
                         <span class="label-hint">16bit</span>
                       </label>
                       <label class="filter-checkbox">
@@ -3851,7 +3851,7 @@
             <button
               class="control-btn icon-only"
               onclick={() => (albumViewMode = albumViewMode === 'list' ? 'grid' : 'list')}
-              title={albumViewMode === 'list' ? 'Grid view' : 'List view'}
+              title={albumViewMode === 'list' ? $t('purchases.view.grid') : $t('purchases.view.list')}
             >
               {#if albumViewMode === 'list'}
                 <LayoutGrid size={16} />
@@ -3943,7 +3943,7 @@
             <!-- Left column: Artist cards (single column with scroll) -->
             <div class="artist-column">
               <div class="artist-column-header">
-                <span class="artist-count">{filteredArtists.length} artists</span>
+                <span class="artist-count">{filteredArtists.length} {$t('library.artists').toLowerCase()}</span>
               </div>
               {#if filteredArtists.length === 0}
                 <div class="empty-small">
@@ -3978,7 +3978,7 @@
                         </div>
                         <div class="artist-card-info">
                           <span class="artist-name">{displayName}</span>
-                          <span class="artist-meta">{artist.album_count} albums &bull; {artist.track_count} tracks</span>
+                          <span class="artist-meta">{artist.album_count} {$t('library.albums').toLowerCase()} &bull; {artist.track_count} {$t('library.tracks').toLowerCase()}</span>
                         </div>
                       </button>
                     {/each}
@@ -3992,7 +3992,7 @@
               {#if selectedArtistName}
                 <div class="artist-albums-header">
                   <h3>{getArtistDisplayName(selectedArtistName)}</h3>
-                  <span class="album-count">{selectedArtistAlbums.length} albums</span>
+                  <span class="album-count">{selectedArtistAlbums.length} {$t('library.albums').toLowerCase()}</span>
                 </div>
                 {#if selectedArtistAlbums.length === 0}
                   <div class="empty-small">
@@ -4050,12 +4050,12 @@
               >
                 <span>
                   {!trackGroupingEnabled
-                    ? 'Group: Off'
+                    ? $t('purchases.group.off')
                     : trackGroupMode === 'album'
-                      ? 'Group: Album'
+                      ? $t('purchases.group.album')
                       : trackGroupMode === 'artist'
-                        ? 'Group: Artist'
-                        : 'Group: Name'}
+                        ? $t('purchases.group.artist')
+                        : $t('purchases.group.name')}
                 </span>
               </button>
               {#if showTrackGroupMenu}
@@ -4065,28 +4065,28 @@
                     class:selected={!trackGroupingEnabled}
                     onclick={() => { trackGroupingEnabled = false; showTrackGroupMenu = false; }}
                   >
-                    Off
+                    {$t('purchases.group.optionOff')}
                   </button>
                   <button
                     class="dropdown-item"
                     class:selected={trackGroupingEnabled && trackGroupMode === 'album'}
                     onclick={() => { trackGroupMode = 'album'; trackGroupingEnabled = true; showTrackGroupMenu = false; }}
                   >
-                    Album
+                    {$t('purchases.group.optionAlbum')}
                   </button>
                   <button
                     class="dropdown-item"
                     class:selected={trackGroupingEnabled && trackGroupMode === 'artist'}
                     onclick={() => { trackGroupMode = 'artist'; trackGroupingEnabled = true; showTrackGroupMenu = false; }}
                   >
-                    Artist
+                    {$t('purchases.group.optionArtist')}
                   </button>
                   <button
                     class="dropdown-item"
                     class:selected={trackGroupingEnabled && trackGroupMode === 'name'}
                     onclick={() => { trackGroupMode = 'name'; trackGroupingEnabled = true; showTrackGroupMenu = false; }}
                   >
-                    Name (A-Z)
+                    {$t('purchases.group.optionAlpha')}
                   </button>
                 </div>
               {/if}
@@ -4152,7 +4152,7 @@
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <div class="modal" role="dialog" aria-modal="true" tabindex="-1" onclick={(e: MouseEvent) => e.stopPropagation()}>
       <div class="modal-header">
-        <h2>Album Settings</h2>
+        <h2>{$t('library.albumSettings')}</h2>
         <button class="close-btn" onclick={() => showAlbumEditModal = false}>
           <X size={20} />
         </button>
@@ -4184,14 +4184,14 @@
               {:else}
                 <RefreshCw size={18} class={refreshingAlbumMetadata ? 'spinning' : ''} />
               {/if}
-              <span>{refreshingAlbumMetadata ? 'Refreshing...' : 'Refresh metadata'}</span>
+              <span>{refreshingAlbumMetadata ? 'Refreshing...' : $t('library.refreshMetadata')}</span>
             </button>
             </div>
           </div>
 
           <div class="form-group">
             <div class="artwork-layout-header" class:discogs-active={discogsFetchSuccessful}>
-              <span class="form-label">Album Artwork</span>
+              <span class="form-label">{$t('library.albumArtwork')}</span>
               {#if discogsFetchSuccessful}
                 <div class="discogs-layout-label">Select Artwork from Discogs</div>
               {/if}
@@ -4215,7 +4215,7 @@
                   <div class="artwork-actions">
                     <button class="discogs-btn" onclick={handleSetAlbumArtwork} disabled={updatingArtwork}>
                       <Upload size={14} />
-                      <span>{updatingArtwork ? 'Updating...' : 'Upload cover'}</span>
+                      <span>{updatingArtwork ? 'Updating...' : $t('library.uploadCover')}</span>
                     </button>
                     <button class="discogs-btn" onclick={fetchDiscogsArtwork} disabled={fetchingDiscogsImages}>
                       <img src="/discogs_icon.svg" alt="Discogs" class="discogs-icon" />
@@ -4284,17 +4284,17 @@
         <div class="footer-left">
           <label class="toggle-label footer-toggle">
             <input type="checkbox" bind:checked={editingAlbumHidden} />
-            <span>Hide this album from library</span>
+            <span>{$t('library.hideAlbum')}</span>
           </label>
-          <p class="form-hint footer-hint">Hidden albums can be viewed from Settings</p>
+          <p class="form-hint footer-hint">{$t('library.hideAlbumHint')}</p>
         </div>
 
         <div class="footer-actions">
           <button class="btn btn-secondary" onclick={() => showAlbumEditModal = false}>
-            Cancel
+            {$t('actions.cancel')}
           </button>
           <button class="btn btn-primary" onclick={saveAlbumEdit}>
-            Save
+            {$t('actions.save')}
           </button>
         </div>
       </div>

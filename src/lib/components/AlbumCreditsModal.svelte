@@ -1,5 +1,6 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
+  import { locale } from 'svelte-i18n';
   import { Play, ChevronDown, ChevronUp, Loader2, X } from 'lucide-svelte';
   import type { AlbumCredits, QobuzAlbum, Performer, TrackCredits } from '$lib/types';
 
@@ -223,7 +224,7 @@
                       <span class="meta-value label-name">{credits.album.label}</span>
                     {/if}
                     {#if credits.album.release_date}
-                      <span class="meta-date">on {new Date(credits.album.release_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</span>
+                      <span class="meta-date">on {new Date(credits.album.release_date).toLocaleDateString($locale ? $locale : 'en-us', { month: 'long', day: 'numeric', year: 'numeric' })}</span>
                     {/if}
                   </p>
                 {/if}

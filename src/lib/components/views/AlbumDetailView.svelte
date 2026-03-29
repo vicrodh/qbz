@@ -3,7 +3,7 @@
   import { invoke, convertFileSrc } from '@tauri-apps/api/core';
   import { open, save } from '@tauri-apps/plugin-dialog';
   import { openUrl } from '@tauri-apps/plugin-opener';
-  import { t } from 'svelte-i18n';
+  import { t, locale } from 'svelte-i18n';
   import { showToast } from '$lib/stores/toastStore';
   import {
     hasCustomAlbumCover,
@@ -319,7 +319,7 @@
     if (album.releaseDate) {
       const date = new Date(album.releaseDate);
       if (!isNaN(date.getTime())) {
-        return date.toLocaleDateString('en-US', {
+        return date.toLocaleDateString($locale ? $locale : 'en-us', {
           year: 'numeric',
           month: 'long',
           day: 'numeric'
@@ -479,7 +479,7 @@
   <!-- Back Navigation -->
   <button class="back-btn" onclick={onBack}>
     <ArrowLeft size={16} />
-    <span>Back</span>
+    <span>{$t('actions.back')}</span>
   </button>
 
   <!-- Album Header -->
@@ -518,21 +518,21 @@
          • {album.genre}
       </div>
       <div class="album-quality">{album.quality}</div>
-      <div class="album-stats">{album.trackCount} tracks • {album.duration}</div>
+      <div class="album-stats">{album.trackCount} {$t('album.tracks')} • {album.duration}</div>
 
       <!-- Action Buttons -->
       <div class="actions">
         <button
           class="action-btn-circle primary"
           onclick={onPlayAll}
-          title="Play"
+          title={$t('actions.play')}
         >
           <Play size={20} fill="currentColor" color="currentColor" />
         </button>
         <button
           class="action-btn-circle"
           onclick={onShuffleAll}
-          title="Shuffle"
+          title={$t('actions.shuffle')}
         >
           <Shuffle size={18} />
         </button>
@@ -541,7 +541,7 @@
           class:is-active={isFavorite}
           onclick={toggleFavorite}
           disabled={isFavoriteLoading}
-          title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+          title={isFavorite ? $t('actions.removeFromFavorites') : $t('actions.addToFavorites')}
         >
           <Heart
             size={18}
@@ -567,7 +567,7 @@
           <button
             class="action-btn-circle"
             onclick={onShowAlbumCredits}
-            title="Album credits"
+            title={$t('actions.albumCredits')}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
               <path d="M13.839 17.525c-.006.002-.559.186-1.039.186-.265 0-.372-.055-.406-.079-.168-.117-.48-.336.054-1.4l1-1.994c.593-1.184.681-2.329.245-3.225-.356-.733-1.039-1.236-1.92-1.416-.317-.065-.639-.097-.958-.097-1.849 0-3.094 1.08-3.146 1.126-.179.158-.221.42-.102.626.12.206.367.3.595.222.005-.002.559-.187 1.039-.187.263 0 .369.055.402.078.169.118.482.34-.051 1.402l-1 1.995c-.594 1.185-.681 2.33-.245 3.225.356.733 1.038 1.236 1.921 1.416.314.063.636.097.954.097 1.85 0 3.096-1.08 3.148-1.126.179-.157.221-.42.102-.626-.12-.205-.369-.297-.593-.223z"/>
@@ -615,9 +615,9 @@
     <!-- Table Header -->
     <div class="table-header">
       <div class="col-number">#</div>
-      <div class="col-title">Title</div>
-      <div class="col-duration">Duration</div>
-      <div class="col-quality">Quality</div>
+      <div class="col-title">{$t('tracklist.title')}</div>
+      <div class="col-duration">{$t('tracklist.duration')}</div>
+      <div class="col-quality">{$t('tracklist.quality')}</div>
       <div class="col-icon"><Heart size={14} /></div>
       <div class="col-icon"><CloudDownload size={14} /></div>
       <div class="col-spacer"></div>
@@ -697,14 +697,14 @@
   {#if filteredArtistAlbums.length > 0 && !isVariousArtists}
     <div class="same-artist-section">
       <div class="section-header">
-        <h2 class="section-title">By the same artist</h2>
+        <h2 class="section-title">{$t('album.sameArtist')}</h2>
         {#if hasMoreThanVisible}
           <div class="carousel-controls">
             <button
               class="carousel-btn"
               onclick={() => scrollCarousel('left')}
               disabled={!canScrollLeft}
-              aria-label="Previous albums"
+              aria-label={$t('actions.previousAlbums')}
             >
               <ChevronLeft size={20} />
             </button>
@@ -712,7 +712,7 @@
               class="carousel-btn"
               onclick={() => scrollCarousel('right')}
               disabled={!canScrollRight}
-              aria-label="Next albums"
+              aria-label={$t('actions.nextAlbums')}
             >
               <ChevronRight size={20} />
             </button>
@@ -750,12 +750,12 @@
               <div class="view-more-card">
                 <button class="view-more-cover" onclick={onViewArtistDiscography}>
                   <div class="view-more-label">
-                    <span>View more</span>
+                    <span>{$t('search.viewMore')}</span>
                     <ChevronRight size={20} />
                   </div>
                 </button>
                 <div class="view-more-info">
-                  <span class="view-more-text">See full discography</span>
+                  <span class="view-more-text">{$t('album.seeFullDiscography')}</span>
                 </div>
               </div>
             </div>

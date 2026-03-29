@@ -315,10 +315,10 @@
   let showAlbumSortMenu = $state(false);
 
   const albumSortOptions: { value: AlbumSortBy; label: string }[] = [
-    { value: 'default', label: 'Default' },
-    { value: 'date', label: 'Recently Added' },
-    { value: 'title', label: 'Title' },
-    { value: 'artist', label: 'Artist' }
+    { value: 'default', label: $t('sort.default') },
+    { value: 'date', label: $t('sort.addedRecently') },
+    { value: 'title', label: $t('sort.title') },
+    { value: 'artist', label: $t('sort.artist') }
   ];
 
   function selectAlbumSort(value: AlbumSortBy) {
@@ -426,8 +426,8 @@
       case 'default': return $t('sort.default');
       case 'newest': return $t('sort.newest');
       case 'oldest': return $t('sort.oldest');
-      case 'title-asc': return $t('sort.titleAsc');
-      case 'title-desc': return $t('sort.titleDesc');
+      case 'title-asc': return $t('sort.titleAZ');
+      case 'title-desc': return $t('sort.titleZA');
     }
   }
 
@@ -913,7 +913,7 @@
     if (item.hires && item.maximum_bit_depth && item.maximum_sampling_rate) {
       return `${item.maximum_bit_depth}bit/${item.maximum_sampling_rate}kHz`;
     }
-    return item.hires ? 'Hi-Res' : 'CD Quality';
+    return item.hires ? 'Hi-Res' : $t('quality.cdQuality');
   }
 
   const alphaIndexLetters = ['#', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'];
@@ -1397,13 +1397,13 @@
     <div class="nav-right">
       <span class="results-count">
         {#if activeTab === 'tracks'}
-          {filteredTracks.length}{trackSearch ? ` / ${favoriteTracks.length}` : ''} tracks
+          {filteredTracks.length}{trackSearch ? ` / ${favoriteTracks.length}` : ''} {$t('favorites.tracks').toLowerCase()}
         {:else if activeTab === 'albums'}
-          {filteredAlbums.length}{albumSearch ? ` / ${favoriteAlbums.length}` : ''} albums
+          {filteredAlbums.length}{albumSearch ? ` / ${favoriteAlbums.length}` : ''} {$t('favorites.albums').toLowerCase()}
         {:else if activeTab === 'artists'}
-          {filteredArtists.length}{artistSearch ? ` / ${favoriteArtists.length}` : ''} artists
+          {filteredArtists.length}{artistSearch ? ` / ${favoriteArtists.length}` : ''} {$t('favorites.artists').toLowerCase()}
         {:else}
-          {filteredPlaylists.length}{playlistSearch ? ` / ${favoritePlaylists.length}` : ''} playlists
+          {filteredPlaylists.length}{playlistSearch ? ` / ${favoritePlaylists.length}` : ''} {$t('favorites.playlists').toLowerCase()}
         {/if}
       </span>
       {#if activeTab === 'albums'}
@@ -1413,9 +1413,9 @@
             <span>
               {albumGroupingEnabled
                 ? albumGroupMode === 'alpha'
-                  ? 'Group: A-Z'
-                  : 'Group: Artist'
-                : 'Group: Off'}
+                  ? $t('purchases.group.alpha')
+                  : $t('purchases.group.artist')
+                : $t('purchases.group.off')}
             </span>
             <ChevronDown size={14} />
           </button>
@@ -1426,28 +1426,28 @@
                 class:selected={!albumGroupingEnabled}
                 onclick={() => { albumGroupingEnabled = false; showAlbumGroupMenu = false; }}
               >
-                Off
+                {$t('purchases.group.optionOff')}
               </button>
               <button
                 class="dropdown-item"
                 class:selected={albumGroupingEnabled && albumGroupMode === 'alpha'}
                 onclick={() => { albumGroupMode = 'alpha'; albumGroupingEnabled = true; showAlbumGroupMenu = false; }}
               >
-                Alphabetical (A-Z)
+                {$t('purchases.group.optionAlpha')}
               </button>
               <button
                 class="dropdown-item"
                 class:selected={albumGroupingEnabled && albumGroupMode === 'artist'}
                 onclick={() => { albumGroupMode = 'artist'; albumGroupingEnabled = true; showAlbumGroupMenu = false; }}
               >
-                Artist
+                {$t('purchases.group.optionArtist')}
               </button>
             </div>
           {/if}
         </div>
         <div class="dropdown-container">
           <button class="control-btn" onclick={() => (showAlbumSortMenu = !showAlbumSortMenu)}>
-            <span>Sort: {albumSortOptions.find(o => o.value === albumSortBy)?.label}</span>
+            <span>{$t('sort.sort')}: {albumSortOptions.find(o => o.value === albumSortBy)?.label}</span>
             <ChevronDown size={14} />
           </button>
           {#if showAlbumSortMenu}
@@ -1470,7 +1470,7 @@
         <button
           class="icon-btn"
           onclick={() => (albumViewMode = albumViewMode === 'grid' ? 'list' : 'grid')}
-          title={albumViewMode === 'grid' ? 'List view' : 'Grid view'}
+          title={albumViewMode === 'grid' ? $t('purchases.view.list') : $t('purchases.view.grid')}
         >
           {#if albumViewMode === 'grid'}
             <List size={16} />
@@ -1493,11 +1493,11 @@
             <span>
               {trackGroupingEnabled
                 ? trackGroupMode === 'album'
-                  ? 'Group: Album'
+                  ? $t('purchases.group.album')
                   : trackGroupMode === 'artist'
-                    ? 'Group: Artist'
-                    : 'Group: Name'
-                : 'Group: Off'}
+                    ? $t('purchases.group.artist')
+                    : $t('purchases.group.name')
+                : $t('purchases.group.off')}
             </span>
             <ChevronDown size={14} />
           </button>
@@ -1508,28 +1508,28 @@
                 class:selected={!trackGroupingEnabled}
                 onclick={() => { trackGroupingEnabled = false; showTrackGroupMenu = false; }}
               >
-                Off
+                {$t('purchases.group.optionOff')}
               </button>
               <button
                 class="dropdown-item"
                 class:selected={trackGroupingEnabled && trackGroupMode === 'album'}
                 onclick={() => { trackGroupMode = 'album'; trackGroupingEnabled = true; showTrackGroupMenu = false; }}
               >
-                Album
+              {$t('purchases.group.optionAlbum')}
               </button>
               <button
                 class="dropdown-item"
                 class:selected={trackGroupingEnabled && trackGroupMode === 'artist'}
                 onclick={() => { trackGroupMode = 'artist'; trackGroupingEnabled = true; showTrackGroupMenu = false; }}
               >
-                Artist
+                {$t('purchases.group.optionArtist')}
               </button>
               <button
                 class="dropdown-item"
                 class:selected={trackGroupingEnabled && trackGroupMode === 'name'}
                 onclick={() => { trackGroupMode = 'name'; trackGroupingEnabled = true; showTrackGroupMenu = false; }}
               >
-                Name (A-Z)
+                {$t('purchases.group.optionAlpha')}
               </button>
             </div>
           {/if}
@@ -1545,7 +1545,7 @@
               selectedFavoriteArtist = null;
             }
           }}
-          title={artistViewMode === 'grid' ? 'Browse view' : 'Grid view'}
+          title={artistViewMode === 'grid' ? $t('purchases.view.list') : $t('purchases.view.grid')}
         >
           {#if artistViewMode === 'grid'}
             <PanelLeftClose size={16} />
@@ -1556,7 +1556,7 @@
         {#if artistViewMode === 'grid'}
           <div class="dropdown-container">
             <button class="control-btn" onclick={() => (showArtistGroupMenu = !showArtistGroupMenu)}>
-              <span>{artistGroupingEnabled ? 'Group: A-Z' : 'Group: Off'}</span>
+              <span>{artistGroupingEnabled ? $t('purchases.group.alpha') : $t('purchases.group.off')}</span>
               <ChevronDown size={14} />
             </button>
             {#if showArtistGroupMenu}
@@ -1566,14 +1566,14 @@
                   class:selected={!artistGroupingEnabled}
                   onclick={() => { artistGroupingEnabled = false; showArtistGroupMenu = false; }}
                 >
-                  Off
+                  {$t('purchases.group.optionOff')}
                 </button>
                 <button
                   class="dropdown-item"
                   class:selected={artistGroupingEnabled}
                   onclick={() => { artistGroupingEnabled = true; showArtistGroupMenu = false; }}
                 >
-                  Alphabetical (A-Z)
+                  {$t('purchases.group.optionAlpha')}
                 </button>
               </div>
             {/if}
@@ -2008,9 +2008,9 @@
                 <!-- Footer -->
                 <div class="artist-albums-footer">
                   <p class="footer-hint">
-                    To view compilations and other content,
+                    {$t('favorites.footer.viewCompilationsAndContent')},
                     <button class="link-btn" onclick={() => onArtistClick?.(selectedFavoriteArtist!.id)}>
-                      go to {selectedFavoriteArtist.name}'s page
+                      {$t('favorites.footer.goToArtistPage', { values: {"artist": selectedFavoriteArtist.name} })}
                     </button>
                   </p>
                 </div>

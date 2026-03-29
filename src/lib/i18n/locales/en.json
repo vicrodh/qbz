@@ -216,6 +216,7 @@
     "stats": "{albums} albums • {tracks} tracks • {duration} • {size}",
     "scanLibrary": "Scan Library",
     "viewHiddenAlbums": "View Hidden Albums",
+    "showActiveAlbums": "Show Active Albums",
     "fetchMissingArtwork": "Fetch Missing Artwork",
     "maintenance": "MAINTENANCE",
     "dangerZone": "DANGER ZONE",
@@ -260,7 +261,11 @@
     "hideAlbumHint": "Hidden albums can be viewed from Settings",
     "localTrackIndicator": "Local track - only available on this device",
     "singleFileAlbumNotice": "This album appears to be a single file containing the full disc. Individual track navigation requires the Plex server to split the file (e.g. via cue sheet scanner).",
-    "plexTrackIndicator": "Plex track - served from your local Plex library"
+    "plexTrackIndicator": "Plex track - served from your local Plex library",
+    "refreshMetadata": "Refresh metadata",
+    "albumSettings": "Album settings",
+    "albumArtwork": "Album Artwork",
+    "uploadCover": "Upload cover"
   },
   "album": {
     "tracks": "tracks",
@@ -294,7 +299,9 @@
     "bookletError": "Could not load booklet",
     "bookletFitWidth": "Fit to width",
     "bookletRotate": "Rotate",
-    "bookletDownload": "Save booklet"
+    "bookletDownload": "Save booklet",
+    "sameArtist": "By the same artist",
+    "seeFullDiscography": "See full discography"
   },
   "artist": {
     "albums": "Albums",
@@ -324,10 +331,13 @@
     "customImageRemoved": "Custom artist image removed",
     "customImageError": "Failed to update artist image",
     "imageSaved": "Artist image saved",
-    "youMayAlsoLike": "YOU MAY ALSO LIKE",
+    "labels": "Labels",
+    "youMayAlsoLike": "You may also like",
     "dismissRecommendation": "Not a good recommendation",
     "founded": "Founded:",
+    "disbanded": "Disbanded:",
     "born": "Born:",
+    "died": "Died:",
     "foundedIn": "Founded in:",
     "bornIn": "Born in:",
     "from": "From:",
@@ -338,7 +348,19 @@
     "sceneStep1": "Searching MusicBrainz for {genre} artists...",
     "sceneStep2": "Analyzing genre affinity across {count} candidates...",
     "sceneStep3": "Verifying availability on Qobuz...",
-    "sceneStep4": "Preparing results..."
+    "sceneStep4": "Preparing results...",
+    "jumpTo": "Jump to",
+    "about": "About",
+    "artistIsBlacklisted": "Show this artist in searches, playlists, discover, etc.",
+    "artistIsNotBlacklisted": "Don't show this artist in searches, playlists, discover, etc.",
+    "manageBlacklistFromSettings": "Blacklist can be managed from settings.",
+    "blacklistBanner": "This artist is hidden. Their music won't appear in search, radio, or suggestions.",
+    "search": {
+      "previousResult": "Previous result",
+      "nextResult": "Next result",
+      "close": "Close search",
+      "searchInPage": "Search in this page"
+    }
   },
   "sort": {
     "sort": "Sort",
@@ -405,6 +427,7 @@
     "noPlaylistsFound": "No playlists found",
     "morePlaylists": "{count} more playlist(s)...",
     "folder": "Folder",
+    "folders": "Folders",
     "noFolder": "No folder",
     "makePublic": "Make playlist public",
     "hideFromSidebar": "Hide from sidebar",
@@ -436,12 +459,11 @@
     },
     "suggestSongs": "Suggest songs for this playlist",
     "suggestionsLargePlaylist": "This playlist has many tracks. Tap the button to generate suggestions.",
-    "trackTitle": "Title",
-    "trackAlbum": "Album",
-    "trackDuration": "Duration",
-    "trackQuality": "Quality",
     "label": "Playlist",
-    "playCount": "Play count"
+    "playCount": "Play count",
+    "playlists": "playlists",
+    "dragPlaylists": "Drag playlists to reorder them",
+    "dropOntoFolder": "or drop onto a folder to move."
   },
   "favorites": {
     "title": "Favorites",
@@ -496,7 +518,11 @@
     "moveDown": "Move down",
     "save": "Save",
     "saving": "Saving...",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "footer": {
+      "viewCompilationsAndContent": "To view compilations and other content",
+      "goToArtistPage": "go to {artist}'s page"
+    }
   },
   "placeholders": {
     "search": "Search...",
@@ -630,7 +656,9 @@
       "resampled": "Resampled by system",
       "qualityAdjusted": "Quality adjusted for device compatibility — bit-perfect, no resampling",
       "fix": "Enable DAC Passthrough or Exclusive Mode in Settings"
-    }
+    },
+    "stereo": "Stereo",
+    "Mono": "Mono"
   },
   "actions": {
     "play": "Play",
@@ -648,6 +676,7 @@
     "select": "Select",
     "cancelSelection": "Cancel Selection",
     "makeAvailableOffline": "Make available offline",
+    "refreshOfflineCopy": "Refresh offline copy",
     "share": "Share",
     "viewAlbum": "View Album",
     "viewArtist": "View Artist",
@@ -683,7 +712,24 @@
     "collapse": "Collapse sidebar",
     "expand": "Expand sidebar",
     "moreOptions": "More options",
-    "shareQobuz": "Share (Qobuz)"
+    "shareQobuz": "Share (Qobuz)",
+    "albumCredits": "Album credits",
+    "startArtistRadio" : "Start Artist Radio",
+    "radio": {
+      "startArtistRadio" : "Lancer la radio de l'artiste"
+    },
+    "previousAlbums": "Previous albums",
+    "nextAlbums": "Next albums",
+    "artistNetwork": "Artist network",
+    "hide": {
+      "hideArtist": "Hide artist",
+      "hideArtistOptions": "Hide artist options",
+      "hiddenArtist": "Hidden artist",
+      "showArtist": "Show artist"
+    },
+    "newFolder": "New folder",
+    "previousArtists": "Previous artists",
+    "nextArtists": "Next artists"
   },
   "settings": {
     "title": "Settings",
@@ -1032,7 +1078,7 @@
     "contentFiltering": {
       "title": "Blacklist",
       "artistBlacklist": "Artist Blacklist",
-      "artistsBlocked": "{count} artists blocked",
+      "artistsBlocked": "{count} artist(s) blocked",
       "manage": "Manage",
       "disabled": "disabled"
     },
@@ -1354,7 +1400,9 @@
     "v2NotInitialized": "Could not connect to Qobuz. Please restart the app.",
     "connectionFailed": "Failed to connect to Qobuz™. Check your network and try again.",
     "oauthButton": "Sign in via Browser",
-    "oauthLoading": "Opening browser..."
+    "oauthLoading": "Opening browser...",
+    "activeSubscriptionRequired": "QBZ requires an active Qobuz™ subscription. Your credentials are sent directly to Qobuz™.",
+    "APIUse": "This application uses the Qobuz API but is not certified by Qobuz."
   },
   "legal": {
     "brandingLineSuffix": "",
@@ -1401,6 +1449,12 @@
     "hoursAgo": "{count}h ago",
     "daysAgo": "{count}d ago"
   },
+  "storage": {
+    "B": "B",
+    "KB": "KB",
+    "MB": "MB",
+    "GB": "GB"
+  },
   "empty": {
     "noAlbums": "No albums yet",
     "noArtists": "No artists yet",
@@ -1438,6 +1492,8 @@
     "loadingAlbum": "Loading album...",
     "loadingArtist": "Loading artist...",
     "loadingPlaylist": "Loading playlist...",
+    "loadingPlaylists": "Loading playlists...",
+    "loadingTracks": "Loading tracks...",
     "lookingUp": "Looking up {name}...",
     "failedLoadAlbum": "Failed to load album",
     "failedLoadArtist": "Failed to load artist",
@@ -1539,7 +1595,12 @@
     "failedSaveAutoplay": "Failed to save autoplay preference",
     "failedSaveIconVisibility": "Failed to save icon visibility preference",
     "failedRepairOffline": "Failed to repair offline library: {error}",
-    "failedOpenCacheFolder": "Failed to open cache folder"
+    "failedOpenCacheFolder": "Failed to open cache folder",
+    "blacklist": {
+      "newState": "Blacklist {status}",
+      "enabled": "enabled",
+      "disabled": "disabled"
+    } 
   },
   "offline": {
     "title": "Offline Mode",
@@ -1595,7 +1656,9 @@
     "failed": "Failed to cache for offline (click to retry)"
   },
   "filter": {
-    "all": "All"
+    "all": "All",
+    "hidden": "Hidden",
+    "visible": "Visible"
   },
   "genreFilter": {
     "title": "Filter by genre",
@@ -1609,6 +1672,10 @@
     "collapse": "Collapse",
     "expand": "Expand",
     "clearFilter": "Clear filter"
+  },
+  "keys": {
+    "enter": "Enter",
+    "shift": "Shift"
   },
   "keybindings": {
     "title": "Keyboard Shortcuts",
@@ -2096,6 +2163,7 @@
     "emptyPlaylists": "No played playlists yet. Play some playlists to build your mix!"
   },
   "playlistManager": {
+    "heading": "Playlist manager",
     "switchToFlat": "Flat view",
     "switchToFolders": "Folder view",
     "emptyFolder": "Empty folder"
@@ -2170,6 +2238,12 @@
     "qbzRadio": "QBZ Radio",
     "qobuzRadio": "Qobuz Radio",
     "creating": "Creating radio..."
+  },
+  "tracklist": {
+    "title": "Title",
+    "album": "Album",
+    "duration": "Duration",
+    "quality": "Quality"
   },
   "qualityFallback": {
     "title": "Streaming issue",

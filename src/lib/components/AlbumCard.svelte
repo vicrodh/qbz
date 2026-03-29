@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import { Play, Disc3, Heart, HardDrive } from 'lucide-svelte';
+  import { locale } from 'svelte-i18n';
   import AlbumMenu from './AlbumMenu.svelte';
   import {
     subscribe as subscribeAlbumFavorites,
@@ -111,7 +112,7 @@
     if (!dateStr) return '';
     const date = new Date(dateStr);
     if (isNaN(date.getTime())) return '';
-    return date.toLocaleDateString('en-US', {
+    return date.toLocaleDateString($locale ? $locale : 'en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric'

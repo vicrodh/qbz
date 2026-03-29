@@ -3,7 +3,7 @@
   import { open, save } from '@tauri-apps/plugin-dialog';
   import { openUrl } from '@tauri-apps/plugin-opener';
   import { setCustomImage, removeCustomImage as removeCustomImageFromStore } from '$lib/stores/customArtistImageStore';
-  import { t } from 'svelte-i18n';
+  import { t, locale } from 'svelte-i18n';
   import { cachedSrc } from '$lib/actions/cachedImage';
   import { ArrowLeft, User, ChevronDown, ChevronUp, Play, Music, Heart, Search, X, ChevronLeft, ChevronRight, Radio, MoreHorizontal, Info, Disc, Settings, CheckSquare, PanelRightClose, ThumbsDown } from 'lucide-svelte';
   import {
@@ -930,6 +930,18 @@
     return begin;
   }
 
+  function formatMbDate_v2(dateToFormat: string): string {
+    const date = new Date(dateToFormat);
+    if (!isNaN(date.getTime())) {
+      return date.toLocaleDateString($locale ? $locale : 'en-us', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+    }
+    return dateToFormat;
+  };
+
   // Load MusicBrainz relationships for artist enrichment
   async function loadMusicBrainzRelationships() {
     // First, resolve the artist to get MBID
@@ -1407,15 +1419,15 @@
   let hasOthers = $derived(artist.others.length > 0);
   let hasPlaylists = $derived(artist.playlists.length > 0);
   let jumpSections = $derived.by(() => [
-    { id: 'about', label: 'About', el: aboutSection, visible: true },
-    { id: 'popular', label: 'Popular Tracks', el: topTracksSection, visible: hasTopTracks },
-    { id: 'discography', label: 'Discography', el: discographySection, visible: true },
-    { id: 'eps', label: 'EPs & Singles', el: epsSinglesSection, visible: hasEpsSingles },
-    { id: 'live', label: 'Live Albums', el: liveAlbumsSection, visible: hasLiveAlbums },
-    { id: 'compilations', label: 'Compilations', el: compilationsSection, visible: hasCompilations },
-    { id: 'others', label: 'Others', el: othersSection, visible: hasOthers },
-    { id: 'playlists', label: 'Playlists', el: playlistsSection, visible: hasPlaylists },
-    { id: 'tributes', label: 'Tributes', el: tributesSection, visible: hasTributes },
+    { id: 'about', label: $t('artist.about'), el: aboutSection, visible: true },
+    { id: 'popular', label: $t('artist.popularTracks'), el: topTracksSection, visible: hasTopTracks },
+    { id: 'discography', label: $t('artist.discography'), el: discographySection, visible: true },
+    { id: 'eps', label: $t('artist.eps'), el: epsSinglesSection, visible: hasEpsSingles },
+    { id: 'live', label: $t('artist.liveAlbums'), el: liveAlbumsSection, visible: hasLiveAlbums },
+    { id: 'compilations', label: $t('artist.compilations'), el: compilationsSection, visible: hasCompilations },
+    { id: 'others', label: $t('artist.others'), el: othersSection, visible: hasOthers },
+    { id: 'playlists', label: $t('artist.playlists'), el: playlistsSection, visible: hasPlaylists },
+    { id: 'tributes', label: $t('artist.tributes'), el: tributesSection, visible: hasTributes },
   ].filter(section => section.visible));
 
   let showJumpNav = $derived(jumpSections.length > 1);
@@ -1633,7 +1645,7 @@
   <!-- Back Navigation -->
   <button class="back-btn" onclick={onBack}>
     <ArrowLeft size={16} />
-    <span>Back</span>
+    <span>{$t('actions.back')}</span>
   </button>
 
   <!-- Artist Header -->
@@ -1679,15 +1691,15 @@
             <button class="bio-toggle" onclick={() => bioExpanded = !bioExpanded}>
               {#if bioExpanded}
                 <ChevronUp size={16} />
-                <span>Show less</span>
+                <span>{$t('artist.readLess')}</span>
               {:else}
                 <ChevronDown size={16} />
-                <span>Read more</span>
+                <span>{$t('artist.readMore')}</span>
               {/if}
             </button>
           {/if}
           {#if artist.biography?.source}
-            <div class="bio-source">Source: {artist.biography.source}</div>
+            <div class="bio-source">{$t('library.source')}: {artist.biography.source}</div>
           {/if}
         </div>
       {/if}
@@ -1790,7 +1802,7 @@
           class:is-favorite={isFavorite}
           onclick={toggleFavorite}
           disabled={isFavoriteLoading}
-          title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+          title={isFavorite ? $t('actions.removeFromFavorites') : $t('actions.addToFavorites')}
         >
           {#if isFavorite}
             <Heart size={24} fill="var(--accent-primary)" color="var(--accent-primary)" />
@@ -1805,17 +1817,17 @@
             class:glow={radioJustCreated}
             onclick={() => { radioDropdownOpen = !radioDropdownOpen; }}
             disabled={isRadioLoading}
-            title="Start Artist Radio"
+            title={$t('actions.radio.startArtistRadio')}
           >
             <Radio size={24} />
           </button>
           {#if radioDropdownOpen && !isRadioLoading}
             <div class="radio-dropdown" role="menu">
               <button class="radio-dropdown-item" onclick={() => { radioDropdownOpen = false; createArtistRadio(); }}>
-                QBZ Radio
+                {$t('radio.qbzRadio')}
               </button>
               <button class="radio-dropdown-item" onclick={() => { radioDropdownOpen = false; createQobuzArtistRadio(); }}>
-                Qobuz Radio
+                {$t('radio.qobuzRadio')}
               </button>
             </div>
             <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
@@ -1831,7 +1843,7 @@
           class="network-btn"
           class:active={showNetworkSidebar}
           onclick={handleToggleNetworkSidebar}
-          title="Artist Network"
+          title={$t('actions.artistNetwork')}
         >
           <img src="/element-connect.svg" alt="Network" class="network-icon" />
         </button>
@@ -1847,7 +1859,7 @@
               class:active={showHideDropdown}
               class:is-hidden={artistIsBlacklisted}
               onclick={() => showHideDropdown = !showHideDropdown}
-              title={artistIsBlacklisted ? 'Artist is hidden' : 'Hide artist options'}
+              title={artistIsBlacklisted ? $t('actions.hide.hiddenArtist') : $t('actions.hide.hideArtistOptions')}
             >
               <img src="/blind-eye.svg" alt="" class="hide-icon" />
             </button>
@@ -1860,21 +1872,21 @@
                 >
                   <div class="hide-option-header">
                     {#if artistIsBlacklisted}
-                      <span>Show this artist</span>
+                      <span>{$t('actions.hide.showArtist')}</span>
                     {:else}
-                      <span>Hide this artist</span>
+                      <span>{$t('actions.hide.hideArtist')}</span>
                     {/if}
                   </div>
                   <p class="hide-option-desc">
                     {#if artistIsBlacklisted}
-                      Show this artist in searches, playlists, discover, etc.
+                      {$t('artist.artistIsBlacklisted')}
                     {:else}
-                      Don't show this artist in searches, playlists, discover, etc.
+                      {$t('artist.artistIsNotBlacklisted')}
                     {/if}
                   </p>
                   <p class="hide-option-hint">
                     <Settings size={12} />
-                    Blacklist can be managed from settings.
+                    {$t('artist.manageBlacklistFromSettings')}
                   </p>
                 </button>
               </div>
@@ -1891,9 +1903,9 @@
   {#if contentFilteringEnabled && artistIsBlacklisted}
     <div class="blacklist-banner">
       <img src="/blind-eye.svg" alt="" class="banner-icon" />
-      <span>This artist is hidden. Their music won't appear in search, radio, or suggestions.</span>
+      <span>{$t('artist.blacklistBanner')}</span>
       <button class="unblock-btn" onclick={toggleBlacklist} disabled={isBlacklistLoading}>
-        Show Artist
+        {$t('actions.hide.showArtist')}
       </button>
     </div>
   {/if}
@@ -1901,7 +1913,7 @@
   {#if showJumpNav}
     <div class="jump-nav">
       <div class="jump-nav-left">
-        <div class="jump-label">Jump to</div>
+        <div class="jump-label">{$t('artist.jumpTo')}</div>
         <div class="jump-links">
           {#each jumpSections as section}
             <button
@@ -1920,7 +1932,7 @@
             <input
               type="text"
               class="search-input"
-              placeholder="Search in this page..."
+              placeholder={$t('placeholders.searchInPage')}
               bind:value={searchQuery}
               bind:this={searchInputEl}
               onkeydown={(e) => {
@@ -1945,7 +1957,7 @@
                   class="search-nav-btn"
                   onclick={prevResult}
                   disabled={totalFilteredResults === 0}
-                  title="Previous result (Shift+Enter)"
+                  title="{$t('artist.search.previousResult')} ({$t('keys.shift')}+{$t('keys.enter')})"
                 >
                   <ChevronLeft size={16} />
                 </button>
@@ -1953,18 +1965,18 @@
                   class="search-nav-btn"
                   onclick={nextResult}
                   disabled={totalFilteredResults === 0}
-                  title="Next result (Enter)"
+                  title="{$t('artist.search.nextResult')} ({$t('keys.enter')})"
                 >
                   <ChevronRight size={16} />
                 </button>
               {/if}
-              <button class="search-close-btn" onclick={toggleSearch} title="Close search">
+              <button class="search-close-btn" onclick={toggleSearch} title={$t('artist.search.close')}>
                 <X size={16} />
               </button>
             </div>
           </div>
         {:else}
-          <button class="search-toggle" onclick={toggleSearch} title="Search in this page">
+          <button class="search-toggle" onclick={toggleSearch} title={$t('artist.search.searchInPage')}>
             <Search size={18} />
           </button>
         {/if}
@@ -1981,11 +1993,11 @@
     <div class="top-tracks-section section-anchor" bind:this={topTracksSection}>
       <div class="section-header">
         <div class="section-header-left">
-          <h2 class="section-title">Popular Tracks</h2>
+          <h2 class="section-title">{$t('artist.popularTracks')}</h2>
         </div>
         {#if topTracks.length > 0}
           <div class="section-header-actions">
-            <button class="action-btn-circle primary" onclick={handlePlayAllTracks} title="Play All">
+            <button class="action-btn-circle primary" onclick={handlePlayAllTracks} title={$t('actions.playAll')}>
               <Play size={20} fill="currentColor" color="currentColor" />
             </button>
             <button
@@ -2008,16 +2020,16 @@
                 <div class="context-menu-backdrop" onclick={() => showTracksContextMenu = false} role="presentation"></div>
                 <div class="context-menu">
                   <button class="context-menu-item" onclick={() => { handlePlayAllTracksNext(); showTracksContextMenu = false; }}>
-                    Play Next
+                    {$t('actions.playNext')}
                   </button>
                   <button class="context-menu-item" onclick={() => { handlePlayAllTracksLater(); showTracksContextMenu = false; }}>
-                    Add to queue
+                    {$t('actions.addToQueue')}
                   </button>
                   <button class="context-menu-item" onclick={() => { handleShuffleAllTracks(); showTracksContextMenu = false; }}>
-                    Shuffle
+                    {$t('actions.shuffle')}
                   </button>
                   <button class="context-menu-item" onclick={() => { handleAddAllTracksToPlaylist(); showTracksContextMenu = false; }}>
-                    Add to Playlist
+                    {$t('actions.addToPlaylist')}
                   </button>
                 </div>
               {/if}
@@ -2027,7 +2039,7 @@
       </div>
 
       {#if tracksLoading}
-        <div class="tracks-loading">Loading tracks...</div>
+        <div class="tracks-loading">{$t('toast.loadingTracks')}</div>
       {:else}
         <div class="tracks-list">
           {#each visibleTracks as track, index}
@@ -2164,7 +2176,7 @@
         </div>
         {#if canLoadMoreTracks}
           <button class="load-more-link" onclick={loadMoreTracks}>
-            Load More
+            {$t('actions.loadMore')}
           </button>
         {/if}
         <BulkActionBar
@@ -2183,7 +2195,7 @@
   <div class="discography section-anchor" bind:this={discographySection}>
     <div class="section-header">
       <div class="section-header-left">
-        <h2 class="section-title">Discography</h2>
+        <h2 class="section-title">{$t('artist.discography')}</h2>
         {#if artist.albums.length > 0}
           <span class="section-count">{artist.albums.length}</span>
         {/if}
@@ -2192,11 +2204,11 @@
       <div class="sort-dropdown">
         <button class="sort-btn" onclick={() => (showAlbumSortMenu = !showAlbumSortMenu)}>
           <span>
-            {#if albumSortMode === 'default'}Sort: Default
-            {:else if albumSortMode === 'newest'}Sort: Newest
-            {:else if albumSortMode === 'oldest'}Sort: Oldest
-            {:else if albumSortMode === 'title-asc'}Sort: A-Z
-            {:else if albumSortMode === 'title-desc'}Sort: Z-A
+            {#if albumSortMode === 'default'}{$t('sort.sort')}: {$t('sort.default')}
+            {:else if albumSortMode === 'newest'}{$t('sort.sort')}: {$t('sort.newest')}
+            {:else if albumSortMode === 'oldest'}{$t('sort.sort')}: {$t('sort.oldest')}
+            {:else if albumSortMode === 'title-asc'}{$t('sort.sort')}: {$t('sort.titleAZ')}
+            {:else if albumSortMode === 'title-desc'}{$t('sort.sort')}: {$t('sort.titleZA')}
             {/if}
           </span>
           <ChevronDown size={14} />
@@ -2208,35 +2220,35 @@
               class:selected={albumSortMode === 'default'}
               onclick={() => { albumSortMode = 'default'; showAlbumSortMenu = false; }}
             >
-              Default
+              {$t('sort.default')}
             </button>
             <button
               class="sort-item"
               class:selected={albumSortMode === 'newest'}
               onclick={() => { albumSortMode = 'newest'; showAlbumSortMenu = false; }}
             >
-              Newest First
+              {$t('sort.newest')}
             </button>
             <button
               class="sort-item"
               class:selected={albumSortMode === 'oldest'}
               onclick={() => { albumSortMode = 'oldest'; showAlbumSortMenu = false; }}
             >
-              Oldest First
+              {$t('sort.oldest')}
             </button>
             <button
               class="sort-item"
               class:selected={albumSortMode === 'title-asc'}
               onclick={() => { albumSortMode = 'title-asc'; showAlbumSortMenu = false; }}
             >
-              Title (A-Z)
+              {$t('sort.titleAZ')}
             </button>
             <button
               class="sort-item"
               class:selected={albumSortMode === 'title-desc'}
               onclick={() => { albumSortMode = 'title-desc'; showAlbumSortMenu = false; }}
             >
-              Title (Z-A)
+              {$t('sort.titleZA')}
             </button>
           </div>
         {/if}
@@ -2244,7 +2256,7 @@
     </div>
 
     {#if artist.albums.length === 0}
-      <div class="no-albums">No albums found</div>
+      <div class="no-albums">{$t('library.noAlbumsFound')}</div>
     {:else}
         <div class="albums-grid">
           {#each filteredAlbums as album}
@@ -2276,7 +2288,7 @@
         {#if artist.releaseHasMore?.album && onLoadMoreReleases}
           <div class="load-more-section">
             <button class="load-more-btn" disabled={isLoadingMore} onclick={() => onLoadMoreReleases('album')}>
-              {isLoadingMore ? 'Loading...' : 'Load more albums'}
+              {isLoadingMore ? $t('actions.loading') : $t('actions.loadMore')}
             </button>
           </div>
         {/if}
@@ -2290,28 +2302,28 @@
     <div class="discography section-anchor" bind:this={epsSinglesSection}>
       <div class="section-header">
         <div class="section-header-left">
-          <h2 class="section-title">EPs & Singles</h2>
+          <h2 class="section-title">{$t('artist.epsSingles')}</h2>
           <span class="section-count">{artist.epsSingles.length}</span>
         </div>
         <div class="sort-dropdown">
           <button class="sort-btn" onclick={() => (showEpsSinglesSortMenu = !showEpsSinglesSortMenu)}>
             <span>
-              {#if epsSinglesSortMode === 'default'}Sort: Default
-              {:else if epsSinglesSortMode === 'newest'}Sort: Newest
-              {:else if epsSinglesSortMode === 'oldest'}Sort: Oldest
-              {:else if epsSinglesSortMode === 'title-asc'}Sort: A-Z
-              {:else if epsSinglesSortMode === 'title-desc'}Sort: Z-A
+              {#if epsSinglesSortMode === 'default'}{$t('sort.sort')}: {$t('sort.default')}
+              {:else if epsSinglesSortMode === 'newest'}{$t('sort.sort')}: {$t('sort.newest')}
+              {:else if epsSinglesSortMode === 'oldest'}{$t('sort.sort')}: {$t('sort.oldest')}
+              {:else if epsSinglesSortMode === 'title-asc'}{$t('sort.sort')}: {$t('sort.titleAZ')}
+              {:else if epsSinglesSortMode === 'title-desc'}{$t('sort.sort')}: {$t('sort.titleZA')}
               {/if}
             </span>
             <ChevronDown size={14} />
           </button>
           {#if showEpsSinglesSortMenu}
             <div class="sort-menu">
-              <button class="sort-item" class:selected={epsSinglesSortMode === 'default'} onclick={() => { epsSinglesSortMode = 'default'; showEpsSinglesSortMenu = false; }}>Default</button>
-              <button class="sort-item" class:selected={epsSinglesSortMode === 'newest'} onclick={() => { epsSinglesSortMode = 'newest'; showEpsSinglesSortMenu = false; }}>Newest First</button>
-              <button class="sort-item" class:selected={epsSinglesSortMode === 'oldest'} onclick={() => { epsSinglesSortMode = 'oldest'; showEpsSinglesSortMenu = false; }}>Oldest First</button>
-              <button class="sort-item" class:selected={epsSinglesSortMode === 'title-asc'} onclick={() => { epsSinglesSortMode = 'title-asc'; showEpsSinglesSortMenu = false; }}>Title (A-Z)</button>
-              <button class="sort-item" class:selected={epsSinglesSortMode === 'title-desc'} onclick={() => { epsSinglesSortMode = 'title-desc'; showEpsSinglesSortMenu = false; }}>Title (Z-A)</button>
+              <button class="sort-item" class:selected={epsSinglesSortMode === 'default'} onclick={() => { epsSinglesSortMode = 'default'; showEpsSinglesSortMenu = false; }}>{$t('sort.default')}</button>
+              <button class="sort-item" class:selected={epsSinglesSortMode === 'newest'} onclick={() => { epsSinglesSortMode = 'newest'; showEpsSinglesSortMenu = false; }}>{$t('sort.newest')}</button>
+              <button class="sort-item" class:selected={epsSinglesSortMode === 'oldest'} onclick={() => { epsSinglesSortMode = 'oldest'; showEpsSinglesSortMenu = false; }}>{$t('sort.oldest')}</button>
+              <button class="sort-item" class:selected={epsSinglesSortMode === 'title-asc'} onclick={() => { epsSinglesSortMode = 'title-asc'; showEpsSinglesSortMenu = false; }}>{$t('sort.titleAZ')}</button>
+              <button class="sort-item" class:selected={epsSinglesSortMode === 'title-desc'} onclick={() => { epsSinglesSortMode = 'title-desc'; showEpsSinglesSortMenu = false; }}>{$t('sort.titleZA')}</button>
             </div>
           {/if}
         </div>
@@ -2346,7 +2358,7 @@
       {#if artist.releaseHasMore?.ep && onLoadMoreReleases}
         <div class="load-more-section">
           <button class="load-more-btn" disabled={isLoadingMore} onclick={() => onLoadMoreReleases('ep')}>
-            {isLoadingMore ? 'Loading...' : 'Load more EPs & Singles'}
+            {isLoadingMore ? $t('actions.loading') : $t('actions.loadMore')}
           </button>
         </div>
       {/if}
@@ -2359,28 +2371,28 @@
     <div class="discography section-anchor" bind:this={liveAlbumsSection}>
       <div class="section-header">
         <div class="section-header-left">
-          <h2 class="section-title">Live Albums</h2>
+          <h2 class="section-title">{$t('artist.liveAlbums')}</h2>
           <span class="section-count">{artist.liveAlbums.length}</span>
         </div>
         <div class="sort-dropdown">
           <button class="sort-btn" onclick={() => (showLiveAlbumsSortMenu = !showLiveAlbumsSortMenu)}>
             <span>
-              {#if liveAlbumsSortMode === 'default'}Sort: Default
-              {:else if liveAlbumsSortMode === 'newest'}Sort: Newest
-              {:else if liveAlbumsSortMode === 'oldest'}Sort: Oldest
-              {:else if liveAlbumsSortMode === 'title-asc'}Sort: A-Z
-              {:else if liveAlbumsSortMode === 'title-desc'}Sort: Z-A
+              {#if liveAlbumsSortMode === 'default'}{$t('sort.sort')}: {$t('sort.default')}
+              {:else if liveAlbumsSortMode === 'newest'}{$t('sort.sort')}: {$t('sort.newest')}
+              {:else if liveAlbumsSortMode === 'oldest'}{$t('sort.sort')}: {$t('sort.oldest')}
+              {:else if liveAlbumsSortMode === 'title-asc'}{$t('sort.sort')}: {$t('sort.titleAZ')}
+              {:else if liveAlbumsSortMode === 'title-desc'}{$t('sort.sort')}: {$t('sort.titleZA')}
               {/if}
             </span>
             <ChevronDown size={14} />
           </button>
           {#if showLiveAlbumsSortMenu}
             <div class="sort-menu">
-              <button class="sort-item" class:selected={liveAlbumsSortMode === 'default'} onclick={() => { liveAlbumsSortMode = 'default'; showLiveAlbumsSortMenu = false; }}>Default</button>
-              <button class="sort-item" class:selected={liveAlbumsSortMode === 'newest'} onclick={() => { liveAlbumsSortMode = 'newest'; showLiveAlbumsSortMenu = false; }}>Newest First</button>
-              <button class="sort-item" class:selected={liveAlbumsSortMode === 'oldest'} onclick={() => { liveAlbumsSortMode = 'oldest'; showLiveAlbumsSortMenu = false; }}>Oldest First</button>
-              <button class="sort-item" class:selected={liveAlbumsSortMode === 'title-asc'} onclick={() => { liveAlbumsSortMode = 'title-asc'; showLiveAlbumsSortMenu = false; }}>Title (A-Z)</button>
-              <button class="sort-item" class:selected={liveAlbumsSortMode === 'title-desc'} onclick={() => { liveAlbumsSortMode = 'title-desc'; showLiveAlbumsSortMenu = false; }}>Title (Z-A)</button>
+              <button class="sort-item" class:selected={liveAlbumsSortMode === 'default'} onclick={() => { liveAlbumsSortMode = 'default'; showLiveAlbumsSortMenu = false; }}>{$t('sort.default')}</button>
+              <button class="sort-item" class:selected={liveAlbumsSortMode === 'newest'} onclick={() => { liveAlbumsSortMode = 'newest'; showLiveAlbumsSortMenu = false; }}>{$t('sort.newest')}</button>
+              <button class="sort-item" class:selected={liveAlbumsSortMode === 'oldest'} onclick={() => { liveAlbumsSortMode = 'oldest'; showLiveAlbumsSortMenu = false; }}>{$t('sort.oldest')}</button>
+              <button class="sort-item" class:selected={liveAlbumsSortMode === 'title-asc'} onclick={() => { liveAlbumsSortMode = 'title-asc'; showLiveAlbumsSortMenu = false; }}>{$t('sort.titleAZ')}</button>
+              <button class="sort-item" class:selected={liveAlbumsSortMode === 'title-desc'} onclick={() => { liveAlbumsSortMode = 'title-desc'; showLiveAlbumsSortMenu = false; }}>{$t('sort.titleZA')}</button>
             </div>
           {/if}
         </div>
@@ -2415,7 +2427,7 @@
       {#if artist.releaseHasMore?.live && onLoadMoreReleases}
         <div class="load-more-section">
           <button class="load-more-btn" disabled={isLoadingMore} onclick={() => onLoadMoreReleases('live')}>
-            {isLoadingMore ? 'Loading...' : 'Load more live albums'}
+            {isLoadingMore ? $t('actions.loading') : $t('actions.loadMore')}
           </button>
         </div>
       {/if}
@@ -2428,28 +2440,28 @@
     <div class="discography section-anchor" bind:this={compilationsSection}>
       <div class="section-header">
         <div class="section-header-left">
-          <h2 class="section-title">Compilations</h2>
+          <h2 class="section-title">{$t('artist.compilations')}</h2>
           <span class="section-count">{artist.compilations.length}</span>
         </div>
         <div class="sort-dropdown">
           <button class="sort-btn" onclick={() => (showCompilationsSortMenu = !showCompilationsSortMenu)}>
             <span>
-              {#if compilationsSortMode === 'default'}Sort: Default
-              {:else if compilationsSortMode === 'newest'}Sort: Newest
-              {:else if compilationsSortMode === 'oldest'}Sort: Oldest
-              {:else if compilationsSortMode === 'title-asc'}Sort: A-Z
-              {:else if compilationsSortMode === 'title-desc'}Sort: Z-A
+              {#if compilationsSortMode === 'default'}{$t('sort.sort')}: {$t('sort.default')}
+              {:else if compilationsSortMode === 'newest'}{$t('sort.sort')}: {$t('sort.newest')}
+              {:else if compilationsSortMode === 'oldest'}{$t('sort.sort')}: {$t('sort.oldest')}
+              {:else if compilationsSortMode === 'title-asc'}{$t('sort.sort')}: {$t('sort.titleAZ')}
+              {:else if compilationsSortMode === 'title-desc'}{$t('sort.sort')}: {$t('sort.titleZA')}
               {/if}
             </span>
             <ChevronDown size={14} />
           </button>
           {#if showCompilationsSortMenu}
             <div class="sort-menu">
-              <button class="sort-item" class:selected={compilationsSortMode === 'default'} onclick={() => { compilationsSortMode = 'default'; showCompilationsSortMenu = false; }}>Default</button>
-              <button class="sort-item" class:selected={compilationsSortMode === 'newest'} onclick={() => { compilationsSortMode = 'newest'; showCompilationsSortMenu = false; }}>Newest First</button>
-              <button class="sort-item" class:selected={compilationsSortMode === 'oldest'} onclick={() => { compilationsSortMode = 'oldest'; showCompilationsSortMenu = false; }}>Oldest First</button>
-              <button class="sort-item" class:selected={compilationsSortMode === 'title-asc'} onclick={() => { compilationsSortMode = 'title-asc'; showCompilationsSortMenu = false; }}>Title (A-Z)</button>
-              <button class="sort-item" class:selected={compilationsSortMode === 'title-desc'} onclick={() => { compilationsSortMode = 'title-desc'; showCompilationsSortMenu = false; }}>Title (Z-A)</button>
+              <button class="sort-item" class:selected={compilationsSortMode === 'default'} onclick={() => { compilationsSortMode = 'default'; showCompilationsSortMenu = false; }}>{$t('sort.default')}</button>
+              <button class="sort-item" class:selected={compilationsSortMode === 'newest'} onclick={() => { compilationsSortMode = 'newest'; showCompilationsSortMenu = false; }}>{$t('sort.newest')}</button>
+              <button class="sort-item" class:selected={compilationsSortMode === 'oldest'} onclick={() => { compilationsSortMode = 'oldest'; showCompilationsSortMenu = false; }}>{$t('sort.oldest')}</button>
+              <button class="sort-item" class:selected={compilationsSortMode === 'title-asc'} onclick={() => { compilationsSortMode = 'title-asc'; showCompilationsSortMenu = false; }}>{$t('sort.titleAZ')}</button>
+              <button class="sort-item" class:selected={compilationsSortMode === 'title-desc'} onclick={() => { compilationsSortMode = 'title-desc'; showCompilationsSortMenu = false; }}>{$t('sort.titleZA')}</button>
             </div>
           {/if}
         </div>
@@ -2490,28 +2502,28 @@
     <div class="discography section-anchor" bind:this={othersSection}>
       <div class="section-header">
         <div class="section-header-left">
-          <h2 class="section-title">Others</h2>
+          <h2 class="section-title">{$t('artist.others')}</h2>
           <span class="section-count">{artist.others.length}</span>
         </div>
         <div class="sort-dropdown">
           <button class="sort-btn" onclick={() => (showOthersSortMenu = !showOthersSortMenu)}>
             <span>
-              {#if othersSortMode === 'default'}Sort: Default
-              {:else if othersSortMode === 'newest'}Sort: Newest
-              {:else if othersSortMode === 'oldest'}Sort: Oldest
-              {:else if othersSortMode === 'title-asc'}Sort: A-Z
-              {:else if othersSortMode === 'title-desc'}Sort: Z-A
+              {#if othersSortMode === 'default'}{$t('sort.sort')}: {$t('sort.default')}
+              {:else if othersSortMode === 'newest'}{$t('sort.sort')}: {$t('sort.newest')}
+              {:else if othersSortMode === 'oldest'}{$t('sort.sort')}: {$t('sort.oldest')}
+              {:else if othersSortMode === 'title-asc'}{$t('sort.sort')}: {$t('sort.titleAZ')}
+              {:else if othersSortMode === 'title-desc'}{$t('sort.sort')}: {$t('sort.titleZA')}
               {/if}
             </span>
             <ChevronDown size={14} />
           </button>
           {#if showOthersSortMenu}
             <div class="sort-menu">
-              <button class="sort-item" class:selected={othersSortMode === 'default'} onclick={() => { othersSortMode = 'default'; showOthersSortMenu = false; }}>Default</button>
-              <button class="sort-item" class:selected={othersSortMode === 'newest'} onclick={() => { othersSortMode = 'newest'; showOthersSortMenu = false; }}>Newest First</button>
-              <button class="sort-item" class:selected={othersSortMode === 'oldest'} onclick={() => { othersSortMode = 'oldest'; showOthersSortMenu = false; }}>Oldest First</button>
-              <button class="sort-item" class:selected={othersSortMode === 'title-asc'} onclick={() => { othersSortMode = 'title-asc'; showOthersSortMenu = false; }}>Title (A-Z)</button>
-              <button class="sort-item" class:selected={othersSortMode === 'title-desc'} onclick={() => { othersSortMode = 'title-desc'; showOthersSortMenu = false; }}>Title (Z-A)</button>
+              <button class="sort-item" class:selected={othersSortMode === 'default'} onclick={() => { othersSortMode = 'default'; showOthersSortMenu = false; }}>{$t('sort.default')}</button>
+              <button class="sort-item" class:selected={othersSortMode === 'newest'} onclick={() => { othersSortMode = 'newest'; showOthersSortMenu = false; }}>{$t('sort.newest')}</button>
+              <button class="sort-item" class:selected={othersSortMode === 'oldest'} onclick={() => { othersSortMode = 'oldest'; showOthersSortMenu = false; }}>{$t('sort.oldest')}</button>
+              <button class="sort-item" class:selected={othersSortMode === 'title-asc'} onclick={() => { othersSortMode = 'title-asc'; showOthersSortMenu = false; }}>{$t('sort.titleAZ')}</button>
+              <button class="sort-item" class:selected={othersSortMode === 'title-desc'} onclick={() => { othersSortMode = 'title-desc'; showOthersSortMenu = false; }}>{$t('sort.titleZA')}</button>
             </div>
           {/if}
         </div>
@@ -2546,7 +2558,7 @@
       {#if (artist.releaseHasMore?.compilation || artist.releaseHasMore?.other) && onLoadMoreReleases}
         <div class="load-more-section">
           <button class="load-more-btn" disabled={isLoadingMore} onclick={() => onLoadMoreReleases('compilation')}>
-            {isLoadingMore ? 'Loading...' : 'Load more'}
+            {isLoadingMore ? $t('actions.loading') : $t('actions.loadMore')}
           </button>
         </div>
       {/if}
@@ -2559,7 +2571,7 @@
     <div class="playlists-section section-anchor" bind:this={playlistsSection}>
       <div class="section-header">
         <div class="section-header-left">
-          <h2 class="section-title">Playlists</h2>
+          <h2 class="section-title">{$t('artist.playlists')}</h2>
           <span class="section-count">{artist.playlists.length}</span>
         </div>
       </div>
@@ -2585,7 +2597,7 @@
               <div class="playlist-title">{playlist.title}</div>
               <div class="playlist-meta">
                 {#if playlist.trackCount}
-                  {playlist.trackCount} tracks
+                  {playlist.trackCount} {$t('playlist.tracks')}
                 {:else}
                   Playlist
                 {/if}
@@ -2606,7 +2618,7 @@
     <div class="discography section-anchor" bind:this={tributesSection}>
       <div class="section-header">
         <div class="section-header-left">
-          <h2 class="section-title">Tributes & Covers</h2>
+          <h2 class="section-title">{$t('artist.tributes')}</h2>
           <span class="section-count">{artist.tributes.length}</span>
           <button
             class="info-btn"
@@ -2626,22 +2638,22 @@
           <div class="sort-dropdown">
             <button class="sort-btn" onclick={() => (showTributesSortMenu = !showTributesSortMenu)}>
               <span>
-                {#if tributesSortMode === 'default'}Sort: Default
-                {:else if tributesSortMode === 'newest'}Sort: Newest
-                {:else if tributesSortMode === 'oldest'}Sort: Oldest
-                {:else if tributesSortMode === 'title-asc'}Sort: A-Z
-                {:else if tributesSortMode === 'title-desc'}Sort: Z-A
+                {#if tributesSortMode === 'default'}{$t('sort.sort')}: {$t('sort.default')}
+                {:else if tributesSortMode === 'newest'}{$t('sort.sort')}: {$t('sort.newest')}
+                {:else if tributesSortMode === 'oldest'}{$t('sort.sort')}: {$t('sort.oldest')}
+                {:else if tributesSortMode === 'title-asc'}{$t('sort.sort')}: {$t('sort.titleAZ')}
+                {:else if tributesSortMode === 'title-desc'}{$t('sort.sort')}: {$t('sort.titleZA')}
                 {/if}
               </span>
               <ChevronDown size={14} />
             </button>
             {#if showTributesSortMenu}
               <div class="sort-menu">
-                <button class="sort-item" class:selected={tributesSortMode === 'default'} onclick={() => { tributesSortMode = 'default'; showTributesSortMenu = false; }}>Default</button>
-                <button class="sort-item" class:selected={tributesSortMode === 'newest'} onclick={() => { tributesSortMode = 'newest'; showTributesSortMenu = false; }}>Newest First</button>
-                <button class="sort-item" class:selected={tributesSortMode === 'oldest'} onclick={() => { tributesSortMode = 'oldest'; showTributesSortMenu = false; }}>Oldest First</button>
-                <button class="sort-item" class:selected={tributesSortMode === 'title-asc'} onclick={() => { tributesSortMode = 'title-asc'; showTributesSortMenu = false; }}>Title (A-Z)</button>
-                <button class="sort-item" class:selected={tributesSortMode === 'title-desc'} onclick={() => { tributesSortMode = 'title-desc'; showTributesSortMenu = false; }}>Title (Z-A)</button>
+                <button class="sort-item" class:selected={tributesSortMode === 'default'} onclick={() => { tributesSortMode = 'default'; showTributesSortMenu = false; }}>{$t('sort.default')}</button>
+                <button class="sort-item" class:selected={tributesSortMode === 'newest'} onclick={() => { tributesSortMode = 'newest'; showTributesSortMenu = false; }}>{$t('sort.newest')}</button>
+                <button class="sort-item" class:selected={tributesSortMode === 'oldest'} onclick={() => { tributesSortMode = 'oldest'; showTributesSortMenu = false; }}>{$t('sort.oldest')}</button>
+                <button class="sort-item" class:selected={tributesSortMode === 'title-asc'} onclick={() => { tributesSortMode = 'title-asc'; showTributesSortMenu = false; }}>{$t('sort.titleAZ')}</button>
+                <button class="sort-item" class:selected={tributesSortMode === 'title-desc'} onclick={() => { tributesSortMode = 'title-desc'; showTributesSortMenu = false; }}>{$t('sort.titleZA')}</button>
               </div>
             {/if}
           </div>
@@ -2678,7 +2690,7 @@
         {#if canLoadMoreTributes}
           <div class="load-more-container">
             <button class="load-more-btn" onclick={() => (tributesVisibleCount += 20)}>
-              Load More ({filteredTributes.length - tributesVisibleCount} remaining)
+              {$t('actions.loadMore')} ({filteredTributes.length - tributesVisibleCount} remaining)
             </button>
           </div>
         {/if}
@@ -2713,7 +2725,7 @@
                   <span class="origin-label">
                     {mbMetadata.artist_type === 'person' ? $t('artist.born') : $t('artist.founded')}
                   </span>
-                  <span class="origin-value">{formatMbDate(mbMetadata.life_span)}</span>
+                  <span class="origin-value">{formatMbDate_v2(mbMetadata.life_span.begin)}</span>
                 </div>
               {/if}
               {#if mbMetadata.location}
@@ -2757,13 +2769,21 @@
                   {/if}
                 </div>
               {/if}
+              {#if mbMetadata.life_span?.end}
+                <div class="origin-row">
+                  <span class="origin-label">
+                    {mbMetadata.artist_type === 'person' ? $t('artist.died') : $t('artist.disbanded')}
+                  </span>
+                  <span class="origin-value">{formatMbDate_v2(mbMetadata.life_span.end)}</span>
+                </div>
+              {/if}
             {/if}
           </section>
         {/if}
 
         <!-- Labels Section -->
         <section class="sidebar-section">
-          <h4 class="section-label">LABELS</h4>
+          <h4 class="section-label">{$t('artist.labels')}</h4>
           <div class="section-items">
             {#if artist.labels.length > 0}
               {#each artist.labels as label}
@@ -2784,10 +2804,10 @@
 
         <!-- Similar Artists Section -->
         <section class="sidebar-section">
-          <h4 class="section-label">SIMILAR ARTISTS</h4>
+          <h4 class="section-label">{$t('artist.similarArtists').toUpperCase()}</h4>
           <div class="section-items">
             {#if similarArtistsLoading}
-              <span class="placeholder-text">Loading...</span>
+              <span class="placeholder-text">{$t('actions.loading')}</span>
             {:else if similarArtists.length > 0}
               {#each similarArtists as similar}
                 <button
@@ -2875,7 +2895,7 @@
         <!-- Discovery: "You may also like" (MusicBrainz tag-based) -->
         {#if mbAvailable && (discoveryLoading || discoveryArtists.length > 0)}
           <section class="sidebar-section">
-            <h4 class="section-label">{$t('artist.youMayAlsoLike')}</h4>
+            <h4 class="section-label">{$t('artist.youMayAlsoLike').toUpperCase()}</h4>
             <div class="section-items">
               {#if discoveryLoading}
                 <span class="placeholder-text">{$t('actions.loading')}</span>

@@ -22,7 +22,7 @@
   import HomeSettingsModal from '../HomeSettingsModal.svelte';
   import GenreFilterButton from '../GenreFilterButton.svelte';
   import PlaylistTagFilter from '../PlaylistTagFilter.svelte';
-  import { formatDuration, formatQuality, getQobuzImage, getQobuzImageForSize } from '$lib/adapters/qobuzAdapters';
+  import { formatDuration, getQobuzImage, getQobuzImageForSize } from '$lib/adapters/qobuzAdapters';
   import { isBlacklisted as isArtistBlacklisted } from '$lib/stores/artistBlacklistStore';
   import {
     subscribe as subscribeHomeSettings,
@@ -627,6 +627,13 @@
       image: resolveArtistImage(artist.name, getQobuzImageForSize(artist.image, 'small')),
       playCount
     };
+  }
+
+  function formatQuality(hires?: boolean, maximum_bit_depth?: number, maximum_sampling_rate?: number): string {
+    if (!hires) return $t('quality.cdQuality');
+    const depth = maximum_bit_depth ?? 16;
+    const rate = maximum_sampling_rate ?? 44.1;
+    return `${depth}/${rate}kHz`;
   }
 
   function getTrackQuality(track: DisplayTrack): string {

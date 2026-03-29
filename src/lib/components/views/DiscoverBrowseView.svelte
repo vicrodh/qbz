@@ -216,7 +216,7 @@
   }
 
   function getQualityLabel(item: { hires?: boolean; maximum_bit_depth?: number; maximum_sampling_rate?: number }): string {
-    if (!item.hires) return 'CD';
+    if (!item.hires) return $t('quality.cdQuality');
     const depth = item.maximum_bit_depth ?? 16;
     const rate = item.maximum_sampling_rate ?? 44.1;
     return `${depth}/${rate}kHz`;

@@ -3684,9 +3684,9 @@
   }
 
   function formatBytes(bytes: number): string {
-    if (bytes === 0) return '0 B';
+    if (bytes === 0) return '0 ' + $t('storage.B');
     const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const sizes = [$t('storage.B'), $t('storage.KB'), $t('storage.MB'), $t('storage.GB')];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
   }
@@ -3811,7 +3811,7 @@
       </div>
       <Dropdown
         value={streamingQuality}
-        options={['MP3', 'CD Quality', 'Hi-Res', 'Hi-Res+']}
+        options={['MP3', $t('quality.cdQuality'), 'Hi-Res', 'Hi-Res+']}
         onchange={handleQualityChange}
       />
     </div>
@@ -4822,9 +4822,9 @@
       <span class="setting-label">{$t('settings.offlineLibrary.cachedTracks')}</span>
       <span class="setting-value">
         {#if downloadStats}
-          {downloadStats.readyTracks} tracks ({formatBytes(downloadStats.totalSizeBytes)})
+          {downloadStats.readyTracks} {$t('library.tracks').toLowerCase()} ({formatBytes(downloadStats.totalSizeBytes)})
         {:else}
-          Loading...
+          {$t('actions.loading')}
         {/if}
       </span>
     </div>
@@ -4894,7 +4894,7 @@
           <div class="setting-with-description">
             <span class="setting-label">{$t('settings.contentFiltering.artistBlacklist')}</span>
             <span class="setting-description">
-              {blacklistCount} {blacklistCount === 1 ? 'artist' : 'artists'} blocked
+              {$t('settings.contentFiltering.artistsBlocked', { values: {"count": blacklistCount} })}
               {#if !blacklistEnabled}
                 <span class="status-disabled">({$t('settings.contentFiltering.disabled')})</span>
               {/if}
@@ -5518,9 +5518,9 @@
     {/if}
     <div class="setting-row">
       <div class="setting-info">
-        <span class="setting-label">Clear All Caches</span>
+        <span class="setting-label">{$t('settings.metadata.clearAllCaches')}</span>
         <small class="setting-note">
-          Clears all cached data above
+          {$t('settings.metadata.clearAllCachesDesc')}
         </small>
       </div>
       <button

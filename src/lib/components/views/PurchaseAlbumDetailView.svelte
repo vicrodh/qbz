@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { t } from '$lib/i18n';
+  import { t, locale } from '$lib/i18n';
   import { invoke } from '@tauri-apps/api/core';
   import { ArrowLeft, Download, Check, Loader2, AlertTriangle, Library, Play, X } from 'lucide-svelte';
   import QualityBadge from '../QualityBadge.svelte';
@@ -73,7 +73,7 @@
   function formatPurchaseDate(ts?: number): string {
     if (!ts) return '';
     try {
-      return new Date(ts * 1000).toLocaleDateString(undefined, {
+      return new Date(ts * 1000).toLocaleDateString($locale ? $locale : 'en-us', {
         year: 'numeric',
         month: 'long',
         day: 'numeric',

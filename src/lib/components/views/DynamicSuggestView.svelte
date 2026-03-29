@@ -1,7 +1,7 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
   import { onMount, onDestroy } from 'svelte';
-  import { ArrowLeft, Info, ListPlus, Play, RefreshCw, Search, Shuffle, X, CheckSquare } from 'lucide-svelte';
+  import { ArrowLeft, CloudDownload, Heart, Info, ListPlus, Play, RefreshCw, Search, Shuffle, X, CheckSquare } from 'lucide-svelte';
   import PlaylistModal from '$lib/components/PlaylistModal.svelte';
   import TrackRow from '$lib/components/TrackRow.svelte';
   import BulkActionBar from '$lib/components/BulkActionBar.svelte';
@@ -425,8 +425,8 @@
     const totalSecs = filteredTracks.reduce((sum, track) => sum + (track.duration || 0), 0);
     const hours = Math.floor(totalSecs / 3600);
     const mins = Math.floor((totalSecs % 3600) / 60);
-    if (hours > 0) return `${hours} hr ${mins} min`;
-    return `${mins} min`;
+    if (hours > 0) return `${hours}h ${mins}m`;
+    return `${mins}m`;
   });
 
   onMount(() => {
@@ -533,10 +533,12 @@
       <div class="track-list-header">
         <div class="col-number">#</div>
         <div class="col-artwork"></div>
-        <div class="col-title">{$t('common.title')}</div>
-        <div class="col-album">{$t('purchases.sort.album')}</div>
-        <div class="col-duration">{$t('album.duration')}</div>
-        <div class="col-quality">{$t('album.quality')}</div>
+        <div class="col-title">{$t('tracklist.title')}</div>
+        <div class="col-album">{$t('tracklist.album')}</div>
+        <div class="col-duration">{$t('tracklist.duration')}</div>
+        <div class="col-quality">{$t('tracklist.quality')}</div>
+        <div class="col-icon"><Heart size={14} /></div>
+        <div class="col-icon"><CloudDownload size={14} /></div>
         <div class="col-spacer"></div>
       </div>
 
@@ -902,6 +904,15 @@
   .col-quality {
     width: 80px;
     text-align: center;
+  }
+
+  .col-icon {
+    width: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    opacity: 0.5;
   }
 
   .col-spacer {

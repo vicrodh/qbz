@@ -389,7 +389,7 @@
       <div class="login-body">
         <form onsubmit={handleLogin}>
           <div class="input-group">
-            <label for="email">Email</label>
+            <label for="email">{$t('auth.email')}</label>
             <input
               id="email"
               type="email"
@@ -401,7 +401,7 @@
           </div>
 
           <div class="input-group">
-            <label for="password">Password</label>
+            <label for="password">{$t('auth.password')}</label>
             <input
               id="password"
               type="password"
@@ -415,7 +415,7 @@
           <div class="remember-me">
             <label>
               <input type="checkbox" bind:checked={rememberMe} />
-              <span>Remember me</span>
+              <span>{$t('auth.rememberMe')}</span>
             </label>
           </div>
 
@@ -471,8 +471,8 @@
 
         <div class="login-footer">
           <p class="footer-copy">
-            QBZ requires an active Qobuz™ subscription. Your credentials are sent directly to Qobuz™.<br />
-            This application uses the Qobuz API but is not certified by Qobuz. {$t('legal.trademarkNotice')}
+            {$t('auth.activeSubscriptionRequired')}<br />
+            {$t('auth.APIUse')} {$t('legal.trademarkNotice')}
           </p>
         </div>
       </div>

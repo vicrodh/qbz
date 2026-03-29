@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { ArrowLeft, Search, X, Trash2, Ban, ToggleLeft, ToggleRight, AlertCircle } from 'lucide-svelte';
   import ViewTransition from '../ViewTransition.svelte';
-  import { t } from '$lib/i18n';
+  import { t, locale } from '$lib/i18n';
   import { showToast } from '$lib/stores/toastStore';
   import {
     subscribe,
@@ -75,7 +75,7 @@
     try {
       const newState = !enabled;
       await setEnabled(newState);
-      showToast(`Blacklist ${newState ? 'enabled' : 'disabled'}`, 'info');
+      showToast($t('toast.blacklist.newState', { values: {"status": newState ? $t('toast.blacklist.enabled') : $t('toast.blacklist.disabled')}}), 'info');
     } catch (err) {
       console.error('Failed to toggle blacklist:', err);
       showToast('Failed to toggle blacklist', 'error');
@@ -95,7 +95,7 @@
   }
 
   function formatDate(timestamp: number): string {
-    return new Date(timestamp * 1000).toLocaleDateString(undefined, {
+    return new Date(timestamp * 1000).toLocaleDateString($locale ? $locale : 'en-us', {
       year: 'numeric',
       month: 'short',
       day: 'numeric'
@@ -105,12 +105,14 @@
 
 <ViewTransition duration={200} distance={12} direction="down">
 <div class="blacklist-manager">
-  <!-- Header -->
-  <div class="header">
+ <div class="top-bar">
     <button class="back-btn" onclick={onBack}>
       <ArrowLeft size={16} />
       <span>{$t('actions.back')}</span>
     </button>
+  </div>
+  <!-- Header -->
+  <div class="header">
     <div class="title-section">
       <Ban size={24} class="title-icon" />
       <h1>{$t('settings.blacklist.title')}</h1>

@@ -166,7 +166,7 @@
     if (tier === 'mp3') {
       return 'MP3';
     }
-    return 'CD Quality';
+    return $t('quality.cdQuality');
   });
 
   const tierLabel = $derived.by(() => {

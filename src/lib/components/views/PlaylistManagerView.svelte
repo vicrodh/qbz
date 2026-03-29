@@ -882,20 +882,20 @@
 
 <ViewTransition duration={200} distance={12} direction="down">
 <div class="playlist-manager">
+  <button class="back-btn" onclick={onBack}>
+    <ArrowLeft size={16} />
+    <span>{$t('actions.back')}</span>
+  </button>
   <!-- Header -->
   <div class="header">
-    <button class="back-btn" onclick={onBack}>
-      <ArrowLeft size={16} />
-      <span>Back</span>
-    </button>
-    <h1>Playlist Manager</h1>
+    <h1>{$t('playlistManager.heading')}</h1>
   </div>
 
   <!-- Breadcrumb Navigation (when inside a folder, only in folder mode and not tree) -->
   {#if folderMode && viewMode !== 'tree' && currentFolderId && currentFolder}
     <div class="breadcrumb">
       <button class="breadcrumb-item" onclick={navigateToRoot}>
-        All Playlists
+        {$t('playlist.allPlaylists')}
       </button>
       <ChevronRight size={14} class="breadcrumb-separator" />
       <span class="breadcrumb-current">{currentFolder.name}</span>
@@ -909,7 +909,7 @@
       <Search size={16} class="search-icon" />
       <input
         type="text"
-        placeholder="Search playlists..."
+        placeholder={$t('placeholders.searchPlaylists')}
         bind:value={searchQuery}
         class="search-input"
       />
@@ -941,9 +941,9 @@
         {/if}
         <span>
           {#if offlineStatus.isOffline}
-            {filter === 'all' || filter === 'offline_all' ? $t('offline.available') : filter === 'offline_partial' ? $t('offline.partiallyAvailable') : filter === 'offline_unavailable' ? $t('offline.notAvailableOffline') : filter === 'visible' ? 'Visible' : 'Hidden'}
+            {filter === 'all' || filter === 'offline_all' ? $t('offline.available') : filter === 'offline_partial' ? $t('offline.partiallyAvailable') : filter === 'offline_unavailable' ? $t('offline.notAvailableOffline') : filter === 'visible' ? $t('filter.visible') : $t('filter.hidden')}
           {:else}
-            {filter === 'all' ? 'All' : filter === 'visible' ? 'Visible' : 'Hidden'}
+            {filter === 'all' ? $t('filter.all') : filter === 'visible' ? $t('filter.visible') : $t('filter.hidden')}
           {/if}
         </span>
       </button>
@@ -968,13 +968,13 @@
             <div class="dropdown-divider"></div>
           {/if}
           <button class="dropdown-item" class:selected={filter === 'all' && !offlineStatus.isOffline} onclick={() => { filter = 'all'; closeFilterMenu(); }}>
-            {offlineStatus.isOffline ? $t('filter.all') : 'All'}
+            {offlineStatus.isOffline ? $t('filter.all') : $t('filter.all')}
           </button>
           <button class="dropdown-item" class:selected={filter === 'visible'} onclick={() => { filter = 'visible'; closeFilterMenu(); }}>
-            Visible
+            {$t('filter.visible')}
           </button>
           <button class="dropdown-item" class:selected={filter === 'hidden'} onclick={() => { filter = 'hidden'; closeFilterMenu(); }}>
-            Hidden
+            {$t('filter.hidden')}
           </button>
         </div>
       {/if}
@@ -994,7 +994,7 @@
       }}>
         <ArrowUpDown size={16} />
         <span>
-          {sort === 'name' ? 'Name' : sort === 'recent' ? 'Recent' : sort === 'playcount' ? 'Play Count' : sort === 'tracks' ? 'Track Count' : 'Custom'}
+          {sort === 'name' ? $t('sort.nameAZ') : sort === 'recent' ? $t('sort.recent') : sort === 'playcount' ? $t('sort.playCount') : sort === 'tracks' ? $t('sort.trackCount') : $t('sort.custom')}
         </span>
       </button>
       {#if showSortMenu}
@@ -1006,19 +1006,19 @@
           onmouseleave={() => isHoveringSortMenu = false}
         >
           <button class="dropdown-item" class:selected={sort === 'name'} onclick={() => { sort = 'name'; closeSortMenu(); }}>
-            Name (A-Z)
+            {$t('sort.nameAZ')}
           </button>
           <button class="dropdown-item" class:selected={sort === 'recent'} onclick={() => { sort = 'recent'; closeSortMenu(); }}>
-            Recent
+            {$t('sort.recent')}
           </button>
           <button class="dropdown-item" class:selected={sort === 'playcount'} onclick={() => { sort = 'playcount'; closeSortMenu(); }}>
-            Play Count
+            {$t('sort.playCount')}
           </button>
           <button class="dropdown-item" class:selected={sort === 'tracks'} onclick={() => { sort = 'tracks'; closeSortMenu(); }}>
-            Track Count
+            {$t('sort.trackCount')}
           </button>
           <button class="dropdown-item" class:selected={sort === 'custom'} onclick={() => { sort = 'custom'; closeSortMenu(); }}>
-            Custom Order
+            {$t('sort.custom')}
           </button>
         </div>
       {/if}
@@ -1061,28 +1061,28 @@
     {#if folderMode && !currentFolderId}
       <button class="control-btn" onclick={openCreateFolderModal}>
         <FolderPlus size={16} />
-        <span>New Folder</span>
+        <span>{$t('actions.newFolder')}</span>
       </button>
     {/if}
 
     <span class="playlist-count">
       {#if !currentFolderId && folders.length > 0}
-        {folders.length} folders, {displayPlaylists.length} playlists
+        {folders.length} {$t('playlist.folders').toLowerCase()}, {displayPlaylists.length} {$t('playlist.playlists')}
       {:else}
-        {displayPlaylists.length} playlists
+        {displayPlaylists.length} {$t('playlist.playlists')}
       {/if}
     </span>
   </div>
 
   {#if sort === 'custom'}
-    <p class="drag-hint">Drag playlists to reorder them{#if !currentFolderId && folders.length > 0}, or drop onto a folder to move{/if}</p>
+    <p class="drag-hint">{$t('playlist.dragPlaylists')}{#if !currentFolderId && folders.length > 0}, {$t('playlist.dropOntoFolder')}{/if}</p>
   {/if}
 
   <!-- Content -->
   {#if loading}
     <div class="loading" class:fading={spinnerFading}>
       <div class="spinner"></div>
-      <p>Loading playlists...</p>
+      <p>{$t('toast.loadingPlaylists')}</p>
     </div>
   {:else}
     <ViewTransition duration={200} distance={12} direction="up">
@@ -1093,7 +1093,7 @@
           class="section-header-btn"
           onclick={() => foldersCollapsed = !foldersCollapsed}
         >
-          <span class="section-title">Folders ({folders.length})</span>
+          <span class="section-title">{$t('playlist.folders')} ({folders.length})</span>
           <span class="info-icon" title="To drag playlists into folders, enable Custom sort order">
             <Info size={12} />
           </span>
@@ -1142,12 +1142,12 @@
                       {/if}
                     </div>
                     <span class="folder-name">{folder.name}</span>
-                    <span class="folder-count">{getPlaylistCountInFolder(folder.id)} playlists</span>
+                    <span class="folder-count">{getPlaylistCountInFolder(folder.id)} {$t('playlist.playlists')}</span>
                   </div>
                   <button
                     class="folder-edit-btn"
                     onclick={(e) => { e.stopPropagation(); openEditFolderModal(folder); }}
-                    title="Edit folder"
+                    title={$t('library.editFolder')}
                   >
                     <Pencil size={12} />
                   </button>
@@ -1192,7 +1192,7 @@
                   <button
                     class="folder-list-edit"
                     onclick={(e) => { e.stopPropagation(); openEditFolderModal(folder); }}
-                    title="Edit folder"
+                    title={$t('library.editFolder')}
                   >
                     <Pencil size={12} />
                   </button>
@@ -1295,14 +1295,14 @@
 
           <!-- Footer: meta + action buttons inline -->
           <div class="grid-item-footer">
-            <span class="meta">{getTotalTrackCount(playlist)} tracks{#if getLocalTrackCount(playlist.id) > 0} <span class="local-count">({getLocalTrackCount(playlist.id)} local)</span>{/if}</span>
+            <span class="meta">{getTotalTrackCount(playlist)} {$t('playlist.tracks')}{#if getLocalTrackCount(playlist.id) > 0} <span class="local-count">({getLocalTrackCount(playlist.id)} local)</span>{/if}</span>
             {#if !isUnavailable}
               <div class="footer-actions">
                 <button
                   class="favorite-btn"
                   class:is-active={isFavorite}
                   onclick={(e) => { e.stopPropagation(); toggleFavorite(playlist); }}
-                  title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                  title={isFavorite ? $t('actions.removeFromFavorites') : $t('actions.addToFavorites')}
                 >
                   <Heart size={12} fill={isFavorite ? 'var(--accent-primary)' : 'none'} color={isFavorite ? 'var(--accent-primary)' : 'currentColor'} />
                 </button>
@@ -1310,7 +1310,7 @@
                   class="visibility-btn"
                   class:is-hidden={isHidden}
                   onclick={(e) => { e.stopPropagation(); toggleHidden(playlist); }}
-                  title={isHidden ? 'Show in sidebar' : 'Hide from sidebar'}
+                  title={isHidden ? $t('playlist.showInSidebar') : $t('playlist.hideFromSidebar')}
                 >
                   {#if isHidden}
                     <EyeOff size={12} />
@@ -1321,7 +1321,7 @@
                 <button
                   class="edit-btn"
                   onclick={(e) => { e.stopPropagation(); openEditModal(playlist); }}
-                  title="Edit playlist"
+                  title={$t('playlist.editPlaylist')}
                 >
                   <Pencil size={12} />
                 </button>
@@ -1387,7 +1387,7 @@
                     </div>
                     <div class="tree-item-info">
                       <span class="tree-item-name">{playlist.name}</span>
-                      <span class="tree-item-meta">{getTotalTrackCount(playlist)} tracks</span>
+                      <span class="tree-item-meta">{getTotalTrackCount(playlist)} {$t('playlist.tracks')}</span>
                     </div>
                     {#if !isUnavailable}
                       <div class="tree-item-actions">
@@ -1395,7 +1395,7 @@
                           class="favorite-btn"
                           class:is-active={isFavorite}
                           onclick={(e) => { e.stopPropagation(); toggleFavorite(playlist); }}
-                          title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                          title={isFavorite ? $t('actions.removeFromFavorites') : $t('actions.addToFavorites')}
                         >
                           <Heart size={12} fill={isFavorite ? 'var(--accent-primary)' : 'none'} color={isFavorite ? 'var(--accent-primary)' : 'currentColor'} />
                         </button>
@@ -1403,7 +1403,7 @@
                           class="visibility-btn"
                           class:is-hidden={isHidden}
                           onclick={(e) => { e.stopPropagation(); toggleHidden(playlist); }}
-                          title={isHidden ? 'Show in sidebar' : 'Hide from sidebar'}
+                          title={isHidden ? $t('playlist.showInSidebar') : $t('playlist.hideFromSidebar')}
                         >
                           {#if isHidden}
                             <EyeOff size={12} />
@@ -1414,7 +1414,7 @@
                         <button
                           class="edit-btn"
                           onclick={(e) => { e.stopPropagation(); openEditModal(playlist); }}
-                          title="Edit playlist"
+                          title={$t('playlist.editPlaylist')}
                         >
                           <Pencil size={12} />
                         </button>
@@ -1448,7 +1448,7 @@
             </div>
             <div class="tree-item-info">
               <span class="tree-item-name">{playlist.name}</span>
-              <span class="tree-item-meta">{getTotalTrackCount(playlist)} tracks</span>
+              <span class="tree-item-meta">{getTotalTrackCount(playlist)} {$t('playlist.tracks')}</span>
             </div>
             {#if !isUnavailable}
               <div class="tree-item-actions">
@@ -1456,7 +1456,7 @@
                   class="favorite-btn"
                   class:is-active={isFavorite}
                   onclick={(e) => { e.stopPropagation(); toggleFavorite(playlist); }}
-                  title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                  title={isFavorite ? $t('actions.removeFromFavorites') : $t('actions.addToFavorites')}
                 >
                   <Heart size={12} fill={isFavorite ? 'var(--accent-primary)' : 'none'} color={isFavorite ? 'var(--accent-primary)' : 'currentColor'} />
                 </button>
@@ -1464,7 +1464,7 @@
                   class="visibility-btn"
                   class:is-hidden={isHidden}
                   onclick={(e) => { e.stopPropagation(); toggleHidden(playlist); }}
-                  title={isHidden ? 'Show in sidebar' : 'Hide from sidebar'}
+                  title={isHidden ? $t('playlist.showInSidebar') : $t('playlist.hideFromSidebar')}
                 >
                   {#if isHidden}
                     <EyeOff size={12} />
@@ -1475,7 +1475,7 @@
                 <button
                   class="edit-btn"
                   onclick={(e) => { e.stopPropagation(); openEditModal(playlist); }}
-                  title="Edit playlist"
+                  title={$t('playlist.editPlaylist')}
                 >
                   <Pencil size={12} />
                 </button>
@@ -1543,7 +1543,7 @@
           <div class="info">
             <span class="name">{playlist.name}</span>
             <span class="meta">
-              {getTotalTrackCount(playlist)} tracks{#if getLocalTrackCount(playlist.id) > 0} <span class="local-count">({getLocalTrackCount(playlist.id)} local)</span>{/if}
+              {getTotalTrackCount(playlist)} {$t('playlist.tracks')}{#if getLocalTrackCount(playlist.id) > 0} <span class="local-count">({getLocalTrackCount(playlist.id)} {$t('playlist.local')})</span>{/if}
               {#if playlist.duration > 0}
                 <span class="dot">.</span>
                 {formatDuration(playlist.duration)}
@@ -1574,7 +1574,7 @@
               class="favorite-btn"
               class:is-active={isFavorite}
               onclick={(e) => { e.stopPropagation(); toggleFavorite(playlist); }}
-              title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+              title={isFavorite ? $t('actions.removeFromFavorites') : $t('actions.addToFavorites')}
             >
               <Heart size={14} fill={isFavorite ? 'var(--accent-primary)' : 'none'} color={isFavorite ? 'var(--accent-primary)' : 'currentColor'} />
             </button>
@@ -1582,7 +1582,7 @@
               class="visibility-btn"
               class:is-hidden={isHidden}
               onclick={(e) => { e.stopPropagation(); toggleHidden(playlist); }}
-              title={isHidden ? 'Show in sidebar' : 'Hide from sidebar'}
+              title={isHidden ? $t('playlist.showInSidebar') : $t('playlist.hideFromSidebar')}
             >
               {#if isHidden}
                 <EyeOff size={14} />
@@ -1593,7 +1593,7 @@
             <button
               class="edit-btn"
               onclick={(e) => { e.stopPropagation(); openEditModal(playlist); }}
-              title="Edit playlist"
+              title={$t('playlist.editPlaylist')}
             >
               <Pencil size={14} />
             </button>
