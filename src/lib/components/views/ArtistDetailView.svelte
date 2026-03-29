@@ -3,7 +3,7 @@
   import { open, save } from '@tauri-apps/plugin-dialog';
   import { openUrl } from '@tauri-apps/plugin-opener';
   import { setCustomImage, removeCustomImage as removeCustomImageFromStore } from '$lib/stores/customArtistImageStore';
-  import { t } from 'svelte-i18n';
+  import { t, locale } from 'svelte-i18n';
   import { cachedSrc } from '$lib/actions/cachedImage';
   import { ArrowLeft, User, ChevronDown, ChevronUp, Play, Music, Heart, Search, X, ChevronLeft, ChevronRight, Radio, MoreHorizontal, Info, Disc, Settings, CheckSquare, PanelRightClose, ThumbsDown } from 'lucide-svelte';
   import {
@@ -929,6 +929,18 @@
     }
     return begin;
   }
+
+  function formatMbDate_v2(dateToFormat: string): string {
+    const date = new Date(dateToFormat);
+    if (!isNaN(date.getTime())) {
+      return date.toLocaleDateString($locale ? $locale : 'en-us', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+    }
+    return dateToFormat;
+  };
 
   // Load MusicBrainz relationships for artist enrichment
   async function loadMusicBrainzRelationships() {
@@ -2713,7 +2725,7 @@
                   <span class="origin-label">
                     {mbMetadata.artist_type === 'person' ? $t('artist.born') : $t('artist.founded')}
                   </span>
-                  <span class="origin-value">{formatMbDate(mbMetadata.life_span)}</span>
+                  <span class="origin-value">{formatMbDate_v2(mbMetadata.life_span.begin)}</span>
                 </div>
               {/if}
               {#if mbMetadata.location}
@@ -2755,6 +2767,14 @@
                   {:else}
                     <span class="origin-value">{mbMetadata.location.display_name}</span>
                   {/if}
+                </div>
+              {/if}
+              {#if mbMetadata.life_span?.end}
+                <div class="origin-row">
+                  <span class="origin-label">
+                    {mbMetadata.artist_type === 'person' ? $t('artist.died') : $t('artist.disbanded')}
+                  </span>
+                  <span class="origin-value">{formatMbDate_v2(mbMetadata.life_span.end)}</span>
                 </div>
               {/if}
             {/if}
