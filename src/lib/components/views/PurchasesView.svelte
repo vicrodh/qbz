@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { t } from '$lib/i18n';
+  import { t, locale } from '$lib/i18n';
   import {
     Search, X, Download, Check, Loader2, Music, Disc3, ShoppingBag,
     ChevronDown, LayoutGrid, List
@@ -149,7 +149,7 @@
   function formatPurchaseDate(ts?: number): string {
     if (!ts) return '';
     try {
-      return new Date(ts * 1000).toLocaleDateString(undefined, {
+      return new Date(ts * 1000).toLocaleDateString($locale ? $locale : 'en-us', {
         year: 'numeric',
         month: 'short',
         day: 'numeric',
