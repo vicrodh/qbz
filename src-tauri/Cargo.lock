@@ -230,6 +230,7 @@ dependencies = [
  "futures-util",
  "getrandom 0.4.2",
  "serde",
+ "serde_repr",
  "tokio",
  "zbus",
 ]
@@ -3157,21 +3158,6 @@ dependencies = [
 
 [[package]]
 name = "lofty"
-version = "0.18.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f75066eb1d25a7047fb2667edb410ae2592439ed81546f95c28b0a1c7d7d3818"
-dependencies = [
- "byteorder",
- "data-encoding",
- "flate2",
- "lofty_attr 0.9.0",
- "log",
- "ogg_pager 0.6.1",
- "paste",
-]
-
-[[package]]
-name = "lofty"
 version = "0.23.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6d0c107dba5af049cf1c36b646fc1ba0cd2705f40d766d2c4c64f1b797c5fbed"
@@ -3179,21 +3165,10 @@ dependencies = [
  "byteorder",
  "data-encoding",
  "flate2",
- "lofty_attr 0.12.0",
+ "lofty_attr",
  "log",
- "ogg_pager 0.7.1",
+ "ogg_pager",
  "paste",
-]
-
-[[package]]
-name = "lofty_attr"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "764b60e1ddd07e5665a6a17636a95cd7d8f3b86c73503a69c32979d05f72f3cf"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.117",
 ]
 
 [[package]]
@@ -3803,15 +3778,6 @@ dependencies = [
  "objc2-app-kit",
  "objc2-core-foundation",
  "objc2-foundation",
-]
-
-[[package]]
-name = "ogg_pager"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "87b0bef808533c5890ab77279538212efdbbbd9aa4ef1ccdfcfbf77a42f7e6fa"
-dependencies = [
- "byteorder",
 ]
 
 [[package]]
@@ -4606,7 +4572,7 @@ dependencies = [
  "dirs 5.0.1",
  "glob",
  "image",
- "lofty 0.18.2",
+ "lofty",
  "log",
  "rusqlite",
  "serde",
@@ -4651,7 +4617,7 @@ dependencies = [
  "image",
  "keyring",
  "lazy_static",
- "lofty 0.23.3",
+ "lofty",
  "log",
  "md-5",
  "mupdf",

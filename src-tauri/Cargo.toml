@@ -145,7 +145,7 @@ futures-util = "0.3"
 # Platform-specific dependencies
 [target.'cfg(target_os = "linux")'.dependencies]
 tauri-plugin-dialog = { version = "2.6.0" }
-ashpd = { version = "0.13", default-features = false, features = ["tokio", "notification"] }
+ashpd = { version = "0.13", default-features = false, features = ["tokio", "notification", "inhibit"] }
 
 # Direct ALSA access for bit-perfect playback (bypasses CPAL limitations)
 alsa = "0.9"

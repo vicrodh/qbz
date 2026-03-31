@@ -27,6 +27,7 @@ pub mod config;
 pub mod credentials;
 pub mod discogs;
 pub mod flatpak;
+pub mod idle_inhibit;
 pub mod image_cache;
 pub mod lastfm;
 pub mod library;
@@ -83,6 +84,7 @@ pub struct AppState {
     pub lastfm: Arc<Mutex<LastFmClient>>,
     pub songlink: SongLinkClient,
     pub visualizer: Visualizer,
+    pub idle_inhibitor: idle_inhibit::IdleInhibitor,
 }
 
 impl AppState {
@@ -139,6 +141,7 @@ impl AppState {
             lastfm: Arc::new(Mutex::new(LastFmClient::default())),
             songlink: SongLinkClient::new(),
             visualizer,
+            idle_inhibitor: idle_inhibit::IdleInhibitor::new(),
         }
     }
 }
@@ -1010,6 +1013,16 @@ pub fn run() {
                             media_controls.set_stopped();
                         } else {
                             media_controls.set_playback_with_progress(is_playing, position);
+                        }
+                    }
+
+                    // Idle inhibit: prevent screen/suspend while playing
+                    if is_playing != last_is_playing || track_cleared {
+                        let inhibitor = &app_handle.state::<AppState>().idle_inhibitor;
+                        if is_playing {
+                            inhibitor.inhibit().await;
+                        } else {
+                            inhibitor.uninhibit().await;
                         }
                     }
 
