@@ -1015,13 +1015,6 @@ fn queue_version_opt(
     Ok(Some(QueueVersion::new(major, minor)))
 }
 
-fn required_i32_to_u64(value: Option<i32>, field_name: &str) -> Result<u64, ProtocolError> {
-    let raw = value.ok_or_else(|| {
-        ProtocolError::InvalidPayload(format!("missing required numeric field '{field_name}'"))
-    })?;
-    i32_to_u64(raw)
-}
-
 fn optional_i32_to_u64_named(
     value: Option<i32>,
     field_name: &str,
