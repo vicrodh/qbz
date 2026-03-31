@@ -421,6 +421,42 @@ fn should_use_main_window_transparency() -> bool {
         .unwrap_or(false)
 }
 
+/// Check if a string looks like a Qobuz link (custom scheme or web URL).
+fn is_qobuz_link(s: &str) -> bool {
+    s.starts_with("qobuzapp://")
+        || s.starts_with("https://play.qobuz.com/")
+        || s.starts_with("http://play.qobuz.com/")
+        || s.starts_with("https://open.qobuz.com/")
+        || s.starts_with("http://open.qobuz.com/")
+}
+
+/// Resolve a Qobuz link and emit the result to the frontend.
+/// If `delay` is true, waits 1500ms to give the frontend time to mount (first launch).
+fn handle_qobuz_link(handle: &tauri::AppHandle, url: &str, delay: bool) {
+    if !is_qobuz_link(url) {
+        return;
+    }
+    match qbz_qobuz::resolve_link(url) {
+        Ok(resolved) => {
+            log::info!("[Link] Resolved: {:?}", resolved);
+            if delay {
+                let h = handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+                    if let Err(e) = h.emit("link:resolved", &resolved) {
+                        log::error!("[Link] Failed to emit resolved link: {}", e);
+                    }
+                });
+            } else if let Err(e) = handle.emit("link:resolved", &resolved) {
+                log::error!("[Link] Failed to emit resolved link: {}", e);
+            }
+        }
+        Err(e) => {
+            log::debug!("[Link] Failed to resolve '{}': {}", url.split('?').next().unwrap_or(url), e);
+        }
+    }
+}
+
 pub fn run() {
     // Load .env file if present (for development)
     // Silently ignore if not found (production builds use compile-time env vars)
@@ -693,18 +729,13 @@ pub fn run() {
 
             // Check if second instance was launched with a Qobuz link arg
             for arg in &args {
-                if arg.starts_with("qobuzapp://")
-                    || arg.contains("play.qobuz.com/")
-                    || arg.contains("open.qobuz.com/")
-                {
-                    if let Ok(resolved) = qbz_qobuz::resolve_link(arg) {
-                        log::info!("Single-instance forwarding link: {:?}", resolved);
-                        let _ = app.emit("link:resolved", &resolved);
-                    }
+                if is_qobuz_link(arg) {
+                    handle_qobuz_link(app, arg, false);
                     break;
                 }
             }
         }))
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -856,28 +887,34 @@ pub fn run() {
             // NOTE: Subscription purge check moved to activate_user_session
             // (runs after login when per-user state is available)
 
-            // Check if app was launched with a Qobuz link argument
+            // Check if app was launched with a Qobuz link argument.
             // (first launch, not single-instance — that's handled by the plugin above)
+            // Note: on macOS, URLs arrive via Apple Events (deep-link handler below),
+            // not CLI args, so this path is only active on Linux/Windows.
             {
-                let launch_handle = app.handle().clone();
                 let args: Vec<String> = std::env::args().collect();
                 for arg in &args[1..] {
-                    // skip binary name
-                    if arg.starts_with("qobuzapp://")
-                        || arg.contains("play.qobuz.com/")
-                        || arg.contains("open.qobuz.com/")
-                    {
-                        if let Ok(resolved) = qbz_qobuz::resolve_link(arg) {
-                            log::info!("Launch arg link resolved: {:?}", resolved);
-                            // Delay emission to give frontend time to mount
-                            tauri::async_runtime::spawn(async move {
-                                tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
-                                let _ = launch_handle.emit("link:resolved", &resolved);
-                            });
-                        }
+                    if is_qobuz_link(arg) {
+                        handle_qobuz_link(app.handle(), arg, true);
                         break;
                     }
                 }
+            }
+
+            // Register deep link handler for qobuzapp:// URLs.
+            // On macOS, URLs are delivered via Apple Events (not CLI args), so
+            // this is the only way to receive them. On Linux/Windows, the
+            // single-instance plugin forwards URL args to this handler too.
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                let deep_link_handle = app.handle().clone();
+                app.deep_link().on_open_url(move |event| {
+                    for url in event.urls() {
+                        let url_str = url.as_str();
+                        log::debug!("[Deep Link] Received URL: {}", url_str.split('?').next().unwrap_or(url_str));
+                        handle_qobuz_link(&deep_link_handle, url_str, false);
+                    }
+                });
             }
 
             // Start background task to emit playback events
