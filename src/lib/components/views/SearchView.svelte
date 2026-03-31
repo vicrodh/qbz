@@ -3014,20 +3014,6 @@
     color: var(--accent-primary);
   }
 
-  .view-more-info {
-    width: 160px;
-    padding: 0 4px;
-    text-align: center;
-  }
-
-  .view-more-text {
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--text-muted);
-    line-height: 1.3;
-    display: block;
-  }
-
   .tracks-section {
     width: 100%;
   }
