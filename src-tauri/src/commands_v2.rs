@@ -10153,9 +10153,12 @@ pub async fn v2_musicbrainz_get_artist_metadata(
         if loc.city.is_some() {
             if let Some(ref area_id) = loc.area_id {
                 let client = state.client.lock().await;
-                if let Ok(Some(real_country)) = client.resolve_area_country(area_id).await {
-                    loc.display_name = format!("{}, {}", loc.display_name, real_country);
-                    loc.country = Some(real_country);
+                if let Ok(Some((country_name, country_code))) =
+                    client.resolve_area_country(area_id).await
+                {
+                    loc.display_name = format!("{}, {}", loc.display_name, country_name);
+                    loc.country = Some(country_name);
+                    loc.country_code = country_code;
                 }
             }
         }

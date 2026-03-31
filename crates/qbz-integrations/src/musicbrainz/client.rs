@@ -263,10 +263,25 @@ impl MusicBrainzClient {
     }
 
     /// Resolve an artist to get MusicBrainz ID
+    ///
+    /// Prefers exact name matches over highest score to avoid disambiguation
+    /// issues (e.g., multiple artists named "The Warning").
     pub async fn resolve_artist(&self, name: &str) -> IntegrationResult<Option<ResolvedArtist>> {
-        let response = self.search_artist(name, 5).await?;
+        let response = self.search_artist(name, 10).await?;
 
-        if let Some(artist) = response.artists.first() {
+        if response.artists.is_empty() {
+            return Ok(None);
+        }
+
+        // Prefer exact name match (case-insensitive)
+        let target = name.trim().to_lowercase();
+        let best = response
+            .artists
+            .iter()
+            .find(|a| a.name.trim().to_lowercase() == target && a.score.unwrap_or(0) >= 90)
+            .or_else(|| response.artists.first());
+
+        if let Some(artist) = best {
             let confidence = MatchConfidence::from_score(artist.score);
 
             return Ok(Some(ResolvedArtist {
@@ -653,14 +668,14 @@ impl MusicBrainzClient {
 
     /// Resolve the country that an area belongs to by walking up the hierarchy.
     ///
-    /// Frankfurt am Main → Hessen → Germany → returns "Germany"
-    /// Monterrey → Nuevo León → Mexico → returns "Mexico"
+    /// Frankfurt am Main → Hessen → Germany → returns ("Germany", Some("de"))
+    /// Monterrey → Nuevo León → Mexico → returns ("Mexico", Some("mx"))
     ///
-    /// Returns None if the country cannot be determined within max_hops.
+    /// Returns (country_name, country_code_lowercase) or None.
     pub async fn resolve_area_country(
         &self,
         area_id: &str,
-    ) -> IntegrationResult<Option<String>> {
+    ) -> IntegrationResult<Option<(String, Option<String>)>> {
         let mut current_id = area_id.to_string();
         let max_hops = 5;
 
@@ -674,7 +689,12 @@ impl MusicBrainzClient {
                 .map(|t| t.eq_ignore_ascii_case("country"))
                 .unwrap_or(false)
             {
-                return Ok(Some(detail.name));
+                let code = detail
+                    .iso_codes
+                    .as_ref()
+                    .and_then(|c| c.first())
+                    .map(|c| c.to_lowercase());
+                return Ok(Some((detail.name, code)));
             }
 
             // Find "part of" parent
@@ -692,13 +712,17 @@ impl MusicBrainzClient {
 
             match parent {
                 Some(p) => {
-                    // If parent is a country, return it directly
                     if p.area_type
                         .as_deref()
                         .map(|t| t.eq_ignore_ascii_case("country"))
                         .unwrap_or(false)
                     {
-                        return Ok(Some(p.name.clone()));
+                        let code = p
+                            .iso_codes
+                            .as_ref()
+                            .and_then(|c| c.first())
+                            .map(|c| c.to_lowercase());
+                        return Ok(Some((p.name.clone(), code)));
                     }
                     current_id = p.id.clone();
                 }
