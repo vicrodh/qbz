@@ -651,6 +651,64 @@ impl MusicBrainzClient {
         Ok(None)
     }
 
+    /// Resolve the country that an area belongs to by walking up the hierarchy.
+    ///
+    /// Frankfurt am Main → Hessen → Germany → returns "Germany"
+    /// Monterrey → Nuevo León → Mexico → returns "Mexico"
+    ///
+    /// Returns None if the country cannot be determined within max_hops.
+    pub async fn resolve_area_country(
+        &self,
+        area_id: &str,
+    ) -> IntegrationResult<Option<String>> {
+        let mut current_id = area_id.to_string();
+        let max_hops = 5;
+
+        for _hop in 0..max_hops {
+            let detail = self.get_area_with_relations(&current_id).await?;
+
+            // If current area IS a country, return it
+            if detail
+                .area_type
+                .as_deref()
+                .map(|t| t.eq_ignore_ascii_case("country"))
+                .unwrap_or(false)
+            {
+                return Ok(Some(detail.name));
+            }
+
+            // Find "part of" parent
+            let parent = detail
+                .relations
+                .as_ref()
+                .and_then(|rels| {
+                    rels.iter()
+                        .find(|rel| {
+                            rel.relation_type == "part of"
+                                && rel.direction.as_deref() == Some("backward")
+                        })
+                        .and_then(|rel| rel.area.as_ref())
+                });
+
+            match parent {
+                Some(p) => {
+                    // If parent is a country, return it directly
+                    if p.area_type
+                        .as_deref()
+                        .map(|t| t.eq_ignore_ascii_case("country"))
+                        .unwrap_or(false)
+                    {
+                        return Ok(Some(p.name.clone()));
+                    }
+                    current_id = p.id.clone();
+                }
+                None => return Ok(None),
+            }
+        }
+
+        Ok(None)
+    }
+
     // ============ Internal Helpers ============
 
     async fn check_enabled(&self) -> IntegrationResult<()> {

@@ -10145,7 +10145,21 @@ pub async fn v2_musicbrainz_get_artist_metadata(
     drop(client);
 
     // Extract metadata using the location discovery module (now uses V2 types)
-    let metadata = crate::musicbrainz::location_discovery::extract_metadata(&artist);
+    let mut metadata = crate::musicbrainz::location_discovery::extract_metadata(&artist);
+
+    // Resolve real country from begin_area hierarchy (MB's "country" field is
+    // where the artist is active, not where they were born/formed)
+    if let Some(ref mut loc) = metadata.location {
+        if loc.city.is_some() {
+            if let Some(ref area_id) = loc.area_id {
+                let client = state.client.lock().await;
+                if let Ok(Some(real_country)) = client.resolve_area_country(area_id).await {
+                    loc.display_name = format!("{}, {}", loc.display_name, real_country);
+                    loc.country = Some(real_country);
+                }
+            }
+        }
+    }
 
     // Cache to V2 cache
     {
