@@ -3761,6 +3761,14 @@
   function handleKeydown(e: KeyboardEvent) {
     if (!isLoggedIn) return;
 
+    // Global fullscreen toggle (F11) — works even outside immersive player
+    if (e.key === 'F11') {
+      e.preventDefault();
+      const win = getCurrentWindow();
+      win.isFullscreen().then(fs => win.setFullscreen(!fs));
+      return;
+    }
+
     // Delegate to keybinding manager (handles input target filtering internally)
     keybindingHandler(e);
   }
