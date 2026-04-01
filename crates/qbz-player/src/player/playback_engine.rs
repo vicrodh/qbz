@@ -214,6 +214,7 @@ impl PlaybackEngine {
                 sink.append(source);
                 Ok(())
             }
+            #[cfg(target_os = "linux")]
             Self::AlsaDirect {
                 is_playing,
                 should_stop,
@@ -223,13 +224,10 @@ impl PlaybackEngine {
                 ..
             } => {
                 let is_first = source_queue.is_empty() && !is_playing.load(Ordering::SeqCst);
-
-                // Box the source iterator and push to queue
                 let boxed: BoxedSampleIter = Box::new(source.into_iter());
                 source_queue.push(boxed);
 
                 if is_first {
-                    // First source: reset position, clear stop, start playing
                     position_frames.store(0, Ordering::SeqCst);
                     should_stop.store(false, Ordering::SeqCst);
                     source_transition.store(false, Ordering::SeqCst);
@@ -241,6 +239,31 @@ impl PlaybackEngine {
 
                 Ok(())
             }
+            #[cfg(target_os = "freebsd")]
+            Self::OssDirect {
+                is_playing,
+                should_stop,
+                position_frames,
+                source_queue,
+                source_transition,
+                ..
+            } => {
+                let is_first = source_queue.is_empty() && !is_playing.load(Ordering::SeqCst);
+                let boxed: BoxedSampleIter = Box::new(source.into_iter());
+                source_queue.push(boxed);
+
+                if is_first {
+                    position_frames.store(0, Ordering::SeqCst);
+                    should_stop.store(false, Ordering::SeqCst);
+                    source_transition.store(false, Ordering::SeqCst);
+                    is_playing.store(true, Ordering::SeqCst);
+                    log::info!("[OSS Direct Engine] First source queued, playback starting");
+                } else {
+                    log::info!("[OSS Direct Engine] Source queued for gapless transition");
+                }
+
+                Ok(())
+            }
         }
     }
 
@@ -248,8 +271,14 @@ impl PlaybackEngine {
     pub fn play(&self) {
         match self {
             Self::Rodio { sink } => sink.play(),
+            #[cfg(target_os = "linux")]
             Self::AlsaDirect { is_playing, .. } => {
                 log::info!("[ALSA Direct Engine] Resume requested");
+                is_playing.store(true, Ordering::SeqCst);
+            }
+            #[cfg(target_os = "freebsd")]
+            Self::OssDirect { is_playing, .. } => {
+                log::info!("[OSS Direct Engine] Resume requested");
                 is_playing.store(true, Ordering::SeqCst);
             }
         }
@@ -259,8 +288,14 @@ impl PlaybackEngine {
     pub fn pause(&self) {
         match self {
             Self::Rodio { sink } => sink.pause(),
+            #[cfg(target_os = "linux")]
             Self::AlsaDirect { is_playing, .. } => {
                 log::info!("[ALSA Direct Engine] Pause requested");
+                is_playing.store(false, Ordering::SeqCst);
+            }
+            #[cfg(target_os = "freebsd")]
+            Self::OssDirect { is_playing, .. } => {
+                log::info!("[OSS Direct Engine] Pause requested");
                 is_playing.store(false, Ordering::SeqCst);
             }
         }
@@ -279,6 +314,7 @@ impl PlaybackEngine {
             Self::Rodio { sink } => {
                 sink.stop();
             }
+            #[cfg(target_os = "linux")]
             Self::AlsaDirect {
                 stream,
                 is_playing,
@@ -287,7 +323,7 @@ impl PlaybackEngine {
                 ..
             } => {
                 if should_stop.load(Ordering::SeqCst) {
-                    return; // Already stopped
+                    return;
                 }
                 log::info!("[ALSA Direct Engine] Stop requested");
                 should_stop.store(true, Ordering::SeqCst);
@@ -301,6 +337,29 @@ impl PlaybackEngine {
                     log::warn!("[ALSA Direct Engine] Stop failed: {}", e);
                 }
             }
+            #[cfg(target_os = "freebsd")]
+            Self::OssDirect {
+                stream,
+                is_playing,
+                should_stop,
+                playback_thread,
+                ..
+            } => {
+                if should_stop.load(Ordering::SeqCst) {
+                    return;
+                }
+                log::info!("[OSS Direct Engine] Stop requested");
+                should_stop.store(true, Ordering::SeqCst);
+                is_playing.store(false, Ordering::SeqCst);
+
+                if let Some(handle) = playback_thread.take() {
+                    let _ = handle.join();
+                }
+
+                if let Err(e) = stream.stop() {
+                    log::warn!("[OSS Direct Engine] Stop failed: {}", e);
+                }
+            }
         }
     }
 
@@ -308,23 +367,21 @@ impl PlaybackEngine {
     pub fn set_volume(&self, volume: f32) {
         match self {
             Self::Rodio { sink } => sink.set_volume(volume),
+            #[cfg(target_os = "linux")]
             Self::AlsaDirect {
                 stream,
                 hardware_volume,
                 ..
             } => {
                 if *hardware_volume {
-                    #[cfg(target_os = "linux")]
-                    {
-                        if let Err(e) = stream.set_hardware_volume(volume) {
-                            log::warn!("[ALSA Direct Engine] Hardware volume failed: {}", e);
-                        }
+                    if let Err(e) = stream.set_hardware_volume(volume) {
+                        log::warn!("[ALSA Direct Engine] Hardware volume failed: {}", e);
                     }
-                } else {
-                    log::debug!(
-                        "[ALSA Direct Engine] Hardware volume control disabled (use DAC/amplifier)"
-                    );
                 }
+            }
+            #[cfg(target_os = "freebsd")]
+            Self::OssDirect { .. } => {
+                log::debug!("[OSS Direct Engine] Hardware volume not supported");
             }
         }
     }
@@ -333,7 +390,14 @@ impl PlaybackEngine {
     pub fn empty(&self) -> bool {
         match self {
             Self::Rodio { sink } => sink.empty(),
+            #[cfg(target_os = "linux")]
             Self::AlsaDirect {
+                is_playing,
+                source_queue,
+                ..
+            } => !is_playing.load(Ordering::SeqCst) && source_queue.is_empty(),
+            #[cfg(target_os = "freebsd")]
+            Self::OssDirect {
                 is_playing,
                 source_queue,
                 ..
@@ -342,11 +406,17 @@ impl PlaybackEngine {
     }
 
     /// Check if a gapless source transition just happened.
-    /// Returns true once, then resets the flag.
     pub fn take_source_transition(&self) -> bool {
         match self {
             Self::Rodio { .. } => false,
+            #[cfg(target_os = "linux")]
             Self::AlsaDirect {
+                source_transition, ..
+            } => source_transition
+                .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
+                .is_ok(),
+            #[cfg(target_os = "freebsd")]
+            Self::OssDirect {
                 source_transition, ..
             } => source_transition
                 .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
@@ -354,44 +424,62 @@ impl PlaybackEngine {
         }
     }
 
-    /// Get current position in seconds (for ALSA Direct only)
+    /// Get current position in seconds (direct engine only)
     #[allow(dead_code)]
     pub fn position_secs(&self) -> Option<u64> {
         match self {
             Self::Rodio { .. } => None,
+            #[cfg(target_os = "linux")]
             Self::AlsaDirect {
                 position_frames,
                 stream,
                 ..
             } => {
                 let frames = position_frames.load(Ordering::SeqCst);
-                let sample_rate = stream.sample_rate() as u64;
-                Some(frames / sample_rate)
+                Some(frames / stream.sample_rate() as u64)
+            }
+            #[cfg(target_os = "freebsd")]
+            Self::OssDirect {
+                position_frames,
+                stream,
+                ..
+            } => {
+                let frames = position_frames.load(Ordering::SeqCst);
+                Some(frames / stream.sample_rate() as u64)
             }
         }
     }
 
-    /// Get duration in seconds (for ALSA Direct only)
+    /// Get duration in seconds (direct engine only)
     #[allow(dead_code)]
     pub fn duration_secs(&self) -> Option<u64> {
         match self {
             Self::Rodio { .. } => None,
+            #[cfg(target_os = "linux")]
             Self::AlsaDirect {
                 duration_frames,
                 stream,
                 ..
             } => {
                 let frames = duration_frames.load(Ordering::SeqCst);
-                let sample_rate = stream.sample_rate() as u64;
-                Some(frames / sample_rate)
+                Some(frames / stream.sample_rate() as u64)
+            }
+            #[cfg(target_os = "freebsd")]
+            Self::OssDirect {
+                duration_frames,
+                stream,
+                ..
+            } => {
+                let frames = duration_frames.load(Ordering::SeqCst);
+                Some(frames / stream.sample_rate() as u64)
             }
         }
     }
 
-    /// Check if using ALSA Direct engine
+    /// Check if using a direct hardware engine (ALSA or OSS)
     #[allow(dead_code)]
-    pub fn is_alsa_direct(&self) -> bool {
-        matches!(self, Self::AlsaDirect { .. })
+    pub fn is_direct(&self) -> bool {
+        !matches!(self, Self::Rodio { .. })
     }
 }
 
