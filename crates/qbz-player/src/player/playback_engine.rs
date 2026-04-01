@@ -8,7 +8,10 @@
 //! to enable gapless playback. When one source ends, the next is picked up
 //! seamlessly without interrupting the PCM stream.
 
+#[cfg(target_os = "linux")]
 use qbz_audio::AlsaDirectStream;
+#[cfg(target_os = "freebsd")]
+use qbz_audio::OssDirectStream;
 use rodio::{mixer::Mixer, Player as RodioPlayer, Source};
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -69,6 +72,7 @@ pub enum PlaybackEngine {
     /// Rodio-based (PipeWire, Pulse, ALSA via CPAL)
     Rodio { sink: RodioPlayer },
     /// Direct ALSA (hw: devices, bit-perfect) with gapless source queue
+    #[cfg(target_os = "linux")]
     AlsaDirect {
         stream: Arc<AlsaDirectStream>,
         is_playing: Arc<AtomicBool>,
@@ -77,7 +81,19 @@ pub enum PlaybackEngine {
         duration_frames: Arc<AtomicU64>,
         source_queue: Arc<SourceQueue>,
         playback_thread: Option<thread::JoinHandle<()>>,
-        /// Signals that the writer thread has consumed a source and moved to next
+        source_transition: Arc<AtomicBool>,
+        hardware_volume: bool,
+    },
+    /// Direct OSS (/dev/dspX, bit-perfect) with gapless source queue
+    #[cfg(target_os = "freebsd")]
+    OssDirect {
+        stream: Arc<OssDirectStream>,
+        is_playing: Arc<AtomicBool>,
+        should_stop: Arc<AtomicBool>,
+        position_frames: Arc<AtomicU64>,
+        duration_frames: Arc<AtomicU64>,
+        source_queue: Arc<SourceQueue>,
+        playback_thread: Option<thread::JoinHandle<()>>,
         source_transition: Arc<AtomicBool>,
         hardware_volume: bool,
     },
@@ -92,6 +108,7 @@ impl PlaybackEngine {
 
     /// Create ALSA Direct engine with gapless source queue.
     /// Spawns a single writer thread that lives for the engine's lifetime.
+    #[cfg(target_os = "linux")]
     pub fn new_alsa_direct(stream: Arc<AlsaDirectStream>, hardware_volume: bool) -> Self {
         let is_playing = Arc::new(AtomicBool::new(false));
         let should_stop = Arc::new(AtomicBool::new(false));
