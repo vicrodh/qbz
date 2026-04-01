@@ -1,5 +1,6 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
+  import { t } from 'svelte-i18n';
   import { onMount, onDestroy } from 'svelte';
   import { X, Cast, LoaderCircle, Monitor, Wifi, Tv, Speaker, Power } from 'lucide-svelte';
   import {
@@ -175,7 +176,7 @@
   <div class="overlay" onclick={onClose} onkeydown={(e) => e.key === 'Escape' && onClose()} role="presentation">
     <div class="picker" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="dialog" tabindex="-1">
       <div class="header">
-        <h3>Cast to Device</h3>
+        <h3>{$t('player.castToDevice')}</h3>
         <button class="close-btn" onclick={onClose}>
           <X size={20} />
         </button>
@@ -188,13 +189,13 @@
           <div class="connected-info">
             <ProtocolIcon size={20} />
             <div class="connected-text">
-              <span class="connected-label">Connected to</span>
+              <span class="connected-label">{$t('player.connectedTo')}</span>
               <span class="connected-name">{castState.device.name}</span>
             </div>
           </div>
           <button class="disconnect-btn" onclick={handleDisconnect}>
             <Power size={16} />
-            <span>Disconnect</span>
+            <span>{$t('integrations.disconnect')}</span>
           </button>
         </div>
       {:else}
@@ -230,12 +231,12 @@
           {#if connecting}
             <div class="loading">
               <LoaderCircle size={32} class="spin" />
-              <p>Connecting...</p>
+              <p>{$t('integrations.connecting')}</p>
             </div>
           {:else if loading && devices().length === 0}
             <div class="loading">
               <LoaderCircle size={32} class="spin" />
-              <p>Searching for devices...</p>
+              <p>{$t('toast.loadingDevices')}</p>
             </div>
           {:else if error}
             <div class="error">
@@ -244,8 +245,8 @@
           {:else if devices().length === 0}
             <div class="empty">
               <Wifi size={32} />
-              <p>No {getProtocolLabel(activeProtocol)} devices found</p>
-              <p class="hint">Make sure devices are on the same network</p>
+              <p>{$t('settings.integrations.noProtocolDeviceFound', { "values": { "protocol": getProtocolLabel(activeProtocol) } })}</p>
+              <p class="hint">{$t('settings.integrations.noProtocolDeviceFoundHint')}</p>
             </div>
           {:else}
             <div class="devices">
@@ -383,6 +384,7 @@
   }
 
   .hint {
+    text-align: center;
     font-size: 12px;
     color: #666666;
   }
