@@ -27,6 +27,7 @@ pub mod config;
 pub mod credentials;
 pub mod discogs;
 pub mod flatpak;
+#[cfg(target_os = "linux")]
 pub mod idle_inhibit;
 pub mod image_cache;
 pub mod lastfm;
@@ -84,6 +85,7 @@ pub struct AppState {
     pub lastfm: Arc<Mutex<LastFmClient>>,
     pub songlink: SongLinkClient,
     pub visualizer: Visualizer,
+    #[cfg(target_os = "linux")]
     pub idle_inhibitor: idle_inhibit::IdleInhibitor,
 }
 
@@ -141,6 +143,7 @@ impl AppState {
             lastfm: Arc::new(Mutex::new(LastFmClient::default())),
             songlink: SongLinkClient::new(),
             visualizer,
+            #[cfg(target_os = "linux")]
             idle_inhibitor: idle_inhibit::IdleInhibitor::new(),
         }
     }
@@ -1021,7 +1024,8 @@ pub fn run() {
                         }
                     }
 
-                    // Idle inhibit: prevent screen/suspend while playing
+                    // Idle inhibit: prevent screen/suspend while playing (Linux only, via XDG Portal)
+                    #[cfg(target_os = "linux")]
                     if is_playing != last_is_playing || track_cleared {
                         let inhibitor = &app_handle.state::<AppState>().idle_inhibitor;
                         if is_playing {
