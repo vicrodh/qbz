@@ -16,7 +16,7 @@
   import FavoritesEditModal from '../FavoritesEditModal.svelte';
   import BulkActionBar from '../BulkActionBar.svelte';
   import ViewTransition from '../ViewTransition.svelte';
-  import { type OfflineCacheStatus } from '$lib/stores/offlineCacheState';
+  import { type OfflineCacheStatus, cacheTracksForOfflineBatch } from '$lib/stores/offlineCacheState';
   import { consumeContextTrackFocus, setPlaybackContext } from '$lib/stores/playbackContextStore';
   import { normalizeFavoritesTabOrder } from '$lib/utils/favorites';
   import { syncCache as syncTrackCache, subscribe as subscribeFavorites, isTrackFavorite } from '$lib/stores/favoritesStore';
@@ -302,11 +302,26 @@
   }
 
   async function handleBulkMakeOffline() {
-    for (const id of selectedTrackIds) {
-      invoke('v2_cache_favorite_track', { trackId: id }).catch(() => {});
-    }
+    const tracksToCache = favoriteTracks
+      .filter(track => selectedTrackIds.has(track.id))
+      .map(track => ({
+        id: track.id,
+        title: track.title,
+        artist: track.performer?.name || 'Unknown',
+        album: track.album?.title,
+        albumId: track.album?.id,
+        durationSecs: track.duration,
+        quality: track.hires ? 'Hi-Res' : '-',
+        bitDepth: track.maximum_bit_depth,
+        sampleRate: track.maximum_sampling_rate,
+      }));
     trackSelectMode = false;
     selectedTrackIds = new Set();
+    if (tracksToCache.length > 0) {
+      await cacheTracksForOfflineBatch(tracksToCache).catch(err => {
+        console.error('Failed to batch cache tracks for offline:', err);
+      });
+    }
   }
 
   let albumViewMode = $state<'grid' | 'list'>('grid');
