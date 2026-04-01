@@ -726,24 +726,29 @@ pub fn run() {
     // Initialize per-user data paths (no user active yet until login)
     let user_data_paths = user_data::UserDataPaths::new();
 
-    tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
-            // Second instance launched — bring existing window to front
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.unminimize();
-                let _ = window.set_focus();
-            }
+    let mut builder = tauri::Builder::default();
 
-            // Check if second instance was launched with a Qobuz link arg
-            for arg in &args {
-                if is_qobuz_link(arg) {
-                    handle_qobuz_link(app, arg, false);
-                    break;
+    // Single-instance + deep-link: not available on FreeBSD (requires D-Bus)
+    #[cfg(not(target_os = "freebsd"))]
+    {
+        builder = builder
+            .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.unminimize();
+                    let _ = window.set_focus();
                 }
-            }
-        }))
-        .plugin(tauri_plugin_deep_link::init())
+                for arg in &args {
+                    if is_qobuz_link(arg) {
+                        handle_qobuz_link(app, arg, false);
+                        break;
+                    }
+                }
+            }))
+            .plugin(tauri_plugin_deep_link::init());
+    }
+
+    builder
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -910,9 +915,7 @@ pub fn run() {
             }
 
             // Register deep link handler for qobuzapp:// URLs.
-            // On macOS, URLs are delivered via Apple Events (not CLI args), so
-            // this is the only way to receive them. On Linux/Windows, the
-            // single-instance plugin forwards URL args to this handler too.
+            #[cfg(not(target_os = "freebsd"))]
             {
                 use tauri_plugin_deep_link::DeepLinkExt;
                 let deep_link_handle = app.handle().clone();

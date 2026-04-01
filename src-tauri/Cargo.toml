@@ -34,9 +34,12 @@ qconnect-transport-ws = { path = "../crates/qconnect-transport-ws" }
 # Tauri
 tauri = { version = "2", features = ["protocol-asset", "tray-icon", "macos-private-api"] }
 tauri-plugin-opener = "2"
+tauri-plugin-dialog = { version = "2.6.0" }
+
+# Single-instance + deep-link: use D-Bus on Linux, not available on FreeBSD
+[target.'cfg(not(target_os = "freebsd"))'.dependencies]
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 tauri-plugin-deep-link = "2"
-tauri-plugin-dialog = { version = "2.6.0" }
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
