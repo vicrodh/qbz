@@ -319,7 +319,12 @@ pub fn enumerate_oss_devices() -> Vec<crate::backend::AudioDevice> {
             devices.push(crate::backend::AudioDevice {
                 id: path.clone(),
                 name: format!("{} ({})", name, path),
+                description: None,
                 is_default: num == 0,
+                max_sample_rate: None,
+                supported_sample_rates: None,
+                device_bus: None,
+                is_hardware: true,
             });
         }
     }
@@ -329,7 +334,12 @@ pub fn enumerate_oss_devices() -> Vec<crate::backend::AudioDevice> {
         devices.push(crate::backend::AudioDevice {
             id: "/dev/dsp0".to_string(),
             name: "Default OSS Device (/dev/dsp0)".to_string(),
+            description: None,
             is_default: true,
+            max_sample_rate: None,
+            supported_sample_rates: None,
+            device_bus: None,
+            is_hardware: true,
         });
     }
 
