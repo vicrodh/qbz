@@ -6016,6 +6016,17 @@
     height: calc(100vh - 104px); /* Only 104px NowPlayingBar, no title bar */
   }
 
+  /* macOS: pad main content to clear native overlay title bar */
+  :global(html.macos) .main-content {
+    padding-top: 16px;
+    height: calc(100vh - 104px - 16px);
+  }
+
+  /* macOS: home view handles its own spacing */
+  :global(html.macos) .main-content :global(.home-view) {
+    margin-top: -16px;
+  }
+
   /* macOS: invisible drag region for window movement (overlay title bar) */
   :global(html.macos) .macos-drag-region {
     height: 28px;

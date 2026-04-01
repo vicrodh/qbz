@@ -4312,6 +4312,8 @@
       <span class="setting-label">{$t('settings.appearance.systemNotifications')}</span>
       <Toggle enabled={systemNotificationsEnabled} onchange={(v) => { systemNotificationsEnabled = v; setSystemNotificationsEnabled(v); }} />
     </div>
+    <!-- Title bar toggles: hidden on macOS (always uses native overlay title bar) -->
+    {#if !document.documentElement.classList.contains('macos')}
     <div class="setting-row">
       <div class="setting-info">
         <span class="setting-label">{$t('settings.appearance.useSystemTitleBar')}</span>
@@ -4326,6 +4328,9 @@
       </div>
       <Toggle enabled={hideTitleBar} onchange={(v) => setHideTitleBar(v)} disabled={useSystemTitleBar} />
     </div>
+    {/if}
+    <!-- Title bar customization: hidden on macOS (uses native overlay title bar) -->
+    {#if !document.documentElement.classList.contains('macos')}
     <div class="setting-row">
       <div class="setting-info">
         <span class="setting-label">{$t('settings.appearance.searchInTitleBar')}</span>
@@ -4482,6 +4487,7 @@
         disabled={hideTitleBar || useSystemTitleBar}
       />
     </div>
+    {/if}
     <div class="setting-row">
       <span class="setting-label">{$t('settings.appearance.miniplayerDefaultView')}</span>
       <Dropdown
@@ -4915,7 +4921,8 @@
   <section class="section">
     <h3 class="section-title">{$t('settings.integrations.title')}</h3>
 
-    <!-- Qobuz Link Handler -->
+    <!-- Qobuz Link Handler (Linux only — macOS registers via Info.plist at build time) -->
+    {#if !document.documentElement.classList.contains('macos')}
     <div class="setting-row">
       <div class="setting-info">
         <span class="setting-label">{$t('settings.integrations.qobuzLinkHandler')}</span>
@@ -4923,6 +4930,7 @@
       </div>
       <Toggle enabled={qobuzLinkHandlerEnabled} onchange={handleQobuzLinkHandlerToggle} disabled={qobuzLinkHandlerBusy} />
     </div>
+    {/if}
 
     <!-- Qobuz Connect Device Name -->
     <div class="setting-row">
