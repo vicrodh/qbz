@@ -58,6 +58,7 @@ use crate::offline_cache::OfflineCacheState;
 use crate::playback_context::{ContentSource, ContextType, PlaybackContext};
 use crate::plex::{PlexMusicSection, PlexPlayResult, PlexServerInfo, PlexTrack};
 use crate::qconnect_service::{QconnectServiceState, QconnectVisibleQueueProjection};
+use crate::queue::{RepeatMode as QueueRepeatMode};
 use crate::reco_store::{HomeResolved, HomeSeeds, RecoEventInput, RecoState};
 use crate::runtime::{
     CommandRequirement, DegradedReason, RuntimeError, RuntimeEvent, RuntimeManagerState,
@@ -4223,6 +4224,7 @@ pub async fn v2_library_play_track(
     library_state: State<'_, LibraryState>,
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
+    app_state: State<'_, AppState>,
 ) -> Result<(), String> {
     runtime
         .manager()
@@ -4242,6 +4244,15 @@ pub async fn v2_library_play_track(
         return Err(format!("File not found: {}", track.file_path));
     }
     let audio_data = std::fs::read(file_path).map_err(|e| format!("Failed to read file: {}", e))?;
+
+    let cache = app_state.audio_cache.clone();
+    if let Ok(track_id_u64) = u64::try_from(track_id) {
+        if !cache.contains(track_id_u64) {
+            cache.insert(track_id_u64, audio_data.clone());
+            log::info!("[V2/CACHED] Track {} stored in memory cache", track_id_u64);
+        }
+    }
+
     let bridge = bridge.get().await;
     bridge
         .player()
@@ -6250,6 +6261,7 @@ pub async fn v2_set_repeat_mode(
     bridge: State<'_, CoreBridgeState>,
     qconnect: State<'_, QconnectServiceState>,
     runtime: State<'_, RuntimeManagerState>,
+    app_state: State<'_, AppState>,
 ) -> Result<(), RuntimeError> {
     runtime
         .manager()
@@ -6271,6 +6283,9 @@ pub async fn v2_set_repeat_mode(
 
     let bridge = bridge.get().await;
     bridge.set_repeat_mode(mode).await;
+
+    let queue_repeat_mode = repeat_mode_to_queue_repeat_mode(mode);
+    app_state.queue.set_repeat(queue_repeat_mode);
     Ok(())
 }
 
@@ -6351,6 +6366,14 @@ pub async fn v2_clear_queue(
     let bridge = bridge.get().await;
     bridge.clear_queue().await;
     Ok(())
+}
+
+fn repeat_mode_to_queue_repeat_mode (mode: RepeatMode) -> QueueRepeatMode {
+    match mode {
+        RepeatMode::Off => QueueRepeatMode::Off,
+        RepeatMode::All => QueueRepeatMode::All,
+        RepeatMode::One => QueueRepeatMode::One,
+    }
 }
 
 async fn apply_qconnect_shuffle_mode(
@@ -7621,6 +7644,11 @@ pub async fn v2_play_next_gapless(
     let bridge_guard = bridge.get().await;
     let player = bridge_guard.player();
     let current_track_id = player.state.current_track_id();
+    let repeat_mode = app_state.queue.get_repeat();
+    let track_id_to_play = match repeat_mode {
+        QueueRepeatMode::One => current_track_id,
+        _ => track_id
+    };
 
     // Defensive guard: never queue the currently playing track as "next".
     // This avoids infinite one-track loops when frontend queue state is stale.
@@ -7637,7 +7665,7 @@ pub async fn v2_play_next_gapless(
         let cached_path = {
             let db_opt = offline_cache.db.lock().await;
             if let Some(db) = db_opt.as_ref() {
-                if let Ok(Some(file_path)) = db.get_file_path(track_id) {
+                if let Ok(Some(file_path)) = db.get_file_path(track_id_to_play) {
                     Some(file_path)
                 } else {
                     None
@@ -7649,12 +7677,12 @@ pub async fn v2_play_next_gapless(
         if let Some(file_path) = cached_path {
             let path = std::path::Path::new(&file_path);
             if path.exists() {
-                log::info!("[V2/GAPLESS] Track {} from OFFLINE cache", track_id);
+                log::info!("[V2/GAPLESS] Track {} from OFFLINE cache", track_id_to_play);
                 let audio_data = std::fs::read(path).map_err(|e| {
                     RuntimeError::Internal(format!("Failed to read cached file: {}", e))
                 })?;
                 player
-                    .play_next(audio_data, track_id)
+                    .play_next(audio_data, track_id_to_play)
                     .map_err(RuntimeError::Internal)?;
                 return Ok(true);
             }
@@ -7663,28 +7691,28 @@ pub async fn v2_play_next_gapless(
 
     // Check memory cache (L1)
     let cache = app_state.audio_cache.clone();
-    if let Some(cached) = cache.get(track_id) {
+    if let Some(cached) = cache.get(track_id_to_play) {
         log::info!(
             "[V2/GAPLESS] Track {} from MEMORY cache ({} bytes)",
-            track_id,
+            track_id_to_play,
             cached.size_bytes
         );
         player
-            .play_next(cached.data, track_id)
+            .play_next(cached.data, track_id_to_play)
             .map_err(RuntimeError::Internal)?;
         return Ok(true);
     }
 
     // Check playback cache (L2 - disk)
     if let Some(playback_cache) = cache.get_playback_cache() {
-        if let Some(audio_data) = playback_cache.get(track_id) {
+        if let Some(audio_data) = playback_cache.get(track_id_to_play) {
             log::info!(
                 "[V2/GAPLESS] Track {} from DISK cache ({} bytes)",
-                track_id,
+                track_id_to_play,
                 audio_data.len()
             );
             player
-                .play_next(audio_data, track_id)
+                .play_next(audio_data, track_id_to_play)
                 .map_err(RuntimeError::Internal)?;
             return Ok(true);
         }
@@ -7692,7 +7720,7 @@ pub async fn v2_play_next_gapless(
 
     // Check local library
     // Convert u64 to i64 for library query
-    let track_id_i64 = track_id
+    let track_id_i64 = track_id_to_play
         .try_into()
         .map_err(|_| RuntimeError::Internal("Track ID too large for i64".to_string()))?;
 
@@ -7704,11 +7732,11 @@ pub async fn v2_play_next_gapless(
     if let Some(local_track) = tracks.into_iter().next() {
         let path = std::path::Path::new(&local_track.file_path);
         if path.exists() {
-            log::info!("[V2/GAPLESS] Track {} from LOCAL library", track_id);
+            log::info!("[V2/GAPLESS] Track {} from LOCAL library", track_id_to_play);
             let audio_data = std::fs::read(path)
                 .map_err(|e| RuntimeError::Internal(format!("Failed to read local file: {}", e)))?;
             bridge.get().await.player()
-                .play_next(audio_data, track_id)
+                .play_next(audio_data, track_id_to_play)
                 .map_err(RuntimeError::Internal)?;
             return Ok(true);
         }
@@ -7716,7 +7744,7 @@ pub async fn v2_play_next_gapless(
 
     log::info!(
         "[V2/GAPLESS] Track {} not in any cache, gapless not possible",
-        track_id
+        track_id_to_play
     );
     Ok(false)
 }
