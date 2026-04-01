@@ -163,3 +163,4 @@ tempfile = "3"
 # Patch muda to use dev branch with FreeBSD support (PR #331, not yet released)
 [patch.crates-io]
 muda = { git = "https://github.com/tauri-apps/muda", branch = "dev" }
+tray-icon = { git = "https://github.com/tauri-apps/tray-icon", branch = "dev" }

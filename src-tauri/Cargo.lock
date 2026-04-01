@@ -7202,8 +7202,7 @@ dependencies = [
 [[package]]
 name = "tray-icon"
 version = "0.21.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5e85aa143ceb072062fc4d6356c1b520a51d636e7bc8e77ec94be3608e5e80c"
+source = "git+https://github.com/tauri-apps/tray-icon?branch=dev#83ba6dfe18ea61bbc267a60cb6ba31a59c76b925"
 dependencies = [
  "crossbeam-channel",
  "dirs 6.0.0",
@@ -7215,7 +7214,7 @@ dependencies = [
  "objc2-core-graphics",
  "objc2-foundation",
  "once_cell",
- "png 0.17.16",
+ "png 0.18.1",
  "serde",
  "thiserror 2.0.18",
  "windows-sys 0.60.2",
