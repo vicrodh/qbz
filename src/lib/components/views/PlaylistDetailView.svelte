@@ -2264,18 +2264,18 @@
           <div class="batch-left">
             {#if selectedTrackKeys.size > 0}
               <span class="selection-count">{selectedTrackKeys.size} selected</span>
-              <button class="batch-btn" onclick={clearSelection}>Clear</button>
+              <button class="batch-btn" onclick={clearSelection}>{ $t('actions.clear') }</button>
             {:else}
-              <button class="batch-btn" onclick={selectAllTracks}>Select All</button>
+              <button class="batch-btn" onclick={selectAllTracks}>{ $t('actions.selectAll') }</button>
             {/if}
           </div>
           {#if selectedTrackKeys.size > 0}
             <div class="batch-right">
               <button class="batch-btn" onclick={moveSelectedUp} title="Move selected up">
-                <ChevronUp size={14} /> Move Up
+                <ChevronUp size={14} /> { $t('favorites.moveUp') }
               </button>
               <button class="batch-btn" onclick={moveSelectedDown} title="Move selected down">
-                <ChevronDown size={14} /> Move Down
+                <ChevronDown size={14} /> { $t('favorites.moveDown') }
               </button>
             </div>
           {/if}
@@ -2356,7 +2356,7 @@
                   class="reorder-btn"
                   onclick={() => moveTrackUp(track, idx)}
                   disabled={idx === 0}
-                  title="Move up"
+                  title={ $t('favorites.moveUp') }
                 >
                   <ChevronUp size={16} />
                 </button>
@@ -2367,7 +2367,7 @@
                   class="reorder-btn"
                   onclick={() => moveTrackDown(track, idx)}
                   disabled={idx === displayTracks.length - 1}
-                  title="Move down"
+                  title={ $t('favorites.moveDown') }
                 >
                   <ChevronDown size={16} />
                 </button>
