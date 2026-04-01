@@ -3414,8 +3414,7 @@ dependencies = [
 [[package]]
 name = "muda"
 version = "0.17.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "01c1738382f66ed56b3b9c8119e794a2e23148ac8ea214eda86622d4cb9d415a"
+source = "git+https://github.com/tauri-apps/muda?branch=dev#cee9923e4c8cfc00a0c75502854dfc0a2753921d"
 dependencies = [
  "crossbeam-channel",
  "dpi",
