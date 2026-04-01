@@ -2439,6 +2439,13 @@ pub fn v2_get_devices_for_backend(
     backendType: AudioBackendType,
 ) -> Result<Vec<AudioDevice>, String> {
     log::info!("Command: v2_get_devices_for_backend({:?})", backendType);
+
+    // OSS uses direct device enumeration (no AudioBackend trait)
+    #[cfg(target_os = "freebsd")]
+    if backendType == AudioBackendType::Oss {
+        return Ok(qbz_audio::oss_direct::enumerate_oss_devices());
+    }
+
     let backend = BackendManager::create_backend(backendType)?;
     backend.enumerate_devices()
 }

@@ -253,3 +253,85 @@ impl DirectAudioStream for OssDirectStream {
     // set_hardware_volume: uses trait default (returns error) — OSS USB DACs
     // typically have no software mixer control accessible via ioctl.
 }
+
+/// Enumerate available OSS audio devices by scanning /dev/dsp* and /dev/sndstat.
+pub fn enumerate_oss_devices() -> Vec<crate::backend::AudioDevice> {
+    let mut devices = Vec::new();
+
+    // Try to parse /dev/sndstat for device names
+    let sndstat = std::fs::read_to_string("/dev/sndstat").ok();
+    let device_names: std::collections::HashMap<u32, String> = sndstat
+        .as_deref()
+        .map(|content| {
+            content
+                .lines()
+                .filter_map(|line| {
+                    // Format: "pcm0: <device name> ..."
+                    if line.starts_with("pcm") {
+                        let rest = line.strip_prefix("pcm")?;
+                        let (num_str, remainder) = rest.split_once(':')?;
+                        let num = num_str.parse::<u32>().ok()?;
+                        let name = remainder
+                            .trim()
+                            .strip_prefix('<')
+                            .and_then(|s| s.split_once('>'))
+                            .map(|(name, _)| name.to_string())
+                            .unwrap_or_else(|| remainder.trim().to_string());
+                        Some((num, name))
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    // Scan /dev/dsp* devices
+    if let Ok(entries) = std::fs::read_dir("/dev") {
+        let mut dsp_paths: Vec<String> = entries
+            .filter_map(|e| e.ok())
+            .filter_map(|e| {
+                let name = e.file_name().to_string_lossy().to_string();
+                if name.starts_with("dsp") && name != "dsp" {
+                    Some(format!("/dev/{}", name))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        dsp_paths.sort();
+
+        // Always include /dev/dsp0 even if not explicitly listed
+        if dsp_paths.is_empty() && std::path::Path::new("/dev/dsp0").exists() {
+            dsp_paths.push("/dev/dsp0".to_string());
+        }
+
+        for path in dsp_paths {
+            let num = path
+                .strip_prefix("/dev/dsp")
+                .and_then(|s| s.parse::<u32>().ok())
+                .unwrap_or(0);
+            let name = device_names
+                .get(&num)
+                .cloned()
+                .unwrap_or_else(|| format!("OSS Device {}", num));
+
+            devices.push(crate::backend::AudioDevice {
+                id: path.clone(),
+                name: format!("{} ({})", name, path),
+                is_default: num == 0,
+            });
+        }
+    }
+
+    // If nothing found, add a default entry
+    if devices.is_empty() {
+        devices.push(crate::backend::AudioDevice {
+            id: "/dev/dsp0".to_string(),
+            name: "Default OSS Device (/dev/dsp0)".to_string(),
+            is_default: true,
+        });
+    }
+
+    devices
+}
