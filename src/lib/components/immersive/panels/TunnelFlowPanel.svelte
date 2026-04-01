@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { t } from 'svelte-i18n';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import { invoke } from '@tauri-apps/api/core';
   import QualityBadge from '$lib/components/QualityBadge.svelte';
@@ -992,7 +993,7 @@
     <div class="track-meta">
       <span class="track-title">{trackTitle}</span>
       {#if explicit}
-        <span class="explicit-badge" title="Explicit"></span>
+        <span class="explicit-badge" title="{ $t('library.explicit') }"></span>
       {/if}
       {#if album}
         <span class="track-album">{album}</span>

@@ -706,7 +706,7 @@
             <div class="split-title-row">
               <h2 class="split-track-title">{trackTitle}</h2>
               {#if explicit}
-                <span class="explicit-badge" title="Explicit"></span>
+                <span class="explicit-badge" title="{ $t('library.explicit') }"></span>
               {/if}
             </div>
             <p class="split-track-artist">{artist}</p>

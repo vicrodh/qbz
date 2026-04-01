@@ -58,7 +58,7 @@
             <div class="row-title-row">
               <div class="row-title">{queueTrack.title}</div>
               {#if queueTrack.parental_warning}
-                <span class="explicit-badge" title="Explicit"></span>
+                <span class="explicit-badge" title="{ $t('library.explicit') }"></span>
               {/if}
             </div>
             <div class="row-artist">{queueTrack.artist}</div>
