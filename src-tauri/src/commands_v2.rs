@@ -71,8 +71,9 @@ use ashpd::desktop::Icon;
 use md5::{Digest, Md5};
 use std::collections::HashSet;
 use std::fs;
+use std::io::Write;
 #[cfg(target_os = "linux")]
-use std::io::{Cursor, Write};
+use std::io::Cursor;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
@@ -801,7 +802,7 @@ const PORTAL_NOTIFICATION_ICON_MAX_EDGE: u32 = 512;
 #[cfg(target_os = "linux")]
 const PORTAL_NOTIFICATION_ICON_MAX_BYTES: usize = 4 * 1024 * 1024;
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn v2_get_notification_artwork_cache_dir() -> Result<PathBuf, String> {
     let cache_dir = dirs::cache_dir()
         .ok_or_else(|| "Could not find cache directory".to_string())?
@@ -813,7 +814,7 @@ fn v2_get_notification_artwork_cache_dir() -> Result<PathBuf, String> {
     Ok(cache_dir)
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn v2_resolve_local_artwork(url: &str) -> Option<PathBuf> {
     if let Some(path) = url.strip_prefix("file://") {
         return Some(PathBuf::from(path));
@@ -825,7 +826,7 @@ fn v2_resolve_local_artwork(url: &str) -> Option<PathBuf> {
     None
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn v2_cache_notification_artwork(url: &str) -> Result<PathBuf, String> {
     if let Some(local_path) = v2_resolve_local_artwork(url) {
         if local_path.exists() {
@@ -844,14 +845,16 @@ fn v2_cache_notification_artwork(url: &str) -> Result<PathBuf, String> {
 
     let response = reqwest::blocking::Client::new()
         .get(url)
+        .header("User-Agent", "Mozilla/5.0")
         .timeout(std::time::Duration::from_secs(5))
         .send()
         .map_err(|e| format!("Failed to download artwork: {}", e))?;
 
     if !response.status().is_success() {
         return Err(format!(
-            "Failed to download artwork: HTTP {}",
-            response.status()
+            "Failed to download artwork: HTTP {} (url: {})",
+            response.status(),
+            url.split('?').next().unwrap_or(url)
         ));
     }
 
@@ -11407,16 +11410,34 @@ pub async fn v2_show_track_notification(
 
     #[cfg(target_os = "macos")]
     {
-        let _ = &artwork_url; // macOS notify-rust doesn't support custom artwork
-
         // Fire-and-forget: notification delivery shouldn't block track playback response
         tokio::task::spawn_blocking(move || {
             let _ = notify_rust::set_application("com.blitzfc.qbz");
-            if let Err(e) = notify_rust::Notification::new()
-                .summary(&title)
-                .body(&body_text)
-                .show()
-            {
+
+            // Cache artwork to disk if available (image_path needs a file path)
+            let artwork_path = artwork_url.as_deref().and_then(|url_str| {
+                match v2_cache_notification_artwork(url_str) {
+                    Ok(path) => {
+                        log::debug!("Notification artwork cached: {:?}", path);
+                        Some(path)
+                    }
+                    Err(e) => {
+                        log::debug!("Could not prepare notification artwork: {}", e);
+                        None
+                    }
+                }
+            });
+
+            let mut notification = notify_rust::Notification::new();
+            notification.summary(&title).body(&body_text);
+
+            if let Some(ref path) = artwork_path {
+                if let Some(path_str) = path.to_str() {
+                    notification.image_path(path_str);
+                }
+            }
+
+            if let Err(e) = notification.show() {
                 log::warn!("Failed to show macOS notification: {}", e);
             }
         });
