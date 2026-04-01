@@ -143,12 +143,12 @@
     </div>
   {:else if error}
     <div class="error-state">
-      <span>{$t('errors.failedToLoad') || 'Failed to load'}</span>
+      <span>{$t('errors.failedToLoad')}</span>
     </div>
   {:else if !trackId}
     <div class="empty-state">
       <Music2 size={32} strokeWidth={1.5} />
-      <span>{$t('player.noTrackSelected') || 'No track selected'}</span>
+      <span>{$t('player.noTrackSelected')}</span>
     </div>
   {:else if trackInfo}
     <div class="info-content">
@@ -164,13 +164,13 @@
       <div class="metadata-section">
         <div class="metadata-item">
           <Clock size={14} />
-          <span class="metadata-label">{$t('track.duration') || 'Duration'}</span>
+          <span class="metadata-label">{$t('tracklist.duration')}</span>
           <span class="metadata-value">{formatDuration(trackInfo.track.duration)}</span>
         </div>
 
         <div class="metadata-item">
           <Music2 size={14} />
-          <span class="metadata-label">{$t('track.quality') || 'Quality'}</span>
+          <span class="metadata-label">{$t('tracklist.quality')}</span>
           <span class="metadata-value">{formatQuality(trackInfo.track)}</span>
         </div>
 
@@ -185,7 +185,7 @@
         {#if trackInfo.track.album?.label}
           <div class="metadata-item">
             <Building2 size={14} />
-            <span class="metadata-label">{$t('album.label') || 'Label'}</span>
+            <span class="metadata-label">{$t('album.label')}</span>
             {#if onLabelClick}
               <button
                 class="metadata-link"
@@ -203,7 +203,7 @@
       <!-- Credits Section -->
       {#if groupedCredits.length > 0}
         <div class="credits-section">
-          <h3 class="section-title">{$t('player.credits') || 'Credits'}</h3>
+          <h3 class="section-title">{$t('player.credits')}</h3>
           <div class="credits-list">
             {#each groupedCredits as { role, names }}
               <div class="credit-item">
