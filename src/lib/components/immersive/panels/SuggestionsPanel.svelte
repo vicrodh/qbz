@@ -253,7 +253,7 @@
   {:else if !artistId}
     <div class="empty-state">
       <Radio size={32} strokeWidth={1.5} />
-      <span>{$t('player.noTrackSelected') || 'No track selected'}</span>
+      <span>{$t('player.noTrackSelected')}</span>
     </div>
   {:else}
     <div class="suggestions-content">
@@ -292,20 +292,20 @@
               </div>
               <!-- Hover overlay with actions -->
               <div class="card-overlay">
-                <button class="overlay-btn secondary" onclick={() => onAddToQueue?.('playlist', playlist.id)} title="Add to queue">
+                <button class="overlay-btn secondary" onclick={() => onAddToQueue?.('playlist', playlist.id)} title={$t('actions.addToQueue')}>
                   <ListPlus size={16} />
                 </button>
-                <button class="overlay-btn primary" onclick={() => handlePlayPlaylist(playlist.id)} title="Play">
+                <button class="overlay-btn primary" onclick={() => handlePlayPlaylist(playlist.id)} title={$t('actions.play')}>
                   <Play size={20} fill="currentColor" />
                 </button>
-                <button class="overlay-btn secondary" onclick={() => onPlayNext?.('playlist', playlist.id)} title="Play next">
+                <button class="overlay-btn secondary" onclick={() => onPlayNext?.('playlist', playlist.id)} title={$t('actions.playNext')}>
                   <ListEnd size={16} />
                 </button>
               </div>
             </div>
             <div class="card-content">
               <span class="card-title">{playlist.name}</span>
-              <span class="card-subtitle">Playlist · {playlist.tracks_count} tracks</span>
+              <span class="card-subtitle">{$t('playlist.label')} · {playlist.tracks_count} {$t('library.tracks')}</span>
             </div>
           </div>
         {/each}
@@ -323,7 +323,7 @@
               <Info size={18} strokeWidth={2.5} />
               {#if showRadioTooltip}
                 <div class="radio-tooltip">
-                  {$t('player.radioExperimentalTooltip') || 'Radio is an experimental QBZ feature that generates a playlist based on the current track.'}
+                  {$t('player.radioExperimentalTooltip')}
                 </div>
               {/if}
             </div>
@@ -357,14 +357,14 @@
               </div>
               <!-- Hover overlay with play button only (radio replaces queue) -->
               <div class="card-overlay">
-                <button class="overlay-btn primary" onclick={startSongRadio} disabled={loadingRadio} title="Play Radio">
+                <button class="overlay-btn primary" onclick={startSongRadio} disabled={loadingRadio} title={$t('actions.playRadio')}>
                   <Play size={20} fill="currentColor" />
                 </button>
               </div>
             </div>
             <div class="card-content">
-              <span class="card-title">{$t('player.songRadio') || 'Song Radio'}</span>
-              <span class="card-subtitle">{$t('player.basedOnTrack') || 'Based on this track'}</span>
+              <span class="card-title">{$t('player.songRadio')}</span>
+              <span class="card-subtitle">{$t('player.basedOnTrack')}</span>
             </div>
           </div>
         {/if}
@@ -373,7 +373,7 @@
       <!-- Recommended Tracks Section -->
       {#if recommendedTracks.length > 0}
         <div class="tracks-section">
-          <h3 class="section-title">{$t('player.recommendedTracks') || 'Recommended'}</h3>
+          <h3 class="section-title">{$t('player.recommendedTracks')}</h3>
           <div class="tracks-list">
             {#each recommendedTracks as track (track.id)}
               <button
