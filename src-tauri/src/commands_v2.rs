@@ -2417,6 +2417,7 @@ pub fn v2_get_available_backends() -> Result<Vec<BackendInfo>, String> {
                 AudioBackendType::PipeWire => "PipeWire",
                 AudioBackendType::Alsa => "ALSA Direct",
                 AudioBackendType::Pulse => "PulseAudio",
+                AudioBackendType::Oss => "OSS Direct",
                 AudioBackendType::SystemDefault => "System Audio",
             };
 

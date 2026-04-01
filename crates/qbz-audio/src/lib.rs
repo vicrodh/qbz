@@ -1,16 +1,10 @@
 //! QBZ Audio - Audio backend system for bit-perfect playback
 //!
 //! This crate provides the audio backend abstraction layer:
-//! - Backend trait and implementations (PipeWire, ALSA, PulseAudio)
+//! - Backend trait and implementations (PipeWire/ALSA on Linux, OSS on FreeBSD, CoreAudio on macOS)
 //! - Audio device enumeration and selection
 //! - Loudness analysis and normalization
 //! - Diagnostic tools
-//!
-//! # CRITICAL: This code is IMMUTABLE
-//!
-//! The audio backend system was carefully designed for bit-perfect playback.
-//! Do NOT modify the logic in these files without understanding the full
-//! architecture. See `qbz-nix-docs/AUDIO_BACKENDS.md` for details.
 //!
 //! # Architecture
 //!
@@ -27,14 +21,26 @@
 //! ```
 
 pub mod backend;
-#[cfg(target_os = "linux")]
-pub mod pipewire_backend;
+
+// Linux-only audio backends
 #[cfg(target_os = "linux")]
 pub mod alsa_backend;
 #[cfg(target_os = "linux")]
-pub mod pulse_backend;
 pub mod alsa_direct;
+#[cfg(target_os = "linux")]
+pub mod pipewire_backend;
+#[cfg(target_os = "linux")]
+pub mod pulse_backend;
+
+// macOS-only audio backends
+#[cfg(target_os = "macos")]
 pub mod coreaudio_direct;
+
+// FreeBSD-only audio backends
+#[cfg(target_os = "freebsd")]
+pub mod oss_direct;
+
+// Platform-agnostic modules
 pub mod analysis;
 pub mod analyzer_tap;
 pub mod diagnostic;
@@ -51,12 +57,15 @@ pub use alsa_backend::{
     device_supports_sample_rate, get_device_supported_rates, normalize_device_id_to_stable,
     resolve_stable_to_current_hw,
 };
+#[cfg(target_os = "linux")]
 pub use alsa_direct::AlsaDirectStream;
+#[cfg(target_os = "freebsd")]
+pub use oss_direct::OssDirectStream;
 pub use analysis::SpectralAnalyzer;
 pub use analyzer_tap::{AnalyzerMessage, AnalyzerTap};
 pub use backend::{
     AlsaDirectError, AlsaPlugin, AudioBackend, AudioBackendType, AudioDevice, BackendConfig,
-    BackendManager, BackendResult, BitPerfectMode,
+    BackendManager, BackendResult, BitPerfectMode, DirectAudioStream,
 };
 pub use diagnostic::{AudioDiagnostic, BitDepthResult, DiagnosticSource};
 pub use dynamic_amplify::DynamicAmplify;

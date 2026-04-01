@@ -32,19 +32,55 @@ pub enum AudioBackendType {
     /// - Fallback for systems without PipeWire
     Pulse,
 
-    /// System default backend (non-Linux platforms)
+    /// OSS backend (FreeBSD direct hardware access, bit-perfect)
+    /// - Direct /dev/dspX write, no mixing layer
+    /// - Bit-perfect for all supported formats (S32LE, S24LE, S16LE)
+    Oss,
+
+    /// System default backend (non-Linux/FreeBSD platforms)
     /// - Uses CPAL default host (CoreAudio on macOS, WASAPI on Windows)
     /// - Automatic device selection via OS audio system
     SystemDefault,
+}
+
+impl AudioBackendType {
+    /// True for backends that use a direct hardware write path (no rodio/CPAL).
+    pub fn is_direct_backend(self) -> bool {
+        matches!(self, AudioBackendType::Alsa | AudioBackendType::Oss)
+    }
 }
 
 impl Default for AudioBackendType {
     fn default() -> Self {
         if cfg!(target_os = "linux") {
             AudioBackendType::PipeWire
+        } else if cfg!(target_os = "freebsd") {
+            AudioBackendType::Oss
         } else {
             AudioBackendType::SystemDefault
         }
+    }
+}
+
+/// Platform-agnostic trait for bit-perfect direct hardware audio streams.
+///
+/// Implemented by `AlsaDirectStream` (Linux) and `OssDirectStream` (FreeBSD).
+pub trait DirectAudioStream: Send + Sync {
+    /// Write f32 samples (already in the source sample rate / channel count).
+    fn write_f32(&self, samples: &[f32]) -> Result<(), String>;
+    /// Block until the hardware buffer has drained (end-of-track flush).
+    fn drain(&self) -> Result<(), String>;
+    /// Reset / halt the hardware immediately (used on stop).
+    fn stop(&self) -> Result<(), String>;
+    /// Channel count configured for this stream.
+    fn channels(&self) -> u16;
+    /// Sample rate configured for this stream.
+    fn sample_rate(&self) -> u32;
+    /// Device identifier string (e.g. "hw:4,0" or "/dev/dsp1").
+    fn device_id(&self) -> &str;
+    /// Attempt hardware volume control (no-op default).
+    fn set_hardware_volume(&self, _volume: f32) -> Result<(), String> {
+        Err("Hardware volume control not supported on this device/platform".to_string())
     }
 }
 
@@ -266,7 +302,12 @@ impl BackendManager {
             }
         }
 
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(target_os = "freebsd")]
+        {
+            backends.push(AudioBackendType::Oss);
+        }
+
+        #[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
         {
             backends.push(AudioBackendType::SystemDefault);
         }
@@ -320,6 +361,11 @@ impl BackendManager {
                 {
                     Err("PulseAudio backend only available on Linux".to_string())
                 }
+            }
+            AudioBackendType::Oss => {
+                // OSS uses the direct write path (OssDirectStream), not this
+                // AudioBackend trait. This arm exists for completeness.
+                Err("OSS backend uses direct hardware path, not AudioBackend trait".to_string())
             }
         }
     }
