@@ -36,6 +36,7 @@ tauri = { version = "2", features = ["protocol-asset", "tray-icon", "macos-priva
 tauri-plugin-opener = "2"
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 tauri-plugin-deep-link = "2"
+tauri-plugin-dialog = { version = "2.6.0" }
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
@@ -142,7 +143,6 @@ futures-util = "0.3"
 
 # Platform-specific dependencies
 [target.'cfg(target_os = "linux")'.dependencies]
-tauri-plugin-dialog = { version = "2.6.0" }
 ashpd = { version = "0.13", default-features = false, features = ["tokio", "notification", "inhibit"] }
 souvlaki = "0.8"
 
@@ -150,12 +150,10 @@ souvlaki = "0.8"
 alsa = "0.9"
 
 [target.'cfg(target_os = "macos")'.dependencies]
-tauri-plugin-dialog = { version = "2.6.0" }
 souvlaki = "0.8"
 notify-rust = { git = "https://github.com/afonsojramos/notify-rust", branch = "feat/macos-image-path-support" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-tauri-plugin-dialog = { version = "2.6.0" }
 
 [dev-dependencies]
 tempfile = "3"
