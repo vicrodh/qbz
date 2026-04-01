@@ -449,11 +449,13 @@ fn create_output_stream_with_config(
     }
 }
 
-/// Output stream type - either rodio or ALSA Direct
+/// Output stream type - either rodio or direct hardware
 enum StreamType {
     Rodio(MixerDeviceSink),
     #[cfg(target_os = "linux")]
     AlsaDirect(Arc<qbz_audio::AlsaDirectStream>),
+    #[cfg(target_os = "freebsd")]
+    OssDirect(Arc<qbz_audio::OssDirectStream>),
 }
 
 /// Try to create output stream using the backend system (if configured)
@@ -529,6 +531,37 @@ fn try_init_stream_with_backend(
                             StreamType::AlsaDirect(Arc::new(stream))
                         }));
                     }
+                }
+            }
+        }
+    }
+
+    // For OSS backend on FreeBSD, use direct /dev/dspX for bit-perfect
+    #[cfg(target_os = "freebsd")]
+    if backend_type == AudioBackendType::Oss {
+        if let Some(ref device_id) = config.device_id {
+            if qbz_audio::OssDirectStream::is_oss_device(device_id) {
+                log::info!("Detected OSS device, using OSS Direct for bit-perfect playback");
+                match qbz_audio::OssDirectStream::new(device_id, sample_rate, channels) {
+                    Ok(stream) => {
+                        return Some(Ok(StreamType::OssDirect(Arc::new(stream))));
+                    }
+                    Err(e) => {
+                        log::error!("OSS Direct stream creation failed: {}", e);
+                        return Some(Err(e));
+                    }
+                }
+            }
+        } else {
+            // Default to /dev/dsp0 if no device specified
+            log::info!("No OSS device specified, defaulting to /dev/dsp0");
+            match qbz_audio::OssDirectStream::new("/dev/dsp0", sample_rate, channels) {
+                Ok(stream) => {
+                    return Some(Ok(StreamType::OssDirect(Arc::new(stream))));
+                }
+                Err(e) => {
+                    log::error!("OSS Direct stream creation failed: {}", e);
+                    return Some(Err(e));
                 }
             }
         }
@@ -1429,6 +1462,12 @@ impl Player {
                                         hardware_volume,
                                     )
                                 }
+                                #[cfg(target_os = "freebsd")]
+                                StreamType::OssDirect(oss_stream) => {
+                                    *consecutive_sink_failures = 0;
+                                    thread_state.set_stream_error(false);
+                                    PlaybackEngine::new_oss_direct(oss_stream.clone(), false)
+                                }
                             };
 
                             let volume = thread_state.volume.load(Ordering::SeqCst) as f32 / 100.0;
@@ -1731,6 +1770,10 @@ impl Player {
                                         hardware_volume,
                                     )
                                 }
+                                #[cfg(target_os = "freebsd")]
+                                StreamType::OssDirect(oss_stream) => {
+                                    PlaybackEngine::new_oss_direct(oss_stream.clone(), false)
+                                }
                             };
 
                             let volume = thread_state.volume.load(Ordering::SeqCst) as f32 / 100.0;
@@ -1953,6 +1996,10 @@ impl Player {
                                             hardware_volume,
                                         )
                                     }
+                                    #[cfg(target_os = "freebsd")]
+                                    StreamType::OssDirect(oss_stream) => {
+                                        PlaybackEngine::new_oss_direct(oss_stream.clone(), false)
+                                    }
                                 };
 
                                 let volume =
@@ -2101,6 +2148,10 @@ impl Player {
                                         alsa_stream.clone(),
                                         hardware_volume,
                                     )
+                                }
+                                #[cfg(target_os = "freebsd")]
+                                StreamType::OssDirect(oss_stream) => {
+                                    PlaybackEngine::new_oss_direct(oss_stream.clone(), false)
                                 }
                             };
 
