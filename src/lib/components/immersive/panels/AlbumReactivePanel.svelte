@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { t } from 'svelte-i18n';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import { invoke } from '@tauri-apps/api/core';
   import QualityBadge from '$lib/components/QualityBadge.svelte';
@@ -194,7 +195,7 @@
           <span class="bar"></span>
           <span class="bar"></span>
         </div>
-        <span>Now Playing</span>
+        <span>{$t('player.nowPlaying')}</span>
       </div>
     {/if}
     <div class="track-title-row">
