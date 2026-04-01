@@ -11,7 +11,7 @@
 #[cfg(target_os = "linux")]
 use qbz_audio::AlsaDirectStream;
 #[cfg(target_os = "freebsd")]
-use qbz_audio::OssDirectStream;
+use qbz_audio::{DirectAudioStream, OssDirectStream};
 use rodio::{mixer::Mixer, Player as RodioPlayer, Source};
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
