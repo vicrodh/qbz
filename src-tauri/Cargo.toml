@@ -91,9 +91,6 @@ spectrum-analyzer = "1.5"
 # EBU R128 loudness measurement (real-time normalization)
 ebur128 = "0.1"
 
-# Media controls (MPRIS on Linux)
-souvlaki = "0.8"
-
 # Desktop notifications → ashpd in [target.linux] deps below
 
 # Image processing (tray icon + thumbnails)
@@ -147,12 +144,14 @@ futures-util = "0.3"
 [target.'cfg(target_os = "linux")'.dependencies]
 tauri-plugin-dialog = { version = "2.6.0" }
 ashpd = { version = "0.13", default-features = false, features = ["tokio", "notification", "inhibit"] }
+souvlaki = "0.8"
 
 # Direct ALSA access for bit-perfect playback (bypasses CPAL limitations)
 alsa = "0.9"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 tauri-plugin-dialog = { version = "2.6.0" }
+souvlaki = "0.8"
 notify-rust = { git = "https://github.com/afonsojramos/notify-rust", branch = "feat/macos-image-path-support" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
