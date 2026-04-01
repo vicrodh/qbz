@@ -4001,6 +4001,7 @@
         sidebarRef?.focusSearch();
       }
     });
+    registerAction('nav.settings', () => navigateTo('settings'));
     registerAction('ui.sidebar', toggleSidebar);
     registerAction('ui.focusMode', toggleFocusMode);
     registerAction('ui.miniPlayer', () => { void enterMiniplayerMode(); });
