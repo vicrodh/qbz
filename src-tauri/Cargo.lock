@@ -4548,6 +4548,7 @@ dependencies = [
  "coreaudio-rs 0.14.0",
  "dirs 5.0.1",
  "ebur128",
+ "libc",
  "log",
  "qbz-models",
  "rodio",
