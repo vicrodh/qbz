@@ -22,7 +22,7 @@
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::Frame;
 
-use crate::app::{ActiveView, AppState};
+use crate::app::{ActiveView, AppState, RightPanelMode};
 use super::album_detail::render_album_detail;
 use super::artist_detail::render_artist_detail;
 use super::discovery::render_discovery;
@@ -34,9 +34,11 @@ use super::player_bar::render_player_bar;
 use super::queue_panel::render_queue_panel;
 use super::playlists::render_playlists;
 use super::search::render_search;
+use super::login_modal::render_login_modal;
 use super::search_modal::render_search_modal;
 use super::settings::render_settings;
 use super::sidebar::render_sidebar;
+use super::visualizer::render_visualizer;
 
 /// Width of the right panel (queue/lyrics) in columns.
 const RIGHT_PANEL_WIDTH: u16 = 30;
@@ -142,14 +144,22 @@ pub fn render_layout(frame: &mut Frame, state: &mut AppState) -> LayoutAreas {
         ActiveView::Playlists => render_playlists(frame, content_area, state),
     }
 
-    // Render right panel if visible
+    // Render right panel if visible (queue or visualizer)
     if state.show_queue_panel && queue_panel_area.width > 0 {
-        render_queue_panel(frame, queue_panel_area, state);
+        match state.right_panel_mode {
+            RightPanelMode::Queue => render_queue_panel(frame, queue_panel_area, state),
+            RightPanelMode::Visualizer => render_visualizer(frame, queue_panel_area, state),
+        }
     }
 
     // Render search modal overlay if active
     if state.show_search_modal {
         render_search_modal(frame, state);
+    }
+
+    // Render login modal overlay if active (highest z-order)
+    if state.show_login_modal {
+        render_login_modal(frame, state);
     }
 
     LayoutAreas {

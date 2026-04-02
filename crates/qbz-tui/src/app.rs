@@ -16,10 +16,10 @@ use ratatui::Frame;
 use ratatui::Terminal;
 use tokio::sync::mpsc;
 
-use qbz_audio::{settings::AudioSettingsStore, AudioDiagnostic, AudioSettings};
+use qbz_audio::{settings::AudioSettingsStore, AudioDiagnostic, AudioSettings, VisualizerTap};
 use qbz_cache::PlaybackCache;
 use qbz_core::QbzCore;
-use qbz_models::{Album, CoreEvent, DiscoverAlbum, DiscoverPlaylist, DiscoverResponse, Playlist, QueueState, RepeatMode, SearchResultsPage, Track};
+use qbz_models::{Album, CoreEvent, DiscoverAlbum, DiscoverPlaylist, DiscoverResponse, Playlist, QueueState, RepeatMode, SearchResultsPage, Track, UserSession};
 use qbz_player::Player;
 
 use crate::adapter::TuiAdapter;
@@ -89,6 +89,13 @@ pub enum InputMode {
     TextInput,
 }
 
+/// What the right panel displays when visible.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum RightPanelMode {
+    Queue,
+    Visualizer,
+}
+
 /// Which tab is active in the search results view.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SearchTab {
@@ -146,6 +153,34 @@ impl Default for SearchState {
             loading: false,
             error: None,
             scrollbar_state: ScrollbarState::default(),
+        }
+    }
+}
+
+/// State for the login modal.
+pub struct LoginState {
+    pub email: String,
+    pub email_cursor: usize,
+    pub password: String,
+    pub password_cursor: usize,
+    /// Which field is focused (0=email, 1=password).
+    pub active_field: u8,
+    /// Whether a login attempt is in progress.
+    pub logging_in: bool,
+    /// Error message from the last login attempt.
+    pub error: Option<String>,
+}
+
+impl Default for LoginState {
+    fn default() -> Self {
+        Self {
+            email: String::new(),
+            email_cursor: 0,
+            password: String::new(),
+            password_cursor: 0,
+            active_field: 0,
+            logging_in: false,
+            error: None,
         }
     }
 }
@@ -431,6 +466,10 @@ pub struct AppState {
     pub queue_scrollbar_state: ScrollbarState,
     /// Whether the search modal popup is visible (toggled with '/').
     pub show_search_modal: bool,
+    /// Whether the login modal is visible.
+    pub show_login_modal: bool,
+    /// Login modal state.
+    pub login: LoginState,
     /// Album detail view state.
     pub album: AlbumState,
     /// Artist detail view state.
@@ -453,6 +492,12 @@ pub struct AppState {
     pub is_buffering: bool,
     /// Human-readable buffering status (e.g., "Downloading...", "Playing from cache...")
     pub buffering_status: Option<String>,
+    /// Dynamic accent color extracted from current cover art.
+    pub dynamic_accent: Option<ratatui::style::Color>,
+    /// What the right panel displays (queue or visualizer).
+    pub right_panel_mode: RightPanelMode,
+    /// Current frequency bar heights (0.0 to 1.0) for the visualizer.
+    pub visualizer_bars: Vec<f32>,
 }
 
 impl Default for AppState {
@@ -479,6 +524,8 @@ impl Default for AppState {
             show_queue_panel: false,
             queue_scrollbar_state: ScrollbarState::default(),
             show_search_modal: false,
+            show_login_modal: false,
+            login: LoginState::default(),
             album: AlbumState::default(),
             artist_detail: ArtistState::default(),
             library: LibraryState::default(),
@@ -490,9 +537,15 @@ impl Default for AppState {
             no_images: false,
             is_buffering: false,
             buffering_status: None,
+            dynamic_accent: None,
+            right_panel_mode: RightPanelMode::Queue,
+            visualizer_bars: Vec::new(),
         }
     }
 }
+
+/// Type alias for the login result payload.
+type LoginResult = Result<UserSession, qbz_core::error::CoreError>;
 
 /// Type alias for the album result payload.
 type AlbumResult = Result<Album, qbz_core::error::CoreError>;
@@ -552,6 +605,8 @@ pub struct App {
     should_quit: bool,
     pub no_images: bool,
     rt_handle: tokio::runtime::Handle,
+    /// Visualizer tap for reading audio samples from the player.
+    visualizer_tap: Option<VisualizerTap>,
     /// Sender for search results (cloned into async tasks).
     search_result_tx: mpsc::UnboundedSender<SearchResult>,
     /// Receiver for search results (drained each tick).
@@ -620,6 +675,10 @@ pub struct App {
     artist_page_result_tx: mpsc::UnboundedSender<ArtistPageResult>,
     /// Receiver for artist page results.
     artist_page_result_rx: mpsc::UnboundedReceiver<ArtistPageResult>,
+    /// Sender for login results (cloned into async tasks).
+    login_result_tx: mpsc::UnboundedSender<LoginResult>,
+    /// Receiver for login results (drained each tick).
+    login_result_rx: mpsc::UnboundedReceiver<LoginResult>,
     /// Layout areas from the last render, used for mouse hit-testing.
     layout_areas: LayoutAreas,
     /// Sender for playback status updates (cloned into async tasks).
@@ -628,6 +687,8 @@ pub struct App {
     playback_status_rx: mpsc::UnboundedReceiver<PlaybackStatus>,
     /// Whether playback was active on the previous tick (for auto-advance detection).
     was_playing: bool,
+    /// Track ID from the previous tick (for gapless transition detection).
+    last_track_id: u64,
     /// L2 disk cache for playback audio data.
     playback_cache: Option<Arc<PlaybackCache>>,
     /// Sender for cover art images (cloned into async download tasks).
@@ -666,7 +727,8 @@ impl App {
         );
 
         let diagnostic = AudioDiagnostic::new();
-        let player = Player::new(device_name, audio_settings, None, diagnostic);
+        let visualizer_tap = VisualizerTap::new();
+        let player = Player::new(device_name, audio_settings, Some(visualizer_tap.clone()), diagnostic);
         let core = QbzCore::new(adapter, player);
 
         // Initialize core (extracts Qobuz bundle tokens)
@@ -750,6 +812,7 @@ impl App {
         let (lib_artists_tx, lib_artists_rx) = mpsc::unbounded_channel::<LibraryArtistsResult>();
         let (lib_tracks_tx, lib_tracks_rx) = mpsc::unbounded_channel::<LibraryTracksResult>();
         let (artist_page_tx, artist_page_rx) = mpsc::unbounded_channel::<ArtistPageResult>();
+        let (login_tx, login_rx) = mpsc::unbounded_channel::<LoginResult>();
         let (cover_art_tx, cover_art_rx) = mpsc::unbounded_channel::<Option<image::DynamicImage>>();
 
         // Create image picker — use Halfblocks as safe default that works everywhere.
@@ -819,14 +882,18 @@ impl App {
             library_tracks_result_rx: lib_tracks_rx,
             artist_page_result_tx: artist_page_tx,
             artist_page_result_rx: artist_page_rx,
+            login_result_tx: login_tx,
+            login_result_rx: login_rx,
             layout_areas: LayoutAreas::default(),
             playback_status_tx: playback_tx,
             playback_status_rx: playback_rx,
             was_playing: false,
+            last_track_id: 0,
             playback_cache,
             cover_art_tx,
             cover_art_rx,
             picker,
+            visualizer_tap: Some(visualizer_tap),
         })
     }
 
@@ -893,6 +960,9 @@ impl App {
 
             // Poll player state for now-playing bar (player doesn't emit events)
             self.poll_player_state().await;
+
+            // Update visualizer bars from audio tap (every tick)
+            self.update_visualizer();
 
             // Drain playback status updates
             while let Ok(status) = self.playback_status_rx.try_recv() {
@@ -1000,14 +1070,21 @@ impl App {
                 self.handle_artist_page_result(result);
             }
 
+            // Drain login results
+            while let Ok(result) = self.login_result_rx.try_recv() {
+                self.handle_login_result(result);
+            }
+
             // Drain cover art results
             while let Ok(img_opt) = self.cover_art_rx.try_recv() {
                 match img_opt {
                     Some(img) => {
+                        self.state.dynamic_accent = Some(extract_dominant_color(&img));
                         let protocol = self.picker.new_resize_protocol(img);
                         self.state.cover_art = Some(protocol);
                     }
                     None => {
+                        self.state.dynamic_accent = None;
                         self.state.cover_art = None;
                     }
                 }
@@ -1027,6 +1104,10 @@ impl App {
     }
 
     fn handle_key(&mut self, key: KeyEvent) {
+        if self.state.show_login_modal {
+            self.handle_key_login(key);
+            return;
+        }
         match self.state.input_mode {
             InputMode::TextInput => self.handle_key_text_input(key),
             InputMode::Normal => self.handle_key_normal(key),
@@ -1212,9 +1293,32 @@ impl App {
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.should_quit = true;
             }
-            // 'q' toggles the queue panel
+            // 'q' cycles right panel: Hidden -> Queue -> Visualizer -> Hidden
             KeyCode::Char('q') => {
-                self.state.show_queue_panel = !self.state.show_queue_panel;
+                if !self.state.show_queue_panel {
+                    // Hidden -> Queue
+                    self.state.show_queue_panel = true;
+                    self.state.right_panel_mode = RightPanelMode::Queue;
+                    // Disable visualizer tap when showing queue
+                    if let Some(ref tap) = self.visualizer_tap {
+                        tap.set_enabled(false);
+                    }
+                } else if self.state.right_panel_mode == RightPanelMode::Queue {
+                    // Queue -> Visualizer
+                    self.state.right_panel_mode = RightPanelMode::Visualizer;
+                    // Enable visualizer tap for audio capture
+                    if let Some(ref tap) = self.visualizer_tap {
+                        tap.set_enabled(true);
+                    }
+                } else {
+                    // Visualizer -> Hidden
+                    self.state.show_queue_panel = false;
+                    self.state.right_panel_mode = RightPanelMode::Queue;
+                    // Disable visualizer tap when hiding
+                    if let Some(ref tap) = self.visualizer_tap {
+                        tap.set_enabled(false);
+                    }
+                }
             }
             // Tab/BackTab for discovery tab cycling
             KeyCode::Tab if self.state.active_view == ActiveView::Discovery => {
@@ -1270,6 +1374,12 @@ impl App {
             // '/' from any view opens the search modal popup
             KeyCode::Char('/') => {
                 self.state.show_search_modal = true;
+                self.state.input_mode = InputMode::TextInput;
+            }
+
+            // 'l' opens the login modal when not authenticated
+            KeyCode::Char('l') if !self.state.authenticated => {
+                self.state.show_login_modal = true;
                 self.state.input_mode = InputMode::TextInput;
             }
 
@@ -1600,6 +1710,35 @@ impl App {
                 });
             }
 
+            // Shuffle toggle (global)
+            KeyCode::Char('s') => {
+                let core = Arc::clone(&self.core);
+                self.rt_handle.spawn(async move {
+                    core.toggle_shuffle().await;
+                });
+                self.state.queue_shuffle = !self.state.queue_shuffle;
+                self.state.status_message = Some(format!(
+                    "Shuffle: {}",
+                    if self.state.queue_shuffle { "ON" } else { "OFF" }
+                ));
+            }
+
+            // Repeat mode cycle (global, except Settings where 'r' = reload)
+            KeyCode::Char('r') if self.state.active_view != ActiveView::Settings => {
+                let next_mode = match self.state.queue_repeat {
+                    RepeatMode::Off => RepeatMode::One,
+                    RepeatMode::One => RepeatMode::All,
+                    RepeatMode::All => RepeatMode::Off,
+                };
+                let core = Arc::clone(&self.core);
+                let mode = next_mode;
+                self.rt_handle.spawn(async move {
+                    core.set_repeat_mode(mode).await;
+                });
+                self.state.queue_repeat = next_mode;
+                self.state.status_message = Some(format!("Repeat: {:?}", next_mode));
+            }
+
             // Search view: 'a' to add selected track to queue
             KeyCode::Char('a') if self.state.active_view == ActiveView::Search => {
                 self.add_selected_to_queue();
@@ -1701,6 +1840,105 @@ impl App {
                 search.cursor += c.len_utf8();
             }
             _ => {}
+        }
+    }
+
+    /// Handle keys when the login modal is visible.
+    fn handle_key_login(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc => {
+                self.state.show_login_modal = false;
+                self.state.input_mode = InputMode::Normal;
+                self.state.login.error = None;
+            }
+            KeyCode::Tab => {
+                // Toggle between email (0) and password (1)
+                self.state.login.active_field =
+                    if self.state.login.active_field == 0 { 1 } else { 0 };
+            }
+            KeyCode::Enter => {
+                self.attempt_login();
+            }
+            KeyCode::Backspace => {
+                if self.state.login.active_field == 0 {
+                    let login = &mut self.state.login;
+                    if login.email_cursor > 0 {
+                        let prev = login.email[..login.email_cursor]
+                            .char_indices()
+                            .next_back()
+                            .map(|(idx, _)| idx)
+                            .unwrap_or(0);
+                        login.email.remove(prev);
+                        login.email_cursor = prev;
+                    }
+                } else {
+                    let login = &mut self.state.login;
+                    if login.password_cursor > 0 {
+                        let prev = login.password[..login.password_cursor]
+                            .char_indices()
+                            .next_back()
+                            .map(|(idx, _)| idx)
+                            .unwrap_or(0);
+                        login.password.remove(prev);
+                        login.password_cursor = prev;
+                    }
+                }
+            }
+            KeyCode::Char(c) => {
+                if self.state.login.active_field == 0 {
+                    self.state.login.email.insert(self.state.login.email_cursor, c);
+                    self.state.login.email_cursor += c.len_utf8();
+                } else {
+                    self.state
+                        .login
+                        .password
+                        .insert(self.state.login.password_cursor, c);
+                    self.state.login.password_cursor += c.len_utf8();
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Attempt to log in with the credentials entered in the login modal.
+    fn attempt_login(&mut self) {
+        let email = self.state.login.email.trim().to_string();
+        let password = self.state.login.password.clone();
+
+        if email.is_empty() || password.is_empty() {
+            self.state.login.error = Some("Email and password required".to_string());
+            return;
+        }
+
+        self.state.login.logging_in = true;
+        self.state.login.error = None;
+
+        let core = Arc::clone(&self.core);
+        let event_tx = self.login_result_tx.clone();
+
+        self.rt_handle.spawn(async move {
+            let result = core.login(&email, &password).await;
+            let _ = event_tx.send(result);
+        });
+    }
+
+    /// Process the result of a login attempt.
+    fn handle_login_result(&mut self, result: LoginResult) {
+        self.state.login.logging_in = false;
+        match result {
+            Ok(session) => {
+                self.state.authenticated = true;
+                self.state.auth_email = Some(session.email.clone());
+                self.state.show_login_modal = false;
+                self.state.input_mode = InputMode::Normal;
+                self.state.status_message =
+                    Some(format!("Logged in ({})", session.subscription_label));
+                // Clear login form
+                self.state.login = LoginState::default();
+            }
+            Err(e) => {
+                self.state.login.error = Some(format!("Login failed: {}", e));
+            }
         }
     }
 
@@ -3639,12 +3877,56 @@ impl App {
 
     /// Poll the player's shared atomic state to update the now-playing bar.
     /// The V2 player doesn't emit CoreEvents for position/playback changes,
-    /// so we poll every tick (~100ms). Also detects track end for auto-advance.
+    /// so we poll every tick (~100ms). Also detects track end for auto-advance
+    /// and gapless transitions.
     async fn poll_player_state(&mut self) {
         let ps = self.core.get_playback_state();
         let is_playing = ps.is_playing;
+        let player = self.core.player();
 
-        // Check for auto-advance before updating state
+        // Detect gapless transition: track_id changed while still playing.
+        // The audio thread already transitioned seamlessly; we need to advance
+        // the queue and update the UI to reflect the new track.
+        if is_playing
+            && ps.track_id != 0
+            && self.last_track_id != 0
+            && ps.track_id != self.last_track_id
+        {
+            log::info!(
+                "[TUI] Gapless transition detected: track {} -> {}",
+                self.last_track_id,
+                ps.track_id,
+            );
+
+            // Advance the queue (the player already switched internally)
+            if let Some(advanced_track) = self.core.next_track().await {
+                log::info!(
+                    "[TUI] Queue advanced for gapless: {} - {}",
+                    advanced_track.artist,
+                    advanced_track.title,
+                );
+
+                // Update now-playing info
+                self.state.current_track_title = Some(advanced_track.title.clone());
+                self.state.current_track_artist = Some(advanced_track.artist.clone());
+                self.state.current_track_quality =
+                    match (advanced_track.bit_depth, advanced_track.sample_rate) {
+                        (Some(bd), Some(sr)) => {
+                            Some(format!("{}-bit / {:.1}kHz", bd, sr / 1000.0))
+                        }
+                        _ if advanced_track.hires => Some("Hi-Res".to_string()),
+                        _ => None,
+                    };
+
+                // Trigger cover art download for the new track
+                self.update_artwork_from_queue_track(&advanced_track);
+
+                // Pre-buffer the NEXT track after this gapless transition
+                self.prebuffer_next_track();
+            }
+        }
+
+        // Check for auto-advance (non-gapless: track ended, player stopped)
         if let Some(next_track) = playback::check_auto_advance(
             &self.core,
             self.was_playing,
@@ -3694,12 +3976,194 @@ impl App {
             });
         }
 
+        // Gapless pre-buffering: when the audio thread signals it wants the
+        // next track queued (~5s before current track ends), download and
+        // feed it via play_next() for seamless transition.
+        if player.state.is_gapless_ready() && player.state.get_gapless_next_track_id() == 0 {
+            self.prebuffer_next_track();
+        }
+
         // Update state
         self.was_playing = is_playing;
+        self.last_track_id = ps.track_id;
         self.state.is_playing = is_playing;
         self.state.position_secs = ps.position;
         self.state.duration_secs = ps.duration;
         self.state.volume = ps.volume;
+    }
+
+    /// Pre-buffer the next track in the queue for gapless playback.
+    ///
+    /// Downloads (or loads from cache) the next track and feeds it to the
+    /// player via `play_next()` so the audio thread can append it to the
+    /// current sink without any gap.
+    fn prebuffer_next_track(&mut self) {
+        let core = Arc::clone(&self.core);
+        let cache = self.playback_cache.clone();
+
+        self.rt_handle.spawn(async move {
+            // Peek at the next track without advancing the queue
+            let upcoming = core.peek_upcoming(1).await;
+            let next_track = match upcoming.first() {
+                Some(track) => track.clone(),
+                None => return,
+            };
+
+            log::info!(
+                "[TUI] Pre-buffering next track for gapless: {} - {} (id={})",
+                next_track.artist,
+                next_track.title,
+                next_track.id,
+            );
+
+            // Load quality settings
+            let (quality, streaming_only) = playback::load_quality_settings();
+
+            // Check L2 disk cache first
+            if let Some(ref pc) = cache {
+                if let Some(cached_data) = pc.get(next_track.id) {
+                    log::info!(
+                        "[TUI] Gapless pre-buffer: cache HIT for track {} ({} bytes)",
+                        next_track.id,
+                        cached_data.len(),
+                    );
+                    let player = core.player();
+                    match player.play_next(cached_data, next_track.id) {
+                        Ok(()) => log::info!("[TUI] Next track queued for gapless (from cache)"),
+                        Err(e) => log::warn!("[TUI] Failed to queue gapless track: {}", e),
+                    }
+                    return;
+                }
+            }
+
+            // Download from network
+            match core.get_stream_url(next_track.id, quality).await {
+                Ok(stream_url) => match reqwest::get(&stream_url.url).await {
+                    Ok(response) => {
+                        if let Ok(bytes) = response.bytes().await {
+                            let audio_vec = bytes.to_vec();
+
+                            // Cache the download (unless streaming_only)
+                            if !streaming_only {
+                                if let Some(ref pc) = cache {
+                                    pc.insert(next_track.id, &audio_vec);
+                                    log::debug!(
+                                        "[TUI] Cached pre-buffered track {} to L2 disk",
+                                        next_track.id,
+                                    );
+                                }
+                            }
+
+                            // Queue for gapless playback
+                            let player = core.player();
+                            match player.play_next(audio_vec, next_track.id) {
+                                Ok(()) => {
+                                    log::info!(
+                                        "[TUI] Next track queued for gapless (from network)"
+                                    )
+                                }
+                                Err(e) => {
+                                    log::warn!("[TUI] Failed to queue gapless track: {}", e)
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        log::warn!("[TUI] Failed to download next track for gapless: {}", e)
+                    }
+                },
+                Err(e) => {
+                    log::warn!(
+                        "[TUI] Failed to get stream URL for gapless pre-buffer: {}",
+                        e
+                    )
+                }
+            }
+        });
+    }
+
+    /// Read audio samples from the visualizer tap and compute bar heights.
+    fn update_visualizer(&mut self) {
+        if self.state.right_panel_mode != RightPanelMode::Visualizer
+            || !self.state.show_queue_panel
+        {
+            return;
+        }
+
+        let num_bars: usize = 16;
+
+        if !self.state.is_playing {
+            // Decay bars to zero when not playing
+            if !self.state.visualizer_bars.is_empty() {
+                let mut all_zero = true;
+                for bar in self.state.visualizer_bars.iter_mut() {
+                    *bar *= 0.8;
+                    if *bar > 0.01 {
+                        all_zero = false;
+                    } else {
+                        *bar = 0.0;
+                    }
+                }
+                if all_zero {
+                    self.state.visualizer_bars.clear();
+                }
+            }
+            return;
+        }
+
+        if let Some(ref tap) = self.visualizer_tap {
+            // Read a snapshot of the latest samples from the ring buffer
+            let sample_count = 2048;
+            let mut samples = vec![0.0f32; sample_count];
+            tap.ring_buffer.snapshot(&mut samples);
+
+            // Check if we have any actual audio data
+            let has_signal = samples.iter().any(|s| s.abs() > 0.0001);
+            if !has_signal {
+                // No signal — decay existing bars
+                if !self.state.visualizer_bars.is_empty() {
+                    for bar in self.state.visualizer_bars.iter_mut() {
+                        *bar *= 0.85;
+                        if *bar < 0.01 {
+                            *bar = 0.0;
+                        }
+                    }
+                }
+                return;
+            }
+
+            let chunk_size = samples.len() / num_bars;
+            let mut bars = Vec::with_capacity(num_bars);
+
+            for chunk_idx in 0..num_bars {
+                let start = chunk_idx * chunk_size;
+                let end = (start + chunk_size).min(samples.len());
+                let chunk = &samples[start..end];
+
+                // RMS of the chunk
+                let rms: f32 = (chunk.iter().map(|s| s * s).sum::<f32>()
+                    / chunk.len().max(1) as f32)
+                    .sqrt();
+
+                // Scale to 0.0..1.0 (typical audio RMS peaks around 0.3-0.5)
+                let height = (rms * 3.0).clamp(0.0, 1.0);
+                bars.push(height);
+            }
+
+            // Smooth with previous bars (instant rise, slow decay)
+            if self.state.visualizer_bars.len() == num_bars {
+                for (idx, bar) in bars.iter_mut().enumerate() {
+                    let prev = self.state.visualizer_bars[idx];
+                    *bar = if *bar > prev {
+                        *bar // instant rise
+                    } else {
+                        prev * 0.85 + *bar * 0.15 // slow decay
+                    };
+                }
+            }
+
+            self.state.visualizer_bars = bars;
+        }
     }
 
     fn handle_core_event(&mut self, event: CoreEvent) {
@@ -3796,5 +4260,59 @@ impl App {
         }
 
         self.state.queue_tracks = tracks;
+    }
+}
+
+/// Extract a dominant color from album cover art for use as a dynamic accent.
+///
+/// Downscales the image to 16x16 for fast analysis, skips transparent and
+/// very dark/light pixels (backgrounds and highlights), then averages the
+/// remaining pixels and boosts saturation slightly for visibility on dark
+/// terminal backgrounds. Falls back to Cyan if no qualifying pixels are found.
+fn extract_dominant_color(img: &image::DynamicImage) -> ratatui::style::Color {
+    let thumb = img.resize_exact(16, 16, image::imageops::FilterType::Nearest);
+    let rgba = thumb.to_rgba8();
+
+    let mut total_r: u64 = 0;
+    let mut total_g: u64 = 0;
+    let mut total_b: u64 = 0;
+    let mut count: u64 = 0;
+
+    for pixel in rgba.pixels() {
+        let [r, g, b, a] = pixel.0;
+        if a < 128 {
+            continue; // skip transparent
+        }
+        // Skip very dark and very light pixels (backgrounds/highlights)
+        let brightness = (r as u32 + g as u32 + b as u32) / 3;
+        if brightness < 30 || brightness > 225 {
+            continue;
+        }
+        total_r += r as u64;
+        total_g += g as u64;
+        total_b += b as u64;
+        count += 1;
+    }
+
+    if count == 0 {
+        return ratatui::style::Color::Cyan; // fallback to default accent
+    }
+
+    let r = (total_r / count) as u8;
+    let g = (total_g / count) as u8;
+    let b = (total_b / count) as u8;
+
+    // Boost saturation slightly for better visibility on dark background
+    let max_ch = r.max(g).max(b);
+    let min_ch = r.min(g).min(b);
+    if max_ch > min_ch {
+        let boost = 1.3f32;
+        let mid = (max_ch as f32 + min_ch as f32) / 2.0;
+        let r2 = ((r as f32 - mid) * boost + mid).clamp(0.0, 255.0) as u8;
+        let g2 = ((g as f32 - mid) * boost + mid).clamp(0.0, 255.0) as u8;
+        let b2 = ((b as f32 - mid) * boost + mid).clamp(0.0, 255.0) as u8;
+        ratatui::style::Color::Rgb(r2, g2, b2)
+    } else {
+        ratatui::style::Color::Rgb(r, g, b)
     }
 }

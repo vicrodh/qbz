@@ -91,8 +91,14 @@ pub fn render_help_bar(frame: &mut Frame, area: Rect, state: &AppState) {
             base.extend([
                 ("Space", "play/pause"),
                 ("n/p", "next/prev"),
+                ("s", "shuffle"),
+                ("r", "repeat"),
                 ("q", "queue"),
             ]);
+
+            if !state.authenticated {
+                base.push(("l", "login"));
+            }
 
             base
         }
