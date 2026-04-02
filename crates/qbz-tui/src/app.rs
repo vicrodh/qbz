@@ -307,6 +307,9 @@ impl App {
                 self.handle_core_event(core_event);
             }
 
+            // Poll player state for now-playing bar (player doesn't emit events)
+            self.poll_player_state();
+
             // Drain search results
             while let Ok(result) = self.search_result_rx.try_recv() {
                 self.handle_search_result(result);
@@ -603,6 +606,14 @@ impl App {
             return;
         }
 
+        // Update now-playing info immediately (player state only has track_id)
+        self.state.current_track_title = Some(track.title.clone());
+        self.state.current_track_artist = Some(track.performer.as_ref().map(|p| p.name.clone()).unwrap_or_else(|| "Unknown".to_string()));
+        self.state.current_track_quality = if track.hires_streamable {
+            Some("Hi-Res".to_string())
+        } else {
+            Some(format!("{}bit/{}kHz", track.maximum_bit_depth.unwrap_or(16), track.maximum_sampling_rate.unwrap_or(44.1)))
+        };
         self.state.status_message = Some(format!("Loading: {}...", track.title));
 
         let core = Arc::clone(&self.core);
@@ -641,6 +652,17 @@ impl App {
                 self.state.status_message = Some(format!("Search failed: {}", e));
             }
         }
+    }
+
+    /// Poll the player's shared atomic state to update the now-playing bar.
+    /// The V2 player doesn't emit CoreEvents for position/playback changes,
+    /// so we poll every tick (~100ms).
+    fn poll_player_state(&mut self) {
+        let ps = self.core.get_playback_state();
+        self.state.is_playing = ps.is_playing;
+        self.state.position_secs = ps.position;
+        self.state.duration_secs = ps.duration;
+        self.state.volume = ps.volume;
     }
 
     fn handle_core_event(&mut self, event: CoreEvent) {
