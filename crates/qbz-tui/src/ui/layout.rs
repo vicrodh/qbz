@@ -30,6 +30,7 @@ use super::placeholder::render_placeholder;
 use super::player_bar::render_player_bar;
 use super::queue_panel::render_queue_panel;
 use super::search::render_search;
+use super::search_modal::render_search_modal;
 use super::sidebar::render_sidebar;
 
 /// Width of the right panel (queue/lyrics) in columns.
@@ -134,6 +135,11 @@ pub fn render_layout(frame: &mut Frame, state: &mut AppState) -> LayoutAreas {
     // Render right panel if visible
     if state.show_queue_panel && queue_panel_area.width > 0 {
         render_queue_panel(frame, queue_panel_area, state);
+    }
+
+    // Render search modal overlay if active
+    if state.show_search_modal {
+        render_search_modal(frame, state);
     }
 
     LayoutAreas {

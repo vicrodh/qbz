@@ -6,4 +6,5 @@ pub mod placeholder;
 pub mod player_bar;
 pub mod queue_panel;
 pub mod search;
+pub mod search_modal;
 pub mod sidebar;

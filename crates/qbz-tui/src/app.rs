@@ -184,6 +184,8 @@ pub struct AppState {
     pub show_queue_panel: bool,
     /// Scrollbar state for the queue panel.
     pub queue_scrollbar_state: ScrollbarState,
+    /// Whether the search modal popup is visible (toggled with '/').
+    pub show_search_modal: bool,
 }
 
 impl Default for AppState {
@@ -209,6 +211,7 @@ impl Default for AppState {
             queue_repeat: RepeatMode::Off,
             show_queue_panel: false,
             queue_scrollbar_state: ScrollbarState::default(),
+            show_search_modal: false,
         }
     }
 }
@@ -595,12 +598,48 @@ impl App {
             }
             KeyCode::Char('6') => self.state.active_view = ActiveView::Settings,
 
-            // Search view: press 'i' or '/' to enter text input mode
-            KeyCode::Char('i') | KeyCode::Char('/') if self.state.active_view == ActiveView::Search => {
+            // '/' from any view opens the search modal popup
+            KeyCode::Char('/') => {
+                self.state.show_search_modal = true;
                 self.state.input_mode = InputMode::TextInput;
             }
 
-            // Search view: j/k for navigating results
+            // 'i' in search view enters text input mode (legacy, also opens modal)
+            KeyCode::Char('i') if self.state.active_view == ActiveView::Search => {
+                self.state.show_search_modal = true;
+                self.state.input_mode = InputMode::TextInput;
+            }
+
+            // Search modal open (normal mode): j/k for navigating results
+            KeyCode::Char('j') | KeyCode::Down if self.state.show_search_modal => {
+                let len = self.state.search.tracks.len();
+                if len > 0 {
+                    self.state.search.selected_index =
+                        (self.state.search.selected_index + 1).min(len - 1);
+                }
+            }
+            KeyCode::Char('k') | KeyCode::Up if self.state.show_search_modal => {
+                if self.state.search.selected_index > 0 {
+                    self.state.search.selected_index -= 1;
+                }
+            }
+
+            // Search modal open: Enter to play selected track
+            KeyCode::Enter if self.state.show_search_modal => {
+                self.play_selected_track();
+            }
+
+            // Search modal open: Esc closes the modal
+            KeyCode::Esc if self.state.show_search_modal => {
+                self.state.show_search_modal = false;
+            }
+
+            // Search modal open: 'a' adds track to queue
+            KeyCode::Char('a') if self.state.show_search_modal => {
+                self.add_selected_to_queue();
+            }
+
+            // Search view (non-modal): j/k for navigating results
             KeyCode::Char('j') | KeyCode::Down if self.state.active_view == ActiveView::Search => {
                 let len = self.state.search.tracks.len();
                 if len > 0 {
@@ -705,9 +744,14 @@ impl App {
         match key.code {
             KeyCode::Esc => {
                 self.state.input_mode = InputMode::Normal;
+                // If in modal, close it entirely
+                if self.state.show_search_modal {
+                    self.state.show_search_modal = false;
+                }
             }
             KeyCode::Enter => {
                 // Execute search, then return to normal mode for result navigation
+                // (modal stays open for browsing results)
                 self.execute_search();
                 self.state.input_mode = InputMode::Normal;
             }
