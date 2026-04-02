@@ -1407,7 +1407,7 @@ impl App {
 
             // Search modal open (normal mode): j/k for navigating results
             KeyCode::Char('j') | KeyCode::Down if self.state.show_search_modal => {
-                let len = self.state.search.tracks.len();
+                let len = self.search_active_list_len();
                 if len > 0 {
                     self.state.search.selected_index =
                         (self.state.search.selected_index + 1).min(len - 1);
@@ -1419,9 +1419,21 @@ impl App {
                 }
             }
 
-            // Search modal open: Enter to play selected track
+            // Search modal open: Tab/Shift+Tab to switch tabs
+            KeyCode::Tab if self.state.show_search_modal => {
+                self.cycle_search_tab(true);
+            }
+            KeyCode::BackTab if self.state.show_search_modal => {
+                self.cycle_search_tab(false);
+            }
+
+            // Search modal open: Enter to play/open selected item
             KeyCode::Enter if self.state.show_search_modal => {
-                self.play_selected_track();
+                match self.state.search.tab {
+                    SearchTab::Tracks => self.play_selected_track(),
+                    SearchTab::Albums => self.open_selected_search_album(),
+                    SearchTab::Artists => {} // TODO: artist detail
+                }
             }
 
             // Search modal open: Esc closes the modal
@@ -1434,11 +1446,11 @@ impl App {
                 self.add_selected_to_queue();
             }
 
-            // Search view: Tab/Shift+Tab to switch tabs
-            KeyCode::Tab if self.state.active_view == ActiveView::Search && !self.state.show_search_modal => {
+            // Search view (non-modal): Tab/Shift+Tab to switch tabs
+            KeyCode::Tab if self.state.active_view == ActiveView::Search => {
                 self.cycle_search_tab(true);
             }
-            KeyCode::BackTab if self.state.active_view == ActiveView::Search && !self.state.show_search_modal => {
+            KeyCode::BackTab if self.state.active_view == ActiveView::Search => {
                 self.cycle_search_tab(false);
             }
 
@@ -1793,6 +1805,13 @@ impl App {
                 if self.state.show_search_modal {
                     self.state.show_search_modal = false;
                 }
+            }
+            // Tab switches search tab even while typing
+            KeyCode::Tab if self.state.show_search_modal => {
+                self.cycle_search_tab(true);
+            }
+            KeyCode::BackTab if self.state.show_search_modal => {
+                self.cycle_search_tab(false);
             }
             KeyCode::Enter => {
                 // Execute search, then return to normal mode for result navigation
