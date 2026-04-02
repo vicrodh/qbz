@@ -100,7 +100,7 @@
                 class="tab-move-btn"
                 onclick={() => moveUp(index)}
                 disabled={index === 0}
-                title={$t('actions.moveUp')}
+                title={ $t('actions.moveUp') }
               >
                 ↑
               </button>
@@ -108,7 +108,7 @@
                 class="tab-move-btn"
                 onclick={() => moveDown(index)}
                 disabled={index === tabOrder.length - 1}
-                title={$t('actions.moveDown')}
+                title={ $t('actions.moveDown') }
               >
                 ↓
               </button>
