@@ -1,4 +1,4 @@
-use ratatui::layout::{Constraint, Direction, Layout};
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::Frame;
 
 use crate::app::{ActiveView, AppState};
@@ -7,12 +7,25 @@ use super::placeholder::render_placeholder;
 use super::search::render_search;
 use super::sidebar::render_sidebar;
 
+/// Computed layout areas from the last render, used for mouse hit-testing.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct LayoutAreas {
+    pub sidebar: Rect,
+    pub content: Rect,
+    pub now_playing: Rect,
+    /// The area where search results are rendered (within content).
+    /// Only valid when the active view is Search.
+    pub search_results: Rect,
+}
+
 /// Top-level render function.
 ///
 /// Splits the terminal into:
 /// - Vertical: `[main_area (Min(1)), now_playing (Length(3))]`
 /// - Main area horizontal: `[sidebar (Length(sidebar_width)), content (Min(1))]`
-pub fn render_layout(frame: &mut Frame, state: &AppState) {
+///
+/// Returns the computed [`LayoutAreas`] for mouse hit-testing.
+pub fn render_layout(frame: &mut Frame, state: &AppState) -> LayoutAreas {
     let size = frame.area();
 
     // Vertical split: main content + now-playing bar at bottom
@@ -42,6 +55,22 @@ pub fn render_layout(frame: &mut Frame, state: &AppState) {
 
     render_sidebar(frame, sidebar_area, state);
 
+    // Compute search results area (only meaningful when in Search view).
+    // The search view splits content_area into: input(3) + status(1) + results(rest).
+    let search_results_area = if state.active_view == ActiveView::Search {
+        let search_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(3),
+                Constraint::Length(1),
+                Constraint::Min(1),
+            ])
+            .split(content_area);
+        search_chunks[2]
+    } else {
+        Rect::default()
+    };
+
     // Render view-specific content
     match state.active_view {
         ActiveView::Search => render_search(frame, content_area, state),
@@ -49,4 +78,11 @@ pub fn render_layout(frame: &mut Frame, state: &AppState) {
     }
 
     render_now_playing(frame, now_playing_area, state);
+
+    LayoutAreas {
+        sidebar: sidebar_area,
+        content: content_area,
+        now_playing: now_playing_area,
+        search_results: search_results_area,
+    }
 }

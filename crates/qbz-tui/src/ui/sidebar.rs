@@ -8,7 +8,7 @@ use crate::app::{ActiveView, AppState};
 use crate::theme::{ACCENT, BG_PRIMARY, BG_SELECTED, TEXT_DIM, TEXT_PRIMARY, TEXT_SECONDARY};
 
 /// All navigation entries in display order.
-const NAV_ITEMS: &[(ActiveView, &str, &str)] = &[
+pub const NAV_ITEMS: &[(ActiveView, &str, &str)] = &[
     (ActiveView::Home, "Home", "H"),
     (ActiveView::Favorites, "Favorites", "F"),
     (ActiveView::Library, "Library", "L"),

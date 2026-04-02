@@ -2,7 +2,10 @@ use std::io::{self, stdout};
 use std::sync::Arc;
 use std::time::Duration;
 
-use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::event::{
+    self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent,
+    MouseEventKind,
+};
 use crossterm::execute;
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
@@ -19,7 +22,7 @@ use qbz_player::Player;
 
 use crate::adapter::TuiAdapter;
 use crate::credentials;
-use crate::ui::layout::render_layout;
+use crate::ui::layout::{render_layout, LayoutAreas};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ActiveView {
@@ -150,6 +153,8 @@ pub struct App {
     search_result_tx: mpsc::UnboundedSender<SearchResult>,
     /// Receiver for search results (drained each tick).
     search_result_rx: mpsc::UnboundedReceiver<SearchResult>,
+    /// Layout areas from the last render, used for mouse hit-testing.
+    layout_areas: LayoutAreas,
 }
 
 impl App {
@@ -237,12 +242,13 @@ impl App {
             rt_handle,
             search_result_tx: search_tx,
             search_result_rx: search_rx,
+            layout_areas: LayoutAreas::default(),
         })
     }
 
-    /// Render the full UI for the current frame.
-    pub fn draw(&self, frame: &mut Frame) {
-        render_layout(frame, &self.state);
+    /// Render the full UI for the current frame and return the computed layout areas.
+    pub fn draw(&self, frame: &mut Frame) -> LayoutAreas {
+        render_layout(frame, &self.state)
     }
 
     pub async fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
@@ -250,7 +256,11 @@ impl App {
         let original_hook = std::panic::take_hook();
         std::panic::set_hook(Box::new(move |panic_info| {
             let _ = disable_raw_mode();
-            let _ = execute!(io::stdout(), LeaveAlternateScreen);
+            let _ = execute!(
+                io::stdout(),
+                LeaveAlternateScreen,
+                crossterm::event::DisableMouseCapture
+            );
             let _ = execute!(io::stdout(), crossterm::cursor::Show);
             original_hook(panic_info);
         }));
@@ -258,23 +268,37 @@ impl App {
         // Set up terminal
         enable_raw_mode()?;
         let mut stdout_handle = stdout();
-        execute!(stdout_handle, EnterAlternateScreen)?;
+        execute!(
+            stdout_handle,
+            EnterAlternateScreen,
+            crossterm::event::EnableMouseCapture
+        )?;
         let backend = CrosstermBackend::new(stdout_handle);
         let mut terminal = Terminal::new(backend)?;
         terminal.clear()?;
 
         // Main event loop
         while !self.should_quit {
-            // Draw UI
-            terminal.draw(|frame| self.draw(frame))?;
+            // Draw UI and capture layout areas for mouse hit-testing
+            let areas = std::cell::Cell::new(LayoutAreas::default());
+            terminal.draw(|frame| {
+                areas.set(self.draw(frame));
+            })?;
+            self.layout_areas = areas.get();
 
             // Poll crossterm events with 100ms timeout
             if event::poll(Duration::from_millis(100))? {
-                if let Event::Key(key) = event::read()? {
-                    // Only handle key press events (ignore release/repeat on some terminals)
-                    if key.kind == KeyEventKind::Press {
-                        self.handle_key(key);
+                match event::read()? {
+                    Event::Key(key) => {
+                        // Only handle key press events (ignore release/repeat on some terminals)
+                        if key.kind == KeyEventKind::Press {
+                            self.handle_key(key);
+                        }
                     }
+                    Event::Mouse(mouse) => {
+                        self.handle_mouse(mouse);
+                    }
+                    _ => {}
                 }
             }
 
@@ -291,7 +315,11 @@ impl App {
 
         // Cleanup terminal
         disable_raw_mode()?;
-        execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+        execute!(
+            terminal.backend_mut(),
+            LeaveAlternateScreen,
+            crossterm::event::DisableMouseCapture
+        )?;
         execute!(terminal.backend_mut(), crossterm::cursor::Show)?;
 
         Ok(())
@@ -301,6 +329,94 @@ impl App {
         match self.state.input_mode {
             InputMode::TextInput => self.handle_key_text_input(key),
             InputMode::Normal => self.handle_key_normal(key),
+        }
+    }
+
+    /// Handle mouse events using the stored layout areas from the last render.
+    fn handle_mouse(&mut self, mouse: MouseEvent) {
+        let col = mouse.column;
+        let row = mouse.row;
+
+        match mouse.kind {
+            MouseEventKind::Down(MouseButton::Left) => {
+                if Self::is_in_rect(col, row, self.layout_areas.sidebar) {
+                    self.handle_sidebar_click(col, row);
+                } else if self.state.active_view == ActiveView::Search
+                    && Self::is_in_rect(col, row, self.layout_areas.search_results)
+                {
+                    self.handle_search_click(row);
+                }
+            }
+            MouseEventKind::ScrollUp => {
+                self.handle_scroll(-1);
+            }
+            MouseEventKind::ScrollDown => {
+                self.handle_scroll(1);
+            }
+            _ => {}
+        }
+    }
+
+    /// Check whether a screen position falls inside a given rectangle.
+    fn is_in_rect(col: u16, row: u16, rect: ratatui::layout::Rect) -> bool {
+        col >= rect.x
+            && col < rect.x + rect.width
+            && row >= rect.y
+            && row < rect.y + rect.height
+    }
+
+    /// Map a click on the sidebar to a navigation item.
+    fn handle_sidebar_click(&mut self, _col: u16, row: u16) {
+        use crate::ui::sidebar::NAV_ITEMS;
+
+        let area = self.layout_areas.sidebar;
+
+        // The sidebar renders inside a Block with a right border, so the inner
+        // area starts 1 row into the block (though the block has no top border,
+        // the inner area matches the block area minus the right border column).
+        // For hit-testing we use the row offset from the top of the sidebar area.
+        let relative_row = row.saturating_sub(area.y);
+
+        if self.state.sidebar_expanded {
+            // Expanded sidebar layout:
+            //   row 0: header ("QBZ")
+            //   row 1: separator
+            //   row 2..2+N: nav items
+            if relative_row >= 2 {
+                let item_idx = (relative_row - 2) as usize;
+                if let Some((view, _, _)) = NAV_ITEMS.get(item_idx) {
+                    self.state.active_view = *view;
+                }
+            }
+        } else {
+            // Collapsed sidebar: nav items start at row 0 of the inner area.
+            let item_idx = relative_row as usize;
+            if let Some((view, _, _)) = NAV_ITEMS.get(item_idx) {
+                self.state.active_view = *view;
+            }
+        }
+    }
+
+    /// Map a click on the search results list to a selection change.
+    fn handle_search_click(&mut self, row: u16) {
+        let results_area = self.layout_areas.search_results;
+        let relative_row = row.saturating_sub(results_area.y) as usize;
+        let len = self.state.search.tracks.len();
+        if len > 0 && relative_row < len {
+            self.state.search.selected_index = relative_row;
+        }
+    }
+
+    /// Handle scroll wheel: move the selection in the current list.
+    fn handle_scroll(&mut self, delta: i32) {
+        if self.state.active_view == ActiveView::Search {
+            let len = self.state.search.tracks.len();
+            if len == 0 {
+                return;
+            }
+            let current = self.state.search.selected_index as i32;
+            let next = (current + delta).clamp(0, (len as i32) - 1) as usize;
+            self.state.search.selected_index = next;
         }
     }
 
