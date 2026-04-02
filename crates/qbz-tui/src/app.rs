@@ -19,7 +19,7 @@ use tokio::sync::mpsc;
 use qbz_audio::{settings::AudioSettingsStore, AudioDiagnostic, AudioSettings};
 use qbz_cache::PlaybackCache;
 use qbz_core::QbzCore;
-use qbz_models::{Album, CoreEvent, Playlist, QueueState, RepeatMode, Track};
+use qbz_models::{Album, CoreEvent, DiscoverAlbum, DiscoverResponse, Playlist, QueueState, RepeatMode, SearchResultsPage, Track};
 use qbz_player::Player;
 
 use crate::adapter::TuiAdapter;
@@ -29,7 +29,7 @@ use crate::ui::layout::{render_layout, LayoutAreas};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ActiveView {
-    Home,
+    Discovery,
     Favorites,
     Library,
     Playlists,
@@ -42,7 +42,7 @@ impl ActiveView {
     /// Human-readable label for display in placeholder views.
     pub fn label(self) -> &'static str {
         match self {
-            ActiveView::Home => "Home",
+            ActiveView::Discovery => "Discovery",
             ActiveView::Favorites => "Favorites",
             ActiveView::Library => "Library",
             ActiveView::Playlists => "Playlists",
@@ -51,6 +51,14 @@ impl ActiveView {
             ActiveView::Album => "Album",
         }
     }
+}
+
+/// Which tab is active in the discovery view.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum DiscoveryTab {
+    Home,
+    EditorPicks,
+    ForYou,
 }
 
 /// Simplified track info for display in the queue panel.
@@ -240,6 +248,54 @@ impl Default for PlaylistsState {
     }
 }
 
+/// State for the discovery view.
+pub struct DiscoveryState {
+    /// Active tab.
+    pub tab: DiscoveryTab,
+    /// Currently selected index in the active tab's list.
+    pub selected_index: usize,
+    /// Whether a load is in progress.
+    pub loading: bool,
+    /// Error from the last load attempt.
+    pub error: Option<String>,
+    /// Whether Home tab data has been loaded.
+    pub loaded: bool,
+    // Home tab data (from discover index)
+    pub new_releases: Vec<DiscoverAlbum>,
+    pub most_streamed: Vec<DiscoverAlbum>,
+    pub press_awards: Vec<DiscoverAlbum>,
+    pub qobuzissimes: Vec<DiscoverAlbum>,
+    // Editor's Picks tab
+    pub editor_picks: Vec<Album>,
+    pub editor_picks_loaded: bool,
+    // For You tab (favorite albums)
+    pub for_you_albums: Vec<Album>,
+    pub for_you_loaded: bool,
+    /// Scrollbar state.
+    pub scrollbar_state: ScrollbarState,
+}
+
+impl Default for DiscoveryState {
+    fn default() -> Self {
+        Self {
+            tab: DiscoveryTab::Home,
+            selected_index: 0,
+            loading: false,
+            error: None,
+            loaded: false,
+            new_releases: Vec::new(),
+            most_streamed: Vec::new(),
+            press_awards: Vec::new(),
+            qobuzissimes: Vec::new(),
+            editor_picks: Vec::new(),
+            editor_picks_loaded: false,
+            for_you_albums: Vec::new(),
+            for_you_loaded: false,
+            scrollbar_state: ScrollbarState::default(),
+        }
+    }
+}
+
 /// State for the settings view.
 pub struct SettingsState {
     /// Loaded audio settings (snapshot).
@@ -299,12 +355,14 @@ pub struct AppState {
     pub settings: SettingsState,
     /// Playlists view state.
     pub playlists: PlaylistsState,
+    /// Discovery view state.
+    pub discovery: DiscoveryState,
 }
 
 impl Default for AppState {
     fn default() -> Self {
         Self {
-            active_view: ActiveView::Home,
+            active_view: ActiveView::Discovery,
             is_playing: false,
             current_track_title: None,
             current_track_artist: None,
@@ -328,6 +386,7 @@ impl Default for AppState {
             album: AlbumState::default(),
             settings: SettingsState::default(),
             playlists: PlaylistsState::default(),
+            discovery: DiscoveryState::default(),
         }
     }
 }
@@ -352,6 +411,15 @@ type PlaylistsResult = Result<Vec<Playlist>, qbz_core::error::CoreError>;
 
 /// Type alias for the playlist detail result payload.
 type PlaylistDetailResult = Result<Playlist, qbz_core::error::CoreError>;
+
+/// Type alias for the discover index result payload.
+type DiscoverResult = Result<DiscoverResponse, qbz_core::error::CoreError>;
+
+/// Type alias for the editor picks result payload.
+type EditorPicksResult = Result<SearchResultsPage<Album>, qbz_core::error::CoreError>;
+
+/// Type alias for the for-you (favorite albums) result payload.
+type ForYouResult = Result<Vec<Album>, qbz_core::error::CoreError>;
 
 pub struct App {
     pub state: AppState,
@@ -388,6 +456,18 @@ pub struct App {
     playlist_detail_result_tx: mpsc::UnboundedSender<PlaylistDetailResult>,
     /// Receiver for playlist detail results.
     playlist_detail_result_rx: mpsc::UnboundedReceiver<PlaylistDetailResult>,
+    /// Sender for discover index results.
+    discover_result_tx: mpsc::UnboundedSender<DiscoverResult>,
+    /// Receiver for discover index results.
+    discover_result_rx: mpsc::UnboundedReceiver<DiscoverResult>,
+    /// Sender for editor picks results.
+    editor_picks_result_tx: mpsc::UnboundedSender<EditorPicksResult>,
+    /// Receiver for editor picks results.
+    editor_picks_result_rx: mpsc::UnboundedReceiver<EditorPicksResult>,
+    /// Sender for for-you results.
+    for_you_result_tx: mpsc::UnboundedSender<ForYouResult>,
+    /// Receiver for for-you results.
+    for_you_result_rx: mpsc::UnboundedReceiver<ForYouResult>,
     /// Layout areas from the last render, used for mouse hit-testing.
     layout_areas: LayoutAreas,
     /// Sender for playback status updates (cloned into async tasks).
@@ -501,6 +581,9 @@ impl App {
         let (playlists_tx, playlists_rx) = mpsc::unbounded_channel::<PlaylistsResult>();
         let (playlist_detail_tx, playlist_detail_rx) = mpsc::unbounded_channel::<PlaylistDetailResult>();
         let (playback_tx, playback_rx) = mpsc::unbounded_channel::<PlaybackStatus>();
+        let (discover_tx, discover_rx) = mpsc::unbounded_channel::<DiscoverResult>();
+        let (editor_picks_tx, editor_picks_rx) = mpsc::unbounded_channel::<EditorPicksResult>();
+        let (for_you_tx, for_you_rx) = mpsc::unbounded_channel::<ForYouResult>();
 
         // Initialize L2 disk playback cache (800MB limit)
         let playback_cache = match PlaybackCache::new(800 * 1024 * 1024) {
@@ -540,6 +623,12 @@ impl App {
             playlists_result_rx: playlists_rx,
             playlist_detail_result_tx: playlist_detail_tx,
             playlist_detail_result_rx: playlist_detail_rx,
+            discover_result_tx: discover_tx,
+            discover_result_rx: discover_rx,
+            editor_picks_result_tx: editor_picks_tx,
+            editor_picks_result_rx: editor_picks_rx,
+            for_you_result_tx: for_you_tx,
+            for_you_result_rx: for_you_rx,
             layout_areas: LayoutAreas::default(),
             playback_status_tx: playback_tx,
             playback_status_rx: playback_rx,
@@ -661,6 +750,21 @@ impl App {
             while let Ok(result) = self.playlist_detail_result_rx.try_recv() {
                 self.handle_playlist_detail_result(result);
             }
+
+            // Drain discovery results
+            while let Ok(result) = self.discover_result_rx.try_recv() {
+                self.handle_discover_result(result);
+            }
+
+            // Drain editor picks results
+            while let Ok(result) = self.editor_picks_result_rx.try_recv() {
+                self.handle_editor_picks_result(result);
+            }
+
+            // Drain for-you results
+            while let Ok(result) = self.for_you_result_rx.try_recv() {
+                self.handle_for_you_result(result);
+            }
         }
 
         // Cleanup terminal
@@ -740,7 +844,9 @@ impl App {
 
         if let Some(view) = nav_view {
             self.state.active_view = view;
-            if view == ActiveView::Favorites {
+            if view == ActiveView::Discovery {
+                self.load_discovery_if_needed();
+            } else if view == ActiveView::Favorites {
                 self.load_favorites_if_needed();
             } else if view == ActiveView::Settings {
                 self.load_settings_if_needed();
@@ -799,6 +905,15 @@ impl App {
                 let next = (current + delta).clamp(0, (total as i32) - 1) as usize;
                 self.state.settings.selected_index = next;
             }
+            ActiveView::Discovery => {
+                let len = self.discovery_item_count();
+                if len == 0 {
+                    return;
+                }
+                let current = self.state.discovery.selected_index as i32;
+                let next = (current + delta).clamp(0, (len as i32) - 1) as usize;
+                self.state.discovery.selected_index = next;
+            }
             ActiveView::Playlists => {
                 if self.state.playlists.detail_playlist.is_some() {
                     let len = self.state.playlists.detail_playlist.as_ref()
@@ -837,8 +952,37 @@ impl App {
             KeyCode::Char('q') => {
                 self.state.show_queue_panel = !self.state.show_queue_panel;
             }
-            // Tab key: reserved for future focus cycling
-            KeyCode::Char('1') => self.state.active_view = ActiveView::Home,
+            // Tab/BackTab for discovery tab cycling
+            KeyCode::Tab if self.state.active_view == ActiveView::Discovery => {
+                self.cycle_discovery_tab(true);
+            }
+            KeyCode::BackTab if self.state.active_view == ActiveView::Discovery => {
+                self.cycle_discovery_tab(false);
+            }
+
+            // Discovery view: j/k for navigating items
+            KeyCode::Char('j') | KeyCode::Down if self.state.active_view == ActiveView::Discovery => {
+                let len = self.discovery_item_count();
+                if len > 0 {
+                    self.state.discovery.selected_index =
+                        (self.state.discovery.selected_index + 1).min(len - 1);
+                }
+            }
+            KeyCode::Char('k') | KeyCode::Up if self.state.active_view == ActiveView::Discovery => {
+                if self.state.discovery.selected_index > 0 {
+                    self.state.discovery.selected_index -= 1;
+                }
+            }
+
+            // Discovery view: Enter to navigate to album detail
+            KeyCode::Enter if self.state.active_view == ActiveView::Discovery => {
+                self.open_selected_discovery_album();
+            }
+
+            KeyCode::Char('1') => {
+                self.state.active_view = ActiveView::Discovery;
+                self.load_discovery_if_needed();
+            }
             KeyCode::Char('2') => {
                 self.state.active_view = ActiveView::Favorites;
                 self.load_favorites_if_needed();
@@ -1783,6 +1927,242 @@ impl App {
         self.rt_handle.spawn(async move {
             core.add_track(queue_track).await;
         });
+    }
+
+    // ==================== Discovery ====================
+
+    /// Load the discover index if not already loaded (Home tab).
+    fn load_discovery_if_needed(&mut self) {
+        if self.state.discovery.loaded || self.state.discovery.loading {
+            return;
+        }
+
+        if !self.state.authenticated {
+            self.state.discovery.error = Some("Not authenticated".to_string());
+            return;
+        }
+
+        self.state.discovery.loading = true;
+        self.state.discovery.error = None;
+        self.state.status_message = Some("Loading discovery...".to_string());
+
+        let core = Arc::clone(&self.core);
+        let event_tx = self.discover_result_tx.clone();
+
+        self.rt_handle.spawn(async move {
+            let result = core.get_discover_index(None).await;
+            let _ = event_tx.send(result);
+        });
+    }
+
+    /// Load editor picks if not already loaded.
+    fn load_editor_picks_if_needed(&mut self) {
+        if self.state.discovery.editor_picks_loaded || self.state.discovery.loading {
+            return;
+        }
+
+        if !self.state.authenticated {
+            self.state.discovery.error = Some("Not authenticated".to_string());
+            return;
+        }
+
+        self.state.discovery.loading = true;
+        self.state.discovery.error = None;
+        self.state.status_message = Some("Loading editor's picks...".to_string());
+
+        let core = Arc::clone(&self.core);
+        let event_tx = self.editor_picks_result_tx.clone();
+
+        self.rt_handle.spawn(async move {
+            let result = core.get_featured_albums("editor-picks", 50, 0, None).await;
+            let _ = event_tx.send(result);
+        });
+    }
+
+    /// Load for-you favorite albums if not already loaded.
+    fn load_for_you_if_needed(&mut self) {
+        if self.state.discovery.for_you_loaded || self.state.discovery.loading {
+            return;
+        }
+
+        if !self.state.authenticated {
+            self.state.discovery.error = Some("Not authenticated".to_string());
+            return;
+        }
+
+        self.state.discovery.loading = true;
+        self.state.discovery.error = None;
+        self.state.status_message = Some("Loading your favorites...".to_string());
+
+        let core = Arc::clone(&self.core);
+        let event_tx = self.for_you_result_tx.clone();
+
+        self.rt_handle.spawn(async move {
+            let result = core.get_favorites("albums", 50, 0).await;
+            let parsed = result.and_then(|json| {
+                let albums_page = json
+                    .get("albums")
+                    .and_then(|albums| {
+                        serde_json::from_value::<SearchResultsPage<Album>>(albums.clone()).ok()
+                    });
+                match albums_page {
+                    Some(page) => Ok(page.items),
+                    None => {
+                        log::warn!("[TUI] Could not parse for-you albums response");
+                        Ok(Vec::new())
+                    }
+                }
+            });
+            let _ = event_tx.send(parsed);
+        });
+    }
+
+    /// Handle the result of a discover index load.
+    fn handle_discover_result(&mut self, result: DiscoverResult) {
+        self.state.discovery.loading = false;
+        self.state.discovery.loaded = true;
+        match result {
+            Ok(response) => {
+                self.state.discovery.new_releases = response
+                    .containers
+                    .new_releases
+                    .map(|c| c.data.items)
+                    .unwrap_or_default();
+                self.state.discovery.most_streamed = response
+                    .containers
+                    .most_streamed
+                    .map(|c| c.data.items)
+                    .unwrap_or_default();
+                self.state.discovery.press_awards = response
+                    .containers
+                    .press_awards
+                    .map(|c| c.data.items)
+                    .unwrap_or_default();
+                self.state.discovery.qobuzissimes = response
+                    .containers
+                    .qobuzissims
+                    .map(|c| c.data.items)
+                    .unwrap_or_default();
+                self.state.discovery.selected_index = 0;
+                self.state.discovery.error = None;
+
+                let total = self.state.discovery.new_releases.len()
+                    + self.state.discovery.most_streamed.len()
+                    + self.state.discovery.press_awards.len()
+                    + self.state.discovery.qobuzissimes.len();
+                self.state.status_message = Some(format!("Discovery: {} albums", total));
+            }
+            Err(e) => {
+                self.state.discovery.error = Some(format!("{}", e));
+                self.state.status_message = Some(format!("Failed to load discovery: {}", e));
+            }
+        }
+    }
+
+    /// Handle the result of an editor picks load.
+    fn handle_editor_picks_result(&mut self, result: EditorPicksResult) {
+        self.state.discovery.loading = false;
+        self.state.discovery.editor_picks_loaded = true;
+        match result {
+            Ok(page) => {
+                let count = page.items.len();
+                self.state.discovery.editor_picks = page.items;
+                self.state.discovery.selected_index = 0;
+                self.state.discovery.error = None;
+                self.state.status_message = Some(format!("Editor's Picks: {} albums", count));
+            }
+            Err(e) => {
+                self.state.discovery.error = Some(format!("{}", e));
+                self.state.status_message = Some(format!("Failed to load editor's picks: {}", e));
+            }
+        }
+    }
+
+    /// Handle the result of a for-you load.
+    fn handle_for_you_result(&mut self, result: ForYouResult) {
+        self.state.discovery.loading = false;
+        self.state.discovery.for_you_loaded = true;
+        match result {
+            Ok(albums) => {
+                let count = albums.len();
+                self.state.discovery.for_you_albums = albums;
+                self.state.discovery.selected_index = 0;
+                self.state.discovery.error = None;
+                self.state.status_message = Some(format!("For You: {} albums", count));
+            }
+            Err(e) => {
+                self.state.discovery.error = Some(format!("{}", e));
+                self.state.status_message = Some(format!("Failed to load favorites: {}", e));
+            }
+        }
+    }
+
+    /// Cycle through discovery tabs.
+    fn cycle_discovery_tab(&mut self, forward: bool) {
+        let tabs = [
+            DiscoveryTab::Home,
+            DiscoveryTab::EditorPicks,
+            DiscoveryTab::ForYou,
+        ];
+        let current = tabs.iter().position(|tab| *tab == self.state.discovery.tab).unwrap_or(0);
+        let next = if forward {
+            (current + 1) % tabs.len()
+        } else {
+            (current + tabs.len() - 1) % tabs.len()
+        };
+        self.state.discovery.tab = tabs[next];
+        self.state.discovery.selected_index = 0;
+
+        // Load data for the new tab if needed
+        match self.state.discovery.tab {
+            DiscoveryTab::Home => self.load_discovery_if_needed(),
+            DiscoveryTab::EditorPicks => self.load_editor_picks_if_needed(),
+            DiscoveryTab::ForYou => self.load_for_you_if_needed(),
+        }
+    }
+
+    /// Get the total number of items in the current discovery tab.
+    fn discovery_item_count(&self) -> usize {
+        match self.state.discovery.tab {
+            DiscoveryTab::Home => {
+                self.state.discovery.new_releases.len()
+                    + self.state.discovery.most_streamed.len()
+                    + self.state.discovery.press_awards.len()
+                    + self.state.discovery.qobuzissimes.len()
+            }
+            DiscoveryTab::EditorPicks => self.state.discovery.editor_picks.len(),
+            DiscoveryTab::ForYou => self.state.discovery.for_you_albums.len(),
+        }
+    }
+
+    /// Open the selected album from the discovery view.
+    fn open_selected_discovery_album(&mut self) {
+        let idx = self.state.discovery.selected_index;
+        let album_id: Option<String> = match self.state.discovery.tab {
+            DiscoveryTab::Home => {
+                // Build flat list to find the album at idx
+                let all_albums: Vec<&DiscoverAlbum> = self
+                    .state
+                    .discovery
+                    .new_releases
+                    .iter()
+                    .chain(self.state.discovery.most_streamed.iter())
+                    .chain(self.state.discovery.press_awards.iter())
+                    .chain(self.state.discovery.qobuzissimes.iter())
+                    .collect();
+                all_albums.get(idx).map(|a| a.id.clone())
+            }
+            DiscoveryTab::EditorPicks => {
+                self.state.discovery.editor_picks.get(idx).map(|a| a.id.clone())
+            }
+            DiscoveryTab::ForYou => {
+                self.state.discovery.for_you_albums.get(idx).map(|a| a.id.clone())
+            }
+        };
+
+        if let Some(id) = album_id {
+            self.load_album(&id, ActiveView::Discovery);
+        }
     }
 
     // ==================== Settings ====================

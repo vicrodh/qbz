@@ -24,6 +24,7 @@ use ratatui::Frame;
 
 use crate::app::{ActiveView, AppState};
 use super::album_detail::render_album_detail;
+use super::discovery::render_discovery;
 use super::favorites::render_favorites;
 use super::help_bar::render_help_bar;
 use super::menu_bar::render_menu_bar;
@@ -130,6 +131,7 @@ pub fn render_layout(frame: &mut Frame, state: &mut AppState) -> LayoutAreas {
     // Render view-specific content
     let active = state.active_view;
     match active {
+        ActiveView::Discovery => render_discovery(frame, content_area, state),
         ActiveView::Search => render_search(frame, content_area, state),
         ActiveView::Favorites => render_favorites(frame, content_area, state),
         ActiveView::Album => render_album_detail(frame, content_area, state),

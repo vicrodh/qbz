@@ -1,4 +1,5 @@
 pub mod album_detail;
+pub mod discovery;
 pub mod favorites;
 pub mod help_bar;
 pub mod layout;

@@ -11,7 +11,7 @@ use crate::theme::{ACCENT, BG_PRIMARY, BG_SELECTED, TEXT_DIM, TEXT_MUTED, TEXT_P
 
 /// All navigation entries in display order.
 pub const NAV_ITEMS: &[(ActiveView, &str)] = &[
-    (ActiveView::Home, "Home"),
+    (ActiveView::Discovery, "Discovery"),
     (ActiveView::Favorites, "Favorites"),
     (ActiveView::Library, "Library"),
     (ActiveView::Playlists, "Playlists"),
