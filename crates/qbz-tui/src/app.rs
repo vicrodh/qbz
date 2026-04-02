@@ -22,6 +22,7 @@ use qbz_player::Player;
 
 use crate::adapter::TuiAdapter;
 use crate::credentials;
+use crate::playback::{self, PlaybackStatus};
 use crate::ui::layout::{render_layout, LayoutAreas};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -155,6 +156,12 @@ pub struct App {
     search_result_rx: mpsc::UnboundedReceiver<SearchResult>,
     /// Layout areas from the last render, used for mouse hit-testing.
     layout_areas: LayoutAreas,
+    /// Sender for playback status updates (cloned into async tasks).
+    playback_status_tx: mpsc::UnboundedSender<PlaybackStatus>,
+    /// Receiver for playback status updates (drained each tick).
+    playback_status_rx: mpsc::UnboundedReceiver<PlaybackStatus>,
+    /// Whether playback was active on the previous tick (for auto-advance detection).
+    was_playing: bool,
 }
 
 impl App {
@@ -232,6 +239,7 @@ impl App {
         let rt_handle = tokio::runtime::Handle::current();
 
         let (search_tx, search_rx) = mpsc::unbounded_channel::<SearchResult>();
+        let (playback_tx, playback_rx) = mpsc::unbounded_channel::<PlaybackStatus>();
 
         Ok(Self {
             state,
@@ -243,6 +251,9 @@ impl App {
             search_result_tx: search_tx,
             search_result_rx: search_rx,
             layout_areas: LayoutAreas::default(),
+            playback_status_tx: playback_tx,
+            playback_status_rx: playback_rx,
+            was_playing: false,
         })
     }
 
@@ -308,7 +319,22 @@ impl App {
             }
 
             // Poll player state for now-playing bar (player doesn't emit events)
-            self.poll_player_state();
+            self.poll_player_state().await;
+
+            // Drain playback status updates
+            while let Ok(status) = self.playback_status_rx.try_recv() {
+                match status {
+                    PlaybackStatus::Buffering(msg) => {
+                        self.state.status_message = Some(msg);
+                    }
+                    PlaybackStatus::Playing => {
+                        self.state.status_message = None;
+                    }
+                    PlaybackStatus::Error(msg) => {
+                        self.state.status_message = Some(format!("Error: {}", msg));
+                    }
+                }
+            }
 
             // Drain search results
             while let Ok(result) = self.search_result_rx.try_recv() {
@@ -618,18 +644,19 @@ impl App {
 
         let core = Arc::clone(&self.core);
         let track_id = track.id;
+        let status_tx = self.playback_status_tx.clone();
 
         self.rt_handle.spawn(async move {
-            // Get the QobuzClient from the core to call play_track on the player
-            let client_lock = core.client();
-            let client_guard = client_lock.read().await;
-            if let Some(client) = client_guard.as_ref() {
-                let player = core.player();
-                if let Err(e) = player.play_track(client, track_id, Quality::HiRes).await {
-                    log::error!("[TUI] Failed to play track {}: {}", track_id, e);
-                }
-            } else {
-                log::error!("[TUI] No Qobuz client available for playback");
+            if let Err(e) = playback::play_qobuz_track(
+                &core,
+                track_id,
+                Quality::HiRes,
+                &status_tx,
+            )
+            .await
+            {
+                log::error!("[TUI] Failed to play track {}: {}", track_id, e);
+                let _ = status_tx.send(PlaybackStatus::Error(e));
             }
         });
     }
@@ -656,10 +683,60 @@ impl App {
 
     /// Poll the player's shared atomic state to update the now-playing bar.
     /// The V2 player doesn't emit CoreEvents for position/playback changes,
-    /// so we poll every tick (~100ms).
-    fn poll_player_state(&mut self) {
+    /// so we poll every tick (~100ms). Also detects track end for auto-advance.
+    async fn poll_player_state(&mut self) {
         let ps = self.core.get_playback_state();
-        self.state.is_playing = ps.is_playing;
+        let is_playing = ps.is_playing;
+
+        // Check for auto-advance before updating state
+        if let Some(next_track) = playback::check_auto_advance(
+            &self.core,
+            self.was_playing,
+            is_playing,
+            ps.position,
+            ps.duration,
+        )
+        .await
+        {
+            log::info!(
+                "[TUI] Auto-advancing to: {} - {}",
+                next_track.artist,
+                next_track.title,
+            );
+
+            // Update now-playing info from queue track
+            self.state.current_track_title = Some(next_track.title.clone());
+            self.state.current_track_artist = Some(next_track.artist.clone());
+            self.state.current_track_quality = match (next_track.bit_depth, next_track.sample_rate)
+            {
+                (Some(bd), Some(sr)) => Some(format!("{}-bit / {:.1}kHz", bd, sr / 1000.0)),
+                _ if next_track.hires => Some("Hi-Res".to_string()),
+                _ => None,
+            };
+
+            // Play the next track through the orchestrator
+            let core = Arc::clone(&self.core);
+            let track_id = next_track.id;
+            let status_tx = self.playback_status_tx.clone();
+
+            self.rt_handle.spawn(async move {
+                if let Err(e) = playback::play_qobuz_track(
+                    &core,
+                    track_id,
+                    Quality::HiRes,
+                    &status_tx,
+                )
+                .await
+                {
+                    log::error!("[TUI] Auto-advance failed for track {}: {}", track_id, e);
+                    let _ = status_tx.send(PlaybackStatus::Error(e));
+                }
+            });
+        }
+
+        // Update state
+        self.was_playing = is_playing;
+        self.state.is_playing = is_playing;
         self.state.position_secs = ps.position;
         self.state.duration_secs = ps.duration;
         self.state.volume = ps.volume;
