@@ -4,8 +4,12 @@ use ratatui::Frame;
 use crate::app::{ActiveView, AppState};
 use super::now_playing::render_now_playing;
 use super::placeholder::render_placeholder;
+use super::queue_panel::render_queue_panel;
 use super::search::render_search;
 use super::sidebar::render_sidebar;
+
+/// Width of the queue panel in columns.
+const QUEUE_PANEL_WIDTH: u16 = 28;
 
 /// Computed layout areas from the last render, used for mouse hit-testing.
 #[derive(Debug, Clone, Copy, Default)]
@@ -16,6 +20,8 @@ pub struct LayoutAreas {
     /// The area where search results are rendered (within content).
     /// Only valid when the active view is Search.
     pub search_results: Rect,
+    /// The queue panel area. Zero-sized when the panel is hidden.
+    pub queue_panel: Rect,
 }
 
 /// Top-level render function.
@@ -40,18 +46,29 @@ pub fn render_layout(frame: &mut Frame, state: &AppState) -> LayoutAreas {
     let main_area = vertical[0];
     let now_playing_area = vertical[1];
 
-    // Horizontal split: sidebar + content
+    // Horizontal split: sidebar + content [+ queue panel]
     let sidebar_width = if state.sidebar_expanded { 22 } else { 4 };
-    let horizontal = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Length(sidebar_width),
-            Constraint::Min(1),
-        ])
-        .split(main_area);
 
-    let sidebar_area = horizontal[0];
-    let content_area = horizontal[1];
+    let (sidebar_area, content_area, queue_panel_area) = if state.show_queue_panel {
+        let horizontal = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Length(sidebar_width),
+                Constraint::Min(1),
+                Constraint::Length(QUEUE_PANEL_WIDTH),
+            ])
+            .split(main_area);
+        (horizontal[0], horizontal[1], horizontal[2])
+    } else {
+        let horizontal = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Length(sidebar_width),
+                Constraint::Min(1),
+            ])
+            .split(main_area);
+        (horizontal[0], horizontal[1], Rect::default())
+    };
 
     render_sidebar(frame, sidebar_area, state);
 
@@ -77,6 +94,11 @@ pub fn render_layout(frame: &mut Frame, state: &AppState) -> LayoutAreas {
         _ => render_placeholder(frame, content_area, state.active_view.label()),
     }
 
+    // Render queue panel if visible
+    if state.show_queue_panel && queue_panel_area.width > 0 {
+        render_queue_panel(frame, queue_panel_area, state);
+    }
+
     render_now_playing(frame, now_playing_area, state);
 
     LayoutAreas {
@@ -84,5 +106,6 @@ pub fn render_layout(frame: &mut Frame, state: &AppState) -> LayoutAreas {
         content: content_area,
         now_playing: now_playing_area,
         search_results: search_results_area,
+        queue_panel: queue_panel_area,
     }
 }

@@ -18,7 +18,7 @@ use tokio::sync::mpsc;
 use qbz_audio::{AudioDiagnostic, AudioSettings};
 use qbz_cache::PlaybackCache;
 use qbz_core::QbzCore;
-use qbz_models::{CoreEvent, Track};
+use qbz_models::{CoreEvent, QueueState, RepeatMode, Track};
 use qbz_player::Player;
 
 use crate::adapter::TuiAdapter;
@@ -48,6 +48,15 @@ impl ActiveView {
             ActiveView::Settings => "Settings",
         }
     }
+}
+
+/// Simplified track info for display in the queue panel.
+#[derive(Debug, Clone)]
+pub struct QueueTrackInfo {
+    pub id: u64,
+    pub title: String,
+    pub artist: String,
+    pub duration_secs: u64,
 }
 
 /// Whether the TUI is in normal mode (vim-like navigation) or text input mode.
@@ -118,6 +127,16 @@ pub struct AppState {
     pub search: SearchState,
     /// Transient status message shown at the bottom.
     pub status_message: Option<String>,
+    /// Simplified queue info for the queue panel display.
+    pub queue_tracks: Vec<QueueTrackInfo>,
+    /// Index of the currently playing track within the full queue.
+    pub queue_current_index: Option<usize>,
+    /// Whether shuffle mode is active.
+    pub queue_shuffle: bool,
+    /// Current repeat mode.
+    pub queue_repeat: RepeatMode,
+    /// Whether the queue panel is visible (toggled with 'q').
+    pub show_queue_panel: bool,
 }
 
 impl Default for AppState {
@@ -137,6 +156,11 @@ impl Default for AppState {
             auth_email: None,
             search: SearchState::default(),
             status_message: None,
+            queue_tracks: Vec::new(),
+            queue_current_index: None,
+            queue_shuffle: false,
+            queue_repeat: RepeatMode::Off,
+            show_queue_panel: false,
         }
     }
 }
@@ -473,7 +497,17 @@ impl App {
     /// Handle keys in normal (navigation) mode.
     fn handle_key_normal(&mut self, key: KeyEvent) {
         match key.code {
-            KeyCode::Char('q') | KeyCode::Char('Q') => self.should_quit = true,
+            // Ctrl+q or Ctrl+c quits the application
+            KeyCode::Char('q') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.should_quit = true;
+            }
+            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.should_quit = true;
+            }
+            // 'q' toggles the queue panel
+            KeyCode::Char('q') => {
+                self.state.show_queue_panel = !self.state.show_queue_panel;
+            }
             KeyCode::Tab => self.state.sidebar_expanded = !self.state.sidebar_expanded,
             KeyCode::Char('1') => self.state.active_view = ActiveView::Home,
             KeyCode::Char('2') => self.state.active_view = ActiveView::Favorites,
@@ -874,9 +908,47 @@ impl App {
             CoreEvent::Error { message, .. } => {
                 log::error!("Core error: {}", message);
             }
-            // Queue, auth, library, loading, audio device, search, navigation events
+            CoreEvent::QueueUpdated { state } => {
+                self.update_queue_state(state);
+            }
+            CoreEvent::RepeatModeChanged { mode } => {
+                self.state.queue_repeat = mode;
+            }
+            // Auth, library, loading, audio device, search, navigation events
             // are not yet reflected in the TUI state (handled in later tasks)
             _ => {}
         }
+    }
+
+    /// Map a `QueueState` snapshot from the core into the TUI's display state.
+    fn update_queue_state(&mut self, queue: QueueState) {
+        self.state.queue_shuffle = queue.shuffle;
+        self.state.queue_repeat = queue.repeat;
+        self.state.queue_current_index = queue.current_index;
+
+        // Build flat list: history (reversed) + current + upcoming
+        // For display purposes we only care about current + upcoming so the
+        // panel shows "now playing" + "up next".
+        let mut tracks: Vec<QueueTrackInfo> = Vec::new();
+
+        if let Some(ref cur) = queue.current_track {
+            tracks.push(QueueTrackInfo {
+                id: cur.id,
+                title: cur.title.clone(),
+                artist: cur.artist.clone(),
+                duration_secs: cur.duration_secs,
+            });
+        }
+
+        for track in &queue.upcoming {
+            tracks.push(QueueTrackInfo {
+                id: track.id,
+                title: track.title.clone(),
+                artist: track.artist.clone(),
+                duration_secs: track.duration_secs,
+            });
+        }
+
+        self.state.queue_tracks = tracks;
     }
 }
