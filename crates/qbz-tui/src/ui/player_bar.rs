@@ -1,4 +1,4 @@
-//! Player bar — 3-line bottom bar with cover art placeholder, track info,
+//! Player bar — 3-line bottom bar with cover art, track info,
 //! progress bar (LineGauge), and codec details.
 
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
@@ -6,15 +6,19 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, LineGauge, Paragraph};
 use ratatui::Frame;
+use ratatui_image::StatefulImage;
 
 use crate::app::AppState;
 use crate::theme::{ACCENT, BG_SECONDARY, HIRES_BADGE, TEXT_DIM, TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY};
 
-/// Width of the cover art placeholder area in columns.
-const COVER_ART_WIDTH: u16 = 16;
+/// Width of the cover art area in columns (approx 2:1 aspect ratio for terminal chars).
+const COVER_ART_WIDTH: u16 = 10;
 
 /// Render the player bar (3 lines tall, below main content).
-pub fn render_player_bar(frame: &mut Frame, area: Rect, state: &AppState) {
+///
+/// Takes `&mut AppState` because rendering the cover art with `StatefulImage`
+/// requires a mutable reference to the stateful protocol.
+pub fn render_player_bar(frame: &mut Frame, area: Rect, state: &mut AppState) {
     let block = Block::default()
         .borders(Borders::TOP)
         .border_style(Style::default().fg(TEXT_DIM))
@@ -44,16 +48,30 @@ fn render_idle(frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(line), row);
 }
 
-/// Active playback: cover art placeholder | track info + progress + codec.
-fn render_active(frame: &mut Frame, area: Rect, state: &AppState) {
+/// Active playback: cover art | track info + progress + codec.
+fn render_active(frame: &mut Frame, area: Rect, state: &mut AppState) {
     if area.height < 2 {
         return;
     }
 
-    // Horizontal split: cover art area | track info area
+    // Determine if we should show cover art:
+    // - Need enough horizontal space
+    // - Images not disabled
+    // - Either have actual art or show placeholder
     let has_cover_space = area.width > COVER_ART_WIDTH + 20;
+    let show_cover = has_cover_space && !state.no_images;
 
-    let (cover_area, info_area) = if has_cover_space {
+    let (cover_area, info_area) = if show_cover {
+        let h_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Length(COVER_ART_WIDTH),
+                Constraint::Min(1),
+            ])
+            .split(area);
+        (Some(h_chunks[0]), h_chunks[1])
+    } else if has_cover_space {
+        // no_images mode: still show placeholder
         let h_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
@@ -66,9 +84,17 @@ fn render_active(frame: &mut Frame, area: Rect, state: &AppState) {
         (None, area)
     };
 
-    // Render cover art placeholder
+    // Render cover art or placeholder
     if let Some(cover) = cover_area {
-        render_cover_placeholder(frame, cover, state);
+        if !state.no_images {
+            if let Some(ref mut protocol) = state.cover_art {
+                render_cover_image(frame, cover, protocol);
+            } else {
+                render_cover_placeholder(frame, cover, state);
+            }
+        } else {
+            render_cover_placeholder(frame, cover, state);
+        }
     }
 
     // Vertical split for info area: row0 (track info) | row1 (progress) | row2 (codec)
@@ -94,6 +120,20 @@ fn render_active(frame: &mut Frame, area: Rect, state: &AppState) {
     if rows.len() > 2 {
         render_codec_info(frame, rows[2], state);
     }
+}
+
+/// Render actual cover art image using ratatui-image StatefulImage.
+fn render_cover_image(
+    frame: &mut Frame,
+    area: Rect,
+    protocol: &mut ratatui_image::protocol::StatefulProtocol,
+) {
+    if area.height == 0 || area.width < 2 {
+        return;
+    }
+
+    let image_widget = StatefulImage::default();
+    frame.render_stateful_widget(image_widget, area, protocol);
 }
 
 /// Render a simple cover art placeholder box with album initials.

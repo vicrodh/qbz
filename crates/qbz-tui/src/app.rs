@@ -36,6 +36,7 @@ pub enum ActiveView {
     Search,
     Settings,
     Album,
+    Artist,
 }
 
 impl ActiveView {
@@ -49,8 +50,17 @@ impl ActiveView {
             ActiveView::Search => "Search",
             ActiveView::Settings => "Settings",
             ActiveView::Album => "Album",
+            ActiveView::Artist => "Artist",
         }
     }
+}
+
+/// Which tab is active in the library view.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum LibraryTab {
+    Albums,
+    Artists,
+    Tracks,
 }
 
 /// Which tab is active in the discovery view.
@@ -325,6 +335,62 @@ impl Default for SettingsState {
     }
 }
 
+/// State for the library view (user's full collection).
+pub struct LibraryState {
+    pub tab: LibraryTab,
+    pub albums: Vec<Album>,
+    pub artists: Vec<qbz_models::Artist>,
+    pub tracks: Vec<Track>,
+    pub selected_index: usize,
+    pub loading: bool,
+    pub error: Option<String>,
+    pub albums_loaded: bool,
+    pub artists_loaded: bool,
+    pub tracks_loaded: bool,
+    pub scrollbar_state: ScrollbarState,
+}
+
+impl Default for LibraryState {
+    fn default() -> Self {
+        Self {
+            tab: LibraryTab::Albums,
+            albums: Vec::new(),
+            artists: Vec::new(),
+            tracks: Vec::new(),
+            selected_index: 0,
+            loading: false,
+            error: None,
+            albums_loaded: false,
+            artists_loaded: false,
+            tracks_loaded: false,
+            scrollbar_state: ScrollbarState::default(),
+        }
+    }
+}
+
+/// State for the artist detail view.
+pub struct ArtistState {
+    pub artist: Option<qbz_models::PageArtistResponse>,
+    pub selected_index: usize,
+    pub loading: bool,
+    pub error: Option<String>,
+    pub scrollbar_state: ScrollbarState,
+    pub return_view: ActiveView,
+}
+
+impl Default for ArtistState {
+    fn default() -> Self {
+        Self {
+            artist: None,
+            selected_index: 0,
+            loading: false,
+            error: None,
+            scrollbar_state: ScrollbarState::default(),
+            return_view: ActiveView::Search,
+        }
+    }
+}
+
 pub struct AppState {
     pub active_view: ActiveView,
     pub is_playing: bool,
@@ -357,12 +423,22 @@ pub struct AppState {
     pub show_search_modal: bool,
     /// Album detail view state.
     pub album: AlbumState,
+    /// Artist detail view state.
+    pub artist_detail: ArtistState,
+    /// Library view state.
+    pub library: LibraryState,
     /// Settings view state.
     pub settings: SettingsState,
     /// Playlists view state.
     pub playlists: PlaylistsState,
     /// Discovery view state.
     pub discovery: DiscoveryState,
+    /// Current track artwork URL (from QueueTrack or Track).
+    pub current_artwork_url: Option<String>,
+    /// Decoded cover art image for the player bar (ratatui-image protocol).
+    pub cover_art: Option<ratatui_image::protocol::StatefulProtocol>,
+    /// Whether images are disabled (--no-images CLI flag).
+    pub no_images: bool,
 }
 
 impl Default for AppState {
@@ -390,9 +466,14 @@ impl Default for AppState {
             queue_scrollbar_state: ScrollbarState::default(),
             show_search_modal: false,
             album: AlbumState::default(),
+            artist_detail: ArtistState::default(),
+            library: LibraryState::default(),
             settings: SettingsState::default(),
             playlists: PlaylistsState::default(),
             discovery: DiscoveryState::default(),
+            current_artwork_url: None,
+            cover_art: None,
+            no_images: false,
         }
     }
 }
@@ -432,6 +513,18 @@ type EditorPicksResult = Result<SearchResultsPage<Album>, qbz_core::error::CoreE
 
 /// Type alias for the for-you (favorite albums) result payload.
 type ForYouResult = Result<Vec<Album>, qbz_core::error::CoreError>;
+
+/// Type alias for the library albums result payload.
+type LibraryAlbumsResult = Result<Vec<Album>, qbz_core::error::CoreError>;
+
+/// Type alias for the library artists result payload.
+type LibraryArtistsResult = Result<Vec<qbz_models::Artist>, qbz_core::error::CoreError>;
+
+/// Type alias for the library tracks result payload.
+type LibraryTracksResult = Result<Vec<Track>, qbz_core::error::CoreError>;
+
+/// Type alias for the artist page result payload.
+type ArtistPageResult = Result<qbz_models::PageArtistResponse, qbz_core::error::CoreError>;
 
 pub struct App {
     pub state: AppState,
@@ -488,6 +581,22 @@ pub struct App {
     for_you_result_tx: mpsc::UnboundedSender<ForYouResult>,
     /// Receiver for for-you results.
     for_you_result_rx: mpsc::UnboundedReceiver<ForYouResult>,
+    /// Sender for library albums results.
+    library_albums_result_tx: mpsc::UnboundedSender<LibraryAlbumsResult>,
+    /// Receiver for library albums results.
+    library_albums_result_rx: mpsc::UnboundedReceiver<LibraryAlbumsResult>,
+    /// Sender for library artists results.
+    library_artists_result_tx: mpsc::UnboundedSender<LibraryArtistsResult>,
+    /// Receiver for library artists results.
+    library_artists_result_rx: mpsc::UnboundedReceiver<LibraryArtistsResult>,
+    /// Sender for library tracks results.
+    library_tracks_result_tx: mpsc::UnboundedSender<LibraryTracksResult>,
+    /// Receiver for library tracks results.
+    library_tracks_result_rx: mpsc::UnboundedReceiver<LibraryTracksResult>,
+    /// Sender for artist page results.
+    artist_page_result_tx: mpsc::UnboundedSender<ArtistPageResult>,
+    /// Receiver for artist page results.
+    artist_page_result_rx: mpsc::UnboundedReceiver<ArtistPageResult>,
     /// Layout areas from the last render, used for mouse hit-testing.
     layout_areas: LayoutAreas,
     /// Sender for playback status updates (cloned into async tasks).
@@ -498,6 +607,12 @@ pub struct App {
     was_playing: bool,
     /// L2 disk cache for playback audio data.
     playback_cache: Option<Arc<PlaybackCache>>,
+    /// Sender for cover art images (cloned into async download tasks).
+    cover_art_tx: mpsc::UnboundedSender<Option<image::DynamicImage>>,
+    /// Receiver for cover art images (drained each tick).
+    cover_art_rx: mpsc::UnboundedReceiver<Option<image::DynamicImage>>,
+    /// Image protocol picker (detects terminal capabilities once).
+    picker: ratatui_image::picker::Picker,
 }
 
 impl App {
@@ -540,6 +655,7 @@ impl App {
         }
 
         let mut state = AppState::default();
+        state.no_images = no_images;
 
         // Authenticate using saved credentials
         if core_initialized {
@@ -606,6 +722,20 @@ impl App {
         let (discover_tx, discover_rx) = mpsc::unbounded_channel::<DiscoverResult>();
         let (editor_picks_tx, editor_picks_rx) = mpsc::unbounded_channel::<EditorPicksResult>();
         let (for_you_tx, for_you_rx) = mpsc::unbounded_channel::<ForYouResult>();
+        let (lib_albums_tx, lib_albums_rx) = mpsc::unbounded_channel::<LibraryAlbumsResult>();
+        let (lib_artists_tx, lib_artists_rx) = mpsc::unbounded_channel::<LibraryArtistsResult>();
+        let (lib_tracks_tx, lib_tracks_rx) = mpsc::unbounded_channel::<LibraryTracksResult>();
+        let (artist_page_tx, artist_page_rx) = mpsc::unbounded_channel::<ArtistPageResult>();
+        let (cover_art_tx, cover_art_rx) = mpsc::unbounded_channel::<Option<image::DynamicImage>>();
+
+        // Create image picker — use Halfblocks as safe default that works everywhere.
+        // Picker::from_query_stdio() requires non-raw-mode terminal, and we haven't
+        // entered raw mode yet, but Halfblocks is universally supported.
+        let picker = ratatui_image::picker::Picker::from_query_stdio()
+            .unwrap_or_else(|_| {
+                log::info!("[TUI] Terminal image query failed, falling back to halfblocks");
+                ratatui_image::picker::Picker::from_fontsize((8, 16))
+            });
 
         // Initialize L2 disk playback cache (800MB limit)
         let playback_cache = match PlaybackCache::new(800 * 1024 * 1024) {
@@ -655,11 +785,22 @@ impl App {
             editor_picks_result_rx: editor_picks_rx,
             for_you_result_tx: for_you_tx,
             for_you_result_rx: for_you_rx,
+            library_albums_result_tx: lib_albums_tx,
+            library_albums_result_rx: lib_albums_rx,
+            library_artists_result_tx: lib_artists_tx,
+            library_artists_result_rx: lib_artists_rx,
+            library_tracks_result_tx: lib_tracks_tx,
+            library_tracks_result_rx: lib_tracks_rx,
+            artist_page_result_tx: artist_page_tx,
+            artist_page_result_rx: artist_page_rx,
             layout_areas: LayoutAreas::default(),
             playback_status_tx: playback_tx,
             playback_status_rx: playback_rx,
             was_playing: false,
             playback_cache,
+            cover_art_tx,
+            cover_art_rx,
+            picker,
         })
     }
 
@@ -801,6 +942,39 @@ impl App {
             while let Ok(result) = self.for_you_result_rx.try_recv() {
                 self.handle_for_you_result(result);
             }
+
+            // Drain library albums results
+            while let Ok(result) = self.library_albums_result_rx.try_recv() {
+                self.handle_library_albums_result(result);
+            }
+
+            // Drain library artists results
+            while let Ok(result) = self.library_artists_result_rx.try_recv() {
+                self.handle_library_artists_result(result);
+            }
+
+            // Drain library tracks results
+            while let Ok(result) = self.library_tracks_result_rx.try_recv() {
+                self.handle_library_tracks_result(result);
+            }
+
+            // Drain artist page results
+            while let Ok(result) = self.artist_page_result_rx.try_recv() {
+                self.handle_artist_page_result(result);
+            }
+
+            // Drain cover art results
+            while let Ok(img_opt) = self.cover_art_rx.try_recv() {
+                match img_opt {
+                    Some(img) => {
+                        let protocol = self.picker.new_resize_protocol(img);
+                        self.state.cover_art = Some(protocol);
+                    }
+                    None => {
+                        self.state.cover_art = None;
+                    }
+                }
+            }
         }
 
         // Cleanup terminal
@@ -888,6 +1062,8 @@ impl App {
                 self.load_settings_if_needed();
             } else if view == ActiveView::Playlists {
                 self.load_playlists_if_needed();
+            } else if view == ActiveView::Library {
+                self.load_library_for_active_tab();
             }
         }
     }
@@ -970,6 +1146,22 @@ impl App {
                     }
                 }
             }
+            ActiveView::Library => {
+                let len = self.library_active_list_len();
+                if len > 0 {
+                    let current = self.state.library.selected_index as i32;
+                    let next = (current + delta).clamp(0, (len as i32) - 1) as usize;
+                    self.state.library.selected_index = next;
+                }
+            }
+            ActiveView::Artist => {
+                let len = self.artist_top_tracks_len();
+                if len > 0 {
+                    let current = self.state.artist_detail.selected_index as i32;
+                    let next = (current + delta).clamp(0, (len as i32) - 1) as usize;
+                    self.state.artist_detail.selected_index = next;
+                }
+            }
             _ => {}
         }
     }
@@ -1023,7 +1215,10 @@ impl App {
                 self.state.active_view = ActiveView::Favorites;
                 self.load_favorites_if_needed();
             }
-            KeyCode::Char('3') => self.state.active_view = ActiveView::Library,
+            KeyCode::Char('3') => {
+                self.state.active_view = ActiveView::Library;
+                self.load_library_for_active_tab();
+            }
             KeyCode::Char('4') => {
                 self.state.active_view = ActiveView::Playlists;
                 self.load_playlists_if_needed();
@@ -1104,7 +1299,7 @@ impl App {
                 match self.state.search.tab {
                     SearchTab::Tracks => self.play_selected_track(),
                     SearchTab::Albums => self.open_selected_search_album(),
-                    SearchTab::Artists => {} // TODO: artist detail view
+                    SearchTab::Artists => self.open_selected_search_artist(),
                 }
             }
 
@@ -1135,7 +1330,7 @@ impl App {
                 match self.state.favorites.tab {
                     FavoritesTab::Tracks => self.play_selected_favorite(),
                     FavoritesTab::Albums => self.open_selected_favorite_album(),
-                    FavoritesTab::Artists => {} // TODO: artist detail view
+                    FavoritesTab::Artists => self.open_selected_favorite_artist(),
                     FavoritesTab::Playlists => {} // use playlists view instead
                 }
             }
@@ -1235,6 +1430,76 @@ impl App {
             // Album view: Backspace/Esc returns to previous view
             KeyCode::Backspace | KeyCode::Esc if self.state.active_view == ActiveView::Album => {
                 self.state.active_view = self.state.album.return_view;
+            }
+
+            // Library view: Tab/Shift+Tab to switch tabs
+            KeyCode::Tab if self.state.active_view == ActiveView::Library => {
+                self.cycle_library_tab(true);
+            }
+            KeyCode::BackTab if self.state.active_view == ActiveView::Library => {
+                self.cycle_library_tab(false);
+            }
+
+            // Library view: j/k for navigating items
+            KeyCode::Char('j') | KeyCode::Down if self.state.active_view == ActiveView::Library => {
+                let len = self.library_active_list_len();
+                if len > 0 {
+                    self.state.library.selected_index =
+                        (self.state.library.selected_index + 1).min(len - 1);
+                }
+            }
+            KeyCode::Char('k') | KeyCode::Up if self.state.active_view == ActiveView::Library => {
+                if self.state.library.selected_index > 0 {
+                    self.state.library.selected_index -= 1;
+                }
+            }
+
+            // Library view: Enter to play/open selected item
+            KeyCode::Enter if self.state.active_view == ActiveView::Library => {
+                match self.state.library.tab {
+                    LibraryTab::Tracks => self.play_selected_library_track(),
+                    LibraryTab::Albums => self.open_selected_library_album(),
+                    LibraryTab::Artists => self.open_selected_library_artist(),
+                }
+            }
+
+            // Library view: 'g' to go to album detail from tracks tab
+            KeyCode::Char('g') if self.state.active_view == ActiveView::Library => {
+                self.navigate_to_album_from_library();
+            }
+
+            // Library view: 'a' to add track to queue
+            KeyCode::Char('a') if self.state.active_view == ActiveView::Library => {
+                self.add_selected_library_track_to_queue();
+            }
+
+            // Artist detail view: j/k navigation
+            KeyCode::Char('j') | KeyCode::Down if self.state.active_view == ActiveView::Artist => {
+                let len = self.artist_top_tracks_len();
+                if len > 0 {
+                    self.state.artist_detail.selected_index =
+                        (self.state.artist_detail.selected_index + 1).min(len - 1);
+                }
+            }
+            KeyCode::Char('k') | KeyCode::Up if self.state.active_view == ActiveView::Artist => {
+                if self.state.artist_detail.selected_index > 0 {
+                    self.state.artist_detail.selected_index -= 1;
+                }
+            }
+
+            // Artist detail view: Enter to play top track
+            KeyCode::Enter if self.state.active_view == ActiveView::Artist => {
+                self.play_selected_artist_track();
+            }
+
+            // Artist detail view: 'g' to go to album from top track
+            KeyCode::Char('g') if self.state.active_view == ActiveView::Artist => {
+                self.navigate_to_album_from_artist();
+            }
+
+            // Artist detail view: Backspace/Esc returns to previous view
+            KeyCode::Backspace | KeyCode::Esc if self.state.active_view == ActiveView::Artist => {
+                self.state.active_view = self.state.artist_detail.return_view;
             }
 
             // Settings view: j/k navigation
@@ -1511,6 +1776,9 @@ impl App {
         };
         self.state.status_message = Some(format!("Loading: {}...", track.title));
 
+        // Trigger cover art download
+        self.update_artwork_from_track(&track);
+
         let core = Arc::clone(&self.core);
         let track_id = track.id;
         let status_tx = self.playback_status_tx.clone();
@@ -1721,6 +1989,9 @@ impl App {
             ))
         };
         self.state.status_message = Some(format!("Loading: {}...", track.title));
+
+        // Trigger cover art download
+        self.update_artwork_from_track(&track);
 
         let core = Arc::clone(&self.core);
         let track_id = track.id;
@@ -2033,6 +2304,9 @@ impl App {
             ))
         };
         self.state.status_message = Some(format!("Loading: {}...", track.title));
+
+        // Trigger cover art download
+        self.update_artwork_from_track(&track);
 
         let core = Arc::clone(&self.core);
         let track_id = track.id;
@@ -2562,8 +2836,7 @@ impl App {
     /// Queues all tracks from the selected index onward, then starts playback.
     fn play_album_from_selected(&mut self) {
         let idx = self.state.album.selected_index;
-        let tracks = &self.state.album.tracks;
-        if tracks.is_empty() || idx >= tracks.len() {
+        if self.state.album.tracks.is_empty() || idx >= self.state.album.tracks.len() {
             return;
         }
 
@@ -2572,34 +2845,40 @@ impl App {
             return;
         }
 
+        // Clone the selected track to avoid borrow conflicts with &mut self
+        let selected_track = self.state.album.tracks[idx].clone();
+
         // Build queue from selected track onward
-        let queue_tracks: Vec<qbz_models::QueueTrack> = tracks[idx..]
+        let queue_tracks: Vec<qbz_models::QueueTrack> = self.state.album.tracks[idx..]
             .iter()
             .map(|track| Self::track_to_queue_track(track))
             .collect();
 
-        let first_track_id = tracks[idx].id;
-        let first_title = tracks[idx].title.clone();
+        let first_track_id = selected_track.id;
+        let first_title = selected_track.title.clone();
 
         // Update now-playing info immediately
         self.state.current_track_title = Some(first_title.clone());
         self.state.current_track_artist = Some(
-            tracks[idx]
+            selected_track
                 .performer
                 .as_ref()
                 .map(|p| p.name.clone())
                 .unwrap_or_else(|| "Unknown".to_string()),
         );
-        self.state.current_track_quality = if tracks[idx].hires_streamable {
+        self.state.current_track_quality = if selected_track.hires_streamable {
             Some("Hi-Res".to_string())
         } else {
             Some(format!(
                 "{}bit/{}kHz",
-                tracks[idx].maximum_bit_depth.unwrap_or(16),
-                tracks[idx].maximum_sampling_rate.unwrap_or(44.1)
+                selected_track.maximum_bit_depth.unwrap_or(16),
+                selected_track.maximum_sampling_rate.unwrap_or(44.1)
             ))
         };
         self.state.status_message = Some(format!("Loading: {}...", first_title));
+
+        // Trigger cover art download
+        self.update_artwork_from_track(&selected_track);
 
         let core = Arc::clone(&self.core);
         let status_tx = self.playback_status_tx.clone();
@@ -2637,6 +2916,529 @@ impl App {
         });
     }
 
+    // ==================== Library ====================
+
+    /// Load library data for the currently active tab.
+    fn load_library_for_active_tab(&mut self) {
+        match self.state.library.tab {
+            LibraryTab::Albums => self.load_library_albums_if_needed(),
+            LibraryTab::Artists => self.load_library_artists_if_needed(),
+            LibraryTab::Tracks => self.load_library_tracks_if_needed(),
+        }
+    }
+
+    /// Load library albums if not already loaded.
+    fn load_library_albums_if_needed(&mut self) {
+        if self.state.library.albums_loaded || self.state.library.loading {
+            return;
+        }
+
+        if !self.state.authenticated {
+            self.state.library.error = Some("Not authenticated".to_string());
+            return;
+        }
+
+        self.state.library.loading = true;
+        self.state.library.error = None;
+        self.state.status_message = Some("Loading library albums...".to_string());
+
+        let core = Arc::clone(&self.core);
+        let event_tx = self.library_albums_result_tx.clone();
+
+        self.rt_handle.spawn(async move {
+            let result = core.get_favorites("albums", 500, 0).await;
+            let parsed = result.and_then(|json| {
+                let albums_page = json
+                    .get("albums")
+                    .and_then(|albums| {
+                        serde_json::from_value::<qbz_models::SearchResultsPage<Album>>(albums.clone()).ok()
+                    });
+                match albums_page {
+                    Some(page) => Ok(page.items),
+                    None => {
+                        log::warn!("[TUI] Could not parse library albums response");
+                        Ok(Vec::new())
+                    }
+                }
+            });
+            let _ = event_tx.send(parsed);
+        });
+    }
+
+    /// Handle the result of a library albums load.
+    fn handle_library_albums_result(&mut self, result: LibraryAlbumsResult) {
+        self.state.library.loading = false;
+        self.state.library.albums_loaded = true;
+        match result {
+            Ok(albums) => {
+                let count = albums.len();
+                self.state.library.albums = albums;
+                self.state.library.selected_index = 0;
+                self.state.library.error = None;
+                self.state.status_message = Some(format!("{} library albums", count));
+            }
+            Err(e) => {
+                self.state.library.error = Some(format!("{}", e));
+                self.state.status_message = Some(format!("Failed to load library albums: {}", e));
+            }
+        }
+    }
+
+    /// Load library artists if not already loaded.
+    fn load_library_artists_if_needed(&mut self) {
+        if self.state.library.artists_loaded || self.state.library.loading {
+            return;
+        }
+
+        if !self.state.authenticated {
+            self.state.library.error = Some("Not authenticated".to_string());
+            return;
+        }
+
+        self.state.library.loading = true;
+        self.state.library.error = None;
+        self.state.status_message = Some("Loading library artists...".to_string());
+
+        let core = Arc::clone(&self.core);
+        let event_tx = self.library_artists_result_tx.clone();
+
+        self.rt_handle.spawn(async move {
+            let result = core.get_favorites("artists", 500, 0).await;
+            let parsed = result.and_then(|json| {
+                let artists_page = json
+                    .get("artists")
+                    .and_then(|artists| {
+                        serde_json::from_value::<qbz_models::SearchResultsPage<qbz_models::Artist>>(artists.clone()).ok()
+                    });
+                match artists_page {
+                    Some(page) => Ok(page.items),
+                    None => {
+                        log::warn!("[TUI] Could not parse library artists response");
+                        Ok(Vec::new())
+                    }
+                }
+            });
+            let _ = event_tx.send(parsed);
+        });
+    }
+
+    /// Handle the result of a library artists load.
+    fn handle_library_artists_result(&mut self, result: LibraryArtistsResult) {
+        self.state.library.loading = false;
+        self.state.library.artists_loaded = true;
+        match result {
+            Ok(artists) => {
+                let count = artists.len();
+                self.state.library.artists = artists;
+                self.state.library.selected_index = 0;
+                self.state.library.error = None;
+                self.state.status_message = Some(format!("{} library artists", count));
+            }
+            Err(e) => {
+                self.state.library.error = Some(format!("{}", e));
+                self.state.status_message = Some(format!("Failed to load library artists: {}", e));
+            }
+        }
+    }
+
+    /// Load library tracks if not already loaded.
+    fn load_library_tracks_if_needed(&mut self) {
+        if self.state.library.tracks_loaded || self.state.library.loading {
+            return;
+        }
+
+        if !self.state.authenticated {
+            self.state.library.error = Some("Not authenticated".to_string());
+            return;
+        }
+
+        self.state.library.loading = true;
+        self.state.library.error = None;
+        self.state.status_message = Some("Loading library tracks...".to_string());
+
+        let core = Arc::clone(&self.core);
+        let event_tx = self.library_tracks_result_tx.clone();
+
+        self.rt_handle.spawn(async move {
+            let result = core.get_favorites("tracks", 500, 0).await;
+            let parsed = result.and_then(|json| {
+                let tracks_page = json
+                    .get("tracks")
+                    .and_then(|tracks| {
+                        serde_json::from_value::<qbz_models::SearchResultsPage<Track>>(tracks.clone()).ok()
+                    });
+                match tracks_page {
+                    Some(page) => Ok(page.items),
+                    None => {
+                        log::warn!("[TUI] Could not parse library tracks response");
+                        Ok(Vec::new())
+                    }
+                }
+            });
+            let _ = event_tx.send(parsed);
+        });
+    }
+
+    /// Handle the result of a library tracks load.
+    fn handle_library_tracks_result(&mut self, result: LibraryTracksResult) {
+        self.state.library.loading = false;
+        self.state.library.tracks_loaded = true;
+        match result {
+            Ok(tracks) => {
+                let count = tracks.len();
+                self.state.library.tracks = tracks;
+                self.state.library.selected_index = 0;
+                self.state.library.error = None;
+                self.state.status_message = Some(format!("{} library tracks", count));
+            }
+            Err(e) => {
+                self.state.library.error = Some(format!("{}", e));
+                self.state.status_message = Some(format!("Failed to load library tracks: {}", e));
+            }
+        }
+    }
+
+    /// Cycle through library tabs.
+    fn cycle_library_tab(&mut self, forward: bool) {
+        let tabs = [LibraryTab::Albums, LibraryTab::Artists, LibraryTab::Tracks];
+        let current = tabs.iter().position(|tab| *tab == self.state.library.tab).unwrap_or(0);
+        let next = if forward {
+            (current + 1) % tabs.len()
+        } else {
+            (current + tabs.len() - 1) % tabs.len()
+        };
+        self.state.library.tab = tabs[next];
+        self.state.library.selected_index = 0;
+
+        // Load data for the new tab if needed
+        self.load_library_for_active_tab();
+    }
+
+    /// Get the length of the active library list.
+    fn library_active_list_len(&self) -> usize {
+        match self.state.library.tab {
+            LibraryTab::Albums => self.state.library.albums.len(),
+            LibraryTab::Artists => self.state.library.artists.len(),
+            LibraryTab::Tracks => self.state.library.tracks.len(),
+        }
+    }
+
+    /// Play the selected track from the library tracks tab.
+    fn play_selected_library_track(&mut self) {
+        let idx = self.state.library.selected_index;
+        let track = match self.state.library.tracks.get(idx) {
+            Some(tr) => tr.clone(),
+            None => return,
+        };
+
+        if !self.state.authenticated {
+            self.state.status_message = Some("Not authenticated".to_string());
+            return;
+        }
+
+        self.state.current_track_title = Some(track.title.clone());
+        self.state.current_track_artist = Some(
+            track.performer.as_ref().map(|p| p.name.clone()).unwrap_or_else(|| "Unknown".to_string()),
+        );
+        self.state.current_track_quality = if track.hires_streamable {
+            Some("Hi-Res".to_string())
+        } else {
+            Some(format!(
+                "{}bit/{}kHz",
+                track.maximum_bit_depth.unwrap_or(16),
+                track.maximum_sampling_rate.unwrap_or(44.1)
+            ))
+        };
+        self.state.status_message = Some(format!("Loading: {}...", track.title));
+
+        let core = Arc::clone(&self.core);
+        let track_id = track.id;
+        let status_tx = self.playback_status_tx.clone();
+        let cache = self.playback_cache.clone();
+
+        self.rt_handle.spawn(async move {
+            if let Err(e) = playback::play_qobuz_track(&core, track_id, &cache, &status_tx).await {
+                log::error!("[TUI] Failed to play library track {}: {}", track_id, e);
+                let _ = status_tx.send(PlaybackStatus::Error(e));
+            }
+        });
+    }
+
+    /// Open the selected album from library albums tab.
+    fn open_selected_library_album(&mut self) {
+        let idx = self.state.library.selected_index;
+        let album_id = match self.state.library.albums.get(idx) {
+            Some(album) => album.id.clone(),
+            None => return,
+        };
+        self.load_album(&album_id, ActiveView::Library);
+    }
+
+    /// Open the selected artist from library artists tab.
+    fn open_selected_library_artist(&mut self) {
+        let idx = self.state.library.selected_index;
+        let artist_id = match self.state.library.artists.get(idx) {
+            Some(artist) => artist.id,
+            None => return,
+        };
+        self.load_artist(artist_id, ActiveView::Library);
+    }
+
+    /// Navigate to album detail from a library track.
+    fn navigate_to_album_from_library(&mut self) {
+        if self.state.library.tab != LibraryTab::Tracks {
+            return;
+        }
+        let idx = self.state.library.selected_index;
+        let album_id = match self.state.library.tracks.get(idx) {
+            Some(track) => track.album.as_ref().map(|a| a.id.clone()),
+            None => None,
+        };
+        if let Some(id) = album_id {
+            self.load_album(&id, ActiveView::Library);
+        }
+    }
+
+    /// Add the selected library track to the queue.
+    fn add_selected_library_track_to_queue(&mut self) {
+        if self.state.library.tab != LibraryTab::Tracks {
+            return;
+        }
+        let idx = self.state.library.selected_index;
+        let track = match self.state.library.tracks.get(idx) {
+            Some(tr) => tr.clone(),
+            None => return,
+        };
+
+        let queue_track = Self::track_to_queue_track(&track);
+        let core = Arc::clone(&self.core);
+
+        self.state.status_message = Some(format!("Added to queue: {}", track.title));
+
+        self.rt_handle.spawn(async move {
+            core.add_track(queue_track).await;
+        });
+    }
+
+    // ==================== Artist Detail ====================
+
+    /// Load an artist page by ID and switch to the artist detail view.
+    fn load_artist(&mut self, artist_id: u64, return_view: ActiveView) {
+        if !self.state.authenticated {
+            self.state.status_message = Some("Not authenticated".to_string());
+            return;
+        }
+
+        self.state.artist_detail = ArtistState {
+            loading: true,
+            return_view,
+            ..ArtistState::default()
+        };
+        self.state.active_view = ActiveView::Artist;
+        self.state.status_message = Some("Loading artist...".to_string());
+
+        // Close search modal if open
+        if self.state.show_search_modal {
+            self.state.show_search_modal = false;
+            self.state.input_mode = InputMode::Normal;
+        }
+
+        let core = Arc::clone(&self.core);
+        let event_tx = self.artist_page_result_tx.clone();
+
+        self.rt_handle.spawn(async move {
+            let result = core.get_artist_page(artist_id, None).await;
+            let _ = event_tx.send(result);
+        });
+    }
+
+    /// Handle the result of an artist page load.
+    fn handle_artist_page_result(&mut self, result: ArtistPageResult) {
+        self.state.artist_detail.loading = false;
+        match result {
+            Ok(artist) => {
+                let track_count = artist.top_tracks.as_ref().map(|tracks| tracks.len()).unwrap_or(0);
+                self.state.status_message = Some(format!("{} - {} top tracks", artist.name.display, track_count));
+                self.state.artist_detail.artist = Some(artist);
+                self.state.artist_detail.selected_index = 0;
+                self.state.artist_detail.error = None;
+            }
+            Err(e) => {
+                self.state.artist_detail.error = Some(format!("{}", e));
+                self.state.status_message = Some(format!("Failed to load artist: {}", e));
+            }
+        }
+    }
+
+    /// Get the number of top tracks for the current artist.
+    fn artist_top_tracks_len(&self) -> usize {
+        self.state.artist_detail.artist
+            .as_ref()
+            .and_then(|a| a.top_tracks.as_ref())
+            .map(|tracks| tracks.len())
+            .unwrap_or(0)
+    }
+
+    /// Play the selected top track from the artist detail view.
+    fn play_selected_artist_track(&mut self) {
+        let artist = match &self.state.artist_detail.artist {
+            Some(a) => a,
+            None => return,
+        };
+
+        let top_tracks = match &artist.top_tracks {
+            Some(tracks) => tracks,
+            None => return,
+        };
+
+        let idx = self.state.artist_detail.selected_index;
+        let track = match top_tracks.get(idx) {
+            Some(tr) => tr,
+            None => return,
+        };
+
+        if !self.state.authenticated {
+            self.state.status_message = Some("Not authenticated".to_string());
+            return;
+        }
+
+        self.state.current_track_title = Some(track.title.clone());
+        self.state.current_track_artist = Some(
+            track.artist.as_ref().map(|a| a.name.display.clone()).unwrap_or_else(|| "Unknown".to_string()),
+        );
+
+        let is_hires = track.audio_info.as_ref()
+            .and_then(|ai| ai.maximum_bit_depth)
+            .map(|bd| bd > 16)
+            .unwrap_or(false);
+        self.state.current_track_quality = if is_hires {
+            Some("Hi-Res".to_string())
+        } else {
+            Some("CD".to_string())
+        };
+
+        self.state.status_message = Some(format!("Loading: {}...", track.title));
+
+        let core = Arc::clone(&self.core);
+        let track_id = track.id;
+        let status_tx = self.playback_status_tx.clone();
+        let cache = self.playback_cache.clone();
+
+        self.rt_handle.spawn(async move {
+            if let Err(e) = playback::play_qobuz_track(&core, track_id, &cache, &status_tx).await {
+                log::error!("[TUI] Failed to play artist track {}: {}", track_id, e);
+                let _ = status_tx.send(PlaybackStatus::Error(e));
+            }
+        });
+    }
+
+    /// Navigate to album detail from an artist top track.
+    fn navigate_to_album_from_artist(&mut self) {
+        let artist = match &self.state.artist_detail.artist {
+            Some(a) => a,
+            None => return,
+        };
+
+        let top_tracks = match &artist.top_tracks {
+            Some(tracks) => tracks,
+            None => return,
+        };
+
+        let idx = self.state.artist_detail.selected_index;
+        let album_id = match top_tracks.get(idx) {
+            Some(track) => track.album.as_ref().map(|a| a.id.clone()),
+            None => None,
+        };
+        if let Some(id) = album_id {
+            self.load_album(&id, ActiveView::Artist);
+        }
+    }
+
+    /// Open the selected artist from search results.
+    fn open_selected_search_artist(&mut self) {
+        let idx = self.state.search.selected_index;
+        let artist_id = match self.state.search.artists.get(idx) {
+            Some(artist) => artist.id,
+            None => return,
+        };
+        self.load_artist(artist_id, ActiveView::Search);
+    }
+
+    /// Open the selected artist from favorites.
+    fn open_selected_favorite_artist(&mut self) {
+        let idx = self.state.favorites.selected_index;
+        let artist_id = match self.state.favorites.artists.get(idx) {
+            Some(artist) => artist.id,
+            None => return,
+        };
+        self.load_artist(artist_id, ActiveView::Favorites);
+    }
+
+    /// Extract artwork URL from a Track's album image set.
+    fn artwork_url_from_track(track: &Track) -> Option<String> {
+        track.album.as_ref().and_then(|a| {
+            a.image.large.clone()
+                .or_else(|| a.image.extralarge.clone())
+                .or_else(|| a.image.thumbnail.clone())
+                .or_else(|| a.image.small.clone())
+        })
+    }
+
+    /// Set the current artwork URL and trigger a download if it changed.
+    fn update_artwork_from_track(&mut self, track: &Track) {
+        if self.no_images || self.state.no_images {
+            return;
+        }
+        let new_url = Self::artwork_url_from_track(track);
+        if new_url != self.state.current_artwork_url {
+            self.state.current_artwork_url = new_url.clone();
+            if let Some(ref url) = new_url {
+                self.load_cover_art(url);
+            } else {
+                self.state.cover_art = None;
+            }
+        }
+    }
+
+    /// Set the current artwork URL from a QueueTrack and trigger download if changed.
+    fn update_artwork_from_queue_track(&mut self, queue_track: &qbz_models::QueueTrack) {
+        if self.no_images || self.state.no_images {
+            return;
+        }
+        let new_url = queue_track.artwork_url.clone();
+        if new_url != self.state.current_artwork_url {
+            self.state.current_artwork_url = new_url.clone();
+            if let Some(ref url) = new_url {
+                self.load_cover_art(url);
+            } else {
+                self.state.cover_art = None;
+            }
+        }
+    }
+
+    /// Download and decode artwork from URL asynchronously.
+    fn load_cover_art(&mut self, url: &str) {
+        let url = url.to_string();
+        let art_tx = self.cover_art_tx.clone();
+
+        self.rt_handle.spawn(async move {
+            match reqwest::get(&url).await {
+                Ok(response) => {
+                    if let Ok(bytes) = response.bytes().await {
+                        if let Ok(img) = image::load_from_memory(&bytes) {
+                            let _ = art_tx.send(Some(img));
+                        } else {
+                            log::warn!("[TUI] Failed to decode artwork image");
+                        }
+                    }
+                }
+                Err(err) => {
+                    log::warn!("[TUI] Failed to download artwork: {}", err);
+                }
+            }
+        });
+    }
+
     /// Poll the player's shared atomic state to update the now-playing bar.
     /// The V2 player doesn't emit CoreEvents for position/playback changes,
     /// so we poll every tick (~100ms). Also detects track end for auto-advance.
@@ -2669,6 +3471,9 @@ impl App {
                 _ if next_track.hires => Some("Hi-Res".to_string()),
                 _ => None,
             };
+
+            // Trigger cover art download for auto-advanced track
+            self.update_artwork_from_queue_track(&next_track);
 
             // Play the next track through the orchestrator
             let core = Arc::clone(&self.core);
@@ -2703,8 +3508,8 @@ impl App {
         match event {
             CoreEvent::TrackStarted { track, .. } => {
                 self.state.is_playing = true;
-                self.state.current_track_title = Some(track.title);
-                self.state.current_track_artist = Some(track.artist);
+                self.state.current_track_title = Some(track.title.clone());
+                self.state.current_track_artist = Some(track.artist.clone());
                 self.state.duration_secs = track.duration_secs;
                 self.state.position_secs = 0;
 
@@ -2717,6 +3522,9 @@ impl App {
                     _ => None,
                 };
                 self.state.current_track_quality = quality;
+
+                // Trigger cover art download from TrackStarted event
+                self.update_artwork_from_queue_track(&track);
             }
             CoreEvent::PlaybackStateChanged { state } => {
                 self.state.is_playing = state == qbz_models::PlaybackState::Playing;
