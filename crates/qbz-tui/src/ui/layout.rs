@@ -1,9 +1,10 @@
 use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::Frame;
 
-use crate::app::AppState;
+use crate::app::{ActiveView, AppState};
 use super::now_playing::render_now_playing;
 use super::placeholder::render_placeholder;
+use super::search::render_search;
 use super::sidebar::render_sidebar;
 
 /// Top-level render function.
@@ -40,6 +41,12 @@ pub fn render_layout(frame: &mut Frame, state: &AppState) {
     let content_area = horizontal[1];
 
     render_sidebar(frame, sidebar_area, state);
-    render_placeholder(frame, content_area, state.active_view.label());
+
+    // Render view-specific content
+    match state.active_view {
+        ActiveView::Search => render_search(frame, content_area, state),
+        _ => render_placeholder(frame, content_area, state.active_view.label()),
+    }
+
     render_now_playing(frame, now_playing_area, state);
 }
