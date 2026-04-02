@@ -49,25 +49,34 @@ fn render_search_input(frame: &mut Frame, area: Rect, state: &AppState) {
     let cursor = state.search.cursor;
 
     if is_editing {
-        // Show cursor as a block character
-        let before = &query[..cursor.min(query.len())];
-        let cursor_char = query.chars().nth(cursor).unwrap_or(' ');
-        let after_start = cursor + cursor_char.len_utf8().min(query.len() - cursor.min(query.len()));
-        let after = if after_start <= query.len() {
-            &query[after_start..]
-        } else {
-            ""
-        };
+        // Cursor position is a byte offset maintained by the input handler.
+        let clamped = cursor.min(query.len());
+        let before = &query[..clamped];
 
-        let line = Line::from(vec![
-            Span::styled(before, Style::default().fg(TEXT_PRIMARY)),
-            Span::styled(
-                cursor_char.to_string(),
-                Style::default().fg(TEXT_PRIMARY).bg(ACCENT),
-            ),
-            Span::styled(after, Style::default().fg(TEXT_PRIMARY)),
-        ]);
-        frame.render_widget(Paragraph::new(line), inner);
+        if clamped < query.len() {
+            // There is a character under the cursor — highlight it.
+            let rest = &query[clamped..];
+            let cursor_char = rest.chars().next().unwrap();
+            let char_end = clamped + cursor_char.len_utf8();
+            let after = &query[char_end..];
+
+            let line = Line::from(vec![
+                Span::styled(before, Style::default().fg(TEXT_PRIMARY)),
+                Span::styled(
+                    cursor_char.to_string(),
+                    Style::default().fg(TEXT_PRIMARY).bg(ACCENT),
+                ),
+                Span::styled(after, Style::default().fg(TEXT_PRIMARY)),
+            ]);
+            frame.render_widget(Paragraph::new(line), inner);
+        } else {
+            // Cursor is at the end — show a trailing block.
+            let line = Line::from(vec![
+                Span::styled(before, Style::default().fg(TEXT_PRIMARY)),
+                Span::styled(" ", Style::default().bg(ACCENT)),
+            ]);
+            frame.render_widget(Paragraph::new(line), inner);
+        }
     } else if query.is_empty() {
         let placeholder = Paragraph::new("Type a search query...")
             .style(Style::default().fg(TEXT_DIM));

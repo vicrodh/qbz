@@ -377,8 +377,14 @@ impl App {
             KeyCode::Backspace => {
                 let search = &mut self.state.search;
                 if search.cursor > 0 {
-                    search.query.remove(search.cursor - 1);
-                    search.cursor -= 1;
+                    // Find the previous char boundary
+                    let prev = search.query[..search.cursor]
+                        .char_indices()
+                        .next_back()
+                        .map(|(i, _)| i)
+                        .unwrap_or(0);
+                    search.query.remove(prev);
+                    search.cursor = prev;
                 }
             }
             KeyCode::Delete => {
@@ -388,14 +394,23 @@ impl App {
                 }
             }
             KeyCode::Left => {
-                if self.state.search.cursor > 0 {
-                    self.state.search.cursor -= 1;
+                let search = &mut self.state.search;
+                if search.cursor > 0 {
+                    // Move to previous char boundary
+                    search.cursor = search.query[..search.cursor]
+                        .char_indices()
+                        .next_back()
+                        .map(|(i, _)| i)
+                        .unwrap_or(0);
                 }
             }
             KeyCode::Right => {
-                let len = self.state.search.query.len();
-                if self.state.search.cursor < len {
-                    self.state.search.cursor += 1;
+                let search = &mut self.state.search;
+                if search.cursor < search.query.len() {
+                    // Move to next char boundary
+                    let rest = &search.query[search.cursor..];
+                    let ch = rest.chars().next().unwrap();
+                    search.cursor += ch.len_utf8();
                 }
             }
             KeyCode::Home => {
@@ -412,7 +427,7 @@ impl App {
             KeyCode::Char(c) => {
                 let search = &mut self.state.search;
                 search.query.insert(search.cursor, c);
-                search.cursor += 1;
+                search.cursor += c.len_utf8();
             }
             _ => {}
         }
