@@ -1,5 +1,6 @@
 use std::io::{self, stdout};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use crossterm::event::{
@@ -619,6 +620,9 @@ pub struct App {
     rt_handle: tokio::runtime::Handle,
     /// Visualizer tap for reading audio samples from the player.
     visualizer_tap: Option<VisualizerTap>,
+    /// Playback generation counter — incremented each time a new track is requested.
+    /// Spawned download tasks compare their captured generation to skip stale play_data calls.
+    playback_generation: Arc<AtomicU64>,
     /// Sender for search results (cloned into async tasks).
     search_result_tx: mpsc::UnboundedSender<SearchResult>,
     /// Receiver for search results (drained each tick).
@@ -906,6 +910,7 @@ impl App {
             cover_art_rx,
             picker,
             visualizer_tap: Some(visualizer_tap),
+            playback_generation: Arc::new(AtomicU64::new(0)),
         })
     }
 
@@ -2070,12 +2075,24 @@ impl App {
             None => return,
         };
 
+        self.play_track_common(track);
+    }
+
+    /// Common track playback logic — stops current, sets queue, downloads, plays.
+    /// Used by play_selected_track, play_selected_favorite, and similar methods.
+    fn play_track_common(&mut self, track: Track) {
         if !self.state.authenticated {
             self.state.status_message = Some("Not authenticated".to_string());
             return;
         }
 
-        // Update now-playing info immediately (player state only has track_id)
+        // Stop current playback immediately to prevent overlap
+        let _ = self.core.player().stop();
+
+        // Increment generation to invalidate any in-flight download tasks
+        let generation = self.playback_generation.fetch_add(1, Ordering::SeqCst) + 1;
+
+        // Update now-playing info immediately
         self.state.current_track_title = Some(track.title.clone());
         self.state.current_track_artist = Some(track.performer.as_ref().map(|p| p.name.clone()).unwrap_or_else(|| "Unknown".to_string()));
         self.state.current_track_quality = if track.hires_streamable {
@@ -2084,16 +2101,29 @@ impl App {
             Some(format!("{}bit/{}kHz", track.maximum_bit_depth.unwrap_or(16), track.maximum_sampling_rate.unwrap_or(44.1)))
         };
         self.state.status_message = Some(format!("Loading: {}...", track.title));
+        self.state.is_buffering = true;
 
         // Trigger cover art download
         self.update_artwork_from_track(&track);
 
+        // Set queue to this single track
+        let queue_track = Self::track_to_queue_track(&track);
         let core = Arc::clone(&self.core);
         let track_id = track.id;
         let status_tx = self.playback_status_tx.clone();
         let cache = self.playback_cache.clone();
+        let gen = Arc::clone(&self.playback_generation);
 
         self.rt_handle.spawn(async move {
+            // Set queue first
+            core.set_queue(vec![queue_track], Some(0)).await;
+
+            // Check generation before playing (another track may have been requested)
+            if gen.load(Ordering::SeqCst) != generation {
+                log::info!("[TUI] Playback generation changed, skipping stale track {}", track_id);
+                return;
+            }
+
             if let Err(e) = playback::play_qobuz_track(
                 &core,
                 track_id,
@@ -2273,48 +2303,7 @@ impl App {
             Some(tr) => tr.clone(),
             None => return,
         };
-
-        if !self.state.authenticated {
-            self.state.status_message = Some("Not authenticated".to_string());
-            return;
-        }
-
-        // Update now-playing info immediately
-        self.state.current_track_title = Some(track.title.clone());
-        self.state.current_track_artist = Some(
-            track
-                .performer
-                .as_ref()
-                .map(|p| p.name.clone())
-                .unwrap_or_else(|| "Unknown".to_string()),
-        );
-        self.state.current_track_quality = if track.hires_streamable {
-            Some("Hi-Res".to_string())
-        } else {
-            Some(format!(
-                "{}bit/{}kHz",
-                track.maximum_bit_depth.unwrap_or(16),
-                track.maximum_sampling_rate.unwrap_or(44.1)
-            ))
-        };
-        self.state.status_message = Some(format!("Loading: {}...", track.title));
-
-        // Trigger cover art download
-        self.update_artwork_from_track(&track);
-
-        let core = Arc::clone(&self.core);
-        let track_id = track.id;
-        let status_tx = self.playback_status_tx.clone();
-        let cache = self.playback_cache.clone();
-
-        self.rt_handle.spawn(async move {
-            if let Err(e) =
-                playback::play_qobuz_track(&core, track_id, &cache, &status_tx).await
-            {
-                log::error!("[TUI] Failed to play favorite track {}: {}", track_id, e);
-                let _ = status_tx.send(PlaybackStatus::Error(e));
-            }
-        });
+        self.play_track_common(track);
     }
 
     /// Add the selected favorite track to the queue.
