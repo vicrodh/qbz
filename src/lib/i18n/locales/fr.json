@@ -691,7 +691,7 @@
     "shareQobuz": "Partager (Qobuz)",
     "albumCredits": "Crédits de l'album",
     "radio": {
-      "startArtistRadio" : "Lancer la radio de l'artiste"
+      "startArtistRadio": "Lancer la radio de l'artiste"
     },
     "previousAlbums": "Albums précédents",
     "nextAlbums": "Albums suivants",
@@ -966,11 +966,11 @@
         }
       },
       "fpsOptions": {
-        "disabled": "Désactivé",
         "15": "15 IPS (Bas)",
         "30": "30 IPS (Moyen)",
         "60": "60 IPS (Élevé)",
-        "120": "120 IPS (Ultra)"
+        "120": "120 IPS (Ultra)",
+        "disabled": "Désactivé"
       },
       "miniplayerDefaultView": "Vue par défaut du mini-lecteur",
       "miniplayerViews": {
@@ -1530,7 +1530,8 @@
       "newState": "Liste noire {status}",
       "enabled": "activée",
       "disabled": "désactivée"
-    } 
+    },
+    "copied": "Copié!"
   },
   "offline": {
     "title": "Mode hors ligne",
