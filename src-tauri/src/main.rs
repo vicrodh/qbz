@@ -1,6 +1,8 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use clap::Parser;
+
 #[cfg(target_os = "linux")]
 fn is_virtual_machine() -> bool {
     // DMI product name (most reliable)
@@ -81,14 +83,16 @@ fn is_intel_gpu() -> bool {
 }
 
 fn main() {
+    let cli = qbz_nix_lib::cli::Cli::parse();
+
     // CLI flag: --autoconfig-graphics — detect environment and apply optimal settings
-    if std::env::args().any(|a| a == "--autoconfig-graphics") {
+    if cli.autoconfig_graphics {
         qbz_nix_lib::autoconfig_graphics::run();
         return;
     }
 
     // CLI flag: --reset-graphics — resets ALL graphics/composition settings to defaults
-    if std::env::args().any(|a| a == "--reset-graphics") {
+    if cli.reset_graphics {
         eprintln!("[QBZ] Resetting all graphics settings to defaults...");
         let mut errors = Vec::new();
 
@@ -146,7 +150,7 @@ fn main() {
     }
 
     // CLI flag: --reset-dmabuf — resets the developer force_dmabuf setting and exits
-    if std::env::args().any(|a| a == "--reset-dmabuf") {
+    if cli.reset_dmabuf {
         match qbz_nix_lib::config::developer_settings::DeveloperSettingsStore::new() {
             Ok(store) => match store.set_force_dmabuf(false) {
                 Ok(()) => {
@@ -160,6 +164,31 @@ fn main() {
         return;
     }
 
+    // CLI flag: --export-settings — export settings to a JSON file
+    if let Some(_path) = &cli.export_settings {
+        eprintln!("[QBZ] --export-settings: not yet implemented");
+        return;
+    }
+
+    // CLI flag: --import-settings — import settings from a JSON file
+    if let Some(_path) = &cli.import_settings {
+        eprintln!("[QBZ] --import-settings: not yet implemented");
+        return;
+    }
+
+    // Route to run mode
+    match cli.run_mode() {
+        qbz_nix_lib::cli::RunMode::Desktop => run_desktop(),
+        qbz_nix_lib::cli::RunMode::Tui => {
+            eprintln!("[QBZ] TUI mode: not yet implemented");
+        }
+        qbz_nix_lib::cli::RunMode::Headless => {
+            eprintln!("[QBZ] Headless mode: not yet implemented");
+        }
+    }
+}
+
+fn run_desktop() {
     // Set the application name/class for Linux window managers
     // This helps task managers and window switchers identify the app correctly
     #[cfg(target_os = "linux")]
