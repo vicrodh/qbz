@@ -4955,15 +4955,23 @@ dependencies = [
 name = "qbz-tui"
 version = "0.1.0"
 dependencies = [
+ "aes-gcm",
  "async-trait",
+ "base64 0.22.1",
  "crossterm",
+ "dirs 6.0.0",
+ "keyring",
  "log",
  "qbz-audio",
  "qbz-core",
  "qbz-models",
  "qbz-player",
  "qbz-qobuz",
+ "rand 0.10.0",
  "ratatui",
+ "serde",
+ "serde_json",
+ "sha2",
  "tokio",
 ]
 

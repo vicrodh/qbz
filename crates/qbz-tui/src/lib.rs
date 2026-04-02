@@ -1,5 +1,6 @@
 pub mod app;
 pub mod adapter;
+pub mod credentials;
 pub mod input;
 pub mod theme;
 pub mod ui;
