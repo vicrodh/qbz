@@ -13,6 +13,10 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 name = "qbz"
 path = "src/main.rs"
 
+[features]
+default = ["desktop"]
+desktop = []
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

@@ -190,7 +190,16 @@ fn main() {
 
     // Route to run mode
     match cli.run_mode() {
-        qbz_nix_lib::cli::RunMode::Desktop => run_desktop(),
+        qbz_nix_lib::cli::RunMode::Desktop => {
+            #[cfg(not(feature = "desktop"))]
+            {
+                eprintln!("[QBZ] Desktop mode requires the 'desktop' feature.");
+                eprintln!("[QBZ] This binary was compiled without desktop support.");
+                std::process::exit(1);
+            }
+            #[cfg(feature = "desktop")]
+            run_desktop();
+        }
         qbz_nix_lib::cli::RunMode::Tui => {
             eprintln!("[QBZ] TUI mode: not yet implemented");
         }
