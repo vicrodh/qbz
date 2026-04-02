@@ -1,16 +1,42 @@
+//! Top-level layout — menu bar, 3-column content area, player bar, help bar.
+//!
+//! ```text
+//! +----------------------------------------------------------+
+//! | Library . Favorites . Playlists . Search      flac 100%  |  <- menu bar (1 line)
+//! +----------------------------------------------------------+
+//! | Nav List    | Main Content              | Lyrics          |
+//! | (left)      | (center)                  | (right top)     |
+//! |             |                           |                 |
+//! |             |                           |-----------------|
+//! |             |                           | Queue           |
+//! |             |                           | (right bottom)  |
+//! +----------------------------------------------------------+
+//! | [cover]  Title -- Album > Artist                         |
+//! | [art  ]  > 33% ━━━━━━━━━───────── 1:11 / 3:32           |
+//! | [     ]  flac -- 44.1 kHz -- stereo                      |
+//! +----------------------------------------------------------+
+//! | Help <?> Quit <Ctrl+Q>                                   |  <- help bar (1 line)
+//! +----------------------------------------------------------+
+//! ```
+
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::Frame;
 
 use crate::app::{ActiveView, AppState};
 use super::favorites::render_favorites;
-use super::now_playing::render_now_playing;
+use super::help_bar::render_help_bar;
+use super::menu_bar::render_menu_bar;
 use super::placeholder::render_placeholder;
+use super::player_bar::render_player_bar;
 use super::queue_panel::render_queue_panel;
 use super::search::render_search;
 use super::sidebar::render_sidebar;
 
-/// Width of the queue panel in columns.
-const QUEUE_PANEL_WIDTH: u16 = 28;
+/// Width of the right panel (queue/lyrics) in columns.
+const RIGHT_PANEL_WIDTH: u16 = 30;
+
+/// Width of the left sidebar in columns.
+const SIDEBAR_WIDTH: u16 = 20;
 
 /// Computed layout areas from the last render, used for mouse hit-testing.
 #[derive(Debug, Clone, Copy, Default)]
@@ -28,35 +54,44 @@ pub struct LayoutAreas {
 /// Top-level render function.
 ///
 /// Splits the terminal into:
-/// - Vertical: `[main_area (Min(1)), now_playing (Length(3))]`
-/// - Main area horizontal: `[sidebar (Length(sidebar_width)), content (Min(1))]`
+/// - Menu bar (1 line top)
+/// - Content area: sidebar (left) + main (center) + right panel (optional)
+/// - Player bar (4 lines bottom)
+/// - Help bar (1 line bottom)
 ///
 /// Returns the computed [`LayoutAreas`] for mouse hit-testing.
 pub fn render_layout(frame: &mut Frame, state: &AppState) -> LayoutAreas {
     let size = frame.area();
 
-    // Vertical split: main content + now-playing bar at bottom
+    // Vertical split: menu(1) + content(fill) + player(4) + help(1)
     let vertical = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Min(1),
-            Constraint::Length(3),
+            Constraint::Length(1),  // menu bar
+            Constraint::Min(1),    // content area
+            Constraint::Length(4), // player bar
+            Constraint::Length(1), // help bar
         ])
         .split(size);
 
-    let main_area = vertical[0];
-    let now_playing_area = vertical[1];
+    let menu_area = vertical[0];
+    let main_area = vertical[1];
+    let player_area = vertical[2];
+    let help_area = vertical[3];
 
-    // Horizontal split: sidebar + content [+ queue panel]
-    let sidebar_width = if state.sidebar_expanded { 22 } else { 4 };
+    // Render chrome
+    render_menu_bar(frame, menu_area, state);
+    render_player_bar(frame, player_area, state);
+    render_help_bar(frame, help_area, state);
 
+    // Horizontal split: sidebar + content [+ right panel]
     let (sidebar_area, content_area, queue_panel_area) = if state.show_queue_panel {
         let horizontal = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
-                Constraint::Length(sidebar_width),
+                Constraint::Length(SIDEBAR_WIDTH),
                 Constraint::Min(1),
-                Constraint::Length(QUEUE_PANEL_WIDTH),
+                Constraint::Length(RIGHT_PANEL_WIDTH),
             ])
             .split(main_area);
         (horizontal[0], horizontal[1], horizontal[2])
@@ -64,7 +99,7 @@ pub fn render_layout(frame: &mut Frame, state: &AppState) -> LayoutAreas {
         let horizontal = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
-                Constraint::Length(sidebar_width),
+                Constraint::Length(SIDEBAR_WIDTH),
                 Constraint::Min(1),
             ])
             .split(main_area);
@@ -74,7 +109,6 @@ pub fn render_layout(frame: &mut Frame, state: &AppState) -> LayoutAreas {
     render_sidebar(frame, sidebar_area, state);
 
     // Compute search results area (only meaningful when in Search view).
-    // The search view splits content_area into: input(3) + status(1) + results(rest).
     let search_results_area = if state.active_view == ActiveView::Search {
         let search_chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -96,17 +130,15 @@ pub fn render_layout(frame: &mut Frame, state: &AppState) -> LayoutAreas {
         _ => render_placeholder(frame, content_area, state.active_view.label()),
     }
 
-    // Render queue panel if visible
+    // Render right panel if visible
     if state.show_queue_panel && queue_panel_area.width > 0 {
         render_queue_panel(frame, queue_panel_area, state);
     }
 
-    render_now_playing(frame, now_playing_area, state);
-
     LayoutAreas {
         sidebar: sidebar_area,
         content: content_area,
-        now_playing: now_playing_area,
+        now_playing: player_area,
         search_results: search_results_area,
         queue_panel: queue_panel_area,
     }

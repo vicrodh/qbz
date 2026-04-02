@@ -506,21 +506,15 @@ impl App {
         // For hit-testing we use the row offset from the top of the sidebar area.
         let relative_row = row.saturating_sub(area.y);
 
-        let nav_view = if self.state.sidebar_expanded {
-            // Expanded sidebar layout:
-            //   row 0: header ("QBZ")
-            //   row 1: separator
-            //   row 2..2+N: nav items
-            if relative_row >= 2 {
-                let item_idx = (relative_row - 2) as usize;
-                NAV_ITEMS.get(item_idx).map(|(view, _, _)| *view)
-            } else {
-                None
-            }
+        // Sidebar layout:
+        //   row 0: header ("QBZ")
+        //   row 1: separator
+        //   row 2..2+N: nav items
+        let nav_view = if relative_row >= 2 {
+            let item_idx = (relative_row - 2) as usize;
+            NAV_ITEMS.get(item_idx).map(|(view, _)| *view)
         } else {
-            // Collapsed sidebar: nav items start at row 0 of the inner area.
-            let item_idx = relative_row as usize;
-            NAV_ITEMS.get(item_idx).map(|(view, _, _)| *view)
+            None
         };
 
         if let Some(view) = nav_view {
