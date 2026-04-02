@@ -304,7 +304,9 @@
     "bookletRotate": "Rotar",
     "bookletDownload": "Guardar booklet",
     "sameArtist": "Del mismo artista...",
-    "seeFullDiscography": "Ver discografía completa"
+    "seeFullDiscography": "Ver discografía completa",
+    "releasedOn": "el",
+    "releasedBy": "Publicado en"
   },
   "artist": {
     "albums": "Álbumes",
@@ -365,7 +367,8 @@
       "searchInPage": "Buscar en esta página"
     },
     "noAlbumAppearancesFound": "No se encontraron apariciones en álbumes",
-    "noAlbumsFound": "No se encontraron álbumes"
+    "noAlbumsFound": "No se encontraron álbumes",
+    "bandProjects": "Alzacuello"
   },
   "sort": {
     "sort": "Ordenar",
@@ -637,7 +640,9 @@
     "fullscreenWithKey": "Pantalla completa ({key})",
     "restoreWindow": "Restaurar ventana",
     "maximizeWindow": "Maximizar ventana",
-    "windowControls": "Controles de ventana"
+    "windowControls": "Controles de ventana",
+    "closeApp": "Cerrar aplicación",
+    "connectedTo": "Conectado a"
   },
   "audioBadges": {
     "castingTo": "Transmitiendo a",
@@ -750,7 +755,22 @@
     "visitReleasePage": "Visitar la página de lanzamiento",
     "moveUp": "Subir",
     "moveDown": "Bajar",
-    "backToHome": "De vuelta a la página principal"
+    "backToHome": "De vuelta a la página principal",
+    "clearSelection": "Borrar selección",
+    "copyCommand": "comando copiar",
+    "downloadOnGitHub": "Descargar en GitHub",
+    "findAvailableVersion": "Encuentra la versión disponible",
+    "gotIt": "Entiendo",
+    "okClose": "Bien, cerca",
+    "playFromHere": "Juega desde aquí",
+    "playRadio": "Reproducir radio",
+    "playTrackOnly": "Reproducir solo pista",
+    "qobuzLink": "Enlace Qobuz™",
+    "removeOfflineCopy": "Eliminar copia sin conexión",
+    "selectAll": "Seleccionar todo",
+    "startOffline": "Empezar sin conexión",
+    "tryAgain": "Intentar otra vez",
+    "startArtistRadio": "Iniciar radio del artista"
   },
   "settings": {
     "title": "Ajustes",
@@ -1239,7 +1259,9 @@
       "qobuzLinkHandlerDesc": "Registrar QBZ como la app predeterminada para enlaces qobuzapp:// desde el navegador.",
       "qobuzLinkHandlerError": "Error al actualizar el registro del manejador de enlaces.",
       "qconnectDeviceName": "Nombre del dispositivo",
-      "qconnectDeviceNameDesc": "Nombre mostrado en Qobuz Connect"
+      "qconnectDeviceNameDesc": "Nombre mostrado en Qobuz Connect",
+      "noProtocolDeviceFound": "No se encontraron dispositivos {protocolo}",
+      "noProtocolDeviceFoundHint": "Asegúrese de que los dispositivos estén en la misma red"
     },
     "storage": {
       "title": "Almacenamiento",
@@ -1516,7 +1538,8 @@
     "sectionsDesc": "Reordena con flechas. Activa/desactiva con interruptor.",
     "moveUp": "Subir",
     "moveDown": "Bajar",
-    "resetToDefaults": "Restablecer valores"
+    "resetToDefaults": "Restablecer valores",
+    "itemsToShow": "Artículos para mostrar"
   },
   "toast": {
     "loadingAlbum": "Cargando álbum...",
@@ -1634,7 +1657,8 @@
     "loadingDevices": "Cargando dispositivos...",
     "addedToPlaylist": "Agregado a la lista",
     "copied": "¡Copiado!",
-    "loadingCredits": "Cargando créditos..."
+    "loadingCredits": "Cargando créditos...",
+    "laodingDevices": "Cargando dispositivos..."
   },
   "offline": {
     "title": "Modo Offline",
