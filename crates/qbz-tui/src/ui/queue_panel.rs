@@ -1,9 +1,9 @@
-//! Right panel — split into Lyrics (top) and Queue (bottom).
+//! Right panel — split into Lyrics (top) and Queue (bottom) with scrollbar.
 
-use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use ratatui::layout::{Constraint, Direction, Layout, Margin, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Paragraph};
+use ratatui::widgets::{Block, Borders, Paragraph, Scrollbar, ScrollbarOrientation};
 use ratatui::Frame;
 
 use qbz_models::RepeatMode;
@@ -14,7 +14,7 @@ use crate::theme::{
 };
 
 /// Render the right-side panel, split vertically into Lyrics (top) and Queue (bottom).
-pub fn render_queue_panel(frame: &mut Frame, area: Rect, state: &AppState) {
+pub fn render_queue_panel(frame: &mut Frame, area: Rect, state: &mut AppState) {
     let block = Block::default()
         .borders(Borders::LEFT)
         .border_style(Style::default().fg(TEXT_DIM))
@@ -83,8 +83,8 @@ fn render_section_separator(frame: &mut Frame, area: Rect) {
     );
 }
 
-/// Queue section (bottom portion of right panel).
-fn render_queue_section(frame: &mut Frame, area: Rect, state: &AppState) {
+/// Queue section (bottom portion of right panel) with scrollbar.
+fn render_queue_section(frame: &mut Frame, area: Rect, state: &mut AppState) {
     if area.height == 0 {
         return;
     }
@@ -110,7 +110,7 @@ fn render_queue_section(frame: &mut Frame, area: Rect, state: &AppState) {
             .split(area)
     };
 
-    render_queue_header(frame, chunks[0]);
+    render_queue_header(frame, chunks[0], state);
     render_queue_content(frame, chunks[1], state);
 
     if has_footer && chunks.len() > 2 {
@@ -118,19 +118,41 @@ fn render_queue_section(frame: &mut Frame, area: Rect, state: &AppState) {
     }
 }
 
-/// Queue header.
-fn render_queue_header(frame: &mut Frame, area: Rect) {
-    let header = Line::from(Span::styled(
-        "Queue",
-        Style::default()
-            .fg(TEXT_MUTED)
-            .add_modifier(Modifier::BOLD),
-    ));
+/// Queue header with track count.
+fn render_queue_header(frame: &mut Frame, area: Rect, state: &AppState) {
+    let upcoming_count = if state.queue_tracks.len() > 1 {
+        state.queue_tracks.len() - 1
+    } else {
+        0
+    };
+
+    let header = if upcoming_count > 0 {
+        Line::from(vec![
+            Span::styled(
+                "Queue",
+                Style::default()
+                    .fg(TEXT_MUTED)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                format!(" ({})", upcoming_count),
+                Style::default().fg(TEXT_DIM),
+            ),
+        ])
+    } else {
+        Line::from(Span::styled(
+            "Queue",
+            Style::default()
+                .fg(TEXT_MUTED)
+                .add_modifier(Modifier::BOLD),
+        ))
+    };
+
     frame.render_widget(Paragraph::new(header), area);
 }
 
-/// Queue content: now playing + up next tracks.
-fn render_queue_content(frame: &mut Frame, area: Rect, state: &AppState) {
+/// Queue content: now playing + up next tracks, with scrollbar.
+fn render_queue_content(frame: &mut Frame, area: Rect, state: &mut AppState) {
     if area.height == 0 {
         return;
     }
@@ -208,7 +230,30 @@ fn render_queue_content(frame: &mut Frame, area: Rect, state: &AppState) {
         }
     }
 
+    let total_lines = lines.len();
     frame.render_widget(Paragraph::new(lines), area);
+
+    // Render scrollbar for queue if there are items
+    if upcoming.len() > 0 {
+        state.queue_scrollbar_state = state
+            .queue_scrollbar_state
+            .content_length(total_lines)
+            .position(0);
+
+        let scrollbar = Scrollbar::default()
+            .orientation(ScrollbarOrientation::VerticalRight)
+            .begin_symbol(Some("\u{2191}")) // ↑
+            .end_symbol(Some("\u{2193}")); // ↓
+
+        frame.render_stateful_widget(
+            scrollbar,
+            area.inner(Margin {
+                vertical: 0,
+                horizontal: 0,
+            }),
+            &mut state.queue_scrollbar_state,
+        );
+    }
 }
 
 /// Queue footer: shuffle and repeat status.

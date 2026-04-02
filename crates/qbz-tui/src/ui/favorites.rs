@@ -1,16 +1,16 @@
-//! Favorites view — tab bar, track list, and playback trigger.
+//! Favorites view — tab bar, track list with scrollbar, and playback trigger.
 
-use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use ratatui::layout::{Constraint, Direction, Layout, Margin, Rect};
 use ratatui::style::{Modifier, Style, Stylize};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{List, ListItem, ListState, Paragraph};
+use ratatui::widgets::{List, ListItem, ListState, Paragraph, Scrollbar, ScrollbarOrientation};
 use ratatui::Frame;
 
 use crate::app::{AppState, FavoritesTab};
 use crate::theme::{ACCENT, BG_SELECTED, DANGER, HIRES_BADGE, TEXT_DIM, TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY};
 
 /// Render the full favorites view inside `area`.
-pub fn render_favorites(frame: &mut Frame, area: Rect, state: &AppState) {
+pub fn render_favorites(frame: &mut Frame, area: Rect, state: &mut AppState) {
     // Split vertically: tab bar (1) + results (rest)
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -81,8 +81,8 @@ fn render_tab_bar(frame: &mut Frame, area: Rect, state: &AppState) {
     frame.render_widget(Paragraph::new(line), area);
 }
 
-/// The favorites track list.
-fn render_tracks(frame: &mut Frame, area: Rect, state: &AppState) {
+/// The favorites track list with scrollbar.
+fn render_tracks(frame: &mut Frame, area: Rect, state: &mut AppState) {
     let favs = &state.favorites;
 
     if favs.tracks.is_empty() && !favs.loading {
@@ -108,13 +108,19 @@ fn render_tracks(frame: &mut Frame, area: Rect, state: &AppState) {
         return;
     }
 
+    let selected_index = favs.selected_index;
+    let track_count = favs.tracks.len();
+
     // Build list items
     let items: Vec<ListItem<'_>> = favs
         .tracks
         .iter()
         .enumerate()
         .map(|(idx, track)| {
-            let is_selected = idx == favs.selected_index;
+            let is_selected = idx == selected_index;
+
+            // Favorite indicator
+            let fav_icon = "\u{2665} "; // ♥
 
             // Track number / index
             let num = format!("{:>3}. ", idx + 1);
@@ -155,6 +161,7 @@ fn render_tracks(frame: &mut Frame, area: Rect, state: &AppState) {
             };
 
             let mut spans = vec![
+                Span::styled(fav_icon, style.fg(ACCENT)),
                 Span::styled(num, style.fg(TEXT_DIM)),
                 Span::styled(title.to_string(), if is_selected {
                     style.add_modifier(Modifier::BOLD)
@@ -204,9 +211,32 @@ fn render_tracks(frame: &mut Frame, area: Rect, state: &AppState) {
 
     // Use ListState to enable scroll tracking
     let mut list_state = ListState::default();
-    list_state.select(Some(favs.selected_index));
+    list_state.select(Some(selected_index));
 
     frame.render_stateful_widget(list, area, &mut list_state);
+
+    // Render scrollbar (Jellyfin-TUI pattern)
+    if track_count > 0 {
+        state.favorites.scrollbar_state = state
+            .favorites
+            .scrollbar_state
+            .content_length(track_count)
+            .position(selected_index);
+
+        let scrollbar = Scrollbar::default()
+            .orientation(ScrollbarOrientation::VerticalRight)
+            .begin_symbol(Some("\u{2191}")) // ↑
+            .end_symbol(Some("\u{2193}")); // ↓
+
+        frame.render_stateful_widget(
+            scrollbar,
+            area.inner(Margin {
+                vertical: 0,
+                horizontal: 1,
+            }),
+            &mut state.favorites.scrollbar_state,
+        );
+    }
 }
 
 fn format_duration(seconds: u32) -> String {

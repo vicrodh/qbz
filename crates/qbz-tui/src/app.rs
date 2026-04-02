@@ -11,6 +11,7 @@ use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
 use ratatui::prelude::CrosstermBackend;
+use ratatui::widgets::ScrollbarState;
 use ratatui::Frame;
 use ratatui::Terminal;
 use tokio::sync::mpsc;
@@ -103,6 +104,8 @@ pub struct SearchState {
     pub loading: bool,
     /// Error message from the last search attempt.
     pub error: Option<String>,
+    /// Scrollbar state for the results list.
+    pub scrollbar_state: ScrollbarState,
 }
 
 impl Default for SearchState {
@@ -116,6 +119,7 @@ impl Default for SearchState {
             total_results: 0,
             loading: false,
             error: None,
+            scrollbar_state: ScrollbarState::default(),
         }
     }
 }
@@ -134,6 +138,8 @@ pub struct FavoritesState {
     pub error: Option<String>,
     /// Whether favorites have been fetched at least once.
     pub loaded: bool,
+    /// Scrollbar state for the track list.
+    pub scrollbar_state: ScrollbarState,
 }
 
 impl Default for FavoritesState {
@@ -145,6 +151,7 @@ impl Default for FavoritesState {
             loading: false,
             error: None,
             loaded: false,
+            scrollbar_state: ScrollbarState::default(),
         }
     }
 }
@@ -175,6 +182,8 @@ pub struct AppState {
     pub queue_repeat: RepeatMode,
     /// Whether the queue panel is visible (toggled with 'q').
     pub show_queue_panel: bool,
+    /// Scrollbar state for the queue panel.
+    pub queue_scrollbar_state: ScrollbarState,
 }
 
 impl Default for AppState {
@@ -199,6 +208,7 @@ impl Default for AppState {
             queue_shuffle: false,
             queue_repeat: RepeatMode::Off,
             show_queue_panel: false,
+            queue_scrollbar_state: ScrollbarState::default(),
         }
     }
 }
@@ -351,8 +361,8 @@ impl App {
     }
 
     /// Render the full UI for the current frame and return the computed layout areas.
-    pub fn draw(&self, frame: &mut Frame) -> LayoutAreas {
-        render_layout(frame, &self.state)
+    pub fn draw(&mut self, frame: &mut Frame) -> LayoutAreas {
+        render_layout(frame, &mut self.state)
     }
 
     pub async fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {

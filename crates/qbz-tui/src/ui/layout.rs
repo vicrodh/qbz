@@ -60,7 +60,7 @@ pub struct LayoutAreas {
 /// - Help bar (1 line bottom)
 ///
 /// Returns the computed [`LayoutAreas`] for mouse hit-testing.
-pub fn render_layout(frame: &mut Frame, state: &AppState) -> LayoutAreas {
+pub fn render_layout(frame: &mut Frame, state: &mut AppState) -> LayoutAreas {
     let size = frame.area();
 
     // Vertical split: menu(1) + content(fill) + player(4) + help(1)
@@ -124,10 +124,11 @@ pub fn render_layout(frame: &mut Frame, state: &AppState) -> LayoutAreas {
     };
 
     // Render view-specific content
-    match state.active_view {
+    let active = state.active_view;
+    match active {
         ActiveView::Search => render_search(frame, content_area, state),
         ActiveView::Favorites => render_favorites(frame, content_area, state),
-        _ => render_placeholder(frame, content_area, state.active_view.label()),
+        _ => render_placeholder(frame, content_area, active.label()),
     }
 
     // Render right panel if visible
