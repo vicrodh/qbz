@@ -14,6 +14,7 @@ pub mod tauri_adapter;
 pub mod auto_theme;
 pub mod autoconfig_graphics;
 pub mod cli;
+pub mod commands_v2_settings_export;
 pub mod headless;
 pub mod settings_export;
 
@@ -1687,6 +1688,9 @@ pub fn run() {
             commands_v2::v2_set_image_cache_max_size,
             commands_v2::v2_get_image_cache_stats,
             commands_v2::v2_clear_image_cache,
+            // Settings export/import (desktop UI — no file I/O in backend)
+            commands_v2_settings_export::v2_export_settings_json,
+            commands_v2_settings_export::v2_import_settings_json,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
