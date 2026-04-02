@@ -16,8 +16,9 @@ use ratatui::Terminal;
 use tokio::sync::mpsc;
 
 use qbz_audio::{AudioDiagnostic, AudioSettings};
+use qbz_cache::PlaybackCache;
 use qbz_core::QbzCore;
-use qbz_models::{CoreEvent, Quality, Track};
+use qbz_models::{CoreEvent, Track};
 use qbz_player::Player;
 
 use crate::adapter::TuiAdapter;
@@ -162,6 +163,8 @@ pub struct App {
     playback_status_rx: mpsc::UnboundedReceiver<PlaybackStatus>,
     /// Whether playback was active on the previous tick (for auto-advance detection).
     was_playing: bool,
+    /// L2 disk cache for playback audio data.
+    playback_cache: Option<Arc<PlaybackCache>>,
 }
 
 impl App {
@@ -241,6 +244,23 @@ impl App {
         let (search_tx, search_rx) = mpsc::unbounded_channel::<SearchResult>();
         let (playback_tx, playback_rx) = mpsc::unbounded_channel::<PlaybackStatus>();
 
+        // Initialize L2 disk playback cache (800MB limit)
+        let playback_cache = match PlaybackCache::new(800 * 1024 * 1024) {
+            Ok(cache) => {
+                let stats = cache.stats();
+                log::info!(
+                    "[TUI] Playback cache initialized: {} tracks, {} MB",
+                    stats.cached_tracks,
+                    stats.current_size_bytes / 1_048_576
+                );
+                Some(Arc::new(cache))
+            }
+            Err(e) => {
+                log::warn!("[TUI] Playback cache unavailable: {}", e);
+                None
+            }
+        };
+
         Ok(Self {
             state,
             core_event_rx: event_rx,
@@ -254,6 +274,7 @@ impl App {
             playback_status_tx: playback_tx,
             playback_status_rx: playback_rx,
             was_playing: false,
+            playback_cache,
         })
     }
 
@@ -498,10 +519,11 @@ impl App {
             KeyCode::Char('n') => {
                 let core = Arc::clone(&self.core);
                 let status_tx = self.playback_status_tx.clone();
+                let cache = self.playback_cache.clone();
                 self.rt_handle.spawn(async move {
                     if let Some(track) = core.next_track().await {
                         log::info!("[TUI] Next track: {} - {}", track.artist, track.title);
-                        if let Err(e) = playback::play_qobuz_track(&core, track.id, Quality::HiRes, &status_tx).await {
+                        if let Err(e) = playback::play_qobuz_track(&core, track.id, &cache, &status_tx).await {
                             log::error!("[TUI] Next track playback failed: {}", e);
                             let _ = status_tx.send(PlaybackStatus::Error(e));
                         }
@@ -511,10 +533,11 @@ impl App {
             KeyCode::Char('p') => {
                 let core = Arc::clone(&self.core);
                 let status_tx = self.playback_status_tx.clone();
+                let cache = self.playback_cache.clone();
                 self.rt_handle.spawn(async move {
                     if let Some(track) = core.previous_track().await {
                         log::info!("[TUI] Previous track: {} - {}", track.artist, track.title);
-                        if let Err(e) = playback::play_qobuz_track(&core, track.id, Quality::HiRes, &status_tx).await {
+                        if let Err(e) = playback::play_qobuz_track(&core, track.id, &cache, &status_tx).await {
                             log::error!("[TUI] Previous track playback failed: {}", e);
                             let _ = status_tx.send(PlaybackStatus::Error(e));
                         }
@@ -703,12 +726,13 @@ impl App {
         let core = Arc::clone(&self.core);
         let track_id = track.id;
         let status_tx = self.playback_status_tx.clone();
+        let cache = self.playback_cache.clone();
 
         self.rt_handle.spawn(async move {
             if let Err(e) = playback::play_qobuz_track(
                 &core,
                 track_id,
-                Quality::HiRes,
+                &cache,
                 &status_tx,
             )
             .await
@@ -776,12 +800,13 @@ impl App {
             let core = Arc::clone(&self.core);
             let track_id = next_track.id;
             let status_tx = self.playback_status_tx.clone();
+            let cache = self.playback_cache.clone();
 
             self.rt_handle.spawn(async move {
                 if let Err(e) = playback::play_qobuz_track(
                     &core,
                     track_id,
-                    Quality::HiRes,
+                    &cache,
                     &status_tx,
                 )
                 .await

@@ -12,6 +12,7 @@ qbz-models = { path = "../qbz-models" }
 qbz-player = { path = "../qbz-player" }
 qbz-audio = { path = "../qbz-audio" }
 qbz-qobuz = { path = "../qbz-qobuz" }
+qbz-cache = { path = "../qbz-cache" }
 reqwest = { workspace = true }
 tokio = { version = "1", features = ["full"] }
 async-trait = "0.1"
