@@ -211,6 +211,421 @@ pub struct ExportedSettings {
     pub image_cache: Option<ImageCacheExport>,
 }
 
+/// Write all exportable settings to `path` as pretty-printed JSON.
+///
+/// Returns `Err` only on I/O or serialization failure.  Individual store
+/// read failures are logged as warnings and result in `None` for that
+/// category — they do NOT abort the export.
+pub fn export_to_file(path: &str) -> Result<(), String> {
+    let settings = ExportedSettings::collect();
+    let json = serde_json::to_string_pretty(&settings)
+        .map_err(|e| format!("Failed to serialize settings: {}", e))?;
+    std::fs::write(path, json)
+        .map_err(|e| format!("Failed to write settings file '{}': {}", path, e))?;
+    Ok(())
+}
+
+/// Read settings from a JSON file at `path` and apply each non-None
+/// section to its corresponding settings store.
+///
+/// All per-field errors are collected and reported at the end rather than
+/// aborting on the first failure, so a partial import is still applied.
+pub fn import_from_file(path: &str) -> Result<(), String> {
+    let contents = std::fs::read_to_string(path)
+        .map_err(|e| format!("Failed to read settings file '{}': {}", path, e))?;
+    let settings: ExportedSettings = serde_json::from_str(&contents)
+        .map_err(|e| format!("Failed to parse settings JSON: {}", e))?;
+
+    let mut errors: Vec<String> = Vec::new();
+
+    // --- Audio ---
+    if let Some(audio) = settings.audio {
+        apply_audio(&audio, &mut errors);
+    }
+
+    // --- Download ---
+    if let Some(download) = settings.download {
+        apply_download(&download, &mut errors);
+    }
+
+    // --- Playback ---
+    if let Some(playback) = settings.playback {
+        apply_playback(&playback, &mut errors);
+    }
+
+    // --- Favorites ---
+    if let Some(favorites) = settings.favorites {
+        apply_favorites(&favorites, &mut errors);
+    }
+
+    // --- Tray ---
+    if let Some(tray) = settings.tray {
+        apply_tray(&tray, &mut errors);
+    }
+
+    // --- Graphics ---
+    if let Some(graphics) = settings.graphics {
+        apply_graphics(&graphics, &mut errors);
+    }
+
+    // --- Developer ---
+    if let Some(developer) = settings.developer {
+        apply_developer(&developer, &mut errors);
+    }
+
+    // --- Remote control ---
+    if let Some(remote_control) = settings.remote_control {
+        apply_remote_control(&remote_control, &mut errors);
+    }
+
+    // --- Window ---
+    if let Some(window) = settings.window {
+        apply_window(&window, &mut errors);
+    }
+
+    // --- Image cache ---
+    if let Some(image_cache) = settings.image_cache {
+        apply_image_cache(&image_cache, &mut errors);
+    }
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "{} error(s) during import:\n{}",
+            errors.len(),
+            errors.join("\n")
+        ))
+    }
+}
+
+// ============================================================================
+// Per-category apply helpers (pub so Tauri commands can reuse them)
+// ============================================================================
+
+pub fn apply_audio(audio: &AudioExport, errors: &mut Vec<String>) {
+    let store = match AudioSettingsStore::new() {
+        Ok(s) => s,
+        Err(e) => {
+            errors.push(format!("audio_settings open: {}", e));
+            return;
+        }
+    };
+
+    if let Some(v) = audio.exclusive_mode {
+        if let Err(e) = store.set_exclusive_mode(v) {
+            errors.push(format!("audio.exclusive_mode: {}", e));
+        }
+    }
+    if let Some(v) = audio.dac_passthrough {
+        if let Err(e) = store.set_dac_passthrough(v) {
+            errors.push(format!("audio.dac_passthrough: {}", e));
+        }
+    }
+    if let Some(v) = audio.preferred_sample_rate {
+        if let Err(e) = store.set_sample_rate(Some(v)) {
+            errors.push(format!("audio.preferred_sample_rate: {}", e));
+        }
+    }
+    if let Some(ref v) = audio.backend_type {
+        if let Err(e) = store.set_backend_type(Some(v.clone())) {
+            errors.push(format!("audio.backend_type: {}", e));
+        }
+    }
+    if let Some(ref v) = audio.alsa_plugin {
+        if let Err(e) = store.set_alsa_plugin(Some(v.clone())) {
+            errors.push(format!("audio.alsa_plugin: {}", e));
+        }
+    }
+    if let Some(v) = audio.alsa_hardware_volume {
+        if let Err(e) = store.set_alsa_hardware_volume(v) {
+            errors.push(format!("audio.alsa_hardware_volume: {}", e));
+        }
+    }
+    if let Some(v) = audio.stream_first_track {
+        if let Err(e) = store.set_stream_first_track(v) {
+            errors.push(format!("audio.stream_first_track: {}", e));
+        }
+    }
+    if let Some(v) = audio.stream_buffer_seconds {
+        if let Err(e) = store.set_stream_buffer_seconds(v) {
+            errors.push(format!("audio.stream_buffer_seconds: {}", e));
+        }
+    }
+    if let Some(v) = audio.streaming_only {
+        if let Err(e) = store.set_streaming_only(v) {
+            errors.push(format!("audio.streaming_only: {}", e));
+        }
+    }
+    if let Some(v) = audio.limit_quality_to_device {
+        if let Err(e) = store.set_limit_quality_to_device(v) {
+            errors.push(format!("audio.limit_quality_to_device: {}", e));
+        }
+    }
+    if let Some(v) = audio.normalization_enabled {
+        if let Err(e) = store.set_normalization_enabled(v) {
+            errors.push(format!("audio.normalization_enabled: {}", e));
+        }
+    }
+    if let Some(v) = audio.normalization_target_lufs {
+        if let Err(e) = store.set_normalization_target_lufs(v) {
+            errors.push(format!("audio.normalization_target_lufs: {}", e));
+        }
+    }
+    if let Some(v) = audio.gapless_enabled {
+        if let Err(e) = store.set_gapless_enabled(v) {
+            errors.push(format!("audio.gapless_enabled: {}", e));
+        }
+    }
+    if let Some(v) = audio.pw_force_bitperfect {
+        if let Err(e) = store.set_pw_force_bitperfect(v) {
+            errors.push(format!("audio.pw_force_bitperfect: {}", e));
+        }
+    }
+    if let Some(v) = audio.sync_audio_on_startup {
+        if let Err(e) = store.set_sync_audio_on_startup(v) {
+            errors.push(format!("audio.sync_audio_on_startup: {}", e));
+        }
+    }
+    if let Some(ref v) = audio.quality_fallback_behavior {
+        if let Err(e) = store.set_quality_fallback_behavior(v) {
+            errors.push(format!("audio.quality_fallback_behavior: {}", e));
+        }
+    }
+}
+
+pub fn apply_download(download: &DownloadExport, errors: &mut Vec<String>) {
+    let store = match DownloadSettingsStore::new() {
+        Ok(s) => s,
+        Err(e) => {
+            errors.push(format!("download_settings open: {}", e));
+            return;
+        }
+    };
+
+    if let Some(ref v) = download.download_root {
+        if let Err(e) = store.set_download_root(v) {
+            errors.push(format!("download.download_root: {}", e));
+        }
+    }
+    if let Some(v) = download.show_in_library {
+        if let Err(e) = store.set_show_in_library(v) {
+            errors.push(format!("download.show_in_library: {}", e));
+        }
+    }
+}
+
+pub fn apply_playback(playback: &PlaybackExport, errors: &mut Vec<String>) {
+    let store = match PlaybackPreferencesStore::new() {
+        Ok(s) => s,
+        Err(e) => {
+            errors.push(format!("playback_preferences open: {}", e));
+            return;
+        }
+    };
+
+    if let Some(v) = playback.autoplay_mode {
+        if let Err(e) = store.set_autoplay_mode(v) {
+            errors.push(format!("playback.autoplay_mode: {}", e));
+        }
+    }
+    if let Some(v) = playback.show_context_icon {
+        if let Err(e) = store.set_show_context_icon(v) {
+            errors.push(format!("playback.show_context_icon: {}", e));
+        }
+    }
+    if let Some(v) = playback.persist_session {
+        if let Err(e) = store.set_persist_session(v) {
+            errors.push(format!("playback.persist_session: {}", e));
+        }
+    }
+}
+
+pub fn apply_favorites(favorites: &FavoritesExport, errors: &mut Vec<String>) {
+    let store = match FavoritesPreferencesStore::new() {
+        Ok(s) => s,
+        Err(e) => {
+            errors.push(format!("favorites_preferences open: {}", e));
+            return;
+        }
+    };
+
+    // Read current prefs so we can do a partial update via save_preferences
+    let mut prefs = match store.get_preferences() {
+        Ok(p) => p,
+        Err(e) => {
+            errors.push(format!("favorites_preferences read: {}", e));
+            return;
+        }
+    };
+
+    // custom_icon_preset: exported as Option<String>, stored as Option<String>
+    if favorites.custom_icon_preset.is_some() {
+        prefs.custom_icon_preset = favorites.custom_icon_preset.clone();
+    }
+    // icon_background
+    if favorites.icon_background.is_some() {
+        prefs.icon_background = favorites.icon_background.clone();
+    }
+    // tab_order
+    if let Some(ref order) = favorites.tab_order {
+        prefs.tab_order = order.clone();
+    }
+    // custom_icon_path is intentionally NOT applied (hardware-specific path)
+
+    if let Err(e) = store.save_preferences(prefs) {
+        errors.push(format!("favorites_preferences save: {}", e));
+    }
+}
+
+pub fn apply_tray(tray: &TrayExport, errors: &mut Vec<String>) {
+    let store = match TraySettingsStore::new() {
+        Ok(s) => s,
+        Err(e) => {
+            errors.push(format!("tray_settings open: {}", e));
+            return;
+        }
+    };
+
+    if let Some(v) = tray.enable_tray {
+        if let Err(e) = store.set_enable_tray(v) {
+            errors.push(format!("tray.enable_tray: {}", e));
+        }
+    }
+    if let Some(v) = tray.minimize_to_tray {
+        if let Err(e) = store.set_minimize_to_tray(v) {
+            errors.push(format!("tray.minimize_to_tray: {}", e));
+        }
+    }
+    if let Some(v) = tray.close_to_tray {
+        if let Err(e) = store.set_close_to_tray(v) {
+            errors.push(format!("tray.close_to_tray: {}", e));
+        }
+    }
+}
+
+pub fn apply_graphics(graphics: &GraphicsExport, errors: &mut Vec<String>) {
+    let store = match GraphicsSettingsStore::new() {
+        Ok(s) => s,
+        Err(e) => {
+            errors.push(format!("graphics_settings open: {}", e));
+            return;
+        }
+    };
+
+    if let Some(v) = graphics.hardware_acceleration {
+        if let Err(e) = store.set_hardware_acceleration(v) {
+            errors.push(format!("graphics.hardware_acceleration: {}", e));
+        }
+    }
+    if let Some(v) = graphics.force_x11 {
+        if let Err(e) = store.set_force_x11(v) {
+            errors.push(format!("graphics.force_x11: {}", e));
+        }
+    }
+    // gdk_scale / gdk_dpi_scale / gsk_renderer are Option<String> — import as-is
+    if graphics.gdk_scale.is_some() || matches!(graphics.gdk_scale, None) {
+        // Only write if the field was present in the export (non-default)
+        // The field uses skip_serializing_if = "Option::is_none", so if it
+        // deserialized to Some(_), the user explicitly set it.
+        if let Some(ref v) = graphics.gdk_scale {
+            if let Err(e) = store.set_gdk_scale(Some(v.clone())) {
+                errors.push(format!("graphics.gdk_scale: {}", e));
+            }
+        }
+    }
+    if let Some(ref v) = graphics.gdk_dpi_scale {
+        if let Err(e) = store.set_gdk_dpi_scale(Some(v.clone())) {
+            errors.push(format!("graphics.gdk_dpi_scale: {}", e));
+        }
+    }
+    if let Some(ref v) = graphics.gsk_renderer {
+        if let Err(e) = store.set_gsk_renderer(Some(v.clone())) {
+            errors.push(format!("graphics.gsk_renderer: {}", e));
+        }
+    }
+}
+
+pub fn apply_developer(developer: &DeveloperExport, errors: &mut Vec<String>) {
+    let store = match DeveloperSettingsStore::new() {
+        Ok(s) => s,
+        Err(e) => {
+            errors.push(format!("developer_settings open: {}", e));
+            return;
+        }
+    };
+
+    if let Some(v) = developer.force_dmabuf {
+        if let Err(e) = store.set_force_dmabuf(v) {
+            errors.push(format!("developer.force_dmabuf: {}", e));
+        }
+    }
+}
+
+pub fn apply_remote_control(remote_control: &RemoteControlExport, errors: &mut Vec<String>) {
+    let store = match RemoteControlSettingsStore::new() {
+        Ok(s) => s,
+        Err(e) => {
+            errors.push(format!("remote_control_settings open: {}", e));
+            return;
+        }
+    };
+
+    if let Some(v) = remote_control.enabled {
+        if let Err(e) = store.set_enabled(v) {
+            errors.push(format!("remote_control.enabled: {}", e));
+        }
+    }
+    if let Some(v) = remote_control.port {
+        if let Err(e) = store.set_port(v) {
+            errors.push(format!("remote_control.port: {}", e));
+        }
+    }
+    if let Some(v) = remote_control.secure {
+        if let Err(e) = store.set_secure(v) {
+            errors.push(format!("remote_control.secure: {}", e));
+        }
+    }
+    // token is intentionally NOT applied — it is a security credential
+}
+
+pub fn apply_window(window: &WindowExport, errors: &mut Vec<String>) {
+    let store = match WindowSettingsStore::new() {
+        Ok(s) => s,
+        Err(e) => {
+            errors.push(format!("window_settings open: {}", e));
+            return;
+        }
+    };
+
+    if let Some(v) = window.use_system_titlebar {
+        if let Err(e) = store.set_use_system_titlebar(v) {
+            errors.push(format!("window.use_system_titlebar: {}", e));
+        }
+    }
+}
+
+pub fn apply_image_cache(image_cache: &ImageCacheExport, errors: &mut Vec<String>) {
+    let store = match ImageCacheSettingsStore::new() {
+        Ok(s) => s,
+        Err(e) => {
+            errors.push(format!("image_cache_settings open: {}", e));
+            return;
+        }
+    };
+
+    if let Some(v) = image_cache.enabled {
+        if let Err(e) = store.set_enabled(v) {
+            errors.push(format!("image_cache.enabled: {}", e));
+        }
+    }
+    if let Some(v) = image_cache.max_size_mb {
+        if let Err(e) = store.set_max_size_mb(v) {
+            errors.push(format!("image_cache.max_size_mb: {}", e));
+        }
+    }
+}
+
 impl ExportedSettings {
     /// Current schema version written to every export.
     pub const CURRENT_VERSION: u32 = 1;

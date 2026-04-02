@@ -165,14 +165,26 @@ fn main() {
     }
 
     // CLI flag: --export-settings — export settings to a JSON file
-    if let Some(_path) = &cli.export_settings {
-        eprintln!("[QBZ] --export-settings: not yet implemented");
+    if let Some(ref path) = cli.export_settings {
+        match qbz_nix_lib::settings_export::export_to_file(path) {
+            Ok(()) => eprintln!("[QBZ] Settings exported to {}", path),
+            Err(e) => {
+                eprintln!("[QBZ] Failed to export settings: {}", e);
+                std::process::exit(1);
+            }
+        }
         return;
     }
 
     // CLI flag: --import-settings — import settings from a JSON file
-    if let Some(_path) = &cli.import_settings {
-        eprintln!("[QBZ] --import-settings: not yet implemented");
+    if let Some(ref path) = cli.import_settings {
+        match qbz_nix_lib::settings_export::import_from_file(path) {
+            Ok(()) => eprintln!("[QBZ] Settings imported from {}", path),
+            Err(e) => {
+                eprintln!("[QBZ] Failed to import settings: {}", e);
+                std::process::exit(1);
+            }
+        }
         return;
     }
 
