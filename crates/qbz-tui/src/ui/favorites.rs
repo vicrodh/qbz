@@ -7,7 +7,7 @@ use ratatui::widgets::{List, ListItem, ListState, Paragraph};
 use ratatui::Frame;
 
 use crate::app::{AppState, FavoritesTab};
-use crate::theme::{ACCENT, BG_SELECTED, DANGER, SUCCESS, TEXT_DIM, TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY};
+use crate::theme::{ACCENT, BG_SELECTED, DANGER, HIRES_BADGE, TEXT_DIM, TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY};
 
 /// Render the full favorites view inside `area`.
 pub fn render_favorites(frame: &mut Frame, area: Rect, state: &AppState) {
@@ -187,7 +187,7 @@ fn render_tracks(frame: &mut Frame, area: Rect, state: &AppState) {
 
             // Quality badge
             let quality_color = if track.hires_streamable {
-                SUCCESS
+                HIRES_BADGE
             } else {
                 TEXT_DIM
             };

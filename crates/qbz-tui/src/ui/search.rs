@@ -7,7 +7,7 @@ use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph};
 use ratatui::Frame;
 
 use crate::app::{AppState, InputMode, SearchTab};
-use crate::theme::{ACCENT, BG_SELECTED, DANGER, SUCCESS, TEXT_DIM, TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY};
+use crate::theme::{ACCENT, BG_SELECTED, DANGER, HIRES_BADGE, TEXT_DIM, TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY};
 
 /// Render the full search view inside `area`.
 pub fn render_search(frame: &mut Frame, area: Rect, state: &AppState) {
@@ -253,7 +253,7 @@ fn render_results(frame: &mut Frame, area: Rect, state: &AppState) {
 
             // Quality badge
             let quality_color = if track.hires_streamable {
-                SUCCESS
+                HIRES_BADGE
             } else {
                 TEXT_DIM
             };
