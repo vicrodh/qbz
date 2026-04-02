@@ -2,6 +2,7 @@ pub mod app;
 pub mod adapter;
 pub mod credentials;
 pub mod input;
+pub mod playback;
 pub mod theme;
 pub mod ui;
 
