@@ -30,6 +30,7 @@ use super::menu_bar::render_menu_bar;
 use super::placeholder::render_placeholder;
 use super::player_bar::render_player_bar;
 use super::queue_panel::render_queue_panel;
+use super::playlists::render_playlists;
 use super::search::render_search;
 use super::search_modal::render_search_modal;
 use super::settings::render_settings;
@@ -133,6 +134,7 @@ pub fn render_layout(frame: &mut Frame, state: &mut AppState) -> LayoutAreas {
         ActiveView::Favorites => render_favorites(frame, content_area, state),
         ActiveView::Album => render_album_detail(frame, content_area, state),
         ActiveView::Settings => render_settings(frame, content_area, state),
+        ActiveView::Playlists => render_playlists(frame, content_area, state),
         _ => render_placeholder(frame, content_area, active.label()),
     }
 

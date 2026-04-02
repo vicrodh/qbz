@@ -16,12 +16,26 @@ pub fn render_favorites(frame: &mut Frame, area: Rect, state: &mut AppState) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(1), // tab bar + status
-            Constraint::Min(1),   // track list
+            Constraint::Min(1),   // content list
         ])
         .split(area);
 
     render_tab_bar(frame, chunks[0], state);
-    render_tracks(frame, chunks[1], state);
+
+    match state.favorites.tab {
+        FavoritesTab::Tracks => render_tracks(frame, chunks[1], state),
+        FavoritesTab::Albums => render_albums(frame, chunks[1], state),
+        FavoritesTab::Artists => render_artists(frame, chunks[1], state),
+        FavoritesTab::Playlists => {
+            let msg = Paragraph::new("Use Playlists view (key 4) for playlists")
+                .style(Style::default().fg(TEXT_DIM))
+                .alignment(ratatui::layout::Alignment::Center);
+            let mid_y = chunks[1].y + chunks[1].height / 2;
+            if mid_y < chunks[1].y + chunks[1].height {
+                frame.render_widget(msg, Rect::new(chunks[1].x, mid_y, chunks[1].width, 1));
+            }
+        }
+    }
 }
 
 /// Tab bar and track count.
@@ -62,11 +76,22 @@ fn render_tab_bar(frame: &mut Frame, area: Rect, state: &AppState) {
             format!("  Error: {}", err),
             Style::default().fg(DANGER),
         ));
-    } else if !favs.tracks.is_empty() {
-        spans.push(Span::styled(
-            format!("  {} tracks", favs.tracks.len()),
-            Style::default().fg(TEXT_MUTED),
-        ));
+    } else {
+        let count_label = match favs.tab {
+            FavoritesTab::Tracks if !favs.tracks.is_empty() => {
+                Some(format!("  {} tracks", favs.tracks.len()))
+            }
+            FavoritesTab::Albums if !favs.albums.is_empty() => {
+                Some(format!("  {} albums", favs.albums.len()))
+            }
+            FavoritesTab::Artists if !favs.artists.is_empty() => {
+                Some(format!("  {} artists", favs.artists.len()))
+            }
+            _ => None,
+        };
+        if let Some(label) = count_label {
+            spans.push(Span::styled(label, Style::default().fg(TEXT_MUTED)));
+        }
     }
 
     // Auth status
@@ -230,6 +255,186 @@ fn render_tracks(frame: &mut Frame, area: Rect, state: &mut AppState) {
                 vertical: 0,
                 horizontal: 1,
             }),
+            &mut state.favorites.scrollbar_state,
+        );
+    }
+}
+
+/// Render the favorite albums list.
+fn render_albums(frame: &mut Frame, area: Rect, state: &mut AppState) {
+    let favs = &state.favorites;
+
+    if favs.albums.is_empty() && !favs.loading {
+        let msg = if !favs.albums_loaded {
+            "Press Tab to load albums"
+        } else {
+            "No favorite albums yet"
+        };
+        let mid_y = area.y + area.height / 2;
+        if mid_y < area.y + area.height {
+            let row = Rect::new(area.x, mid_y, area.width, 1);
+            let paragraph = Paragraph::new(msg)
+                .style(Style::default().fg(TEXT_DIM))
+                .alignment(ratatui::layout::Alignment::Center);
+            frame.render_widget(paragraph, row);
+        }
+        return;
+    }
+
+    let selected_index = favs.selected_index;
+    let total_width = area.width as usize;
+
+    // Columns: # (4) | Title (flex) | Artist (30%) | Tracks (8) | Quality (6)
+    let num_w: usize = 4;
+    let tracks_w: usize = 8;
+    let quality_w: usize = 6;
+    let remaining = total_width.saturating_sub(num_w + tracks_w + quality_w + 2);
+    let artist_w = remaining * 30 / 100;
+    let title_w = remaining.saturating_sub(artist_w);
+
+    let items: Vec<ListItem<'_>> = favs
+        .albums
+        .iter()
+        .enumerate()
+        .map(|(idx, album)| {
+            let is_selected = idx == selected_index;
+            let num = format!("{:>3} ", idx + 1);
+            let title = truncate(&album.title, title_w);
+            let artist = truncate(&album.artist.name, artist_w.saturating_sub(1));
+            let track_count = album.tracks_count.map(|c| format!("{:>3} trk", c)).unwrap_or_default();
+
+            let quality = if album.hires_streamable { "Hi-Res" } else { "CD" };
+
+            let style = if is_selected {
+                Style::default().fg(TEXT_PRIMARY).bg(BG_SELECTED)
+            } else {
+                Style::default().fg(TEXT_SECONDARY)
+            };
+
+            let title_padded = format!("{:<width$}", title, width = title_w);
+            let artist_padded = format!("{:<width$}", artist, width = artist_w);
+            let tracks_padded = format!("{:>width$}", track_count, width = tracks_w);
+
+            let quality_color = if album.hires_streamable { HIRES_BADGE } else { TEXT_DIM };
+
+            let spans = vec![
+                Span::styled(num, style.fg(TEXT_DIM)),
+                Span::styled(title_padded, if is_selected { style.bold() } else { style }),
+                Span::styled(artist_padded, style.fg(TEXT_MUTED)),
+                Span::styled(tracks_padded, style.fg(TEXT_DIM)),
+                Span::styled(format!(" {:<5}", quality), style.fg(quality_color)),
+            ];
+
+            ListItem::new(Line::from(spans))
+        })
+        .collect();
+
+    let album_count = favs.albums.len();
+    let list = List::new(items);
+    let mut list_state = ListState::default();
+    list_state.select(Some(selected_index));
+    frame.render_stateful_widget(list, area, &mut list_state);
+
+    if album_count > 0 {
+        state.favorites.scrollbar_state = state
+            .favorites
+            .scrollbar_state
+            .content_length(album_count)
+            .position(selected_index);
+
+        let scrollbar = Scrollbar::default()
+            .orientation(ScrollbarOrientation::VerticalRight)
+            .begin_symbol(Some("\u{2191}"))
+            .end_symbol(Some("\u{2193}"));
+
+        frame.render_stateful_widget(
+            scrollbar,
+            area.inner(Margin { vertical: 0, horizontal: 1 }),
+            &mut state.favorites.scrollbar_state,
+        );
+    }
+}
+
+/// Render the favorite artists list.
+fn render_artists(frame: &mut Frame, area: Rect, state: &mut AppState) {
+    let favs = &state.favorites;
+
+    if favs.artists.is_empty() && !favs.loading {
+        let msg = if !favs.artists_loaded {
+            "Press Tab to load artists"
+        } else {
+            "No favorite artists yet"
+        };
+        let mid_y = area.y + area.height / 2;
+        if mid_y < area.y + area.height {
+            let row = Rect::new(area.x, mid_y, area.width, 1);
+            let paragraph = Paragraph::new(msg)
+                .style(Style::default().fg(TEXT_DIM))
+                .alignment(ratatui::layout::Alignment::Center);
+            frame.render_widget(paragraph, row);
+        }
+        return;
+    }
+
+    let selected_index = favs.selected_index;
+    let total_width = area.width as usize;
+
+    let num_w: usize = 4;
+    let albums_w: usize = 12;
+    let name_w = total_width.saturating_sub(num_w + albums_w + 2);
+
+    let items: Vec<ListItem<'_>> = favs
+        .artists
+        .iter()
+        .enumerate()
+        .map(|(idx, artist)| {
+            let is_selected = idx == selected_index;
+            let num = format!("{:>3} ", idx + 1);
+            let name = truncate(&artist.name, name_w);
+            let album_count = artist.albums_count
+                .map(|c| format!("{} albums", c))
+                .unwrap_or_default();
+
+            let style = if is_selected {
+                Style::default().fg(TEXT_PRIMARY).bg(BG_SELECTED)
+            } else {
+                Style::default().fg(TEXT_SECONDARY)
+            };
+
+            let name_padded = format!("{:<width$}", name, width = name_w);
+            let albums_padded = format!("{:>width$}", album_count, width = albums_w);
+
+            let spans = vec![
+                Span::styled(num, style.fg(TEXT_DIM)),
+                Span::styled(name_padded, if is_selected { style.bold() } else { style }),
+                Span::styled(albums_padded, style.fg(TEXT_MUTED)),
+            ];
+
+            ListItem::new(Line::from(spans))
+        })
+        .collect();
+
+    let artist_count = favs.artists.len();
+    let list = List::new(items);
+    let mut list_state = ListState::default();
+    list_state.select(Some(selected_index));
+    frame.render_stateful_widget(list, area, &mut list_state);
+
+    if artist_count > 0 {
+        state.favorites.scrollbar_state = state
+            .favorites
+            .scrollbar_state
+            .content_length(artist_count)
+            .position(selected_index);
+
+        let scrollbar = Scrollbar::default()
+            .orientation(ScrollbarOrientation::VerticalRight)
+            .begin_symbol(Some("\u{2191}"))
+            .end_symbol(Some("\u{2193}"));
+
+        frame.render_stateful_widget(
+            scrollbar,
+            area.inner(Margin { vertical: 0, horizontal: 1 }),
             &mut state.favorites.scrollbar_state,
         );
     }
