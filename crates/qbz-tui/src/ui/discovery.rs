@@ -1,4 +1,9 @@
-//! Discovery view — tab bar (Home / Editor's Picks / For You), sectioned lists.
+//! Discovery view — 3 tabs: Home, Editor's Picks, For You.
+//!
+//! Each tab shows sectioned content with headers and scrollable lists.
+//! - Home: Mix of editorial + personal (all discover sections)
+//! - Editor's Picks: Editorial content from Qobuz discover API
+//! - For You: Personalized content (favorites, listening history)
 
 use ratatui::layout::{Constraint, Direction, Layout, Margin, Rect};
 use ratatui::style::{Modifier, Style, Stylize};
@@ -22,9 +27,9 @@ pub fn render_discovery(frame: &mut Frame, area: Rect, state: &mut AppState) {
     render_tab_bar(frame, chunks[0], state);
 
     match state.discovery.tab {
-        DiscoveryTab::Home => render_home(frame, chunks[1], state),
-        DiscoveryTab::EditorPicks => render_album_list(frame, chunks[1], state, AlbumSource::EditorPicks),
-        DiscoveryTab::ForYou => render_for_you(frame, chunks[1], state),
+        DiscoveryTab::Home => render_home_tab(frame, chunks[1], state),
+        DiscoveryTab::EditorPicks => render_editor_picks_tab(frame, chunks[1], state),
+        DiscoveryTab::ForYou => render_for_you_tab(frame, chunks[1], state),
     }
 }
 
@@ -54,309 +59,147 @@ fn render_tab_bar(frame: &mut Frame, area: Rect, state: &AppState) {
     }
 
     if disc.loading {
-        spans.push(Span::styled(
-            "  Loading...",
-            Style::default().fg(ACCENT),
-        ));
+        spans.push(Span::styled("  Loading...", Style::default().fg(ACCENT)));
     } else if let Some(ref err) = disc.error {
-        spans.push(Span::styled(
-            format!("  Error: {}", err),
-            Style::default().fg(DANGER),
-        ));
+        spans.push(Span::styled(format!("  Error: {}", err), Style::default().fg(DANGER)));
     }
 
     if !state.authenticated {
-        spans.push(Span::styled(
-            "  [not logged in]",
-            Style::default().fg(DANGER),
-        ));
+        spans.push(Span::styled("  [not logged in]", Style::default().fg(DANGER)));
     }
 
-    let line = Line::from(spans);
-    frame.render_widget(Paragraph::new(line), area);
+    frame.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
-// ==================== Home Tab ====================
+// ==================== Shared rendering helpers ====================
 
-/// A section in the Home tab. Albums and playlists use the same flat index space.
-struct HomeSection<'a> {
-    name: &'a str,
-    kind: HomeSectionKind<'a>,
+/// A section of items to render with a header.
+struct Section<'a> {
+    title: &'a str,
+    items: Vec<SectionItem>,
 }
 
-enum HomeSectionKind<'a> {
-    Albums(&'a Vec<qbz_models::DiscoverAlbum>),
-    Playlists(&'a Vec<qbz_models::DiscoverPlaylist>),
+/// A single item within a section.
+struct SectionItem {
+    title: String,
+    subtitle: String,
+    detail: String,
+    is_hires: bool,
 }
 
-impl<'a> HomeSectionKind<'a> {
-    fn len(&self) -> usize {
-        match self {
-            HomeSectionKind::Albums(v) => v.len(),
-            HomeSectionKind::Playlists(v) => v.len(),
+/// Build items from DiscoverAlbum list.
+fn discover_albums_to_items(albums: &[qbz_models::DiscoverAlbum]) -> Vec<SectionItem> {
+    albums.iter().map(|album| {
+        let artist = album.artists.first().map(|a| a.name.as_str()).unwrap_or("Unknown");
+        let is_hires = album.audio_info.as_ref()
+            .and_then(|info| info.maximum_bit_depth)
+            .map(|bd| bd > 16)
+            .unwrap_or(false);
+        SectionItem {
+            title: album.title.clone(),
+            subtitle: artist.to_string(),
+            detail: if is_hires { "Hi-Res".into() } else { "CD".into() },
+            is_hires,
         }
-    }
-
-    fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
+    }).collect()
 }
 
-/// Home tab: flat list with section headers for all 7 discover sections.
-fn render_home(frame: &mut Frame, area: Rect, state: &mut AppState) {
-    let disc = &state.discovery;
-
-    let sections: Vec<HomeSection<'_>> = vec![
-        HomeSection { name: "New Releases", kind: HomeSectionKind::Albums(&disc.new_releases) },
-        HomeSection { name: "Essential Discography", kind: HomeSectionKind::Albums(&disc.essential_discography) },
-        HomeSection { name: "Editor's Picks", kind: HomeSectionKind::Albums(&disc.editor_picks_discover) },
-        HomeSection { name: "Press Awards", kind: HomeSectionKind::Albums(&disc.press_awards) },
-        HomeSection { name: "Most Streamed", kind: HomeSectionKind::Albums(&disc.most_streamed) },
-        HomeSection { name: "Qobuzissimes", kind: HomeSectionKind::Albums(&disc.qobuzissimes) },
-        HomeSection { name: "Qobuz Playlists", kind: HomeSectionKind::Playlists(&disc.qobuz_playlists) },
-    ];
-
-    // Check if all sections are empty
-    let total_items: usize = sections.iter().map(|s| s.kind.len()).sum();
-    if total_items == 0 && !disc.loading {
-        let msg = if !disc.loaded {
-            ""
-        } else if disc.error.is_some() {
-            "Failed to load discovery"
-        } else {
-            "No items found"
-        };
-
-        if !msg.is_empty() {
-            let mid_y = area.y + area.height / 2;
-            if mid_y < area.y + area.height {
-                let row = Rect::new(area.x, mid_y, area.width, 1);
-                let paragraph = Paragraph::new(msg)
-                    .style(Style::default().fg(TEXT_DIM))
-                    .alignment(ratatui::layout::Alignment::Center);
-                frame.render_widget(paragraph, row);
-            }
+/// Build items from Album list.
+fn albums_to_items(albums: &[qbz_models::Album]) -> Vec<SectionItem> {
+    albums.iter().map(|album| {
+        let tracks_str = album.tracks_count.map(|c| format!("{} trk", c)).unwrap_or_default();
+        SectionItem {
+            title: album.title.clone(),
+            subtitle: album.artist.name.clone(),
+            detail: if album.hires_streamable {
+                format!("Hi-Res  {}", tracks_str)
+            } else {
+                format!("CD  {}", tracks_str)
+            },
+            is_hires: album.hires_streamable,
         }
-        return;
-    }
+    }).collect()
+}
 
-    let selected_index = disc.selected_index;
+/// Build items from DiscoverPlaylist list.
+fn playlists_to_items(playlists: &[qbz_models::DiscoverPlaylist]) -> Vec<SectionItem> {
+    playlists.iter().map(|playlist| {
+        SectionItem {
+            title: playlist.name.clone(),
+            subtitle: playlist.owner.name.clone(),
+            detail: format!("{} tracks", playlist.tracks_count),
+            is_hires: false,
+        }
+    }).collect()
+}
+
+/// Build items from Artist list.
+fn artists_to_items(artists: &[qbz_models::Artist]) -> Vec<SectionItem> {
+    artists.iter().map(|artist| {
+        let albums_str = artist.albums_count.map(|c| format!("{} albums", c)).unwrap_or_default();
+        SectionItem {
+            title: artist.name.clone(),
+            subtitle: String::new(),
+            detail: albums_str,
+            is_hires: false,
+        }
+    }).collect()
+}
+
+/// Render a list of sections with headers, navigable with j/k.
+/// Returns the number of selectable items rendered.
+fn render_sectioned_list(
+    frame: &mut Frame,
+    area: Rect,
+    sections: &[Section<'_>],
+    selected_index: usize,
+    scrollbar_state: &mut ratatui::widgets::ScrollbarState,
+) {
     let total_width = area.width as usize;
-
-    // Build flat list with section headers and items
-    let mut items: Vec<ListItem<'_>> = Vec::new();
-    let mut flat_index: usize = 0;
-
-    // Column widths for album rows: # (4) | Title - Artist (flex) | Quality (8)
     let num_w: usize = 4;
-    let quality_w: usize = 8;
-    let album_content_w = total_width.saturating_sub(num_w + quality_w + 4);
+    let detail_w: usize = 14;
+    let remaining = total_width.saturating_sub(num_w + detail_w + 2);
+    let subtitle_w = remaining * 30 / 100;
+    let title_w = remaining.saturating_sub(subtitle_w);
 
-    // Column widths for playlist rows: # (4) | Name (flex) | Tracks (10) | Owner (20)
-    let playlist_tracks_w: usize = 10;
-    let playlist_owner_w: usize = 20;
-    let playlist_name_w = total_width.saturating_sub(num_w + playlist_tracks_w + playlist_owner_w + 4);
+    let mut list_items: Vec<ListItem<'_>> = Vec::new();
+    let mut data_index: usize = 0;
+    let mut visual_to_data: Vec<Option<usize>> = Vec::new();
 
-    for section in &sections {
-        if section.kind.is_empty() {
+    for (sec_idx, section) in sections.iter().enumerate() {
+        if section.items.is_empty() {
             continue;
         }
 
+        // Blank line between sections (except first)
+        if sec_idx > 0 && !list_items.is_empty() {
+            list_items.push(ListItem::new(Line::from("")));
+            visual_to_data.push(None);
+        }
+
         // Section header
-        items.push(ListItem::new(Line::from(vec![
-            Span::styled(
-                format!("  \u{25a0} {}", section.name),
-                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
-            ),
-        ])));
+        list_items.push(ListItem::new(Line::from(Span::styled(
+            format!("  {} {}", "\u{25a0}", section.title),
+            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+        ))));
+        visual_to_data.push(None);
 
-        match &section.kind {
-            HomeSectionKind::Albums(albums) => {
-                for album in *albums {
-                    let is_selected = flat_index == selected_index;
+        // Section items (max 8 per section for readability)
+        for item in section.items.iter().take(8) {
+            let is_selected = data_index == selected_index;
 
-                    let num = format!("{:>3} ", flat_index + 1);
-                    let artist_name = album
-                        .artists
-                        .first()
-                        .map(|a| a.name.as_str())
-                        .unwrap_or("Unknown");
-                    let title_artist = format!("{} \u{2014} {}", album.title, artist_name);
-                    let title_display = truncate(&title_artist, album_content_w);
-                    let title_padded = format!("{:<width$}", title_display, width = album_content_w);
+            let num = format!("{:>3} ", data_index + 1);
+            let title_display = truncate(&item.title, title_w);
+            let title_padded = format!("{:<width$}", title_display, width = title_w);
 
-                    let is_hires = album
-                        .audio_info
-                        .as_ref()
-                        .and_then(|info| info.maximum_bit_depth)
-                        .map(|bd| bd > 16)
-                        .unwrap_or(false);
-                    let quality = if is_hires { "Hi-Res" } else { "CD" };
-                    let quality_color = if is_hires { HIRES_BADGE } else { TEXT_DIM };
-
-                    let style = if is_selected {
-                        Style::default().fg(TEXT_PRIMARY).bg(BG_SELECTED)
-                    } else {
-                        Style::default().fg(TEXT_SECONDARY)
-                    };
-
-                    let spans = vec![
-                        Span::styled(num, style.fg(TEXT_DIM)),
-                        Span::styled(
-                            title_padded,
-                            if is_selected {
-                                style.add_modifier(Modifier::BOLD)
-                            } else {
-                                style
-                            },
-                        ),
-                        Span::styled(format!(" {:<7}", quality), style.fg(quality_color)),
-                    ];
-
-                    items.push(ListItem::new(Line::from(spans)));
-                    flat_index += 1;
-                }
-            }
-            HomeSectionKind::Playlists(playlists) => {
-                for playlist in *playlists {
-                    let is_selected = flat_index == selected_index;
-
-                    let num = format!("{:>3} ", flat_index + 1);
-                    let name_display = truncate(&playlist.name, playlist_name_w);
-                    let name_padded = format!("{:<width$}", name_display, width = playlist_name_w);
-                    let tracks_str = format!("{:>4} trk", playlist.tracks_count);
-                    let tracks_padded = format!("{:>width$}", tracks_str, width = playlist_tracks_w);
-                    let owner_display = truncate(&playlist.owner.name, playlist_owner_w.saturating_sub(1));
-                    let owner_padded = format!("{:<width$}", owner_display, width = playlist_owner_w);
-
-                    let style = if is_selected {
-                        Style::default().fg(TEXT_PRIMARY).bg(BG_SELECTED)
-                    } else {
-                        Style::default().fg(TEXT_SECONDARY)
-                    };
-
-                    let spans = vec![
-                        Span::styled(num, style.fg(TEXT_DIM)),
-                        Span::styled(
-                            name_padded,
-                            if is_selected {
-                                style.add_modifier(Modifier::BOLD)
-                            } else {
-                                style
-                            },
-                        ),
-                        Span::styled(tracks_padded, style.fg(TEXT_DIM)),
-                        Span::styled(format!(" {}", owner_padded), style.fg(TEXT_MUTED)),
-                    ];
-
-                    items.push(ListItem::new(Line::from(spans)));
-                    flat_index += 1;
-                }
-            }
-        }
-
-        // Empty line between sections
-        items.push(ListItem::new(Line::from("")));
-    }
-
-    let list = List::new(items);
-    frame.render_widget(list, area);
-
-    // Scrollbar
-    let total_selectable = flat_index;
-    if total_selectable > 0 {
-        state.discovery.scrollbar_state = state
-            .discovery
-            .scrollbar_state
-            .content_length(total_selectable)
-            .position(selected_index);
-
-        let scrollbar = Scrollbar::default()
-            .orientation(ScrollbarOrientation::VerticalRight)
-            .begin_symbol(Some("\u{2191}"))
-            .end_symbol(Some("\u{2193}"));
-
-        frame.render_stateful_widget(
-            scrollbar,
-            area.inner(Margin {
-                vertical: 0,
-                horizontal: 1,
-            }),
-            &mut state.discovery.scrollbar_state,
-        );
-    }
-}
-
-// ==================== Editor's Picks Tab ====================
-
-/// Which album source to render.
-enum AlbumSource {
-    EditorPicks,
-}
-
-/// Render a simple album list (used by Editor's Picks tab).
-fn render_album_list(frame: &mut Frame, area: Rect, state: &mut AppState, source: AlbumSource) {
-    let disc = &state.discovery;
-
-    let (albums, loaded, empty_msg): (&Vec<qbz_models::Album>, bool, &str) = match source {
-        AlbumSource::EditorPicks => (
-            &disc.editor_picks,
-            disc.editor_picks_loaded,
-            "No editor's picks found",
-        ),
-    };
-
-    if albums.is_empty() && !disc.loading {
-        let msg = if !loaded {
-            ""
-        } else if disc.error.is_some() {
-            "Failed to load albums"
-        } else {
-            empty_msg
-        };
-
-        if !msg.is_empty() {
-            let mid_y = area.y + area.height / 2;
-            if mid_y < area.y + area.height {
-                let row = Rect::new(area.x, mid_y, area.width, 1);
-                let paragraph = Paragraph::new(msg)
-                    .style(Style::default().fg(TEXT_DIM))
-                    .alignment(ratatui::layout::Alignment::Center);
-                frame.render_widget(paragraph, row);
-            }
-        }
-        return;
-    }
-
-    let selected_index = disc.selected_index;
-    let total_width = area.width as usize;
-
-    // Columns: # (4) | Title (flex) | Artist (30%) | Tracks (8) | Quality (6)
-    let num_w: usize = 4;
-    let tracks_w: usize = 8;
-    let quality_w: usize = 6;
-    let remaining = total_width.saturating_sub(num_w + tracks_w + quality_w + 2);
-    let artist_w = remaining * 30 / 100;
-    let title_w = remaining.saturating_sub(artist_w);
-
-    let items: Vec<ListItem<'_>> = albums
-        .iter()
-        .enumerate()
-        .map(|(idx, album)| {
-            let is_selected = idx == selected_index;
-            let num = format!("{:>3} ", idx + 1);
-            let title = truncate(&album.title, title_w);
-            let artist = truncate(&album.artist.name, artist_w.saturating_sub(1));
-            let track_count = album
-                .tracks_count
-                .map(|c| format!("{:>3} trk", c))
-                .unwrap_or_default();
-
-            let quality = if album.hires_streamable {
-                "Hi-Res"
+            let subtitle_display = if item.subtitle.is_empty() {
+                " ".repeat(subtitle_w)
             } else {
-                "CD"
+                let sub = truncate(&item.subtitle, subtitle_w.saturating_sub(1));
+                format!("{:<width$}", sub, width = subtitle_w)
             };
+
+            let detail_padded = format!("{:>width$}", item.detail, width = detail_w);
 
             let style = if is_selected {
                 Style::default().fg(TEXT_PRIMARY).bg(BG_SELECTED)
@@ -364,42 +207,43 @@ fn render_album_list(frame: &mut Frame, area: Rect, state: &mut AppState, source
                 Style::default().fg(TEXT_SECONDARY)
             };
 
-            let title_padded = format!("{:<width$}", title, width = title_w);
-            let artist_padded = format!("{:<width$}", artist, width = artist_w);
-            let tracks_padded = format!("{:>width$}", track_count, width = tracks_w);
-
-            let quality_color = if album.hires_streamable {
-                HIRES_BADGE
-            } else {
-                TEXT_DIM
-            };
+            let detail_color = if item.is_hires { HIRES_BADGE } else { TEXT_DIM };
 
             let spans = vec![
                 Span::styled(num, style.fg(TEXT_DIM)),
-                Span::styled(
-                    title_padded,
-                    if is_selected { style.bold() } else { style },
-                ),
-                Span::styled(artist_padded, style.fg(TEXT_MUTED)),
-                Span::styled(tracks_padded, style.fg(TEXT_DIM)),
-                Span::styled(format!(" {:<5}", quality), style.fg(quality_color)),
+                Span::styled(title_padded, if is_selected { style.bold() } else { style }),
+                Span::styled(subtitle_display, style.fg(TEXT_MUTED)),
+                Span::styled(detail_padded, style.fg(detail_color)),
             ];
 
-            ListItem::new(Line::from(spans))
-        })
-        .collect();
+            list_items.push(ListItem::new(Line::from(spans)));
+            visual_to_data.push(Some(data_index));
+            data_index += 1;
+        }
+    }
 
-    let album_count = albums.len();
-    let list = List::new(items);
+    if list_items.is_empty() {
+        return;
+    }
+
+    let list = List::new(list_items);
+
+    // Find the visual index for the selected data index
+    let visual_selected = visual_to_data
+        .iter()
+        .position(|v| *v == Some(selected_index))
+        .unwrap_or(0);
+
     let mut list_state = ListState::default();
-    list_state.select(Some(selected_index));
+    list_state.select(Some(visual_selected));
+
     frame.render_stateful_widget(list, area, &mut list_state);
 
-    if album_count > 0 {
-        state.discovery.scrollbar_state = state
-            .discovery
-            .scrollbar_state
-            .content_length(album_count)
+    // Scrollbar
+    let total_items = data_index;
+    if total_items > 0 {
+        *scrollbar_state = scrollbar_state
+            .content_length(total_items)
             .position(selected_index);
 
         let scrollbar = Scrollbar::default()
@@ -409,192 +253,144 @@ fn render_album_list(frame: &mut Frame, area: Rect, state: &mut AppState, source
 
         frame.render_stateful_widget(
             scrollbar,
-            area.inner(Margin {
-                vertical: 0,
-                horizontal: 1,
-            }),
-            &mut state.discovery.scrollbar_state,
+            area.inner(Margin { vertical: 0, horizontal: 1 }),
+            scrollbar_state,
         );
     }
 }
 
-// ==================== For You Tab ====================
+/// Show centered empty/loading message.
+fn render_empty_message(frame: &mut Frame, area: Rect, msg: &str) {
+    if msg.is_empty() { return; }
+    let mid_y = area.y + area.height / 2;
+    if mid_y < area.y + area.height {
+        let row = Rect::new(area.x, mid_y, area.width, 1);
+        let paragraph = Paragraph::new(msg)
+            .style(Style::default().fg(TEXT_DIM))
+            .alignment(ratatui::layout::Alignment::Center);
+        frame.render_widget(paragraph, row);
+    }
+}
 
-/// Render the For You tab with Favorite Albums and Top Artists sections.
-fn render_for_you(frame: &mut Frame, area: Rect, state: &mut AppState) {
+// ==================== Home tab ====================
+
+fn render_home_tab(frame: &mut Frame, area: Rect, state: &mut AppState) {
     let disc = &state.discovery;
 
-    let albums = &disc.for_you_albums;
-    let artists = &disc.for_you_artists;
-    let total_items = albums.len() + artists.len();
-
-    if total_items == 0 && !disc.loading {
-        let msg = if !disc.for_you_loaded {
-            ""
-        } else if disc.error.is_some() {
-            "Failed to load favorites"
-        } else {
-            "No favorites yet"
-        };
-
-        if !msg.is_empty() {
-            let mid_y = area.y + area.height / 2;
-            if mid_y < area.y + area.height {
-                let row = Rect::new(area.x, mid_y, area.width, 1);
-                let paragraph = Paragraph::new(msg)
-                    .style(Style::default().fg(TEXT_DIM))
-                    .alignment(ratatui::layout::Alignment::Center);
-                frame.render_widget(paragraph, row);
-            }
-        }
+    if !disc.loaded && !disc.loading {
+        render_empty_message(frame, area, "Press 1 to load Discovery");
         return;
     }
 
-    let selected_index = disc.selected_index;
-    let total_width = area.width as usize;
+    let sections = vec![
+        Section { title: "New Releases", items: discover_albums_to_items(&disc.new_releases) },
+        Section { title: "Popular Albums", items: discover_albums_to_items(&disc.most_streamed) },
+        Section { title: "Essential Discography", items: discover_albums_to_items(&disc.essential_discography) },
+        Section { title: "Qobuzissimes", items: discover_albums_to_items(&disc.qobuzissimes) },
+        Section { title: "Qobuz Playlists", items: playlists_to_items(&disc.qobuz_playlists) },
+    ];
 
-    let mut items: Vec<ListItem<'_>> = Vec::new();
-    let mut flat_index: usize = 0;
-
-    // Columns for albums: # (4) | Title (flex) | Artist (30%) | Tracks (8) | Quality (6)
-    let num_w: usize = 4;
-    let tracks_w: usize = 8;
-    let quality_w: usize = 6;
-    let remaining = total_width.saturating_sub(num_w + tracks_w + quality_w + 2);
-    let artist_w = remaining * 30 / 100;
-    let title_w = remaining.saturating_sub(artist_w);
-
-    // Favorite Albums section
-    if !albums.is_empty() {
-        items.push(ListItem::new(Line::from(vec![
-            Span::styled(
-                "  \u{25a0} Favorite Albums",
-                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
-            ),
-        ])));
-
-        for album in albums {
-            let is_selected = flat_index == selected_index;
-            let num = format!("{:>3} ", flat_index + 1);
-            let title = truncate(&album.title, title_w);
-            let artist = truncate(&album.artist.name, artist_w.saturating_sub(1));
-            let track_count = album
-                .tracks_count
-                .map(|c| format!("{:>3} trk", c))
-                .unwrap_or_default();
-
-            let quality = if album.hires_streamable {
-                "Hi-Res"
-            } else {
-                "CD"
-            };
-
-            let style = if is_selected {
-                Style::default().fg(TEXT_PRIMARY).bg(BG_SELECTED)
-            } else {
-                Style::default().fg(TEXT_SECONDARY)
-            };
-
-            let title_padded = format!("{:<width$}", title, width = title_w);
-            let artist_padded = format!("{:<width$}", artist, width = artist_w);
-            let tracks_padded = format!("{:>width$}", track_count, width = tracks_w);
-
-            let quality_color = if album.hires_streamable {
-                HIRES_BADGE
-            } else {
-                TEXT_DIM
-            };
-
-            let spans = vec![
-                Span::styled(num, style.fg(TEXT_DIM)),
-                Span::styled(
-                    title_padded,
-                    if is_selected { style.bold() } else { style },
-                ),
-                Span::styled(artist_padded, style.fg(TEXT_MUTED)),
-                Span::styled(tracks_padded, style.fg(TEXT_DIM)),
-                Span::styled(format!(" {:<5}", quality), style.fg(quality_color)),
-            ];
-
-            items.push(ListItem::new(Line::from(spans)));
-            flat_index += 1;
-        }
-
-        items.push(ListItem::new(Line::from("")));
+    let total: usize = sections.iter().map(|s| s.items.len().min(8)).sum();
+    if total == 0 && !disc.loading {
+        render_empty_message(frame, area, if disc.loaded { "No content available" } else { "" });
+        return;
     }
 
-    // Top Artists section
-    if !artists.is_empty() {
-        items.push(ListItem::new(Line::from(vec![
-            Span::styled(
-                "  \u{25a0} Top Artists",
-                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
-            ),
-        ])));
-
-        for artist in artists {
-            let is_selected = flat_index == selected_index;
-            let num = format!("{:>3} ", flat_index + 1);
-            let name_display = truncate(&artist.name, total_width.saturating_sub(num_w + 2));
-
-            let style = if is_selected {
-                Style::default().fg(TEXT_PRIMARY).bg(BG_SELECTED)
-            } else {
-                Style::default().fg(TEXT_SECONDARY)
-            };
-
-            let spans = vec![
-                Span::styled(num, style.fg(TEXT_DIM)),
-                Span::styled(
-                    name_display,
-                    if is_selected {
-                        style.add_modifier(Modifier::BOLD)
-                    } else {
-                        style
-                    },
-                ),
-            ];
-
-            items.push(ListItem::new(Line::from(spans)));
-            flat_index += 1;
-        }
-    }
-
-    let list = List::new(items);
-    frame.render_widget(list, area);
-
-    // Scrollbar
-    let total_selectable = flat_index;
-    if total_selectable > 0 {
-        state.discovery.scrollbar_state = state
-            .discovery
-            .scrollbar_state
-            .content_length(total_selectable)
-            .position(selected_index);
-
-        let scrollbar = Scrollbar::default()
-            .orientation(ScrollbarOrientation::VerticalRight)
-            .begin_symbol(Some("\u{2191}"))
-            .end_symbol(Some("\u{2193}"));
-
-        frame.render_stateful_widget(
-            scrollbar,
-            area.inner(Margin {
-                vertical: 0,
-                horizontal: 1,
-            }),
-            &mut state.discovery.scrollbar_state,
-        );
-    }
+    let selected = disc.selected_index;
+    let mut scrollbar = disc.scrollbar_state;
+    render_sectioned_list(frame, area, &sections, selected, &mut scrollbar);
+    state.discovery.scrollbar_state = scrollbar;
 }
 
-// ==================== Helpers ====================
+// ==================== Editor's Picks tab ====================
 
-/// Truncate a string to fit within `max_chars`, appending an ellipsis if needed.
-fn truncate(s: &str, max_chars: usize) -> String {
-    if max_chars == 0 {
-        return String::new();
+fn render_editor_picks_tab(frame: &mut Frame, area: Rect, state: &mut AppState) {
+    let disc = &state.discovery;
+
+    if !disc.loaded && !disc.loading {
+        render_empty_message(frame, area, "Loading editorial content...");
+        return;
     }
+
+    let sections = vec![
+        Section { title: "New Releases", items: discover_albums_to_items(&disc.new_releases) },
+        Section { title: "Albums of the Week", items: discover_albums_to_items(&disc.editor_picks_discover) },
+        Section { title: "Qobuzissimes", items: discover_albums_to_items(&disc.qobuzissimes) },
+        Section { title: "Press Accolades", items: discover_albums_to_items(&disc.press_awards) },
+        Section { title: "Popular Albums", items: discover_albums_to_items(&disc.most_streamed) },
+        Section { title: "Essential Discography", items: discover_albums_to_items(&disc.essential_discography) },
+        Section { title: "Qobuz Playlists", items: playlists_to_items(&disc.qobuz_playlists) },
+    ];
+
+    let total: usize = sections.iter().map(|s| s.items.len().min(8)).sum();
+    if total == 0 && !disc.loading {
+        render_empty_message(frame, area, if disc.loaded { "No editorial content" } else { "" });
+        return;
+    }
+
+    let selected = disc.selected_index;
+    let mut scrollbar = disc.scrollbar_state;
+    render_sectioned_list(frame, area, &sections, selected, &mut scrollbar);
+    state.discovery.scrollbar_state = scrollbar;
+}
+
+// ==================== For You tab ====================
+
+fn render_for_you_tab(frame: &mut Frame, area: Rect, state: &mut AppState) {
+    let disc = &state.discovery;
+
+    if !disc.for_you_loaded && !disc.loading {
+        render_empty_message(frame, area, "Loading personalized content...");
+        return;
+    }
+
+    let mut sections: Vec<Section<'_>> = Vec::new();
+
+    // Recently Played (favorite albums as proxy)
+    if !disc.for_you_albums.is_empty() {
+        sections.push(Section {
+            title: "Recently Played",
+            items: albums_to_items(&disc.for_you_albums),
+        });
+    }
+
+    // Your Top Artists (favorite artists)
+    if !disc.for_you_artists.is_empty() {
+        sections.push(Section {
+            title: "Your Top Artists",
+            items: artists_to_items(&disc.for_you_artists),
+        });
+    }
+
+    // Placeholder sections for future features
+    if sections.is_empty() {
+        sections.push(Section {
+            title: "Your Mixes",
+            items: vec![SectionItem {
+                title: "Coming soon".into(),
+                subtitle: "Personalized mixes based on your listening".into(),
+                detail: String::new(),
+                is_hires: false,
+            }],
+        });
+    }
+
+    let total: usize = sections.iter().map(|s| s.items.len().min(8)).sum();
+    if total == 0 {
+        render_empty_message(frame, area, "No personalized content yet");
+        return;
+    }
+
+    let selected = disc.selected_index;
+    let mut scrollbar = disc.scrollbar_state;
+    render_sectioned_list(frame, area, &sections, selected, &mut scrollbar);
+    state.discovery.scrollbar_state = scrollbar;
+}
+
+// ==================== Utilities ====================
+
+fn truncate(s: &str, max_chars: usize) -> String {
+    if max_chars == 0 { return String::new(); }
     let chars: Vec<char> = s.chars().collect();
     if chars.len() <= max_chars {
         s.to_string()

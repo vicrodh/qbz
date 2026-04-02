@@ -945,6 +945,9 @@ impl App {
         let mut terminal = Terminal::new(backend)?;
         terminal.clear()?;
 
+        // Auto-load Discovery data on startup (default view)
+        self.load_discovery_if_needed();
+
         // Main event loop
         while !self.should_quit {
             // Draw UI and capture layout areas for mouse hit-testing
