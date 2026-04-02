@@ -96,7 +96,7 @@ pub async fn play_qobuz_track(
     }
 
     // 3. Get stream URL from Qobuz API (with quality)
-    let _ = status_tx.send(PlaybackStatus::Buffering("Getting stream URL...".into()));
+    let _ = status_tx.send(PlaybackStatus::Buffering("Getting stream...".into()));
 
     let stream_url = core
         .get_stream_url(track_id, quality)

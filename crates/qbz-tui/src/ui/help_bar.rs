@@ -7,7 +7,7 @@ use ratatui::widgets::Paragraph;
 use ratatui::Frame;
 
 use crate::app::{ActiveView, AppState, InputMode};
-use crate::theme::{BG_SECONDARY, TEXT_DIM, TEXT_MUTED, TEXT_PRIMARY};
+use crate::theme::{ACCENT, BG_SECONDARY, TEXT_DIM, TEXT_MUTED, TEXT_PRIMARY};
 
 /// Render the 1-line bottom help bar with contextual keybinding hints.
 pub fn render_help_bar(frame: &mut Frame, area: Rect, state: &AppState) {
@@ -122,11 +122,13 @@ pub fn render_help_bar(frame: &mut Frame, area: Rect, state: &AppState) {
         let total_width = area.width as usize;
         let gap = total_width.saturating_sub(left_width + msg_width + 2);
 
+        let msg_color = if state.is_buffering { ACCENT } else { TEXT_MUTED };
+
         if gap > 0 {
             spans.push(Span::raw(" ".repeat(gap)));
             spans.push(Span::styled(
                 msg.clone(),
-                Style::default().fg(TEXT_MUTED),
+                Style::default().fg(msg_color),
             ));
         }
     }

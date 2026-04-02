@@ -19,7 +19,7 @@ use tokio::sync::mpsc;
 use qbz_audio::{settings::AudioSettingsStore, AudioDiagnostic, AudioSettings};
 use qbz_cache::PlaybackCache;
 use qbz_core::QbzCore;
-use qbz_models::{Album, CoreEvent, DiscoverAlbum, DiscoverResponse, Playlist, QueueState, RepeatMode, SearchResultsPage, Track};
+use qbz_models::{Album, CoreEvent, DiscoverAlbum, DiscoverPlaylist, DiscoverResponse, Playlist, QueueState, RepeatMode, SearchResultsPage, Track};
 use qbz_player::Player;
 
 use crate::adapter::TuiAdapter;
@@ -281,12 +281,17 @@ pub struct DiscoveryState {
     pub most_streamed: Vec<DiscoverAlbum>,
     pub press_awards: Vec<DiscoverAlbum>,
     pub qobuzissimes: Vec<DiscoverAlbum>,
+    pub editor_picks_discover: Vec<DiscoverAlbum>,
+    pub essential_discography: Vec<DiscoverAlbum>,
+    pub qobuz_playlists: Vec<DiscoverPlaylist>,
     // Editor's Picks tab
     pub editor_picks: Vec<Album>,
     pub editor_picks_loaded: bool,
-    // For You tab (favorite albums)
+    // For You tab
     pub for_you_albums: Vec<Album>,
     pub for_you_loaded: bool,
+    pub for_you_artists: Vec<qbz_models::Artist>,
+    pub for_you_artists_loaded: bool,
     /// Scrollbar state.
     pub scrollbar_state: ScrollbarState,
 }
@@ -303,10 +308,15 @@ impl Default for DiscoveryState {
             most_streamed: Vec::new(),
             press_awards: Vec::new(),
             qobuzissimes: Vec::new(),
+            editor_picks_discover: Vec::new(),
+            essential_discography: Vec::new(),
+            qobuz_playlists: Vec::new(),
             editor_picks: Vec::new(),
             editor_picks_loaded: false,
             for_you_albums: Vec::new(),
             for_you_loaded: false,
+            for_you_artists: Vec::new(),
+            for_you_artists_loaded: false,
             scrollbar_state: ScrollbarState::default(),
         }
     }
@@ -439,6 +449,10 @@ pub struct AppState {
     pub cover_art: Option<ratatui_image::protocol::StatefulProtocol>,
     /// Whether images are disabled (--no-images CLI flag).
     pub no_images: bool,
+    /// Whether a track is currently being buffered/downloaded.
+    pub is_buffering: bool,
+    /// Human-readable buffering status (e.g., "Downloading...", "Playing from cache...")
+    pub buffering_status: Option<String>,
 }
 
 impl Default for AppState {
@@ -474,6 +488,8 @@ impl Default for AppState {
             current_artwork_url: None,
             cover_art: None,
             no_images: false,
+            is_buffering: false,
+            buffering_status: None,
         }
     }
 }
@@ -513,6 +529,9 @@ type EditorPicksResult = Result<SearchResultsPage<Album>, qbz_core::error::CoreE
 
 /// Type alias for the for-you (favorite albums) result payload.
 type ForYouResult = Result<Vec<Album>, qbz_core::error::CoreError>;
+
+/// Type alias for the for-you artists result payload.
+type ForYouArtistsResult = Result<Vec<qbz_models::Artist>, qbz_core::error::CoreError>;
 
 /// Type alias for the library albums result payload.
 type LibraryAlbumsResult = Result<Vec<Album>, qbz_core::error::CoreError>;
@@ -581,6 +600,10 @@ pub struct App {
     for_you_result_tx: mpsc::UnboundedSender<ForYouResult>,
     /// Receiver for for-you results.
     for_you_result_rx: mpsc::UnboundedReceiver<ForYouResult>,
+    /// Sender for for-you artists results.
+    for_you_artists_result_tx: mpsc::UnboundedSender<ForYouArtistsResult>,
+    /// Receiver for for-you artists results.
+    for_you_artists_result_rx: mpsc::UnboundedReceiver<ForYouArtistsResult>,
     /// Sender for library albums results.
     library_albums_result_tx: mpsc::UnboundedSender<LibraryAlbumsResult>,
     /// Receiver for library albums results.
@@ -722,6 +745,7 @@ impl App {
         let (discover_tx, discover_rx) = mpsc::unbounded_channel::<DiscoverResult>();
         let (editor_picks_tx, editor_picks_rx) = mpsc::unbounded_channel::<EditorPicksResult>();
         let (for_you_tx, for_you_rx) = mpsc::unbounded_channel::<ForYouResult>();
+        let (for_you_artists_tx, for_you_artists_rx) = mpsc::unbounded_channel::<ForYouArtistsResult>();
         let (lib_albums_tx, lib_albums_rx) = mpsc::unbounded_channel::<LibraryAlbumsResult>();
         let (lib_artists_tx, lib_artists_rx) = mpsc::unbounded_channel::<LibraryArtistsResult>();
         let (lib_tracks_tx, lib_tracks_rx) = mpsc::unbounded_channel::<LibraryTracksResult>();
@@ -785,6 +809,8 @@ impl App {
             editor_picks_result_rx: editor_picks_rx,
             for_you_result_tx: for_you_tx,
             for_you_result_rx: for_you_rx,
+            for_you_artists_result_tx: for_you_artists_tx,
+            for_you_artists_result_rx: for_you_artists_rx,
             library_albums_result_tx: lib_albums_tx,
             library_albums_result_rx: lib_albums_rx,
             library_artists_result_tx: lib_artists_tx,
@@ -872,12 +898,18 @@ impl App {
             while let Ok(status) = self.playback_status_rx.try_recv() {
                 match status {
                     PlaybackStatus::Buffering(msg) => {
+                        self.state.is_buffering = true;
+                        self.state.buffering_status = Some(msg.clone());
                         self.state.status_message = Some(msg);
                     }
                     PlaybackStatus::Playing => {
+                        self.state.is_buffering = false;
+                        self.state.buffering_status = None;
                         self.state.status_message = None;
                     }
                     PlaybackStatus::Error(msg) => {
+                        self.state.is_buffering = false;
+                        self.state.buffering_status = None;
                         self.state.status_message = Some(format!("Error: {}", msg));
                     }
                 }
@@ -941,6 +973,11 @@ impl App {
             // Drain for-you results
             while let Ok(result) = self.for_you_result_rx.try_recv() {
                 self.handle_for_you_result(result);
+            }
+
+            // Drain for-you artists results
+            while let Ok(result) = self.for_you_artists_result_rx.try_recv() {
+                self.handle_for_you_artists_result(result);
             }
 
             // Drain library albums results
@@ -2399,42 +2436,66 @@ impl App {
         });
     }
 
-    /// Load for-you favorite albums if not already loaded.
+    /// Load for-you favorite albums and artists if not already loaded.
     fn load_for_you_if_needed(&mut self) {
-        if self.state.discovery.for_you_loaded || self.state.discovery.loading {
-            return;
-        }
-
         if !self.state.authenticated {
             self.state.discovery.error = Some("Not authenticated".to_string());
             return;
         }
 
-        self.state.discovery.loading = true;
-        self.state.discovery.error = None;
-        self.state.status_message = Some("Loading your favorites...".to_string());
+        // Load albums
+        if !self.state.discovery.for_you_loaded && !self.state.discovery.loading {
+            self.state.discovery.loading = true;
+            self.state.discovery.error = None;
+            self.state.status_message = Some("Loading your favorites...".to_string());
 
-        let core = Arc::clone(&self.core);
-        let event_tx = self.for_you_result_tx.clone();
+            let core = Arc::clone(&self.core);
+            let event_tx = self.for_you_result_tx.clone();
 
-        self.rt_handle.spawn(async move {
-            let result = core.get_favorites("albums", 50, 0).await;
-            let parsed = result.and_then(|json| {
-                let albums_page = json
-                    .get("albums")
-                    .and_then(|albums| {
-                        serde_json::from_value::<SearchResultsPage<Album>>(albums.clone()).ok()
-                    });
-                match albums_page {
-                    Some(page) => Ok(page.items),
-                    None => {
-                        log::warn!("[TUI] Could not parse for-you albums response");
-                        Ok(Vec::new())
+            self.rt_handle.spawn(async move {
+                let result = core.get_favorites("albums", 50, 0).await;
+                let parsed = result.and_then(|json| {
+                    let albums_page = json
+                        .get("albums")
+                        .and_then(|albums| {
+                            serde_json::from_value::<SearchResultsPage<Album>>(albums.clone()).ok()
+                        });
+                    match albums_page {
+                        Some(page) => Ok(page.items),
+                        None => {
+                            log::warn!("[TUI] Could not parse for-you albums response");
+                            Ok(Vec::new())
+                        }
                     }
-                }
+                });
+                let _ = event_tx.send(parsed);
             });
-            let _ = event_tx.send(parsed);
-        });
+        }
+
+        // Load artists
+        if !self.state.discovery.for_you_artists_loaded {
+            let core = Arc::clone(&self.core);
+            let event_tx = self.for_you_artists_result_tx.clone();
+
+            self.rt_handle.spawn(async move {
+                let result = core.get_favorites("artists", 10, 0).await;
+                let parsed = result.and_then(|json| {
+                    let artists_page = json
+                        .get("artists")
+                        .and_then(|artists| {
+                            serde_json::from_value::<qbz_models::SearchResultsPage<qbz_models::Artist>>(artists.clone()).ok()
+                        });
+                    match artists_page {
+                        Some(page) => Ok(page.items),
+                        None => {
+                            log::warn!("[TUI] Could not parse for-you artists response");
+                            Ok(Vec::new())
+                        }
+                    }
+                });
+                let _ = event_tx.send(parsed);
+            });
+        }
     }
 
     /// Handle the result of a discover index load.
@@ -2463,14 +2524,32 @@ impl App {
                     .qobuzissims
                     .map(|c| c.data.items)
                     .unwrap_or_default();
+                self.state.discovery.editor_picks_discover = response
+                    .containers
+                    .album_of_the_week
+                    .map(|c| c.data.items)
+                    .unwrap_or_default();
+                self.state.discovery.essential_discography = response
+                    .containers
+                    .ideal_discography
+                    .map(|c| c.data.items)
+                    .unwrap_or_default();
+                self.state.discovery.qobuz_playlists = response
+                    .containers
+                    .playlists
+                    .map(|c| c.data.items)
+                    .unwrap_or_default();
                 self.state.discovery.selected_index = 0;
                 self.state.discovery.error = None;
 
                 let total = self.state.discovery.new_releases.len()
-                    + self.state.discovery.most_streamed.len()
+                    + self.state.discovery.essential_discography.len()
+                    + self.state.discovery.editor_picks_discover.len()
                     + self.state.discovery.press_awards.len()
-                    + self.state.discovery.qobuzissimes.len();
-                self.state.status_message = Some(format!("Discovery: {} albums", total));
+                    + self.state.discovery.most_streamed.len()
+                    + self.state.discovery.qobuzissimes.len()
+                    + self.state.discovery.qobuz_playlists.len();
+                self.state.status_message = Some(format!("Discovery: {} items", total));
             }
             Err(e) => {
                 self.state.discovery.error = Some(format!("{}", e));
@@ -2517,6 +2596,19 @@ impl App {
         }
     }
 
+    /// Handle the result of a for-you artists load.
+    fn handle_for_you_artists_result(&mut self, result: ForYouArtistsResult) {
+        self.state.discovery.for_you_artists_loaded = true;
+        match result {
+            Ok(artists) => {
+                self.state.discovery.for_you_artists = artists;
+            }
+            Err(e) => {
+                log::warn!("[TUI] Failed to load for-you artists: {}", e);
+            }
+        }
+    }
+
     /// Cycle through discovery tabs.
     fn cycle_discovery_tab(&mut self, forward: bool) {
         let tabs = [
@@ -2546,12 +2638,18 @@ impl App {
         match self.state.discovery.tab {
             DiscoveryTab::Home => {
                 self.state.discovery.new_releases.len()
-                    + self.state.discovery.most_streamed.len()
+                    + self.state.discovery.essential_discography.len()
+                    + self.state.discovery.editor_picks_discover.len()
                     + self.state.discovery.press_awards.len()
+                    + self.state.discovery.most_streamed.len()
                     + self.state.discovery.qobuzissimes.len()
+                    + self.state.discovery.qobuz_playlists.len()
             }
             DiscoveryTab::EditorPicks => self.state.discovery.editor_picks.len(),
-            DiscoveryTab::ForYou => self.state.discovery.for_you_albums.len(),
+            DiscoveryTab::ForYou => {
+                self.state.discovery.for_you_albums.len()
+                    + self.state.discovery.for_you_artists.len()
+            }
         }
     }
 
@@ -2560,22 +2658,35 @@ impl App {
         let idx = self.state.discovery.selected_index;
         let album_id: Option<String> = match self.state.discovery.tab {
             DiscoveryTab::Home => {
-                // Build flat list to find the album at idx
-                let all_albums: Vec<&DiscoverAlbum> = self
-                    .state
-                    .discovery
+                // Build flat list of all albums (same order as render_home sections).
+                // Playlists are not albums, so they are skipped here.
+                let disc = &self.state.discovery;
+                let all_albums: Vec<&DiscoverAlbum> = disc
                     .new_releases
                     .iter()
-                    .chain(self.state.discovery.most_streamed.iter())
-                    .chain(self.state.discovery.press_awards.iter())
-                    .chain(self.state.discovery.qobuzissimes.iter())
+                    .chain(disc.essential_discography.iter())
+                    .chain(disc.editor_picks_discover.iter())
+                    .chain(disc.press_awards.iter())
+                    .chain(disc.most_streamed.iter())
+                    .chain(disc.qobuzissimes.iter())
                     .collect();
-                all_albums.get(idx).map(|a| a.id.clone())
+                let playlist_count = disc.qobuz_playlists.len();
+                // If idx falls within the album range, return the album id.
+                // If it falls in the playlist range (after all albums), return None
+                // because playlists can't be opened as albums.
+                if idx < all_albums.len() {
+                    all_albums.get(idx).map(|a| a.id.clone())
+                } else {
+                    // idx is in the playlist range — no album to open
+                    let _ = playlist_count; // suppress unused warning
+                    None
+                }
             }
             DiscoveryTab::EditorPicks => {
                 self.state.discovery.editor_picks.get(idx).map(|a| a.id.clone())
             }
             DiscoveryTab::ForYou => {
+                // For You: albums come first, then artists
                 self.state.discovery.for_you_albums.get(idx).map(|a| a.id.clone())
             }
         };

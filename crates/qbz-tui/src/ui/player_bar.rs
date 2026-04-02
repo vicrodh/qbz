@@ -179,8 +179,10 @@ fn render_cover_placeholder(frame: &mut Frame, area: Rect, state: &AppState) {
 
 /// Row 0: play state icon + Title — Artist
 fn render_track_info(frame: &mut Frame, area: Rect, state: &AppState) {
-    // Play state icons matching Jellyfin-TUI: ► (playing), ⏸︎ (paused), ■ (stopped)
-    let icon = if state.is_playing {
+    // Play state icons: ⟳ (buffering), ► (playing), ⏸︎ (paused), ■ (stopped)
+    let icon = if state.is_buffering {
+        "\u{27f3}" // ⟳
+    } else if state.is_playing {
         "\u{25b6}" // ►
     } else if state.current_track_title.is_some() {
         "\u{23f8}\u{fe0e}" // ⏸︎
@@ -223,7 +225,24 @@ fn render_track_info(frame: &mut Frame, area: Rect, state: &AppState) {
 }
 
 /// Row 1: LineGauge progress bar with play state icon, percentage, and duration.
+/// When buffering, shows the buffering status text instead of a progress gauge.
 fn render_progress(frame: &mut Frame, area: Rect, state: &AppState) {
+    // When buffering, replace the progress bar with the buffering status text
+    if state.is_buffering {
+        let status_text = state
+            .buffering_status
+            .as_deref()
+            .unwrap_or("Buffering...");
+        let line = Line::from(vec![
+            Span::styled(
+                format!("  \u{27f3}  {}", status_text),
+                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+            ),
+        ]);
+        frame.render_widget(Paragraph::new(line), area);
+        return;
+    }
+
     let ratio = if state.duration_secs > 0 {
         (state.position_secs as f64 / state.duration_secs as f64).clamp(0.0, 1.0)
     } else {
