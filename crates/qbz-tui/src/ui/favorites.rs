@@ -1,4 +1,4 @@
-//! Favorites view — tab bar, track list with scrollbar, and playback trigger.
+//! Favorites view — tab bar, track list with Jellyfin-TUI formatting, scrollbar.
 
 use ratatui::layout::{Constraint, Direction, Layout, Margin, Rect};
 use ratatui::style::{Modifier, Style, Stylize};
@@ -81,12 +81,13 @@ fn render_tab_bar(frame: &mut Frame, area: Rect, state: &AppState) {
     frame.render_widget(Paragraph::new(line), area);
 }
 
-/// The favorites track list with scrollbar.
+/// The favorites track list with Jellyfin-TUI-style formatting and scrollbar.
+///
+/// Column layout: ♥ (2) | # (4) | Title - Artist (flex) | Album (30%) | Duration (8) | Quality (6)
 fn render_tracks(frame: &mut Frame, area: Rect, state: &mut AppState) {
     let favs = &state.favorites;
 
     if favs.tracks.is_empty() && !favs.loading {
-        // Empty state
         let msg = if !favs.loaded {
             ""
         } else if favs.error.is_some() {
@@ -110,8 +111,17 @@ fn render_tracks(frame: &mut Frame, area: Rect, state: &mut AppState) {
 
     let selected_index = favs.selected_index;
     let track_count = favs.tracks.len();
+    let total_width = area.width as usize;
 
-    // Build list items
+    // Column widths following Jellyfin-TUI pattern
+    let fav_w: usize = 2;      // "♥ "
+    let num_w: usize = 4;      // "#"
+    let dur_w: usize = 8;      // "  M:SS"
+    let quality_w: usize = 6;  // " Hi-Res" or " CD"
+    let remaining = total_width.saturating_sub(fav_w + num_w + dur_w + quality_w + 2);
+    let album_w = remaining * 30 / 100;
+    let title_w = remaining.saturating_sub(album_w);
+
     let items: Vec<ListItem<'_>> = favs
         .tracks
         .iter()
@@ -119,33 +129,23 @@ fn render_tracks(frame: &mut Frame, area: Rect, state: &mut AppState) {
         .map(|(idx, track)| {
             let is_selected = idx == selected_index;
 
-            // Favorite indicator
-            let fav_icon = "\u{2665} "; // ♥
+            let num = format!("{:>3} ", idx + 1);
 
-            // Track number / index
-            let num = format!("{:>3}. ", idx + 1);
-
-            // Title
-            let title = &track.title;
-
-            // Artist
+            let title = truncate(&track.title, title_w.saturating_sub(1));
             let artist_name = track
                 .performer
                 .as_ref()
                 .map(|a| a.name.as_str())
                 .unwrap_or("Unknown Artist");
 
-            // Album
             let album_name = track
                 .album
                 .as_ref()
-                .map(|a| a.title.as_str())
-                .unwrap_or("");
+                .map(|a| truncate(&a.title, album_w.saturating_sub(2)))
+                .unwrap_or_default();
 
-            // Duration
             let dur = format_duration(track.duration);
 
-            // Quality badge
             let quality = if track.hires_streamable {
                 "Hi-Res"
             } else if track.hires {
@@ -160,48 +160,45 @@ fn render_tracks(frame: &mut Frame, area: Rect, state: &mut AppState) {
                 Style::default().fg(TEXT_SECONDARY)
             };
 
-            let mut spans = vec![
-                Span::styled(fav_icon, style.fg(ACCENT)),
-                Span::styled(num, style.fg(TEXT_DIM)),
-                Span::styled(title.to_string(), if is_selected {
-                    style.add_modifier(Modifier::BOLD)
-                } else {
-                    style
-                }),
-            ];
+            // Build formatted row: ♥ | # | Title - Artist | Album | Duration | Quality
+            let title_artist = if !artist_name.is_empty() {
+                format!("{} \u{2014} {}", title, artist_name)
+            } else {
+                title
+            };
+            let title_artist = truncate(&title_artist, title_w);
+            let title_padded = format!("{:<width$}", title_artist, width = title_w);
 
-            // Artist (dimmer)
-            if !artist_name.is_empty() {
-                spans.push(Span::styled(
-                    format!("  {}", artist_name),
-                    style.fg(TEXT_MUTED),
-                ));
-            }
+            let album_padded = if album_name.is_empty() {
+                " ".repeat(album_w)
+            } else {
+                format!("{:<width$}", album_name, width = album_w)
+            };
 
-            // Album (even dimmer)
-            if !album_name.is_empty() {
-                spans.push(Span::styled(
-                    format!("  [{}]", album_name),
-                    style.fg(TEXT_DIM),
-                ));
-            }
+            // Right-align duration
+            let dur_padded = format!("{:>width$}", dur, width = dur_w);
 
-            // Duration
-            spans.push(Span::styled(
-                format!("  {}", dur),
-                style.fg(TEXT_MUTED),
-            ));
-
-            // Quality badge
             let quality_color = if track.hires_streamable {
                 HIRES_BADGE
             } else {
                 TEXT_DIM
             };
-            spans.push(Span::styled(
-                format!("  {}", quality),
-                style.fg(quality_color),
-            ));
+
+            let spans = vec![
+                Span::styled("\u{2665} ", style.fg(ACCENT)), // ♥
+                Span::styled(num, style.fg(TEXT_DIM)),
+                Span::styled(title_padded, if is_selected {
+                    style.add_modifier(Modifier::BOLD)
+                } else {
+                    style
+                }),
+                Span::styled(album_padded, style.fg(TEXT_DIM)),
+                Span::styled(dur_padded, style.fg(TEXT_MUTED)),
+                Span::styled(
+                    format!(" {:<5}", quality),
+                    style.fg(quality_color),
+                ),
+            ];
 
             ListItem::new(Line::from(spans))
         })
@@ -209,13 +206,12 @@ fn render_tracks(frame: &mut Frame, area: Rect, state: &mut AppState) {
 
     let list = List::new(items);
 
-    // Use ListState to enable scroll tracking
     let mut list_state = ListState::default();
     list_state.select(Some(selected_index));
 
     frame.render_stateful_widget(list, area, &mut list_state);
 
-    // Render scrollbar (Jellyfin-TUI pattern)
+    // Scrollbar
     if track_count > 0 {
         state.favorites.scrollbar_state = state
             .favorites
@@ -225,8 +221,8 @@ fn render_tracks(frame: &mut Frame, area: Rect, state: &mut AppState) {
 
         let scrollbar = Scrollbar::default()
             .orientation(ScrollbarOrientation::VerticalRight)
-            .begin_symbol(Some("\u{2191}")) // ↑
-            .end_symbol(Some("\u{2193}")); // ↓
+            .begin_symbol(Some("\u{2191}"))
+            .end_symbol(Some("\u{2193}"));
 
         frame.render_stateful_widget(
             scrollbar,
@@ -236,6 +232,23 @@ fn render_tracks(frame: &mut Frame, area: Rect, state: &mut AppState) {
             }),
             &mut state.favorites.scrollbar_state,
         );
+    }
+}
+
+/// Truncate a string to fit within `max_chars`, appending an ellipsis if needed.
+fn truncate(s: &str, max_chars: usize) -> String {
+    if max_chars == 0 {
+        return String::new();
+    }
+    let chars: Vec<char> = s.chars().collect();
+    if chars.len() <= max_chars {
+        s.to_string()
+    } else if max_chars <= 1 {
+        chars[..max_chars].iter().collect()
+    } else {
+        let mut result: String = chars[..max_chars - 1].iter().collect();
+        result.push('\u{2026}');
+        result
     }
 }
 
