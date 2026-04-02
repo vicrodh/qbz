@@ -33,7 +33,7 @@ pub enum PlaybackStatus {
 ///
 /// Quality preference (Hi-Res/CD/MP3) is stored on the frontend side (localStorage),
 /// not in AudioSettings. Default to HiRes for the TUI until we build a TUI settings view.
-fn load_quality_settings() -> (Quality, bool) {
+pub fn load_quality_settings() -> (Quality, bool) {
     use qbz_audio::settings::AudioSettingsStore;
 
     match AudioSettingsStore::new() {
