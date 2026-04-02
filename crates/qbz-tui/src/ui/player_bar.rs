@@ -9,7 +9,7 @@ use ratatui::Frame;
 use ratatui_image::StatefulImage;
 
 use crate::app::AppState;
-use crate::theme::{ACCENT, BG_SECONDARY, HIRES_BADGE, TEXT_DIM, TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY};
+use crate::theme::{ACCENT, BG_SECONDARY, HIRES_BADGE, TEXT_DIM, TEXT_MUTED, TEXT_SECONDARY};
 
 /// Width of the cover art area in columns (approx 2:1 aspect ratio for terminal chars).
 const COVER_ART_WIDTH: u16 = 10;
@@ -179,6 +179,8 @@ fn render_cover_placeholder(frame: &mut Frame, area: Rect, state: &AppState) {
 
 /// Row 0: play state icon + Title — Artist
 fn render_track_info(frame: &mut Frame, area: Rect, state: &AppState) {
+    let accent = state.dynamic_accent.unwrap_or(ACCENT);
+
     // Play state icons: ⟳ (buffering), ► (playing), ⏸︎ (paused), ■ (stopped)
     let icon = if state.is_buffering {
         "\u{27f3}" // ⟳
@@ -202,12 +204,12 @@ fn render_track_info(frame: &mut Frame, area: Rect, state: &AppState) {
     let spans = vec![
         Span::styled(
             format!("  {} ", icon),
-            Style::default().fg(ACCENT),
+            Style::default().fg(accent),
         ),
         Span::styled(
             title,
             Style::default()
-                .fg(TEXT_PRIMARY)
+                .fg(accent)
                 .add_modifier(Modifier::BOLD),
         ),
         Span::styled(
@@ -227,6 +229,8 @@ fn render_track_info(frame: &mut Frame, area: Rect, state: &AppState) {
 /// Row 1: LineGauge progress bar with play state icon, percentage, and duration.
 /// When buffering, shows the buffering status text instead of a progress gauge.
 fn render_progress(frame: &mut Frame, area: Rect, state: &AppState) {
+    let accent = state.dynamic_accent.unwrap_or(ACCENT);
+
     // When buffering, replace the progress bar with the buffering status text
     if state.is_buffering {
         let status_text = state
@@ -236,7 +240,7 @@ fn render_progress(frame: &mut Frame, area: Rect, state: &AppState) {
         let line = Line::from(vec![
             Span::styled(
                 format!("  \u{27f3}  {}", status_text),
-                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+                Style::default().fg(accent).add_modifier(Modifier::BOLD),
             ),
         ]);
         frame.render_widget(Paragraph::new(line), area);
@@ -280,7 +284,7 @@ fn render_progress(frame: &mut Frame, area: Rect, state: &AppState) {
         .block(Block::default())
         .filled_style(
             Style::default()
-                .fg(ACCENT)
+                .fg(accent)
                 .add_modifier(Modifier::BOLD),
         )
         .unfilled_style(
