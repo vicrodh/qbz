@@ -176,34 +176,49 @@ impl App {
 
         // Authenticate using saved credentials
         if core_initialized {
-            match credentials::load_qobuz_credentials() {
-                Ok(Some(creds)) => {
-                    log::info!("[TUI] Found saved credentials for {}", creds.email);
-                    match core.login(&creds.email, &creds.password).await {
-                        Ok(session) => {
-                            log::info!(
-                                "[TUI] Authenticated as {} (plan: {})",
-                                session.email,
-                                session.subscription_label
-                            );
-                            state.authenticated = true;
-                            state.auth_email = Some(session.email);
-                            state.status_message =
-                                Some(format!("Logged in ({})", session.subscription_label));
-                        }
-                        Err(e) => {
-                            log::warn!("[TUI] Authentication failed: {}", e);
-                            state.status_message = Some(format!("Auth failed: {}", e));
+            let mut logged_in = false;
+
+            // Try email/password first
+            if let Ok(Some(creds)) = credentials::load_qobuz_credentials() {
+                log::info!("[TUI] Found saved credentials for {}", creds.email);
+                match core.login(&creds.email, &creds.password).await {
+                    Ok(session) => {
+                        log::info!("[TUI] Authenticated as {} (plan: {})", session.email, session.subscription_label);
+                        state.authenticated = true;
+                        state.auth_email = Some(session.email);
+                        state.status_message = Some(format!("Logged in ({})", session.subscription_label));
+                        logged_in = true;
+                    }
+                    Err(e) => log::warn!("[TUI] Password auth failed: {}", e),
+                }
+            }
+
+            // Fallback: try saved OAuth token
+            if !logged_in {
+                match credentials::load_oauth_token() {
+                    Ok(Some(token)) => {
+                        log::info!("[TUI] Found saved OAuth token, restoring session...");
+                        match core.login_with_token(&token).await {
+                            Ok(session) => {
+                                log::info!("[TUI] OAuth session restored for {}", session.email);
+                                state.authenticated = true;
+                                state.auth_email = Some(session.email);
+                                state.status_message = Some(format!("Logged in ({})", session.subscription_label));
+                            }
+                            Err(e) => {
+                                log::warn!("[TUI] OAuth token expired or invalid: {}", e);
+                                state.status_message = Some(format!("Auth failed: {}", e));
+                            }
                         }
                     }
-                }
-                Ok(None) => {
-                    log::info!("[TUI] No saved credentials found");
-                    state.status_message = Some("No saved credentials".to_string());
-                }
-                Err(e) => {
-                    log::warn!("[TUI] Failed to load credentials: {}", e);
-                    state.status_message = Some(format!("Credential error: {}", e));
+                    Ok(None) => {
+                        log::info!("[TUI] No saved credentials or OAuth token found");
+                        state.status_message = Some("Not logged in".to_string());
+                    }
+                    Err(e) => {
+                        log::warn!("[TUI] Failed to load OAuth token: {}", e);
+                        state.status_message = Some("Not logged in".to_string());
+                    }
                 }
             }
         }

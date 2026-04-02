@@ -4960,6 +4960,7 @@ dependencies = [
  "base64 0.22.1",
  "crossterm",
  "dirs 6.0.0",
+ "env_logger",
  "keyring",
  "log",
  "qbz-audio",

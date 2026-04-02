@@ -194,24 +194,63 @@ pub fn load_qobuz_credentials() -> Result<Option<QobuzCredentials>, String> {
     log::info!("[TUI] Attempting to load credentials");
 
     // Try keyring first
-    if let Ok(entry) = Entry::new(SERVICE_NAME, QOBUZ_CREDENTIALS_KEY) {
-        match entry.get_password() {
-            Ok(json) => {
-                if let Ok(credentials) = serde_json::from_str::<QobuzCredentials>(&json) {
-                    log::info!("[TUI] Credentials loaded from keyring");
-                    return Ok(Some(credentials));
+    match Entry::new(SERVICE_NAME, QOBUZ_CREDENTIALS_KEY) {
+        Ok(entry) => {
+            log::info!("[TUI] Keyring entry created, attempting to read...");
+            match entry.get_password() {
+                Ok(json) => {
+                    log::info!("[TUI] Got keyring data ({} bytes)", json.len());
+                    if let Ok(credentials) = serde_json::from_str::<QobuzCredentials>(&json) {
+                        log::info!("[TUI] Credentials loaded from keyring for {}", credentials.email);
+                        return Ok(Some(credentials));
+                    } else {
+                        log::warn!("[TUI] Keyring data is not valid QobuzCredentials JSON");
+                    }
+                }
+                Err(keyring::Error::NoEntry) => {
+                    log::info!("[TUI] No credentials in keyring (NoEntry), checking fallback...");
+                }
+                Err(e) => {
+                    log::warn!("[TUI] Keyring get_password failed: {:?}, checking fallback...", e);
                 }
             }
-            Err(keyring::Error::NoEntry) => {
-                log::debug!("[TUI] No credentials in keyring, checking fallback...");
-            }
-            Err(e) => {
-                log::warn!("[TUI] Keyring load failed ({}), checking fallback...", e);
-            }
         }
-    } else {
-        log::warn!("[TUI] Keyring not available, checking fallback...");
+        Err(e) => {
+            log::warn!("[TUI] Keyring Entry::new failed: {:?}, checking fallback...", e);
+        }
     }
 
     load_from_fallback()
+}
+
+const OAUTH_TOKEN_FILE_NAME: &str = ".qbz-oauth-token";
+
+/// Load a previously saved OAuth user_auth_token.
+///
+/// The token is stored encrypted in the same format as credentials
+/// (as the `email` field of a QobuzCredentials struct).
+pub fn load_oauth_token() -> Result<Option<String>, String> {
+    let path = match dirs::config_dir() {
+        Some(p) => p.join("qbz").join(OAUTH_TOKEN_FILE_NAME),
+        None => return Ok(None),
+    };
+
+    if !path.exists() {
+        log::info!("[TUI] No OAuth token file found");
+        return Ok(None);
+    }
+
+    let content =
+        std::fs::read_to_string(&path).map_err(|e| format!("Failed to read OAuth token file: {}", e))?;
+
+    match decrypt_credentials(&content) {
+        Ok(placeholder) => {
+            log::info!("[TUI] OAuth token loaded from file");
+            Ok(Some(placeholder.email))
+        }
+        Err(e) => {
+            log::warn!("[TUI] Failed to decrypt OAuth token: {}", e);
+            Err(e)
+        }
+    }
 }
