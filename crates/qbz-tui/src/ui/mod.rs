@@ -1,8 +1,10 @@
 pub mod album_detail;
+pub mod artist_detail;
 pub mod discovery;
 pub mod favorites;
 pub mod help_bar;
 pub mod layout;
+pub mod library;
 pub mod menu_bar;
 pub mod placeholder;
 pub mod player_bar;

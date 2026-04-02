@@ -1162,7 +1162,6 @@ impl App {
                     self.state.artist_detail.selected_index = next;
                 }
             }
-            _ => {}
         }
     }
 

@@ -24,11 +24,12 @@ use ratatui::Frame;
 
 use crate::app::{ActiveView, AppState};
 use super::album_detail::render_album_detail;
+use super::artist_detail::render_artist_detail;
 use super::discovery::render_discovery;
 use super::favorites::render_favorites;
 use super::help_bar::render_help_bar;
+use super::library::render_library;
 use super::menu_bar::render_menu_bar;
-use super::placeholder::render_placeholder;
 use super::player_bar::render_player_bar;
 use super::queue_panel::render_queue_panel;
 use super::playlists::render_playlists;
@@ -134,10 +135,11 @@ pub fn render_layout(frame: &mut Frame, state: &mut AppState) -> LayoutAreas {
         ActiveView::Discovery => render_discovery(frame, content_area, state),
         ActiveView::Search => render_search(frame, content_area, state),
         ActiveView::Favorites => render_favorites(frame, content_area, state),
+        ActiveView::Library => render_library(frame, content_area, state),
         ActiveView::Album => render_album_detail(frame, content_area, state),
+        ActiveView::Artist => render_artist_detail(frame, content_area, state),
         ActiveView::Settings => render_settings(frame, content_area, state),
         ActiveView::Playlists => render_playlists(frame, content_area, state),
-        _ => render_placeholder(frame, content_area, active.label()),
     }
 
     // Render right panel if visible
