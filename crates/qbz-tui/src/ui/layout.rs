@@ -32,6 +32,7 @@ use super::player_bar::render_player_bar;
 use super::queue_panel::render_queue_panel;
 use super::search::render_search;
 use super::search_modal::render_search_modal;
+use super::settings::render_settings;
 use super::sidebar::render_sidebar;
 
 /// Width of the right panel (queue/lyrics) in columns.
@@ -131,6 +132,7 @@ pub fn render_layout(frame: &mut Frame, state: &mut AppState) -> LayoutAreas {
         ActiveView::Search => render_search(frame, content_area, state),
         ActiveView::Favorites => render_favorites(frame, content_area, state),
         ActiveView::Album => render_album_detail(frame, content_area, state),
+        ActiveView::Settings => render_settings(frame, content_area, state),
         _ => render_placeholder(frame, content_area, active.label()),
     }
 

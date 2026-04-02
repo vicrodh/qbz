@@ -190,6 +190,29 @@ impl Default for AlbumState {
     }
 }
 
+/// State for the settings view.
+pub struct SettingsState {
+    /// Loaded audio settings (snapshot).
+    pub audio_settings: AudioSettings,
+    /// Whether settings have been loaded from the database.
+    pub loaded: bool,
+    /// Currently selected setting index.
+    pub selected_index: usize,
+    /// Scrollbar state.
+    pub scrollbar_state: ScrollbarState,
+}
+
+impl Default for SettingsState {
+    fn default() -> Self {
+        Self {
+            audio_settings: AudioSettings::default(),
+            loaded: false,
+            selected_index: 0,
+            scrollbar_state: ScrollbarState::default(),
+        }
+    }
+}
+
 pub struct AppState {
     pub active_view: ActiveView,
     pub is_playing: bool,
@@ -222,6 +245,8 @@ pub struct AppState {
     pub show_search_modal: bool,
     /// Album detail view state.
     pub album: AlbumState,
+    /// Settings view state.
+    pub settings: SettingsState,
 }
 
 impl Default for AppState {
@@ -249,6 +274,7 @@ impl Default for AppState {
             queue_scrollbar_state: ScrollbarState::default(),
             show_search_modal: false,
             album: AlbumState::default(),
+            settings: SettingsState::default(),
         }
     }
 }
@@ -603,6 +629,8 @@ impl App {
             self.state.active_view = view;
             if view == ActiveView::Favorites {
                 self.load_favorites_if_needed();
+            } else if view == ActiveView::Settings {
+                self.load_settings_if_needed();
             }
         }
     }
@@ -647,6 +675,15 @@ impl App {
                 let next = (current + delta).clamp(0, (len as i32) - 1) as usize;
                 self.state.album.selected_index = next;
             }
+            ActiveView::Settings => {
+                let total = self.settings_item_count();
+                if total == 0 {
+                    return;
+                }
+                let current = self.state.settings.selected_index as i32;
+                let next = (current + delta).clamp(0, (total as i32) - 1) as usize;
+                self.state.settings.selected_index = next;
+            }
             _ => {}
         }
     }
@@ -676,7 +713,10 @@ impl App {
             KeyCode::Char('5') => {
                 self.state.active_view = ActiveView::Search;
             }
-            KeyCode::Char('6') => self.state.active_view = ActiveView::Settings,
+            KeyCode::Char('6') => {
+                self.state.active_view = ActiveView::Settings;
+                self.load_settings_if_needed();
+            }
 
             // '/' from any view opens the search modal popup
             KeyCode::Char('/') => {
@@ -803,6 +843,31 @@ impl App {
                 self.state.active_view = self.state.album.return_view;
             }
 
+            // Settings view: j/k navigation
+            KeyCode::Char('j') | KeyCode::Down if self.state.active_view == ActiveView::Settings => {
+                let total = self.settings_item_count();
+                if total > 0 {
+                    self.state.settings.selected_index =
+                        (self.state.settings.selected_index + 1).min(total - 1);
+                }
+            }
+            KeyCode::Char('k') | KeyCode::Up if self.state.active_view == ActiveView::Settings => {
+                if self.state.settings.selected_index > 0 {
+                    self.state.settings.selected_index -= 1;
+                }
+            }
+
+            // Settings view: Enter/Space to toggle, +/- to adjust
+            KeyCode::Enter | KeyCode::Char(' ') if self.state.active_view == ActiveView::Settings => {
+                self.toggle_selected_setting();
+            }
+
+            // Settings view: 'r' to reload settings from database
+            KeyCode::Char('r') if self.state.active_view == ActiveView::Settings => {
+                self.state.settings.loaded = false;
+                self.load_settings_if_needed();
+            }
+
             // Playback controls
             KeyCode::Char(' ') => {
                 if self.state.is_playing {
@@ -844,6 +909,15 @@ impl App {
             KeyCode::Char('a') if self.state.active_view == ActiveView::Search => {
                 self.add_selected_to_queue();
             }
+
+            // Settings view: +/- to adjust numeric values
+            KeyCode::Char('+') | KeyCode::Char('=') if self.state.active_view == ActiveView::Settings => {
+                self.adjust_selected_setting(1);
+            }
+            KeyCode::Char('-') if self.state.active_view == ActiveView::Settings => {
+                self.adjust_selected_setting(-1);
+            }
+
             KeyCode::Char('+') | KeyCode::Char('=') => {
                 let new_vol = (self.state.volume + 0.05).min(1.0);
                 if self.core.set_volume(new_vol).is_ok() {
@@ -1187,6 +1261,172 @@ impl App {
             core.add_track(queue_track).await;
         });
     }
+
+    // ==================== Settings ====================
+
+    /// Load settings from AudioSettingsStore if not already loaded.
+    fn load_settings_if_needed(&mut self) {
+        if self.state.settings.loaded {
+            return;
+        }
+
+        match AudioSettingsStore::new() {
+            Ok(store) => match store.get_settings() {
+                Ok(settings) => {
+                    self.state.settings.audio_settings = settings;
+                    self.state.settings.loaded = true;
+                    self.state.status_message = Some("Settings loaded".to_string());
+                }
+                Err(e) => {
+                    self.state.status_message =
+                        Some(format!("Failed to load settings: {}", e));
+                }
+            },
+            Err(e) => {
+                self.state.status_message =
+                    Some(format!("Failed to open settings store: {}", e));
+            }
+        }
+    }
+
+    /// Get the total number of editable setting items.
+    fn settings_item_count(&self) -> usize {
+        crate::ui::settings::build_settings_list(&self.state).len()
+    }
+
+    /// Toggle the selected boolean setting.
+    fn toggle_selected_setting(&mut self) {
+        use crate::ui::settings::{build_settings_list, SettingKind};
+
+        let items = build_settings_list(&self.state);
+        let idx = self.state.settings.selected_index;
+        let item = match items.get(idx) {
+            Some(item) if item.kind == SettingKind::Toggle => item.clone(),
+            _ => return,
+        };
+
+        let settings = &mut self.state.settings.audio_settings;
+        let store = match AudioSettingsStore::new() {
+            Ok(s) => s,
+            Err(e) => {
+                self.state.status_message = Some(format!("Settings store error: {}", e));
+                return;
+            }
+        };
+
+        let result = match item.label.as_str() {
+            "Exclusive Mode" => {
+                settings.exclusive_mode = !settings.exclusive_mode;
+                store.set_exclusive_mode(settings.exclusive_mode)
+            }
+            "DAC Passthrough" => {
+                settings.dac_passthrough = !settings.dac_passthrough;
+                store.set_dac_passthrough(settings.dac_passthrough)
+            }
+            "PipeWire Force Bit-Perfect" => {
+                settings.pw_force_bitperfect = !settings.pw_force_bitperfect;
+                store.set_pw_force_bitperfect(settings.pw_force_bitperfect)
+            }
+            "ALSA Hardware Volume" => {
+                settings.alsa_hardware_volume = !settings.alsa_hardware_volume;
+                store.set_alsa_hardware_volume(settings.alsa_hardware_volume)
+            }
+            "Limit Quality to Device" => {
+                settings.limit_quality_to_device = !settings.limit_quality_to_device;
+                store.set_limit_quality_to_device(settings.limit_quality_to_device)
+            }
+            "Streaming Only" => {
+                settings.streaming_only = !settings.streaming_only;
+                store.set_streaming_only(settings.streaming_only)
+            }
+            "Stream First Track" => {
+                settings.stream_first_track = !settings.stream_first_track;
+                store.set_stream_first_track(settings.stream_first_track)
+            }
+            "Gapless Playback" => {
+                settings.gapless_enabled = !settings.gapless_enabled;
+                store.set_gapless_enabled(settings.gapless_enabled)
+            }
+            "Volume Normalization" => {
+                settings.normalization_enabled = !settings.normalization_enabled;
+                store.set_normalization_enabled(settings.normalization_enabled)
+            }
+            _ => return,
+        };
+
+        match result {
+            Ok(()) => {
+                let new_val = match item.label.as_str() {
+                    "Exclusive Mode" => settings.exclusive_mode,
+                    "DAC Passthrough" => settings.dac_passthrough,
+                    "PipeWire Force Bit-Perfect" => settings.pw_force_bitperfect,
+                    "ALSA Hardware Volume" => settings.alsa_hardware_volume,
+                    "Limit Quality to Device" => settings.limit_quality_to_device,
+                    "Streaming Only" => settings.streaming_only,
+                    "Stream First Track" => settings.stream_first_track,
+                    "Gapless Playback" => settings.gapless_enabled,
+                    "Volume Normalization" => settings.normalization_enabled,
+                    _ => false,
+                };
+                self.state.status_message = Some(format!(
+                    "{}: {}",
+                    item.label,
+                    if new_val { "ON" } else { "OFF" }
+                ));
+            }
+            Err(e) => {
+                self.state.status_message = Some(format!("Failed to save: {}", e));
+            }
+        }
+    }
+
+    /// Adjust the selected numeric setting by a delta.
+    fn adjust_selected_setting(&mut self, delta: i32) {
+        use crate::ui::settings::{build_settings_list, SettingKind};
+
+        let items = build_settings_list(&self.state);
+        let idx = self.state.settings.selected_index;
+        let item = match items.get(idx) {
+            Some(item) if item.kind == SettingKind::Numeric => item.clone(),
+            _ => return,
+        };
+
+        let settings = &mut self.state.settings.audio_settings;
+        let store = match AudioSettingsStore::new() {
+            Ok(s) => s,
+            Err(e) => {
+                self.state.status_message = Some(format!("Settings store error: {}", e));
+                return;
+            }
+        };
+
+        let result = match item.label.as_str() {
+            "Stream Buffer" => {
+                let new_val =
+                    (settings.stream_buffer_seconds as i32 + delta).clamp(1, 10) as u8;
+                settings.stream_buffer_seconds = new_val;
+                let r = store.set_stream_buffer_seconds(new_val);
+                self.state.status_message =
+                    Some(format!("Stream Buffer: {} seconds", new_val));
+                r
+            }
+            "Normalization Target" => {
+                let new_val = (settings.normalization_target_lufs + delta as f32).clamp(-30.0, 0.0);
+                settings.normalization_target_lufs = new_val;
+                let r = store.set_normalization_target_lufs(new_val);
+                self.state.status_message =
+                    Some(format!("Normalization Target: {:.1} LUFS", new_val));
+                r
+            }
+            _ => return,
+        };
+
+        if let Err(e) = result {
+            self.state.status_message = Some(format!("Failed to save: {}", e));
+        }
+    }
+
+    // ==================== Album ====================
 
     /// Navigate to album detail from a search result track.
     fn navigate_to_album_from_search(&mut self) {
