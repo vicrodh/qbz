@@ -1,5 +1,6 @@
 pub mod album_detail;
 pub mod artist_detail;
+pub mod device_picker;
 pub mod discovery;
 pub mod favorites;
 pub mod help_bar;

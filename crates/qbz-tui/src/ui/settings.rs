@@ -53,7 +53,7 @@ pub fn build_settings_list(state: &AppState) -> Vec<SettingItem> {
     items.push(SettingItem {
         label: "Output Device".into(),
         value: settings.output_device.clone().unwrap_or_else(|| "System Default".into()),
-        kind: SettingKind::ReadOnly,
+        kind: SettingKind::Cycle,
         section: SettingSection::Audio,
     });
 

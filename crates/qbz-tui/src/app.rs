@@ -498,6 +498,14 @@ pub struct AppState {
     pub right_panel_mode: RightPanelMode,
     /// Current frequency bar heights (0.0 to 1.0) for the visualizer.
     pub visualizer_bars: Vec<f32>,
+    /// Whether the device picker modal is visible.
+    pub show_device_picker: bool,
+    /// Available audio devices for the current backend.
+    pub available_devices: Vec<qbz_audio::AudioDevice>,
+    /// Selected index in the device picker.
+    pub device_picker_index: usize,
+    /// Whether devices are being enumerated.
+    pub devices_loading: bool,
 }
 
 impl Default for AppState {
@@ -540,6 +548,10 @@ impl Default for AppState {
             dynamic_accent: None,
             right_panel_mode: RightPanelMode::Queue,
             visualizer_bars: Vec::new(),
+            show_device_picker: false,
+            available_devices: Vec::new(),
+            device_picker_index: 0,
+            devices_loading: false,
         }
     }
 }
@@ -1104,6 +1116,10 @@ impl App {
     }
 
     fn handle_key(&mut self, key: KeyEvent) {
+        if self.state.show_device_picker {
+            self.handle_key_device_picker(key);
+            return;
+        }
         if self.state.show_login_modal {
             self.handle_key_login(key);
             return;
@@ -3151,6 +3167,10 @@ impl App {
         };
 
         match item.label.as_str() {
+            "Output Device" => {
+                self.open_device_picker();
+                return;
+            }
             "Backend" => {
                 // Cycle: Auto → PipeWire → Alsa → Pulse → Auto
                 let next = match settings.backend_type {
@@ -3184,6 +3204,120 @@ impl App {
             }
             _ => {}
         }
+    }
+
+    // ==================== Device Picker ====================
+
+    /// Open the device picker modal and enumerate devices for the current backend.
+    fn open_device_picker(&mut self) {
+        let backend_type = self.state.settings.audio_settings.backend_type
+            .unwrap_or_else(qbz_audio::AudioBackendType::default);
+
+        self.state.devices_loading = true;
+        self.state.show_device_picker = true;
+        self.state.device_picker_index = 0;
+
+        match qbz_audio::BackendManager::create_backend(backend_type) {
+            Ok(backend) => {
+                match backend.enumerate_devices() {
+                    Ok(devices) => {
+                        // Find the currently selected device to highlight it
+                        let current_device = &self.state.settings.audio_settings.output_device;
+                        if let Some(pos) = devices.iter().position(|dev| {
+                            current_device.as_ref().map(|c| c == &dev.id).unwrap_or(dev.is_default)
+                        }) {
+                            self.state.device_picker_index = pos;
+                        }
+                        self.state.available_devices = devices;
+                        self.state.devices_loading = false;
+                    }
+                    Err(e) => {
+                        self.state.status_message = Some(format!("Failed to list devices: {}", e));
+                        self.state.show_device_picker = false;
+                        self.state.devices_loading = false;
+                    }
+                }
+            }
+            Err(e) => {
+                self.state.status_message = Some(format!("Backend error: {}", e));
+                self.state.show_device_picker = false;
+                self.state.devices_loading = false;
+            }
+        }
+    }
+
+    /// Handle key events when the device picker modal is open.
+    fn handle_key_device_picker(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc => {
+                self.state.show_device_picker = false;
+            }
+            KeyCode::Char('j') | KeyCode::Down => {
+                let len = self.state.available_devices.len();
+                if len > 0 {
+                    self.state.device_picker_index =
+                        (self.state.device_picker_index + 1).min(len - 1);
+                }
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                if self.state.device_picker_index > 0 {
+                    self.state.device_picker_index -= 1;
+                }
+            }
+            KeyCode::Enter => {
+                self.select_audio_device();
+            }
+            _ => {}
+        }
+    }
+
+    /// Select the highlighted device in the picker, persist it, and close the modal.
+    fn select_audio_device(&mut self) {
+        let idx = self.state.device_picker_index;
+        let device = match self.state.available_devices.get(idx) {
+            Some(dev) => dev.clone(),
+            None => return,
+        };
+
+        let store = match AudioSettingsStore::new() {
+            Ok(s) => s,
+            Err(e) => {
+                self.state.status_message = Some(format!("Store error: {}", e));
+                return;
+            }
+        };
+
+        // Save device selection
+        if let Err(e) = store.set_output_device(Some(&device.id)) {
+            self.state.status_message = Some(format!("Failed to save device: {}", e));
+            return;
+        }
+
+        // Save device max sample rate if known
+        if let Some(rate) = device.max_sample_rate {
+            let _ = store.set_device_max_sample_rate(Some(rate));
+            self.state.settings.audio_settings.device_max_sample_rate = Some(rate);
+        }
+
+        // Save per-device sample rate limit
+        if let Some(rate) = device.max_sample_rate {
+            let _ = store.set_device_sample_rate_limit(&device.id, Some(rate));
+            self.state.settings.audio_settings.device_sample_rate_limits
+                .insert(device.id.clone(), rate);
+        }
+
+        // Update local settings state
+        self.state.settings.audio_settings.output_device = Some(device.id.clone());
+
+        // Push to player
+        let player = self.core.player();
+        if let Err(e) = player.reload_settings(self.state.settings.audio_settings.clone()) {
+            log::warn!("Failed to push device settings to player: {}", e);
+        }
+
+        // Close picker
+        self.state.show_device_picker = false;
+        self.state.status_message = Some(format!("Output: {} (applies on next track)", device.name));
     }
 
     // ==================== Album ====================

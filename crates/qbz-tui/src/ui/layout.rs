@@ -157,9 +157,14 @@ pub fn render_layout(frame: &mut Frame, state: &mut AppState) -> LayoutAreas {
         render_search_modal(frame, state);
     }
 
-    // Render login modal overlay if active (highest z-order)
+    // Render login modal overlay if active
     if state.show_login_modal {
         render_login_modal(frame, state);
+    }
+
+    // Render device picker modal overlay if active (highest z-order)
+    if state.show_device_picker {
+        super::device_picker::render_device_picker(frame, state);
     }
 
     LayoutAreas {
