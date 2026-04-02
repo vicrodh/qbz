@@ -1,10 +1,10 @@
 //! Player bar — 3-line bottom bar with cover art placeholder, track info,
-//! progress bar, and codec details.
+//! progress bar (LineGauge), and codec details.
 
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Paragraph};
+use ratatui::widgets::{Block, Borders, LineGauge, Paragraph};
 use ratatui::Frame;
 
 use crate::app::AppState;
@@ -30,17 +30,17 @@ pub fn render_player_bar(frame: &mut Frame, area: Rect, state: &AppState) {
     }
 }
 
-/// Nothing is playing — show idle state.
+/// Nothing is playing — show idle state with stopped icon.
 fn render_idle(frame: &mut Frame, area: Rect) {
     if area.height == 0 {
         return;
     }
     let mid_y = area.y + area.height / 2;
     let row = Rect::new(area.x, mid_y, area.width, 1);
-    let line = Line::from(Span::styled(
-        "  Not playing",
-        Style::default().fg(TEXT_DIM),
-    ));
+    let line = Line::from(vec![
+        Span::styled("  \u{25a0} ", Style::default().fg(TEXT_DIM)),
+        Span::styled("Not playing", Style::default().fg(TEXT_DIM)),
+    ]);
     frame.render_widget(Paragraph::new(line), row);
 }
 
@@ -85,7 +85,7 @@ fn render_active(frame: &mut Frame, area: Rect, state: &AppState) {
         render_track_info(frame, rows[0], state);
     }
 
-    // Row 1: Progress bar with percentage + elapsed/total
+    // Row 1: Progress bar using LineGauge
     if rows.len() > 1 {
         render_progress(frame, rows[1], state);
     }
@@ -104,26 +104,31 @@ fn render_cover_placeholder(frame: &mut Frame, area: Rect, state: &AppState) {
 
     // Draw a bordered box for the cover art area
     let border = Block::default()
-        .borders(Borders::RIGHT)
+        .borders(Borders::ALL)
         .border_style(Style::default().fg(TEXT_DIM));
     let inner = border.inner(area);
     frame.render_widget(border, area);
 
     // Show album initials centered in the box
-    let initials = state
+    let album_title = state
         .current_track_title
         .as_deref()
-        .unwrap_or("?")
-        .chars()
+        .unwrap_or("?");
+    // Take first letter of each word (up to 2)
+    let initials: String = album_title
+        .split_whitespace()
+        .filter_map(|word| word.chars().next())
         .take(2)
         .collect::<String>()
         .to_uppercase();
 
     let mid_y = inner.y + inner.height / 2;
-    if mid_y < inner.y + inner.height {
+    if mid_y < inner.y + inner.height && inner.width > 0 {
         let row = Rect::new(inner.x, mid_y, inner.width, 1);
+        // Center the initials
+        let pad = (inner.width as usize).saturating_sub(initials.len()) / 2;
         let line = Line::from(Span::styled(
-            format!("  {}", initials),
+            format!("{}{}", " ".repeat(pad), initials),
             Style::default()
                 .fg(ACCENT)
                 .add_modifier(Modifier::BOLD),
@@ -132,9 +137,16 @@ fn render_cover_placeholder(frame: &mut Frame, area: Rect, state: &AppState) {
     }
 }
 
-/// Row 0: play/pause icon + Title -- Album > Artist
+/// Row 0: play state icon + Title — Artist
 fn render_track_info(frame: &mut Frame, area: Rect, state: &AppState) {
-    let icon = if state.is_playing { "\u{25b6}" } else { "\u{2016}" };
+    // Play state icons matching Jellyfin-TUI: ► (playing), ⏸︎ (paused), ■ (stopped)
+    let icon = if state.is_playing {
+        "\u{25b6}" // ►
+    } else if state.current_track_title.is_some() {
+        "\u{23f8}\u{fe0e}" // ⏸︎
+    } else {
+        "\u{25a0}" // ■
+    };
 
     let title = state
         .current_track_title
@@ -157,7 +169,11 @@ fn render_track_info(frame: &mut Frame, area: Rect, state: &AppState) {
                 .add_modifier(Modifier::BOLD),
         ),
         Span::styled(
-            format!(" \u{2014} {}", artist),
+            " \u{2014} ",
+            Style::default().fg(TEXT_DIM),
+        ),
+        Span::styled(
+            artist,
             Style::default().fg(TEXT_SECONDARY),
         ),
     ];
@@ -166,7 +182,7 @@ fn render_track_info(frame: &mut Frame, area: Rect, state: &AppState) {
     frame.render_widget(Paragraph::new(line), area);
 }
 
-/// Row 1: progress bar with percentage + elapsed/total
+/// Row 1: LineGauge progress bar with play state icon, percentage, and duration.
 fn render_progress(frame: &mut Frame, area: Rect, state: &AppState) {
     let ratio = if state.duration_secs > 0 {
         (state.position_secs as f64 / state.duration_secs as f64).clamp(0.0, 1.0)
@@ -178,50 +194,107 @@ fn render_progress(frame: &mut Frame, area: Rect, state: &AppState) {
     let pos_str = format_time(state.position_secs);
     let dur_str = format_time(state.duration_secs);
 
-    // Build the progress bar manually for more control
-    let prefix = format!("  {} {}% ", if state.is_playing { "\u{25b6}" } else { "\u{2016}" }, pct);
-    let suffix = format!(" {} / {} ", pos_str, dur_str);
+    // Play state icon for the gauge label (matches Jellyfin-TUI pattern)
+    let icon = if state.is_playing {
+        "\u{25b6}" // ►
+    } else if state.current_track_title.is_some() {
+        "\u{23f8}\u{fe0e}" // ⏸︎
+    } else {
+        "\u{25a0}" // ■
+    };
 
-    let prefix_width = prefix.chars().count();
-    let suffix_width = suffix.chars().count();
-    let bar_width = (area.width as usize).saturating_sub(prefix_width + suffix_width);
+    // Duration text rendered to the right of the gauge
+    let duration_text = format!(" {} / {} ", pos_str, dur_str);
+    let duration_width = duration_text.len() as u16;
 
-    let filled = ((bar_width as f64) * ratio).round() as usize;
-    let empty = bar_width.saturating_sub(filled);
+    // Split the area: gauge (fill) | duration (fixed)
+    let chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Min(1),
+            Constraint::Length(duration_width),
+        ])
+        .split(area);
 
-    let bar_filled = "\u{2501}".repeat(filled); // ━
-    let bar_empty = "\u{2500}".repeat(empty);   // ─
+    // LineGauge with bold filled style (Jellyfin-TUI pattern)
+    let gauge = LineGauge::default()
+        .block(Block::default())
+        .filled_style(
+            Style::default()
+                .fg(ACCENT)
+                .add_modifier(Modifier::BOLD),
+        )
+        .unfilled_style(
+            Style::default()
+                .fg(TEXT_DIM)
+                .add_modifier(Modifier::BOLD),
+        )
+        .ratio(ratio)
+        .label(Line::from(format!(
+            "  {}   {:.0}%",
+            icon, pct,
+        )));
 
-    let spans = vec![
-        Span::styled(prefix, Style::default().fg(TEXT_MUTED)),
-        Span::styled(bar_filled, Style::default().fg(ACCENT)),
-        Span::styled(bar_empty, Style::default().fg(TEXT_DIM)),
-        Span::styled(suffix, Style::default().fg(TEXT_MUTED)),
-    ];
+    frame.render_widget(gauge, chunks[0]);
 
-    let line = Line::from(spans);
-    frame.render_widget(Paragraph::new(line), area);
+    // Duration text
+    let duration_line = Line::from(Span::styled(
+        duration_text,
+        Style::default().fg(TEXT_MUTED),
+    ));
+    frame.render_widget(Paragraph::new(duration_line), chunks[1]);
 }
 
-/// Row 2: codec info — format, sample rate, channels, bitrate
+/// Row 2: codec info — format — sample rate — channels — bit depth
 fn render_codec_info(frame: &mut Frame, area: Rect, state: &AppState) {
-    let mut parts: Vec<Span<'_>> = Vec::new();
-    parts.push(Span::styled("  ", Style::default()));
-
     if let Some(ref quality) = state.current_track_quality {
-        parts.push(Span::styled(
-            quality.clone(),
-            Style::default().fg(HIRES_BADGE),
-        ));
-    } else {
-        parts.push(Span::styled(
-            "--",
+        // Parse and format codec info in Jellyfin-TUI style: "flac — 96.0 kHz — stereo — 24-bit"
+        let sep = Span::styled(
+            " \u{2014} ",
             Style::default().fg(TEXT_DIM),
-        ));
-    }
+        );
 
-    let line = Line::from(parts);
-    frame.render_widget(Paragraph::new(line), area);
+        let mut spans: Vec<Span<'_>> = Vec::new();
+        spans.push(Span::styled("  ", Style::default()));
+
+        // Try to decompose the quality string into components
+        // Quality strings come in formats like "Hi-Res", "24-bit / 96.0kHz", "16bit/44.1kHz"
+        let parts: Vec<&str> = quality.split(&['/', '-'][..]).collect();
+        if parts.len() >= 2 {
+            // We have structured quality info
+            let formatted = format_codec_line(quality);
+            spans.push(Span::styled(
+                formatted,
+                Style::default().fg(HIRES_BADGE),
+            ));
+        } else {
+            spans.push(Span::styled(
+                quality.clone(),
+                Style::default().fg(HIRES_BADGE),
+            ));
+        }
+
+        let _ = sep; // separator used in future structured codec info
+
+        let line = Line::from(spans);
+        frame.render_widget(Paragraph::new(line), area);
+    } else {
+        let line = Line::from(vec![
+            Span::styled("  ", Style::default()),
+            Span::styled("--", Style::default().fg(TEXT_DIM)),
+        ]);
+        frame.render_widget(Paragraph::new(line), area);
+    }
+}
+
+/// Format a quality string into the Jellyfin-TUI codec line style.
+/// Input examples: "24-bit / 96.0kHz", "Hi-Res"
+/// Output: "flac \u{2014} 96.0 kHz \u{2014} stereo \u{2014} 24-bit"
+fn format_codec_line(quality: &str) -> String {
+    // For now, just pass through the quality string with nicer formatting.
+    // The full structured codec info requires sample_rate, channels, bit_depth
+    // fields in AppState which we don't have yet (quality is a pre-formatted string).
+    quality.to_string()
 }
 
 fn format_time(secs: u64) -> String {
