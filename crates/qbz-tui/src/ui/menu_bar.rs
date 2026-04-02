@@ -9,17 +9,25 @@ use ratatui::Frame;
 use crate::app::{ActiveView, AppState};
 use crate::theme::{ACCENT, BG_SECONDARY, HIRES_BADGE, TEXT_DIM, TEXT_MUTED, TEXT_PRIMARY};
 
-/// Ordered list of tab views matching the Tabs widget indices.
+/// Ordered list of tab views matching the Tabs widget indices and number key accelerators (1-6).
 const TAB_VIEWS: &[ActiveView] = &[
-    ActiveView::Library,
+    ActiveView::Discovery,
     ActiveView::Favorites,
+    ActiveView::Library,
     ActiveView::Playlists,
     ActiveView::Search,
     ActiveView::Settings,
 ];
 
-/// Tab labels displayed in the Tabs widget.
-const TAB_LABELS: &[&str] = &["Library", "Favorites", "Playlists", "Search", "Settings"];
+/// Tab labels displayed in the Tabs widget (with number prefix accelerators).
+const TAB_LABELS: &[&str] = &[
+    "1:Discovery",
+    "2:Favorites",
+    "3:Library",
+    "4:Playlists",
+    "5:Search",
+    "6:Settings",
+];
 
 /// Render the 1-line top menu bar using ratatui's Tabs widget.
 pub fn render_menu_bar(frame: &mut Frame, area: Rect, state: &AppState) {
@@ -42,16 +50,51 @@ pub fn render_menu_bar(frame: &mut Frame, area: Rect, state: &AppState) {
         .position(|view| *view == state.active_view)
         .unwrap_or(0);
 
+    // Build tab labels with accent-colored number prefixes
+    let tab_lines: Vec<Line> = TAB_LABELS
+        .iter()
+        .enumerate()
+        .map(|(idx, label)| {
+            // Split "1:Discovery" into number prefix "1:" and name "Discovery"
+            let (num_prefix, name) = label.split_once(':').unwrap_or(("", label));
+            let is_selected = idx == selected;
+            if is_selected {
+                // Selected tab: both number and name in accent + bold
+                Line::from(vec![
+                    Span::styled(
+                        format!("{}:", num_prefix),
+                        Style::default()
+                            .fg(ACCENT)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(
+                        name.to_string(),
+                        Style::default()
+                            .fg(ACCENT)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                ])
+            } else {
+                // Unselected tab: number in accent, name in muted
+                Line::from(vec![
+                    Span::styled(
+                        format!("{}:", num_prefix),
+                        Style::default().fg(ACCENT),
+                    ),
+                    Span::styled(
+                        name.to_string(),
+                        Style::default().fg(TEXT_MUTED),
+                    ),
+                ])
+            }
+        })
+        .collect();
+
     // Render Tabs widget with dot divider (Jellyfin-TUI pattern)
-    let tabs = Tabs::new(TAB_LABELS.iter().copied().collect::<Vec<&str>>())
-        .style(Style::default().fg(TEXT_MUTED).bg(BG_SECONDARY))
-        .highlight_style(
-            Style::default()
-                .fg(ACCENT)
-                .add_modifier(Modifier::BOLD),
-        )
+    let tabs = Tabs::new(tab_lines)
+        .style(Style::default().bg(BG_SECONDARY))
         .select(selected)
-        .divider("\u{2022}") // • bullet divider
+        .divider("\u{2022}") // bullet divider
         .padding(" ", " ");
 
     frame.render_widget(tabs, chunks[0]);
