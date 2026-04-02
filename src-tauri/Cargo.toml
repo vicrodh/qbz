@@ -32,6 +32,7 @@ qbz-cache = { path = "../crates/qbz-cache" }
 qbz-library = { path = "../crates/qbz-library" }
 qbz-cast = { path = "../crates/qbz-cast" }
 qconnect-app = { path = "../crates/qconnect-app" }
+qbz-tui = { path = "../crates/qbz-tui" }
 qconnect-core = { path = "../crates/qconnect-core" }
 qconnect-transport-ws = { path = "../crates/qconnect-transport-ws" }
 

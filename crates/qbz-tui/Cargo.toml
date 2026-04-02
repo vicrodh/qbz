@@ -1,0 +1,17 @@
+[package]
+name = "qbz-tui"
+version = "0.1.0"
+edition = "2021"
+description = "Terminal UI for QBZ"
+
+[dependencies]
+ratatui = "0.29"
+crossterm = "0.28"
+qbz-core = { path = "../qbz-core" }
+qbz-models = { path = "../qbz-models" }
+qbz-player = { path = "../qbz-player" }
+qbz-audio = { path = "../qbz-audio" }
+qbz-qobuz = { path = "../qbz-qobuz" }
+tokio = { version = "1", features = ["full"] }
+async-trait = "0.1"
+log = "0.4"

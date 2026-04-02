@@ -15,6 +15,7 @@ members = [
     "qconnect-protocol",
     "qconnect-transport-ws",
     "qconnect-app",
+    "qbz-tui",
 ]
 
 [workspace.package]
