@@ -32,6 +32,8 @@ pub enum SettingKind {
     Toggle,
     /// Numeric value (+/- to adjust)
     Numeric,
+    /// Cycle through options (Enter to advance)
+    Cycle,
     /// Read-only display value
     ReadOnly,
 }
@@ -57,12 +59,11 @@ pub fn build_settings_list(state: &AppState) -> Vec<SettingItem> {
 
     items.push(SettingItem {
         label: "Backend".into(),
-        value: settings
-            .backend_type
-            .as_ref()
-            .map(|b| format!("{:?}", b))
-            .unwrap_or_else(|| "Auto".into()),
-        kind: SettingKind::ReadOnly,
+        value: match &settings.backend_type {
+            Some(b) => format!("{:?}", b),
+            None => "Auto".into(),
+        },
+        kind: SettingKind::Cycle,
         section: SettingSection::Audio,
     });
 
@@ -249,12 +250,14 @@ pub fn render_settings(frame: &mut Frame, area: Rect, state: &mut AppState) {
                 }
             }
             SettingKind::Numeric => style.fg(ACCENT),
+            SettingKind::Cycle => style.fg(ACCENT),
             SettingKind::ReadOnly => style.fg(TEXT_MUTED),
         };
 
         let kind_hint = match item.kind {
             SettingKind::Toggle => " [toggle]",
             SettingKind::Numeric => " [+/-]",
+            SettingKind::Cycle => " [cycle]",
             SettingKind::ReadOnly => "",
         };
 

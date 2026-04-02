@@ -2624,9 +2624,15 @@ impl App {
         let items = build_settings_list(&self.state);
         let idx = self.state.settings.selected_index;
         let item = match items.get(idx) {
-            Some(item) if item.kind == SettingKind::Toggle => item.clone(),
+            Some(item) if item.kind == SettingKind::Toggle || item.kind == SettingKind::Cycle => item.clone(),
             _ => return,
         };
+
+        // Handle Cycle items separately
+        if item.kind == SettingKind::Cycle {
+            self.cycle_selected_setting(&item);
+            return;
+        }
 
         let settings = &mut self.state.settings.audio_settings;
         let store = match AudioSettingsStore::new() {
@@ -2779,6 +2785,55 @@ impl App {
             Err(e) => {
                 self.state.status_message = Some(format!("Failed to save: {}", e));
             }
+        }
+    }
+
+    /// Cycle a setting through its available options (e.g. Backend type).
+    fn cycle_selected_setting(&mut self, item: &crate::ui::settings::SettingItem) {
+        use qbz_audio::AudioBackendType;
+
+        let settings = &mut self.state.settings.audio_settings;
+        let store = match AudioSettingsStore::new() {
+            Ok(s) => s,
+            Err(e) => {
+                self.state.status_message = Some(format!("Settings store error: {}", e));
+                return;
+            }
+        };
+
+        match item.label.as_str() {
+            "Backend" => {
+                // Cycle: Auto → PipeWire → Alsa → Pulse → Auto
+                let next = match settings.backend_type {
+                    None => Some(AudioBackendType::PipeWire),
+                    Some(AudioBackendType::PipeWire) => Some(AudioBackendType::Alsa),
+                    Some(AudioBackendType::Alsa) => Some(AudioBackendType::Pulse),
+                    Some(AudioBackendType::Pulse) => None,
+                    Some(_) => None,
+                };
+
+                settings.backend_type = next;
+                let label = match &settings.backend_type {
+                    Some(b) => format!("{:?}", b),
+                    None => "Auto".to_string(),
+                };
+
+                match store.set_backend_type(settings.backend_type) {
+                    Ok(()) => {
+                        // Reload into player
+                        let player = self.core.player();
+                        if let Err(e) = player.reload_settings(settings.clone()) {
+                            log::warn!("Failed to push settings to player: {}", e);
+                        }
+                        self.state.status_message =
+                            Some(format!("Backend: {} (applies on next track)", label));
+                    }
+                    Err(e) => {
+                        self.state.status_message = Some(format!("Failed to save: {}", e));
+                    }
+                }
+            }
+            _ => {}
         }
     }
 
