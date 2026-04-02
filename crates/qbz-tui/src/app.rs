@@ -2691,10 +2691,34 @@ impl App {
                     "Volume Normalization" => settings.normalization_enabled,
                     _ => false,
                 };
+
+                // Push updated settings to the running Player so changes take
+                // effect without restarting the app.
+                let player = self.core.player();
+                if let Err(e) = player.reload_settings(self.state.settings.audio_settings.clone()) {
+                    log::warn!("Failed to push settings to player: {}", e);
+                }
+
+                // Audio-stream settings only take effect on the next track play
+                // because the audio thread reads them when creating a new stream.
+                let next_track_hint = matches!(
+                    item.label.as_str(),
+                    "Exclusive Mode"
+                        | "DAC Passthrough"
+                        | "PipeWire Force Bit-Perfect"
+                        | "ALSA Hardware Volume"
+                );
+                let suffix = if next_track_hint {
+                    " (applies on next track)"
+                } else {
+                    ""
+                };
+
                 self.state.status_message = Some(format!(
-                    "{}: {}",
+                    "{}: {}{}",
                     item.label,
-                    if new_val { "ON" } else { "OFF" }
+                    if new_val { "ON" } else { "OFF" },
+                    suffix,
                 ));
             }
             Err(e) => {
@@ -2744,8 +2768,17 @@ impl App {
             _ => return,
         };
 
-        if let Err(e) = result {
-            self.state.status_message = Some(format!("Failed to save: {}", e));
+        match result {
+            Ok(()) => {
+                // Push updated settings to the running Player.
+                let player = self.core.player();
+                if let Err(e) = player.reload_settings(self.state.settings.audio_settings.clone()) {
+                    log::warn!("Failed to push settings to player: {}", e);
+                }
+            }
+            Err(e) => {
+                self.state.status_message = Some(format!("Failed to save: {}", e));
+            }
         }
     }
 

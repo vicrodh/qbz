@@ -111,6 +111,13 @@ pub fn build_settings_list(state: &AppState) -> Vec<SettingItem> {
         section: SettingSection::Audio,
     });
 
+    items.push(SettingItem {
+        label: "Volume".into(),
+        value: format!("{}%", (state.volume * 100.0) as u32),
+        kind: SettingKind::ReadOnly,
+        section: SettingSection::Audio,
+    });
+
     // === Playback Settings ===
     items.push(SettingItem {
         label: "Streaming Only".into(),
