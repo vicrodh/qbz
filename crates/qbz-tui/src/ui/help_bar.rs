@@ -22,38 +22,78 @@ pub fn render_help_bar(frame: &mut Frame, area: Rect, state: &AppState) {
             ("Ctrl+U", "clear"),
         ],
         InputMode::Normal => {
-            let mut base = vec![
-                ("?", "Help"),
-                ("Ctrl+Q", "Quit"),
-                ("Space", "Play/Pause"),
+            let mut base: Vec<(&str, &str)> = vec![
+                ("Ctrl+Q", "quit"),
             ];
 
             match state.active_view {
+                ActiveView::Discovery => {
+                    base.extend([
+                        ("Tab", "switch tab"),
+                        ("j/k", "navigate"),
+                        ("Enter", "open album"),
+                        ("/", "search"),
+                    ]);
+                }
                 ActiveView::Search => {
                     base.extend([
                         ("/", "type"),
                         ("j/k", "navigate"),
                         ("Enter", "play"),
-                        ("a", "add to queue"),
+                        ("a", "queue"),
+                        ("g", "album"),
                     ]);
                 }
                 ActiveView::Favorites => {
                     base.extend([
+                        ("Tab", "switch tab"),
                         ("j/k", "navigate"),
                         ("Enter", "play"),
-                        ("a", "add to queue"),
+                        ("a", "queue"),
+                        ("g", "album"),
                     ]);
                 }
-                _ => {
+                ActiveView::Album => {
                     base.extend([
-                        ("n", "next"),
-                        ("p", "prev"),
-                        ("+/-", "volume"),
+                        ("j/k", "navigate"),
+                        ("Enter", "play album"),
+                        ("a", "queue"),
+                        ("Bksp", "back"),
                     ]);
                 }
+                ActiveView::Playlists => {
+                    if state.playlists.detail_playlist.is_some() {
+                        base.extend([
+                            ("j/k", "navigate"),
+                            ("Enter", "play"),
+                            ("a", "queue"),
+                            ("Bksp", "back"),
+                        ]);
+                    } else {
+                        base.extend([
+                            ("j/k", "navigate"),
+                            ("Enter", "open"),
+                        ]);
+                    }
+                }
+                ActiveView::Settings => {
+                    base.extend([
+                        ("j/k", "navigate"),
+                        ("Enter", "toggle"),
+                        ("+/-", "adjust"),
+                        ("r", "reload"),
+                    ]);
+                }
+                _ => {}
             }
 
-            base.push(("q", "queue panel"));
+            // Global playback controls
+            base.extend([
+                ("Space", "play/pause"),
+                ("n/p", "next/prev"),
+                ("q", "queue"),
+            ]);
+
             base
         }
     };
