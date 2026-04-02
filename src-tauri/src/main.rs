@@ -201,7 +201,10 @@ fn main() {
             run_desktop();
         }
         qbz_nix_lib::cli::RunMode::Tui => {
-            eprintln!("[QBZ] TUI mode: not yet implemented");
+            if let Err(e) = qbz_tui::run(cli.no_images) {
+                eprintln!("[QBZ] TUI error: {}", e);
+                std::process::exit(1);
+            }
         }
         qbz_nix_lib::cli::RunMode::Headless => {
             qbz_nix_lib::headless::run(cli.web);
