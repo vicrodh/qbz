@@ -1158,17 +1158,17 @@ impl App {
         self.rt_handle.spawn(async move {
             let result = core.get_favorites("tracks", 500, 0).await;
             let parsed = result.and_then(|json| {
-                // The API returns { "items": { "items": [...], "total": N, ... } }
-                // when fav_type is "tracks".
+                // The API returns { "tracks": { "items": [...], "total": N, ... } }
+                // when fav_type is "tracks". The key matches the fav_type argument.
                 let tracks_page = json
-                    .get("items")
-                    .and_then(|items| {
-                        serde_json::from_value::<qbz_models::SearchResultsPage<Track>>(items.clone()).ok()
+                    .get("tracks")
+                    .and_then(|tracks| {
+                        serde_json::from_value::<qbz_models::SearchResultsPage<Track>>(tracks.clone()).ok()
                     });
                 match tracks_page {
                     Some(page) => Ok(page.items),
                     None => {
-                        log::warn!("[TUI] Could not parse favorites response: {:?}", &json);
+                        log::warn!("[TUI] Could not parse favorites response");
                         Ok(Vec::new())
                     }
                 }
