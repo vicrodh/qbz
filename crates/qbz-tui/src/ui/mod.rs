@@ -1,3 +1,4 @@
+pub mod favorites;
 pub mod layout;
 pub mod now_playing;
 pub mod placeholder;

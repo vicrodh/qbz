@@ -2,6 +2,7 @@ use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::Frame;
 
 use crate::app::{ActiveView, AppState};
+use super::favorites::render_favorites;
 use super::now_playing::render_now_playing;
 use super::placeholder::render_placeholder;
 use super::queue_panel::render_queue_panel;
@@ -91,6 +92,7 @@ pub fn render_layout(frame: &mut Frame, state: &AppState) -> LayoutAreas {
     // Render view-specific content
     match state.active_view {
         ActiveView::Search => render_search(frame, content_area, state),
+        ActiveView::Favorites => render_favorites(frame, content_area, state),
         _ => render_placeholder(frame, content_area, state.active_view.label()),
     }
 

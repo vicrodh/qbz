@@ -76,6 +76,15 @@ pub enum SearchTab {
     Artists,
 }
 
+/// Which tab is active in the favorites view.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum FavoritesTab {
+    Tracks,
+    Albums,
+    Artists,
+    Playlists,
+}
+
 /// State for the search view.
 pub struct SearchState {
     /// Current search query text.
@@ -111,6 +120,35 @@ impl Default for SearchState {
     }
 }
 
+/// State for the favorites view.
+pub struct FavoritesState {
+    /// Active tab in the favorites view.
+    pub tab: FavoritesTab,
+    /// Favorite tracks from the last load.
+    pub tracks: Vec<Track>,
+    /// Currently selected index in the track list.
+    pub selected_index: usize,
+    /// Whether a load is currently in progress.
+    pub loading: bool,
+    /// Error message from the last load attempt.
+    pub error: Option<String>,
+    /// Whether favorites have been fetched at least once.
+    pub loaded: bool,
+}
+
+impl Default for FavoritesState {
+    fn default() -> Self {
+        Self {
+            tab: FavoritesTab::Tracks,
+            tracks: Vec::new(),
+            selected_index: 0,
+            loading: false,
+            error: None,
+            loaded: false,
+        }
+    }
+}
+
 pub struct AppState {
     pub active_view: ActiveView,
     pub sidebar_expanded: bool,
@@ -125,6 +163,7 @@ pub struct AppState {
     pub authenticated: bool,
     pub auth_email: Option<String>,
     pub search: SearchState,
+    pub favorites: FavoritesState,
     /// Transient status message shown at the bottom.
     pub status_message: Option<String>,
     /// Simplified queue info for the queue panel display.
@@ -155,6 +194,7 @@ impl Default for AppState {
             authenticated: false,
             auth_email: None,
             search: SearchState::default(),
+            favorites: FavoritesState::default(),
             status_message: None,
             queue_tracks: Vec::new(),
             queue_current_index: None,
@@ -168,6 +208,9 @@ impl Default for AppState {
 /// Type alias for the search result payload.
 type SearchResult = Result<qbz_models::SearchResultsPage<Track>, qbz_core::error::CoreError>;
 
+/// Type alias for the favorites result payload.
+type FavoritesResult = Result<Vec<Track>, qbz_core::error::CoreError>;
+
 pub struct App {
     pub state: AppState,
     core_event_rx: mpsc::UnboundedReceiver<CoreEvent>,
@@ -179,6 +222,10 @@ pub struct App {
     search_result_tx: mpsc::UnboundedSender<SearchResult>,
     /// Receiver for search results (drained each tick).
     search_result_rx: mpsc::UnboundedReceiver<SearchResult>,
+    /// Sender for favorites results (cloned into async tasks).
+    favorites_result_tx: mpsc::UnboundedSender<FavoritesResult>,
+    /// Receiver for favorites results (drained each tick).
+    favorites_result_rx: mpsc::UnboundedReceiver<FavoritesResult>,
     /// Layout areas from the last render, used for mouse hit-testing.
     layout_areas: LayoutAreas,
     /// Sender for playback status updates (cloned into async tasks).
@@ -266,6 +313,7 @@ impl App {
         let rt_handle = tokio::runtime::Handle::current();
 
         let (search_tx, search_rx) = mpsc::unbounded_channel::<SearchResult>();
+        let (favorites_tx, favorites_rx) = mpsc::unbounded_channel::<FavoritesResult>();
         let (playback_tx, playback_rx) = mpsc::unbounded_channel::<PlaybackStatus>();
 
         // Initialize L2 disk playback cache (800MB limit)
@@ -294,6 +342,8 @@ impl App {
             rt_handle,
             search_result_tx: search_tx,
             search_result_rx: search_rx,
+            favorites_result_tx: favorites_tx,
+            favorites_result_rx: favorites_rx,
             layout_areas: LayoutAreas::default(),
             playback_status_tx: playback_tx,
             playback_status_rx: playback_rx,
@@ -385,6 +435,11 @@ impl App {
             while let Ok(result) = self.search_result_rx.try_recv() {
                 self.handle_search_result(result);
             }
+
+            // Drain favorites results
+            while let Ok(result) = self.favorites_result_rx.try_recv() {
+                self.handle_favorites_result(result);
+            }
         }
 
         // Cleanup terminal
@@ -451,22 +506,27 @@ impl App {
         // For hit-testing we use the row offset from the top of the sidebar area.
         let relative_row = row.saturating_sub(area.y);
 
-        if self.state.sidebar_expanded {
+        let nav_view = if self.state.sidebar_expanded {
             // Expanded sidebar layout:
             //   row 0: header ("QBZ")
             //   row 1: separator
             //   row 2..2+N: nav items
             if relative_row >= 2 {
                 let item_idx = (relative_row - 2) as usize;
-                if let Some((view, _, _)) = NAV_ITEMS.get(item_idx) {
-                    self.state.active_view = *view;
-                }
+                NAV_ITEMS.get(item_idx).map(|(view, _, _)| *view)
+            } else {
+                None
             }
         } else {
             // Collapsed sidebar: nav items start at row 0 of the inner area.
             let item_idx = relative_row as usize;
-            if let Some((view, _, _)) = NAV_ITEMS.get(item_idx) {
-                self.state.active_view = *view;
+            NAV_ITEMS.get(item_idx).map(|(view, _, _)| *view)
+        };
+
+        if let Some(view) = nav_view {
+            self.state.active_view = view;
+            if view == ActiveView::Favorites {
+                self.load_favorites_if_needed();
             }
         }
     }
@@ -483,14 +543,26 @@ impl App {
 
     /// Handle scroll wheel: move the selection in the current list.
     fn handle_scroll(&mut self, delta: i32) {
-        if self.state.active_view == ActiveView::Search {
-            let len = self.state.search.tracks.len();
-            if len == 0 {
-                return;
+        match self.state.active_view {
+            ActiveView::Search => {
+                let len = self.state.search.tracks.len();
+                if len == 0 {
+                    return;
+                }
+                let current = self.state.search.selected_index as i32;
+                let next = (current + delta).clamp(0, (len as i32) - 1) as usize;
+                self.state.search.selected_index = next;
             }
-            let current = self.state.search.selected_index as i32;
-            let next = (current + delta).clamp(0, (len as i32) - 1) as usize;
-            self.state.search.selected_index = next;
+            ActiveView::Favorites => {
+                let len = self.state.favorites.tracks.len();
+                if len == 0 {
+                    return;
+                }
+                let current = self.state.favorites.selected_index as i32;
+                let next = (current + delta).clamp(0, (len as i32) - 1) as usize;
+                self.state.favorites.selected_index = next;
+            }
+            _ => {}
         }
     }
 
@@ -510,7 +582,10 @@ impl App {
             }
             KeyCode::Tab => self.state.sidebar_expanded = !self.state.sidebar_expanded,
             KeyCode::Char('1') => self.state.active_view = ActiveView::Home,
-            KeyCode::Char('2') => self.state.active_view = ActiveView::Favorites,
+            KeyCode::Char('2') => {
+                self.state.active_view = ActiveView::Favorites;
+                self.load_favorites_if_needed();
+            }
             KeyCode::Char('3') => self.state.active_view = ActiveView::Library,
             KeyCode::Char('4') => self.state.active_view = ActiveView::Playlists,
             KeyCode::Char('5') => {
@@ -540,6 +615,30 @@ impl App {
             // Search view: Enter to play selected track
             KeyCode::Enter if self.state.active_view == ActiveView::Search => {
                 self.play_selected_track();
+            }
+
+            // Favorites view: j/k for navigating tracks
+            KeyCode::Char('j') | KeyCode::Down if self.state.active_view == ActiveView::Favorites => {
+                let len = self.state.favorites.tracks.len();
+                if len > 0 {
+                    self.state.favorites.selected_index =
+                        (self.state.favorites.selected_index + 1).min(len - 1);
+                }
+            }
+            KeyCode::Char('k') | KeyCode::Up if self.state.active_view == ActiveView::Favorites => {
+                if self.state.favorites.selected_index > 0 {
+                    self.state.favorites.selected_index -= 1;
+                }
+            }
+
+            // Favorites view: Enter to play selected track
+            KeyCode::Enter if self.state.active_view == ActiveView::Favorites => {
+                self.play_selected_favorite();
+            }
+
+            // Favorites view: 'a' to add selected track to queue
+            KeyCode::Char('a') if self.state.active_view == ActiveView::Favorites => {
+                self.add_selected_favorite_to_queue();
             }
 
             // Playback controls
@@ -795,6 +894,131 @@ impl App {
                 self.state.status_message = Some(format!("Search failed: {}", e));
             }
         }
+    }
+
+    /// Load favorites if they haven't been loaded yet (lazy load on first visit).
+    fn load_favorites_if_needed(&mut self) {
+        if self.state.favorites.loaded || self.state.favorites.loading {
+            return;
+        }
+
+        if !self.state.authenticated {
+            self.state.favorites.error = Some("Not authenticated".to_string());
+            return;
+        }
+
+        self.state.favorites.loading = true;
+        self.state.favorites.error = None;
+        self.state.status_message = Some("Loading favorites...".to_string());
+
+        let core = Arc::clone(&self.core);
+        let event_tx = self.favorites_result_tx.clone();
+
+        self.rt_handle.spawn(async move {
+            let result = core.get_favorites("tracks", 500, 0).await;
+            let parsed = result.and_then(|json| {
+                // The API returns { "items": { "items": [...], "total": N, ... } }
+                // when fav_type is "tracks".
+                let tracks_page = json
+                    .get("items")
+                    .and_then(|items| {
+                        serde_json::from_value::<qbz_models::SearchResultsPage<Track>>(items.clone()).ok()
+                    });
+                match tracks_page {
+                    Some(page) => Ok(page.items),
+                    None => {
+                        log::warn!("[TUI] Could not parse favorites response: {:?}", &json);
+                        Ok(Vec::new())
+                    }
+                }
+            });
+            let _ = event_tx.send(parsed);
+        });
+    }
+
+    /// Handle the result of a favorites load.
+    fn handle_favorites_result(&mut self, result: FavoritesResult) {
+        self.state.favorites.loading = false;
+        self.state.favorites.loaded = true;
+        match result {
+            Ok(tracks) => {
+                let count = tracks.len();
+                self.state.favorites.tracks = tracks;
+                self.state.favorites.selected_index = 0;
+                self.state.favorites.error = None;
+                self.state.status_message = Some(format!("{} favorite tracks", count));
+            }
+            Err(e) => {
+                self.state.favorites.error = Some(format!("{}", e));
+                self.state.status_message = Some(format!("Failed to load favorites: {}", e));
+            }
+        }
+    }
+
+    /// Play the currently selected track from favorites.
+    fn play_selected_favorite(&mut self) {
+        let idx = self.state.favorites.selected_index;
+        let track = match self.state.favorites.tracks.get(idx) {
+            Some(tr) => tr.clone(),
+            None => return,
+        };
+
+        if !self.state.authenticated {
+            self.state.status_message = Some("Not authenticated".to_string());
+            return;
+        }
+
+        // Update now-playing info immediately
+        self.state.current_track_title = Some(track.title.clone());
+        self.state.current_track_artist = Some(
+            track
+                .performer
+                .as_ref()
+                .map(|p| p.name.clone())
+                .unwrap_or_else(|| "Unknown".to_string()),
+        );
+        self.state.current_track_quality = if track.hires_streamable {
+            Some("Hi-Res".to_string())
+        } else {
+            Some(format!(
+                "{}bit/{}kHz",
+                track.maximum_bit_depth.unwrap_or(16),
+                track.maximum_sampling_rate.unwrap_or(44.1)
+            ))
+        };
+        self.state.status_message = Some(format!("Loading: {}...", track.title));
+
+        let core = Arc::clone(&self.core);
+        let track_id = track.id;
+        let status_tx = self.playback_status_tx.clone();
+        let cache = self.playback_cache.clone();
+
+        self.rt_handle.spawn(async move {
+            if let Err(e) =
+                playback::play_qobuz_track(&core, track_id, &cache, &status_tx).await
+            {
+                log::error!("[TUI] Failed to play favorite track {}: {}", track_id, e);
+                let _ = status_tx.send(PlaybackStatus::Error(e));
+            }
+        });
+    }
+
+    /// Add the selected favorite track to the queue.
+    fn add_selected_favorite_to_queue(&mut self) {
+        let idx = self.state.favorites.selected_index;
+        let track = match self.state.favorites.tracks.get(idx) {
+            Some(tr) => tr.clone(),
+            None => return,
+        };
+
+        let queue_track = Self::track_to_queue_track(&track);
+        let core = Arc::clone(&self.core);
+
+        self.state.status_message = Some(format!("Added to queue: {}", track.title));
+
+        self.rt_handle.spawn(async move {
+            core.add_track(queue_track).await;
+        });
     }
 
     /// Poll the player's shared atomic state to update the now-playing bar.
