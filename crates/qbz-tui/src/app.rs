@@ -151,7 +151,6 @@ impl Default for FavoritesState {
 
 pub struct AppState {
     pub active_view: ActiveView,
-    pub sidebar_expanded: bool,
     pub is_playing: bool,
     pub current_track_title: Option<String>,
     pub current_track_artist: Option<String>,
@@ -182,7 +181,6 @@ impl Default for AppState {
     fn default() -> Self {
         Self {
             active_view: ActiveView::Home,
-            sidebar_expanded: false,
             is_playing: false,
             current_track_title: None,
             current_track_artist: None,
@@ -574,7 +572,7 @@ impl App {
             KeyCode::Char('q') => {
                 self.state.show_queue_panel = !self.state.show_queue_panel;
             }
-            KeyCode::Tab => self.state.sidebar_expanded = !self.state.sidebar_expanded,
+            // Tab key: reserved for future focus cycling
             KeyCode::Char('1') => self.state.active_view = ActiveView::Home,
             KeyCode::Char('2') => {
                 self.state.active_view = ActiveView::Favorites;
