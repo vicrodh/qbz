@@ -3559,6 +3559,11 @@
               quality,
               bitDepth: track.bit_depth ?? undefined,
               samplingRate: track.sample_rate ?? undefined,
+              albumId: track.album_id ?? undefined,
+              artistId: track.artist_id ?? undefined,
+              isLocal: track.is_local ?? false,
+              source: track.source ?? 'qobuz',
+              parental_warning: track.parental_warning ?? false,
             });
 
             // Update MPRIS metadata so playerctl shows track info
