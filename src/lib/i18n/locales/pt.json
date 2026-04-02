@@ -70,7 +70,12 @@
     "topTracksLabel": "PRINCIPAIS FAIXAS",
     "topTracksBy": "Por {artist}",
     "andMore": "e mais",
-    "playlistLabel": "PLAYLIST"
+    "playlistLabel": "PLAYLIST",
+    "continueTracks": "Continuar ouvindo",
+    "mostStreamed": "Álbuns populares",
+    "favoriteAlbums": "Mais dos favoritos",
+    "recentAlbums": "Jogado recentemente",
+    "topArtists": "Seus principais artistas"
   },
   "discover": {
     "newReleases": "Novos Lançamentos",

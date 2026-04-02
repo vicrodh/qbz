@@ -70,7 +70,12 @@
     "topTracksLabel": "TOP TRACKS",
     "topTracksBy": "Par {artist}",
     "andMore": "et plus",
-    "playlistLabel": "PLAYLIST"
+    "playlistLabel": "PLAYLIST",
+    "continueTracks": "Continuer l'écoute",
+    "mostStreamed": "Top albums",
+    "favoriteAlbums": "Plus de favoris",
+    "recentAlbums": "Récemment écouté",
+    "topArtists": "Vos artistes favoris"
   },
   "discover": {
     "newReleases": "Nouveautés",
@@ -1238,7 +1243,7 @@
       "qobuzLinkHandlerError": "Erreur lors de la mise a jour de l'enregistrement du gestionnaire de liens.",
       "qconnectDeviceName": "Nom de l'appareil",
       "qconnectDeviceNameDesc": "Nom affiché dans Qobuz Connect",
-      "noProtocolDeviceFound": "Aucun appareil {protocole} trouvé",
+      "noProtocolDeviceFound": "Aucun appareil {protocol} trouvé",
       "noProtocolDeviceFoundHint": "Assurez-vous que les appareils sont sur le même réseau",
       "plexStatusPlayingDirect": "Lecture directe depuis Plex : {title} ({rate} Hz / {bits}-bit, {contentType}).",
       "plexStatusPlayingFallback": "Lecture de {title}, mais la lecture directe n'est pas confirmée (partie : {partKey}).",

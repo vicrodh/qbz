@@ -70,7 +70,12 @@
     "playlistLabel": "PLAYLIST",
     "allTags": "Alle",
     "essentialDiscography": "Wesentliche Diskographie",
-    "qobuzPlaylists": "Die Playlists von Qobuz"
+    "qobuzPlaylists": "Die Playlists von Qobuz",
+    "continueTracks": "Hören Sie weiter zu",
+    "mostStreamed": "Beliebte Alben",
+    "favoriteAlbums": "Mehr von Favoriten",
+    "recentAlbums": "Kürzlich gespielt",
+    "topArtists": "Ihre Top-Künstler"
   },
   "discover": {
     "newReleases": "Neuerscheinungen",

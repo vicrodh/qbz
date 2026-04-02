@@ -70,7 +70,12 @@
     "topTracksLabel": "TOP TRACKS",
     "topTracksBy": "By {artist}",
     "andMore": "and more",
-    "playlistLabel": "PLAYLIST"
+    "playlistLabel": "PLAYLIST",
+    "mostStreamed": "Popular albums",
+    "recentAlbums": "Recently Played",
+    "continueTracks": "Continue Listening",
+    "topArtists": "Your Top Artists",
+    "favoriteAlbums": "More From Favorites"
   },
   "discover": {
     "newReleases": "New Releases",
