@@ -183,7 +183,7 @@ fn main() {
             eprintln!("[QBZ] TUI mode: not yet implemented");
         }
         qbz_nix_lib::cli::RunMode::Headless => {
-            eprintln!("[QBZ] Headless mode: not yet implemented");
+            qbz_nix_lib::headless::run(cli.web);
         }
     }
 }

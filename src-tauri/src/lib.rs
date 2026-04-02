@@ -14,6 +14,7 @@ pub mod tauri_adapter;
 pub mod auto_theme;
 pub mod autoconfig_graphics;
 pub mod cli;
+pub mod headless;
 
 pub mod api;
 pub mod api_cache;
