@@ -19,6 +19,7 @@
     PictureInPicture2,
     TriangleAlert
   } from 'lucide-svelte';
+  import { t } from 'svelte-i18n';
   import QualityBadge from './QualityBadge.svelte';
   import AudioOutputBadges from './AudioOutputBadges.svelte';
   import QconnectBadge from './QconnectBadge.svelte';
@@ -395,7 +396,7 @@
             <div class="song-title-row">
               <button class="song-title" title={$translateStore('actions.trackInfo')} onclick={onTrackClick}>{trackTitle}</button>
               {#if explicit}
-                <span class="explicit-badge" title="Explicit"></span>
+                <span class="explicit-badge" title={ $t('library.explicit') }></span>
               {/if}
             </div>
             <div class="song-meta">
