@@ -497,15 +497,34 @@ impl App {
             }
             KeyCode::Char('n') => {
                 let core = Arc::clone(&self.core);
+                let status_tx = self.playback_status_tx.clone();
                 self.rt_handle.spawn(async move {
-                    let _ = core.next_track().await;
+                    if let Some(track) = core.next_track().await {
+                        log::info!("[TUI] Next track: {} - {}", track.artist, track.title);
+                        if let Err(e) = playback::play_qobuz_track(&core, track.id, Quality::HiRes, &status_tx).await {
+                            log::error!("[TUI] Next track playback failed: {}", e);
+                            let _ = status_tx.send(PlaybackStatus::Error(e));
+                        }
+                    }
                 });
             }
             KeyCode::Char('p') => {
                 let core = Arc::clone(&self.core);
+                let status_tx = self.playback_status_tx.clone();
                 self.rt_handle.spawn(async move {
-                    let _ = core.previous_track().await;
+                    if let Some(track) = core.previous_track().await {
+                        log::info!("[TUI] Previous track: {} - {}", track.artist, track.title);
+                        if let Err(e) = playback::play_qobuz_track(&core, track.id, Quality::HiRes, &status_tx).await {
+                            log::error!("[TUI] Previous track playback failed: {}", e);
+                            let _ = status_tx.send(PlaybackStatus::Error(e));
+                        }
+                    }
                 });
+            }
+
+            // Search view: 'a' to add selected track to queue
+            KeyCode::Char('a') if self.state.active_view == ActiveView::Search => {
+                self.add_selected_to_queue();
             }
             KeyCode::Char('+') | KeyCode::Char('=') => {
                 let new_vol = (self.state.volume + 0.05).min(1.0);
@@ -616,6 +635,45 @@ impl App {
         self.rt_handle.spawn(async move {
             let result = core.search_tracks(&query, 25, 0, None).await;
             let _ = event_tx.send(result);
+        });
+    }
+
+    /// Build a QueueTrack from a search result Track.
+    fn track_to_queue_track(track: &Track) -> qbz_models::QueueTrack {
+        qbz_models::QueueTrack {
+            id: track.id,
+            title: track.title.clone(),
+            artist: track.performer.as_ref().map(|p| p.name.clone()).unwrap_or_else(|| "Unknown".to_string()),
+            album: track.album.as_ref().map(|a| a.title.clone()).unwrap_or_default(),
+            duration_secs: track.duration as u64,
+            artwork_url: track.album.as_ref().and_then(|a| a.image.large.clone()),
+            hires: track.hires_streamable,
+            bit_depth: track.maximum_bit_depth,
+            sample_rate: track.maximum_sampling_rate,
+            is_local: false,
+            album_id: track.album.as_ref().map(|a| a.id.clone()),
+            artist_id: track.performer.as_ref().map(|p| p.id),
+            streamable: true,
+            source: Some("qobuz".to_string()),
+            parental_warning: false,
+        }
+    }
+
+    /// Add the selected search result to the queue.
+    fn add_selected_to_queue(&mut self) {
+        let idx = self.state.search.selected_index;
+        let track = match self.state.search.tracks.get(idx) {
+            Some(tr) => tr.clone(),
+            None => return,
+        };
+
+        let queue_track = Self::track_to_queue_track(&track);
+        let core = Arc::clone(&self.core);
+
+        self.state.status_message = Some(format!("Added to queue: {}", track.title));
+
+        self.rt_handle.spawn(async move {
+            core.add_track(queue_track).await;
         });
     }
 
