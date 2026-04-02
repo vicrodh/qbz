@@ -23,6 +23,7 @@ use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::Frame;
 
 use crate::app::{ActiveView, AppState};
+use super::album_detail::render_album_detail;
 use super::favorites::render_favorites;
 use super::help_bar::render_help_bar;
 use super::menu_bar::render_menu_bar;
@@ -129,6 +130,7 @@ pub fn render_layout(frame: &mut Frame, state: &mut AppState) -> LayoutAreas {
     match active {
         ActiveView::Search => render_search(frame, content_area, state),
         ActiveView::Favorites => render_favorites(frame, content_area, state),
+        ActiveView::Album => render_album_detail(frame, content_area, state),
         _ => render_placeholder(frame, content_area, active.label()),
     }
 

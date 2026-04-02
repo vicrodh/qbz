@@ -16,10 +16,10 @@ use ratatui::Frame;
 use ratatui::Terminal;
 use tokio::sync::mpsc;
 
-use qbz_audio::{AudioDiagnostic, AudioSettings};
+use qbz_audio::{settings::AudioSettingsStore, AudioDiagnostic, AudioSettings};
 use qbz_cache::PlaybackCache;
 use qbz_core::QbzCore;
-use qbz_models::{CoreEvent, QueueState, RepeatMode, Track};
+use qbz_models::{Album, CoreEvent, QueueState, RepeatMode, Track};
 use qbz_player::Player;
 
 use crate::adapter::TuiAdapter;
@@ -35,6 +35,7 @@ pub enum ActiveView {
     Playlists,
     Search,
     Settings,
+    Album,
 }
 
 impl ActiveView {
@@ -47,6 +48,7 @@ impl ActiveView {
             ActiveView::Playlists => "Playlists",
             ActiveView::Search => "Search",
             ActiveView::Settings => "Settings",
+            ActiveView::Album => "Album",
         }
     }
 }
@@ -156,6 +158,38 @@ impl Default for FavoritesState {
     }
 }
 
+/// State for the album detail view.
+pub struct AlbumState {
+    /// The loaded album metadata.
+    pub album: Option<Album>,
+    /// Album tracks (from album.tracks.items).
+    pub tracks: Vec<Track>,
+    /// Currently selected track index.
+    pub selected_index: usize,
+    /// Whether the album is being loaded.
+    pub loading: bool,
+    /// Error from the last load attempt.
+    pub error: Option<String>,
+    /// Scrollbar state for the track list.
+    pub scrollbar_state: ScrollbarState,
+    /// The view to return to when pressing Backspace/Esc.
+    pub return_view: ActiveView,
+}
+
+impl Default for AlbumState {
+    fn default() -> Self {
+        Self {
+            album: None,
+            tracks: Vec::new(),
+            selected_index: 0,
+            loading: false,
+            error: None,
+            scrollbar_state: ScrollbarState::default(),
+            return_view: ActiveView::Search,
+        }
+    }
+}
+
 pub struct AppState {
     pub active_view: ActiveView,
     pub is_playing: bool,
@@ -186,6 +220,8 @@ pub struct AppState {
     pub queue_scrollbar_state: ScrollbarState,
     /// Whether the search modal popup is visible (toggled with '/').
     pub show_search_modal: bool,
+    /// Album detail view state.
+    pub album: AlbumState,
 }
 
 impl Default for AppState {
@@ -212,9 +248,13 @@ impl Default for AppState {
             show_queue_panel: false,
             queue_scrollbar_state: ScrollbarState::default(),
             show_search_modal: false,
+            album: AlbumState::default(),
         }
     }
 }
+
+/// Type alias for the album result payload.
+type AlbumResult = Result<Album, qbz_core::error::CoreError>;
 
 /// Type alias for the search result payload.
 type SearchResult = Result<qbz_models::SearchResultsPage<Track>, qbz_core::error::CoreError>;
@@ -237,6 +277,10 @@ pub struct App {
     favorites_result_tx: mpsc::UnboundedSender<FavoritesResult>,
     /// Receiver for favorites results (drained each tick).
     favorites_result_rx: mpsc::UnboundedReceiver<FavoritesResult>,
+    /// Sender for album detail results (cloned into async tasks).
+    album_result_tx: mpsc::UnboundedSender<AlbumResult>,
+    /// Receiver for album detail results (drained each tick).
+    album_result_rx: mpsc::UnboundedReceiver<AlbumResult>,
     /// Layout areas from the last render, used for mouse hit-testing.
     layout_areas: LayoutAreas,
     /// Sender for playback status updates (cloned into async tasks).
@@ -254,11 +298,30 @@ impl App {
         let (event_tx, event_rx) = mpsc::unbounded_channel::<CoreEvent>();
         let adapter = TuiAdapter::new(event_tx);
 
-        // Use default audio settings for TUI (proper settings loading added later)
-        let audio_settings = AudioSettings::default();
-        let diagnostic = AudioDiagnostic::new();
+        // Load saved audio settings from database (same as desktop CoreBridge)
+        let (device_name, audio_settings) = AudioSettingsStore::new()
+            .ok()
+            .and_then(|store| {
+                store
+                    .get_settings()
+                    .ok()
+                    .map(|settings| (settings.output_device.clone(), settings))
+            })
+            .unwrap_or_else(|| {
+                log::info!("[TUI] No saved audio settings, using defaults");
+                (None, AudioSettings::default())
+            });
 
-        let player = Player::new(None, audio_settings, None, diagnostic);
+        log::info!(
+            "[TUI] Player init: device={:?}, backend={:?}, exclusive={}, dac_passthrough={}",
+            device_name,
+            audio_settings.backend_type,
+            audio_settings.exclusive_mode,
+            audio_settings.dac_passthrough
+        );
+
+        let diagnostic = AudioDiagnostic::new();
+        let player = Player::new(device_name, audio_settings, None, diagnostic);
         let core = QbzCore::new(adapter, player);
 
         // Initialize core (extracts Qobuz bundle tokens)
@@ -325,6 +388,7 @@ impl App {
 
         let (search_tx, search_rx) = mpsc::unbounded_channel::<SearchResult>();
         let (favorites_tx, favorites_rx) = mpsc::unbounded_channel::<FavoritesResult>();
+        let (album_tx, album_rx) = mpsc::unbounded_channel::<AlbumResult>();
         let (playback_tx, playback_rx) = mpsc::unbounded_channel::<PlaybackStatus>();
 
         // Initialize L2 disk playback cache (800MB limit)
@@ -355,6 +419,8 @@ impl App {
             search_result_rx: search_rx,
             favorites_result_tx: favorites_tx,
             favorites_result_rx: favorites_rx,
+            album_result_tx: album_tx,
+            album_result_rx: album_rx,
             layout_areas: LayoutAreas::default(),
             playback_status_tx: playback_tx,
             playback_status_rx: playback_rx,
@@ -450,6 +516,11 @@ impl App {
             // Drain favorites results
             while let Ok(result) = self.favorites_result_rx.try_recv() {
                 self.handle_favorites_result(result);
+            }
+
+            // Drain album detail results
+            while let Ok(result) = self.album_result_rx.try_recv() {
+                self.handle_album_result(result);
             }
         }
 
@@ -567,6 +638,15 @@ impl App {
                 let next = (current + delta).clamp(0, (len as i32) - 1) as usize;
                 self.state.favorites.selected_index = next;
             }
+            ActiveView::Album => {
+                let len = self.state.album.tracks.len();
+                if len == 0 {
+                    return;
+                }
+                let current = self.state.album.selected_index as i32;
+                let next = (current + delta).clamp(0, (len as i32) - 1) as usize;
+                self.state.album.selected_index = next;
+            }
             _ => {}
         }
     }
@@ -680,6 +760,47 @@ impl App {
             // Favorites view: 'a' to add selected track to queue
             KeyCode::Char('a') if self.state.active_view == ActiveView::Favorites => {
                 self.add_selected_favorite_to_queue();
+            }
+
+            // Search/Favorites: 'g' to go to album detail
+            KeyCode::Char('g') if self.state.active_view == ActiveView::Search => {
+                self.navigate_to_album_from_search();
+            }
+            KeyCode::Char('g') if self.state.active_view == ActiveView::Favorites => {
+                self.navigate_to_album_from_favorites();
+            }
+            // Search modal: 'g' to go to album detail
+            KeyCode::Char('g') if self.state.show_search_modal => {
+                self.navigate_to_album_from_search();
+            }
+
+            // Album view: j/k navigation
+            KeyCode::Char('j') | KeyCode::Down if self.state.active_view == ActiveView::Album => {
+                let len = self.state.album.tracks.len();
+                if len > 0 {
+                    self.state.album.selected_index =
+                        (self.state.album.selected_index + 1).min(len - 1);
+                }
+            }
+            KeyCode::Char('k') | KeyCode::Up if self.state.active_view == ActiveView::Album => {
+                if self.state.album.selected_index > 0 {
+                    self.state.album.selected_index -= 1;
+                }
+            }
+
+            // Album view: Enter to play selected track (queues whole album starting from selection)
+            KeyCode::Enter if self.state.active_view == ActiveView::Album => {
+                self.play_album_from_selected();
+            }
+
+            // Album view: 'a' to add selected track to queue
+            KeyCode::Char('a') if self.state.active_view == ActiveView::Album => {
+                self.add_album_track_to_queue();
+            }
+
+            // Album view: Backspace/Esc returns to previous view
+            KeyCode::Backspace | KeyCode::Esc if self.state.active_view == ActiveView::Album => {
+                self.state.active_view = self.state.album.return_view;
             }
 
             // Playback controls
@@ -1053,6 +1174,165 @@ impl App {
     fn add_selected_favorite_to_queue(&mut self) {
         let idx = self.state.favorites.selected_index;
         let track = match self.state.favorites.tracks.get(idx) {
+            Some(tr) => tr.clone(),
+            None => return,
+        };
+
+        let queue_track = Self::track_to_queue_track(&track);
+        let core = Arc::clone(&self.core);
+
+        self.state.status_message = Some(format!("Added to queue: {}", track.title));
+
+        self.rt_handle.spawn(async move {
+            core.add_track(queue_track).await;
+        });
+    }
+
+    /// Navigate to album detail from a search result track.
+    fn navigate_to_album_from_search(&mut self) {
+        let idx = self.state.search.selected_index;
+        let album_id = match self.state.search.tracks.get(idx) {
+            Some(track) => track.album.as_ref().map(|a| a.id.clone()),
+            None => None,
+        };
+        if let Some(id) = album_id {
+            self.load_album(&id, ActiveView::Search);
+        }
+    }
+
+    /// Navigate to album detail from a favorites track.
+    fn navigate_to_album_from_favorites(&mut self) {
+        let idx = self.state.favorites.selected_index;
+        let album_id = match self.state.favorites.tracks.get(idx) {
+            Some(track) => track.album.as_ref().map(|a| a.id.clone()),
+            None => None,
+        };
+        if let Some(id) = album_id {
+            self.load_album(&id, ActiveView::Favorites);
+        }
+    }
+
+    /// Load an album by ID and switch to the album detail view.
+    fn load_album(&mut self, album_id: &str, return_view: ActiveView) {
+        if !self.state.authenticated {
+            self.state.status_message = Some("Not authenticated".to_string());
+            return;
+        }
+
+        self.state.album = AlbumState {
+            loading: true,
+            return_view,
+            ..AlbumState::default()
+        };
+        self.state.active_view = ActiveView::Album;
+        self.state.status_message = Some("Loading album...".to_string());
+
+        // Close search modal if open
+        if self.state.show_search_modal {
+            self.state.show_search_modal = false;
+            self.state.input_mode = InputMode::Normal;
+        }
+
+        let core = Arc::clone(&self.core);
+        let event_tx = self.album_result_tx.clone();
+        let id = album_id.to_string();
+
+        self.rt_handle.spawn(async move {
+            let result = core.get_album(&id).await;
+            let _ = event_tx.send(result);
+        });
+    }
+
+    /// Handle the result of an album detail load.
+    fn handle_album_result(&mut self, result: AlbumResult) {
+        self.state.album.loading = false;
+        match result {
+            Ok(album) => {
+                let tracks = album
+                    .tracks
+                    .as_ref()
+                    .map(|tc| tc.items.clone())
+                    .unwrap_or_default();
+                let count = tracks.len();
+                self.state.status_message =
+                    Some(format!("{} - {} tracks", album.title, count));
+                self.state.album.tracks = tracks;
+                self.state.album.album = Some(album);
+                self.state.album.selected_index = 0;
+                self.state.album.error = None;
+            }
+            Err(e) => {
+                self.state.album.error = Some(format!("{}", e));
+                self.state.status_message = Some(format!("Failed to load album: {}", e));
+            }
+        }
+    }
+
+    /// Play the album starting from the selected track.
+    /// Queues all tracks from the selected index onward, then starts playback.
+    fn play_album_from_selected(&mut self) {
+        let idx = self.state.album.selected_index;
+        let tracks = &self.state.album.tracks;
+        if tracks.is_empty() || idx >= tracks.len() {
+            return;
+        }
+
+        if !self.state.authenticated {
+            self.state.status_message = Some("Not authenticated".to_string());
+            return;
+        }
+
+        // Build queue from selected track onward
+        let queue_tracks: Vec<qbz_models::QueueTrack> = tracks[idx..]
+            .iter()
+            .map(|track| Self::track_to_queue_track(track))
+            .collect();
+
+        let first_track_id = tracks[idx].id;
+        let first_title = tracks[idx].title.clone();
+
+        // Update now-playing info immediately
+        self.state.current_track_title = Some(first_title.clone());
+        self.state.current_track_artist = Some(
+            tracks[idx]
+                .performer
+                .as_ref()
+                .map(|p| p.name.clone())
+                .unwrap_or_else(|| "Unknown".to_string()),
+        );
+        self.state.current_track_quality = if tracks[idx].hires_streamable {
+            Some("Hi-Res".to_string())
+        } else {
+            Some(format!(
+                "{}bit/{}kHz",
+                tracks[idx].maximum_bit_depth.unwrap_or(16),
+                tracks[idx].maximum_sampling_rate.unwrap_or(44.1)
+            ))
+        };
+        self.state.status_message = Some(format!("Loading: {}...", first_title));
+
+        let core = Arc::clone(&self.core);
+        let status_tx = self.playback_status_tx.clone();
+        let cache = self.playback_cache.clone();
+
+        self.rt_handle.spawn(async move {
+            // Set the queue with all remaining album tracks, starting at index 0
+            core.set_queue(queue_tracks, Some(0)).await;
+
+            // Play the first track
+            if let Err(e) =
+                playback::play_qobuz_track(&core, first_track_id, &cache, &status_tx).await
+            {
+                log::error!("[TUI] Failed to play album track {}: {}", first_track_id, e);
+                let _ = status_tx.send(PlaybackStatus::Error(e));
+            }
+        });
+    }
+
+    /// Add the selected album track to the queue.
+    fn add_album_track_to_queue(&mut self) {
+        let idx = self.state.album.selected_index;
+        let track = match self.state.album.tracks.get(idx) {
             Some(tr) => tr.clone(),
             None => return,
         };
