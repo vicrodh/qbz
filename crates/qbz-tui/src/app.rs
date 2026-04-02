@@ -106,6 +106,10 @@ pub struct SearchState {
     pub tab: SearchTab,
     /// Track results from the last search.
     pub tracks: Vec<Track>,
+    /// Album results from the last search.
+    pub albums: Vec<Album>,
+    /// Artist results from the last search.
+    pub artists: Vec<qbz_models::Artist>,
     /// Currently selected index in the results list.
     pub selected_index: usize,
     /// Total results reported by the API.
@@ -125,6 +129,8 @@ impl Default for SearchState {
             cursor: 0,
             tab: SearchTab::Tracks,
             tracks: Vec::new(),
+            albums: Vec::new(),
+            artists: Vec::new(),
             selected_index: 0,
             total_results: 0,
             loading: false,
@@ -397,6 +403,12 @@ type AlbumResult = Result<Album, qbz_core::error::CoreError>;
 /// Type alias for the search result payload.
 type SearchResult = Result<qbz_models::SearchResultsPage<Track>, qbz_core::error::CoreError>;
 
+/// Type alias for the search albums result payload.
+type SearchAlbumsResult = Result<qbz_models::SearchResultsPage<Album>, qbz_core::error::CoreError>;
+
+/// Type alias for the search artists result payload.
+type SearchArtistsResult = Result<qbz_models::SearchResultsPage<qbz_models::Artist>, qbz_core::error::CoreError>;
+
 /// Type alias for the favorites result payload.
 type FavoritesResult = Result<Vec<Track>, qbz_core::error::CoreError>;
 
@@ -432,6 +444,14 @@ pub struct App {
     search_result_tx: mpsc::UnboundedSender<SearchResult>,
     /// Receiver for search results (drained each tick).
     search_result_rx: mpsc::UnboundedReceiver<SearchResult>,
+    /// Sender for search albums results.
+    search_albums_result_tx: mpsc::UnboundedSender<SearchAlbumsResult>,
+    /// Receiver for search albums results.
+    search_albums_result_rx: mpsc::UnboundedReceiver<SearchAlbumsResult>,
+    /// Sender for search artists results.
+    search_artists_result_tx: mpsc::UnboundedSender<SearchArtistsResult>,
+    /// Receiver for search artists results.
+    search_artists_result_rx: mpsc::UnboundedReceiver<SearchArtistsResult>,
     /// Sender for favorites results (cloned into async tasks).
     favorites_result_tx: mpsc::UnboundedSender<FavoritesResult>,
     /// Receiver for favorites results (drained each tick).
@@ -574,6 +594,8 @@ impl App {
         let rt_handle = tokio::runtime::Handle::current();
 
         let (search_tx, search_rx) = mpsc::unbounded_channel::<SearchResult>();
+        let (search_albums_tx, search_albums_rx) = mpsc::unbounded_channel::<SearchAlbumsResult>();
+        let (search_artists_tx, search_artists_rx) = mpsc::unbounded_channel::<SearchArtistsResult>();
         let (favorites_tx, favorites_rx) = mpsc::unbounded_channel::<FavoritesResult>();
         let (album_tx, album_rx) = mpsc::unbounded_channel::<AlbumResult>();
         let (fav_albums_tx, fav_albums_rx) = mpsc::unbounded_channel::<FavoritesAlbumsResult>();
@@ -611,6 +633,10 @@ impl App {
             rt_handle,
             search_result_tx: search_tx,
             search_result_rx: search_rx,
+            search_albums_result_tx: search_albums_tx,
+            search_albums_result_rx: search_albums_rx,
+            search_artists_result_tx: search_artists_tx,
+            search_artists_result_rx: search_artists_rx,
             favorites_result_tx: favorites_tx,
             favorites_result_rx: favorites_rx,
             album_result_tx: album_tx,
@@ -719,6 +745,16 @@ impl App {
             // Drain search results
             while let Ok(result) = self.search_result_rx.try_recv() {
                 self.handle_search_result(result);
+            }
+
+            // Drain search albums results
+            while let Ok(result) = self.search_albums_result_rx.try_recv() {
+                self.handle_search_albums_result(result);
+            }
+
+            // Drain search artists results
+            while let Ok(result) = self.search_artists_result_rx.try_recv() {
+                self.handle_search_artists_result(result);
             }
 
             // Drain favorites results
@@ -870,7 +906,7 @@ impl App {
     fn handle_scroll(&mut self, delta: i32) {
         match self.state.active_view {
             ActiveView::Search => {
-                let len = self.state.search.tracks.len();
+                let len = self.search_active_list_len();
                 if len == 0 {
                     return;
                 }
@@ -1041,9 +1077,17 @@ impl App {
                 self.add_selected_to_queue();
             }
 
+            // Search view: Tab/Shift+Tab to switch tabs
+            KeyCode::Tab if self.state.active_view == ActiveView::Search && !self.state.show_search_modal => {
+                self.cycle_search_tab(true);
+            }
+            KeyCode::BackTab if self.state.active_view == ActiveView::Search && !self.state.show_search_modal => {
+                self.cycle_search_tab(false);
+            }
+
             // Search view (non-modal): j/k for navigating results
             KeyCode::Char('j') | KeyCode::Down if self.state.active_view == ActiveView::Search => {
-                let len = self.state.search.tracks.len();
+                let len = self.search_active_list_len();
                 if len > 0 {
                     self.state.search.selected_index =
                         (self.state.search.selected_index + 1).min(len - 1);
@@ -1055,9 +1099,13 @@ impl App {
                 }
             }
 
-            // Search view: Enter to play selected track
+            // Search view: Enter to play/open selected item
             KeyCode::Enter if self.state.active_view == ActiveView::Search => {
-                self.play_selected_track();
+                match self.state.search.tab {
+                    SearchTab::Tracks => self.play_selected_track(),
+                    SearchTab::Albums => self.open_selected_search_album(),
+                    SearchTab::Artists => {} // TODO: artist detail view
+                }
             }
 
             // Favorites view: j/k for navigating tracks
@@ -1369,16 +1417,36 @@ impl App {
 
         self.state.search.loading = true;
         self.state.search.error = None;
-        self.state.search.tracks.clear();
         self.state.search.selected_index = 0;
 
         let core = Arc::clone(&self.core);
-        let event_tx = self.search_result_tx.clone();
 
-        self.rt_handle.spawn(async move {
-            let result = core.search_tracks(&query, 25, 0, None).await;
-            let _ = event_tx.send(result);
-        });
+        match self.state.search.tab {
+            SearchTab::Tracks => {
+                self.state.search.tracks.clear();
+                let event_tx = self.search_result_tx.clone();
+                self.rt_handle.spawn(async move {
+                    let result = core.search_tracks(&query, 25, 0, None).await;
+                    let _ = event_tx.send(result);
+                });
+            }
+            SearchTab::Albums => {
+                self.state.search.albums.clear();
+                let event_tx = self.search_albums_result_tx.clone();
+                self.rt_handle.spawn(async move {
+                    let result = core.search_albums(&query, 25, 0, None).await;
+                    let _ = event_tx.send(result);
+                });
+            }
+            SearchTab::Artists => {
+                self.state.search.artists.clear();
+                let event_tx = self.search_artists_result_tx.clone();
+                self.rt_handle.spawn(async move {
+                    let result = core.search_artists(&query, 25, 0, None).await;
+                    let _ = event_tx.send(result);
+                });
+            }
+        }
     }
 
     /// Build a QueueTrack from a search result Track.
@@ -1481,6 +1549,85 @@ impl App {
                 self.state.status_message = Some(format!("Search failed: {}", e));
             }
         }
+    }
+
+    /// Handle the result of a search albums request.
+    fn handle_search_albums_result(&mut self, result: SearchAlbumsResult) {
+        self.state.search.loading = false;
+        match result {
+            Ok(page) => {
+                self.state.search.total_results = page.total;
+                self.state.search.albums = page.items;
+                self.state.search.selected_index = 0;
+                self.state.search.error = None;
+
+                let count = self.state.search.albums.len();
+                self.state.status_message =
+                    Some(format!("{} albums found (of {})", count, page.total));
+            }
+            Err(e) => {
+                self.state.search.error = Some(format!("{}", e));
+                self.state.status_message = Some(format!("Search failed: {}", e));
+            }
+        }
+    }
+
+    /// Handle the result of a search artists request.
+    fn handle_search_artists_result(&mut self, result: SearchArtistsResult) {
+        self.state.search.loading = false;
+        match result {
+            Ok(page) => {
+                self.state.search.total_results = page.total;
+                self.state.search.artists = page.items;
+                self.state.search.selected_index = 0;
+                self.state.search.error = None;
+
+                let count = self.state.search.artists.len();
+                self.state.status_message =
+                    Some(format!("{} artists found (of {})", count, page.total));
+            }
+            Err(e) => {
+                self.state.search.error = Some(format!("{}", e));
+                self.state.status_message = Some(format!("Search failed: {}", e));
+            }
+        }
+    }
+
+    /// Get the length of the active search results list.
+    fn search_active_list_len(&self) -> usize {
+        match self.state.search.tab {
+            SearchTab::Tracks => self.state.search.tracks.len(),
+            SearchTab::Albums => self.state.search.albums.len(),
+            SearchTab::Artists => self.state.search.artists.len(),
+        }
+    }
+
+    /// Cycle through search tabs.
+    fn cycle_search_tab(&mut self, forward: bool) {
+        let tabs = [SearchTab::Tracks, SearchTab::Albums, SearchTab::Artists];
+        let current = tabs.iter().position(|tab| *tab == self.state.search.tab).unwrap_or(0);
+        let next = if forward {
+            (current + 1) % tabs.len()
+        } else {
+            (current + tabs.len() - 1) % tabs.len()
+        };
+        self.state.search.tab = tabs[next];
+        self.state.search.selected_index = 0;
+
+        // Re-execute the search for the new tab if there's a query
+        if !self.state.search.query.trim().is_empty() {
+            self.execute_search();
+        }
+    }
+
+    /// Open the selected album from search results.
+    fn open_selected_search_album(&mut self) {
+        let idx = self.state.search.selected_index;
+        let album_id = match self.state.search.albums.get(idx) {
+            Some(album) => album.id.clone(),
+            None => return,
+        };
+        self.load_album(&album_id, ActiveView::Search);
     }
 
     /// Load favorites if they haven't been loaded yet (lazy load on first visit).
