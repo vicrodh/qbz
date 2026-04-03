@@ -3158,7 +3158,6 @@ impl App {
                 r
             }
             "Preferred Sample Rate" => {
-                // Cycle through common sample rates: Auto, 44100, 48000, 88200, 96000, 176400, 192000, 384000
                 let rates: &[Option<u32>] = &[
                     None, Some(44100), Some(48000), Some(88200),
                     Some(96000), Some(176400), Some(192000), Some(384000),
@@ -3174,6 +3173,32 @@ impl App {
                 let r = store.set_sample_rate(new_val);
                 let label = new_val.map(|r| format!("{} Hz", r)).unwrap_or_else(|| "Auto".into());
                 self.state.status_message = Some(format!("Preferred Sample Rate: {}", label));
+                r
+            }
+            "Device Max Sample Rate" => {
+                // Same options as desktop: No limit, 44.1kHz, 48kHz, 96kHz, 192kHz, 384kHz
+                let rates: &[Option<u32>] = &[
+                    None, Some(44100), Some(48000), Some(96000),
+                    Some(192000), Some(384000),
+                ];
+                let current_idx = rates.iter().position(|r| *r == settings.device_max_sample_rate).unwrap_or(0);
+                let next_idx = if delta > 0 {
+                    (current_idx + 1) % rates.len()
+                } else {
+                    (current_idx + rates.len() - 1) % rates.len()
+                };
+                let new_val = rates[next_idx];
+                settings.device_max_sample_rate = new_val;
+                let r = store.set_device_max_sample_rate(new_val);
+                let label = match new_val {
+                    Some(44100) => "44.1 kHz (CD)",
+                    Some(48000) => "48 kHz (DVD)",
+                    Some(96000) => "96 kHz (Hi-Res)",
+                    Some(192000) => "192 kHz (Hi-Res+)",
+                    Some(384000) => "384 kHz (DSD)",
+                    _ => "No limit",
+                };
+                self.state.status_message = Some(format!("Device Max Sample Rate: {}", label));
                 r
             }
             _ => return,

@@ -125,9 +125,16 @@ pub fn build_settings_list(state: &AppState) -> Vec<SettingItem> {
         label: "Device Max Sample Rate".into(),
         value: settings
             .device_max_sample_rate
-            .map(|r| format!("{} Hz", r))
-            .unwrap_or_else(|| "Auto".into()),
-        kind: SettingKind::ReadOnly,
+            .map(|r| match r {
+                44100 => "44.1 kHz (CD)".into(),
+                48000 => "48 kHz (DVD)".into(),
+                96000 => "96 kHz (Hi-Res)".into(),
+                192000 => "192 kHz (Hi-Res+)".into(),
+                384000 => "384 kHz (DSD)".into(),
+                other => format!("{} Hz", other),
+            })
+            .unwrap_or_else(|| "No limit".into()),
+        kind: SettingKind::Numeric,
         section: SettingSection::Audio,
     });
 
