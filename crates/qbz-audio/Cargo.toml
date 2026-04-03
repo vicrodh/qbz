@@ -42,5 +42,4 @@ alsa = "0.9"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # CoreAudio for device probing, sample rate switching, and (future) hog mode / exclusive mode
-# Using fork branch until https://github.com/RustAudio/coreaudio-rs/pull/149 is merged
-coreaudio-rs = { git = "https://github.com/afonsojramos/coreaudio-rs.git", branch = "feat/device-helpers" }
+coreaudio-rs = "0.14.1"
