@@ -89,9 +89,28 @@ pub fn build_settings_list(state: &AppState) -> Vec<SettingItem> {
     });
 
     items.push(SettingItem {
+        label: "ALSA Plugin".into(),
+        value: match &settings.alsa_plugin {
+            Some(p) => format!("{:?}", p),
+            None => "Default".into(),
+        },
+        kind: SettingKind::Cycle,
+        section: SettingSection::Audio,
+    });
+
+    items.push(SettingItem {
         label: "ALSA Hardware Volume".into(),
         value: if settings.alsa_hardware_volume { "ON" } else { "OFF" }.into(),
         kind: SettingKind::Toggle,
+        section: SettingSection::Audio,
+    });
+
+    items.push(SettingItem {
+        label: "Preferred Sample Rate".into(),
+        value: settings.preferred_sample_rate
+            .map(|r| format!("{} Hz", r))
+            .unwrap_or_else(|| "Auto".into()),
+        kind: SettingKind::Numeric,
         section: SettingSection::Audio,
     });
 

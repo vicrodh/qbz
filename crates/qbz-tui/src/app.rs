@@ -1800,6 +1800,19 @@ impl App {
                     self.state.volume = new_vol;
                 }
             }
+
+            // Seek: left/right arrows (5 seconds per press)
+            KeyCode::Left if self.state.is_playing && !self.state.show_search_modal => {
+                let new_pos = self.state.position_secs.saturating_sub(5);
+                let _ = self.core.player().seek(new_pos);
+                self.state.position_secs = new_pos;
+            }
+            KeyCode::Right if self.state.is_playing && !self.state.show_search_modal => {
+                let new_pos = (self.state.position_secs + 5).min(self.state.duration_secs);
+                let _ = self.core.player().seek(new_pos);
+                self.state.position_secs = new_pos;
+            }
+
             _ => {}
         }
     }
@@ -2070,32 +2083,33 @@ impl App {
         });
     }
 
-    /// Play the currently selected track from search results.
+    /// Play the currently selected track from search results, queuing all results.
     fn play_selected_track(&mut self) {
         let idx = self.state.search.selected_index;
-        let track = match self.state.search.tracks.get(idx) {
-            Some(tr) => tr.clone(),
-            None => return,
-        };
+        if idx >= self.state.search.tracks.len() {
+            return;
+        }
 
-        self.play_track_common(track);
+        // Build queue from ALL search results starting at the selected index
+        let all_tracks: Vec<qbz_models::QueueTrack> = self.state.search.tracks
+            .iter()
+            .map(|tr| Self::track_to_queue_track(tr))
+            .collect();
+
+        let track = self.state.search.tracks[idx].clone();
+        self.play_track_with_queue(track, all_tracks, idx);
     }
 
-    /// Common track playback logic — stops current, sets queue, downloads, plays.
-    /// Used by play_selected_track, play_selected_favorite, and similar methods.
-    fn play_track_common(&mut self, track: Track) {
+    /// Play a track with a full queue (e.g., all search results).
+    fn play_track_with_queue(&mut self, track: Track, queue: Vec<qbz_models::QueueTrack>, queue_index: usize) {
         if !self.state.authenticated {
             self.state.status_message = Some("Not authenticated".to_string());
             return;
         }
 
-        // Stop current playback immediately to prevent overlap
         let _ = self.core.player().stop();
-
-        // Increment generation to invalidate any in-flight download tasks
         let generation = self.playback_generation.fetch_add(1, Ordering::SeqCst) + 1;
 
-        // Update now-playing info immediately
         self.state.current_track_title = Some(track.title.clone());
         self.state.current_track_artist = Some(track.performer.as_ref().map(|p| p.name.clone()).unwrap_or_else(|| "Unknown".to_string()));
         self.state.current_track_quality = if track.hires_streamable {
@@ -2106,11 +2120,8 @@ impl App {
         self.state.status_message = Some(format!("Loading: {}...", track.title));
         self.state.is_buffering = true;
 
-        // Trigger cover art download
         self.update_artwork_from_track(&track);
 
-        // Set queue to this single track
-        let queue_track = Self::track_to_queue_track(&track);
         let core = Arc::clone(&self.core);
         let track_id = track.id;
         let status_tx = self.playback_status_tx.clone();
@@ -2118,28 +2129,21 @@ impl App {
         let gen = Arc::clone(&self.playback_generation);
 
         self.rt_handle.spawn(async move {
-            // Set queue first
-            core.set_queue(vec![queue_track], Some(0)).await;
+            core.set_queue(queue, Some(queue_index)).await;
 
-            // Check generation before playing (another track may have been requested)
             if gen.load(Ordering::SeqCst) != generation {
                 log::info!("[TUI] Playback generation changed, skipping stale track {}", track_id);
                 return;
             }
 
-            if let Err(e) = playback::play_qobuz_track(
-                &core,
-                track_id,
-                &cache,
-                &status_tx,
-            )
-            .await
-            {
+            if let Err(e) = playback::play_qobuz_track(&core, track_id, &cache, &status_tx).await {
                 log::error!("[TUI] Failed to play track {}: {}", track_id, e);
                 let _ = status_tx.send(PlaybackStatus::Error(e));
             }
         });
     }
+
+
 
     fn handle_search_result(&mut self, result: SearchResult) {
         self.state.search.loading = false;
@@ -2302,11 +2306,17 @@ impl App {
     /// Play the currently selected track from favorites.
     fn play_selected_favorite(&mut self) {
         let idx = self.state.favorites.selected_index;
-        let track = match self.state.favorites.tracks.get(idx) {
-            Some(tr) => tr.clone(),
-            None => return,
-        };
-        self.play_track_common(track);
+        if idx >= self.state.favorites.tracks.len() {
+            return;
+        }
+
+        let all_tracks: Vec<qbz_models::QueueTrack> = self.state.favorites.tracks
+            .iter()
+            .map(|tr| Self::track_to_queue_track(tr))
+            .collect();
+
+        let track = self.state.favorites.tracks[idx].clone();
+        self.play_track_with_queue(track, all_tracks, idx);
     }
 
     /// Add the selected favorite track to the queue.
@@ -3147,6 +3157,25 @@ impl App {
                     Some(format!("Normalization Target: {:.1} LUFS", new_val));
                 r
             }
+            "Preferred Sample Rate" => {
+                // Cycle through common sample rates: Auto, 44100, 48000, 88200, 96000, 176400, 192000, 384000
+                let rates: &[Option<u32>] = &[
+                    None, Some(44100), Some(48000), Some(88200),
+                    Some(96000), Some(176400), Some(192000), Some(384000),
+                ];
+                let current_idx = rates.iter().position(|r| *r == settings.preferred_sample_rate).unwrap_or(0);
+                let next_idx = if delta > 0 {
+                    (current_idx + 1) % rates.len()
+                } else {
+                    (current_idx + rates.len() - 1) % rates.len()
+                };
+                let new_val = rates[next_idx];
+                settings.preferred_sample_rate = new_val;
+                let r = store.set_sample_rate(new_val);
+                let label = new_val.map(|r| format!("{} Hz", r)).unwrap_or_else(|| "Auto".into());
+                self.state.status_message = Some(format!("Preferred Sample Rate: {}", label));
+                r
+            }
             _ => return,
         };
 
@@ -3207,6 +3236,36 @@ impl App {
                         }
                         self.state.status_message =
                             Some(format!("Backend: {} (applies on next track)", label));
+                    }
+                    Err(e) => {
+                        self.state.status_message = Some(format!("Failed to save: {}", e));
+                    }
+                }
+            }
+            "ALSA Plugin" => {
+                use qbz_audio::AlsaPlugin;
+                // Cycle: Default → Hw → PlugHw → Pcm → Default
+                let next = match settings.alsa_plugin {
+                    None => Some(AlsaPlugin::Hw),
+                    Some(AlsaPlugin::Hw) => Some(AlsaPlugin::PlugHw),
+                    Some(AlsaPlugin::PlugHw) => Some(AlsaPlugin::Pcm),
+                    Some(AlsaPlugin::Pcm) => None,
+                };
+
+                settings.alsa_plugin = next;
+                let label = match &settings.alsa_plugin {
+                    Some(p) => format!("{:?}", p),
+                    None => "Default".to_string(),
+                };
+
+                match store.set_alsa_plugin(settings.alsa_plugin) {
+                    Ok(()) => {
+                        let player = self.core.player();
+                        if let Err(e) = player.reload_settings(settings.clone()) {
+                            log::warn!("Failed to push settings to player: {}", e);
+                        }
+                        self.state.status_message =
+                            Some(format!("ALSA Plugin: {} (applies on next track)", label));
                     }
                     Err(e) => {
                         self.state.status_message = Some(format!("Failed to save: {}", e));

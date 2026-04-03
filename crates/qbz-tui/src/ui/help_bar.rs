@@ -91,8 +91,8 @@ pub fn render_help_bar(frame: &mut Frame, area: Rect, state: &AppState) {
             base.extend([
                 ("Space", "play/pause"),
                 ("n/p", "next/prev"),
-                ("s", "shuffle"),
-                ("r", "repeat"),
+                ("\u{2190}/\u{2192}", "seek"),
+                ("s/r", "shuf/rep"),
                 ("q", "queue"),
             ]);
 
