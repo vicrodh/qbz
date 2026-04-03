@@ -12,6 +12,7 @@ pub mod session_lifecycle;
 pub mod tauri_adapter;
 
 pub mod auto_theme;
+#[cfg(target_os = "linux")]
 pub mod autoconfig_graphics;
 
 pub mod api;
