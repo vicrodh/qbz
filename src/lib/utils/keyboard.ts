@@ -2,6 +2,8 @@
  * Keyboard utilities for keybindings system
  */
 
+import { platform } from '$lib/utils/platform';
+
 /** Display mappings for special keys */
 const KEY_DISPLAY_MAP: Record<string, string> = {
   ArrowLeft: '←',
@@ -78,21 +80,17 @@ export function parseShortcut(shortcut: string): {
  * @example formatShortcutDisplay('Ctrl+ArrowRight') // '⌘ →' on macOS, 'Ctrl + →' on others
  */
 export function formatShortcutDisplay(shortcut: string): string {
-  const isMac =
-    typeof navigator !== 'undefined' &&
-    navigator.platform.toLowerCase().includes('mac');
-
   const { ctrl, alt, shift, key } = parseShortcut(shortcut);
   const parts: string[] = [];
 
-  if (ctrl) parts.push(isMac ? '⌘' : 'Ctrl');
-  if (alt) parts.push(isMac ? '⌥' : 'Alt');
-  if (shift) parts.push(isMac ? '⇧' : 'Shift');
+  if (ctrl) parts.push(platform === 'macos' ? '⌘' : 'Ctrl');
+  if (alt) parts.push(platform === 'macos' ? '⌥' : 'Alt');
+  if (shift) parts.push(platform === 'macos' ? '⇧' : 'Shift');
 
   const displayKey = KEY_DISPLAY_MAP[key] || key.toUpperCase();
   parts.push(displayKey);
 
-  return parts.join(isMac ? ' ' : ' + ');
+  return parts.join(platform === 'macos' ? ' ' : ' + ');
 }
 
 /**

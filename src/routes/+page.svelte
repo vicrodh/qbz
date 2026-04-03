@@ -154,6 +154,7 @@
   import { loadAlbumFavorites } from '$lib/stores/albumFavoritesStore';
   import { loadArtistFavorites } from '$lib/stores/artistFavoritesStore';
   import { getDefaultFavoritesTab } from '$lib/utils/favorites';
+  import { platform } from '$lib/utils/platform';
   import type { FavoritesPreferences, ResolvedMusician } from '$lib/types';
 
   // Navigation state management
@@ -479,7 +480,6 @@
   // Title Bar State (from titleBarStore subscription)
   let showTitleBar = $state(shouldShowTitleBar());
   let showWindowControls = $state(getShowWindowControls());
-  const isMacOS = typeof document !== 'undefined' && document.documentElement.classList.contains('macos');
 
   // Search Bar Location State
   let searchBarLocationPref = $state(getSearchBarLocation());
@@ -4883,7 +4883,7 @@
 {:else}
   <div class="app" class:no-titlebar={!showTitleBar} class:floating={isWindowFloating}>
     <!-- macOS: drag region for window movement (overlay title bar has no native drag area) -->
-    {#if !showTitleBar && isMacOS}
+    {#if !showTitleBar && platform === 'macos'}
       <div class="macos-drag-region" data-tauri-drag-region></div>
     {/if}
     <!-- Custom Title Bar (CSD) -->
