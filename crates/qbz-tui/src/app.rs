@@ -328,6 +328,8 @@ pub struct DiscoveryState {
     pub for_you_loaded: bool,
     pub for_you_artists: Vec<qbz_models::Artist>,
     pub for_you_artists_loaded: bool,
+    pub for_you_tracks: Vec<Track>,
+    pub for_you_tracks_loaded: bool,
     /// Scrollbar state.
     pub scrollbar_state: ScrollbarState,
 }
@@ -353,6 +355,8 @@ impl Default for DiscoveryState {
             for_you_loaded: false,
             for_you_artists: Vec::new(),
             for_you_artists_loaded: false,
+            for_you_tracks: Vec::new(),
+            for_you_tracks_loaded: false,
             scrollbar_state: ScrollbarState::default(),
         }
     }
@@ -603,6 +607,9 @@ type ForYouResult = Result<Vec<Album>, qbz_core::error::CoreError>;
 /// Type alias for the for-you artists result payload.
 type ForYouArtistsResult = Result<Vec<qbz_models::Artist>, qbz_core::error::CoreError>;
 
+/// Type alias for the for-you tracks (continue listening) result payload.
+type ForYouTracksResult = Result<Vec<Track>, qbz_core::error::CoreError>;
+
 /// Type alias for the library albums result payload.
 type LibraryAlbumsResult = Result<Vec<Album>, qbz_core::error::CoreError>;
 
@@ -679,6 +686,10 @@ pub struct App {
     for_you_artists_result_tx: mpsc::UnboundedSender<ForYouArtistsResult>,
     /// Receiver for for-you artists results.
     for_you_artists_result_rx: mpsc::UnboundedReceiver<ForYouArtistsResult>,
+    /// Sender for for-you tracks (continue listening) results.
+    for_you_tracks_result_tx: mpsc::UnboundedSender<ForYouTracksResult>,
+    /// Receiver for for-you tracks (continue listening) results.
+    for_you_tracks_result_rx: mpsc::UnboundedReceiver<ForYouTracksResult>,
     /// Sender for library albums results.
     library_albums_result_tx: mpsc::UnboundedSender<LibraryAlbumsResult>,
     /// Receiver for library albums results.
@@ -828,6 +839,7 @@ impl App {
         let (editor_picks_tx, editor_picks_rx) = mpsc::unbounded_channel::<EditorPicksResult>();
         let (for_you_tx, for_you_rx) = mpsc::unbounded_channel::<ForYouResult>();
         let (for_you_artists_tx, for_you_artists_rx) = mpsc::unbounded_channel::<ForYouArtistsResult>();
+        let (for_you_tracks_tx, for_you_tracks_rx) = mpsc::unbounded_channel::<ForYouTracksResult>();
         let (lib_albums_tx, lib_albums_rx) = mpsc::unbounded_channel::<LibraryAlbumsResult>();
         let (lib_artists_tx, lib_artists_rx) = mpsc::unbounded_channel::<LibraryArtistsResult>();
         let (lib_tracks_tx, lib_tracks_rx) = mpsc::unbounded_channel::<LibraryTracksResult>();
@@ -894,6 +906,8 @@ impl App {
             for_you_result_rx: for_you_rx,
             for_you_artists_result_tx: for_you_artists_tx,
             for_you_artists_result_rx: for_you_artists_rx,
+            for_you_tracks_result_tx: for_you_tracks_tx,
+            for_you_tracks_result_rx: for_you_tracks_rx,
             library_albums_result_tx: lib_albums_tx,
             library_albums_result_rx: lib_albums_rx,
             library_artists_result_tx: lib_artists_tx,
@@ -1072,6 +1086,11 @@ impl App {
             // Drain for-you artists results
             while let Ok(result) = self.for_you_artists_result_rx.try_recv() {
                 self.handle_for_you_artists_result(result);
+            }
+
+            // Drain for-you tracks results
+            while let Ok(result) = self.for_you_tracks_result_rx.try_recv() {
+                self.handle_for_you_tracks_result(result);
             }
 
             // Drain library albums results
@@ -2775,6 +2794,31 @@ impl App {
                 let _ = event_tx.send(parsed);
             });
         }
+
+        // Load tracks (Continue Listening)
+        if !self.state.discovery.for_you_tracks_loaded {
+            let core = Arc::clone(&self.core);
+            let event_tx = self.for_you_tracks_result_tx.clone();
+
+            self.rt_handle.spawn(async move {
+                let result = core.get_favorites("tracks", 10, 0).await;
+                let parsed = result.and_then(|json| {
+                    let tracks_page = json
+                        .get("tracks")
+                        .and_then(|tracks| {
+                            serde_json::from_value::<qbz_models::SearchResultsPage<Track>>(tracks.clone()).ok()
+                        });
+                    match tracks_page {
+                        Some(page) => Ok(page.items),
+                        None => {
+                            log::warn!("[TUI] Could not parse for-you tracks response");
+                            Ok(Vec::new())
+                        }
+                    }
+                });
+                let _ = event_tx.send(parsed);
+            });
+        }
     }
 
     /// Handle the result of a discover index load.
@@ -2888,6 +2932,19 @@ impl App {
         }
     }
 
+    /// Handle the result of a for-you tracks (continue listening) load.
+    fn handle_for_you_tracks_result(&mut self, result: ForYouTracksResult) {
+        self.state.discovery.for_you_tracks_loaded = true;
+        match result {
+            Ok(tracks) => {
+                self.state.discovery.for_you_tracks = tracks;
+            }
+            Err(e) => {
+                log::warn!("[TUI] Failed to load for-you tracks: {}", e);
+            }
+        }
+    }
+
     /// Cycle through discovery tabs.
     fn cycle_discovery_tab(&mut self, forward: bool) {
         let tabs = [
@@ -2926,8 +2983,10 @@ impl App {
             }
             DiscoveryTab::EditorPicks => self.state.discovery.editor_picks.len(),
             DiscoveryTab::ForYou => {
-                self.state.discovery.for_you_albums.len()
-                    + self.state.discovery.for_you_artists.len()
+                4 // Your Mixes (static items)
+                    + self.state.discovery.for_you_tracks.len().min(10)
+                    + self.state.discovery.for_you_albums.len().min(8)
+                    + self.state.discovery.for_you_artists.len().min(8)
             }
         }
     }
@@ -2965,8 +3024,17 @@ impl App {
                 self.state.discovery.editor_picks.get(idx).map(|a| a.id.clone())
             }
             DiscoveryTab::ForYou => {
-                // For You: albums come first, then artists
-                self.state.discovery.for_you_albums.get(idx).map(|a| a.id.clone())
+                // For You layout: 4 mixes, then tracks, then albums, then artists.
+                // Only albums are openable as album detail.
+                let mixes_count = 4;
+                let tracks_count = self.state.discovery.for_you_tracks.len().min(10);
+                let albums_start = mixes_count + tracks_count;
+                let albums_count = self.state.discovery.for_you_albums.len().min(8);
+                if idx >= albums_start && idx < albums_start + albums_count {
+                    self.state.discovery.for_you_albums.get(idx - albums_start).map(|a| a.id.clone())
+                } else {
+                    None
+                }
             }
         };
 

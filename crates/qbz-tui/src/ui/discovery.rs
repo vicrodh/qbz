@@ -77,6 +77,10 @@ fn render_tab_bar(frame: &mut Frame, area: Rect, state: &AppState) {
 struct Section<'a> {
     title: &'a str,
     items: Vec<SectionItem>,
+    /// Whether items should be numbered (default: true).
+    numbered: bool,
+    /// Maximum items to display (0 = show all).
+    max_display: usize,
 }
 
 /// A single item within a section.
@@ -133,6 +137,23 @@ fn playlists_to_items(playlists: &[qbz_models::DiscoverPlaylist]) -> Vec<Section
     }).collect()
 }
 
+/// Build items from Track list (for Continue Listening).
+fn tracks_to_items(tracks: &[qbz_models::Track]) -> Vec<SectionItem> {
+    tracks.iter().map(|track| {
+        let artist = track.performer.as_ref().map(|a| a.name.as_str()).unwrap_or("Unknown");
+        let album_title = track.album.as_ref().map(|a| a.title.as_str()).unwrap_or("");
+        let mins = track.duration / 60;
+        let secs = track.duration % 60;
+        let quality = if track.hires_streamable { "Hi-Res" } else { "CD" };
+        SectionItem {
+            title: format!("{} \u{2014} {}", track.title, artist),
+            subtitle: album_title.to_string(),
+            detail: format!("{}:{:02}  {}", mins, secs, quality),
+            is_hires: track.hires_streamable,
+        }
+    }).collect()
+}
+
 /// Build items from Artist list.
 fn artists_to_items(artists: &[qbz_models::Artist]) -> Vec<SectionItem> {
     artists.iter().map(|artist| {
@@ -184,11 +205,16 @@ fn render_sectioned_list(
         ))));
         visual_to_data.push(None);
 
-        // Section items (max 8 per section for readability)
-        for item in section.items.iter().take(8) {
+        // Section items (capped by max_display, 0 = show all)
+        let max_items = if section.max_display > 0 { section.max_display } else { section.items.len() };
+        for item in section.items.iter().take(max_items) {
             let is_selected = data_index == selected_index;
 
-            let num = format!("{:>3} ", data_index + 1);
+            let num = if section.numbered {
+                format!("{:>3} ", data_index + 1)
+            } else {
+                "    ".to_string()
+            };
             let title_display = truncate(&item.title, title_w);
             let title_padded = format!("{:<width$}", title_display, width = title_w);
 
@@ -259,6 +285,15 @@ fn render_sectioned_list(
     }
 }
 
+/// Effective number of displayed items in a section.
+fn effective_count(section: &Section<'_>) -> usize {
+    if section.max_display > 0 {
+        section.items.len().min(section.max_display)
+    } else {
+        section.items.len()
+    }
+}
+
 /// Show centered empty/loading message.
 fn render_empty_message(frame: &mut Frame, area: Rect, msg: &str) {
     if msg.is_empty() { return; }
@@ -283,14 +318,14 @@ fn render_home_tab(frame: &mut Frame, area: Rect, state: &mut AppState) {
     }
 
     let sections = vec![
-        Section { title: "New Releases", items: discover_albums_to_items(&disc.new_releases) },
-        Section { title: "Popular Albums", items: discover_albums_to_items(&disc.most_streamed) },
-        Section { title: "Essential Discography", items: discover_albums_to_items(&disc.essential_discography) },
-        Section { title: "Qobuzissimes", items: discover_albums_to_items(&disc.qobuzissimes) },
-        Section { title: "Qobuz Playlists", items: playlists_to_items(&disc.qobuz_playlists) },
+        Section { title: "New Releases", items: discover_albums_to_items(&disc.new_releases), numbered: true, max_display: 8 },
+        Section { title: "Popular Albums", items: discover_albums_to_items(&disc.most_streamed), numbered: true, max_display: 8 },
+        Section { title: "Essential Discography", items: discover_albums_to_items(&disc.essential_discography), numbered: true, max_display: 8 },
+        Section { title: "Qobuzissimes", items: discover_albums_to_items(&disc.qobuzissimes), numbered: true, max_display: 8 },
+        Section { title: "Qobuz Playlists", items: playlists_to_items(&disc.qobuz_playlists), numbered: true, max_display: 8 },
     ];
 
-    let total: usize = sections.iter().map(|s| s.items.len().min(8)).sum();
+    let total: usize = sections.iter().map(|s| effective_count(s)).sum();
     if total == 0 && !disc.loading {
         render_empty_message(frame, area, if disc.loaded { "No content available" } else { "" });
         return;
@@ -313,16 +348,16 @@ fn render_editor_picks_tab(frame: &mut Frame, area: Rect, state: &mut AppState) 
     }
 
     let sections = vec![
-        Section { title: "New Releases", items: discover_albums_to_items(&disc.new_releases) },
-        Section { title: "Albums of the Week", items: discover_albums_to_items(&disc.editor_picks_discover) },
-        Section { title: "Qobuzissimes", items: discover_albums_to_items(&disc.qobuzissimes) },
-        Section { title: "Press Accolades", items: discover_albums_to_items(&disc.press_awards) },
-        Section { title: "Popular Albums", items: discover_albums_to_items(&disc.most_streamed) },
-        Section { title: "Essential Discography", items: discover_albums_to_items(&disc.essential_discography) },
-        Section { title: "Qobuz Playlists", items: playlists_to_items(&disc.qobuz_playlists) },
+        Section { title: "New Releases", items: discover_albums_to_items(&disc.new_releases), numbered: true, max_display: 8 },
+        Section { title: "Albums of the Week", items: discover_albums_to_items(&disc.editor_picks_discover), numbered: true, max_display: 8 },
+        Section { title: "Qobuzissimes", items: discover_albums_to_items(&disc.qobuzissimes), numbered: true, max_display: 8 },
+        Section { title: "Press Accolades", items: discover_albums_to_items(&disc.press_awards), numbered: true, max_display: 8 },
+        Section { title: "Popular Albums", items: discover_albums_to_items(&disc.most_streamed), numbered: true, max_display: 8 },
+        Section { title: "Essential Discography", items: discover_albums_to_items(&disc.essential_discography), numbered: true, max_display: 8 },
+        Section { title: "Qobuz Playlists", items: playlists_to_items(&disc.qobuz_playlists), numbered: true, max_display: 8 },
     ];
 
-    let total: usize = sections.iter().map(|s| s.items.len().min(8)).sum();
+    let total: usize = sections.iter().map(|s| effective_count(s)).sum();
     if total == 0 && !disc.loading {
         render_empty_message(frame, area, if disc.loaded { "No editorial content" } else { "" });
         return;
@@ -346,10 +381,55 @@ fn render_for_you_tab(frame: &mut Frame, area: Rect, state: &mut AppState) {
 
     let mut sections: Vec<Section<'_>> = Vec::new();
 
+    // Your Mixes (static items — always shown)
+    sections.push(Section {
+        title: "Your Mixes",
+        numbered: false,
+        max_display: 0,
+        items: vec![
+            SectionItem {
+                title: "DailyQ".into(),
+                subtitle: "Personalized daily mix".into(),
+                detail: String::new(),
+                is_hires: false,
+            },
+            SectionItem {
+                title: "WeeklyQ".into(),
+                subtitle: "Fresh weekly journey".into(),
+                detail: String::new(),
+                is_hires: false,
+            },
+            SectionItem {
+                title: "FavQ".into(),
+                subtitle: "From your personal favorites".into(),
+                detail: String::new(),
+                is_hires: false,
+            },
+            SectionItem {
+                title: "TopQ".into(),
+                subtitle: "From your most-played playlists".into(),
+                detail: String::new(),
+                is_hires: false,
+            },
+        ],
+    });
+
+    // Continue Listening (favorite tracks)
+    if !disc.for_you_tracks.is_empty() {
+        sections.push(Section {
+            title: "Continue Listening",
+            numbered: true,
+            max_display: 10,
+            items: tracks_to_items(&disc.for_you_tracks),
+        });
+    }
+
     // Recently Played (favorite albums as proxy)
     if !disc.for_you_albums.is_empty() {
         sections.push(Section {
             title: "Recently Played",
+            numbered: true,
+            max_display: 8,
             items: albums_to_items(&disc.for_you_albums),
         });
     }
@@ -358,24 +438,13 @@ fn render_for_you_tab(frame: &mut Frame, area: Rect, state: &mut AppState) {
     if !disc.for_you_artists.is_empty() {
         sections.push(Section {
             title: "Your Top Artists",
+            numbered: true,
+            max_display: 8,
             items: artists_to_items(&disc.for_you_artists),
         });
     }
 
-    // Placeholder sections for future features
-    if sections.is_empty() {
-        sections.push(Section {
-            title: "Your Mixes",
-            items: vec![SectionItem {
-                title: "Coming soon".into(),
-                subtitle: "Personalized mixes based on your listening".into(),
-                detail: String::new(),
-                is_hires: false,
-            }],
-        });
-    }
-
-    let total: usize = sections.iter().map(|s| s.items.len().min(8)).sum();
+    let total: usize = sections.iter().map(|s| effective_count(s)).sum();
     if total == 0 {
         render_empty_message(frame, area, "No personalized content yet");
         return;
