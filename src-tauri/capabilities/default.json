@@ -33,6 +33,7 @@
     "core:webview:allow-webview-close",
     "core:webview:allow-set-webview-zoom",
     "opener:default",
+    "os:default",
     "dialog:default",
     "clipboard-manager:default",
     "clipboard-manager:allow-write-text"
