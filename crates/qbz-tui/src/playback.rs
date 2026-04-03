@@ -36,19 +36,38 @@ pub enum PlaybackStatus {
 pub fn load_quality_settings() -> (Quality, bool) {
     use qbz_audio::settings::AudioSettingsStore;
 
+    // Load streaming quality from TUI preference file
+    let quality = {
+        let quality_path = dirs::data_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
+            .join("qbz")
+            .join("tui_streaming_quality");
+        match std::fs::read_to_string(&quality_path) {
+            Ok(saved) => match saved.trim() {
+                "MP3" => Quality::Mp3,
+                "CD" => Quality::Lossless,
+                "Hi-Res" => Quality::HiRes,
+                "Hi-Res+" => Quality::UltraHiRes,
+                _ => Quality::HiRes,
+            },
+            Err(_) => Quality::HiRes, // default
+        }
+    };
+
     match AudioSettingsStore::new() {
         Ok(store) => match store.get_settings() {
             Ok(settings) => {
                 let streaming_only = settings.streaming_only;
                 log::info!(
-                    "[TUI] Audio settings loaded: streaming_only={}",
+                    "[TUI] Audio settings loaded: quality={:?}, streaming_only={}",
+                    quality,
                     streaming_only,
                 );
-                (Quality::HiRes, streaming_only)
+                (quality, streaming_only)
             }
             Err(e) => {
                 log::warn!("[TUI] Failed to load audio settings: {}, using defaults", e);
-                (Quality::HiRes, false)
+                (quality, false)
             }
         },
         Err(e) => {
@@ -56,7 +75,7 @@ pub fn load_quality_settings() -> (Quality, bool) {
                 "[TUI] Failed to open audio settings store: {}, using defaults",
                 e
             );
-            (Quality::HiRes, false)
+            (quality, false)
         }
     }
 }

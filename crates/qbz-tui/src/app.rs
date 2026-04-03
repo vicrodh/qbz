@@ -362,6 +362,9 @@ impl Default for DiscoveryState {
 pub struct SettingsState {
     /// Loaded audio settings (snapshot).
     pub audio_settings: AudioSettings,
+    /// Streaming quality preference (MP3/CD/Hi-Res/Hi-Res+).
+    /// Stored separately from AudioSettings (same as desktop stores in localStorage).
+    pub streaming_quality: String,
     /// Whether settings have been loaded from the database.
     pub loaded: bool,
     /// Currently selected setting index.
@@ -374,6 +377,7 @@ impl Default for SettingsState {
     fn default() -> Self {
         Self {
             audio_settings: AudioSettings::default(),
+            streaming_quality: "Hi-Res".to_string(),
             loaded: false,
             selected_index: 0,
             scrollbar_state: ScrollbarState::default(),
@@ -2984,6 +2988,19 @@ impl App {
                 Ok(settings) => {
                     self.state.settings.audio_settings = settings;
                     self.state.settings.loaded = true;
+
+                    // Load streaming quality from file (TUI-specific, desktop uses localStorage)
+                    let quality_path = dirs::data_dir()
+                        .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
+                        .join("qbz")
+                        .join("tui_streaming_quality");
+                    if let Ok(saved) = std::fs::read_to_string(&quality_path) {
+                        let trimmed = saved.trim();
+                        if ["MP3", "CD", "Hi-Res", "Hi-Res+"].contains(&trimmed) {
+                            self.state.settings.streaming_quality = trimmed.to_string();
+                        }
+                    }
+
                     self.state.status_message = Some("Settings loaded".to_string());
                 }
                 Err(e) => {
@@ -3038,11 +3055,11 @@ impl App {
                 settings.dac_passthrough = !settings.dac_passthrough;
                 store.set_dac_passthrough(settings.dac_passthrough)
             }
-            "PipeWire Force Bit-Perfect" => {
+            "PW Force Bit-Perfect" => {
                 settings.pw_force_bitperfect = !settings.pw_force_bitperfect;
                 store.set_pw_force_bitperfect(settings.pw_force_bitperfect)
             }
-            "ALSA Hardware Volume" => {
+            "Hardware Volume" => {
                 settings.alsa_hardware_volume = !settings.alsa_hardware_volume;
                 store.set_alsa_hardware_volume(settings.alsa_hardware_volume)
             }
@@ -3054,7 +3071,7 @@ impl App {
                 settings.streaming_only = !settings.streaming_only;
                 store.set_streaming_only(settings.streaming_only)
             }
-            "Stream First Track" => {
+            "Stream Uncached" => {
                 settings.stream_first_track = !settings.stream_first_track;
                 store.set_stream_first_track(settings.stream_first_track)
             }
@@ -3074,11 +3091,11 @@ impl App {
                 let new_val = match item.label.as_str() {
                     "Exclusive Mode" => settings.exclusive_mode,
                     "DAC Passthrough" => settings.dac_passthrough,
-                    "PipeWire Force Bit-Perfect" => settings.pw_force_bitperfect,
-                    "ALSA Hardware Volume" => settings.alsa_hardware_volume,
+                    "PW Force Bit-Perfect" => settings.pw_force_bitperfect,
+                    "Hardware Volume" => settings.alsa_hardware_volume,
                     "Limit Quality to Device" => settings.limit_quality_to_device,
                     "Streaming Only" => settings.streaming_only,
-                    "Stream First Track" => settings.stream_first_track,
+                    "Stream Uncached" => settings.stream_first_track,
                     "Gapless Playback" => settings.gapless_enabled,
                     "Volume Normalization" => settings.normalization_enabled,
                     _ => false,
@@ -3097,8 +3114,8 @@ impl App {
                     item.label.as_str(),
                     "Exclusive Mode"
                         | "DAC Passthrough"
-                        | "PipeWire Force Bit-Perfect"
-                        | "ALSA Hardware Volume"
+                        | "PW Force Bit-Perfect"
+                        | "Hardware Volume"
                 );
                 let suffix = if next_track_hint {
                     " (applies on next track)"
@@ -3140,7 +3157,7 @@ impl App {
         };
 
         let result = match item.label.as_str() {
-            "Stream Buffer" => {
+            "Initial Buffer" => {
                 let new_val =
                     (settings.stream_buffer_seconds as i32 + delta).clamp(1, 10) as u8;
                 settings.stream_buffer_seconds = new_val;
@@ -3236,7 +3253,26 @@ impl App {
                 self.open_device_picker();
                 return;
             }
-            "Backend" => {
+            "Streaming Quality" => {
+                // Cycle: MP3 → CD → Hi-Res → Hi-Res+ → MP3
+                let next = match self.state.settings.streaming_quality.as_str() {
+                    "MP3" => "CD",
+                    "CD" => "Hi-Res",
+                    "Hi-Res" => "Hi-Res+",
+                    "Hi-Res+" => "MP3",
+                    _ => "Hi-Res",
+                };
+                self.state.settings.streaming_quality = next.to_string();
+                // Persist to file (simple key-value)
+                let quality_path = dirs::data_dir()
+                    .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
+                    .join("qbz")
+                    .join("tui_streaming_quality");
+                let _ = std::fs::write(&quality_path, next);
+                self.state.status_message = Some(format!("Streaming Quality: {}", next));
+                return;
+            }
+            "Audio Backend" => {
                 // Cycle: Auto → PipeWire → Alsa → Pulse → Auto
                 let next = match settings.backend_type {
                     None => Some(AudioBackendType::PipeWire),

@@ -49,71 +49,40 @@ pub fn build_settings_list(state: &AppState) -> Vec<SettingItem> {
     let settings = &state.settings.audio_settings;
     let mut items = Vec::new();
 
-    // === Audio Configuration ===
+    // Backend detection for conditional settings (same constraints as desktop)
+    use qbz_audio::{AudioBackendType, AlsaPlugin};
+    let is_alsa = settings.backend_type == Some(AudioBackendType::Alsa);
+    let is_pipewire = settings.backend_type == Some(AudioBackendType::PipeWire);
+    let is_alsa_hw = is_alsa && settings.alsa_plugin == Some(AlsaPlugin::Hw);
+
+    // Pretty backend name (matches desktop: PipeWire, ALSA Direct, PulseAudio, System Audio)
+    let backend_pretty = match &settings.backend_type {
+        Some(AudioBackendType::PipeWire) => "PipeWire".to_string(),
+        Some(AudioBackendType::Alsa) => "ALSA Direct".to_string(),
+        Some(AudioBackendType::Pulse) => "PulseAudio".to_string(),
+        Some(AudioBackendType::SystemDefault) => "System Audio".to_string(),
+        None => "Auto".to_string(),
+    };
+
+    // Pretty ALSA plugin name
+    let alsa_plugin_pretty = match &settings.alsa_plugin {
+        Some(AlsaPlugin::Hw) => "hw (Direct Hardware)".to_string(),
+        Some(AlsaPlugin::PlugHw) => "plughw (Plugin)".to_string(),
+        Some(AlsaPlugin::Pcm) => "default (PCM)".to_string(),
+        None => "Default".to_string(),
+    };
+
+    // === Audio Configuration (matches desktop SettingsView order exactly) ===
+
+    // 1. Streaming Quality
     items.push(SettingItem {
-        label: "Output Device".into(),
-        value: settings.output_device.clone().unwrap_or_else(|| "System Default".into()),
+        label: "Streaming Quality".into(),
+        value: state.settings.streaming_quality.clone(),
         kind: SettingKind::Cycle,
         section: SettingSection::Audio,
     });
 
-    items.push(SettingItem {
-        label: "Backend".into(),
-        value: match &settings.backend_type {
-            Some(b) => format!("{:?}", b),
-            None => "Auto".into(),
-        },
-        kind: SettingKind::Cycle,
-        section: SettingSection::Audio,
-    });
-
-    items.push(SettingItem {
-        label: "Exclusive Mode".into(),
-        value: if settings.exclusive_mode { "ON" } else { "OFF" }.into(),
-        kind: SettingKind::Toggle,
-        section: SettingSection::Audio,
-    });
-
-    items.push(SettingItem {
-        label: "DAC Passthrough".into(),
-        value: if settings.dac_passthrough { "ON" } else { "OFF" }.into(),
-        kind: SettingKind::Toggle,
-        section: SettingSection::Audio,
-    });
-
-    items.push(SettingItem {
-        label: "PipeWire Force Bit-Perfect".into(),
-        value: if settings.pw_force_bitperfect { "ON" } else { "OFF" }.into(),
-        kind: SettingKind::Toggle,
-        section: SettingSection::Audio,
-    });
-
-    items.push(SettingItem {
-        label: "ALSA Plugin".into(),
-        value: match &settings.alsa_plugin {
-            Some(p) => format!("{:?}", p),
-            None => "Default".into(),
-        },
-        kind: SettingKind::Cycle,
-        section: SettingSection::Audio,
-    });
-
-    items.push(SettingItem {
-        label: "ALSA Hardware Volume".into(),
-        value: if settings.alsa_hardware_volume { "ON" } else { "OFF" }.into(),
-        kind: SettingKind::Toggle,
-        section: SettingSection::Audio,
-    });
-
-    items.push(SettingItem {
-        label: "Preferred Sample Rate".into(),
-        value: settings.preferred_sample_rate
-            .map(|r| format!("{} Hz", r))
-            .unwrap_or_else(|| "Auto".into()),
-        kind: SettingKind::Numeric,
-        section: SettingSection::Audio,
-    });
-
+    // 2. Limit Quality to Device
     items.push(SettingItem {
         label: "Limit Quality to Device".into(),
         value: if settings.limit_quality_to_device { "ON" } else { "OFF" }.into(),
@@ -121,23 +90,101 @@ pub fn build_settings_list(state: &AppState) -> Vec<SettingItem> {
         section: SettingSection::Audio,
     });
 
+    // 3. Device Max Sample Rate (only shown when limit_quality_to_device is ON)
+    if settings.limit_quality_to_device {
+        items.push(SettingItem {
+            label: "Device Max Sample Rate".into(),
+            value: settings
+                .device_max_sample_rate
+                .map(|r| match r {
+                    44100 => "44.1 kHz (CD)".into(),
+                    48000 => "48 kHz (DVD)".into(),
+                    96000 => "96 kHz (Hi-Res)".into(),
+                    192000 => "192 kHz (Hi-Res+)".into(),
+                    384000 => "384 kHz (DSD)".into(),
+                    other => format!("{} Hz", other),
+                })
+                .unwrap_or_else(|| "No limit".into()),
+            kind: SettingKind::Numeric,
+            section: SettingSection::Audio,
+        });
+    }
+
+    // 4. Audio Backend
     items.push(SettingItem {
-        label: "Device Max Sample Rate".into(),
-        value: settings
-            .device_max_sample_rate
-            .map(|r| match r {
-                44100 => "44.1 kHz (CD)".into(),
-                48000 => "48 kHz (DVD)".into(),
-                96000 => "96 kHz (Hi-Res)".into(),
-                192000 => "192 kHz (Hi-Res+)".into(),
-                384000 => "384 kHz (DSD)".into(),
-                other => format!("{} Hz", other),
-            })
-            .unwrap_or_else(|| "No limit".into()),
-        kind: SettingKind::Numeric,
+        label: "Audio Backend".into(),
+        value: backend_pretty,
+        kind: SettingKind::Cycle,
         section: SettingSection::Audio,
     });
 
+    // 5. Output Device
+    items.push(SettingItem {
+        label: "Output Device".into(),
+        value: settings.output_device.clone().unwrap_or_else(|| "System Default".into()),
+        kind: SettingKind::Cycle,
+        section: SettingSection::Audio,
+    });
+
+    // 6. ALSA Plugin (only when backend = ALSA Direct)
+    if is_alsa {
+        items.push(SettingItem {
+            label: "ALSA Plugin".into(),
+            value: alsa_plugin_pretty,
+            kind: SettingKind::Cycle,
+            section: SettingSection::Audio,
+        });
+    }
+
+    // 7. Hardware Volume (only when ALSA Direct + Hw plugin)
+    if is_alsa_hw {
+        items.push(SettingItem {
+            label: "Hardware Volume".into(),
+            value: if settings.alsa_hardware_volume { "ON" } else { "OFF" }.into(),
+            kind: SettingKind::Toggle,
+            section: SettingSection::Audio,
+        });
+    }
+
+    // 8. Exclusive Mode (only available with ALSA Direct)
+    items.push(SettingItem {
+        label: "Exclusive Mode".into(),
+        value: if !is_alsa {
+            "N/A (ALSA only)".into()
+        } else if settings.exclusive_mode {
+            "ON".into()
+        } else {
+            "OFF".into()
+        },
+        kind: if is_alsa { SettingKind::Toggle } else { SettingKind::ReadOnly },
+        section: SettingSection::Audio,
+    });
+
+    // 9. DAC Passthrough (only available with PipeWire)
+    items.push(SettingItem {
+        label: "DAC Passthrough".into(),
+        value: if !is_pipewire {
+            "N/A (PipeWire only)".into()
+        } else if settings.dac_passthrough {
+            "ON".into()
+        } else {
+            "OFF".into()
+        },
+        kind: if is_pipewire { SettingKind::Toggle } else { SettingKind::ReadOnly },
+        section: SettingSection::Audio,
+    });
+
+    // 10. PW Force Bit-Perfect (only when PipeWire + DAC Passthrough ON)
+    if is_pipewire && settings.dac_passthrough {
+        items.push(SettingItem {
+            label: "PW Force Bit-Perfect".into(),
+            value: if settings.pw_force_bitperfect { "ON" } else { "OFF" }.into(),
+            kind: SettingKind::Toggle,
+            section: SettingSection::Audio,
+        });
+    }
+
+    // 11. Volume (read-only display)
     items.push(SettingItem {
         label: "Volume".into(),
         value: format!("{}%", (state.volume * 100.0) as u32),
@@ -145,7 +192,41 @@ pub fn build_settings_list(state: &AppState) -> Vec<SettingItem> {
         section: SettingSection::Audio,
     });
 
-    // === Playback Settings ===
+    // === Playback Settings (matches desktop order) ===
+
+    // Gapless (disabled when streaming_only is ON)
+    items.push(SettingItem {
+        label: "Gapless Playback".into(),
+        value: if settings.streaming_only {
+            "N/A (streaming only)".into()
+        } else if settings.gapless_enabled {
+            "ON".into()
+        } else {
+            "OFF".into()
+        },
+        kind: if settings.streaming_only { SettingKind::ReadOnly } else { SettingKind::Toggle },
+        section: SettingSection::Playback,
+    });
+
+    // Stream Uncached (stream_first_track)
+    items.push(SettingItem {
+        label: "Stream Uncached".into(),
+        value: if settings.stream_first_track { "ON" } else { "OFF" }.into(),
+        kind: SettingKind::Toggle,
+        section: SettingSection::Playback,
+    });
+
+    // Initial Buffer (only when stream_first_track is ON)
+    if settings.stream_first_track {
+        items.push(SettingItem {
+            label: "Initial Buffer".into(),
+            value: format!("{} seconds", settings.stream_buffer_seconds),
+            kind: SettingKind::Numeric,
+            section: SettingSection::Playback,
+        });
+    }
+
+    // Streaming Only
     items.push(SettingItem {
         label: "Streaming Only".into(),
         value: if settings.streaming_only { "ON" } else { "OFF" }.into(),
@@ -153,27 +234,7 @@ pub fn build_settings_list(state: &AppState) -> Vec<SettingItem> {
         section: SettingSection::Playback,
     });
 
-    items.push(SettingItem {
-        label: "Stream First Track".into(),
-        value: if settings.stream_first_track { "ON" } else { "OFF" }.into(),
-        kind: SettingKind::Toggle,
-        section: SettingSection::Playback,
-    });
-
-    items.push(SettingItem {
-        label: "Stream Buffer".into(),
-        value: format!("{} seconds", settings.stream_buffer_seconds),
-        kind: SettingKind::Numeric,
-        section: SettingSection::Playback,
-    });
-
-    items.push(SettingItem {
-        label: "Gapless Playback".into(),
-        value: if settings.gapless_enabled { "ON" } else { "OFF" }.into(),
-        kind: SettingKind::Toggle,
-        section: SettingSection::Playback,
-    });
-
+    // Volume Normalization
     items.push(SettingItem {
         label: "Volume Normalization".into(),
         value: if settings.normalization_enabled { "ON" } else { "OFF" }.into(),
@@ -181,12 +242,15 @@ pub fn build_settings_list(state: &AppState) -> Vec<SettingItem> {
         section: SettingSection::Playback,
     });
 
-    items.push(SettingItem {
-        label: "Normalization Target".into(),
-        value: format!("{:.1} LUFS", settings.normalization_target_lufs),
-        kind: SettingKind::Numeric,
-        section: SettingSection::Playback,
-    });
+    // Normalization Target (only when normalization is ON)
+    if settings.normalization_enabled {
+        items.push(SettingItem {
+            label: "Normalization Target".into(),
+            value: format!("{:.1} LUFS", settings.normalization_target_lufs),
+            kind: SettingKind::Numeric,
+            section: SettingSection::Playback,
+        });
+    }
 
     items
 }
