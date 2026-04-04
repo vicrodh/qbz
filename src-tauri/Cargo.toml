@@ -151,7 +151,7 @@ alsa = "0.9"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 tauri-plugin-dialog = { version = "2.6.0" }
-notify-rust = { git = "https://github.com/afonsojramos/notify-rust", branch = "feat/macos-image-path-support" }
+notify-rust = "4.13.0"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 tauri-plugin-dialog = { version = "2.6.0" }
