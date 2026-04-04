@@ -119,10 +119,22 @@ pub fn build_settings_list(state: &AppState) -> Vec<SettingItem> {
         section: SettingSection::Audio,
     });
 
-    // 5. Output Device
+    // 5. Output Device (show pretty name, not raw PipeWire sink ID)
     items.push(SettingItem {
         label: "Output Device".into(),
-        value: settings.output_device.clone().unwrap_or_else(|| "System Default".into()),
+        value: settings.output_device.as_ref().map(|id| {
+            // Strip alsa_output. prefix for readability
+            if let Some(stripped) = id.strip_prefix("alsa_output.") {
+                let cleaned = stripped
+                    .replace('_', " ")
+                    .replace('-', " ")
+                    .replace(".analog stereo", " Analog Stereo")
+                    .replace(".iec958 stereo", " Digital Stereo");
+                cleaned
+            } else {
+                id.clone()
+            }
+        }).unwrap_or_else(|| "System Default".into()),
         kind: SettingKind::Cycle,
         section: SettingSection::Audio,
     });

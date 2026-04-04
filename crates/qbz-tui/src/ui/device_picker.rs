@@ -1,7 +1,7 @@
-//! Device picker modal — centered overlay for selecting an audio output device.
+//! Device picker modal — categorized device list matching desktop app.
 //!
-//! Triggered from Settings when the user presses Enter on "Output Device".
-//! Lists all devices for the current backend with name, description, and max sample rate.
+//! Groups devices by type: DEFAULTS, USB AUDIO (BIT-PERFECT CAPABLE),
+//! OTHER HARDWARE, following the same logic as DeviceDropdown.svelte.
 
 use ratatui::layout::{Constraint, Flex, Layout, Margin, Rect};
 use ratatui::style::{Modifier, Style, Stylize};
@@ -14,7 +14,6 @@ use ratatui::Frame;
 use crate::app::AppState;
 use crate::theme::{ACCENT, BG_SECONDARY, BG_SELECTED, HIRES_BADGE, TEXT_DIM, TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY};
 
-/// Compute a centered popup area using percentage of terminal size.
 fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {
     let vertical = Layout::vertical([Constraint::Percentage(percent_y)]).flex(Flex::Center);
     let horizontal = Layout::horizontal([Constraint::Percentage(percent_x)]).flex(Flex::Center);
@@ -23,26 +22,40 @@ fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {
     area
 }
 
-/// Format a sample rate for display (e.g., 192000 -> "192kHz", 44100 -> "44.1kHz").
-fn format_sample_rate(rate: u32) -> String {
-    if rate % 1000 == 0 {
-        format!("{}kHz", rate / 1000)
-    } else {
-        format!("{:.1}kHz", rate as f64 / 1000.0)
+/// Get a pretty display name for a PipeWire device (strips alsa_output. prefix).
+fn pretty_device_name(device: &qbz_audio::AudioDevice) -> String {
+    // Prefer description if available (PipeWire provides friendly names)
+    if let Some(ref desc) = device.description {
+        if !desc.is_empty() {
+            return desc.clone();
+        }
     }
+
+    let name = &device.name;
+
+    // Strip common PipeWire prefixes for cleaner display
+    if let Some(stripped) = name.strip_prefix("alsa_output.") {
+        // "usb-Cambridge_Audio_Cambridge_Audio_USB_Audio_2.0_0000-00.analog-stereo"
+        // → "Cambridge Audio USB Audio 2.0 Analog Stereo"
+        let cleaned = stripped
+            .replace('_', " ")
+            .replace('-', " ")
+            .replace(".analog stereo", " Analog Stereo")
+            .replace(".iec958 stereo", " Digital Stereo");
+        // Capitalize first letters of significant words
+        return cleaned;
+    }
+
+    name.clone()
 }
 
-/// Render the device picker modal as a centered overlay.
+/// Render the device picker modal as a categorized, grouped list.
 pub fn render_device_picker(frame: &mut Frame, state: &mut AppState) {
     let area = frame.area();
+    let popup = popup_area(area, 65, 55);
 
-    // 60% width, 50% height, centered
-    let popup = popup_area(area, 60, 50);
-
-    // Clear the background area
     frame.render_widget(Clear, popup);
 
-    // Outer block with border and title
     let block = Block::bordered()
         .title(Line::from(vec![
             Span::styled(
@@ -64,7 +77,6 @@ pub fn render_device_picker(frame: &mut Frame, state: &mut AppState) {
         return;
     }
 
-    // Loading state
     if state.devices_loading {
         let msg = Paragraph::new("Scanning devices...")
             .style(Style::default().fg(ACCENT))
@@ -76,7 +88,6 @@ pub fn render_device_picker(frame: &mut Frame, state: &mut AppState) {
         return;
     }
 
-    // Empty state
     if state.available_devices.is_empty() {
         let msg = Paragraph::new("No devices found")
             .style(Style::default().fg(TEXT_DIM))
@@ -88,18 +99,57 @@ pub fn render_device_picker(frame: &mut Frame, state: &mut AppState) {
         return;
     }
 
+    // Group devices by category (same logic as desktop DeviceDropdown.svelte)
     let current_device_id = &state.settings.audio_settings.output_device;
     let selected_index = state.device_picker_index;
-    let device_count = state.available_devices.len();
 
-    let items: Vec<ListItem<'_>> = state
-        .available_devices
-        .iter()
-        .enumerate()
-        .map(|(idx, device)| {
-            let is_highlighted = idx == selected_index;
+    let mut defaults: Vec<usize> = Vec::new();
+    let mut usb_audio: Vec<usize> = Vec::new();
+    let mut other_hw: Vec<usize> = Vec::new();
 
-            // Determine if this is the currently configured device
+    for (idx, device) in state.available_devices.iter().enumerate() {
+        if device.is_default {
+            defaults.push(idx);
+        } else if device.device_bus.as_deref() == Some("usb") && device.is_hardware {
+            usb_audio.push(idx);
+        } else if device.is_hardware {
+            other_hw.push(idx);
+        } else {
+            other_hw.push(idx); // Virtual sinks go to Other
+        }
+    }
+
+    // Build the visual list with group headers
+    let mut list_items: Vec<ListItem<'_>> = Vec::new();
+    let mut visual_to_device: Vec<Option<usize>> = Vec::new();
+
+    let groups: Vec<(&str, &[usize])> = vec![
+        ("DEFAULTS", &defaults),
+        ("USB AUDIO (BIT-PERFECT CAPABLE)", &usb_audio),
+        ("OTHER HARDWARE", &other_hw),
+    ];
+
+    for (group_label, device_indices) in &groups {
+        if device_indices.is_empty() {
+            continue;
+        }
+
+        // Group header
+        if !list_items.is_empty() {
+            list_items.push(ListItem::new(Line::from("")));
+            visual_to_device.push(None);
+        }
+        list_items.push(ListItem::new(Line::from(Span::styled(
+            format!("  {}", group_label),
+            Style::default().fg(TEXT_MUTED).add_modifier(Modifier::BOLD),
+        ))));
+        visual_to_device.push(None);
+
+        // Devices in this group
+        for &dev_idx in *device_indices {
+            let device = &state.available_devices[dev_idx];
+            let is_highlighted = dev_idx == selected_index;
+
             let is_current = current_device_id
                 .as_ref()
                 .map(|cid| cid == &device.id)
@@ -113,79 +163,60 @@ pub fn render_device_picker(frame: &mut Frame, state: &mut AppState) {
                 Style::default().fg(TEXT_SECONDARY)
             };
 
+            let display_name = pretty_device_name(device);
+
             let mut spans = vec![
                 Span::styled(
                     format!("  {} ", marker),
-                    if is_current {
-                        style.fg(HIRES_BADGE)
-                    } else {
-                        style.fg(TEXT_DIM)
-                    },
+                    if is_current { style.fg(HIRES_BADGE) } else { style.fg(TEXT_DIM) },
                 ),
                 Span::styled(
-                    device.name.clone(),
+                    display_name,
                     if is_highlighted { style.bold() } else { style },
                 ),
             ];
 
-            // Add description if available
-            if let Some(ref desc) = device.description {
+            // BP badge for USB audio devices
+            if device.device_bus.as_deref() == Some("usb") && device.is_hardware {
                 spans.push(Span::styled(
-                    format!("  ({})", desc),
-                    style.fg(TEXT_MUTED),
+                    "  BP",
+                    style.fg(HIRES_BADGE).add_modifier(Modifier::BOLD),
                 ));
             }
 
-            // Add max sample rate
-            if let Some(rate) = device.max_sample_rate {
-                let rate_str = format_sample_rate(rate);
-                let rate_color = if rate >= 192000 {
-                    HIRES_BADGE
-                } else {
-                    TEXT_MUTED
-                };
-                spans.push(Span::styled(
-                    format!("  {}", rate_str),
-                    style.fg(rate_color),
-                ));
-            }
+            list_items.push(ListItem::new(Line::from(spans)));
+            visual_to_device.push(Some(dev_idx));
+        }
+    }
 
-            // Add bus type badge
-            if let Some(ref bus) = device.device_bus {
-                spans.push(Span::styled(
-                    format!("  [{}]", bus),
-                    style.fg(TEXT_DIM),
-                ));
-            }
+    let list = List::new(list_items);
 
-            ListItem::new(Line::from(spans))
-        })
-        .collect();
-
-    let list = List::new(items);
+    // Find visual index for selected device
+    let visual_selected = visual_to_device
+        .iter()
+        .position(|v| *v == Some(selected_index))
+        .unwrap_or(0);
 
     let mut list_state = ListState::default();
-    list_state.select(Some(selected_index));
+    list_state.select(Some(visual_selected));
 
     frame.render_stateful_widget(list, inner, &mut list_state);
 
-    // Scrollbar (when there are more devices than fit)
-    if device_count > inner.height as usize {
-        let mut scrollbar_state = ratatui::widgets::ScrollbarState::default()
-            .content_length(device_count)
-            .position(selected_index);
-
+    // Scrollbar
+    let device_count = state.available_devices.len();
+    if device_count > 0 {
         let scrollbar = Scrollbar::default()
             .orientation(ScrollbarOrientation::VerticalRight)
             .begin_symbol(Some("\u{2191}"))
             .end_symbol(Some("\u{2193}"));
 
+        let mut scrollbar_state = ratatui::widgets::ScrollbarState::default()
+            .content_length(device_count)
+            .position(selected_index);
+
         frame.render_stateful_widget(
             scrollbar,
-            inner.inner(Margin {
-                vertical: 0,
-                horizontal: 0,
-            }),
+            inner.inner(Margin { vertical: 0, horizontal: 1 }),
             &mut scrollbar_state,
         );
     }
