@@ -53,6 +53,26 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="1.2.2" date="2026-04-04">
+      <description>
+        <p>About a month and a half ago, Qobuz began making changes to their authentication system. This was the reason we introduced OAuth login early on — and fortunately, doing so ahead of time meant no one was truly locked out of the app. This release simply removes direct credential login, making OAuth the sole authentication method. There is also some bugfixing for issues reported on GitHub.</p>
+        <p>We are considering requesting official API access again, and looking for ways to coordinate with the community to support this request to Qobuz — so that a more severe change in the future does not leave us out. Thank you all for the continued support for QBZ.</p>
+        <ul>
+          <li>OAuth is now the only login method; username/password authentication has been removed</li>
+          <li>Fixed "Go to Album" and "Go to Artist" navigation failing until starting new playback (#252)</li>
+          <li>Fixed MPRIS metadata not populating on session restore (#240)</li>
+          <li>Fixed incorrect artist birth/formation location display in Artist Network (#235)</li>
+          <li>Added Playlists to the favorites quick access menu and titlebar dropdown (#233)</li>
+          <li>Added bulk "make available offline" action to track selection bar (#231)</li>
+          <li>System sleep is now prevented during active playback via XDG portal (#229)</li>
+          <li>Sensitive IDs and UUIDs are now sanitized from logs (#213)</li>
+          <li>F11 fullscreen toggle and ESC exit now work globally (#202)</li>
+          <li>Added streaming buffer progress indicator to the seekbar (#194)</li>
+          <li>Initial macOS support: CoreAudio device probing, deep links, rich notifications, platform-aware settings</li>
+          <li>Dependency updates: coreaudio-rs, notify-rust, axum, lofty, rand, souvlaki, lucide-svelte, vite</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.2.1" date="2026-03-25">
       <description>
         <p>Resilience: exponential backoff retry (1s/2s/4s) with quality fallback when Qobuz servers return 504s. User preference modal for retry behavior (ask/always fallback/always skip), persisted in settings. Degraded service indicator with 5-minute auto-clear. Manual network check button. macOS port foundation (gated backends, native title bar, CI workflow). Offline mode improvements (last known profile restore, dismissible banner, network folders). WebKitGTK 2.50+ image flicker fix. Hybrid Intel+NVIDIA compositing fix. QConnect fixes for queue_version tolerance and ALSA volume control. i18n: hardcoded strings replaced in SearchView and PlaylistDetailView. Security: aws-lc-sys 0.39.0, rustls-webpki 0.103.10.</p>
