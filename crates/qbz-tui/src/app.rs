@@ -1741,32 +1741,10 @@ impl App {
                 }
             }
             KeyCode::Char('n') => {
-                let core = Arc::clone(&self.core);
-                let status_tx = self.playback_status_tx.clone();
-                let cache = self.playback_cache.clone();
-                self.rt_handle.spawn(async move {
-                    if let Some(track) = core.next_track().await {
-                        log::info!("[TUI] Next track: {} - {}", track.artist, track.title);
-                        if let Err(e) = playback::play_qobuz_track(&core, track.id, &cache, &status_tx).await {
-                            log::error!("[TUI] Next track playback failed: {}", e);
-                            let _ = status_tx.send(PlaybackStatus::Error(e));
-                        }
-                    }
-                });
+                self.play_next_or_prev(true);
             }
             KeyCode::Char('p') => {
-                let core = Arc::clone(&self.core);
-                let status_tx = self.playback_status_tx.clone();
-                let cache = self.playback_cache.clone();
-                self.rt_handle.spawn(async move {
-                    if let Some(track) = core.previous_track().await {
-                        log::info!("[TUI] Previous track: {} - {}", track.artist, track.title);
-                        if let Err(e) = playback::play_qobuz_track(&core, track.id, &cache, &status_tx).await {
-                            log::error!("[TUI] Previous track playback failed: {}", e);
-                            let _ = status_tx.send(PlaybackStatus::Error(e));
-                        }
-                    }
-                });
+                self.play_next_or_prev(false);
             }
 
             // Shuffle toggle (global)
@@ -2167,6 +2145,65 @@ impl App {
     }
 
 
+
+    /// Play next or previous track with generation protection.
+    fn play_next_or_prev(&mut self, is_next: bool) {
+        // Stop current playback immediately
+        let _ = self.core.player().stop();
+
+        // Increment generation to cancel any in-flight downloads
+        let generation = self.playback_generation.fetch_add(1, Ordering::SeqCst) + 1;
+
+        self.state.is_buffering = true;
+        self.state.status_message = Some(if is_next { "Next track..." } else { "Previous track..." }.to_string());
+
+        let core = Arc::clone(&self.core);
+        let status_tx = self.playback_status_tx.clone();
+        let cache = self.playback_cache.clone();
+        let gen = Arc::clone(&self.playback_generation);
+        let cover_art_tx = self.cover_art_tx.clone();
+
+        self.rt_handle.spawn(async move {
+            let track = if is_next {
+                core.next_track().await
+            } else {
+                core.previous_track().await
+            };
+
+            let Some(track) = track else {
+                let _ = status_tx.send(PlaybackStatus::Error("No more tracks".into()));
+                return;
+            };
+
+            // Check generation — if user pressed n/p again, skip this stale request
+            if gen.load(Ordering::SeqCst) != generation {
+                log::info!("[TUI] Playback generation changed, skipping stale track {}", track.id);
+                return;
+            }
+
+            log::info!("[TUI] {} track: {} - {}", if is_next { "Next" } else { "Prev" }, track.artist, track.title);
+
+            // Download cover art in background
+            if let Some(ref url) = track.artwork_url {
+                let url = url.clone();
+                let art_tx = cover_art_tx.clone();
+                tokio::spawn(async move {
+                    if let Ok(response) = reqwest::get(&url).await {
+                        if let Ok(bytes) = response.bytes().await {
+                            if let Ok(img) = image::load_from_memory(&bytes) {
+                                let _ = art_tx.send(Some(img));
+                            }
+                        }
+                    }
+                });
+            }
+
+            if let Err(e) = playback::play_qobuz_track(&core, track.id, &cache, &status_tx).await {
+                log::error!("[TUI] Track playback failed: {}", e);
+                let _ = status_tx.send(PlaybackStatus::Error(e));
+            }
+        });
+    }
 
     fn handle_search_result(&mut self, result: SearchResult) {
         self.state.search.loading = false;
@@ -2638,17 +2675,22 @@ impl App {
             ))
         };
         self.state.status_message = Some(format!("Loading: {}...", track.title));
+        self.state.is_buffering = true;
 
-        // Trigger cover art download
+        let _ = self.core.player().stop();
+        let generation = self.playback_generation.fetch_add(1, Ordering::SeqCst) + 1;
+
         self.update_artwork_from_track(&track);
 
         let core = Arc::clone(&self.core);
         let track_id = track.id;
         let status_tx = self.playback_status_tx.clone();
         let cache = self.playback_cache.clone();
+        let gen = Arc::clone(&self.playback_generation);
 
         self.rt_handle.spawn(async move {
             core.set_queue(queue_tracks, Some(0)).await;
+            if gen.load(Ordering::SeqCst) != generation { return; }
             if let Err(e) = playback::play_qobuz_track(&core, track_id, &cache, &status_tx).await {
                 log::error!("[TUI] Failed to play playlist track {}: {}", track_id, e);
                 let _ = status_tx.send(PlaybackStatus::Error(e));
@@ -3645,6 +3687,11 @@ impl App {
             ))
         };
         self.state.status_message = Some(format!("Loading: {}...", first_title));
+        self.state.is_buffering = true;
+
+        // Stop current + generation protection
+        let _ = self.core.player().stop();
+        let generation = self.playback_generation.fetch_add(1, Ordering::SeqCst) + 1;
 
         // Trigger cover art download
         self.update_artwork_from_track(&selected_track);
@@ -3652,12 +3699,16 @@ impl App {
         let core = Arc::clone(&self.core);
         let status_tx = self.playback_status_tx.clone();
         let cache = self.playback_cache.clone();
+        let gen = Arc::clone(&self.playback_generation);
 
         self.rt_handle.spawn(async move {
-            // Set the queue with all remaining album tracks, starting at index 0
             core.set_queue(queue_tracks, Some(0)).await;
 
-            // Play the first track
+            if gen.load(Ordering::SeqCst) != generation {
+                log::info!("[TUI] Playback generation changed, skipping album track {}", first_track_id);
+                return;
+            }
+
             if let Err(e) =
                 playback::play_qobuz_track(&core, first_track_id, &cache, &status_tx).await
             {
@@ -3895,42 +3946,14 @@ impl App {
     /// Play the selected track from the library tracks tab.
     fn play_selected_library_track(&mut self) {
         let idx = self.state.library.selected_index;
-        let track = match self.state.library.tracks.get(idx) {
-            Some(tr) => tr.clone(),
-            None => return,
-        };
+        if idx >= self.state.library.tracks.len() { return; }
 
-        if !self.state.authenticated {
-            self.state.status_message = Some("Not authenticated".to_string());
-            return;
-        }
-
-        self.state.current_track_title = Some(track.title.clone());
-        self.state.current_track_artist = Some(
-            track.performer.as_ref().map(|p| p.name.clone()).unwrap_or_else(|| "Unknown".to_string()),
-        );
-        self.state.current_track_quality = if track.hires_streamable {
-            Some("Hi-Res".to_string())
-        } else {
-            Some(format!(
-                "{}bit/{}kHz",
-                track.maximum_bit_depth.unwrap_or(16),
-                track.maximum_sampling_rate.unwrap_or(44.1)
-            ))
-        };
-        self.state.status_message = Some(format!("Loading: {}...", track.title));
-
-        let core = Arc::clone(&self.core);
-        let track_id = track.id;
-        let status_tx = self.playback_status_tx.clone();
-        let cache = self.playback_cache.clone();
-
-        self.rt_handle.spawn(async move {
-            if let Err(e) = playback::play_qobuz_track(&core, track_id, &cache, &status_tx).await {
-                log::error!("[TUI] Failed to play library track {}: {}", track_id, e);
-                let _ = status_tx.send(PlaybackStatus::Error(e));
-            }
-        });
+        let all_tracks: Vec<qbz_models::QueueTrack> = self.state.library.tracks
+            .iter()
+            .map(|tr| Self::track_to_queue_track(tr))
+            .collect();
+        let track = self.state.library.tracks[idx].clone();
+        self.play_track_with_queue(track, all_tracks, idx);
     }
 
     /// Open the selected album from library albums tab.
@@ -4087,13 +4110,19 @@ impl App {
         };
 
         self.state.status_message = Some(format!("Loading: {}...", track.title));
+        self.state.is_buffering = true;
+
+        let _ = self.core.player().stop();
+        let generation = self.playback_generation.fetch_add(1, Ordering::SeqCst) + 1;
 
         let core = Arc::clone(&self.core);
         let track_id = track.id;
         let status_tx = self.playback_status_tx.clone();
         let cache = self.playback_cache.clone();
+        let gen = Arc::clone(&self.playback_generation);
 
         self.rt_handle.spawn(async move {
+            if gen.load(Ordering::SeqCst) != generation { return; }
             if let Err(e) = playback::play_qobuz_track(&core, track_id, &cache, &status_tx).await {
                 log::error!("[TUI] Failed to play artist track {}: {}", track_id, e);
                 let _ = status_tx.send(PlaybackStatus::Error(e));
