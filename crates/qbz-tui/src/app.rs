@@ -389,6 +389,29 @@ impl Default for SettingsState {
     }
 }
 
+/// State for the QConnect (Qobuz Connect) integration.
+pub struct QconnectState {
+    /// Whether QConnect is enabled (user toggle).
+    pub enabled: bool,
+    /// Whether the transport is currently connected.
+    pub transport_connected: bool,
+    /// Last error message from QConnect.
+    pub last_error: Option<String>,
+    /// Status text for display.
+    pub status: String,
+}
+
+impl Default for QconnectState {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            transport_connected: false,
+            last_error: None,
+            status: "Disabled".to_string(),
+        }
+    }
+}
+
 /// State for the library view (user's full collection).
 pub struct LibraryState {
     pub tab: LibraryTab,
@@ -487,6 +510,8 @@ pub struct AppState {
     pub library: LibraryState,
     /// Settings view state.
     pub settings: SettingsState,
+    /// QConnect (Qobuz Connect) state.
+    pub qconnect: QconnectState,
     /// Playlists view state.
     pub playlists: PlaylistsState,
     /// Discovery view state.
@@ -547,6 +572,7 @@ impl Default for AppState {
             artist_detail: ArtistState::default(),
             library: LibraryState::default(),
             settings: SettingsState::default(),
+            qconnect: QconnectState::default(),
             playlists: PlaylistsState::default(),
             discovery: DiscoveryState::default(),
             current_artwork_url: None,
@@ -728,6 +754,13 @@ pub struct App {
     cover_art_rx: mpsc::UnboundedReceiver<Option<image::DynamicImage>>,
     /// Image protocol picker (detects terminal capabilities once).
     picker: ratatui_image::picker::Picker,
+    /// QConnect service (manages the Qobuz Connect WebSocket connection).
+    /// Wrapped in Arc<Mutex> so it can be shared with spawned async tasks.
+    qconnect_service: Arc<tokio::sync::Mutex<crate::qconnect::QconnectService>>,
+    /// Sender for QConnect events (cloned into the service event sink).
+    qconnect_event_tx: mpsc::UnboundedSender<crate::qconnect::QconnectTuiEvent>,
+    /// Receiver for QConnect events (drained each tick).
+    qconnect_event_rx: mpsc::UnboundedReceiver<crate::qconnect::QconnectTuiEvent>,
 }
 
 impl App {
@@ -846,6 +879,7 @@ impl App {
         let (artist_page_tx, artist_page_rx) = mpsc::unbounded_channel::<ArtistPageResult>();
         let (login_tx, login_rx) = mpsc::unbounded_channel::<LoginResult>();
         let (cover_art_tx, cover_art_rx) = mpsc::unbounded_channel::<Option<image::DynamicImage>>();
+        let (qconnect_tx, qconnect_rx) = mpsc::unbounded_channel::<crate::qconnect::QconnectTuiEvent>();
 
         // Create image picker — use Halfblocks as safe default that works everywhere.
         // Picker::from_query_stdio() requires non-raw-mode terminal, and we haven't
@@ -929,6 +963,9 @@ impl App {
             picker,
             visualizer_tap: Some(visualizer_tap),
             playback_generation: Arc::new(AtomicU64::new(0)),
+            qconnect_service: Arc::new(tokio::sync::Mutex::new(crate::qconnect::QconnectService::new())),
+            qconnect_event_tx: qconnect_tx,
+            qconnect_event_rx: qconnect_rx,
         })
     }
 
@@ -1131,6 +1168,50 @@ impl App {
                         self.state.cover_art = None;
                     }
                 }
+            }
+
+            // Drain QConnect events
+            while let Ok(qc_event) = self.qconnect_event_rx.try_recv() {
+                match qc_event {
+                    crate::qconnect::QconnectTuiEvent::Connected => {
+                        self.state.qconnect.transport_connected = true;
+                        self.state.qconnect.last_error = None;
+                        self.state.qconnect.status = "Connected".to_string();
+                        self.state.status_message = Some("QConnect: Connected".to_string());
+                    }
+                    crate::qconnect::QconnectTuiEvent::Disconnected => {
+                        self.state.qconnect.transport_connected = false;
+                        if self.state.qconnect.enabled {
+                            self.state.qconnect.status = "Disconnected".to_string();
+                            self.state.status_message = Some("QConnect: Disconnected".to_string());
+                        } else {
+                            self.state.qconnect.status = "Disabled".to_string();
+                            self.state.status_message = Some("QConnect: Disabled".to_string());
+                        }
+                    }
+                    crate::qconnect::QconnectTuiEvent::Error(msg) => {
+                        self.state.qconnect.enabled = false;
+                        self.state.qconnect.transport_connected = false;
+                        self.state.qconnect.last_error = Some(msg.clone());
+                        self.state.qconnect.status = format!("Error: {}", msg);
+                        self.state.status_message = Some(format!("QConnect error: {}", msg));
+                    }
+                    crate::qconnect::QconnectTuiEvent::SessionEvent { message_type } => {
+                        log::info!("[QConnect/TUI] Session event: {}", message_type);
+                    }
+                }
+            }
+        }
+
+        // Stop QConnect service if running
+        {
+            let mut guard = self.qconnect_service.blocking_lock();
+            if guard.is_running() {
+                log::info!("[TUI] Stopping QConnect service on exit...");
+                // Use block_in_place since we're in an async context and need to await
+                let _ = tokio::task::block_in_place(|| {
+                    tokio::runtime::Handle::current().block_on(guard.stop())
+                });
             }
         }
 
@@ -3147,6 +3228,12 @@ impl App {
             return;
         }
 
+        // Handle QConnect toggle separately (not in AudioSettingsStore)
+        if item.label == "QConnect" {
+            self.toggle_qconnect();
+            return;
+        }
+
         let settings = &mut self.state.settings.audio_settings;
         let store = match AudioSettingsStore::new() {
             Ok(s) => s,
@@ -3342,6 +3429,66 @@ impl App {
             Err(e) => {
                 self.state.status_message = Some(format!("Failed to save: {}", e));
             }
+        }
+    }
+
+    /// Toggle QConnect on or off.
+    fn toggle_qconnect(&mut self) {
+        let new_enabled = !self.state.qconnect.enabled;
+        self.state.qconnect.enabled = new_enabled;
+
+        if new_enabled {
+            // Start QConnect service
+            if !self.state.authenticated {
+                self.state.qconnect.enabled = false;
+                self.state.qconnect.status = "Requires login".to_string();
+                self.state.status_message = Some("QConnect requires authentication".to_string());
+                return;
+            }
+
+            self.state.qconnect.status = "Connecting...".to_string();
+            self.state.status_message = Some("QConnect: Connecting...".to_string());
+
+            let core = Arc::clone(&self.core);
+            let event_tx = self.qconnect_event_tx.clone();
+            let service = Arc::clone(&self.qconnect_service);
+
+            self.rt_handle.spawn(async move {
+                let mut guard = service.lock().await;
+                match guard.start(&core, event_tx.clone()).await {
+                    Ok(()) => {
+                        log::info!("[QConnect/TUI] Service started successfully");
+                    }
+                    Err(err) => {
+                        log::error!("[QConnect/TUI] Failed to start: {}", err);
+                        let _ = event_tx.send(crate::qconnect::QconnectTuiEvent::Error(err));
+                    }
+                }
+            });
+        } else {
+            // Stop QConnect service
+            self.state.qconnect.status = "Stopping...".to_string();
+
+            let event_tx = self.qconnect_event_tx.clone();
+            let service = Arc::clone(&self.qconnect_service);
+
+            self.rt_handle.spawn(async move {
+                let mut guard = service.lock().await;
+                match guard.stop().await {
+                    Ok(()) => {
+                        log::info!("[QConnect/TUI] Service stopped");
+                        let _ = event_tx.send(crate::qconnect::QconnectTuiEvent::Disconnected);
+                    }
+                    Err(err) => {
+                        log::error!("[QConnect/TUI] Failed to stop: {}", err);
+                        let _ = event_tx.send(crate::qconnect::QconnectTuiEvent::Error(err));
+                    }
+                }
+            });
+
+            self.state.qconnect.status = "Disabled".to_string();
+            self.state.qconnect.transport_connected = false;
+            self.state.status_message = Some("QConnect: Disabled".to_string());
         }
     }
 

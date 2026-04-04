@@ -42,6 +42,7 @@ pub enum SettingKind {
 pub enum SettingSection {
     Audio,
     Playback,
+    QConnect,
 }
 
 /// Build the list of setting items from the current audio settings.
@@ -252,6 +253,31 @@ pub fn build_settings_list(state: &AppState) -> Vec<SettingItem> {
         });
     }
 
+    // === QConnect (Qobuz Connect) ===
+
+    items.push(SettingItem {
+        label: "QConnect".into(),
+        value: if state.qconnect.enabled { "ON" } else { "OFF" }.into(),
+        kind: SettingKind::Toggle,
+        section: SettingSection::QConnect,
+    });
+
+    items.push(SettingItem {
+        label: "Status".into(),
+        value: state.qconnect.status.clone(),
+        kind: SettingKind::ReadOnly,
+        section: SettingSection::QConnect,
+    });
+
+    if let Some(ref err) = state.qconnect.last_error {
+        items.push(SettingItem {
+            label: "Last Error".into(),
+            value: err.clone(),
+            kind: SettingKind::ReadOnly,
+            section: SettingSection::QConnect,
+        });
+    }
+
     items
 }
 
@@ -304,6 +330,7 @@ pub fn render_settings(frame: &mut Frame, area: Rect, state: &mut AppState) {
             let section_name = match item.section {
                 SettingSection::Audio => "Audio Configuration",
                 SettingSection::Playback => "Playback Settings",
+                SettingSection::QConnect => "QConnect (Qobuz Connect)",
             };
 
             // Add blank line between sections (except the first)

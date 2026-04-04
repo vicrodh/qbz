@@ -3,6 +3,7 @@ pub mod adapter;
 pub mod credentials;
 pub mod input;
 pub mod playback;
+pub mod qconnect;
 pub mod theme;
 pub mod ui;
 
