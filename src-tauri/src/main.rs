@@ -81,83 +81,88 @@ fn is_intel_gpu() -> bool {
 }
 
 fn main() {
-    // CLI flag: --autoconfig-graphics — detect environment and apply optimal settings
-    if std::env::args().any(|a| a == "--autoconfig-graphics") {
-        qbz_nix_lib::autoconfig_graphics::run();
-        return;
-    }
+    // CLI flags for Linux graphics troubleshooting (X11/Wayland, GDK, GSK, DMA-BUF)
+    // These are no-ops on macOS/Windows where the graphics stack is managed by the OS.
+    #[cfg(target_os = "linux")]
+    {
+        // CLI flag: --autoconfig-graphics — detect environment and apply optimal settings
+        if std::env::args().any(|a| a == "--autoconfig-graphics") {
+            qbz_nix_lib::autoconfig_graphics::run();
+            return;
+        }
 
-    // CLI flag: --reset-graphics — resets ALL graphics/composition settings to defaults
-    if std::env::args().any(|a| a == "--reset-graphics") {
-        eprintln!("[QBZ] Resetting all graphics settings to defaults...");
-        let mut errors = Vec::new();
+        // CLI flag: --reset-graphics — resets ALL graphics/composition settings to defaults
+        if std::env::args().any(|a| a == "--reset-graphics") {
+            eprintln!("[QBZ] Resetting all graphics settings to defaults...");
+            let mut errors = Vec::new();
 
-        // Reset graphics settings (force_x11, gdk_scale, gdk_dpi_scale)
-        match qbz_nix_lib::config::graphics_settings::GraphicsSettingsStore::new() {
-            Ok(store) => {
-                if let Err(e) = store.set_force_x11(false) {
-                    errors.push(format!("force_x11: {}", e));
+            // Reset graphics settings (force_x11, gdk_scale, gdk_dpi_scale)
+            match qbz_nix_lib::config::graphics_settings::GraphicsSettingsStore::new() {
+                Ok(store) => {
+                    if let Err(e) = store.set_force_x11(false) {
+                        errors.push(format!("force_x11: {}", e));
+                    }
+                    if let Err(e) = store.set_gdk_scale(None) {
+                        errors.push(format!("gdk_scale: {}", e));
+                    }
+                    if let Err(e) = store.set_gdk_dpi_scale(None) {
+                        errors.push(format!("gdk_dpi_scale: {}", e));
+                    }
+                    if let Err(e) = store.set_gsk_renderer(None) {
+                        errors.push(format!("gsk_renderer: {}", e));
+                    }
+                    if let Err(e) = store.set_hardware_acceleration(true) {
+                        errors.push(format!("hardware_acceleration: {}", e));
+                    }
                 }
-                if let Err(e) = store.set_gdk_scale(None) {
-                    errors.push(format!("gdk_scale: {}", e));
+                Err(e) => errors.push(format!("graphics settings store: {}", e)),
+            }
+
+            // Reset developer settings (force_dmabuf)
+            match qbz_nix_lib::config::developer_settings::DeveloperSettingsStore::new() {
+                Ok(store) => {
+                    if let Err(e) = store.set_force_dmabuf(false) {
+                        errors.push(format!("force_dmabuf: {}", e));
+                    }
                 }
-                if let Err(e) = store.set_gdk_dpi_scale(None) {
-                    errors.push(format!("gdk_dpi_scale: {}", e));
-                }
-                if let Err(e) = store.set_gsk_renderer(None) {
-                    errors.push(format!("gsk_renderer: {}", e));
-                }
-                if let Err(e) = store.set_hardware_acceleration(true) {
-                    errors.push(format!("hardware_acceleration: {}", e));
+                Err(e) => errors.push(format!("developer settings store: {}", e)),
+            }
+
+            if errors.is_empty() {
+                eprintln!("[QBZ] All graphics settings have been reset:");
+                eprintln!("[QBZ]   - hardware_acceleration: true");
+                eprintln!("[QBZ]   - force_x11: false");
+                eprintln!("[QBZ]   - gdk_scale: auto");
+                eprintln!("[QBZ]   - gdk_dpi_scale: auto");
+                eprintln!("[QBZ]   - gsk_renderer: auto");
+                eprintln!("[QBZ]   - force_dmabuf: false");
+                eprintln!("[QBZ] You can now start QBZ normally.");
+                eprintln!(
+                    "[QBZ] Tip: Run 'qbz --autoconfig-graphics' to auto-detect optimal settings."
+                );
+            } else {
+                eprintln!("[QBZ] Some settings could not be reset:");
+                for e in &errors {
+                    eprintln!("[QBZ]   - {}", e);
                 }
             }
-            Err(e) => errors.push(format!("graphics settings store: {}", e)),
+            return;
         }
 
-        // Reset developer settings (force_dmabuf)
-        match qbz_nix_lib::config::developer_settings::DeveloperSettingsStore::new() {
-            Ok(store) => {
-                if let Err(e) = store.set_force_dmabuf(false) {
-                    errors.push(format!("force_dmabuf: {}", e));
-                }
+        // CLI flag: --reset-dmabuf — resets the developer force_dmabuf setting and exits
+        if std::env::args().any(|a| a == "--reset-dmabuf") {
+            match qbz_nix_lib::config::developer_settings::DeveloperSettingsStore::new() {
+                Ok(store) => match store.set_force_dmabuf(false) {
+                    Ok(()) => {
+                        eprintln!("[QBZ] Developer force_dmabuf has been reset to false.");
+                        eprintln!("[QBZ] You can now start QBZ normally.");
+                    }
+                    Err(e) => eprintln!("[QBZ] Failed to reset force_dmabuf: {}", e),
+                },
+                Err(e) => eprintln!("[QBZ] Failed to open developer settings: {}", e),
             }
-            Err(e) => errors.push(format!("developer settings store: {}", e)),
+            return;
         }
-
-        if errors.is_empty() {
-            eprintln!("[QBZ] All graphics settings have been reset:");
-            eprintln!("[QBZ]   - hardware_acceleration: true");
-            eprintln!("[QBZ]   - force_x11: false");
-            eprintln!("[QBZ]   - gdk_scale: auto");
-            eprintln!("[QBZ]   - gdk_dpi_scale: auto");
-            eprintln!("[QBZ]   - gsk_renderer: auto");
-            eprintln!("[QBZ]   - force_dmabuf: false");
-            eprintln!("[QBZ] You can now start QBZ normally.");
-            eprintln!(
-                "[QBZ] Tip: Run 'qbz --autoconfig-graphics' to auto-detect optimal settings."
-            );
-        } else {
-            eprintln!("[QBZ] Some settings could not be reset:");
-            for e in &errors {
-                eprintln!("[QBZ]   - {}", e);
-            }
-        }
-        return;
-    }
-
-    // CLI flag: --reset-dmabuf — resets the developer force_dmabuf setting and exits
-    if std::env::args().any(|a| a == "--reset-dmabuf") {
-        match qbz_nix_lib::config::developer_settings::DeveloperSettingsStore::new() {
-            Ok(store) => match store.set_force_dmabuf(false) {
-                Ok(()) => {
-                    eprintln!("[QBZ] Developer force_dmabuf has been reset to false.");
-                    eprintln!("[QBZ] You can now start QBZ normally.");
-                }
-                Err(e) => eprintln!("[QBZ] Failed to reset force_dmabuf: {}", e),
-            },
-            Err(e) => eprintln!("[QBZ] Failed to open developer settings: {}", e),
-        }
-        return;
     }
 
     // Set the application name/class for Linux window managers
@@ -537,7 +542,7 @@ fn main() {
         qbz_nix_lib::logging::log_startup(&format!("[QBZ] GPU rendering: {}", gpu_status));
     }
 
-    // Catch GTK initialization panics and show a recovery message
+    // Catch panics during startup and show a recovery message
     let result = std::panic::catch_unwind(|| qbz_nix_lib::run());
 
     if let Err(panic_info) = result {
@@ -549,33 +554,36 @@ fn main() {
             "Unknown panic".to_string()
         };
 
-        let is_gtk_failure = msg.contains("Failed to initialize gtk")
-            || msg.contains("Failed to initialize GTK")
-            || msg.contains("GDK_BACKEND");
+        // GTK initialization failures only happen on Linux (X11/Wayland graphics stack)
+        #[cfg(target_os = "linux")]
+        {
+            let is_gtk_failure = msg.contains("Failed to initialize gtk")
+                || msg.contains("Failed to initialize GTK")
+                || msg.contains("GDK_BACKEND");
 
-        if is_gtk_failure {
-            eprintln!();
-            eprintln!("╔══════════════════════════════════════════════════════════════╗");
-            eprintln!("║  QBZ failed to start: GTK initialization error              ║");
-            eprintln!("╠══════════════════════════════════════════════════════════════╣");
-            eprintln!("║                                                              ║");
-            eprintln!("║  This is usually caused by incompatible graphics settings.   ║");
-            eprintln!("║  To fix it, run:                                             ║");
-            eprintln!("║                                                              ║");
-            eprintln!("║    qbz --reset-graphics                                      ║");
-            eprintln!("║                                                              ║");
-            eprintln!("║  Or for Flatpak:                                             ║");
-            eprintln!("║                                                              ║");
-            eprintln!("║    flatpak run com.blitzfc.qbz --reset-graphics              ║");
-            eprintln!("║                                                              ║");
-            eprintln!("╚══════════════════════════════════════════════════════════════╝");
-            eprintln!();
-            eprintln!("[QBZ] Error detail: {}", msg);
-        } else {
-            eprintln!("[QBZ] Fatal error: {}", msg);
-            eprintln!("[QBZ] If the app fails to start, try: qbz --reset-graphics");
+            if is_gtk_failure {
+                eprintln!();
+                eprintln!("╔══════════════════════════════════════════════════════════════╗");
+                eprintln!("║  QBZ failed to start: GTK initialization error              ║");
+                eprintln!("╠══════════════════════════════════════════════════════════════╣");
+                eprintln!("║                                                              ║");
+                eprintln!("║  This is usually caused by incompatible graphics settings.   ║");
+                eprintln!("║  To fix it, run:                                             ║");
+                eprintln!("║                                                              ║");
+                eprintln!("║    qbz --reset-graphics                                      ║");
+                eprintln!("║                                                              ║");
+                eprintln!("║  Or for Flatpak:                                             ║");
+                eprintln!("║                                                              ║");
+                eprintln!("║    flatpak run com.blitzfc.qbz --reset-graphics              ║");
+                eprintln!("║                                                              ║");
+                eprintln!("╚══════════════════════════════════════════════════════════════╝");
+                eprintln!();
+                eprintln!("[QBZ] Error detail: {}", msg);
+                std::process::exit(1);
+            }
         }
 
+        eprintln!("[QBZ] Fatal error: {}", msg);
         std::process::exit(1);
     }
 }
