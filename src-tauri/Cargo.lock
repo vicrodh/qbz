@@ -5263,6 +5263,9 @@ dependencies = [
  "qbz-models",
  "qbz-player",
  "qbz-qobuz",
+ "qconnect-app",
+ "qconnect-core",
+ "qconnect-transport-ws",
  "rand 0.10.0",
  "ratatui",
  "ratatui-image",
@@ -5271,6 +5274,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "tokio",
+ "uuid",
 ]
 
 [[package]]

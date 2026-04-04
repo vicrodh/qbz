@@ -13,7 +13,11 @@ qbz-player = { path = "../qbz-player" }
 qbz-audio = { path = "../qbz-audio" }
 qbz-qobuz = { path = "../qbz-qobuz" }
 qbz-cache = { path = "../qbz-cache" }
+qconnect-app = { path = "../qconnect-app" }
+qconnect-core = { path = "../qconnect-core" }
+qconnect-transport-ws = { path = "../qconnect-transport-ws" }
 reqwest = { workspace = true }
+uuid = { version = "1", features = ["v4"] }
 futures-util = { workspace = true }
 tokio = { version = "1", features = ["full"] }
 async-trait = "0.1"
