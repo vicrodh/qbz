@@ -14,6 +14,7 @@ qbz-audio = { path = "../qbz-audio" }
 qbz-qobuz = { path = "../qbz-qobuz" }
 qbz-cache = { path = "../qbz-cache" }
 reqwest = { workspace = true }
+futures-util = { workspace = true }
 tokio = { version = "1", features = ["full"] }
 async-trait = "0.1"
 log = "0.4"
