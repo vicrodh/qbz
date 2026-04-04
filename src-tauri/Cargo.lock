@@ -4661,7 +4661,7 @@ dependencies = [
  "axum-server",
  "base64 0.22.1",
  "chrono",
- "dirs 5.0.1",
+ "dirs 6.0.0",
  "dotenvy",
  "ebur128",
  "env_logger",
