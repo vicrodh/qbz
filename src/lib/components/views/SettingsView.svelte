@@ -748,6 +748,7 @@
   let exclusiveMode = $state(false);
   let dacPassthrough = $state(false);
   let pwForceBitperfect = $state(false);
+  let skipSinkSwitch = $state(false);
   let syncAudioOnStartup = $state(false);
   let selectedBackend = $state<string>('Auto');
   let selectedAlsaPlugin = $state<string>('hw (Direct Hardware)');
@@ -2516,6 +2517,7 @@
     device_max_sample_rate: number | null;
     gapless_enabled: boolean;
     pw_force_bitperfect: boolean;
+    skip_sink_switch: boolean;
     sync_audio_on_startup: boolean;
   }
 
@@ -2670,6 +2672,7 @@
       exclusiveMode = settings.exclusive_mode;
       dacPassthrough = settings.dac_passthrough;
       pwForceBitperfect = settings.pw_force_bitperfect;
+      skipSinkSwitch = settings.skip_sink_switch;
       syncAudioOnStartup = settings.sync_audio_on_startup;
 
       // Load backend and plugin settings
@@ -2789,6 +2792,13 @@
   async function handleDacPassthroughChange(enabled: boolean) {
     dacPassthrough = enabled;
 
+    // Enabling DAC Passthrough disables skip sink switch (mutually exclusive)
+    if (enabled && skipSinkSwitch) {
+      skipSinkSwitch = false;
+      await invoke('v2_set_audio_skip_sink_switch', { enabled: false });
+      console.log('[Audio] Disabled skip sink switch (incompatible with DAC Passthrough)');
+    }
+
     // Disabling DAC Passthrough also disables PW force bit-perfect
     if (!enabled && pwForceBitperfect) {
       pwForceBitperfect = false;
@@ -2824,6 +2834,17 @@
       console.log('[Audio] PW force bit-perfect changed:', enabled);
     } catch (err) {
       console.error('[Audio] Failed to change PW force bit-perfect:', err);
+    }
+  }
+
+  async function handleSkipSinkSwitchChange(enabled: boolean) {
+    skipSinkSwitch = enabled;
+    try {
+      await invoke('v2_set_audio_skip_sink_switch', { enabled });
+      console.log('[Audio] Skip sink switch changed:', enabled);
+    } catch (err) {
+      console.error('[Audio] Failed to change skip sink switch:', err);
+      skipSinkSwitch = !enabled; // Revert on failure
     }
   }
 
@@ -3479,6 +3500,7 @@
       exclusiveMode = false;
       dacPassthrough = false;
       pwForceBitperfect = false;
+      skipSinkSwitch = false;
       selectedBackend = 'Auto';
       selectedAlsaPlugin = 'hw (Direct Hardware)';
       alsaHardwareVolume = false;
@@ -4017,6 +4039,18 @@
       </div>
       <Toggle enabled={syncAudioOnStartup} onchange={handleSyncAudioOnStartupChange} />
     </div>
+    {#if selectedBackend === 'PipeWire'}
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.audio.skipSinkSwitch')} <span class="help-tip" title={$t('settings.audio.skipSinkSwitchHelp')}>(?)</span></span>
+        <span class="setting-desc">{$t('settings.audio.skipSinkSwitchDesc')}</span>
+      </div>
+      <Toggle enabled={skipSinkSwitch} onchange={handleSkipSinkSwitchChange} disabled={dacPassthrough} />
+    </div>
+    {#if skipSinkSwitch}
+    <small class="setting-note">{$t('settings.audio.skipSinkSwitchNote')}</small>
+    {/if}
+    {/if}
     <div class="setting-row">
       <span class="setting-label">{$t('settings.audio.currentSampleRate')}</span>
       <span class="setting-value" class:muted={!hardwareStatus?.is_active}>
