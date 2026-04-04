@@ -1,15 +1,16 @@
-pub mod app;
 pub mod adapter;
 pub mod credentials;
-pub mod input;
-pub mod playback;
-pub mod qconnect;
 pub mod theme;
+pub mod app;
 pub mod ui;
 
 /// Entry point for TUI mode.
+///
+/// Creates a tokio runtime and launches the async application loop.
+/// Logs are written to `~/.cache/qbz/tui.log` (file-based, since the TUI
+/// owns the terminal and stderr is unusable).
 pub fn run(no_images: bool) -> Result<(), Box<dyn std::error::Error>> {
-    // Initialize file-based logger (TUI owns the terminal, so stderr is unusable)
+    // Initialize file-based logger
     let log_path = dirs::cache_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
         .join("qbz")
