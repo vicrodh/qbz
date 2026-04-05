@@ -4653,7 +4653,7 @@ name = "qbz-nix"
 version = "1.2.2"
 dependencies = [
  "aes-gcm",
- "alsa 0.9.1",
+ "alsa 0.10.0",
  "anyhow",
  "ashpd",
  "async-trait",
