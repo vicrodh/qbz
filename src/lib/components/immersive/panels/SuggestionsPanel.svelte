@@ -436,7 +436,7 @@
     height: 100%;
     min-height: 200px;
     color: var(--alpha-50, rgba(255, 255, 255, 0.5));
-    font-size: 14px;
+    font-size: 18px;
   }
 
   .loading-state :global(.spinner),
@@ -653,7 +653,7 @@
   }
 
   .card-title {
-    font-size: 13px;
+    font-size: 17px;
     font-weight: 600;
     color: var(--text-primary, white);
     white-space: nowrap;
@@ -662,7 +662,7 @@
   }
 
   .card-subtitle {
-    font-size: 11px;
+    font-size: 15px;
     color: var(--alpha-50, rgba(255, 255, 255, 0.5));
   }
 
@@ -743,7 +743,7 @@
   }
 
   .section-title {
-    font-size: 12px;
+    font-size: 16px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -820,7 +820,7 @@
   }
 
   .track-title {
-    font-size: 13px;
+    font-size: 17px;
     font-weight: 500;
     color: var(--text-primary, white);
     white-space: nowrap;
@@ -829,7 +829,7 @@
   }
 
   .track-artist {
-    font-size: 12px;
+    font-size: 16px;
     color: var(--alpha-60, rgba(255, 255, 255, 0.6));
     white-space: nowrap;
     overflow: hidden;
@@ -837,7 +837,7 @@
   }
 
   .track-duration {
-    font-size: 12px;
+    font-size: 16px;
     font-family: var(--font-sans);
     color: var(--alpha-50, rgba(255, 255, 255, 0.5));
     flex-shrink: 0;
@@ -848,7 +848,7 @@
     background: rgba(239, 68, 68, 0.1);
     border-radius: 8px;
     color: #ef4444;
-    font-size: 13px;
+    font-size: 17px;
     text-align: center;
   }
 
@@ -935,7 +935,7 @@
     border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 8px;
     padding: 10px 12px;
-    font-size: 12px;
+    font-size: 16px;
     line-height: 1.4;
     color: rgba(255, 255, 255, 0.85);
     max-width: 220px;
