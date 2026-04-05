@@ -168,6 +168,7 @@ pub(crate) fn convert_to_qbz_audio_settings(settings: &AudioSettings) -> qbz_aud
         gapless_enabled: settings.gapless_enabled,
         pw_force_bitperfect: settings.pw_force_bitperfect,
         skip_sink_switch: settings.skip_sink_switch,
+        allow_quality_fallback: settings.allow_quality_fallback,
     }
 }
 
@@ -8670,6 +8671,26 @@ pub async fn v2_set_audio_gapless_enabled(
                 .reload_settings(convert_to_qbz_audio_settings(&fresh));
         }
     }
+    Ok(())
+}
+
+/// Set allow quality fallback (V2)
+#[tauri::command]
+pub async fn v2_set_audio_allow_quality_fallback(
+    enabled: bool,
+    state: State<'_, AudioSettingsState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] set_audio_allow_quality_fallback: {}", enabled);
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
+    let store = guard
+        .as_ref()
+        .ok_or(RuntimeError::UserSessionNotActivated)?;
+    store
+        .set_allow_quality_fallback(enabled)
+        .map_err(RuntimeError::Internal)?;
     Ok(())
 }
 

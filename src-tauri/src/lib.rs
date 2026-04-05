@@ -1565,6 +1565,7 @@ pub fn run() {
             commands_v2::v2_set_audio_backend_type,
             commands_v2::v2_set_audio_alsa_plugin,
             commands_v2::v2_set_audio_gapless_enabled,
+            commands_v2::v2_set_audio_allow_quality_fallback,
             commands_v2::v2_set_audio_skip_sink_switch,
             commands_v2::v2_set_audio_normalization_enabled,
             commands_v2::v2_set_audio_normalization_target,

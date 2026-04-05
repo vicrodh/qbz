@@ -137,6 +137,7 @@ pub async fn cache_track_for_offline(
     state: State<'_, AppState>,
     cache_state: State<'_, OfflineCacheState>,
     library_state: State<'_, crate::library::commands::LibraryState>,
+    audio_settings: State<'_, crate::config::audio_settings::AudioSettingsState>,
     app_handle: AppHandle,
 ) -> Result<(), String> {
     log::info!(
@@ -170,6 +171,15 @@ pub async fn cache_track_for_offline(
             .ok_or("No active session - please log in")?;
         db.insert_track(&track_info, &file_path_str)?;
     }
+
+    // Read quality fallback preference before spawning
+    let allow_fallback = audio_settings
+        .store
+        .lock()
+        .ok()
+        .and_then(|g| g.as_ref().and_then(|s| s.get_settings().ok()))
+        .map(|s| s.allow_quality_fallback)
+        .unwrap_or(false);
 
     // Clone what we need for the spawn
     let client = state.client.clone();
@@ -222,12 +232,18 @@ pub async fn cache_track_for_offline(
             }),
         );
 
-        // Get stream URL with highest quality available
+        // Get stream URL — respect quality fallback preference
         let stream_url = {
             let client_guard = client.read().await;
-            client_guard
-                .get_stream_url_with_fallback(track_id, Quality::UltraHiRes)
-                .await
+            if allow_fallback {
+                client_guard
+                    .get_stream_url_with_fallback(track_id, Quality::UltraHiRes)
+                    .await
+            } else {
+                client_guard
+                    .get_stream_url(track_id, Quality::UltraHiRes)
+                    .await
+            }
         };
 
         let url = match stream_url {
@@ -324,9 +340,15 @@ pub async fn cache_track_for_offline(
                 tokio::time::sleep(std::time::Duration::from_millis(500)).await;
                 let retry_url = {
                     let client_guard = client.read().await;
-                    client_guard
-                        .get_stream_url_with_fallback(track_id, Quality::UltraHiRes)
-                        .await
+                    if allow_fallback {
+                        client_guard
+                            .get_stream_url_with_fallback(track_id, Quality::UltraHiRes)
+                            .await
+                    } else {
+                        client_guard
+                            .get_stream_url(track_id, Quality::UltraHiRes)
+                            .await
+                    }
                 };
 
                 let retry_result = match retry_url {
