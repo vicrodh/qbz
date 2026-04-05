@@ -288,22 +288,50 @@ fn limit_quality_for_device(quality: Quality, max_sample_rate: Option<u32>) -> Q
     }
 }
 
-/// Probe sample rate from FLAC audio data by reading the STREAMINFO header.
-/// Returns None for non-FLAC data or data too short to parse.
-#[cfg(target_os = "linux")]
-fn probe_flac_sample_rate(data: &[u8]) -> Option<u32> {
-    // FLAC format: "fLaC" magic + metadata blocks
-    // First block is always STREAMINFO (34 bytes)
-    // Bytes 18-20 of STREAMINFO contain: sample_rate (20 bits) | channels (3 bits) | bps (5 bits) | ...
+/// Probe sample rate and bit depth from FLAC STREAMINFO header.
+/// Returns (sample_rate, bit_depth) or None for non-FLAC / truncated data.
+fn probe_flac_format(data: &[u8]) -> Option<(u32, u32)> {
+    // FLAC: "fLaC" magic + metadata blocks. First block = STREAMINFO (34 bytes).
+    // Byte layout at offset 18: sample_rate (20 bits) | channels (3 bits) | bps (5 bits) | ...
     if data.len() < 22 || &data[0..4] != b"fLaC" {
         return None;
     }
     let sr = ((data[18] as u32) << 12) | ((data[19] as u32) << 4) | ((data[20] as u32) >> 4);
-    if sr > 0 {
-        Some(sr)
-    } else {
-        None
+    let bps = ((data[20] as u32) & 0x01) << 4 | ((data[21] as u32) >> 4);
+    let bit_depth = bps + 1; // FLAC stores bps-1
+    if sr > 0 { Some((sr, bit_depth)) } else { None }
+}
+
+/// Convenience wrapper used by ALSA hardware check (Linux only).
+#[cfg(target_os = "linux")]
+fn probe_flac_sample_rate(data: &[u8]) -> Option<u32> {
+    probe_flac_format(data).map(|(sr, _)| sr)
+}
+
+/// Check if cached audio quality is below what the user requested.
+/// Returns true if the cache should be skipped in favor of a fresh download.
+fn cached_quality_below_requested(data: &[u8], requested: Quality) -> bool {
+    let (sample_rate, bit_depth) = match probe_flac_format(data) {
+        Some(fmt) => fmt,
+        None => return false, // Can't parse — assume compatible
+    };
+
+    let dominated = match requested {
+        // Hi-Res+: expect 24-bit AND >96kHz
+        Quality::UltraHiRes => bit_depth < 24 || sample_rate <= 96000,
+        // Hi-Res: expect 24-bit
+        Quality::HiRes => bit_depth < 24,
+        // Lossless / Mp3: any FLAC is fine
+        _ => false,
+    };
+
+    if dominated {
+        log::info!(
+            "[V2/Quality] Cached audio is {}Hz/{}bit but requested {:?} — will try re-download",
+            sample_rate, bit_depth, requested
+        );
     }
+    dominated
 }
 
 /// Check if cached audio data has a sample rate that the current ALSA hardware
@@ -7686,6 +7714,10 @@ pub async fn v2_play_track(
     let bridge_guard = bridge.get().await;
     let player = bridge_guard.player();
 
+    // Fallback: if cache has lower quality than requested but network fails,
+    // play the cached version rather than failing entirely.
+    let mut low_quality_fallback: Option<Vec<u8>> = None;
+
     // Check offline cache (persistent disk cache)
     {
         let cached_path = {
@@ -7713,34 +7745,25 @@ pub async fn v2_play_track(
                     RuntimeError::Internal(format!("Failed to read cached file: {}", e))
                 })?;
 
-                // Check if cached audio is compatible with hardware
+                // Check hardware compatibility (ALSA only)
                 #[cfg(target_os = "linux")]
-                if cached_audio_incompatible_with_hw(&audio_data, &audio_settings) {
+                let hw_incompatible =
+                    cached_audio_incompatible_with_hw(&audio_data, &audio_settings);
+                #[cfg(not(target_os = "linux"))]
+                let hw_incompatible = false;
+
+                // Check quality mismatch (all platforms)
+                let quality_mismatch = cached_quality_below_requested(&audio_data, final_quality);
+
+                if hw_incompatible {
                     log::info!(
                         "[V2/Quality] Skipping OFFLINE cache for track {} - incompatible sample rate",
                         track_id
                     );
-                    // Fall through to network path which will request compatible quality
+                } else if quality_mismatch {
+                    // Keep as fallback — don't discard, network might fail
+                    low_quality_fallback = Some(audio_data);
                 } else {
-                    player
-                        .play_data(audio_data, track_id)
-                        .map_err(RuntimeError::Internal)?;
-
-                    // Prefetch next tracks in background (using CoreBridge queue)
-                    let upcoming_tracks = bridge_guard.peek_upcoming(V2_PREFETCH_LOOKAHEAD).await;
-                    drop(bridge_guard);
-                    spawn_v2_prefetch(
-                        bridge.0.clone(),
-                        app_state.audio_cache.clone(),
-                        upcoming_tracks,
-                        final_quality,
-                        streaming_only,
-                    );
-                    return Ok(V2PlayTrackResult { format_id: None });
-                }
-
-                #[cfg(not(target_os = "linux"))]
-                {
                     player
                         .play_data(audio_data, track_id)
                         .map_err(RuntimeError::Internal)?;
@@ -7760,75 +7783,35 @@ pub async fn v2_play_track(
         }
     }
 
-    // Check memory cache (L1) - using AppState's audio_cache for now
-    // TODO: Move cache to qbz-core in future refactor
+    // Check memory cache (L1)
     let cache = app_state.audio_cache.clone();
-    if let Some(cached) = cache.get(track_id) {
-        log::info!(
-            "[V2/CACHE HIT] Track {} from MEMORY cache ({} bytes)",
-            track_id,
-            cached.size_bytes
-        );
-
-        // Check if cached audio is compatible with hardware
-        #[cfg(target_os = "linux")]
-        let skip_cache = cached_audio_incompatible_with_hw(&cached.data, &audio_settings);
-        #[cfg(not(target_os = "linux"))]
-        let skip_cache = false;
-
-        if skip_cache {
+    if low_quality_fallback.is_none() {
+        if let Some(cached) = cache.get(track_id) {
             log::info!(
-                "[V2/Quality] Skipping MEMORY cache for track {} - incompatible sample rate",
-                track_id
-            );
-            // Fall through to network path which will request compatible quality
-        } else {
-            player
-                .play_data(cached.data, track_id)
-                .map_err(RuntimeError::Internal)?;
-
-            // Prefetch next tracks in background (using CoreBridge queue)
-            let upcoming_tracks = bridge_guard.peek_upcoming(V2_PREFETCH_LOOKAHEAD).await;
-            drop(bridge_guard);
-            spawn_v2_prefetch(
-                bridge.0.clone(),
-                cache.clone(),
-                upcoming_tracks,
-                final_quality,
-                streaming_only,
-            );
-            return Ok(V2PlayTrackResult { format_id: None });
-        }
-    }
-
-    // Check playback cache (L2 - disk)
-    if let Some(playback_cache) = cache.get_playback_cache() {
-        if let Some(audio_data) = playback_cache.get(track_id) {
-            log::info!(
-                "[V2/CACHE HIT] Track {} from DISK cache ({} bytes)",
+                "[V2/CACHE HIT] Track {} from MEMORY cache ({} bytes)",
                 track_id,
-                audio_data.len()
+                cached.size_bytes
             );
 
-            // Check if cached audio is compatible with hardware
             #[cfg(target_os = "linux")]
-            let skip_cache = cached_audio_incompatible_with_hw(&audio_data, &audio_settings);
+            let hw_incompatible = cached_audio_incompatible_with_hw(&cached.data, &audio_settings);
             #[cfg(not(target_os = "linux"))]
-            let skip_cache = false;
+            let hw_incompatible = false;
 
-            if skip_cache {
+            let quality_mismatch = cached_quality_below_requested(&cached.data, final_quality);
+
+            if hw_incompatible {
                 log::info!(
-                    "[V2/Quality] Skipping DISK cache for track {} - incompatible sample rate",
+                    "[V2/Quality] Skipping MEMORY cache for track {} - incompatible sample rate",
                     track_id
                 );
-                // Fall through to network path which will request compatible quality
+            } else if quality_mismatch {
+                low_quality_fallback = Some(cached.data);
             } else {
-                cache.insert(track_id, audio_data.clone());
                 player
-                    .play_data(audio_data, track_id)
+                    .play_data(cached.data, track_id)
                     .map_err(RuntimeError::Internal)?;
 
-                // Prefetch next tracks in background (using CoreBridge queue)
                 let upcoming_tracks = bridge_guard.peek_upcoming(V2_PREFETCH_LOOKAHEAD).await;
                 drop(bridge_guard);
                 spawn_v2_prefetch(
@@ -7843,16 +7826,96 @@ pub async fn v2_play_track(
         }
     }
 
-    // Not in any cache - get stream URL from Qobuz via CoreBridge
-    log::info!(
-        "[V2] Track {} not in cache, fetching from network...",
-        track_id
-    );
+    // Check playback cache (L2 - disk)
+    if low_quality_fallback.is_none() {
+        if let Some(playback_cache) = cache.get_playback_cache() {
+            if let Some(audio_data) = playback_cache.get(track_id) {
+                log::info!(
+                    "[V2/CACHE HIT] Track {} from DISK cache ({} bytes)",
+                    track_id,
+                    audio_data.len()
+                );
 
-    let mut stream_url = bridge_guard
+                #[cfg(target_os = "linux")]
+                let hw_incompatible =
+                    cached_audio_incompatible_with_hw(&audio_data, &audio_settings);
+                #[cfg(not(target_os = "linux"))]
+                let hw_incompatible = false;
+
+                let quality_mismatch =
+                    cached_quality_below_requested(&audio_data, final_quality);
+
+                if hw_incompatible {
+                    log::info!(
+                        "[V2/Quality] Skipping DISK cache for track {} - incompatible sample rate",
+                        track_id
+                    );
+                } else if quality_mismatch {
+                    low_quality_fallback = Some(audio_data);
+                } else {
+                    cache.insert(track_id, audio_data.clone());
+                    player
+                        .play_data(audio_data, track_id)
+                        .map_err(RuntimeError::Internal)?;
+
+                    let upcoming_tracks = bridge_guard.peek_upcoming(V2_PREFETCH_LOOKAHEAD).await;
+                    drop(bridge_guard);
+                    spawn_v2_prefetch(
+                        bridge.0.clone(),
+                        cache.clone(),
+                        upcoming_tracks,
+                        final_quality,
+                        streaming_only,
+                    );
+                    return Ok(V2PlayTrackResult { format_id: None });
+                }
+            }
+        }
+    }
+
+    // Not in cache (or cached at lower quality) — fetch from network
+    if low_quality_fallback.is_some() {
+        log::info!(
+            "[V2] Track {} cached at lower quality, re-downloading at {:?}...",
+            track_id, final_quality
+        );
+    } else {
+        log::info!(
+            "[V2] Track {} not in cache, fetching from network...",
+            track_id
+        );
+    }
+
+    let stream_url_result = bridge_guard
         .get_stream_url(track_id, final_quality)
-        .await
-        .map_err(RuntimeError::Internal)?;
+        .await;
+
+    let mut stream_url = match stream_url_result {
+        Ok(url) => url,
+        Err(e) => {
+            // Network failed — use lower-quality fallback if available
+            if let Some(fallback_data) = low_quality_fallback {
+                log::warn!(
+                    "[V2] Network failed for track {}: {}. Playing cached lower-quality version.",
+                    track_id, e
+                );
+                player
+                    .play_data(fallback_data, track_id)
+                    .map_err(RuntimeError::Internal)?;
+                let upcoming_tracks = bridge_guard.peek_upcoming(V2_PREFETCH_LOOKAHEAD).await;
+                drop(bridge_guard);
+                spawn_v2_prefetch(
+                    bridge.0.clone(),
+                    cache.clone(),
+                    upcoming_tracks,
+                    final_quality,
+                    streaming_only,
+                );
+                return Ok(V2PlayTrackResult { format_id: None });
+            }
+            return Err(RuntimeError::Internal(e));
+        }
+    };
     log::info!(
         "[V2] Got stream URL for track {} (format_id={})",
         track_id,
