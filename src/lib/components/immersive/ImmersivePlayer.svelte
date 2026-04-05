@@ -890,34 +890,26 @@
     max-width: 1600px;
     height: 100%;
     display: flex;
-    align-items: stretch;
+    align-items: center;
     justify-content: center;
-    padding: 56px 5% 96px;
-    gap: 3%;
+    padding: 64px 40px 100px;
+    gap: 40px;
     z-index: 1;
   }
 
   .artwork-section {
-    flex: 0 0 42%;
-    max-width: 600px;
+    flex: 0 0 auto;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 12px;
-    min-width: 0;
-  }
-
-  /* Override artwork component max-width in split mode — let column width control sizing */
-  .artwork-section :global(.artwork-wrapper),
-  .artwork-section :global(.vinyl-disc) {
-    max-width: 100%;
+    gap: 16px;
+    padding: 0 clamp(20px, 3vw, 50px);
   }
 
   .split-track-info {
     text-align: center;
-    max-width: 100%;
-    flex-shrink: 0;
+    max-width: 500px;
   }
 
   .split-title-row {
@@ -926,15 +918,16 @@
     justify-content: center;
     gap: 8px;
     min-width: 0;
-    margin: 0 0 4px 0;
+    margin: 0 0 6px 0;
   }
 
   .split-track-title {
-    font-size: clamp(16px, 2vw, 22px);
+    font-size: clamp(18px, 2.5vw, 24px);
     font-weight: 700;
     color: var(--text-primary, white);
     margin: 0;
     text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    /* Truncate long titles */
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -952,18 +945,18 @@
   }
 
   .split-track-artist {
-    font-size: clamp(13px, 1.5vw, 15px);
+    font-size: clamp(14px, 1.8vw, 16px);
     color: var(--alpha-70, rgba(255, 255, 255, 0.7));
-    margin: 0 0 2px 0;
+    margin: 0 0 4px 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
   .split-track-album {
-    font-size: clamp(11px, 1.3vw, 13px);
+    font-size: clamp(12px, 1.5vw, 14px);
     color: var(--alpha-50, rgba(255, 255, 255, 0.5));
-    margin: 0 0 8px 0;
+    margin: 0 0 12px 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -972,16 +965,18 @@
   .split-quality-badge {
     display: flex;
     justify-content: center;
-    margin-top: 4px;
+    margin-top: 8px;
   }
 
   .panel-section {
     flex: 1;
     min-width: 0;
     min-height: 0;
+    max-width: 800px;
     height: 100%;
     display: flex;
     flex-direction: column;
+    align-self: center;
   }
 
   .panel-section.centered-panel {
@@ -1014,12 +1009,12 @@
   /* Responsive */
   @media (max-width: 1200px) {
     .immersive-main {
-      padding: 52px 4% 92px;
-      gap: 3%;
+      padding: 64px 28px 100px;
+      gap: 32px;
     }
 
-    .artwork-section {
-      flex: 0 0 38%;
+    .panel-section {
+      max-width: 700px;
     }
 
     .focus-panel {
@@ -1030,21 +1025,13 @@
   @media (max-width: 900px) {
     .immersive-main {
       flex-direction: column;
-      align-items: center;
-      padding: 52px 24px 96px;
-      gap: 16px;
+      padding: 64px 24px 110px;
+      gap: 20px;
       justify-content: flex-start;
     }
 
     .artwork-section {
       flex: 0 0 auto;
-      max-width: none;
-      width: 100%;
-    }
-
-    .artwork-section :global(.artwork-wrapper),
-    .artwork-section :global(.vinyl-disc) {
-      max-width: min(55vw, 32vh);
     }
 
     .panel-section {
@@ -1064,8 +1051,8 @@
 
   @media (max-width: 600px) {
     .immersive-main {
-      padding: 48px 16px 88px;
-      gap: 12px;
+      padding: 56px 16px 100px;
+      gap: 16px;
     }
 
     .focus-panel {
