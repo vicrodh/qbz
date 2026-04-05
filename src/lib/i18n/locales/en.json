@@ -1408,6 +1408,8 @@
     "connectionFailed": "Failed to connect to Qobuz™. Check your network and try again.",
     "oauthButton": "Sign in via Browser",
     "oauthLoading": "Opening browser...",
+    "systemBrowserButton": "Use your system browser instead",
+    "systemBrowserLoading": "Waiting for login...",
     "activeSubscriptionRequired": "QBZ requires an active Qobuz™ subscription. Your credentials are sent directly to Qobuz™.",
     "APIUse": "This application uses the Qobuz API but is not certified by Qobuz."
   },

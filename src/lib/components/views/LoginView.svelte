@@ -20,6 +20,7 @@
   let { onLoginSuccess, onStartOffline }: Props = $props();
 
   let isOAuthLoading = $state(false);
+  let isSystemBrowserLoading = $state(false);
   let isInitializing = $state(true);
   let initStatus = $state('Connecting to Qobuz™...');
   let error = $state<string | null>(null);
@@ -185,6 +186,43 @@
     }
   }
 
+  type OAuthResponse = {
+    success: boolean;
+    user_name?: string;
+    user_id?: number;
+    subscription?: string;
+    subscription_valid_until?: string | null;
+    error?: string;
+    error_code?: string;
+  };
+
+  function handleOAuthResponse(response: OAuthResponse): boolean {
+    if (response.success) {
+      if (!response.user_id || response.user_id === 0) {
+        error = $t('auth.v2AuthFailed');
+        return false;
+      }
+      onLoginSuccess({
+        userName: response.user_name || 'User',
+        userId: response.user_id,
+        subscription: response.subscription || 'Active',
+        subscriptionValidUntil: response.subscription_valid_until ?? null,
+      });
+      return true;
+    }
+
+    if (response.error_code === 'v2_auth_failed') {
+      error = $t('auth.v2AuthFailed');
+    } else if (response.error_code === 'v2_not_initialized') {
+      error = $t('auth.v2NotInitialized');
+    } else if (response.error_code === 'oauth_cancelled') {
+      error = null;
+    } else {
+      error = response.error || 'Login failed';
+    }
+    return false;
+  }
+
   async function handleOAuthLogin() {
     if (!get(qobuzTosAccepted)) {
       error = $t('legal.tosRequiredToLogin');
@@ -196,51 +234,42 @@
 
     try {
       await setTosAcceptance(true);
-    } catch {
-      // Continue even if persistence fails
-    }
+    } catch { /* continue */ }
 
     try {
-      const response = await invoke<{
-        success: boolean;
-        user_name?: string;
-        user_id?: number;
-        subscription?: string;
-        subscription_valid_until?: string | null;
-        error?: string;
-        error_code?: string;
-      }>('v2_start_oauth_login');
-
+      const response = await invoke<OAuthResponse>('v2_start_oauth_login');
       console.log('[LoginView] v2_start_oauth_login: success =', response.success);
-
-      if (response.success) {
-        if (!response.user_id || response.user_id === 0) {
-          console.error('[LoginView] OAuth login returned success but invalid user_id');
-          error = $t('auth.v2AuthFailed');
-          return;
-        }
-        onLoginSuccess({
-          userName: response.user_name || 'User',
-          userId: response.user_id,
-          subscription: response.subscription || 'Active',
-          subscriptionValidUntil: response.subscription_valid_until ?? null,
-        });
-      } else {
-        if (response.error_code === 'v2_auth_failed') {
-          error = $t('auth.v2AuthFailed');
-        } else if (response.error_code === 'v2_not_initialized') {
-          error = $t('auth.v2NotInitialized');
-        } else if (response.error_code === 'oauth_cancelled') {
-          error = null; // User closed the window, no error to show
-        } else {
-          error = response.error || 'Browser login failed';
-        }
-      }
+      handleOAuthResponse(response);
     } catch (err) {
       console.error('OAuth login error:', err);
       error = formatErrorMessage(err);
     } finally {
       isOAuthLoading = false;
+    }
+  }
+
+  async function handleSystemBrowserLogin() {
+    if (!get(qobuzTosAccepted)) {
+      error = $t('legal.tosRequiredToLogin');
+      return;
+    }
+
+    isSystemBrowserLoading = true;
+    error = null;
+
+    try {
+      await setTosAcceptance(true);
+    } catch { /* continue */ }
+
+    try {
+      const response = await invoke<OAuthResponse>('v2_start_system_browser_oauth');
+      console.log('[LoginView] v2_start_system_browser_oauth: success =', response.success);
+      handleOAuthResponse(response);
+    } catch (err) {
+      console.error('System browser OAuth error:', err);
+      error = formatErrorMessage(err);
+    } finally {
+      isSystemBrowserLoading = false;
     }
   }
 </script>
@@ -284,7 +313,7 @@
         <div class="login-actions">
           <div class="remember-me tos-remember">
             <label>
-              <input type="checkbox" bind:checked={$qobuzTosAccepted} disabled={isOAuthLoading} />
+              <input type="checkbox" bind:checked={$qobuzTosAccepted} disabled={isOAuthLoading || isSystemBrowserLoading} />
               <span>
                 {$t('legal.tosAgreementPrefix')}
                 <a href="https://www.qobuz.com/us-en/legal/terms" target="_blank" rel="noopener">
@@ -301,7 +330,7 @@
           <button
             type="button"
             class="oauth-btn"
-            disabled={isOAuthLoading || !$qobuzTosAccepted}
+            disabled={isOAuthLoading || isSystemBrowserLoading || !$qobuzTosAccepted}
             onclick={handleOAuthLogin}
           >
             {#if isOAuthLoading}
@@ -311,6 +340,23 @@
               <span>{$t('auth.oauthButton')}</span>
             {/if}
           </button>
+
+          <p class="system-browser-link">
+            {#if isSystemBrowserLoading}
+              <small><span class="link-button">{$t('auth.systemBrowserLoading')}</span></small>
+            {:else}
+              <small>
+                <button
+                  type="button"
+                  class="link-button"
+                  disabled={isOAuthLoading || isSystemBrowserLoading || !$qobuzTosAccepted}
+                  onclick={handleSystemBrowserLogin}
+                >
+                  {$t('auth.systemBrowserButton')}
+                </button>
+              </small>
+            {/if}
+          </p>
 
           <p class="offline-link">
             <small>
@@ -565,6 +611,11 @@
     text-align: center;
     line-height: 1.5;
     margin: 0;
+  }
+
+  .system-browser-link {
+    margin-top: -8px;
+    text-align: center;
   }
 
   .offline-link {
