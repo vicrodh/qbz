@@ -880,6 +880,14 @@
     }
   }
 
+  /* Quality badge dark backdrop — legible on any blurred background */
+  .immersive-player :global(.quality-badge) {
+    background: rgba(0, 0, 0, 0.55);
+    border-color: rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+
   /* Split mode layout */
   .immersive-main {
     position: absolute;

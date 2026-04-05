@@ -149,7 +149,6 @@
     padding-left: 40px;
     padding-right: 40px;
     z-index: 5;
-    perspective: 1000px;
   }
 
   .coverflow-container {
@@ -161,7 +160,6 @@
     max-width: 1200px;
     height: min(55vh, 480px);
     perspective: 1400px;
-    transform-style: preserve-3d;
   }
 
   .coverflow-item {
@@ -171,7 +169,6 @@
     padding: 0;
     cursor: pointer;
     transition: transform 500ms cubic-bezier(0.4, 0, 0.2, 1), opacity 500ms cubic-bezier(0.4, 0, 0.2, 1);
-    transform-style: preserve-3d;
   }
 
   .coverflow-item:disabled {
@@ -223,8 +220,8 @@
 
   /* Center item */
   .coverflow-item.center {
-    z-index: 5;
-    transform: translateX(0) rotateY(0deg) scale(1);
+    z-index: 10;
+    transform: translateX(0) scale(1);
   }
 
   .coverflow-item.center .cover-wrapper {
@@ -233,37 +230,37 @@
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   }
 
-  /* Left items — push far enough so 3D projection doesn't overlap center */
+  /* Left items — offset must clear the center cover's edge + perspective projection */
   .coverflow-item.left-1 {
     z-index: 4;
-    transform: translateX(-400px) translateZ(-120px) rotateY(30deg) scale(0.72);
-    --hover-x: -390px;
-    --hover-rotate: 25deg;
+    transform: translateX(-420px) rotateY(25deg) scale(0.7);
+    --hover-x: -410px;
+    --hover-rotate: 20deg;
     opacity: 0.8;
   }
 
   .coverflow-item.left-2 {
     z-index: 3;
-    transform: translateX(-620px) translateZ(-200px) rotateY(38deg) scale(0.55);
-    --hover-x: -610px;
-    --hover-rotate: 34deg;
+    transform: translateX(-640px) rotateY(32deg) scale(0.52);
+    --hover-x: -630px;
+    --hover-rotate: 28deg;
     opacity: 0.45;
   }
 
   /* Right items — mirror of left */
   .coverflow-item.right-1 {
     z-index: 4;
-    transform: translateX(400px) translateZ(-120px) rotateY(-30deg) scale(0.72);
-    --hover-x: 390px;
-    --hover-rotate: -25deg;
+    transform: translateX(420px) rotateY(-25deg) scale(0.7);
+    --hover-x: 410px;
+    --hover-rotate: -20deg;
     opacity: 0.8;
   }
 
   .coverflow-item.right-2 {
     z-index: 3;
-    transform: translateX(620px) translateZ(-200px) rotateY(-38deg) scale(0.55);
-    --hover-x: 610px;
-    --hover-rotate: -34deg;
+    transform: translateX(640px) rotateY(-32deg) scale(0.52);
+    --hover-x: 630px;
+    --hover-rotate: -28deg;
     opacity: 0.45;
   }
 
@@ -361,23 +358,23 @@
   /* Responsive */
   @media (max-width: 1100px) {
     .coverflow-item.left-1 {
-      transform: translateX(-320px) translateZ(-120px) rotateY(30deg) scale(0.68);
-      --hover-x: -310px;
+      transform: translateX(-340px) rotateY(25deg) scale(0.65);
+      --hover-x: -330px;
     }
 
     .coverflow-item.left-2 {
-      transform: translateX(-500px) translateZ(-200px) rotateY(38deg) scale(0.5);
-      --hover-x: -490px;
+      transform: translateX(-520px) rotateY(32deg) scale(0.48);
+      --hover-x: -510px;
     }
 
     .coverflow-item.right-1 {
-      transform: translateX(320px) translateZ(-120px) rotateY(-30deg) scale(0.68);
-      --hover-x: 310px;
+      transform: translateX(340px) rotateY(-25deg) scale(0.65);
+      --hover-x: 330px;
     }
 
     .coverflow-item.right-2 {
-      transform: translateX(500px) translateZ(-200px) rotateY(-38deg) scale(0.5);
-      --hover-x: 490px;
+      transform: translateX(520px) rotateY(-32deg) scale(0.48);
+      --hover-x: 510px;
     }
   }
 
@@ -398,7 +395,7 @@
     }
 
     .coverflow-item.left-1 {
-      transform: translateX(-220px) translateZ(-100px) rotateY(28deg) scale(0.65);
+      transform: translateX(-240px) rotateY(22deg) scale(0.6);
     }
 
     .coverflow-item.left-2 {
@@ -406,7 +403,7 @@
     }
 
     .coverflow-item.right-1 {
-      transform: translateX(220px) translateZ(-100px) rotateY(-28deg) scale(0.65);
+      transform: translateX(240px) rotateY(-22deg) scale(0.6);
     }
 
     .coverflow-item.right-2 {
