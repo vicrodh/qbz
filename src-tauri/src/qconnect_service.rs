@@ -3926,7 +3926,7 @@ async fn deferred_renderer_join(
         log::error!("[QConnect] Deferred renderer max quality report failed: {err}");
     }
 
-    log::info!("[QConnect] Deferred renderer join complete for session {}", crate::log_sanitize::mask_uuid(&session_uuid));
+    log::info!("[QConnect] Deferred renderer join complete");
 
     // Re-request session state so the server sends an updated renderer list
     // (including ourselves). Without this, the frontend may not see QBZ as a
