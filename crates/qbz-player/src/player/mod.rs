@@ -465,8 +465,16 @@ fn try_init_stream_with_backend(
     sample_rate: u32,
     channels: u16,
 ) -> Option<Result<StreamType, String>> {
-    // Check if backend system is configured
-    let backend_type = audio_settings.backend_type?;
+    // Check if backend system is configured.
+    // On non-Linux, default to SystemDefault when not explicitly set,
+    // so macOS gets CoreAudio device probing and sample rate switching.
+    let backend_type = audio_settings.backend_type.or_else(|| {
+        if cfg!(not(target_os = "linux")) {
+            Some(qbz_audio::AudioBackendType::SystemDefault)
+        } else {
+            None
+        }
+    })?;
 
     log::info!(
         "Using backend system: {:?} (device: {:?}, plugin: {:?})",
@@ -500,6 +508,7 @@ fn try_init_stream_with_backend(
         exclusive_mode: audio_settings.exclusive_mode,
         alsa_plugin: audio_settings.alsa_plugin,
         pw_force_bitperfect: audio_settings.pw_force_bitperfect,
+        skip_sink_switch: audio_settings.skip_sink_switch,
     };
 
     // For ALSA backend with hw: devices, try direct ALSA first (Linux only)
@@ -602,6 +611,8 @@ pub struct SharedState {
     gapless_ready: Arc<AtomicBool>,
     /// Track ID of the gapless-queued next track (0 = none)
     gapless_next_track_id: Arc<AtomicU64>,
+    /// Streaming buffer progress (0.0-1.0 stored as f32 bits, 0 = not streaming)
+    buffer_progress: Arc<AtomicU32>,
 }
 
 impl Default for SharedState {
@@ -628,6 +639,7 @@ impl SharedState {
             normalization_gain: Arc::new(AtomicU32::new(0)),
             gapless_ready: Arc::new(AtomicBool::new(false)),
             gapless_next_track_id: Arc::new(AtomicU64::new(0)),
+            buffer_progress: Arc::new(AtomicU32::new(0)),
         }
     }
 
@@ -668,6 +680,23 @@ impl SharedState {
             None
         } else {
             Some(gain)
+        }
+    }
+
+    /// Set streaming buffer progress (0.0 to 1.0). Pass 0.0 when not streaming.
+    pub fn set_buffer_progress(&self, progress: f32) {
+        self.buffer_progress
+            .store(progress.to_bits(), Ordering::SeqCst);
+    }
+
+    /// Get streaming buffer progress (0.0 to 1.0). Returns None if not streaming.
+    pub fn get_buffer_progress(&self) -> Option<f32> {
+        let bits = self.buffer_progress.load(Ordering::SeqCst);
+        let progress = f32::from_bits(bits);
+        if progress <= 0.0 || progress >= 1.0 {
+            None
+        } else {
+            Some(progress)
         }
     }
 
@@ -2313,6 +2342,14 @@ impl Player {
                             let now = Instant::now();
                             if now.duration_since(last_empty_check) >= Duration::from_millis(500) {
                                 last_empty_check = now;
+
+                                // Update streaming buffer progress for UI seekbar
+                                if let Some(streaming_src) = current_streaming_source.as_ref() {
+                                    let progress = streaming_src.progress().unwrap_or(1.0);
+                                    thread_state.set_buffer_progress(progress);
+                                } else {
+                                    thread_state.set_buffer_progress(0.0);
+                                }
 
                                 // Streaming -> cached promotion:
                                 // once streaming download completes, persist full data and clear streaming marker.

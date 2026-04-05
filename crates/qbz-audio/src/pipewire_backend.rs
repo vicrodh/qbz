@@ -308,7 +308,10 @@ impl AudioBackend for PipeWireBackend {
         // Temporarily set default sink to target (if specified)
         // We DON'T restore it - let the user's system keep the selected device as default
         // This is actually the expected behavior: when you select a device, it becomes the default
-        if let Some(sink_name) = &target_sink {
+        // When skip_sink_switch is true, skip this entirely to preserve external routing (JACK/qjackctl)
+        if config.skip_sink_switch {
+            log::info!("[PipeWire Backend] Skipping set-default-sink (skip_sink_switch enabled)");
+        } else if let Some(sink_name) = &target_sink {
             log::info!("[PipeWire Backend] Setting default sink to: {}", sink_name);
 
             let set_result = Command::new("pactl")

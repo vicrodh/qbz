@@ -34,6 +34,7 @@ pub mod alsa_backend;
 #[cfg(target_os = "linux")]
 pub mod pulse_backend;
 pub mod alsa_direct;
+pub mod coreaudio_direct;
 pub mod analysis;
 pub mod analyzer_tap;
 pub mod diagnostic;

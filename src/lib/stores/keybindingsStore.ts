@@ -102,6 +102,13 @@ export const ACTIONS: KeybindingAction[] = [
     defaultShortcut: 'Ctrl+f',
     description: 'Focus search field',
   },
+  {
+    id: 'nav.settings',
+    label: 'Settings',
+    category: 'navigation',
+    defaultShortcut: 'Ctrl+,',
+    description: 'Open settings',
+  },
 
   // UI
   {

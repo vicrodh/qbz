@@ -280,6 +280,7 @@
     showTrackNotification,
     updateLastfmNowPlaying,
     cleanup as cleanupPlayback,
+    updateMediaMetadata,
     type PlayTrackOptions
   } from '$lib/services/playbackService';
   import {
@@ -910,6 +911,7 @@
   let isFavorite = $state(false);
   let normalizationEnabled = $state(false);
   let normalizationGain = $state<number | null>(null);
+  let bufferProgress = $state<number | null>(null);
   let isAlsaDirectHw = $state(false); // ALSA Direct hw: locks volume to 100%
   // Queue/Shuffle State (from queueStore subscription)
   let isShuffle = $state(false);
@@ -3557,7 +3559,33 @@
               quality,
               bitDepth: track.bit_depth ?? undefined,
               samplingRate: track.sample_rate ?? undefined,
+              albumId: track.album_id ?? undefined,
+              artistId: track.artist_id ?? undefined,
+              isLocal: track.is_local ?? false,
+              source: track.source ?? 'qobuz',
+              parental_warning: track.parental_warning ?? false,
             });
+
+            // Update MPRIS metadata so playerctl shows track info
+            updateMediaMetadata({
+              title: track.title,
+              artist: track.artist,
+              album: track.album,
+              durationSecs: track.duration_secs,
+              coverUrl: track.artwork_url || null
+            });
+
+            // Restore playback context (album, playlist, etc.)
+            try {
+              const savedCtx = localStorage.getItem('qbz-playback-context');
+              if (savedCtx) {
+                const ctx = JSON.parse(savedCtx);
+                await setPlaybackContext(ctx.type, ctx.id, ctx.label, ctx.source, ctx.track_ids, ctx.current_position);
+                console.log(`[Session] Playback context restored: ${ctx.type} · ${ctx.label}`);
+              }
+            } catch {
+              console.debug('[Session] Could not restore playback context');
+            }
 
             // First play will load a fresh stream instead of seeking
             setPendingSessionRestore(track.id);
@@ -3751,6 +3779,14 @@
         viewContextId,
         viewContextType
       );
+
+      // Persist playback context for session restore
+      const ctx = getCurrentContext();
+      if (ctx) {
+        localStorage.setItem('qbz-playback-context', JSON.stringify(ctx));
+      } else {
+        localStorage.removeItem('qbz-playback-context');
+      }
       console.log('[Session] Session saved on close');
     } catch (err) {
       console.error('[Session] Failed to save session on close:', err);
@@ -3760,6 +3796,14 @@
   // Keyboard Shortcuts - delegated to keybindings system
   function handleKeydown(e: KeyboardEvent) {
     if (!isLoggedIn) return;
+
+    // Global fullscreen toggle (F11) — works even outside immersive player
+    if (e.key === 'F11') {
+      e.preventDefault();
+      const win = getCurrentWindow();
+      win.isFullscreen().then(fs => win.setFullscreen(!fs));
+      return;
+    }
 
     // Delegate to keybinding manager (handles input target filtering internally)
     keybindingHandler(e);
@@ -3962,6 +4006,7 @@
         sidebarRef?.focusSearch();
       }
     });
+    registerAction('nav.settings', () => navigateTo('settings'));
     registerAction('ui.sidebar', toggleSidebar);
     registerAction('ui.focusMode', toggleFocusMode);
     registerAction('ui.miniPlayer', () => { void enterMiniplayerMode(); });
@@ -4181,6 +4226,7 @@
       const wasPlaying = isPlaying;
       volume = playerState.volume;
       normalizationGain = playerState.normalizationGain;
+      bufferProgress = playerState.bufferProgress;
       if (remotePeerActive) {
         return;
       }
@@ -5659,6 +5705,7 @@
         qconnectBusy={qobuzConnectBusy}
         {showQconnectDevButton}
         volumeLocked={isAlsaDirectHw && !qconnectPeerRendererActive}
+        {bufferProgress}
       />
     {:else}
       <NowPlayingBar
@@ -5973,6 +6020,17 @@
   .app.no-titlebar .content-area,
   .app.no-titlebar .main-content {
     height: calc(100vh - 104px); /* Only 104px NowPlayingBar, no title bar */
+  }
+
+  /* macOS: pad main content to clear native overlay title bar */
+  :global(html.macos) .main-content {
+    padding-top: 16px;
+    height: calc(100vh - 104px - 16px);
+  }
+
+  /* macOS: home view handles its own spacing */
+  :global(html.macos) .main-content :global(.home-view) {
+    margin-top: -16px;
   }
 
   /* macOS: invisible drag region for window movement (overlay title bar) */

@@ -39,3 +39,7 @@ dirs = "5"
 [target.'cfg(target_os = "linux")'.dependencies]
 # ALSA for direct hardware access (bit-perfect)
 alsa = "0.9"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# CoreAudio for device probing, sample rate switching, and (future) hog mode / exclusive mode
+coreaudio-rs = "0.14.1"

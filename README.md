@@ -95,7 +95,7 @@ Download from [Releases](https://github.com/vicrodh/qbz/releases): `chmod +x QBZ
 
 > **QBZ is a Linux-first application.** macOS support is experimental and limited. Features like PipeWire, ALSA Direct, casting, and device control are unavailable.
 
-Download the unsigned DMG from [Releases](https://github.com/vicrodh/qbz/releases) (Apple Silicon only).
+Download the unsigned DMG from [Releases](https://github.com/vicrodh/qbz/releases).
 
 Since the DMG is unsigned, you may need to allow it in System Settings > Privacy & Security after first launch.
 

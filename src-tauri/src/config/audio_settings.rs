@@ -55,6 +55,13 @@ pub struct AudioSettings {
     /// Values: "ask" (default), "always_fallback", "always_skip"
     /// Protected by ADR-003: must survive reset_all() and migrations.
     pub quality_fallback_behavior: String,
+    /// When true, skip `pactl set-default-sink` on stream creation.
+    /// Preserves external routing (JACK, qjackctl, Reaper).
+    /// Mutually exclusive with dac_passthrough.
+    pub skip_sink_switch: bool,
+    /// When true, automatically try lower quality tiers if the requested one fails.
+    /// When false (default), playback or download fails if the exact quality is unavailable.
+    pub allow_quality_fallback: bool,
 }
 
 impl Default for AudioSettings {
@@ -79,6 +86,8 @@ impl Default for AudioSettings {
             pw_force_bitperfect: false, // Off by default — experimental PipeWire feature
             sync_audio_on_startup: false, // Off by default — opt-in for stale-settings edge case
             quality_fallback_behavior: "ask".to_string(),
+            skip_sink_switch: false, // Off by default — only for JACK/DAW routing setups
+            allow_quality_fallback: false, // Off by default — fail rather than silently downgrade
         }
     }
 }
@@ -175,6 +184,14 @@ impl AudioSettingsStore {
             "ALTER TABLE audio_settings ADD COLUMN quality_fallback_behavior TEXT DEFAULT 'ask'",
             [],
         );
+        let _ = conn.execute(
+            "ALTER TABLE audio_settings ADD COLUMN skip_sink_switch INTEGER DEFAULT 0",
+            [],
+        );
+        let _ = conn.execute(
+            "ALTER TABLE audio_settings ADD COLUMN allow_quality_fallback INTEGER DEFAULT 0",
+            [],
+        );
 
         Ok(Self { conn })
     }
@@ -193,7 +210,7 @@ impl AudioSettingsStore {
     pub fn get_settings(&self) -> Result<AudioSettings, String> {
         self.conn
             .query_row(
-                "SELECT output_device, exclusive_mode, dac_passthrough, preferred_sample_rate, backend_type, alsa_plugin, alsa_hardware_volume, stream_first_track, stream_buffer_seconds, streaming_only, limit_quality_to_device, device_max_sample_rate, normalization_enabled, normalization_target_lufs, gapless_enabled, device_sample_rate_limits, pw_force_bitperfect, sync_audio_on_startup, quality_fallback_behavior FROM audio_settings WHERE id = 1",
+                "SELECT output_device, exclusive_mode, dac_passthrough, preferred_sample_rate, backend_type, alsa_plugin, alsa_hardware_volume, stream_first_track, stream_buffer_seconds, streaming_only, limit_quality_to_device, device_max_sample_rate, normalization_enabled, normalization_target_lufs, gapless_enabled, device_sample_rate_limits, pw_force_bitperfect, sync_audio_on_startup, quality_fallback_behavior, skip_sink_switch, allow_quality_fallback FROM audio_settings WHERE id = 1",
                 [],
                 |row| {
                     // Parse backend_type from JSON string
@@ -234,6 +251,8 @@ impl AudioSettingsStore {
                         quality_fallback_behavior: row
                             .get::<_, Option<String>>(18)?
                             .unwrap_or_else(|| "ask".to_string()),
+                        skip_sink_switch: row.get::<_, Option<i64>>(19)?.unwrap_or(0) != 0,
+                        allow_quality_fallback: row.get::<_, Option<i64>>(20)?.unwrap_or(0) != 0,
                     })
                 },
             )
@@ -447,6 +466,26 @@ impl AudioSettingsStore {
         Ok(())
     }
 
+    pub fn set_allow_quality_fallback(&self, enabled: bool) -> Result<(), String> {
+        self.conn
+            .execute(
+                "UPDATE audio_settings SET allow_quality_fallback = ?1 WHERE id = 1",
+                params![enabled as i64],
+            )
+            .map_err(|e| format!("Failed to set allow_quality_fallback: {}", e))?;
+        Ok(())
+    }
+
+    pub fn set_skip_sink_switch(&self, enabled: bool) -> Result<(), String> {
+        self.conn
+            .execute(
+                "UPDATE audio_settings SET skip_sink_switch = ?1 WHERE id = 1",
+                params![enabled as i64],
+            )
+            .map_err(|e| format!("Failed to set skip_sink_switch: {}", e))?;
+        Ok(())
+    }
+
     pub fn set_pw_force_bitperfect(&self, enabled: bool) -> Result<(), String> {
         self.conn
             .execute(
@@ -543,7 +582,9 @@ impl AudioSettingsStore {
                     gapless_enabled = ?15,
                     device_sample_rate_limits = ?16,
                     pw_force_bitperfect = ?17,
-                    sync_audio_on_startup = ?18
+                    sync_audio_on_startup = ?18,
+                    skip_sink_switch = ?19,
+                    allow_quality_fallback = ?20
                 WHERE id = 1",
                 params![
                     defaults.output_device,
@@ -564,6 +605,8 @@ impl AudioSettingsStore {
                     limits_json,
                     defaults.pw_force_bitperfect as i64,
                     defaults.sync_audio_on_startup as i64,
+                    defaults.skip_sink_switch as i64,
+                    defaults.allow_quality_fallback as i64,
                 ],
             )
             .map_err(|e| format!("Failed to reset audio settings: {}", e))?;
@@ -871,6 +914,29 @@ pub fn set_audio_normalization_target(
         .map_err(|e| format!("Lock error: {}", e))?;
     let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.set_normalization_target_lufs(target_lufs)
+}
+
+#[tauri::command]
+pub fn set_audio_skip_sink_switch(
+    state: tauri::State<'_, AudioSettingsState>,
+    enabled: bool,
+) -> Result<(), String> {
+    log::info!("Command: set_audio_skip_sink_switch {}", enabled);
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
+
+    // Constraint: cannot enable skip_sink_switch when dac_passthrough is on
+    if enabled {
+        let settings = store.get_settings()?;
+        if settings.dac_passthrough {
+            return Err("Cannot enable skip sink switch while DAC passthrough is active".to_string());
+        }
+    }
+
+    store.set_skip_sink_switch(enabled)
 }
 
 #[tauri::command]

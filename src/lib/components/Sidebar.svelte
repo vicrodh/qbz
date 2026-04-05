@@ -135,7 +135,7 @@
 
   // Favorites section state
   let favoritesExpanded = $state(false);
-  let favoritesTabOrder = $state<string[]>(['tracks', 'albums', 'artists']);
+  let favoritesTabOrder = $state<string[]>(['tracks', 'albums', 'artists', 'playlists']);
   let showFavoritesMenu = $state(false);
   let favoritesMenuPos = $state({ x: 0, y: 0 });
 
@@ -933,8 +933,7 @@
   async function loadFavoritesPreferences() {
     try {
       const prefs = await invoke<FavoritesPreferences>('v2_get_favorites_preferences');
-      // Filter out 'playlists' from tab order for sidebar display
-      favoritesTabOrder = (prefs.tab_order || ['tracks', 'albums', 'artists']).filter(tab => tab !== 'playlists');
+      favoritesTabOrder = prefs.tab_order || ['tracks', 'albums', 'artists', 'playlists'];
     } catch (err) {
       console.debug('[Sidebar] Failed to load favorites preferences:', err);
     }
@@ -1514,6 +1513,8 @@
                     <Disc size={14} />
                   {:else if tab === 'tracks'}
                     <Music size={14} />
+                  {:else if tab === 'playlists'}
+                    <ListMusic size={14} />
                   {/if}
                 {/snippet}
               </NavigationItem>
@@ -1889,6 +1890,8 @@
           <Disc size={14} />
         {:else if tab === 'tracks'}
           <Music size={14} />
+        {:else if tab === 'playlists'}
+          <ListMusic size={14} />
         {/if}
         <span>{$t(`favorites.${tab}`)}</span>
       </button>

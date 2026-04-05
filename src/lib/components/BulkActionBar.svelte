@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ListPlus, ListEnd, ListMusic, Heart, HeartOff, Trash2, X, ChevronDown } from 'lucide-svelte';
+  import { ListPlus, ListEnd, ListMusic, Heart, HeartOff, Trash2, X, ChevronDown, CloudDownload } from 'lucide-svelte';
   import { t } from 'svelte-i18n';
 
   interface Props {
@@ -10,6 +10,7 @@
     onAddFavorites?: () => void;
     onRemoveFavorites?: () => void;
     onRemoveFromPlaylist?: () => void;
+    onMakeOffline?: () => void;
     onClearSelection: () => void;
     placement?: 'top' | 'bottom';
   }
@@ -22,6 +23,7 @@
     onAddFavorites,
     onRemoveFavorites,
     onRemoveFromPlaylist,
+    onMakeOffline,
     onClearSelection,
     placement = 'bottom',
   }: Props = $props();
@@ -91,6 +93,13 @@
         <ListMusic size={15} />
         <span>{$t('actions.addToPlaylist')}</span>
       </button>
+
+      {#if onMakeOffline}
+        <button class="action-btn" onclick={onMakeOffline} title={$t('actions.makeAvailableOffline')}>
+          <CloudDownload size={15} />
+          <span>{$t('actions.makeAvailableOffline')}</span>
+        </button>
+      {/if}
 
       {#if onAddFavorites}
         <button class="action-btn" onclick={onAddFavorites} title={$t('actions.addToFavorites')}>

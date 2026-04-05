@@ -4,6 +4,7 @@
  * Manages overlay and modal visibility states across the app.
  */
 
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { closeAll as closeAllMenus } from './floatingMenuStore';
 import { hideSidebar as hideLyricsSidebar } from './lyricsStore';
 
@@ -148,6 +149,9 @@ export function openFullScreen(): void {
 
 export function closeFullScreen(): void {
   isFullScreenOpen = false;
+  getCurrentWindow().isFullscreen().then(fs => {
+    if (fs) getCurrentWindow().setFullscreen(false);
+  });
   notifyListeners();
 }
 
@@ -344,6 +348,10 @@ export function handleEscapeKey(): boolean {
     closePlaylistImport();
     return true;
   }
+  // Exit window fullscreen if no UI overlays were open
+  getCurrentWindow().isFullscreen().then(fs => {
+    if (fs) getCurrentWindow().setFullscreen(false);
+  });
   return false;
 }
 

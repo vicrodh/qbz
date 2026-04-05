@@ -71,8 +71,9 @@ use ashpd::desktop::Icon;
 use md5::{Digest, Md5};
 use std::collections::HashSet;
 use std::fs;
+use std::io::Write;
 #[cfg(target_os = "linux")]
-use std::io::{Cursor, Write};
+use std::io::Cursor;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
@@ -166,6 +167,8 @@ pub(crate) fn convert_to_qbz_audio_settings(settings: &AudioSettings) -> qbz_aud
         normalization_target_lufs: settings.normalization_target_lufs,
         gapless_enabled: settings.gapless_enabled,
         pw_force_bitperfect: settings.pw_force_bitperfect,
+        skip_sink_switch: settings.skip_sink_switch,
+        allow_quality_fallback: settings.allow_quality_fallback,
     }
 }
 
@@ -286,22 +289,50 @@ fn limit_quality_for_device(quality: Quality, max_sample_rate: Option<u32>) -> Q
     }
 }
 
-/// Probe sample rate from FLAC audio data by reading the STREAMINFO header.
-/// Returns None for non-FLAC data or data too short to parse.
-#[cfg(target_os = "linux")]
-fn probe_flac_sample_rate(data: &[u8]) -> Option<u32> {
-    // FLAC format: "fLaC" magic + metadata blocks
-    // First block is always STREAMINFO (34 bytes)
-    // Bytes 18-20 of STREAMINFO contain: sample_rate (20 bits) | channels (3 bits) | bps (5 bits) | ...
+/// Probe sample rate and bit depth from FLAC STREAMINFO header.
+/// Returns (sample_rate, bit_depth) or None for non-FLAC / truncated data.
+fn probe_flac_format(data: &[u8]) -> Option<(u32, u32)> {
+    // FLAC: "fLaC" magic + metadata blocks. First block = STREAMINFO (34 bytes).
+    // Byte layout at offset 18: sample_rate (20 bits) | channels (3 bits) | bps (5 bits) | ...
     if data.len() < 22 || &data[0..4] != b"fLaC" {
         return None;
     }
     let sr = ((data[18] as u32) << 12) | ((data[19] as u32) << 4) | ((data[20] as u32) >> 4);
-    if sr > 0 {
-        Some(sr)
-    } else {
-        None
+    let bps = ((data[20] as u32) & 0x01) << 4 | ((data[21] as u32) >> 4);
+    let bit_depth = bps + 1; // FLAC stores bps-1
+    if sr > 0 { Some((sr, bit_depth)) } else { None }
+}
+
+/// Convenience wrapper used by ALSA hardware check (Linux only).
+#[cfg(target_os = "linux")]
+fn probe_flac_sample_rate(data: &[u8]) -> Option<u32> {
+    probe_flac_format(data).map(|(sr, _)| sr)
+}
+
+/// Check if cached audio quality is below what the user requested.
+/// Returns true if the cache should be skipped in favor of a fresh download.
+fn cached_quality_below_requested(data: &[u8], requested: Quality) -> bool {
+    let (sample_rate, bit_depth) = match probe_flac_format(data) {
+        Some(fmt) => fmt,
+        None => return false, // Can't parse — assume compatible
+    };
+
+    let dominated = match requested {
+        // Hi-Res+: expect 24-bit AND >96kHz
+        Quality::UltraHiRes => bit_depth < 24 || sample_rate <= 96000,
+        // Hi-Res: expect 24-bit
+        Quality::HiRes => bit_depth < 24,
+        // Lossless / Mp3: any FLAC is fine
+        _ => false,
+    };
+
+    if dominated {
+        log::info!(
+            "[V2/Quality] Cached audio is {}Hz/{}bit but requested {:?} — will try re-download",
+            sample_rate, bit_depth, requested
+        );
     }
+    dominated
 }
 
 /// Check if cached audio data has a sample rate that the current ALSA hardware
@@ -801,7 +832,7 @@ const PORTAL_NOTIFICATION_ICON_MAX_EDGE: u32 = 512;
 #[cfg(target_os = "linux")]
 const PORTAL_NOTIFICATION_ICON_MAX_BYTES: usize = 4 * 1024 * 1024;
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn v2_get_notification_artwork_cache_dir() -> Result<PathBuf, String> {
     let cache_dir = dirs::cache_dir()
         .ok_or_else(|| "Could not find cache directory".to_string())?
@@ -813,7 +844,7 @@ fn v2_get_notification_artwork_cache_dir() -> Result<PathBuf, String> {
     Ok(cache_dir)
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn v2_resolve_local_artwork(url: &str) -> Option<PathBuf> {
     if let Some(path) = url.strip_prefix("file://") {
         return Some(PathBuf::from(path));
@@ -825,7 +856,7 @@ fn v2_resolve_local_artwork(url: &str) -> Option<PathBuf> {
     None
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn v2_cache_notification_artwork(url: &str) -> Result<PathBuf, String> {
     if let Some(local_path) = v2_resolve_local_artwork(url) {
         if local_path.exists() {
@@ -844,14 +875,16 @@ fn v2_cache_notification_artwork(url: &str) -> Result<PathBuf, String> {
 
     let response = reqwest::blocking::Client::new()
         .get(url)
+        .header("User-Agent", "Mozilla/5.0")
         .timeout(std::time::Duration::from_secs(5))
         .send()
         .map_err(|e| format!("Failed to download artwork: {}", e))?;
 
     if !response.status().is_success() {
         return Err(format!(
-            "Failed to download artwork: HTTP {}",
-            response.status()
+            "Failed to download artwork: HTTP {} (url: {})",
+            response.status(),
+            url.split('?').next().unwrap_or(url)
         ));
     }
 
@@ -1039,136 +1072,11 @@ pub async fn runtime_bootstrap(
         return Ok(status);
     }
 
-    // Step 3: Check for saved credentials and attempt auto-login.
-    // NOTE: user_id hint is optional; credentials are the source of truth.
-    // This keeps bootstrap robust even if last_user_id is missing/corrupt.
-    let creds = crate::credentials::load_qobuz_credentials();
-    let last_user_id_hint = crate::user_data::UserDataPaths::load_last_user_id();
-
-    if let Ok(Some(creds)) = creds {
-        if last_user_id_hint.is_some() {
-            log::info!("[Runtime] Found saved credentials, attempting auto-login");
-        } else {
-            log::info!("[Runtime] Found saved credentials, attempting auto-login (no hint)");
-        }
-
-        // Login to legacy client
-        let client = app_state.client.read().await;
-        match client.login(&creds.email, &creds.password).await {
-            Ok(session) => {
-                log::info!("[Runtime] Legacy auth successful");
-                manager.set_legacy_auth(true, Some(session.user_id)).await;
-                let _ = app.emit(
-                    "runtime:event",
-                    RuntimeEvent::AuthChanged {
-                        logged_in: true,
-                        user_id: Some(session.user_id),
-                    },
-                );
-
-                // Step 4: Wait for CoreBridge init, then authenticate V2 - REQUIRED per ADR
-                let cb_start = std::time::Instant::now();
-                let cb_timeout = std::time::Duration::from_secs(30);
-                let cb_poll = std::time::Duration::from_millis(100);
-
-                loop {
-                    if core_bridge.try_get().await.is_some() {
-                        break;
-                    }
-                    let elapsed = cb_start.elapsed();
-                    if elapsed > cb_timeout {
-                        log::error!("[Runtime] CoreBridge not available after 30s");
-                        manager.set_bootstrap_in_progress(false).await;
-                        return Err(RuntimeError::V2NotInitialized);
-                    }
-                    if elapsed.as_secs() % 5 == 0 && elapsed.as_millis() % 5000 < 150 {
-                        log::info!(
-                            "[Runtime] Waiting for CoreBridge... ({:.0}s)",
-                            elapsed.as_secs_f64()
-                        );
-                    }
-                    tokio::time::sleep(cb_poll).await;
-                }
-                log::info!("[Runtime] CoreBridge ready after {:?}", cb_start.elapsed());
-
-                if let Some(bridge) = core_bridge.try_get().await {
-                    match bridge.login(&creds.email, &creds.password).await {
-                        Ok(_) => {
-                            log::info!("[Runtime] CoreBridge auth successful");
-                            manager.set_corebridge_auth(true).await;
-                        }
-                        Err(e) => {
-                            log::error!("[Runtime] CoreBridge auth failed: {}", e);
-                            let _ = app.emit(
-                                "runtime:event",
-                                RuntimeEvent::CoreBridgeAuthFailed {
-                                    error: e.to_string(),
-                                },
-                            );
-                            manager.set_bootstrap_in_progress(false).await;
-                            return Err(RuntimeError::V2AuthFailed(e));
-                        }
-                    }
-                } else {
-                    log::error!("[Runtime] CoreBridge disappeared after ready check");
-                    manager.set_bootstrap_in_progress(false).await;
-                    return Err(RuntimeError::V2NotInitialized);
-                }
-
-                // Step 5: Activate per-user session - REQUIRED (FATAL if fails)
-                // This initializes all per-user stores and sets runtime state
-                // Session activation failure is FATAL per parity with v2_auto_login/v2_manual_login
-                if let Err(e) =
-                    crate::session_lifecycle::activate_session(&app, session.user_id).await
-                {
-                    log::error!("[Runtime] Session activation failed: {}", e);
-                    // Rollback auth state since session is not usable
-                    manager.set_legacy_auth(false, None).await;
-                    manager.set_corebridge_auth(false).await;
-                    let reason = DegradedReason::SessionActivationFailed(e.clone());
-                    manager.set_degraded(reason.clone()).await;
-                    manager.set_bootstrap_in_progress(false).await;
-                    let _ = app.emit(
-                        "runtime:event",
-                        RuntimeEvent::RuntimeDegraded {
-                            reason: reason.clone(),
-                        },
-                    );
-                    return Err(RuntimeError::RuntimeDegraded(reason));
-                }
-
-                // Step 6: Optionally sync audio settings after session activation.
-                // Only runs if user has enabled sync_audio_on_startup (opt-in).
-                // Useful when Player::new() may hold stale settings (e.g., Flatpak updates).
-                let should_sync = audio_settings
-                    .store
-                    .lock()
-                    .ok()
-                    .and_then(|g| g.as_ref().and_then(|s| s.get_settings().ok()))
-                    .map(|s| s.sync_audio_on_startup)
-                    .unwrap_or(false);
-
-                if should_sync {
-                    if let Some(bridge) = core_bridge.try_get().await {
-                        let player = bridge.player();
-                        if let Ok(guard) = audio_settings.store.lock() {
-                            if let Some(store) = guard.as_ref() {
-                                if let Ok(fresh) = store.get_settings() {
-                                    log::info!("[Runtime] Syncing audio settings to player (sync_audio_on_startup=true)");
-                                    let _ = player
-                                        .reload_settings(convert_to_qbz_audio_settings(&fresh));
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            Err(e) => {
-                log::warn!("[Runtime] Auto-login failed: {}", e);
-                // Not a fatal error - user can login manually
-            }
-        }
-    } else if let Ok(Some(oauth_token)) = crate::credentials::load_oauth_token() {
+    // Step 3: Attempt auto-login via saved OAuth token.
+    // Basic auth (email/password) is no longer supported by Qobuz — any saved
+    // credentials from older versions are ignored. Users will see the login
+    // screen and authenticate via OAuth.
+    if let Ok(Some(oauth_token)) = crate::credentials::load_oauth_token() {
         // No email/password credentials but there IS a saved OAuth token.
         // Try to restore the session by calling /user/login with the stored token.
         log::info!("[Runtime] No email/password credentials, trying saved OAuth token...");
@@ -1364,304 +1272,54 @@ pub async fn v2_get_user_info(
         }))
 }
 
-/// Auto-login using saved credentials (Phase 2 of runtime initialization)
+/// Auto-login using saved credentials.
 ///
-/// This command:
-/// 1. Loads saved credentials from keyring
-/// 2. Authenticates with legacy client
-/// 3. Authenticates with CoreBridge/V2 (BLOCKING - required per ADR)
-/// 4. Updates RuntimeManager state
-///
-/// V2 auth is REQUIRED - if it fails, the whole login fails.
-/// ToS acceptance is REQUIRED - checked in backend before any auth attempt.
+/// Basic auth (email/password) is no longer supported by Qobuz.
+/// This command now always returns no_credentials. Session restore
+/// is handled by the OAuth token path in runtime_bootstrap.
 #[tauri::command]
 pub async fn v2_auto_login(
-    app: tauri::AppHandle,
-    runtime: State<'_, RuntimeManagerState>,
-    app_state: State<'_, AppState>,
-    core_bridge: State<'_, CoreBridgeState>,
-    legal_state: State<'_, LegalSettingsState>,
+    _app: tauri::AppHandle,
+    _runtime: State<'_, RuntimeManagerState>,
+    _app_state: State<'_, AppState>,
+    _core_bridge: State<'_, CoreBridgeState>,
+    _legal_state: State<'_, LegalSettingsState>,
 ) -> Result<V2LoginResponse, String> {
-    let manager = runtime.manager();
-
-    log::info!("[V2] v2_auto_login starting...");
-
-    // Load saved credentials
-    let creds = match crate::credentials::load_qobuz_credentials() {
-        Ok(Some(c)) => c,
-        Ok(None) => {
-            return Ok(V2LoginResponse {
-                success: false,
-                user_name: None,
-                user_id: None,
-                subscription: None,
-                subscription_valid_until: None,
-                error: Some("No saved credentials".to_string()),
-                error_code: Some("no_credentials".to_string()),
-            });
-        }
-        Err(e) => {
-            return Ok(V2LoginResponse {
-                success: false,
-                user_name: None,
-                user_id: None,
-                subscription: None,
-                subscription_valid_until: None,
-                error: Some(e),
-                error_code: Some("credentials_error".to_string()),
-            });
-        }
-    };
-
-    // Legacy auth
-    let client = app_state.client.read().await;
-    let session = match client.login(&creds.email, &creds.password).await {
-        Ok(s) => s,
-        Err(e) => {
-            let error_code = if matches!(e, crate::api::error::ApiError::IneligibleUser) {
-                Some("ineligible_user".to_string())
-            } else {
-                None
-            };
-            return Ok(V2LoginResponse {
-                success: false,
-                user_name: None,
-                user_id: None,
-                subscription: None,
-                subscription_valid_until: None,
-                error: Some(e.to_string()),
-                error_code,
-            });
-        }
-    };
-    drop(client);
-
-    log::info!("[V2] Legacy auth successful");
-    manager.set_legacy_auth(true, Some(session.user_id)).await;
-    let _ = app.emit(
-        "runtime:event",
-        RuntimeEvent::AuthChanged {
-            logged_in: true,
-            user_id: Some(session.user_id),
-        },
-    );
-
-    // V2 CoreBridge auth - REQUIRED per ADR Runtime Session Contract
-    if let Some(bridge) = core_bridge.try_get().await {
-        match bridge.login(&creds.email, &creds.password).await {
-            Ok(_) => {
-                log::info!("[V2] CoreBridge auth successful");
-                manager.set_corebridge_auth(true).await;
-            }
-            Err(e) => {
-                log::error!("[V2] CoreBridge auth failed: {}", e);
-                rollback_auth_state(&manager, &app).await;
-                let _ = app.emit(
-                    "runtime:event",
-                    RuntimeEvent::CoreBridgeAuthFailed {
-                        error: e.to_string(),
-                    },
-                );
-                // V2 auth failed - return failure per ADR
-                return Ok(V2LoginResponse {
-                    success: false,
-                    user_name: Some(session.display_name),
-                    user_id: Some(session.user_id),
-                    subscription: Some(session.subscription_label),
-                    subscription_valid_until: session.subscription_valid_until,
-                    error: Some(format!("V2 authentication failed: {}", e)),
-                    error_code: Some("v2_auth_failed".to_string()),
-                });
-            }
-        }
-    } else {
-        log::error!("[V2] CoreBridge not initialized - cannot complete auth");
-        rollback_auth_state(&manager, &app).await;
-        return Ok(V2LoginResponse {
-            success: false,
-            user_name: Some(session.display_name),
-            user_id: Some(session.user_id),
-            subscription: Some(session.subscription_label),
-            subscription_valid_until: session.subscription_valid_until,
-            error: Some("V2 CoreBridge not initialized".to_string()),
-            error_code: Some("v2_not_initialized".to_string()),
-        });
-    }
-
-    // Activate per-user session (initializes all per-user stores)
-    // This is REQUIRED - without it, user has auth but no stores, causing UserSessionNotActivated errors
-    if let Err(e) = crate::session_lifecycle::activate_session(&app, session.user_id).await {
-        log::error!("[V2] Session activation failed: {}", e);
-        rollback_auth_state(&manager, &app).await;
-        return Ok(V2LoginResponse {
-            success: false,
-            user_name: Some(session.display_name.clone()),
-            user_id: Some(session.user_id),
-            subscription: Some(session.subscription_label.clone()),
-            subscription_valid_until: session.subscription_valid_until.clone(),
-            error: Some(format!("Session activation failed: {}", e)),
-            error_code: Some("session_activation_failed".to_string()),
-        });
-    }
-
-    // Persist ToS acceptance now that login succeeded.
-    // The frontend checkbox already gated the UI; we store the value so
-    // subsequent bootstrap auto-logins pass without requiring the user to
-    // re-accept (e.g. after a factory reset that wiped the DB).
-    accept_tos_best_effort(&legal_state);
-
-    // Emit ready event
-    let _ = app.emit(
-        "runtime:event",
-        RuntimeEvent::RuntimeReady {
-            user_id: session.user_id,
-        },
-    );
-
+    log::info!("[V2] v2_auto_login: basic auth no longer supported, returning no_credentials");
     Ok(V2LoginResponse {
-        success: true,
-        user_name: Some(session.display_name),
-        user_id: Some(session.user_id),
-        subscription: Some(session.subscription_label),
-        subscription_valid_until: session.subscription_valid_until,
-        error: None,
-        error_code: None,
+        success: false,
+        user_name: None,
+        user_id: None,
+        subscription: None,
+        subscription_valid_until: None,
+        error: Some("Basic auth no longer supported. Please use OAuth.".to_string()),
+        error_code: Some("no_credentials".to_string()),
     })
 }
 
-/// Manual login with email and password (V2 - with blocking CoreBridge auth)
+/// Manual login with email and password.
 ///
-/// This command:
-/// 1. Authenticates with legacy client
-/// 2. Authenticates with CoreBridge/V2 (BLOCKING - required per ADR)
-/// 3. Updates RuntimeManager state
-///
-/// V2 auth is REQUIRED - if it fails, the whole login fails.
-/// ToS acceptance is REQUIRED - checked in backend before any auth attempt.
+/// Basic auth is no longer supported by Qobuz. This command is kept for
+/// backward compatibility but always returns an error directing users to OAuth.
 #[tauri::command]
 pub async fn v2_manual_login(
-    email: String,
-    password: String,
-    app: tauri::AppHandle,
-    runtime: State<'_, RuntimeManagerState>,
-    app_state: State<'_, AppState>,
-    core_bridge: State<'_, CoreBridgeState>,
-    legal_state: State<'_, LegalSettingsState>,
+    _email: String,
+    _password: String,
+    _app: tauri::AppHandle,
+    _runtime: State<'_, RuntimeManagerState>,
+    _app_state: State<'_, AppState>,
+    _core_bridge: State<'_, CoreBridgeState>,
+    _legal_state: State<'_, LegalSettingsState>,
 ) -> Result<V2LoginResponse, String> {
-    let manager = runtime.manager();
-
-    log::info!("[V2] v2_manual_login starting...");
-
-    // Legacy auth
-    let client = app_state.client.read().await;
-    let session = match client.login(&email, &password).await {
-        Ok(s) => s,
-        Err(e) => {
-            let error_code = if matches!(e, crate::api::error::ApiError::IneligibleUser) {
-                Some("ineligible_user".to_string())
-            } else {
-                None
-            };
-            return Ok(V2LoginResponse {
-                success: false,
-                user_name: None,
-                user_id: None,
-                subscription: None,
-                subscription_valid_until: None,
-                error: Some(e.to_string()),
-                error_code,
-            });
-        }
-    };
-    drop(client);
-
-    log::info!("[V2] Legacy auth successful");
-    manager.set_legacy_auth(true, Some(session.user_id)).await;
-    let _ = app.emit(
-        "runtime:event",
-        RuntimeEvent::AuthChanged {
-            logged_in: true,
-            user_id: Some(session.user_id),
-        },
-    );
-
-    // V2 CoreBridge auth - REQUIRED per ADR Runtime Session Contract
-    if let Some(bridge) = core_bridge.try_get().await {
-        match bridge.login(&email, &password).await {
-            Ok(_) => {
-                log::info!("[V2] CoreBridge auth successful");
-                manager.set_corebridge_auth(true).await;
-            }
-            Err(e) => {
-                log::error!("[V2] CoreBridge auth failed: {}", e);
-                rollback_auth_state(&manager, &app).await;
-                let _ = app.emit(
-                    "runtime:event",
-                    RuntimeEvent::CoreBridgeAuthFailed {
-                        error: e.to_string(),
-                    },
-                );
-                // V2 auth failed - return failure per ADR
-                return Ok(V2LoginResponse {
-                    success: false,
-                    user_name: Some(session.display_name),
-                    user_id: Some(session.user_id),
-                    subscription: Some(session.subscription_label),
-                    subscription_valid_until: session.subscription_valid_until,
-                    error: Some(format!("V2 authentication failed: {}", e)),
-                    error_code: Some("v2_auth_failed".to_string()),
-                });
-            }
-        }
-    } else {
-        log::error!("[V2] CoreBridge not initialized - cannot complete auth");
-        rollback_auth_state(&manager, &app).await;
-        return Ok(V2LoginResponse {
-            success: false,
-            user_name: Some(session.display_name),
-            user_id: Some(session.user_id),
-            subscription: Some(session.subscription_label),
-            subscription_valid_until: session.subscription_valid_until,
-            error: Some("V2 CoreBridge not initialized".to_string()),
-            error_code: Some("v2_not_initialized".to_string()),
-        });
-    }
-
-    // Activate per-user session (initializes all per-user stores)
-    // This is REQUIRED - without it, user has auth but no stores, causing UserSessionNotActivated errors
-    if let Err(e) = crate::session_lifecycle::activate_session(&app, session.user_id).await {
-        log::error!("[V2] Session activation failed: {}", e);
-        rollback_auth_state(&manager, &app).await;
-        return Ok(V2LoginResponse {
-            success: false,
-            user_name: Some(session.display_name.clone()),
-            user_id: Some(session.user_id),
-            subscription: Some(session.subscription_label.clone()),
-            subscription_valid_until: session.subscription_valid_until.clone(),
-            error: Some(format!("Session activation failed: {}", e)),
-            error_code: Some("session_activation_failed".to_string()),
-        });
-    }
-
-    // Persist ToS acceptance now that login succeeded.
-    accept_tos_best_effort(&legal_state);
-
-    // Emit ready event
-    let _ = app.emit(
-        "runtime:event",
-        RuntimeEvent::RuntimeReady {
-            user_id: session.user_id,
-        },
-    );
-
+    log::info!("[V2] v2_manual_login: basic auth no longer supported");
     Ok(V2LoginResponse {
-        success: true,
-        user_name: Some(session.display_name),
-        user_id: Some(session.user_id),
-        subscription: Some(session.subscription_label),
-        subscription_valid_until: session.subscription_valid_until,
-        error: None,
-        error_code: None,
+        success: false,
+        user_name: None,
+        user_id: None,
+        subscription: None,
+        subscription_valid_until: None,
+        error: Some("Basic auth no longer supported. Please use OAuth.".to_string()),
+        error_code: Some("basic_auth_deprecated".to_string()),
     })
 }
 
@@ -1683,7 +1341,6 @@ pub async fn v2_start_oauth_login(
     core_bridge: State<'_, CoreBridgeState>,
     legal_state: State<'_, LegalSettingsState>,
 ) -> Result<V2LoginResponse, String> {
-    let manager = runtime.manager();
     log::info!("[V2] v2_start_oauth_login starting...");
 
     // Get app_id from initialized client
@@ -1855,12 +1512,31 @@ pub async fn v2_start_oauth_login(
         }
     };
 
-    log::info!("[V2] OAuth code received, exchanging for session...");
+    finalize_oauth_login(&code, &app, &runtime, &app_state, &core_bridge, &legal_state).await
+}
 
-    // Exchange code for UserSession via legacy client
+/// Complete the OAuth login flow after obtaining an authorization code.
+///
+/// Frontend-agnostic: does not depend on how the code was obtained (WebView,
+/// system browser, manual paste, etc.). Suitable for GUI, TUI, and headless.
+///
+/// Steps: exchange code → establish session → inject into CoreBridge →
+/// activate per-user data → persist token.
+async fn finalize_oauth_login(
+    code: &str,
+    app: &tauri::AppHandle,
+    runtime: &State<'_, RuntimeManagerState>,
+    app_state: &State<'_, AppState>,
+    core_bridge: &State<'_, CoreBridgeState>,
+    legal_state: &State<'_, LegalSettingsState>,
+) -> Result<V2LoginResponse, String> {
+    let manager = runtime.manager();
+    log::info!("[OAuth] Exchanging authorization code for session...");
+
+    // Exchange code for UserSession
     let session = {
         let client = app_state.client.read().await;
-        match client.login_with_oauth_code(&code).await {
+        match client.login_with_oauth_code(code).await {
             Ok(s) => s,
             Err(e) => {
                 return Ok(V2LoginResponse {
@@ -1876,7 +1552,7 @@ pub async fn v2_start_oauth_login(
         }
     };
 
-    log::info!("[V2] OAuth session established");
+    log::info!("[OAuth] Session established, activating...");
     manager.set_legacy_auth(true, Some(session.user_id)).await;
     let _ = app.emit(
         "runtime:event",
@@ -1887,13 +1563,12 @@ pub async fn v2_start_oauth_login(
     );
 
     // Convert api::models::UserSession → qbz_models::UserSession for CoreBridge
-    // Both types are structurally identical; serde round-trip is safe.
     let core_session: UserSession =
         match serde_json::to_value(&session).and_then(serde_json::from_value) {
             Ok(s) => s,
             Err(e) => {
-                log::error!("[V2] Failed to convert session for CoreBridge: {}", e);
-                rollback_auth_state(&manager, &app).await;
+                log::error!("[OAuth] Failed to convert session for CoreBridge: {}", e);
+                rollback_auth_state(&manager, app).await;
                 return Ok(V2LoginResponse {
                     success: false,
                     user_name: None,
@@ -1906,16 +1581,16 @@ pub async fn v2_start_oauth_login(
             }
         };
 
-    // CoreBridge auth — inject session directly (OAuth has no email/password)
+    // Inject session into CoreBridge
     if let Some(bridge) = core_bridge.try_get().await {
         match bridge.login_with_session(core_session).await {
             Ok(_) => {
-                log::info!("[V2] CoreBridge session injected for OAuth user");
+                log::info!("[OAuth] CoreBridge session injected");
                 manager.set_corebridge_auth(true).await;
             }
             Err(e) => {
-                log::error!("[V2] CoreBridge session injection failed: {}", e);
-                rollback_auth_state(&manager, &app).await;
+                log::error!("[OAuth] CoreBridge session injection failed: {}", e);
+                rollback_auth_state(&manager, app).await;
                 let _ = app.emit(
                     "runtime:event",
                     RuntimeEvent::CoreBridgeAuthFailed {
@@ -1934,8 +1609,8 @@ pub async fn v2_start_oauth_login(
             }
         }
     } else {
-        log::error!("[V2] CoreBridge not initialized for OAuth login");
-        rollback_auth_state(&manager, &app).await;
+        log::error!("[OAuth] CoreBridge not initialized");
+        rollback_auth_state(&manager, app).await;
         return Ok(V2LoginResponse {
             success: false,
             user_name: Some(session.display_name),
@@ -1947,10 +1622,10 @@ pub async fn v2_start_oauth_login(
         });
     }
 
-    // Activate per-user session (same as manual login)
-    if let Err(e) = crate::session_lifecycle::activate_session(&app, session.user_id).await {
-        log::error!("[V2] Session activation failed after OAuth: {}", e);
-        rollback_auth_state(&manager, &app).await;
+    // Activate per-user session
+    if let Err(e) = crate::session_lifecycle::activate_session(app, session.user_id).await {
+        log::error!("[OAuth] Session activation failed: {}", e);
+        rollback_auth_state(&manager, app).await;
         return Ok(V2LoginResponse {
             success: false,
             user_name: Some(session.display_name.clone()),
@@ -1962,14 +1637,12 @@ pub async fn v2_start_oauth_login(
         });
     }
 
-    // Persist the OAuth token so bootstrap can restore the session on next launch.
-    // Non-fatal: if saving fails, the user just has to re-login via OAuth.
+    // Persist OAuth token for session restore on next launch
     if let Err(e) = crate::credentials::save_oauth_token(&session.user_auth_token) {
-        log::warn!("[V2] Failed to persist OAuth token: {}", e);
+        log::warn!("[OAuth] Failed to persist token: {}", e);
     }
 
-    // Persist ToS acceptance now that login succeeded.
-    accept_tos_best_effort(&legal_state);
+    accept_tos_best_effort(legal_state);
 
     let _ = app.emit(
         "runtime:event",
@@ -1987,6 +1660,130 @@ pub async fn v2_start_oauth_login(
         error: None,
         error_code: None,
     })
+}
+
+/// OAuth login via the user's system browser.
+///
+/// Spawns a temporary local HTTP server, opens the system browser to the Qobuz
+/// OAuth page with a localhost redirect, captures the authorization code when
+/// Qobuz redirects back, then completes the login via `finalize_oauth_login`.
+#[tauri::command]
+pub async fn v2_start_system_browser_oauth(
+    app: tauri::AppHandle,
+    runtime: State<'_, RuntimeManagerState>,
+    app_state: State<'_, AppState>,
+    core_bridge: State<'_, CoreBridgeState>,
+    legal_state: State<'_, LegalSettingsState>,
+) -> Result<V2LoginResponse, String> {
+    log::info!("[V2] System browser OAuth starting...");
+
+    // Get app_id from initialized client
+    let app_id = {
+        let client = app_state.client.read().await;
+        client.app_id().await.map_err(|e| e.to_string())?
+    };
+
+    // Bind to a random available port
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .map_err(|e| format!("Failed to bind local OAuth listener: {}", e))?;
+    let port = listener
+        .local_addr()
+        .map_err(|e| format!("Failed to get listener address: {}", e))?
+        .port();
+
+    let oauth_url = format!(
+        "https://www.qobuz.com/signin/oauth?ext_app_id={}&redirect_url={}",
+        app_id,
+        urlencoding::encode(&format!("http://localhost:{}", port)),
+    );
+
+    // Channel for the authorization code
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(1);
+
+    // Local HTTP handler: serves a success page and forwards the code
+    let oauth_handler = axum::Router::new().route(
+        "/",
+        axum::routing::get(move |axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>| {
+            let tx = tx.clone();
+            async move {
+                if let Some(code) = params.get("code_autorisation").or_else(|| params.get("code")) {
+                    let _ = tx.send(code.clone()).await;
+                    axum::response::Html(
+                        "<html><body style=\"font-family:system-ui;text-align:center;padding:60px\">\
+                         <h2>Login successful</h2>\
+                         <p>You can close this tab and return to QBZ.</p>\
+                         </body></html>"
+                    )
+                } else {
+                    axum::response::Html(
+                        "<html><body style=\"font-family:system-ui;text-align:center;padding:60px\">\
+                         <h2>Login failed</h2>\
+                         <p>No authorization code received. Please try again.</p>\
+                         </body></html>"
+                    )
+                }
+            }
+        }),
+    );
+
+    // Spawn the server in the background
+    let server_handle = tokio::spawn(async move {
+        axum::serve(listener, oauth_handler).await.ok();
+    });
+
+    // Open the user's default browser
+    log::info!("[OAuth] Opening system browser to Qobuz login (port {})", port);
+    if let Err(e) = open::that(&oauth_url) {
+        log::error!("[OAuth] Failed to open system browser: {}", e);
+        server_handle.abort();
+        return Ok(V2LoginResponse {
+            success: false,
+            user_name: None,
+            user_id: None,
+            subscription: None,
+            subscription_valid_until: None,
+            error: Some(format!("Failed to open browser: {}", e)),
+            error_code: Some("browser_open_failed".to_string()),
+        });
+    }
+
+    // Wait up to 5 minutes for the redirect
+    let code = tokio::time::timeout(
+        std::time::Duration::from_secs(300),
+        rx.recv(),
+    )
+    .await;
+
+    server_handle.abort();
+
+    let code = match code {
+        Ok(Some(c)) => c,
+        Ok(None) => {
+            return Ok(V2LoginResponse {
+                success: false,
+                user_name: None,
+                user_id: None,
+                subscription: None,
+                subscription_valid_until: None,
+                error: Some("OAuth login cancelled".to_string()),
+                error_code: Some("oauth_cancelled".to_string()),
+            });
+        }
+        Err(_) => {
+            return Ok(V2LoginResponse {
+                success: false,
+                user_name: None,
+                user_id: None,
+                subscription: None,
+                subscription_valid_until: None,
+                error: Some("OAuth login timed out after 5 minutes".to_string()),
+                error_code: Some("oauth_timeout".to_string()),
+            });
+        }
+    };
+
+    finalize_oauth_login(&code, &app, &runtime, &app_state, &core_bridge, &legal_state).await
 }
 
 // ==================== Prefetch (V2) ====================
@@ -7918,6 +7715,10 @@ pub async fn v2_play_track(
     let bridge_guard = bridge.get().await;
     let player = bridge_guard.player();
 
+    // Fallback: if cache has lower quality than requested but network fails,
+    // play the cached version rather than failing entirely.
+    let mut low_quality_fallback: Option<Vec<u8>> = None;
+
     // Check offline cache (persistent disk cache)
     {
         let cached_path = {
@@ -7945,34 +7746,25 @@ pub async fn v2_play_track(
                     RuntimeError::Internal(format!("Failed to read cached file: {}", e))
                 })?;
 
-                // Check if cached audio is compatible with hardware
+                // Check hardware compatibility (ALSA only)
                 #[cfg(target_os = "linux")]
-                if cached_audio_incompatible_with_hw(&audio_data, &audio_settings) {
+                let hw_incompatible =
+                    cached_audio_incompatible_with_hw(&audio_data, &audio_settings);
+                #[cfg(not(target_os = "linux"))]
+                let hw_incompatible = false;
+
+                // Check quality mismatch (all platforms)
+                let quality_mismatch = cached_quality_below_requested(&audio_data, final_quality);
+
+                if hw_incompatible {
                     log::info!(
                         "[V2/Quality] Skipping OFFLINE cache for track {} - incompatible sample rate",
                         track_id
                     );
-                    // Fall through to network path which will request compatible quality
+                } else if quality_mismatch {
+                    // Keep as fallback — don't discard, network might fail
+                    low_quality_fallback = Some(audio_data);
                 } else {
-                    player
-                        .play_data(audio_data, track_id)
-                        .map_err(RuntimeError::Internal)?;
-
-                    // Prefetch next tracks in background (using CoreBridge queue)
-                    let upcoming_tracks = bridge_guard.peek_upcoming(V2_PREFETCH_LOOKAHEAD).await;
-                    drop(bridge_guard);
-                    spawn_v2_prefetch(
-                        bridge.0.clone(),
-                        app_state.audio_cache.clone(),
-                        upcoming_tracks,
-                        final_quality,
-                        streaming_only,
-                    );
-                    return Ok(V2PlayTrackResult { format_id: None });
-                }
-
-                #[cfg(not(target_os = "linux"))]
-                {
                     player
                         .play_data(audio_data, track_id)
                         .map_err(RuntimeError::Internal)?;
@@ -7992,75 +7784,35 @@ pub async fn v2_play_track(
         }
     }
 
-    // Check memory cache (L1) - using AppState's audio_cache for now
-    // TODO: Move cache to qbz-core in future refactor
+    // Check memory cache (L1)
     let cache = app_state.audio_cache.clone();
-    if let Some(cached) = cache.get(track_id) {
-        log::info!(
-            "[V2/CACHE HIT] Track {} from MEMORY cache ({} bytes)",
-            track_id,
-            cached.size_bytes
-        );
-
-        // Check if cached audio is compatible with hardware
-        #[cfg(target_os = "linux")]
-        let skip_cache = cached_audio_incompatible_with_hw(&cached.data, &audio_settings);
-        #[cfg(not(target_os = "linux"))]
-        let skip_cache = false;
-
-        if skip_cache {
+    if low_quality_fallback.is_none() {
+        if let Some(cached) = cache.get(track_id) {
             log::info!(
-                "[V2/Quality] Skipping MEMORY cache for track {} - incompatible sample rate",
-                track_id
-            );
-            // Fall through to network path which will request compatible quality
-        } else {
-            player
-                .play_data(cached.data, track_id)
-                .map_err(RuntimeError::Internal)?;
-
-            // Prefetch next tracks in background (using CoreBridge queue)
-            let upcoming_tracks = bridge_guard.peek_upcoming(V2_PREFETCH_LOOKAHEAD).await;
-            drop(bridge_guard);
-            spawn_v2_prefetch(
-                bridge.0.clone(),
-                cache.clone(),
-                upcoming_tracks,
-                final_quality,
-                streaming_only,
-            );
-            return Ok(V2PlayTrackResult { format_id: None });
-        }
-    }
-
-    // Check playback cache (L2 - disk)
-    if let Some(playback_cache) = cache.get_playback_cache() {
-        if let Some(audio_data) = playback_cache.get(track_id) {
-            log::info!(
-                "[V2/CACHE HIT] Track {} from DISK cache ({} bytes)",
+                "[V2/CACHE HIT] Track {} from MEMORY cache ({} bytes)",
                 track_id,
-                audio_data.len()
+                cached.size_bytes
             );
 
-            // Check if cached audio is compatible with hardware
             #[cfg(target_os = "linux")]
-            let skip_cache = cached_audio_incompatible_with_hw(&audio_data, &audio_settings);
+            let hw_incompatible = cached_audio_incompatible_with_hw(&cached.data, &audio_settings);
             #[cfg(not(target_os = "linux"))]
-            let skip_cache = false;
+            let hw_incompatible = false;
 
-            if skip_cache {
+            let quality_mismatch = cached_quality_below_requested(&cached.data, final_quality);
+
+            if hw_incompatible {
                 log::info!(
-                    "[V2/Quality] Skipping DISK cache for track {} - incompatible sample rate",
+                    "[V2/Quality] Skipping MEMORY cache for track {} - incompatible sample rate",
                     track_id
                 );
-                // Fall through to network path which will request compatible quality
+            } else if quality_mismatch {
+                low_quality_fallback = Some(cached.data);
             } else {
-                cache.insert(track_id, audio_data.clone());
                 player
-                    .play_data(audio_data, track_id)
+                    .play_data(cached.data, track_id)
                     .map_err(RuntimeError::Internal)?;
 
-                // Prefetch next tracks in background (using CoreBridge queue)
                 let upcoming_tracks = bridge_guard.peek_upcoming(V2_PREFETCH_LOOKAHEAD).await;
                 drop(bridge_guard);
                 spawn_v2_prefetch(
@@ -8075,16 +7827,96 @@ pub async fn v2_play_track(
         }
     }
 
-    // Not in any cache - get stream URL from Qobuz via CoreBridge
-    log::info!(
-        "[V2] Track {} not in cache, fetching from network...",
-        track_id
-    );
+    // Check playback cache (L2 - disk)
+    if low_quality_fallback.is_none() {
+        if let Some(playback_cache) = cache.get_playback_cache() {
+            if let Some(audio_data) = playback_cache.get(track_id) {
+                log::info!(
+                    "[V2/CACHE HIT] Track {} from DISK cache ({} bytes)",
+                    track_id,
+                    audio_data.len()
+                );
 
-    let mut stream_url = bridge_guard
+                #[cfg(target_os = "linux")]
+                let hw_incompatible =
+                    cached_audio_incompatible_with_hw(&audio_data, &audio_settings);
+                #[cfg(not(target_os = "linux"))]
+                let hw_incompatible = false;
+
+                let quality_mismatch =
+                    cached_quality_below_requested(&audio_data, final_quality);
+
+                if hw_incompatible {
+                    log::info!(
+                        "[V2/Quality] Skipping DISK cache for track {} - incompatible sample rate",
+                        track_id
+                    );
+                } else if quality_mismatch {
+                    low_quality_fallback = Some(audio_data);
+                } else {
+                    cache.insert(track_id, audio_data.clone());
+                    player
+                        .play_data(audio_data, track_id)
+                        .map_err(RuntimeError::Internal)?;
+
+                    let upcoming_tracks = bridge_guard.peek_upcoming(V2_PREFETCH_LOOKAHEAD).await;
+                    drop(bridge_guard);
+                    spawn_v2_prefetch(
+                        bridge.0.clone(),
+                        cache.clone(),
+                        upcoming_tracks,
+                        final_quality,
+                        streaming_only,
+                    );
+                    return Ok(V2PlayTrackResult { format_id: None });
+                }
+            }
+        }
+    }
+
+    // Not in cache (or cached at lower quality) — fetch from network
+    if low_quality_fallback.is_some() {
+        log::info!(
+            "[V2] Track {} cached at lower quality, re-downloading at {:?}...",
+            track_id, final_quality
+        );
+    } else {
+        log::info!(
+            "[V2] Track {} not in cache, fetching from network...",
+            track_id
+        );
+    }
+
+    let stream_url_result = bridge_guard
         .get_stream_url(track_id, final_quality)
-        .await
-        .map_err(RuntimeError::Internal)?;
+        .await;
+
+    let mut stream_url = match stream_url_result {
+        Ok(url) => url,
+        Err(e) => {
+            // Network failed — use lower-quality fallback if available
+            if let Some(fallback_data) = low_quality_fallback {
+                log::warn!(
+                    "[V2] Network failed for track {}: {}. Playing cached lower-quality version.",
+                    track_id, e
+                );
+                player
+                    .play_data(fallback_data, track_id)
+                    .map_err(RuntimeError::Internal)?;
+                let upcoming_tracks = bridge_guard.peek_upcoming(V2_PREFETCH_LOOKAHEAD).await;
+                drop(bridge_guard);
+                spawn_v2_prefetch(
+                    bridge.0.clone(),
+                    cache.clone(),
+                    upcoming_tracks,
+                    final_quality,
+                    streaming_only,
+                );
+                return Ok(V2PlayTrackResult { format_id: None });
+            }
+            return Err(RuntimeError::Internal(e));
+        }
+    };
     log::info!(
         "[V2] Got stream URL for track {} (format_id={})",
         track_id,
@@ -8832,6 +8664,69 @@ pub async fn v2_set_audio_gapless_enabled(
     }; // guard dropped here before .await
 
     // Sync to player immediately so gapless takes effect without restart
+    if let Some(fresh) = fresh_settings {
+        if let Some(b) = bridge.try_get().await {
+            let _ = b
+                .player()
+                .reload_settings(convert_to_qbz_audio_settings(&fresh));
+        }
+    }
+    Ok(())
+}
+
+/// Set allow quality fallback (V2)
+#[tauri::command]
+pub async fn v2_set_audio_allow_quality_fallback(
+    enabled: bool,
+    state: State<'_, AudioSettingsState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] set_audio_allow_quality_fallback: {}", enabled);
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
+    let store = guard
+        .as_ref()
+        .ok_or(RuntimeError::UserSessionNotActivated)?;
+    store
+        .set_allow_quality_fallback(enabled)
+        .map_err(RuntimeError::Internal)?;
+    Ok(())
+}
+
+/// Set skip sink switch (V2) — preserves JACK/qjackctl routing
+#[tauri::command]
+pub async fn v2_set_audio_skip_sink_switch(
+    enabled: bool,
+    state: State<'_, AudioSettingsState>,
+    bridge: State<'_, CoreBridgeState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] set_audio_skip_sink_switch: {}", enabled);
+    let fresh_settings = {
+        let guard = state
+            .store
+            .lock()
+            .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
+        let store = guard
+            .as_ref()
+            .ok_or(RuntimeError::UserSessionNotActivated)?;
+
+        // Constraint: cannot enable when dac_passthrough is on
+        if enabled {
+            let current = store.get_settings().map_err(RuntimeError::Internal)?;
+            if current.dac_passthrough {
+                return Err(RuntimeError::Internal(
+                    "Cannot enable skip sink switch while DAC passthrough is active".to_string(),
+                ));
+            }
+        }
+
+        store
+            .set_skip_sink_switch(enabled)
+            .map_err(RuntimeError::Internal)?;
+        store.get_settings().ok()
+    };
+
     if let Some(fresh) = fresh_settings {
         if let Some(b) = bridge.try_get().await {
             let _ = b
@@ -10145,7 +10040,24 @@ pub async fn v2_musicbrainz_get_artist_metadata(
     drop(client);
 
     // Extract metadata using the location discovery module (now uses V2 types)
-    let metadata = crate::musicbrainz::location_discovery::extract_metadata(&artist);
+    let mut metadata = crate::musicbrainz::location_discovery::extract_metadata(&artist);
+
+    // Resolve real country from begin_area hierarchy (MB's "country" field is
+    // where the artist is active, not where they were born/formed)
+    if let Some(ref mut loc) = metadata.location {
+        if loc.city.is_some() {
+            if let Some(ref area_id) = loc.area_id {
+                let client = state.client.lock().await;
+                if let Ok(Some((country_name, country_code))) =
+                    client.resolve_area_country(area_id).await
+                {
+                    loc.display_name = format!("{}, {}", loc.display_name, country_name);
+                    loc.country = Some(country_name);
+                    loc.country_code = country_code;
+                }
+            }
+        }
+    }
 
     // Cache to V2 cache
     {
@@ -11390,16 +11302,34 @@ pub async fn v2_show_track_notification(
 
     #[cfg(target_os = "macos")]
     {
-        let _ = &artwork_url; // macOS notify-rust doesn't support custom artwork
-
         // Fire-and-forget: notification delivery shouldn't block track playback response
         tokio::task::spawn_blocking(move || {
             let _ = notify_rust::set_application("com.blitzfc.qbz");
-            if let Err(e) = notify_rust::Notification::new()
-                .summary(&title)
-                .body(&body_text)
-                .show()
-            {
+
+            // Cache artwork to disk if available (image_path needs a file path)
+            let artwork_path = artwork_url.as_deref().and_then(|url_str| {
+                match v2_cache_notification_artwork(url_str) {
+                    Ok(path) => {
+                        log::debug!("Notification artwork cached: {:?}", path);
+                        Some(path)
+                    }
+                    Err(e) => {
+                        log::debug!("Could not prepare notification artwork: {}", e);
+                        None
+                    }
+                }
+            });
+
+            let mut notification = notify_rust::Notification::new();
+            notification.summary(&title).body(&body_text);
+
+            if let Some(ref path) = artwork_path {
+                if let Some(path_str) = path.to_str() {
+                    notification.image_path(path_str);
+                }
+            }
+
+            if let Err(e) = notification.show() {
                 log::warn!("Failed to show macOS notification: {}", e);
             }
         });

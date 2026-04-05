@@ -92,6 +92,7 @@
     qconnectBusy?: boolean;
     showQconnectDevButton?: boolean;
     volumeLocked?: boolean;
+    bufferProgress?: number | null;
   }
 
   let {
@@ -146,6 +147,7 @@
     qconnectBusy = false,
     showQconnectDevButton = false,
     volumeLocked = false,
+    bufferProgress = null,
   }: Props = $props();
 
   let progressRef = $state<HTMLDivElement | null>(null);
@@ -275,6 +277,9 @@
       aria-valuemax={duration}
     >
       <div class="seekbar-track">
+        {#if bufferProgress != null && bufferProgress < 1}
+          <div class="seekbar-buffer" style="width: {bufferProgress * 100}%"></div>
+        {/if}
         <div class="seekbar-fill" style="width: {progress}%"></div>
       </div>
       <div class="seekbar-thumb" style="left: {progress}%"></div>
@@ -663,6 +668,7 @@
   }
 
   .seekbar-track {
+    position: relative;
     width: 100%;
     height: 3px;
     background: var(--border-subtle);
@@ -670,7 +676,17 @@
     overflow: hidden;
   }
 
+  .seekbar-buffer {
+    position: absolute;
+    height: 100%;
+    background: var(--text-muted, #666);
+    opacity: 0.3;
+    border-radius: 999px;
+    transition: width 250ms linear;
+  }
+
   .seekbar-fill {
+    position: relative;
     height: 100%;
     background: var(--accent-primary, #6366f1);
     border-radius: 999px;

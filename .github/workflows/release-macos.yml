@@ -13,7 +13,13 @@ on:
 
 jobs:
   build-macos:
-    # Apple Silicon only — Intel Macs run via Rosetta 2
+    strategy:
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            artifact: qbz-macos-aarch64
+          - target: x86_64-apple-darwin
+            artifact: qbz-macos-x86_64
     runs-on: macos-latest
     permissions:
       contents: write
@@ -78,29 +84,30 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-darwin
+          targets: ${{ matrix.target }}
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
+          shared-key: macos-${{ matrix.target }}
 
       - name: Install JS dependencies
         run: npm ci
 
       - name: Build DMG
-        run: npm run tauri build -- --target aarch64-apple-darwin --bundles dmg
+        run: npm run tauri build -- --target ${{ matrix.target }} --bundles dmg
 
       - name: Collect artifacts
         run: |
           mkdir -p dist
-          cp -v src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg dist/ || true
+          cp -v src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg dist/ || true
           ls -la dist
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: qbz-macos-aarch64
+          name: ${{ matrix.artifact }}
           path: dist/*
 
       - name: Publish GitHub Release Assets

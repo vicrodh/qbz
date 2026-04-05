@@ -81,6 +81,7 @@ interface PlaybackEvent {
   normalization_gain: number | null;  // Active normalization gain factor (null = not applied)
   gapless_ready: boolean;       // Backend wants next track queued for gapless
   gapless_next_track_id: number; // Track ID queued for gapless (0 = none)
+  buffer_progress?: number | null; // Streaming buffer progress (0-1, null = fully cached)
 }
 
 // Queue track from backend (for external track sync)
@@ -144,6 +145,7 @@ let isAdvancingTrack = false;
 let isSkipping = false;
 let queueEnded = false;
 let normalizationGain: number | null = null;  // Current normalization gain (null = not active)
+let bufferProgress: number | null = null;  // Streaming buffer progress (0-1, null = fully cached)
 let pendingSeekPosition: number | null = null;
 let seekRequestInFlight = false;
 let seekTargetPosition: number | null = null;
@@ -257,6 +259,7 @@ export interface PlayerState {
   isFavorite: boolean;
   isSkipping: boolean;
   normalizationGain: number | null;
+  bufferProgress: number | null;
 }
 
 export function getPlayerState(): PlayerState {
@@ -268,7 +271,8 @@ export function getPlayerState(): PlayerState {
     volume,
     isFavorite,
     isSkipping,
-    normalizationGain
+    normalizationGain,
+    bufferProgress
   };
 }
 
@@ -764,6 +768,7 @@ async function handlePlaybackEvent(event: PlaybackEvent): Promise<void> {
 
     // Update normalization gain state
     normalizationGain = event.normalization_gain;
+    bufferProgress = event.buffer_progress ?? null;
 
     notifyListeners();
 

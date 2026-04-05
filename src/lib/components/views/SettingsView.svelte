@@ -748,6 +748,8 @@
   let exclusiveMode = $state(false);
   let dacPassthrough = $state(false);
   let pwForceBitperfect = $state(false);
+  let skipSinkSwitch = $state(false);
+  let allowQualityFallback = $state(false);
   let syncAudioOnStartup = $state(false);
   let selectedBackend = $state<string>('Auto');
   let selectedAlsaPlugin = $state<string>('hw (Direct Hardware)');
@@ -2516,6 +2518,8 @@
     device_max_sample_rate: number | null;
     gapless_enabled: boolean;
     pw_force_bitperfect: boolean;
+    skip_sink_switch: boolean;
+    allow_quality_fallback: boolean;
     sync_audio_on_startup: boolean;
   }
 
@@ -2670,6 +2674,8 @@
       exclusiveMode = settings.exclusive_mode;
       dacPassthrough = settings.dac_passthrough;
       pwForceBitperfect = settings.pw_force_bitperfect;
+      skipSinkSwitch = settings.skip_sink_switch;
+      allowQualityFallback = settings.allow_quality_fallback;
       syncAudioOnStartup = settings.sync_audio_on_startup;
 
       // Load backend and plugin settings
@@ -2789,6 +2795,13 @@
   async function handleDacPassthroughChange(enabled: boolean) {
     dacPassthrough = enabled;
 
+    // Enabling DAC Passthrough disables skip sink switch (mutually exclusive)
+    if (enabled && skipSinkSwitch) {
+      skipSinkSwitch = false;
+      await invoke('v2_set_audio_skip_sink_switch', { enabled: false });
+      console.log('[Audio] Disabled skip sink switch (incompatible with DAC Passthrough)');
+    }
+
     // Disabling DAC Passthrough also disables PW force bit-perfect
     if (!enabled && pwForceBitperfect) {
       pwForceBitperfect = false;
@@ -2824,6 +2837,28 @@
       console.log('[Audio] PW force bit-perfect changed:', enabled);
     } catch (err) {
       console.error('[Audio] Failed to change PW force bit-perfect:', err);
+    }
+  }
+
+  async function handleAllowQualityFallbackChange(enabled: boolean) {
+    allowQualityFallback = enabled;
+    try {
+      await invoke('v2_set_audio_allow_quality_fallback', { enabled });
+      console.log('[Audio] Allow quality fallback changed:', enabled);
+    } catch (err) {
+      console.error('[Audio] Failed to change quality fallback:', err);
+      allowQualityFallback = !enabled;
+    }
+  }
+
+  async function handleSkipSinkSwitchChange(enabled: boolean) {
+    skipSinkSwitch = enabled;
+    try {
+      await invoke('v2_set_audio_skip_sink_switch', { enabled });
+      console.log('[Audio] Skip sink switch changed:', enabled);
+    } catch (err) {
+      console.error('[Audio] Failed to change skip sink switch:', err);
+      skipSinkSwitch = !enabled; // Revert on failure
     }
   }
 
@@ -3479,6 +3514,8 @@
       exclusiveMode = false;
       dacPassthrough = false;
       pwForceBitperfect = false;
+      skipSinkSwitch = false;
+      allowQualityFallback = false;
       selectedBackend = 'Auto';
       selectedAlsaPlugin = 'hw (Direct Hardware)';
       alsaHardwareVolume = false;
@@ -4012,11 +4049,30 @@
     {/if}
     <div class="setting-row">
       <div class="setting-info">
+        <span class="setting-label">{$t('settings.audio.allowQualityFallback')} <span class="help-tip" title={$t('settings.audio.allowQualityFallbackHelp')}>(?)</span></span>
+        <span class="setting-desc">{$t('settings.audio.allowQualityFallbackDesc')}</span>
+      </div>
+      <Toggle enabled={allowQualityFallback} onchange={handleAllowQualityFallbackChange} />
+    </div>
+    <div class="setting-row">
+      <div class="setting-info">
         <span class="setting-label">{$t('settings.audio.syncAudioOnStartup')}</span>
         <span class="setting-desc">{$t('settings.audio.syncAudioOnStartupDesc')}</span>
       </div>
       <Toggle enabled={syncAudioOnStartup} onchange={handleSyncAudioOnStartupChange} />
     </div>
+    {#if selectedBackend === 'PipeWire'}
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.audio.skipSinkSwitch')} <span class="help-tip" title={$t('settings.audio.skipSinkSwitchHelp')}>(?)</span></span>
+        <span class="setting-desc">{$t('settings.audio.skipSinkSwitchDesc')}</span>
+      </div>
+      <Toggle enabled={skipSinkSwitch} onchange={handleSkipSinkSwitchChange} disabled={dacPassthrough} />
+    </div>
+    {#if skipSinkSwitch}
+    <small class="setting-note">{$t('settings.audio.skipSinkSwitchNote')}</small>
+    {/if}
+    {/if}
     <div class="setting-row">
       <span class="setting-label">{$t('settings.audio.currentSampleRate')}</span>
       <span class="setting-value" class:muted={!hardwareStatus?.is_active}>
@@ -4312,6 +4368,8 @@
       <span class="setting-label">{$t('settings.appearance.systemNotifications')}</span>
       <Toggle enabled={systemNotificationsEnabled} onchange={(v) => { systemNotificationsEnabled = v; setSystemNotificationsEnabled(v); }} />
     </div>
+    <!-- Title bar toggles: hidden on macOS (always uses native overlay title bar) -->
+    {#if !document.documentElement.classList.contains('macos')}
     <div class="setting-row">
       <div class="setting-info">
         <span class="setting-label">{$t('settings.appearance.useSystemTitleBar')}</span>
@@ -4326,6 +4384,9 @@
       </div>
       <Toggle enabled={hideTitleBar} onchange={(v) => setHideTitleBar(v)} disabled={useSystemTitleBar} />
     </div>
+    {/if}
+    <!-- Title bar customization: hidden on macOS (uses native overlay title bar) -->
+    {#if !document.documentElement.classList.contains('macos')}
     <div class="setting-row">
       <div class="setting-info">
         <span class="setting-label">{$t('settings.appearance.searchInTitleBar')}</span>
@@ -4482,6 +4543,7 @@
         disabled={hideTitleBar || useSystemTitleBar}
       />
     </div>
+    {/if}
     <div class="setting-row">
       <span class="setting-label">{$t('settings.appearance.miniplayerDefaultView')}</span>
       <Dropdown
@@ -4510,15 +4572,16 @@
       <Toggle enabled={purchasesEnabled} onchange={handlePurchasesToggle} />
     </div>
 
-    <!-- System Tray subsection -->
-    <h4 class="subsection-title">{$t('settings.appearance.tray.title')}</h4>
+    <!-- System Tray / Menu Bar subsection -->
+    <h4 class="subsection-title">{$t(document.documentElement.classList.contains('macos') ? 'settings.appearance.tray.titleMacos' : 'settings.appearance.tray.title')}</h4>
     <div class="setting-row">
       <div class="setting-info">
-        <span class="setting-label">{$t('settings.appearance.tray.enableTray')}</span>
-        <span class="setting-desc">{$t('settings.appearance.tray.enableTrayDesc')}</span>
+        <span class="setting-label">{$t(document.documentElement.classList.contains('macos') ? 'settings.appearance.tray.enableTrayMacos' : 'settings.appearance.tray.enableTray')}</span>
+        <span class="setting-desc">{$t(document.documentElement.classList.contains('macos') ? 'settings.appearance.tray.enableTrayDescMacos' : 'settings.appearance.tray.enableTrayDesc')}</span>
       </div>
       <Toggle enabled={enableTray} onchange={(v) => handleEnableTrayChange(v)} />
     </div>
+    {#if !document.documentElement.classList.contains('macos')}
     <div class="setting-row">
       <div class="setting-info">
         <span class="setting-label">{$t('settings.appearance.tray.minimizeToTray')}</span>
@@ -4533,6 +4596,7 @@
       </div>
       <Toggle enabled={closeToTray} onchange={(v) => handleCloseToTrayChange(v)} disabled={!enableTray} />
     </div>
+    {/if}
 
     <!-- Immersive subsection -->
     <h4 class="subsection-title">{$t('settings.appearance.immersive.title')}</h4>
@@ -4915,7 +4979,8 @@
   <section class="section">
     <h3 class="section-title">{$t('settings.integrations.title')}</h3>
 
-    <!-- Qobuz Link Handler -->
+    <!-- Qobuz Link Handler (Linux only — macOS registers via Info.plist at build time) -->
+    {#if !document.documentElement.classList.contains('macos')}
     <div class="setting-row">
       <div class="setting-info">
         <span class="setting-label">{$t('settings.integrations.qobuzLinkHandler')}</span>
@@ -4923,6 +4988,7 @@
       </div>
       <Toggle enabled={qobuzLinkHandlerEnabled} onchange={handleQobuzLinkHandlerToggle} disabled={qobuzLinkHandlerBusy} />
     </div>
+    {/if}
 
     <!-- Qobuz Connect Device Name -->
     <div class="setting-row">

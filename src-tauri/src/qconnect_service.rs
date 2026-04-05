@@ -3926,7 +3926,7 @@ async fn deferred_renderer_join(
         log::error!("[QConnect] Deferred renderer max quality report failed: {err}");
     }
 
-    log::info!("[QConnect] Deferred renderer join complete for session {session_uuid}");
+    log::info!("[QConnect] Deferred renderer join complete");
 
     // Re-request session state so the server sends an updated renderer list
     // (including ourselves). Without this, the frontend may not see QBZ as a
@@ -4151,7 +4151,7 @@ pub async fn v2_qconnect_send_command_with_admission(
         .await
     {
         Ok(uuid) => {
-            log::info!("[QConnect] send_command_with_admission: sent uuid={uuid}");
+            log::info!("[QConnect] send_command_with_admission: sent uuid={}", crate::log_sanitize::mask_uuid(&uuid));
             Ok(uuid)
         }
         Err(err) => {

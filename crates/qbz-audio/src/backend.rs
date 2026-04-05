@@ -128,6 +128,10 @@ pub struct BackendConfig {
 
     /// When true, force PipeWire clock.force-quantum for bit-perfect playback
     pub pw_force_bitperfect: bool,
+
+    /// When true, skip `pactl set-default-sink` on stream creation.
+    /// Preserves external routing (JACK, qjackctl, Reaper).
+    pub skip_sink_switch: bool,
 }
 
 /// Result type for backend operations
@@ -391,15 +395,29 @@ impl AudioBackend for CpalDefaultBackend {
                 .map(|desc| desc.name().to_string())
                 .unwrap_or_else(|_| "Unknown Device".to_string());
             let is_default = name == default_name;
+
+            // On macOS, probe device capabilities via CoreAudio
+            #[cfg(target_os = "macos")]
+            let (supported_rates, max_rate, bus_type, is_hw) = {
+                Self::probe_macos_device(&name)
+            };
+            #[cfg(not(target_os = "macos"))]
+            let (supported_rates, max_rate, bus_type, is_hw): (
+                Option<Vec<u32>>,
+                Option<u32>,
+                Option<String>,
+                bool,
+            ) = (None, None, None, false);
+
             devices.push(AudioDevice {
                 id: name.clone(),
                 name,
                 description: None,
                 is_default,
-                max_sample_rate: None,
-                supported_sample_rates: None,
-                device_bus: None,
-                is_hardware: false,
+                max_sample_rate: max_rate,
+                supported_sample_rates: supported_rates,
+                device_bus: bus_type,
+                is_hardware: is_hw,
             });
         }
 
@@ -407,6 +425,17 @@ impl AudioBackend for CpalDefaultBackend {
     }
 
     fn create_output_stream(&self, config: &BackendConfig) -> BackendResult<MixerDeviceSink> {
+        // On macOS, switch device sample rate to match the requested rate
+        #[cfg(target_os = "macos")]
+        {
+            if let Some(ref device_id) = config.device_id {
+                Self::switch_sample_rate_if_needed(device_id, config.sample_rate);
+            } else {
+                // Switch default device rate
+                Self::switch_default_device_rate_if_needed(config.sample_rate);
+            }
+        }
+
         let device = if let Some(ref device_id) = config.device_id {
             self.host
                 .output_devices()
@@ -441,5 +470,108 @@ impl AudioBackend for CpalDefaultBackend {
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
+    }
+}
+
+#[cfg(target_os = "macos")]
+impl CpalDefaultBackend {
+    /// Probe a macOS audio device for capabilities via CoreAudio APIs.
+    /// Returns (supported_rates, max_rate, bus_type, is_hardware).
+    fn probe_macos_device(
+        device_name: &str,
+    ) -> (Option<Vec<u32>>, Option<u32>, Option<String>, bool) {
+        use crate::coreaudio_direct;
+
+        let device_id = match coreaudio_direct::find_device_by_name(device_name) {
+            Ok(Some(id)) => {
+                log::info!("[CoreAudio] Found device '{}' with ID {}", device_name, id);
+                id
+            }
+            Ok(None) => {
+                log::debug!("[CoreAudio] Device '{}' not found via CoreAudio", device_name);
+                return (None, None, None, false);
+            }
+            Err(e) => {
+                log::debug!("[CoreAudio] Error finding device '{}': {}", device_name, e);
+                return (None, None, None, false);
+            }
+        };
+
+        let supported_rates = coreaudio_direct::query_supported_sample_rates(device_id)
+            .inspect(|rates| log::info!("[CoreAudio] Device '{}' supported rates: {:?}", device_name, rates))
+            .inspect_err(|e| log::warn!("[CoreAudio] Failed to query rates for '{}': {}", device_name, e))
+            .ok()
+            .filter(|r| !r.is_empty());
+        let max_rate = supported_rates
+            .as_ref()
+            .and_then(|rates| rates.iter().max().copied());
+        let bus_type = coreaudio_direct::get_device_transport_type(device_id);
+        let is_hardware = bus_type
+            .as_deref()
+            .is_some_and(|t| t == "usb" || t == "built-in" || t == "thunderbolt" || t == "firewire");
+
+        (supported_rates, max_rate, bus_type, is_hardware)
+    }
+
+    /// Switch device sample rate before stream creation (if device supports the target rate).
+    fn switch_sample_rate_if_needed(device_name: &str, target_rate: u32) {
+        use crate::coreaudio_direct;
+
+        log::info!("[CoreAudio] Rate switch requested: device='{}' target={}Hz", device_name, target_rate);
+
+        let device_id = match coreaudio_direct::find_device_by_name(device_name) {
+            Ok(Some(id)) => id,
+            Ok(None) => {
+                log::warn!("[CoreAudio] Cannot switch rate: device '{}' not found", device_name);
+                return;
+            }
+            Err(e) => {
+                log::warn!("[CoreAudio] Cannot switch rate: {}", e);
+                return;
+            }
+        };
+
+        // Check if device supports the target rate
+        if let Ok(rates) = coreaudio_direct::query_supported_sample_rates(device_id) {
+            if !rates.contains(&target_rate) {
+                log::debug!(
+                    "[CoreAudio] Device '{}' does not support {}Hz, skipping rate switch",
+                    device_name,
+                    target_rate
+                );
+                return;
+            }
+        }
+
+        if let Err(e) = coreaudio_direct::set_nominal_sample_rate(device_id, target_rate) {
+            log::warn!("[CoreAudio] Failed to switch sample rate: {}", e);
+        }
+    }
+
+    /// Switch the default output device's sample rate.
+    fn switch_default_device_rate_if_needed(target_rate: u32) {
+        use crate::coreaudio_direct;
+
+        let device_id = match coreaudio_direct::get_default_output_device() {
+            Ok(id) => id,
+            Err(e) => {
+                log::debug!("[CoreAudio] Could not get default device for rate switch: {}", e);
+                return;
+            }
+        };
+
+        if let Ok(rates) = coreaudio_direct::query_supported_sample_rates(device_id) {
+            if !rates.contains(&target_rate) {
+                log::debug!(
+                    "[CoreAudio] Default device does not support {}Hz, skipping rate switch",
+                    target_rate
+                );
+                return;
+            }
+        }
+
+        if let Err(e) = coreaudio_direct::set_nominal_sample_rate(device_id, target_rate) {
+            log::warn!("[CoreAudio] Failed to switch default device sample rate: {}", e);
+        }
     }
 }

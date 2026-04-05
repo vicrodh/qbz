@@ -73,21 +73,15 @@ pub fn get_backend_logs() -> Vec<String> {
 
 #[tauri::command]
 pub async fn upload_logs_to_paste(content: String) -> Result<String, String> {
-    let form = reqwest::multipart::Form::new().part(
-        "file",
-        reqwest::multipart::Part::text(content)
-            .file_name("qbz-logs.txt")
-            .mime_str("text/plain")
-            .map_err(|e| format!("Failed to create multipart part: {}", e))?,
-    );
-
     let client = reqwest::Client::builder()
         .user_agent("QBZ/1.0")
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
     let response = client
-        .post("https://0x0.st")
-        .multipart(form)
+        .post("https://paste.rs/")
+        .header("Content-Type", "text/plain")
+        .body(content)
         .send()
         .await
         .map_err(|e| format!("Failed to upload logs: {}", e))?;

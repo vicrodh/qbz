@@ -866,6 +866,11 @@
     app-region: drag;
   }
 
+  /* macOS: overlay titlebar needs drag region above all UI (matches homepage pattern) */
+  :global(html.macos) .immersive-drag-region {
+    z-index: 9999;
+  }
+
   @keyframes fadeIn {
     from {
       opacity: 0;

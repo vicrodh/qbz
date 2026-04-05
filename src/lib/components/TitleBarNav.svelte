@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Heart, HardDrive, ChevronDown, User, Disc, Music, ShoppingBag } from 'lucide-svelte';
+  import { Heart, HardDrive, ChevronDown, User, Disc, Music, ListMusic, ShoppingBag } from 'lucide-svelte';
   import { t } from '$lib/i18n';
 
   interface Props {
@@ -18,7 +18,7 @@
     activeView,
     activeItemId,
     onNavigate,
-    favoritesTabOrder = ['tracks', 'albums', 'artists'],
+    favoritesTabOrder = ['tracks', 'albums', 'artists', 'playlists'],
     position = 'left',
     showDiscover = false,
     showFavorites = false,
@@ -209,6 +209,8 @@
               <Disc size={12} />
             {:else if tab === 'artists'}
               <User size={12} />
+            {:else if tab === 'playlists'}
+              <ListMusic size={12} />
             {/if}
             <span>{$t(`favorites.${tab}`)}</span>
           </button>
