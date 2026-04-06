@@ -130,8 +130,8 @@ urlencoding = "2"
 # Environment variables
 dotenvy = "0.15"
 
-# Secure credential storage (system keyring)
-keyring = "3"
+# Secure credential storage (system keyring: GNOME Keyring, KDE Wallet, macOS Keychain)
+keyring = { version = "3", features = ["async-secret-service", "crypto-rust"] }
 
 # Clipboard
 tauri-plugin-clipboard-manager = "2"
