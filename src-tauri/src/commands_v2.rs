@@ -251,7 +251,26 @@ fn parse_quality(quality_str: Option<&str>) -> Quality {
         Some("CD Quality") => Quality::Lossless,
         Some("Hi-Res") => Quality::HiRes,
         Some("Hi-Res+") => Quality::UltraHiRes,
-        _ => Quality::UltraHiRes, // Default to highest
+        Some(s) => {
+            // Parse "XXbit/YYYkHz" format from track metadata.
+            // Map to the Quality that matches what the track actually offers,
+            // avoiding unnecessary quality fallback cascades from the API.
+            if let Some((bit_str, rate_str)) = s.split_once("bit/") {
+                let bit_depth: u32 = bit_str.parse().unwrap_or(0);
+                let sample_rate: f64 = rate_str.trim_end_matches("kHz").parse().unwrap_or(0.0);
+
+                if bit_depth >= 24 && sample_rate > 96.0 {
+                    Quality::UltraHiRes
+                } else if bit_depth >= 24 {
+                    Quality::HiRes
+                } else {
+                    Quality::Lossless
+                }
+            } else {
+                Quality::UltraHiRes // Unknown format, try highest
+            }
+        }
+        None => Quality::UltraHiRes,
     }
 }
 
