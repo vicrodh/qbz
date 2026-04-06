@@ -657,116 +657,37 @@ async fn download_with_backoff(
     ))
 }
 
-/// Download audio via CMAF segmented pipeline.
-/// Fetches init segment + audio segments, decrypts, returns standard FLAC bytes.
-async fn download_audio_cmaf(
-    url_template: &str,
+// NOTE: download_audio_cmaf and try_cmaf_download removed -- replaced by
+// v2_cmaf_stream + try_cmaf_streaming_setup for streaming playback.
+
+/// Info gathered from the CMAF init segment, enough to start streaming playback.
+struct CmafStreamingInfo {
+    url_template: String,
     n_segments: u8,
-    content_key: &[u8; 16],
-) -> Result<Vec<u8>, String> {
-    let client = reqwest::Client::builder()
-        .connect_timeout(std::time::Duration::from_secs(10))
-        .use_native_tls()
-        .build()
-        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
-
-    // Fetch init segment (s=0)
-    let init_url = url_template.replace("$SEGMENT$", "0");
-    log::info!("[CMAF] Fetching init segment");
-    let init_data = client
-        .get(&init_url)
-        .header("User-Agent", "Mozilla/5.0")
-        .send()
-        .await
-        .map_err(|e| format!("Failed to fetch init segment: {}", e))?
-        .bytes()
-        .await
-        .map_err(|e| format!("Failed to read init segment: {}", e))?;
-
-    let init_info = qbz_cmaf::parse_init_segment(&init_data)
-        .map_err(|e| format!("Failed to parse init segment: {}", e))?;
-
-    log::info!(
-        "[CMAF] Init: FLAC header {}B, {} entries in segment table",
-        init_info.flac_header.len(),
-        init_info.segment_table.len()
-    );
-
-    // Pre-allocate output
-    let total_size: usize = init_info.flac_header.len()
-        + init_info
-            .segment_table
-            .iter()
-            .map(|s| s.byte_len as usize)
-            .sum::<usize>();
-    let mut output = Vec::with_capacity(total_size);
-    output.extend_from_slice(&init_info.flac_header);
-
-    // Fetch and decrypt audio segments (s=1..n_segments-1)
-    for seg_idx in 1..n_segments {
-        let seg_url = url_template.replace("$SEGMENT$", &seg_idx.to_string());
-        let seg_data = client
-            .get(&seg_url)
-            .header("User-Agent", "Mozilla/5.0")
-            .send()
-            .await
-            .map_err(|e| format!("Segment {} fetch failed: {}", seg_idx, e))?
-            .bytes()
-            .await
-            .map_err(|e| format!("Segment {} read failed: {}", seg_idx, e))?;
-
-        let crypto = qbz_cmaf::parse_segment_crypto(&seg_data)
-            .map_err(|e| format!("Segment {} parse failed: {}", seg_idx, e))?;
-
-        let mut data_pos = crypto.data_offset;
-        for entry in &crypto.entries {
-            let frame_end = data_pos + entry.size as usize;
-            if frame_end > seg_data.len() {
-                return Err(format!("Segment {} frame overflows data", seg_idx));
-            }
-            let mut frame = seg_data[data_pos..frame_end].to_vec();
-            if entry.flags != 0 {
-                qbz_cmaf::decrypt_frame(content_key, &entry.iv, &mut frame);
-            }
-            output.extend_from_slice(&frame);
-            data_pos = frame_end;
-        }
-
-        // Trailing unencrypted data
-        if data_pos < crypto.mdat_end && crypto.mdat_end <= seg_data.len() {
-            output.extend_from_slice(&seg_data[data_pos..crypto.mdat_end]);
-        }
-
-        if seg_idx % 10 == 0 || seg_idx == n_segments - 1 {
-            log::info!(
-                "[CMAF] Segment {}/{} ({:.1} MB)",
-                seg_idx,
-                n_segments - 1,
-                output.len() as f64 / (1024.0 * 1024.0)
-            );
-        }
-    }
-
-    log::info!(
-        "[CMAF] Complete: {:.2} MB FLAC",
-        output.len() as f64 / (1024.0 * 1024.0)
-    );
-    Ok(output)
+    content_key: [u8; 16],
+    flac_header: Vec<u8>,
+    segment_table: Vec<qbz_cmaf::SegmentTableEntry>,
+    format_id: u32,
+    sampling_rate: Option<u32>,
+    bit_depth: Option<u32>,
+    /// How long the init segment fetch took (ms), for speed estimation.
+    init_fetch_ms: u64,
 }
 
-/// Try downloading a track via the CMAF pipeline (Akamai CDN, encrypted segments).
-/// Returns `(audio_bytes, format_id, sample_rate, bit_depth)` on success.
-async fn try_cmaf_download(
+/// Prepare CMAF streaming: fetch init segment only, derive keys, return info.
+/// Does NOT download audio segments -- the caller streams those in background.
+async fn try_cmaf_streaming_setup(
     bridge: &CoreBridge,
     track_id: u64,
     quality: Quality,
-) -> Result<(Vec<u8>, u32, Option<u32>, Option<u32>), String> {
+) -> Result<CmafStreamingInfo, String> {
     let file_url = bridge.get_file_url(track_id, quality).await?;
 
     let url_template = file_url
         .url_template
         .as_ref()
-        .ok_or("No url_template in file/url response")?;
+        .ok_or("No url_template in file/url response")?
+        .clone();
     let key_str = file_url
         .key
         .as_ref()
@@ -779,13 +700,54 @@ async fn try_cmaf_download(
     let content_key = qbz_cmaf::unwrap_content_key(&session_key, key_str)
         .map_err(|e| format!("Content key unwrap failed: {}", e))?;
 
-    let audio_data = download_audio_cmaf(url_template, file_url.n_segments, &content_key).await?;
+    // Fetch only the init segment (s=0) -- typically small, <500ms
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .use_native_tls()
+        .build()
+        .map_err(|e| format!("CMAF client error: {}", e))?;
+
+    let init_url = url_template.replace("$SEGMENT$", "0");
+    let init_start = std::time::Instant::now();
+
+    log::info!("[V2/CMAF] Fetching init segment for streaming setup");
+    let init_data = client
+        .get(&init_url)
+        .header("User-Agent", "Mozilla/5.0")
+        .send()
+        .await
+        .map_err(|e| format!("Failed to fetch init segment: {}", e))?
+        .bytes()
+        .await
+        .map_err(|e| format!("Failed to read init segment: {}", e))?;
+
+    let init_fetch_ms = init_start.elapsed().as_millis() as u64;
+
+    let init_info = qbz_cmaf::parse_init_segment(&init_data)
+        .map_err(|e| format!("Failed to parse init segment: {}", e))?;
+
+    log::info!(
+        "[V2/CMAF] Init segment: FLAC header {}B, {} entries in segment table, fetched in {}ms",
+        init_info.flac_header.len(),
+        init_info.segment_table.len(),
+        init_fetch_ms
+    );
 
     let format_id = file_url.format_id.unwrap_or(quality.id());
     let sampling_rate = file_url.sampling_rate;
     let bit_depth = file_url.bits_depth.or(file_url.bit_depth);
 
-    Ok((audio_data, format_id, sampling_rate, bit_depth))
+    Ok(CmafStreamingInfo {
+        url_template,
+        n_segments: file_url.n_segments,
+        content_key,
+        flac_header: init_info.flac_header,
+        segment_table: init_info.segment_table,
+        format_id,
+        sampling_rate,
+        bit_depth,
+        init_fetch_ms,
+    })
 }
 
 /// Stream info from probing a URL (HEAD + first 64KB)
@@ -990,6 +952,149 @@ async fn v2_download_and_stream(
         cache.insert(track_id, all_data);
         log::info!(
             "[V2/STREAMING] Track {} cached for future playback",
+            track_id
+        );
+    }
+
+    Ok(())
+}
+
+/// Stream CMAF segments to the player's buffer, decrypting on the fly.
+/// The FLAC header is written first by the caller, then this function
+/// fetches each audio segment, decrypts it, and pushes frames to the buffer.
+/// The player starts playing as soon as enough data is buffered.
+///
+/// Signals CDN_STREAMING_ACTIVE so prefetch waits until we finish,
+/// preventing concurrent CDN downloads that trigger rate limiting.
+async fn v2_cmaf_stream(
+    url_template: &str,
+    n_segments: u8,
+    content_key: [u8; 16],
+    flac_header: Vec<u8>,
+    writer: qbz_player::BufferWriter,
+    track_id: u64,
+    cache: Arc<crate::cache::AudioCache>,
+    skip_cache: bool,
+) -> Result<(), String> {
+    use std::time::Instant;
+
+    // Signal that a streaming download is active -- prefetch will wait
+    CDN_STREAMING_ACTIVE.fetch_add(1, std::sync::atomic::Ordering::Release);
+
+    // Ensure we clear the flag and notify waiters when done (even on error)
+    struct StreamingGuard;
+    impl Drop for StreamingGuard {
+        fn drop(&mut self) {
+            CDN_STREAMING_ACTIVE.fetch_sub(1, std::sync::atomic::Ordering::Release);
+            CDN_STREAM_DONE.notify_waiters();
+        }
+    }
+    let _guard = StreamingGuard;
+
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .use_native_tls()
+        .build()
+        .map_err(|e| format!("CMAF client error: {}", e))?;
+
+    // Write the FLAC header first so the decoder can identify the format
+    if let Err(e) = writer.push_chunk(&flac_header) {
+        return Err(format!("Failed to write FLAC header to buffer: {}", e));
+    }
+
+    let mut total_written: u64 = flac_header.len() as u64;
+    // Collect all decrypted data for caching (header + frames)
+    let mut cache_data: Vec<u8> = if skip_cache {
+        Vec::new()
+    } else {
+        let mut v = Vec::with_capacity(flac_header.len());
+        v.extend_from_slice(&flac_header);
+        v
+    };
+    let start = Instant::now();
+
+    for seg_idx in 1..n_segments {
+        let seg_url = url_template.replace("$SEGMENT$", &seg_idx.to_string());
+        let seg_data = client
+            .get(&seg_url)
+            .header("User-Agent", "Mozilla/5.0")
+            .send()
+            .await
+            .map_err(|e| format!("CMAF segment {} fetch: {}", seg_idx, e))?
+            .bytes()
+            .await
+            .map_err(|e| format!("CMAF segment {} read: {}", seg_idx, e))?;
+
+        let crypto = qbz_cmaf::parse_segment_crypto(&seg_data)
+            .map_err(|e| format!("CMAF segment {} parse: {}", seg_idx, e))?;
+
+        let mut data_pos = crypto.data_offset;
+        for entry in &crypto.entries {
+            let frame_end = data_pos + entry.size as usize;
+            if frame_end > seg_data.len() {
+                let _ = writer.error(format!("CMAF segment {} frame overflow", seg_idx));
+                return Err(format!("CMAF segment {} frame overflow", seg_idx));
+            }
+            let mut frame = seg_data[data_pos..frame_end].to_vec();
+            if entry.flags != 0 {
+                qbz_cmaf::decrypt_frame(&content_key, &entry.iv, &mut frame);
+            }
+            // Write decrypted frame to streaming buffer
+            if let Err(e) = writer.push_chunk(&frame) {
+                log::error!("[V2/CMAF-STREAM] Failed to push frame: {}", e);
+            }
+            if !skip_cache {
+                cache_data.extend_from_slice(&frame);
+            }
+            total_written += frame.len() as u64;
+            data_pos = frame_end;
+        }
+
+        // Trailing unencrypted data after all frame entries
+        if data_pos < crypto.mdat_end && crypto.mdat_end <= seg_data.len() {
+            let trailing = &seg_data[data_pos..crypto.mdat_end];
+            if let Err(e) = writer.push_chunk(trailing) {
+                log::error!("[V2/CMAF-STREAM] Failed to push trailing data: {}", e);
+            }
+            if !skip_cache {
+                cache_data.extend_from_slice(trailing);
+            }
+            total_written += trailing.len() as u64;
+        }
+
+        // Progress logging every 5 segments or on last segment
+        if seg_idx % 5 == 0 || seg_idx == n_segments - 1 {
+            let elapsed = start.elapsed().as_secs_f64();
+            log::info!(
+                "[V2/CMAF-STREAM] Segment {}/{} ({:.1} MB, {:.1} MB/s)",
+                seg_idx,
+                n_segments - 1,
+                total_written as f64 / (1024.0 * 1024.0),
+                if elapsed > 0.0 {
+                    total_written as f64 / (1024.0 * 1024.0) / elapsed
+                } else {
+                    0.0
+                }
+            );
+        }
+    }
+
+    // Signal end of stream
+    if let Err(e) = writer.complete() {
+        log::error!("[V2/CMAF-STREAM] Failed to mark buffer complete: {}", e);
+    }
+
+    log::info!(
+        "[V2/CMAF-STREAM] Complete: {:.2} MB in {:.1}s",
+        total_written as f64 / (1024.0 * 1024.0),
+        start.elapsed().as_secs_f64()
+    );
+
+    // Cache the complete FLAC (header + decrypted frames) if enabled
+    if !skip_cache && !cache_data.is_empty() {
+        cache.insert(track_id, cache_data);
+        log::info!(
+            "[V2/CMAF-STREAM] Track {} cached for future playback",
             track_id
         );
     }
@@ -8071,33 +8176,92 @@ pub async fn v2_play_track(
         );
     }
 
-    // Try CMAF pipeline first (Akamai CDN, encrypted segments)
-    log::info!("[V2/CMAF] Attempting CMAF download for track {}", track_id);
-    match try_cmaf_download(&*bridge_guard, track_id, final_quality).await {
-        Ok((audio_data, format_id, _sample_rate, _bit_depth)) => {
-            log::info!(
-                "[V2/CMAF] Success: {} bytes, format_id={}",
-                audio_data.len(),
-                format_id
-            );
-            let data_size = audio_data.len();
+    // Try CMAF streaming pipeline (Akamai CDN, encrypted segments)
+    // Only the init segment is fetched synchronously; audio segments stream in background.
+    log::info!("[V2/CMAF] Attempting CMAF streaming for track {}", track_id);
+    match try_cmaf_streaming_setup(&*bridge_guard, track_id, final_quality).await {
+        Ok(cmaf_info) => {
+            let format_id = cmaf_info.format_id;
 
-            // Cache it (unless streaming_only mode)
-            if !streaming_only {
-                cache.insert(track_id, audio_data.clone());
-                log::info!("[V2/CACHED] Track {} stored in memory cache (via CMAF)", track_id);
+            // Derive stream parameters from init segment and file URL metadata
+            let sample_rate = cmaf_info.sampling_rate.unwrap_or(44100);
+            let channels = 2u16; // FLAC from Qobuz is always stereo
+            let bit_depth = cmaf_info.bit_depth.unwrap_or(16);
+            let total_flac_size = cmaf_info.flac_header.len() as u64
+                + cmaf_info
+                    .segment_table
+                    .iter()
+                    .map(|s| s.byte_len as u64)
+                    .sum::<u64>();
+
+            // Estimate speed from init segment fetch (conservative: assume ~10 MB/s if
+            // init was too fast to measure reliably)
+            let speed_mbps = if cmaf_info.init_fetch_ms > 0 {
+                let init_bytes = cmaf_info.flac_header.len() as f64 + 4096.0; // rough init size
+                (init_bytes / (cmaf_info.init_fetch_ms as f64 / 1000.0)) / (1024.0 * 1024.0)
             } else {
-                log::info!(
-                    "[V2/NOT CACHED] Track {} - streaming_only mode active",
-                    track_id
-                );
-            }
+                10.0
+            };
 
-            // Play it via qbz-player
-            player
-                .play_data(audio_data, track_id)
+            log::info!(
+                "[V2/CMAF] Streaming setup: {}Hz, {}-bit, {:.2} MB total, {:.1} MB/s est, {} segments",
+                sample_rate,
+                bit_depth,
+                total_flac_size as f64 / (1024.0 * 1024.0),
+                speed_mbps,
+                cmaf_info.n_segments
+            );
+
+            // Create streaming buffer and start playback immediately
+            let buffer_writer = player
+                .play_streaming_dynamic(
+                    track_id,
+                    sample_rate,
+                    channels,
+                    bit_depth,
+                    total_flac_size,
+                    speed_mbps,
+                    duration_secs.unwrap_or(0),
+                )
                 .map_err(RuntimeError::Internal)?;
-            log::info!("[V2] Playing track {} ({} bytes, via CMAF)", track_id, data_size);
+
+            // Spawn background task to fetch + decrypt + push audio segments
+            let url_template = cmaf_info.url_template.clone();
+            let content_key = cmaf_info.content_key;
+            let flac_header = cmaf_info.flac_header;
+            let n_segments = cmaf_info.n_segments;
+            let cache_clone = cache.clone();
+            let skip_cache = streaming_only;
+
+            tokio::spawn(async move {
+                match v2_cmaf_stream(
+                    &url_template,
+                    n_segments,
+                    content_key,
+                    flac_header,
+                    buffer_writer,
+                    track_id,
+                    cache_clone,
+                    skip_cache,
+                )
+                .await
+                {
+                    Ok(()) => {
+                        if skip_cache {
+                            log::info!(
+                                "[V2/CMAF-STREAM COMPLETE] Track {} - NOT cached (streaming_only)",
+                                track_id
+                            );
+                        } else {
+                            log::info!(
+                                "[V2/CMAF-STREAM COMPLETE] Track {} - cached for instant replay",
+                                track_id
+                            );
+                        }
+                    }
+                    Err(e) => log::error!("[V2/CMAF-STREAM ERROR] Track {}: {}", track_id, e),
+                }
+            });
 
             // Prefetch next tracks in background
             let upcoming_tracks = bridge_guard.peek_upcoming(V2_PREFETCH_LOOKAHEAD).await;
@@ -8116,7 +8280,7 @@ pub async fn v2_play_track(
             });
         }
         Err(e) => {
-            log::warn!("[V2/CMAF] Failed: {}, falling back to legacy download", e);
+            log::warn!("[V2/CMAF] Streaming setup failed: {}, falling back to legacy download", e);
             // Fall through to existing legacy path
         }
     }
