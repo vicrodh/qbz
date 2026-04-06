@@ -387,14 +387,14 @@ fn cached_audio_incompatible_with_hw(
 
 /// Download audio from URL (full download before playback)
 ///
-/// Uses only a connect timeout (no total timeout) because Hi-Res+ tracks
+/// Downloads audio data from a CDN URL.
+/// Uses a connect timeout but no total timeout because Hi-Res+ tracks
 /// can be 100-200MB and take several minutes on slower connections.
 async fn download_audio(url: &str) -> Result<Vec<u8>, String> {
     use std::time::Duration;
 
     let client = reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(10))
-        .timeout(Duration::from_secs(120))
         .use_native_tls()
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
@@ -403,6 +403,7 @@ async fn download_audio(url: &str) -> Result<Vec<u8>, String> {
 
     let response = client
         .get(url)
+        .header("User-Agent", "Mozilla/5.0")
         .send()
         .await
         .map_err(|e| format!("Failed to fetch audio: {}", e))?;
