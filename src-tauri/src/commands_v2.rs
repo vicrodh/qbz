@@ -7442,14 +7442,10 @@ pub async fn v2_play_next_gapless(
     let player = bridge_guard.player();
     let current_track_id = player.state.current_track_id();
     let repeat_mode = app_state.queue.get_repeat();
-    let track_id_to_play = match repeat_mode {
-        QueueRepeatMode::One => current_track_id,
-        _ => track_id
-    };
 
     // Defensive guard: never queue the currently playing track as "next".
     // This avoids infinite one-track loops when frontend queue state is stale.
-    if current_track_id != 0 && current_track_id == track_id {
+    if current_track_id != 0 && repeat_mode != QueueRepeatMode::One && current_track_id == track_id {
         log::warn!(
             "[V2/GAPLESS] Ignoring play_next_gapless for current track {}",
             track_id
@@ -7462,7 +7458,7 @@ pub async fn v2_play_next_gapless(
         let cached_path = {
             let db_opt = offline_cache.db.lock().await;
             if let Some(db) = db_opt.as_ref() {
-                if let Ok(Some(file_path)) = db.get_file_path(track_id_to_play) {
+                if let Ok(Some(file_path)) = db.get_file_path(track_id) {
                     Some(file_path)
                 } else {
                     None
@@ -7474,12 +7470,12 @@ pub async fn v2_play_next_gapless(
         if let Some(file_path) = cached_path {
             let path = std::path::Path::new(&file_path);
             if path.exists() {
-                log::info!("[V2/GAPLESS] Track {} from OFFLINE cache", track_id_to_play);
+                log::info!("[V2/GAPLESS] Track {} from OFFLINE cache", track_id);
                 let audio_data = std::fs::read(path).map_err(|e| {
                     RuntimeError::Internal(format!("Failed to read cached file: {}", e))
                 })?;
                 player
-                    .play_next(audio_data, track_id_to_play)
+                    .play_next(audio_data, track_id)
                     .map_err(RuntimeError::Internal)?;
                 return Ok(true);
             }
@@ -7488,35 +7484,35 @@ pub async fn v2_play_next_gapless(
 
     // Check memory cache (L1)
     let cache = app_state.audio_cache.clone();
-    if let Some(cached) = cache.get(track_id_to_play) {
+    if let Some(cached) = cache.get(track_id) {
         log::info!(
             "[V2/GAPLESS] Track {} from MEMORY cache ({} bytes)",
-            track_id_to_play,
+            track_id,
             cached.size_bytes
         );
         player
-            .play_next(cached.data, track_id_to_play)
+            .play_next(cached.data, track_id)
             .map_err(RuntimeError::Internal)?;
         return Ok(true);
     }
 
     // Check playback cache (L2 - disk)
     if let Some(playback_cache) = cache.get_playback_cache() {
-        if let Some(audio_data) = playback_cache.get(track_id_to_play) {
+        if let Some(audio_data) = playback_cache.get(track_id) {
             log::info!(
                 "[V2/GAPLESS] Track {} from DISK cache ({} bytes)",
-                track_id_to_play,
+                track_id,
                 audio_data.len()
             );
             player
-                .play_next(audio_data, track_id_to_play)
+                .play_next(audio_data, track_id)
                 .map_err(RuntimeError::Internal)?;
             return Ok(true);
         }
     }
 
     // Check local library
-    if let Ok(track_id_i64) = track_id_to_play.try_into() {
+    if let Ok(track_id_i64) = track_id.try_into() {
         if let Ok(tracks) = 
             v2_library_get_tracks_by_ids(vec![track_id_i64], library_state.clone())
             .await 
@@ -7524,11 +7520,11 @@ pub async fn v2_play_next_gapless(
             if let Some(local_track) = tracks.into_iter().next() {
                 let path = std::path::Path::new(&local_track.file_path);
                 if path.exists() {
-                    log::info!("[V2/GAPLESS] Track {} from LOCAL library", track_id_to_play);
+                    log::info!("[V2/GAPLESS] Track {} from LOCAL library", track_id);
                     let audio_data = std::fs::read(path)
                         .map_err(|e| RuntimeError::Internal(format!("Failed to read local file: {}", e)))?;
                     bridge.get().await.player()
-                        .play_next(audio_data, track_id_to_play)
+                        .play_next(audio_data, track_id)
                         .map_err(RuntimeError::Internal)?;
                     return Ok(true);
                 }
@@ -7538,7 +7534,7 @@ pub async fn v2_play_next_gapless(
 
     log::info!(
         "[V2/GAPLESS] Track {} not in any cache, gapless not possible",
-        track_id_to_play
+        track_id
     );
     Ok(false)
 }
