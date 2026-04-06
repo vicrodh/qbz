@@ -182,6 +182,11 @@
               GwendalBeaumont
               <ExternalLink size={10} />
             </button>
+            <button class="contributor-link" onclick={() => handleOpenUrl('https://github.com/AdamArstall')}>
+              <img src="https://github.com/AdamArstall.png?size=28" alt="AdamArstall" class="contributor-avatar" />
+              AdamArstall
+              <ExternalLink size={10} />
+            </button>
           </div>
         </div>
 

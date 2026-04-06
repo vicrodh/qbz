@@ -305,6 +305,7 @@ Contributions welcome. Please read `CONTRIBUTING.md` before submitting issues or
 - [@arminfelder](https://github.com/arminfelder)
 - [@afonsojramos](https://github.com/afonsojramos) — macOS port
 - [@GwendalBeaumont](https://github.com/GwendalBeaumont) — i18n
+- [@AdamArstall](https://github.com/AdamArstall)
 
 ## License
 
