@@ -570,6 +570,39 @@ impl CoreBridge {
             .map_err(|e| e.to_string())
     }
 
+    // ==================== CMAF Streaming ====================
+
+    /// Ensure a valid CMAF session exists, renewing if expired.
+    /// Returns `(session_id, infos)` where `infos` is used for key derivation.
+    pub async fn ensure_cmaf_session(&self) -> Result<(String, String), String> {
+        let client_lock = self.core.client();
+        let guard = client_lock.read().await;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| "QobuzClient not initialized".to_string())?;
+        client
+            .ensure_cmaf_session()
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Get CMAF segmented file URL for a track.
+    pub async fn get_file_url(
+        &self,
+        track_id: u64,
+        quality: Quality,
+    ) -> Result<qbz_models::TrackFileUrl, String> {
+        let client_lock = self.core.client();
+        let guard = client_lock.read().await;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| "QobuzClient not initialized".to_string())?;
+        client
+            .get_file_url(track_id, quality)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
     // ==================== Playback Commands ====================
 
     /// Pause playback

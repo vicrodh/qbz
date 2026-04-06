@@ -5,13 +5,23 @@ use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use super::auth::{get_timestamp, parse_login_response, sign_get_favorites, sign_get_file_url};
+use super::auth::{
+    get_timestamp, parse_login_response, sign_file_url, sign_get_favorites, sign_get_file_url,
+    sign_session_start,
+};
 use super::bundle::{extract_bundle_tokens, BundleTokens};
 use super::endpoints::{self, paths};
 use super::error::{ApiError, Result};
 use qbz_models::*;
 
 const USER_AGENT: &str = "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0";
+
+/// CMAF session state (session/start + infos for key derivation)
+struct CmafSession {
+    session_id: String,
+    infos: String,
+    expires_at: u64,
+}
 
 /// Qobuz API client
 pub struct QobuzClient {
@@ -20,6 +30,7 @@ pub struct QobuzClient {
     session: Arc<RwLock<Option<UserSession>>>,
     validated_secret: Arc<RwLock<Option<String>>>,
     locale: Arc<RwLock<String>>,
+    cmaf_session: Arc<RwLock<Option<CmafSession>>>,
 }
 
 impl Clone for QobuzClient {
@@ -30,6 +41,7 @@ impl Clone for QobuzClient {
             session: Arc::clone(&self.session),
             validated_secret: Arc::clone(&self.validated_secret),
             locale: Arc::clone(&self.locale),
+            cmaf_session: Arc::clone(&self.cmaf_session),
         }
     }
 }
@@ -48,6 +60,7 @@ impl QobuzClient {
             session: Arc::new(RwLock::new(None)),
             validated_secret: Arc::new(RwLock::new(None)),
             locale: Arc::new(RwLock::new("en".to_string())),
+            cmaf_session: Arc::new(RwLock::new(None)),
         })
     }
 
@@ -1838,6 +1851,133 @@ impl QobuzClient {
             .await?;
 
         Ok(serde_json::from_value(response)?)
+    }
+
+    // === CMAF streaming endpoints ===
+
+    /// Ensure we have a valid CMAF session, renewing if expired.
+    /// Returns `(session_id, infos)` for use with file/url and key derivation.
+    pub async fn ensure_cmaf_session(&self) -> Result<(String, String)> {
+        let now = get_timestamp();
+
+        // Check existing session (with 60s safety margin)
+        {
+            let guard = self.cmaf_session.read().await;
+            if let Some(ref cs) = *guard {
+                if cs.expires_at > now + 60 {
+                    return Ok((cs.session_id.clone(), cs.infos.clone()));
+                }
+            }
+        }
+
+        // Need a new session
+        log::info!("[CMAF] Starting new session");
+        let timestamp = get_timestamp();
+        let sig = sign_session_start(timestamp);
+
+        let url = endpoints::build_url(paths::SESSION_START);
+        let response = self
+            .http
+            .post(&url)
+            .headers(self.authenticated_headers().await?)
+            .form(&[
+                ("profile", "qbz-1"),
+                ("request_ts", &timestamp.to_string()),
+                ("request_sig", &sig),
+            ])
+            .send()
+            .await?;
+
+        let status = response.status();
+        if !status.is_success() {
+            return Err(ApiError::ApiResponse(format!(
+                "session/start failed with status {}",
+                status
+            )));
+        }
+
+        let resp: SessionStartResponse = response.json().await?;
+        let infos = resp.infos.unwrap_or_default();
+        log::info!(
+            "[CMAF] Session started: id={}, expires_at={}",
+            resp.session_id,
+            resp.expires_at
+        );
+
+        let session_id = resp.session_id.clone();
+        let infos_clone = infos.clone();
+
+        *self.cmaf_session.write().await = Some(CmafSession {
+            session_id: resp.session_id,
+            infos,
+            expires_at: resp.expires_at,
+        });
+
+        Ok((session_id, infos_clone))
+    }
+
+    /// Get CMAF segmented file URL for a track.
+    ///
+    /// This is the new streaming endpoint that returns encrypted CMAF segments
+    /// instead of a direct file URL.
+    pub async fn get_file_url(
+        &self,
+        track_id: u64,
+        quality: Quality,
+    ) -> Result<TrackFileUrl> {
+        let (session_id, _infos) = self.ensure_cmaf_session().await?;
+
+        let timestamp = get_timestamp();
+        let format_id = quality.id();
+        let sig = sign_file_url(track_id, format_id, timestamp);
+
+        let url = endpoints::build_url(paths::FILE_URL);
+
+        let mut headers = self.authenticated_headers().await?;
+        headers.insert(
+            "X-Session-Id",
+            reqwest::header::HeaderValue::from_str(&session_id)
+                .map_err(|_| ApiError::ApiResponse("Invalid session ID format".into()))?,
+        );
+
+        let response = self
+            .http
+            .get(&url)
+            .headers(headers)
+            .query(&[
+                ("track_id", track_id.to_string()),
+                ("format_id", format_id.to_string()),
+                ("intent", "stream".to_string()),
+                ("request_ts", timestamp.to_string()),
+                ("request_sig", sig),
+            ])
+            .send()
+            .await?;
+
+        let status = response.status();
+        log::info!(
+            "[CMAF] file/url track_id={} format_id={} status={}",
+            track_id,
+            format_id,
+            status
+        );
+
+        if !status.is_success() {
+            return Err(ApiError::ApiResponse(format!(
+                "file/url failed with status {}",
+                status
+            )));
+        }
+
+        let file_url: TrackFileUrl = response.json().await?;
+        log::info!(
+            "[CMAF] file/url result: segments={}, mime={:?}, sampling_rate={:?}",
+            file_url.n_segments,
+            file_url.mime_type,
+            file_url.sampling_rate
+        );
+
+        Ok(file_url)
     }
 }
 

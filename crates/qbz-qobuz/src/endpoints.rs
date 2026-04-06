@@ -55,6 +55,12 @@ pub mod paths {
     // Genre
     pub const GENRE_LIST: &str = "/genre/list";
 
+    // Session (CMAF streaming)
+    pub const SESSION_START: &str = "/session/start";
+
+    // File (CMAF streaming)
+    pub const FILE_URL: &str = "/file/url";
+
     // Catalog (combined search)
     pub const CATALOG_SEARCH: &str = "/catalog/search";
 
