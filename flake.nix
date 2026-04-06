@@ -15,7 +15,7 @@
         # VERSION BUMP: update version, rev, and hashes
         # when tagging a new release.
         # ──────────────────────────────────────────────
-        qbzVersion = "1.2.2";
+        qbzVersion = "1.2.3";
         qbzRev     = "v${qbzVersion}";
         srcHash    = ""; # nix build will report the correct hash on first run
         npmHash    = ""; # nix build will report the correct hash on first run
