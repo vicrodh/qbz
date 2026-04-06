@@ -2425,6 +2425,15 @@ pub async fn v2_logout(
 ) -> Result<(), RuntimeError> {
     log::info!("[v2_logout] Starting logout");
 
+    // Step 0: Stop any active playback
+    {
+        let bridge_guard = bridge.get().await;
+        if let Err(e) = bridge_guard.stop() {
+            log::debug!("[v2_logout] Stop playback: {}", e);
+        }
+        app_state.media_controls.set_stopped();
+    }
+
     // Step 1: Deactivate session (teardown stores, clear runtime state)
     crate::session_lifecycle::deactivate_session(&app)
         .await
