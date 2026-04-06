@@ -611,48 +611,50 @@ impl AlsaBackend {
                     log::warn!("[ALSA Backend] hw attempt failed: {}", error);
 
                     if matches!(error, super::backend::AlsaDirectError::DeviceBusy(_)) {
-                        // PipeWire may be holding the ALSA device open.
-                        // Suspend PipeWire sinks to release the device, then retry.
-                        log::info!("[ALSA Backend] Device busy — suspending PipeWire sinks to release ALSA device");
-                        if let Ok(output) = std::process::Command::new("pactl")
-                            .args(["suspend-sink", "@DEFAULT_SINK@", "1"])
-                            .output()
-                        {
-                            if output.status.success() {
-                                log::info!("[ALSA Backend] PipeWire sink suspended, waiting for device release...");
-                                std::thread::sleep(std::time::Duration::from_millis(200));
+                        // Device busy: either our own previous PCM handle is still
+                        // releasing (race on fast track skip) or PipeWire holds it.
+                        // Retry with progressive backoff before giving up.
+                        log::info!("[ALSA Backend] Device busy — retrying with backoff");
 
-                                match super::AlsaDirectStream::new(
-                                    &hw_device,
-                                    config.sample_rate,
-                                    config.channels,
-                                ) {
-                                    Ok(stream) => {
-                                        log::info!("[ALSA Backend] ✓ Direct hw stream created after PipeWire suspend");
-                                        return Some(Ok((
-                                            stream,
-                                            super::backend::BitPerfectMode::DirectHardware,
-                                        )));
-                                    }
-                                    Err(e2) => {
-                                        log::warn!(
-                                            "[ALSA Backend] Retry after suspend also failed: {}",
-                                            e2
-                                        );
-                                    }
+                        // Try suspending PipeWire once (covers PipeWire-held case)
+                        let _ = std::process::Command::new("pactl")
+                            .args(["suspend-sink", "@DEFAULT_SINK@", "1"])
+                            .output();
+
+                        let retry_delays_ms = [50, 100, 200, 400];
+                        for (i, delay_ms) in retry_delays_ms.iter().enumerate() {
+                            std::thread::sleep(std::time::Duration::from_millis(*delay_ms));
+
+                            match super::AlsaDirectStream::new(
+                                &hw_device,
+                                config.sample_rate,
+                                config.channels,
+                            ) {
+                                Ok(stream) => {
+                                    log::info!(
+                                        "[ALSA Backend] ✓ Direct hw stream created on retry {} (after {}ms)",
+                                        i + 1,
+                                        delay_ms
+                                    );
+                                    return Some(Ok((
+                                        stream,
+                                        super::backend::BitPerfectMode::DirectHardware,
+                                    )));
                                 }
-                            } else {
-                                let stderr = String::from_utf8_lossy(&output.stderr);
-                                log::warn!(
-                                    "[ALSA Backend] Failed to suspend PipeWire sink: {}",
-                                    stderr
-                                );
+                                Err(e2) => {
+                                    log::warn!(
+                                        "[ALSA Backend] Retry {}/{} failed: {}",
+                                        i + 1,
+                                        retry_delays_ms.len(),
+                                        e2
+                                    );
+                                }
                             }
                         }
 
-                        // If retry failed or suspend failed, fall through to error
                         log::error!(
-                            "[ALSA Backend] Cannot acquire device even after PipeWire suspend"
+                            "[ALSA Backend] Cannot acquire device after {} retries",
+                            retry_delays_ms.len()
                         );
                         return Some(Err(format!(
                             "ALSA Direct failed: {}. Device may be in use or inaccessible.",
@@ -709,35 +711,38 @@ impl AlsaBackend {
                 let error = super::backend::AlsaDirectError::from_alsa_error(&e);
 
                 if matches!(error, super::backend::AlsaDirectError::DeviceBusy(_)) {
-                    log::info!("[ALSA Backend] plughw device busy — suspending PipeWire sinks to release ALSA device");
-                    if let Ok(output) = std::process::Command::new("pactl")
+                    log::info!("[ALSA Backend] plughw device busy — retrying with backoff");
+                    let _ = std::process::Command::new("pactl")
                         .args(["suspend-sink", "@DEFAULT_SINK@", "1"])
-                        .output()
-                    {
-                        if output.status.success() {
-                            log::info!(
-                                "[ALSA Backend] PipeWire sink suspended, retrying plughw..."
-                            );
-                            std::thread::sleep(std::time::Duration::from_millis(200));
+                        .output();
 
-                            match super::AlsaDirectStream::new(
-                                &plughw_device,
-                                config.sample_rate,
-                                config.channels,
-                            ) {
-                                Ok(stream) => {
-                                    log::info!("[ALSA Backend] ✓ plughw stream created after PipeWire suspend");
-                                    return Some(Ok((
-                                        stream,
-                                        super::backend::BitPerfectMode::PluginFallback,
-                                    )));
-                                }
-                                Err(e2) => {
-                                    log::error!(
-                                        "[ALSA Backend] plughw retry after suspend also failed: {}",
-                                        e2
-                                    );
-                                }
+                    let retry_delays_ms = [50, 100, 200, 400];
+                    for (i, delay_ms) in retry_delays_ms.iter().enumerate() {
+                        std::thread::sleep(std::time::Duration::from_millis(*delay_ms));
+
+                        match super::AlsaDirectStream::new(
+                            &plughw_device,
+                            config.sample_rate,
+                            config.channels,
+                        ) {
+                            Ok(stream) => {
+                                log::info!(
+                                    "[ALSA Backend] ✓ plughw stream created on retry {} (after {}ms)",
+                                    i + 1,
+                                    delay_ms
+                                );
+                                return Some(Ok((
+                                    stream,
+                                    super::backend::BitPerfectMode::PluginFallback,
+                                )));
+                            }
+                            Err(e2) => {
+                                log::warn!(
+                                    "[ALSA Backend] plughw retry {}/{} failed: {}",
+                                    i + 1,
+                                    retry_delays_ms.len(),
+                                    e2
+                                );
                             }
                         }
                     }

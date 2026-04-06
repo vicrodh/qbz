@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from 'svelte-i18n';
   import QualityBadge from '$lib/components/QualityBadge.svelte';
 
   interface Props {
@@ -48,13 +49,13 @@
           <span class="bar"></span>
           <span class="bar"></span>
         </div>
-        <span>Now Playing</span>
+        <span>{$t('player.nowPlaying')}</span>
       </div>
     {/if}
     <div class="track-title-row">
       <h1 class="track-title">{trackTitle}</h1>
       {#if explicit}
-        <span class="explicit-badge" title="Explicit"></span>
+        <span class="explicit-badge" title="{ $t('library.explicit') }"></span>
       {/if}
     </div>
     <p class="track-artist">{artist}</p>
@@ -77,8 +78,8 @@
     justify-content: center;
     gap: 20px;
     /* Offset for header (70px) and controls (120px) to achieve true visual center */
-    padding-top: 70px;
-    padding-bottom: 120px;
+    padding-top: 52px;
+    padding-bottom: 88px;
     padding-left: 40px;
     padding-right: 40px;
     z-index: 5;
@@ -92,8 +93,8 @@
 
   .artwork-container {
     position: relative;
-    width: min(45vh, 360px);
-    height: min(45vh, 360px);
+    width: min(52vh, 460px);
+    height: min(52vh, 460px);
     border-radius: 8px;
     overflow: hidden;
     box-shadow:
@@ -208,20 +209,20 @@
   /* Responsive */
   @media (max-width: 768px) {
     .static-panel {
-      padding: 70px 24px 130px;
+      padding: 52px 24px 88px;
       gap: 16px;
     }
 
     .artwork-container {
-      width: min(55vw, 280px);
-      height: min(55vw, 280px);
+      width: min(55vw, 320px);
+      height: min(55vw, 320px);
     }
   }
 
   @media (max-height: 600px) {
     .artwork-container {
-      width: min(32vh, 220px);
-      height: min(32vh, 220px);
+      width: min(38vh, 280px);
+      height: min(38vh, 280px);
     }
 
     .track-info {

@@ -6,6 +6,7 @@
   import { getName, getVersion } from '@tauri-apps/api/app';
   import { onMount } from 'svelte';
   import QobuzLegalNotice from '$lib/components/QobuzLegalNotice.svelte';
+  import { platform } from '$lib/utils/platform';
 
   interface Props {
     isOpen: boolean;
@@ -37,9 +38,7 @@
     }
   });
 
-  // Detect platform for Easter eggs
-  const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform);
-  const platformLabel = isMac ? 'macOS (Tauri 2.0)' : 'Linux (Tauri 2.0)';
+  const platformLabel = platform === 'macos' ? 'macOS (Tauri 2.0)' : platform === 'windows' ? 'Windows (Tauri 2.0)' : 'Linux (Tauri 2.0)';
 
   function handleOpenUrl(url: string) {
     openUrl(url).catch(err => console.error('Failed to open URL:', err));
@@ -183,6 +182,11 @@
               GwendalBeaumont
               <ExternalLink size={10} />
             </button>
+            <button class="contributor-link" onclick={() => handleOpenUrl('https://github.com/AdamArstall')}>
+              <img src="https://github.com/AdamArstall.png?size=28" alt="AdamArstall" class="contributor-avatar" />
+              AdamArstall
+              <ExternalLink size={10} />
+            </button>
           </div>
         </div>
 
@@ -193,7 +197,7 @@
             <img src="/mexico-flag.svg" alt="México" class="inline-icon flag" />
           </p>
           <p class="signature-detail">
-            {$t('about.signatureDetail')} <img src="/Tux.svg" alt="Tux" class="inline-icon tux" class:mac-tux={isMac} />
+            {$t('about.signatureDetail')} <img src="/Tux.svg" alt="Tux" class="inline-icon tux" class:mac-tux={platform === 'macos'} />
           </p>
         </div>
       </div>

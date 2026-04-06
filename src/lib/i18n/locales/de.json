@@ -67,7 +67,15 @@
     "topTracksLabel": "TOP TRACKS",
     "topTracksBy": "Von {artist}",
     "andMore": "und mehr",
-    "playlistLabel": "PLAYLIST"
+    "playlistLabel": "PLAYLIST",
+    "allTags": "Alle",
+    "essentialDiscography": "Wesentliche Diskographie",
+    "qobuzPlaylists": "Die Playlists von Qobuz",
+    "continueTracks": "Hören Sie weiter zu",
+    "mostStreamed": "Beliebte Alben",
+    "favoriteAlbums": "Mehr von Favoriten",
+    "recentAlbums": "Kürzlich gespielt",
+    "topArtists": "Ihre Top-Künstler"
   },
   "discover": {
     "newReleases": "Neuerscheinungen",
@@ -254,7 +262,18 @@
     "refreshMetadata": "Metadaten aktualisieren",
     "albumSettings": "Albumeinstellungen",
     "albumArtwork": "Album-Artwork",
-    "uploadCover": "Cover hochladen"
+    "uploadCover": "Cover hochladen",
+    "background": "Hintergrund",
+    "explicit": "Explizit",
+    "folderName": "Name",
+    "localFiles": "Lokale Dateien",
+    "plexLibrary": "Plex-Bibliothek",
+    "plexSyncFailed": "Die Plex-Bibliothek konnte nicht synchronisiert werden",
+    "syncPlexLibrary": "Plex-Bibliothek synchronisieren",
+    "syncingPlexLibrary": "Plex wird synchronisiert...",
+    "singleFileAlbumNotice": "Dieses Album scheint eine einzelne Datei zu sein, die die gesamte CD enthält. Für die individuelle Titelnavigation muss der Plex-Server die Datei aufteilen (z. B. über einen Cue-Sheet-Scanner).",
+    "plexSyncDone": "Plex-Bibliothek synchronisiert",
+    "source": "Quelle"
   },
   "album": {
     "tracks": "Titel",
@@ -289,7 +308,10 @@
     "bookletRotate": "Drehen",
     "bookletDownload": "Booklet speichern",
     "sameArtist": "Vom selben Künstler",
-    "seeFullDiscography": "Vollständige Diskografie ansehen"
+    "seeFullDiscography": "Vollständige Diskografie ansehen",
+    "loadError": "Albumtitel konnten nicht geladen werden. Bitte versuchen Sie es erneut.",
+    "releasedOn": "am",
+    "releasedBy": "Erschienen bei"
   },
   "artist": {
     "albums": "Alben",
@@ -348,7 +370,10 @@
       "nextResult": "Nächstes Ergebnis",
       "close": "Suche schließen",
       "searchInPage": "Auf dieser Seite suchen"
-    }
+    },
+    "noAlbumAppearancesFound": "Keine Albumauftritte gefunden",
+    "noAlbumsFound": "Keine Alben gefunden",
+    "bandProjects": "Bands"
   },
   "sort": {
     "nameAZ": "Name (A-Z)",
@@ -361,7 +386,13 @@
     "oldest": "Älteste zuerst",
     "titleAZ": "Titel (A-Z)",
     "titleZA": "Titel (Z-A)",
-    "artist": "Künstler"
+    "artist": "Künstler",
+    "album": "Album",
+    "addedRecently": "Kürzlich hinzugefügt",
+    "duration": "Laufzeit",
+    "sort": "Sortieren",
+    "title": "Titel",
+    "label": "Label"
   },
   "playlist": {
     "tracks": "Titel",
@@ -436,7 +467,20 @@
     "playlists": "Playlists",
     "folders": "Ordner",
     "dragPlaylists": "Playlists zum Neuordnen ziehen",
-    "dropOntoFolder": "oder auf einen Ordner ablegen, um sie zu verschieben."
+    "dropOntoFolder": "oder auf einen Ordner ablegen, um sie zu verschieben.",
+    "newFolder": "Neuer Ordner",
+    "folderNamePlaceholder": "Geben Sie den Ordnernamen ein",
+    "moveToFolder": "In Ordner verschieben",
+    "moveToRoot": "Zum Root wechseln",
+    "noFoldersYet": "Noch keine Ordner",
+    "noFoldersMatch": "Es stimmen keine Ordner überein",
+    "copyToLibrary": "In die Bibliothek kopieren",
+    "customArtwork": "Individuelles Kunstwerk",
+    "visibility": "Sichtweite",
+    "removeCustomArtwork": "Entfernen Sie benutzerdefinierte Grafiken",
+    "setCustomArtwork": "Legen Sie benutzerdefinierte Grafiken fest",
+    "showInSidebar": "In der Seitenleiste anzeigen",
+    "suggestedSongs": "Vorgeschlagene Lieder"
   },
   "favorites": {
     "title": "Favoriten",
@@ -581,7 +625,30 @@
     "dragWindow": "Fenster verschieben",
     "normalizationOff": "Lautstärkenormalisierung: Aus",
     "normalizationOn": "Lautstärkenormalisierung: Ein",
-    "normalizationApplied": "Lautstärkenormalisierung: Aktiv"
+    "normalizationApplied": "Lautstärkenormalisierung: Aktiv",
+    "disableInfinitePlay": "Deaktivieren Sie die Infinite Play",
+    "enableInfinitePlay": "Aktivieren Sie „Infinite Play“.",
+    "exitFullscreenWithKey": "Vollbild beenden ({key})",
+    "miniClose": "Schließen Sie den Miniplayer",
+    "miniExpand": "Erweitern Sie es zur vollständigen App",
+    "exitImmersiveWithKey": "Immersive beenden ({key})",
+    "fullscreenWithKey": "Vollbild ({key})",
+    "miniSurfaceLyrics": "Songtext",
+    "qobuzConnect": "Qobuz Connect",
+    "restoreWindow": "Fenster wiederherstellen",
+    "miniAlwaysOnTopEnable": "Immer an der Spitze",
+    "qobuzConnectManage": "Qobuz Connect – Zum Verwalten klicken",
+    "maximizeWindow": "Fenster maximieren",
+    "miniSurfaceMicro": "Mikro",
+    "miniWindowControls": "Mini-Player-Steuerung",
+    "windowControls": "Fenstersteuerung",
+    "miniAlwaysOnTopDisable": "Deaktivieren Sie „Immer im Vordergrund“.",
+    "miniSurfaceArtwork": "Kunstwerk",
+    "closeApp": "App schließen",
+    "connectedTo": "Verbunden mit",
+    "miniAlwaysOnTopLimited": "Always-on-Top wird durch Ihren Fenstermanager eingeschränkt",
+    "miniSurfaceCompact": "Kompakt",
+    "miniSurfaceQueue": "Warteschlange"
   },
   "audioBadges": {
     "castingTo": "Übertragung an",
@@ -689,7 +756,27 @@
     },
     "newFolder": "Neuer Ordner",
     "previousArtists": "Vorherige Künstler",
-    "nextArtists": "Nächste Künstler"
+    "nextArtists": "Nächste Künstler",
+    "switchToImmersiveView": "Zur immersiven Ansicht wechseln (V)",
+    "switchToSplitView": "Zur geteilten Ansicht wechseln (V)",
+    "visitReleasePage": "Besuchen Sie die Release-Seite",
+    "moveUp": "Bewegen Sie sich nach oben",
+    "moveDown": "Bewegen Sie sich nach unten",
+    "backToHome": "Zurück nach Hause",
+    "clearSelection": "Klare Auswahl",
+    "copyCommand": "Befehl kopieren",
+    "downloadOnGitHub": "Auf GitHub herunterladen",
+    "findAvailableVersion": "Finden Sie die verfügbare Version",
+    "gotIt": "Habe es",
+    "okClose": "OK, schließen",
+    "playFromHere": "Spielen Sie von hier aus",
+    "playRadio": "Spielen Sie Radio",
+    "playTrackOnly": "Nur Titel abspielen",
+    "qobuzLink": "Qobuz™-Link",
+    "removeOfflineCopy": "Offline-Kopie entfernen",
+    "selectAll": "Wählen Sie „Alle“ aus",
+    "startOffline": "Offline starten",
+    "tryAgain": "Versuchen Sie es erneut"
   },
   "settings": {
     "title": "Einstellungen",
@@ -769,7 +856,8 @@
       "resetConfirmTitle": "Audio- & Wiedergabeeinstellungen zurücksetzen?",
       "resetConfirmDesc": "Dies setzt alle Audioausgabe-, Backend- und Wiedergabeeinstellungen auf die Standardwerte zurück. Die Wiedergabe wird gestoppt.",
       "resetSuccess": "Audio- und Wiedergabeeinstellungen wurden auf die Standardwerte zurückgesetzt.",
-      "resetError": "Fehler beim Zurücksetzen der Audioeinstellungen: {error}"
+      "resetError": "Fehler beim Zurücksetzen der Audioeinstellungen: {error}",
+      "noDevicesFound": "Keine Geräte gefunden"
     },
     "playback": {
       "title": "Wiedergabe",
@@ -958,11 +1046,11 @@
         }
       },
       "fpsOptions": {
-        "disabled": "Deaktiviert",
         "15": "15 FPS (Niedrig)",
         "30": "30 FPS (Mittel)",
         "60": "60 FPS (Flüssig)",
-        "120": "120 FPS (Ultra)"
+        "120": "120 FPS (Ultra)",
+        "disabled": "Deaktiviert"
       },
       "startupPage": "Startseite",
       "startupPageDesc": "Wähle welche Seite beim App-Start angezeigt wird",
@@ -1029,6 +1117,15 @@
           "maxPerformanceDesc": "Software-Rendering (Cairo) mit deaktiviertem Blur. Maximale Kompatibilitaet, niedrigste GPU-Nutzung. Verwenden bei Ruckeln oder Abstuerzen.",
           "applied": "Profil angewendet: {profile}. QBZ neu starten, damit es wirksam wird."
         }
+      },
+      "miniplayerDefaultView": "Standardansicht des Miniplayers",
+      "miniplayerViews": {
+        "artwork": "Kunstwerk",
+        "compact": "Kompakt",
+        "lyrics": "Songtext",
+        "micro": "Mikro",
+        "remember": "Merken Sie sich die letzte Verwendung",
+        "queue": "Warteschlange"
       }
     },
     "library": {
@@ -1155,7 +1252,32 @@
       "qobuzLinkHandlerDesc": "QBZ als Standard-App fuer qobuzapp://-Links aus dem Browser registrieren.",
       "qobuzLinkHandlerError": "Fehler beim Aktualisieren der Link-Handler-Registrierung.",
       "qconnectDeviceName": "Gerätename",
-      "qconnectDeviceNameDesc": "Angezeigter Name in Qobuz Connect"
+      "qconnectDeviceNameDesc": "Angezeigter Name in Qobuz Connect",
+      "plexActionLoadTracks": "Titel laden",
+      "remoteControlSetupGuide": "Setup-Anleitung",
+      "plexBaseUrl": "Plex-Basis-URL",
+      "plexTrackMeta": "{artist} - {album} - {rate} Hz / {bits}-bit",
+      "plexActionPing": "Ping-Plex",
+      "plexActionPlay": "Spielen",
+      "plexActionPlaying": "Spielen...",
+      "plexMusicSection": "Musikabteilung",
+      "plexBaseUrlPlaceholder": "http://127.0.0.1:32400",
+      "plexNoTracksLoaded": "Es sind noch keine Titel geladen.",
+      "plexPoc": "Plex LAN POC",
+      "plexPocDesc": "Experimentelle Nur-lokale Integration. Verwendet direkte Medienteile von Plex, ohne die QBZ-Wiedergabe zu ersetzen.",
+      "plexSelectSection": "Wählen Sie einen Abschnitt aus",
+      "plexStatusConnected": "Verbunden mit {server} (v{version}).",
+      "plexStatusError": "Plex-Fehler: {error}",
+      "plexStatusPlaying": "Spielt: {title}",
+      "noProtocolDeviceFound": "Keine {protocol}-Geräte gefunden",
+      "noProtocolDeviceFoundHint": "Stellen Sie sicher, dass sich die Geräte im selben Netzwerk befinden",
+      "plexStatusPlayingDirect": "Direkte Wiedergabe von Plex: {title} ({rate} Hz / {bits}-bit, {contentType}).",
+      "plexStatusPlayingFallback": "{title} wird abgespielt, aber die direkte Wiedergabe ist nicht bestätigt (Teil: {partKey}).",
+      "plexStatusSectionsLoaded": "{count} Musikabschnitte geladen.",
+      "plexStatusTracksLoaded": "{count} Titel geladen.",
+      "plexToken": "Plex-Token",
+      "plexTokenPlaceholder": "Fügen Sie Ihr X-Plex-Token ein",
+      "remoteControlExperimental": "Experimental"
     },
     "storage": {
       "title": "Speicher",
@@ -1251,7 +1373,9 @@
       "manageCacheDesc": "Öffne den Cache-Ordner in deinem Dateimanager",
       "openFolderDesc": "Öffne den Cache-Ordner in deinem Dateimanager",
       "sectionSummary": "Zwischengespeicherte Titel für die Offline-Wiedergabe",
-      "repairing": "Reparieren..."
+      "repairing": "Reparieren...",
+      "showInLibrary": "In der lokalen Bibliothek anzeigen",
+      "showInLibraryDesc": "Zeigen Sie offline zwischengespeicherte Titel in der Ansicht „Lokale Bibliothek“ an"
     },
     "updates": {
       "title": "Updates",
@@ -1297,7 +1421,13 @@
       "clearAllCaches": "Alle Caches löschen",
       "clearAllCachesDesc": "Löscht alle oben aufgeführten zwischengespeicherten Daten",
       "cachesDesc": "Cache für Warteschlange, Songtexte, Artwork und Metadaten"
-    }
+    },
+    "immersive": {
+      "title": "Leistungseinbußen",
+      "perfDegraded": "Leistungseinbußen",
+      "perfDontShowAgain": "Nicht mehr anzeigen"
+    },
+    "noMatchesFound": "Keine Übereinstimmungen gefunden"
   },
   "auth": {
     "login": "Anmelden",
@@ -1321,7 +1451,7 @@
   },
   "legal": {
     "brandingLine": "Diese Anwendung verwendet die Qobuz-API, ist jedoch nicht von Qobuz™ zertifiziert.",
-    "brandingLineSuffix": "",
+    "brandingLineSuffix": "Diese Anwendung verwendet die Qobuz™-API, ist jedoch nicht von Qobuz™ zertifiziert.",
     "tosAgreementPrefix": "Ich habe die",
     "tosLinkText": "Qobuz™-Nutzungsbedingungen",
     "tosRequiredToLogin": "Bitte bestätigen Sie, dass Sie die Qobuz™-Nutzungsbedingungen gelesen haben, um fortzufahren.",
@@ -1354,7 +1484,8 @@
     "loadFailed": "Laden fehlgeschlagen",
     "playbackFailed": "Wiedergabe fehlgeschlagen",
     "cachingFailed": "Vorbereitung für Offline fehlgeschlagen",
-    "saveFailed": "Speichern fehlgeschlagen"
+    "saveFailed": "Speichern fehlgeschlagen",
+    "failedToLoad": "Laden fehlgeschlagen"
   },
   "time": {
     "hours": "h",
@@ -1402,7 +1533,8 @@
     "sectionsDesc": "Mit Pfeilen neu anordnen. Sichtbarkeit mit Schalter umschalten.",
     "moveUp": "Nach oben verschieben",
     "moveDown": "Nach unten verschieben",
-    "resetToDefaults": "Auf Standardwerte zurücksetzen"
+    "resetToDefaults": "Auf Standardwerte zurücksetzen",
+    "itemsToShow": "Zu zeigende Elemente"
   },
   "toast": {
     "loadingAlbum": "Album wird geladen...",
@@ -1510,7 +1642,19 @@
     "failedSaveAutoplay": "Speichern der Autoplay-Voreinstellung fehlgeschlagen",
     "failedSaveIconVisibility": "Speichern der Icon-Sichtbarkeit fehlgeschlagen",
     "failedRepairOffline": "Reparatur der Offline-Bibliothek fehlgeschlagen: {error}",
-    "failedOpenCacheFolder": "Öffnen des Cache-Ordners fehlgeschlagen"
+    "failedOpenCacheFolder": "Öffnen des Cache-Ordners fehlgeschlagen",
+    "loadingDevices": "Geräte werden geladen...",
+    "addedToPlaylist": "Zur Playlist hinzugefügt",
+    "copied": "Kopiert!",
+    "loadingCredits": "Credits werden geladen...",
+    "playlistUpdated": "Playlist aktualisiert",
+    "blacklist": {
+      "disabled": "deaktiviert",
+      "enabled": "ermöglicht",
+      "newState": "Blacklist {status}"
+    },
+    "laodingDevices": "Geräte werden geladen...",
+    "findingSimilarArtists": "Suche nach ähnlichen Künstlern..."
   },
   "offline": {
     "title": "Offline-Modus",
@@ -1566,7 +1710,9 @@
     "failed": "Caching fehlgeschlagen (zum erneuten Versuch klicken)"
   },
   "filter": {
-    "all": "Alle"
+    "all": "Alle",
+    "hidden": "Versteckt",
+    "visible": "Sichtbar"
   },
   "metadata": {
     "editMetadata": "Metadaten bearbeiten",
@@ -1764,7 +1910,8 @@
         "custom": "Benutzerdefiniert..."
       },
       "customPlaceholder": "Binärname (z.B. mein-player)",
-      "warning": "Beste Ergebnisse: Verwenden Sie Bit-Perfect nur pro App. Globales Pulse-Bit-Perfect kann Browser und Apps beschädigen, die festes 48kHz ausgeben."
+      "warning": "Beste Ergebnisse: Verwenden Sie Bit-Perfect nur pro App. Globales Pulse-Bit-Perfect kann Browser und Apps beschädigen, die festes 48kHz ausgeben.",
+      "customApps": "Benutzerdefinierte Apps:"
     },
     "wireplumberConfig": {
       "title": "Nur Ihren DAC ansteuern",
@@ -1929,7 +2076,8 @@
   "playlistManager": {
     "switchToFlat": "Flache Ansicht",
     "switchToFolders": "Ordneransicht",
-    "emptyFolder": "Leerer Ordner"
+    "emptyFolder": "Leerer Ordner",
+    "heading": "Playlist-Manager"
   },
   "linkResolver": {
     "title": "Musik-Link oeffnen",
@@ -1948,7 +2096,32 @@
     "algorithmInfo": "Basierend auf dem Qobuz™-Vorschlagsalgorithmus, kuratiert aus deinem lokalen Hoerverlauf.",
     "errors": {
       "fetchFailed": "Dynamische Vorschlaege konnten nicht geladen werden.",
-      "insufficientHistory": "Nicht genuegend Hoerverlauf fuer Vorschlaege. Hoere etwas Musik und versuche es spaeter erneut."
+      "insufficientHistory": "Nicht genuegend Hoerverlauf fuer Vorschlaege. Hoere etwas Musik und versuche es spaeter erneut.",
+      "emptyPlaylist": "Keine Titel zum Speichern als Playlist verfügbar.",
+      "playlistsLoadFailed": "Deine Playlists konnten nicht geladen werden.",
+      "prefillFailed": "Aktuelle Daten aus QBZ-Protokollen konnten nicht geladen werden.",
+      "rawProbeFailed": "Die rohe Endpunktantwort konnte nicht abgerufen werden."
+    },
+    "form": {
+      "limit": "Limit",
+      "run": "Vorschläge abrufen",
+      "listenedTrackIdsPlaceholder": "123,456,789",
+      "listenedTrackIds": "IDs der gehörten Titel (durch Kommas getrennt)",
+      "prefillFromRecents": "Verwenden Sie das aktuelle QBZ-Protokoll",
+      "rawResponse": "Rohe Antwort",
+      "probeRaw": "Rohantwort prüfen",
+      "tracksToAnalyse": "Zu analysierende Titel (eine Zeile: Titel-ID, Künstler-ID, Genre-ID, Label-ID)",
+      "tracksToAnalysePlaceholder": "123,45,78,90"
+    },
+    "result": {
+      "emptyHint": "Versuchte Fallback-Payload-Strategien. \nDieses Konto/Seed-Set gibt derzeit möglicherweise keine Mix-Kandidaten zurück.",
+      "algorithm": "Algorithmus",
+      "count": "{count} Titel",
+      "empty": "Es wurden keine vorgeschlagenen Titel zurückgegeben.",
+      "unknownArtist": "Unbekannter Künstler"
+    },
+    "actions": {
+      "saveAsPlaylist": "Als Playlist speichern"
     }
   },
   "weeklyMixes": {
@@ -2039,5 +2212,365 @@
     "rememberChoice": "Meine Wahl merken",
     "autoRetrying": "Erneuter Versuch mit niedrigerer Qualitaet...",
     "autoSkipping": "Titel wird uebersprungen (Serverproblem)..."
+  },
+  "fileFormat": {
+    "aac": "AAC",
+    "alac": "ALAC",
+    "flac": "FLAC",
+    "mp3": "MP3",
+    "opus": "Opus"
+  },
+  "keys": {
+    "esc": "Esc",
+    "enter": "Eingabetaste",
+    "shift": "Shift"
+  },
+  "platforms": {
+    "appleMusic": "Apple Music",
+    "deezer": "Deezer",
+    "qobuz": "Qobuz",
+    "spotify": "Spotify",
+    "tidal": "Tidal"
+  },
+  "updates": {
+    "snap": {
+      "intro": "Für ein optimales Erlebnis müssen einige Audiostecker manuell angeschlossen werden.",
+      "note": "Führen Sie diese Befehle in einem Terminal aus und starten Sie dann QBZ neu. Dies muss nur einmal durchgeführt werden.",
+      "optional": "Optional (für externe Laufwerke / NAS):",
+      "requiredPlugConnections": "Erforderliche Steckverbindungen:"
+    },
+    "checkForUpdates": "Suchen Sie nach Updates",
+    "flatpak": {
+      "intro": "Es gibt einige Überlegungen, um das beste Erlebnis zu gewährleisten.",
+      "note": "Detaillierte Anweisungen und Befehle zum Kopieren und Einfügen finden Sie im Abschnitt <strong>Flatpak Sandbox</strong> in den Einstellungen.",
+      "whatYouShouldKnow": {
+        "audioFeatures": "Einige Audiofunktionen verhalten sich aufgrund von Sandbox-Einschränkungen möglicherweise anders",
+        "settingsPage": "Die Seite <strong>Einstellungen</strong> enthält Flatpak-spezifische Befehle, die Sie kopieren und ausführen können",
+        "externalMusicFolderAccess": "Der Zugriff auf externe Musikordner (NAS, Netzwerk-Mounts) erfordert manuelle Berechtigungserteilungen",
+        "heading": "Was Sie wissen sollten:"
+      }
+    },
+    "whatsNew": {
+      "whatsNew": "Was ist neu",
+      "whatsNewIn": "Was ist neu in v{version}?",
+      "releaseNotesNotAvailable": "Versionshinweise sind nicht verfügbar.",
+      "releaseNotesNotAvailableForVersion": "Für diese Version sind keine Versionshinweise verfügbar."
+    },
+    "newVersionAvailable": "Neue Version verfügbar: v{version}",
+    "runningIn": "Läuft in {env}",
+    "noUpdatesFound": "Keine Updates gefunden.",
+    "updateReminder": {
+      "hint": "Kann über die Einstellungen wieder aktiviert werden",
+      "doNotNotifyAboutReleases": "Benachrichtigen Sie mich nicht über Neuerscheinungen",
+      "doNotNotifyAgain": "Benachrichtigen Sie mich nicht noch einmal über diese Veröffentlichung",
+      "newVersionReminder": "Erinnerung an neue Version",
+      "remindMeLater": "Erinnere mich später daran"
+    },
+    "runningInsideSandbox": "QBZ hat erkannt, dass es in einer <strong>{env}-Sandbox</strong> ausgeführt wird.",
+    "newReleaseAvailable": "Neue Version verfügbar",
+    "newVersionReleased": "Eine neue Version von QBZ wurde veröffentlicht"
+  },
+  "common": {
+    "name": "Name"
+  },
+  "integrations": {
+    "connecting": "Verbinden..."
+  },
+  "remoteControlWizard": {
+    "buttons": {
+      "back": "Zurück",
+      "close": "Schließen",
+      "next": "Nächste"
+    },
+    "enable": {
+      "step2": "Schalten Sie „Fernbedienung aktivieren“ ein",
+      "subtitle": "Schalten Sie den lokalen API-Server ein",
+      "screenshot": "[Screenshot: Einstellungen > Fernbedienung umschalten]",
+      "step1": "Gehen Sie zu Einstellungen → Fernbedienung",
+      "step3": "Notieren Sie sich die Portnummer (Standard: 8182)",
+      "title": "Aktivieren Sie die Fernbedienung",
+      "portNote": "Der Standardport ist 8182. Sie können ihn bei Bedarf ändern, müssen ihn jedoch während des Pairings aktualisieren."
+    },
+    "https": {
+      "step2": "QBZ generiert ein selbstsigniertes Zertifikat",
+      "intro": "Um die Fernbedienung als Progressive Web App (PWA) auf Ihrem Telefon oder Tablet zu installieren, ist HTTPS erforderlich.",
+      "screenshot": "[Screenshot: HTTPS-Umschaltung aktiviert]",
+      "subtitle": "Erforderlich für die PWA-Installation",
+      "step1": "Aktivieren Sie „Sichere Verbindung (HTTPS)“",
+      "step3": "Eine Zertifikats-URL wird angezeigt",
+      "title": "Aktivieren Sie die sichere Verbindung",
+      "whyReason1": "Moderne Browser erfordern HTTPS für die PWA-Installation",
+      "whyReason2": "Eine sichere Verbindung schützt Ihr Pairing-Token",
+      "whyReason3": "Erforderlich für Servicemitarbeiter und Offlinefunktionen",
+      "whyRequired": "Warum HTTPS?"
+    },
+    "certificate": {
+      "androidStep1": "Öffnen Sie die Zertifikats-URL in Chrome",
+      "androidStep2": "Öffnen Sie die heruntergeladene .crt-Datei",
+      "androidStep3": "Geben Sie einen Namen ein (z. B. „QBZ“)",
+      "intro": "Da QBZ ein selbstsigniertes Zertifikat verwendet, müssen Sie es auf Ihrem steuernden Gerät installieren und als vertrauenswürdig einstufen.",
+      "iosStep1": "Öffnen Sie die Zertifikats-URL in Safari",
+      "iosStep2": "Tippen Sie auf „Zulassen“, um das Profil herunterzuladen",
+      "iosStep3": "Gehen Sie zu Einstellungen → Profil heruntergeladen → Installieren",
+      "macosStep1": "Öffnen Sie die Zertifikats-URL in Safari",
+      "androidStep4": "Wählen Sie als Nutzungsart „VPN und Apps“ oder „WLAN“.",
+      "androidStep5": "Tippen Sie zum Installieren auf OK",
+      "androidTitle": "Android",
+      "iosStep4": "Gehen Sie zu Einstellungen → Allgemein → Info → Zertifikatsvertrauenseinstellungen",
+      "iosStep5": "Aktivieren Sie volle Vertrauenswürdigkeit für das QBZ-Zertifikat",
+      "iosTitle": "iOS (iPhone/iPad)",
+      "macosStep2": "Öffnen Sie die heruntergeladene .crt-Datei",
+      "macosStep3": "Der Schlüsselbundzugriff wird geöffnet – zum Anmeldeschlüsselbund hinzufügen",
+      "macosStep4": "Doppelklicken Sie auf das Zertifikat und erweitern Sie „Vertrauen“.",
+      "macosStep5": "Stellen Sie „Bei Verwendung dieses Zertifikats“ auf „Immer vertrauen“ ein.",
+      "macosTitle": "macOS",
+      "step1": "Kopieren Sie die Zertifikats-URL aus den QBZ-Einstellungen",
+      "screenshot": "[Screenshot: Zertifikat-URL in den QBZ-Einstellungen]",
+      "step2": "Öffnen Sie die URL im Browser Ihres steuernden Geräts",
+      "step3": "Laden Sie das Zertifikat herunter und installieren Sie es",
+      "step4": "Vertrauen Sie dem Zertifikat beim Surfen im Internet",
+      "subtitle": "Vertrauen Sie dem QBZ-Zertifikat auf Ihrem Gerät",
+      "title": "Zertifikat installieren",
+      "windowsStep1": "Öffnen Sie die Zertifikats-URL in einem beliebigen Browser",
+      "windowsStep2": "Öffnen Sie die heruntergeladene .crt-Datei",
+      "windowsStep3": "Klicken Sie auf „Zertifikat installieren…“",
+      "windowsStep4": "Wählen Sie „Lokaler Computer“ und dann „Weiter“.",
+      "windowsStep5": "Wählen Sie „Alle Zertifikate platzieren in: Vertrauenswürdige Stammzertifizierungsstellen“",
+      "windowsStep6": "Beenden Sie den Assistenten und bestätigen Sie",
+      "windowsTitle": "Windows"
+    },
+    "done": {
+      "close": "Schließen",
+      "pwaHint": "Für das beste Erlebnis installieren Sie QBZ Control als PWA:",
+      "pwaStep1": "Öffnen Sie die Kontroll-URL auf Ihrem Gerät",
+      "pwaStep2": "Verwenden Sie „Zum Startbildschirm hinzufügen“ oder „App installieren“.",
+      "pwaStep3": "Starten Sie von Ihrem Startbildschirm aus für ein Vollbilderlebnis",
+      "subtitle": "Sie können QBZ jetzt fernsteuern",
+      "title": "Einrichtung abgeschlossen!"
+    },
+    "pair": {
+      "intro": "Verbinden Sie nun Ihr Steuergerät über den QR-Code oder die manuelle Eingabe mit QBZ.",
+      "manualMethod": "Manuelle Eingabe",
+      "manualStep1": "Beachten Sie die in QBZ angezeigte lokale URL",
+      "manualStep2": "Öffnen Sie diese URL auf Ihrem steuernden Gerät",
+      "manualStep3": "Geben Sie die URL und das Token manuell ein",
+      "qrMethod": "QR-Code (empfohlen)",
+      "qrStep1": "Klicken Sie in den QBZ-Einstellungen auf „QR anzeigen“.",
+      "qrStep2": "Öffnen Sie die QBZ-Kontroll-URL auf Ihrem Gerät",
+      "qrStep3": "Scannen Sie den QR-Code, um die Verbindungsdetails automatisch auszufüllen",
+      "screenshot": "[Screenshot: QR-Code-Kopplungsbildschirm]",
+      "subtitle": "Verbinden Sie sich mit QBZ",
+      "title": "Koppeln Sie Ihr Gerät",
+      "trouble1": "Stellen Sie sicher, dass sich beide Geräte im selben Netzwerk befinden",
+      "trouble2": "Überprüfen Sie, ob die Firewall Port 8182 zulässt",
+      "troubleshooting": "Wenn die Verbindung fehlschlägt:",
+      "trouble3": "Stellen Sie sicher, dass HTTPS aktiviert ist und das Zertifikat vertrauenswürdig ist"
+    },
+    "steps": {
+      "certificate": "Zertifikat",
+      "done": "Erledigt",
+      "enable": "Aktivieren",
+      "https": "HTTPS",
+      "pair": "Koppeln",
+      "welcome": "Willkommen"
+    },
+    "welcome": {
+      "feature1": "Steuern Sie die Wiedergabe (Wiedergabe, Pause, Überspringen)",
+      "feature2": "Verwalten Sie Ihre Warteschlange",
+      "feature3": "Titel suchen und hinzufügen",
+      "feature4": "Als PWA auf Ihrem Gerät installieren",
+      "intro": "Diese Anleitung hilft Ihnen bei der Einrichtung der Fernbedienung, damit Sie QBZ von Ihrem Telefon, Tablet oder einem anderen Gerät im selben Netzwerk aus steuern können.",
+      "screenshot": "[Screenshot: Fernbedienung der PWA auf Mobilgeräten]",
+      "start": "Legen Sie los",
+      "subtitle": "Steuern Sie QBZ von einem anderen Gerät aus",
+      "title": "Einrichtung der Fernbedienung"
+    }
+  },
+  "about": {
+    "attributions": {
+      "lrclibDesc": "Anbieter synchronisierter Liedtexte",
+      "lucideDesc": "Symbolbibliothek",
+      "lyricsOVHDesc": "Songtext-API",
+      "musicBrainzDesc": "Musik-Metadaten-Datenbank",
+      "rodioSymphoniaDesc": "Audio-Wiedergabe-Engine",
+      "qobuzDesc": "Musik-Streaming-Dienst und API",
+      "songLinkOdesliDesc": "API zur Aggregation von Musiklinks",
+      "svelteDesc": "UI-Framework",
+      "tauriDesc": "Anwendungsrahmen",
+      "heading": "Danksagungen"
+    },
+    "author": "Autor",
+    "buildInfo": {
+      "build": "Bauen",
+      "codename": "Codename",
+      "heading": "Build-Info",
+      "license": "Lizenz",
+      "platform": "Plattform",
+      "version": "Version"
+    },
+    "contributors": "Mitwirkende",
+    "release": "Freigeben",
+    "description": "Ein nativer Musik-Streaming-Client für Linux, der für Audiophile entwickelt wurde, die eine bitgenaue Hi-Fi-Wiedergabe ohne Einschränkungen der Browser-Samplerate benötigen.",
+    "signatureDetail": "Hass gegenüber all den Unternehmen, die die Linux-Community diskriminieren und uns keinen anständigen Kunden für ihr Produkt bieten.",
+    "website": "Webseite"
+  },
+  "tracklist": {
+    "album": "Album",
+    "duration": "Laufzeit",
+    "quality": "Qualität",
+    "title": "Titel"
+  },
+  "musician": {
+    "knownFor": "Bekannt für",
+    "viewArtistPage": "Künstlerseite anzeigen"
+  },
+  "performerRoles": {
+    "a&R": "Künstler und Repertoire",
+    "acousticGuitar": "Akustikgitarre",
+    "additionalEngineer": "Zusätzlicher Ingenieur",
+    "additionalKeyboard": "Zusätzliche Tastatur",
+    "additionalVocalist": "Zusätzlicher Sänger",
+    "arranger": "Arrangeur",
+    "assistantEngineer": "Stellvertretender Ingenieur",
+    "assistantMixer": "Assistenzmischer",
+    "associatedPerformer": "Assoziierter Darsteller",
+    "backgroundVocalist": "Backgroundsänger",
+    "bass": "Bass",
+    "bassGuitar": "Bassgitarre",
+    "choir": "Chor",
+    "coProducer": "Co-Produzent",
+    "composer": "Komponist",
+    "composerLyricist": "Komponist und Texter",
+    "digitalEditingEngineer": "Ingenieur für digitale Bearbeitung",
+    "drum": "Trommel",
+    "drumKit": "Schlagzeug",
+    "drums": "Schlagzeug",
+    "electricGuitar": "Elektrische Gitarre",
+    "engineer": "Ingenieur",
+    "featuredArtist": "Ausgewählter Künstler",
+    "guitar": "Gitarre",
+    "keyboard": "Tastatur",
+    "keyboards": "Tastaturen",
+    "lyricist": "Texter",
+    "mainArtist": "Hauptkünstler",
+    "masteringEngineer": "Mastering-Ingenieur",
+    "mixer": "Mischer",
+    "mixingEngineer": "Mischingenieur",
+    "musicPublisher": "Musikverlag",
+    "organ": "Orgel",
+    "percussion": "Schlagzeug",
+    "performance": "Leistung",
+    "piano": "Klavier",
+    "producer": "Produzent",
+    "recordingEngineer": "Aufnahmeingenieur",
+    "programmer": "Programmierer",
+    "recordingSecondEngineer": "Aufnahme des zweiten Ingenieurs",
+    "remixer": "Remixer",
+    "secondEngineer": "Zweiter Ingenieur",
+    "stringArranger": "String-Arrangeur",
+    "strings": "Saiten",
+    "studioPersonnel": "Studiopersonal",
+    "ukulele": "Ukulele",
+    "vocal": "Gesang",
+    "vocalEditingEngineer": "Gesangsbearbeitungsingenieur",
+    "vocalist": "Sänger",
+    "vocals": "Gesang",
+    "writer": "Schriftsteller",
+    "a&RDirector": "Künstler und Repertoiredirektor",
+    "aAndRCoordinator": "A",
+    "accordion": "Akkordeon",
+    "additionalMusic": "Zusätzliche Musik",
+    "additionalProduction": "Zusätzliche Produktion",
+    "additionalProgrammer": "Zusätzlicher Programmierer",
+    "additionalStudioProducer": "Zusätzlicher Studioproduzent",
+    "additionalVocals": "Zusätzlicher Gesang",
+    "artDirector": "Art Director",
+    "artist": "Künstler",
+    "assistant": "Assistent",
+    "assistantMixingEngineer": "Stellvertretender Mischingenieur",
+    "associatedProducer": "Assoziierter Produzent",
+    "author": "Autor",
+    "backgroundVocal": "Hintergrundgesang",
+    "backgroundVocals": "Hintergrundgesang",
+    "backingVocals": "Hintergrundgesang",
+    "baritoneSaxophone": "Baritonsaxophon",
+    "celesta": "Celesta",
+    "cello": "Cello",
+    "chamberOrchestra": "Kammerorchester",
+    "choirArranger": "Chorarrangeur",
+    "choirConductor": "Chorleiter",
+    "coachVocals": "Coach-Gesang",
+    "conductor": "Leiter",
+    "consultant": "Berater",
+    "contractor": "Auftragnehmer",
+    "designer": "Designer",
+    "doubleBass": "Kontrabass",
+    "drumMachine": "Trommelmaschine",
+    "drumProgrammer": "Drum-Programmierer",
+    "drumProgramming": "Drum-Programmierung",
+    "editingEngineer": "Redaktionsingenieur",
+    "electricBassGuitar": "E-Bassgitarre",
+    "executiveProducer": "Ausführender Produzent",
+    "fiddle": "Geige",
+    "frenchHorn": "Waldhorn",
+    "glockenspiel": "Glockenspiel",
+    "hammondOrgan": "Hammond-Orgel",
+    "harp": "Harfe",
+    "horn": "Horn",
+    "horns": "Hörner",
+    "instrumentation": "Instrumentierung",
+    "leadGuitar": "Leadgitarre",
+    "leadViolin": "Lead-Violine",
+    "leadVocals": "Lead-Gesang",
+    "manager": "Manager",
+    "masterer": "Meister",
+    "mixEngineer": "Mix-Ingenieur",
+    "mixingSecondEngineer": "Zweiter Ingenieur mischen",
+    "music": "Musik",
+    "musicDirector": "Musikdirektor",
+    "musicEditor": "Musikredakteur",
+    "musicSupervisor": "Musikbetreuer",
+    "nylonStringGuitar": "Gitarre mit Nylonsaiten",
+    "orchestra": "Orchester",
+    "orchestralContractor": "Orchesterunternehmer",
+    "orchestration": "Orchestrierung",
+    "other": "Andere",
+    "oud": "Oud",
+    "performer": "Künstler",
+    "production": "Produktion",
+    "programming": "Programmierung",
+    "programmingEngineer": "Programmieringenieur",
+    "rapVocalist": "Rap-Sänger",
+    "recordedby": "Aufgenommen von",
+    "recordingArranger": "Aufnahme-Arrangeur",
+    "recordingProducer": "Aufnahmeproduzent",
+    "remasteringEngineer": "Remastering-Ingenieur",
+    "remixingSecondEngineer": "Remix des zweiten Ingenieurs",
+    "rhythmGuitar": "RhythmusGitarre",
+    "samples": "Proben",
+    "saxophone": "Saxophon",
+    "singer": "Sänger",
+    "slideguitar&Pad": "Slide-Gitarre",
+    "songwriter": "Songwriter",
+    "studioAssistant": "Studioassistent",
+    "synthesizer": "Synthesizer",
+    "synthesizerProgrammer": "Synthesizer-Programmierer",
+    "synthesizerProgramming": "Synthesizer-Programmierung",
+    "technicalAssistant": "Technischer Assistent",
+    "technicalEngineer": "Technischer Ingenieur",
+    "technician": "Techniker",
+    "trombone": "Posaune",
+    "trumpet": "Trompete",
+    "tuba": "Tuba",
+    "unknown": "Unbekannt",
+    "vibraphone": "Vibraphon",
+    "viola": "Viola",
+    "violin": "Violine",
+    "vocalArranger": "Gesangsarrangeur",
+    "vocalEngineer": "Gesangsingenieur",
+    "vocalProducer": "Gesangsproduzent",
+    "vocals&Guitar": "Gesang",
+    "voice": "Stimme",
+    "workArranger": "Arbeitsorganisator"
   }
 }

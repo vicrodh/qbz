@@ -316,7 +316,7 @@
                 <div class="np-title-row">
                   <span class="np-title">{currentTrack.title}</span>
                   {#if currentTrack.parental_warning}
-                    <span class="explicit-badge" title="Explicit"></span>
+                    <span class="explicit-badge" title={ $t('library.explicit') }></span>
                   {/if}
                 </div>
                 <div class="np-artist">{currentTrack.artist}</div>
@@ -369,7 +369,7 @@
                     <div class="track-title-row">
                       <span class="track-title">{queueTrack.title}</span>
                       {#if queueTrack.parental_warning}
-                        <span class="explicit-badge" title="Explicit"></span>
+                        <span class="explicit-badge" title={ $t('library.explicit') }></span>
                       {/if}
                     </div>
                     <div class="track-artist">{queueTrack.artist}</div>

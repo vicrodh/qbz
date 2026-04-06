@@ -253,7 +253,7 @@
   {:else if !artistId}
     <div class="empty-state">
       <Radio size={32} strokeWidth={1.5} />
-      <span>{$t('player.noTrackSelected') || 'No track selected'}</span>
+      <span>{$t('player.noTrackSelected')}</span>
     </div>
   {:else}
     <div class="suggestions-content">
@@ -266,7 +266,7 @@
           {@const fallbackImage = playlist.images?.[Math.min(1, (playlist.images?.length || 1) - 1)]}
           <div class="card playlist-card">
             <div class="card-badge qobuz">
-              <img src="/qobuz-logo-filled.svg" alt="Qobuz" class="badge-icon badge-qobuz" />
+              <img src="/qobuz-logo-filled.svg" alt="{ $t('platforms.qobuz') }" class="badge-icon badge-qobuz" />
             </div>
             <div class="card-image-wrapper">
               {#if hasCovers}
@@ -292,20 +292,20 @@
               </div>
               <!-- Hover overlay with actions -->
               <div class="card-overlay">
-                <button class="overlay-btn secondary" onclick={() => onAddToQueue?.('playlist', playlist.id)} title="Add to queue">
+                <button class="overlay-btn secondary" onclick={() => onAddToQueue?.('playlist', playlist.id)} title={$t('actions.addToQueue')}>
                   <ListPlus size={16} />
                 </button>
-                <button class="overlay-btn primary" onclick={() => handlePlayPlaylist(playlist.id)} title="Play">
+                <button class="overlay-btn primary" onclick={() => handlePlayPlaylist(playlist.id)} title={$t('actions.play')}>
                   <Play size={20} fill="currentColor" />
                 </button>
-                <button class="overlay-btn secondary" onclick={() => onPlayNext?.('playlist', playlist.id)} title="Play next">
+                <button class="overlay-btn secondary" onclick={() => onPlayNext?.('playlist', playlist.id)} title={$t('actions.playNext')}>
                   <ListEnd size={16} />
                 </button>
               </div>
             </div>
             <div class="card-content">
               <span class="card-title">{playlist.name}</span>
-              <span class="card-subtitle">Playlist · {playlist.tracks_count} tracks</span>
+              <span class="card-subtitle">{$t('playlist.label')} · {playlist.tracks_count} {$t('library.tracks')}</span>
             </div>
           </div>
         {/each}
@@ -323,7 +323,7 @@
               <Info size={18} strokeWidth={2.5} />
               {#if showRadioTooltip}
                 <div class="radio-tooltip">
-                  {$t('player.radioExperimentalTooltip') || 'Radio is an experimental QBZ feature that generates a playlist based on the current track.'}
+                  {$t('player.radioExperimentalTooltip')}
                 </div>
               {/if}
             </div>
@@ -357,14 +357,14 @@
               </div>
               <!-- Hover overlay with play button only (radio replaces queue) -->
               <div class="card-overlay">
-                <button class="overlay-btn primary" onclick={startSongRadio} disabled={loadingRadio} title="Play Radio">
+                <button class="overlay-btn primary" onclick={startSongRadio} disabled={loadingRadio} title={$t('actions.playRadio')}>
                   <Play size={20} fill="currentColor" />
                 </button>
               </div>
             </div>
             <div class="card-content">
-              <span class="card-title">{$t('player.songRadio') || 'Song Radio'}</span>
-              <span class="card-subtitle">{$t('player.basedOnTrack') || 'Based on this track'}</span>
+              <span class="card-title">{$t('player.songRadio')}</span>
+              <span class="card-subtitle">{$t('player.basedOnTrack')}</span>
             </div>
           </div>
         {/if}
@@ -373,7 +373,7 @@
       <!-- Recommended Tracks Section -->
       {#if recommendedTracks.length > 0}
         <div class="tracks-section">
-          <h3 class="section-title">{$t('player.recommendedTracks') || 'Recommended'}</h3>
+          <h3 class="section-title">{$t('player.recommendedTracks')}</h3>
           <div class="tracks-list">
             {#each recommendedTracks as track (track.id)}
               <button
@@ -436,7 +436,7 @@
     height: 100%;
     min-height: 200px;
     color: var(--alpha-50, rgba(255, 255, 255, 0.5));
-    font-size: 14px;
+    font-size: 18px;
   }
 
   .loading-state :global(.spinner),
@@ -653,7 +653,7 @@
   }
 
   .card-title {
-    font-size: 13px;
+    font-size: 17px;
     font-weight: 600;
     color: var(--text-primary, white);
     white-space: nowrap;
@@ -662,7 +662,7 @@
   }
 
   .card-subtitle {
-    font-size: 11px;
+    font-size: 15px;
     color: var(--alpha-50, rgba(255, 255, 255, 0.5));
   }
 
@@ -743,7 +743,7 @@
   }
 
   .section-title {
-    font-size: 12px;
+    font-size: 16px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -820,7 +820,7 @@
   }
 
   .track-title {
-    font-size: 13px;
+    font-size: 17px;
     font-weight: 500;
     color: var(--text-primary, white);
     white-space: nowrap;
@@ -829,7 +829,7 @@
   }
 
   .track-artist {
-    font-size: 12px;
+    font-size: 16px;
     color: var(--alpha-60, rgba(255, 255, 255, 0.6));
     white-space: nowrap;
     overflow: hidden;
@@ -837,7 +837,7 @@
   }
 
   .track-duration {
-    font-size: 12px;
+    font-size: 16px;
     font-family: var(--font-sans);
     color: var(--alpha-50, rgba(255, 255, 255, 0.5));
     flex-shrink: 0;
@@ -848,7 +848,7 @@
     background: rgba(239, 68, 68, 0.1);
     border-radius: 8px;
     color: #ef4444;
-    font-size: 13px;
+    font-size: 17px;
     text-align: center;
   }
 
@@ -935,7 +935,7 @@
     border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 8px;
     padding: 10px 12px;
-    font-size: 12px;
+    font-size: 16px;
     line-height: 1.4;
     color: rgba(255, 255, 255, 0.85);
     max-width: 220px;

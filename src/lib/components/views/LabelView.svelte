@@ -823,7 +823,7 @@
             <h2 class="section-title">{$t('label.popularTracks')}</h2>
           </div>
           <div class="section-header-actions">
-            <button class="action-btn-circle primary" onclick={handlePlayAllTracks} title="Play All">
+            <button class="action-btn-circle primary" onclick={handlePlayAllTracks} title={ $t('actions.playAll') }>
               <Play size={20} fill="currentColor" color="currentColor" />
             </button>
             <button

@@ -27,6 +27,7 @@ qbz-integrations = { path = "../crates/qbz-integrations" }
 qbz-cache = { path = "../crates/qbz-cache" }
 qbz-library = { path = "../crates/qbz-library" }
 qbz-cast = { path = "../crates/qbz-cast" }
+qbz-cmaf = { path = "../crates/qbz-cmaf" }
 qconnect-app = { path = "../crates/qconnect-app" }
 qconnect-core = { path = "../crates/qconnect-core" }
 qconnect-transport-ws = { path = "../crates/qconnect-transport-ws" }
@@ -34,6 +35,7 @@ qconnect-transport-ws = { path = "../crates/qconnect-transport-ws" }
 # Tauri
 tauri = { version = "2", features = ["protocol-asset", "tray-icon", "macos-private-api"] }
 tauri-plugin-opener = "2"
+tauri-plugin-os = "2"
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 tauri-plugin-deep-link = "2"
 
@@ -115,7 +117,7 @@ open = "5"
 walkdir = "2"
 lofty = "0.23"
 rusqlite = { version = "0.31", features = ["bundled"] }
-dirs = "5"
+dirs = "6"
 filetime = "0.2"
 glob = "0.3"
 uuid = { version = "1", features = ["v4"] }
@@ -128,8 +130,8 @@ urlencoding = "2"
 # Environment variables
 dotenvy = "0.15"
 
-# Secure credential storage (system keyring)
-keyring = "3"
+# Secure credential storage (system keyring: GNOME Keyring, KDE Wallet, macOS Keychain)
+keyring = { version = "3", features = ["async-secret-service", "crypto-rust"] }
 
 # Clipboard
 tauri-plugin-clipboard-manager = "2"
@@ -145,9 +147,6 @@ futures-util = "0.3"
 tauri-plugin-dialog = { version = "2.6.0" }
 ashpd = { version = "0.13", default-features = false, features = ["tokio", "notification", "inhibit"] }
 mupdf = { version = "0.6", features = ["sys-lib-zlib", "sys-lib-harfbuzz", "sys-lib-freetype"] }
-
-# Direct ALSA access for bit-perfect playback (bypasses CPAL limitations)
-alsa = "0.9"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 tauri-plugin-dialog = { version = "2.6.0" }

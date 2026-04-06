@@ -13,5 +13,5 @@ log = "0.4"
 serde = { version = "1", features = ["derive"] }
 
 # File system utilities
-dirs = "5"
+dirs = "6"
 filetime = "0.2"

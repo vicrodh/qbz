@@ -154,6 +154,7 @@
   import { loadAlbumFavorites } from '$lib/stores/albumFavoritesStore';
   import { loadArtistFavorites } from '$lib/stores/artistFavoritesStore';
   import { getDefaultFavoritesTab } from '$lib/utils/favorites';
+  import { platform } from '$lib/utils/platform';
   import type { FavoritesPreferences, ResolvedMusician } from '$lib/types';
 
   // Navigation state management
@@ -220,6 +221,7 @@
     clearQueue,
     playQueueIndex,
     nextTrack,
+    nextTrackGuarded,
     previousTrack,
     moveQueueTrack,
     setLocalTrackIds,
@@ -479,7 +481,6 @@
   // Title Bar State (from titleBarStore subscription)
   let showTitleBar = $state(shouldShowTitleBar());
   let showWindowControls = $state(getShowWindowControls());
-  const isMacOS = typeof document !== 'undefined' && document.documentElement.classList.contains('macos');
 
   // Search Bar Location State
   let searchBarLocationPref = $state(getSearchBarLocation());
@@ -4369,7 +4370,7 @@
         return;
       }
       const previousTrackId = currentTrack?.id ?? null;
-      const nextTrackResult = await nextTrack();
+      const nextTrackResult = await nextTrackGuarded();
       if (nextTrackResult) {
         // Defensive fallback for issue #80:
         // if backend returns same track on auto-advance while repeat-one is off,
@@ -4383,7 +4384,7 @@
             '[Player] Auto-advance returned same track id, forcing one extra nextTrack()',
             previousTrackId
           );
-          const forcedNext = await nextTrack();
+          const forcedNext = await nextTrackGuarded();
           if (forcedNext && forcedNext.id !== previousTrackId) {
             await playQueueTrack(forcedNext);
             return;
@@ -4496,7 +4497,7 @@
       if (qconnectSuppressLocalPlaybackAutomation) return;
       console.log('[Gapless] Handling transition to track', trackId);
       // Advance the queue to match backend state
-      const advanced = await nextTrack();
+      const advanced = await nextTrackGuarded();
       if (advanced && advanced.id === trackId) {
         // Queue advanced successfully — update UI metadata
         await playQueueTrack(advanced, undefined, true);
@@ -4883,7 +4884,7 @@
 {:else}
   <div class="app" class:no-titlebar={!showTitleBar} class:floating={isWindowFloating}>
     <!-- macOS: drag region for window movement (overlay title bar has no native drag area) -->
-    {#if !showTitleBar && isMacOS}
+    {#if !showTitleBar && platform === 'macos'}
       <div class="macos-drag-region" data-tauri-drag-region></div>
     {/if}
     <!-- Custom Title Bar (CSD) -->

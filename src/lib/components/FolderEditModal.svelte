@@ -149,18 +149,18 @@
   <div class="folder-modal-content">
     <!-- Name input -->
     <div class="modal-section">
-      <h3>Name</h3>
+      <h3>{$t('library.folderName')}</h3>
       <input
         type="text"
         class="folder-name-input"
         bind:value={folderName}
-        placeholder="Enter folder name"
+        placeholder={$t('placeholders.enterFolderName')}
       />
     </div>
 
     <!-- Icon Section -->
     <div class="modal-section">
-      <h3>Icon</h3>
+      <h3>{$t('favorites.iconSectionTitle')}</h3>
 
       <div class="icon-grid">
         {#each presetIcons as preset}
@@ -179,7 +179,7 @@
       <div class="custom-upload">
         <button class="upload-btn" onclick={handleUploadClick}>
           <Upload size={16} />
-          <span>Upload Custom Image</span>
+          <span>{$t('favorites.uploadCustomImage')}</span>
         </button>
         {#if useCustomImage && customIconPath}
           <span class="upload-filename">{customIconPath.split('/').pop()}</span>
@@ -189,7 +189,7 @@
 
     <!-- Background Section -->
     <div class="modal-section">
-      <h3>Background</h3>
+      <h3>{$t('library.background')}</h3>
 
       <div class="color-section">
         <div class="color-grid">
@@ -251,15 +251,15 @@
   <div class="modal-actions">
     {#if folder && onDelete}
       <button class="btn btn-danger" onclick={handleDelete} disabled={saving}>
-        Delete Folder
+        {$t('actions.delete')}
       </button>
     {/if}
     <div class="modal-actions-right">
       <button class="btn btn-secondary" onclick={handleCancel} disabled={saving}>
-        Cancel
+        {$t('actions.cancel')}
       </button>
       <button class="btn btn-primary" onclick={handleSave} disabled={saving || !folderName.trim()}>
-        {saving ? 'Saving...' : folder ? 'Save' : 'Create'}
+        {saving ? $t('actions.saving') : folder ? $t('actions.save') : $t('actions.create')}
       </button>
     </div>
   </div>

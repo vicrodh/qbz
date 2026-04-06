@@ -88,7 +88,7 @@
     <!-- Now Playing -->
     {#if currentTrack}
       <div class="section">
-        <div class="section-label">{$t('player.nowPlaying') || 'Now Playing'}</div>
+        <div class="section-label">{$t('player.nowPlaying')}</div>
         <div class="track-item current">
           <img use:cachedSrc={currentTrack.artwork} alt="" class="track-artwork" />
           <div class="track-info">
@@ -102,7 +102,7 @@
 
     <!-- Up Next -->
     <div class="section list-section">
-      <div class="section-label">{$t('player.upNext') || 'Up Next'}</div>
+      <div class="section-label">{$t('player.upNext')}</div>
 
       {#if hasUpcoming}
         <div class="tracks-list">
@@ -112,7 +112,7 @@
               <button
                 class="play-btn"
                 onclick={() => onPlayTrack(actualIndex)}
-                title={$t('actions.playNow') || 'Play now'}
+                title={$t('actions.playNow')}
               >
                 <Play size={14} />
               </button>
@@ -127,7 +127,7 @@
         </div>
       {:else}
         <div class="empty-state">
-          <span>{$t('player.queueEmpty') || 'Queue is empty'}</span>
+          <span>{$t('player.queueEmpty')}</span>
         </div>
       {/if}
     </div>
@@ -141,7 +141,7 @@
               <button
                 class="play-btn"
                 onclick={() => onPlayHistoryTrack?.(String(track.id))}
-                title={$t('actions.playNow') || 'Play now'}
+                title={$t('actions.playNow')}
               >
                 <Play size={14} />
               </button>
@@ -156,7 +156,7 @@
         </div>
       {:else}
         <div class="empty-state">
-          <span>{$t('player.noHistoryYet') || 'No history yet'}</span>
+          <span>{$t('player.noHistoryYet')}</span>
         </div>
       {/if}
     </div>
@@ -204,7 +204,7 @@
     border: none;
     border-radius: 6px;
     color: var(--alpha-60, rgba(255, 255, 255, 0.6));
-    font-size: 13px;
+    font-size: 17px;
     font-weight: 500;
     cursor: pointer;
     transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
@@ -221,7 +221,7 @@
   }
 
   .sub-tab .count {
-    font-size: 11px;
+    font-size: 15px;
     color: var(--alpha-40, rgba(255, 255, 255, 0.4));
   }
 
@@ -235,7 +235,7 @@
     border: none;
     border-radius: 6px;
     color: var(--alpha-70, rgba(255, 255, 255, 0.7));
-    font-size: 12px;
+    font-size: 16px;
     cursor: pointer;
     transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
@@ -262,7 +262,7 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    font-size: 11px;
+    font-size: 15px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -351,7 +351,7 @@
   }
 
   .track-title {
-    font-size: 13px;
+    font-size: 17px;
     font-weight: 500;
     color: var(--text-primary, white);
     white-space: nowrap;
@@ -360,7 +360,7 @@
   }
 
   .track-artist {
-    font-size: 12px;
+    font-size: 16px;
     color: var(--alpha-60, rgba(255, 255, 255, 0.6));
     white-space: nowrap;
     overflow: hidden;
@@ -369,7 +369,7 @@
   }
 
   .track-duration {
-    font-size: 12px;
+    font-size: 16px;
     font-family: var(--font-sans);
     color: var(--alpha-50, rgba(255, 255, 255, 0.5));
     flex-shrink: 0;
@@ -381,7 +381,7 @@
     justify-content: center;
     height: 120px;
     color: var(--alpha-40, rgba(255, 255, 255, 0.4));
-    font-size: 14px;
+    font-size: 18px;
     font-style: italic;
   }
 </style>

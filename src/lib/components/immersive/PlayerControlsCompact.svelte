@@ -199,7 +199,7 @@
           class="control-btn"
           class:active={isFavorite}
           onclick={onToggleFavorite}
-          title={isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}
+          title={isFavorite ? $t('actions.removeFromFavorites') : $t('actions.addToFavorites')}
         >
           <Heart size={12} fill={isFavorite ? 'currentColor' : 'none'} />
         </button>
@@ -207,7 +207,7 @@
           class="control-btn"
           class:active={isShuffle}
           onclick={onToggleShuffle}
-          title="Shuffle"
+          title={$t('player.shuffle')}
         >
           <Shuffle size={12} />
         </button>
@@ -215,7 +215,7 @@
           class="control-btn"
           class:active={repeatMode !== 'off'}
           onclick={onToggleRepeat}
-          title={repeatMode === 'off' ? 'Repeat' : repeatMode === 'all' ? 'Repeat All' : 'Repeat One'}
+          title={repeatMode === 'off' ? $t('player.repeat') : repeatMode === 'all' ? $t('player.repeatAll') : $t('player.repeatOne')}
         >
           <Repeat size={12} />
           {#if repeatMode === 'one'}
@@ -226,7 +226,7 @@
           class="control-btn"
           class:active={isInfinitePlay}
           onclick={onToggleInfinitePlay}
-          title={isInfinitePlay ? 'Disable Infinite Play' : 'Enable Infinite Play'}
+          title={isInfinitePlay ? $t('player.disableInfinitePlay') : $t('player.enableInfinitePlay')}
         >
           <Infinity size={12} />
         </button>
@@ -240,7 +240,7 @@
           class="control-btn nav"
           onclick={onSkipBack}
           disabled={!onSkipBack}
-          title="Previous"
+          title={$t('player.previous')}
         >
           <SkipBack size={14} fill="currentColor" />
         </button>
@@ -248,7 +248,7 @@
         <button
           class="control-btn play-btn"
           onclick={onTogglePlay}
-          title={isPlaying ? 'Pause' : 'Play'}
+          title={isPlaying ? $t('player.pause') : $t('player.play')}
         >
           {#if isPlaying}
             <Pause size={20} fill="currentColor" />
@@ -261,7 +261,7 @@
           class="control-btn nav"
           onclick={onSkipForward}
           disabled={!onSkipForward}
-          title="Next"
+          title={$t('player.next')}
         >
           <SkipForward size={14} fill="currentColor" />
         </button>
@@ -275,7 +275,7 @@
           <button
             class="control-btn"
             onclick={onToggleMute}
-            title={volume === 0 ? 'Unmute' : 'Mute'}
+            title={volume === 0 ? $t('player.unmute') : $t('player.mute')}
           >
             {#if volume === 0}
               <VolumeX size={12} />

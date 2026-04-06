@@ -510,8 +510,19 @@ fn get_oauth_token_path() -> Option<PathBuf> {
     dirs::config_dir().map(|p| p.join("qbz").join(OAUTH_TOKEN_FILE_NAME))
 }
 
-/// Persist the OAuth `user_auth_token` to an AES-256-GCM encrypted file.
+const OAUTH_TOKEN_KEY: &str = "qobuz-oauth-token";
+
+/// Persist the OAuth `user_auth_token` to keyring (primary) and encrypted file (fallback).
 pub fn save_oauth_token(token: &str) -> Result<(), String> {
+    // Try keyring first
+    if let Ok(entry) = Entry::new(SERVICE_NAME, OAUTH_TOKEN_KEY) {
+        match entry.set_password(token) {
+            Ok(()) => log::info!("[Credentials] OAuth token saved to system keyring"),
+            Err(e) => log::debug!("[Credentials] Keyring save failed (not critical): {}", e),
+        }
+    }
+
+    // Always save encrypted file as fallback
     let path = get_oauth_token_path().ok_or("Could not determine config directory")?;
 
     if let Some(parent) = path.parent() {
@@ -519,8 +530,6 @@ pub fn save_oauth_token(token: &str) -> Result<(), String> {
             .map_err(|e| format!("Failed to create config directory: {}", e))?;
     }
 
-    // Re-use the same encryption machinery: wrap the token as the "email" field
-    // of a throwaway QobuzCredentials so we don't duplicate the crypto code.
     let placeholder = QobuzCredentials {
         email: token.to_string(),
         password: String::new(),
@@ -528,12 +537,31 @@ pub fn save_oauth_token(token: &str) -> Result<(), String> {
     let encrypted = encrypt_credentials(&placeholder)?;
     fs::write(&path, encrypted).map_err(|e| format!("Failed to write OAuth token file: {}", e))?;
 
-    log::info!("[Credentials] OAuth token saved");
+    log::info!("[Credentials] OAuth token saved to encrypted file");
     Ok(())
 }
 
 /// Load a previously saved OAuth `user_auth_token`, or `None` if absent.
+/// Tries system keyring first, falls back to encrypted file.
 pub fn load_oauth_token() -> Result<Option<String>, String> {
+    // Try keyring first
+    if let Ok(entry) = Entry::new(SERVICE_NAME, OAUTH_TOKEN_KEY) {
+        match entry.get_password() {
+            Ok(token) if !token.is_empty() => {
+                log::info!("[Credentials] OAuth token loaded from system keyring");
+                return Ok(Some(token));
+            }
+            Ok(_) => {}
+            Err(keyring::Error::NoEntry) => {
+                log::debug!("[Credentials] No OAuth token in keyring, checking file...");
+            }
+            Err(e) => {
+                log::debug!("[Credentials] Keyring load failed ({}), checking file...", e);
+            }
+        }
+    }
+
+    // Fallback to encrypted file
     let path = match get_oauth_token_path() {
         Some(p) => p,
         None => return Ok(None),
@@ -548,7 +576,13 @@ pub fn load_oauth_token() -> Result<Option<String>, String> {
 
     match decrypt_credentials(&content) {
         Ok(placeholder) => {
-            log::info!("[Credentials] OAuth token loaded");
+            log::info!("[Credentials] OAuth token loaded from encrypted file");
+            // Migrate to keyring for next time
+            if let Ok(entry) = Entry::new(SERVICE_NAME, OAUTH_TOKEN_KEY) {
+                if entry.set_password(&placeholder.email).is_ok() {
+                    log::info!("[Credentials] OAuth token migrated to system keyring");
+                }
+            }
             Ok(Some(placeholder.email))
         }
         Err(e) => {
@@ -560,11 +594,21 @@ pub fn load_oauth_token() -> Result<Option<String>, String> {
 
 /// Delete the stored OAuth token (called on logout or token expiry).
 pub fn clear_oauth_token() -> Result<(), String> {
+    // Clear from keyring
+    if let Ok(entry) = Entry::new(SERVICE_NAME, OAUTH_TOKEN_KEY) {
+        match entry.delete_credential() {
+            Ok(()) => log::info!("[Credentials] OAuth token cleared from keyring"),
+            Err(keyring::Error::NoEntry) => {}
+            Err(e) => log::debug!("[Credentials] Keyring clear failed: {}", e),
+        }
+    }
+
+    // Clear encrypted file
     if let Some(path) = get_oauth_token_path() {
         if path.exists() {
             fs::remove_file(&path)
                 .map_err(|e| format!("Failed to remove OAuth token file: {}", e))?;
-            log::info!("[Credentials] OAuth token cleared");
+            log::info!("[Credentials] OAuth token file cleared");
         }
     }
     Ok(())

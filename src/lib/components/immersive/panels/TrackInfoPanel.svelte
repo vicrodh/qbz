@@ -35,7 +35,7 @@
       parts.push(`${track.maximum_sampling_rate}kHz`);
     }
     if (parts.length === 0) {
-      return track.hires_streamable ? 'Hi-Res' : 'Lossless';
+      return track.hires_streamable ? $t('quality.hiRes') : $t('quality.lossless');
     }
     return parts.join(' / ');
   }
@@ -143,12 +143,12 @@
     </div>
   {:else if error}
     <div class="error-state">
-      <span>{$t('errors.failedToLoad') || 'Failed to load'}</span>
+      <span>{$t('errors.failedToLoad')}</span>
     </div>
   {:else if !trackId}
     <div class="empty-state">
       <Music2 size={32} strokeWidth={1.5} />
-      <span>{$t('player.noTrackSelected') || 'No track selected'}</span>
+      <span>{$t('player.noTrackSelected')}</span>
     </div>
   {:else if trackInfo}
     <div class="info-content">
@@ -164,13 +164,13 @@
       <div class="metadata-section">
         <div class="metadata-item">
           <Clock size={14} />
-          <span class="metadata-label">{$t('track.duration') || 'Duration'}</span>
+          <span class="metadata-label">{$t('tracklist.duration')}</span>
           <span class="metadata-value">{formatDuration(trackInfo.track.duration)}</span>
         </div>
 
         <div class="metadata-item">
           <Music2 size={14} />
-          <span class="metadata-label">{$t('track.quality') || 'Quality'}</span>
+          <span class="metadata-label">{$t('tracklist.quality')}</span>
           <span class="metadata-value">{formatQuality(trackInfo.track)}</span>
         </div>
 
@@ -185,7 +185,7 @@
         {#if trackInfo.track.album?.label}
           <div class="metadata-item">
             <Building2 size={14} />
-            <span class="metadata-label">{$t('album.label') || 'Label'}</span>
+            <span class="metadata-label">{$t('album.label')}</span>
             {#if onLabelClick}
               <button
                 class="metadata-link"
@@ -203,7 +203,7 @@
       <!-- Credits Section -->
       {#if groupedCredits.length > 0}
         <div class="credits-section">
-          <h3 class="section-title">{$t('player.credits') || 'Credits'}</h3>
+          <h3 class="section-title">{$t('player.credits')}</h3>
           <div class="credits-list">
             {#each groupedCredits as { role, names }}
               <div class="credit-item">
@@ -253,7 +253,7 @@
     height: 100%;
     min-height: 200px;
     color: var(--alpha-50, rgba(255, 255, 255, 0.5));
-    font-size: 14px;
+    font-size: 18px;
   }
 
   .loading-state :global(.spinner) {
@@ -290,7 +290,7 @@
   }
 
   .track-title {
-    font-size: 20px;
+    font-size: 24px;
     font-weight: 700;
     color: var(--text-primary, white);
     margin: 0 0 6px 0;
@@ -298,7 +298,7 @@
   }
 
   .album-title {
-    font-size: 14px;
+    font-size: 18px;
     color: var(--alpha-60, rgba(255, 255, 255, 0.6));
     margin: 0;
   }
@@ -321,25 +321,25 @@
   }
 
   .metadata-label {
-    font-size: 12px;
+    font-size: 16px;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     min-width: 70px;
   }
 
   .metadata-value {
-    font-size: 14px;
+    font-size: 18px;
     color: var(--text-primary, white);
   }
 
   .metadata-value.mono {
     font-family: var(--font-sans);
-    font-size: 12px;
+    font-size: 16px;
     color: var(--alpha-70, rgba(255, 255, 255, 0.7));
   }
 
   .metadata-link {
-    font-size: 14px;
+    font-size: 18px;
     color: var(--accent-primary, #7c3aed);
     background: none;
     border: none;
@@ -361,7 +361,7 @@
   }
 
   .section-title {
-    font-size: 12px;
+    font-size: 16px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -382,7 +382,7 @@
   }
 
   .credit-role {
-    font-size: 11px;
+    font-size: 15px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -390,7 +390,7 @@
   }
 
   .credit-names {
-    font-size: 14px;
+    font-size: 18px;
     color: var(--text-primary, white);
     line-height: 1.4;
   }
@@ -401,7 +401,7 @@
   }
 
   .copyright {
-    font-size: 11px;
+    font-size: 15px;
     color: var(--alpha-40, rgba(255, 255, 255, 0.4));
     margin: 0;
     line-height: 1.5;

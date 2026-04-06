@@ -104,9 +104,11 @@ pub use types::{
     ReleasesGridResponse,
     SearchResults,
     SearchResultsPage,
+    SessionStartResponse,
     StreamRestriction,
     StreamUrl,
     Track,
+    TrackFileUrl,
     TracksContainer,
     UserSession,
 };

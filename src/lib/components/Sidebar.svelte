@@ -2030,7 +2030,7 @@
       </div>
     {:else}
       <div class="folder-popover-empty">
-        No playlists
+        { $t('empty.noPlaylists') }
       </div>
     {/if}
   </div>

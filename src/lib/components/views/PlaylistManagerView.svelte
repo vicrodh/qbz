@@ -1248,7 +1248,7 @@
                   class="reorder-btn"
                   onclick={(e) => { e.stopPropagation(); movePlaylistUp(playlist.id); }}
                   disabled={playlistIndex === 0}
-                  title="Move up"
+                  title={ $t('favorites.moveUp') }
                 >
                   <ChevronUp size={14} />
                 </button>
@@ -1259,7 +1259,7 @@
                   class="reorder-btn"
                   onclick={(e) => { e.stopPropagation(); movePlaylistDown(playlist.id); }}
                   disabled={playlistIndex === displayPlaylists.length - 1}
-                  title="Move down"
+                  title={ $t('favorites.moveDown') }
                 >
                   <ChevronDown size={14} />
                 </button>
@@ -1321,7 +1321,7 @@
                 <button
                   class="edit-btn"
                   onclick={(e) => { e.stopPropagation(); openEditModal(playlist); }}
-                  title={$t('playlist.editPlaylist')}
+                  title={ $t('playlist.editPlaylist') }
                 >
                   <Pencil size={12} />
                 </button>
@@ -1564,7 +1564,7 @@
             </span>
           {/if}
           {#if stats && stats.play_count > 0}
-            <span class="play-count-badge" title="Play count">
+            <span class="play-count-badge" title={ $t('playlist.playCount') }>
               <ChartNoAxesColumn size={12} />
               {stats.play_count}
             </span>

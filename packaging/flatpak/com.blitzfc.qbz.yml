@@ -28,6 +28,9 @@ finish-args:
   - --talk-name=org.freedesktop.Notifications
   - --talk-name=org.kde.StatusNotifierWatcher
 
+  # System keyring (GNOME Keyring, KDE Wallet) for credential storage
+  - --talk-name=org.freedesktop.secrets
+
   # MPRIS media controls (own-name auto-granted: name contains appid)
   - --talk-name=org.mpris.MediaPlayer2.*
 

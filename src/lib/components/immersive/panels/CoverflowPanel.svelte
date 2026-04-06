@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from 'svelte-i18n';
   import QualityBadge from '$lib/components/QualityBadge.svelte';
   import { cachedSrc } from '$lib/actions/cachedImage';
 
@@ -78,33 +79,6 @@
     return items;
   });
 
-  // Track previous index for animation direction
-  let previousIndex = $state(-1);
-  let animationDirection = $state<'left' | 'right' | null>(null);
-  let animationTimeout: ReturnType<typeof setTimeout> | null = null;
-
-  $effect(() => {
-    if (previousIndex === -1) {
-      // First run: initialize without animating
-      previousIndex = queueCurrentIndex;
-      return;
-    }
-    if (queueCurrentIndex !== previousIndex) {
-      animationDirection = queueCurrentIndex > previousIndex ? 'left' : 'right';
-      previousIndex = queueCurrentIndex;
-
-      if (animationTimeout) clearTimeout(animationTimeout);
-      animationTimeout = setTimeout(() => {
-        animationDirection = null;
-        animationTimeout = null;
-      }, 500);
-
-      return () => {
-        if (animationTimeout) { clearTimeout(animationTimeout); animationTimeout = null; }
-      };
-    }
-  });
-
   function handleCoverClick(index: number) {
     if (index !== queueCurrentIndex && onNavigate) {
       onNavigate(index);
@@ -113,7 +87,7 @@
 </script>
 
 <div class="coverflow-panel">
-  <div class="coverflow-container" class:animate-left={animationDirection === 'left'} class:animate-right={animationDirection === 'right'}>
+  <div class="coverflow-container">
     {#each coverflowItems as item (item.index)}
       <button
         class="coverflow-item"
@@ -143,13 +117,13 @@
           <span class="bar"></span>
           <span class="bar"></span>
         </div>
-        <span>Now Playing</span>
+        <span>{$t('player.nowPlaying')}</span>
       </div>
     {/if}
     <div class="track-title-row">
       <h1 class="track-title">{trackTitle}</h1>
       {#if explicit}
-        <span class="explicit-badge" title="Explicit"></span>
+        <span class="explicit-badge" title="{ $t('library.explicit') }"></span>
       {/if}
     </div>
     <p class="track-artist">{artist}</p>
@@ -176,7 +150,6 @@
     padding-left: 40px;
     padding-right: 40px;
     z-index: 5;
-    perspective: 1000px;
   }
 
   .coverflow-container {
@@ -185,10 +158,9 @@
     align-items: center;
     justify-content: center;
     width: 100%;
-    max-width: 900px;
-    height: min(45vh, 360px);
-    perspective: 1200px;
-    transform-style: preserve-3d;
+    max-width: 1200px;
+    height: min(55vh, 480px);
+    perspective: 1400px;
   }
 
   .coverflow-item {
@@ -198,7 +170,6 @@
     padding: 0;
     cursor: pointer;
     transition: transform 500ms cubic-bezier(0.4, 0, 0.2, 1), opacity 500ms cubic-bezier(0.4, 0, 0.2, 1);
-    transform-style: preserve-3d;
   }
 
   .coverflow-item:disabled {
@@ -211,8 +182,8 @@
 
   .cover-wrapper {
     position: relative;
-    width: min(38vh, 300px);
-    height: min(38vh, 300px);
+    width: min(42vh, 380px);
+    height: min(42vh, 380px);
     border-radius: 8px;
     overflow: visible;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
@@ -250,65 +221,48 @@
 
   /* Center item */
   .coverflow-item.center {
-    z-index: 5;
-    transform: translateX(0) rotateY(0deg) scale(1);
+    z-index: 10;
+    transform: translateX(0) scale(1);
   }
 
   .coverflow-item.center .cover-wrapper {
-    width: min(45vh, 360px);
-    height: min(45vh, 360px);
-    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3);
+    width: min(52vh, 460px);
+    height: min(52vh, 460px);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   }
 
-  /* Left items */
+  /* Left items — z-index < center so they render behind it */
   .coverflow-item.left-1 {
     z-index: 4;
-    transform: translateX(-180px) rotateY(45deg) scale(0.85);
-    --hover-x: -170px;
+    transform: translateX(-200px) rotateY(45deg) scale(0.82);
+    --hover-x: -190px;
     --hover-rotate: 40deg;
-    opacity: 0.9;
+    opacity: 0.85;
   }
 
   .coverflow-item.left-2 {
     z-index: 3;
-    transform: translateX(-300px) rotateY(55deg) scale(0.7);
-    --hover-x: -290px;
+    transform: translateX(-340px) rotateY(55deg) scale(0.65);
+    --hover-x: -330px;
     --hover-rotate: 50deg;
-    opacity: 0.6;
+    opacity: 0.55;
   }
 
-  /* Right items */
+  /* Right items — mirror of left */
   .coverflow-item.right-1 {
     z-index: 4;
-    transform: translateX(180px) rotateY(-45deg) scale(0.85);
-    --hover-x: 170px;
+    transform: translateX(200px) rotateY(-45deg) scale(0.82);
+    --hover-x: 190px;
     --hover-rotate: -40deg;
-    opacity: 0.9;
+    opacity: 0.85;
   }
 
   .coverflow-item.right-2 {
     z-index: 3;
-    transform: translateX(300px) rotateY(-55deg) scale(0.7);
-    --hover-x: 290px;
+    transform: translateX(340px) rotateY(-55deg) scale(0.65);
+    --hover-x: 330px;
     --hover-rotate: -50deg;
-    opacity: 0.6;
-  }
-
-  /* Animation classes */
-  .coverflow-container.animate-left .coverflow-item {
-    animation: slideLeft 500ms cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  .coverflow-container.animate-right .coverflow-item {
-    animation: slideRight 500ms cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  @keyframes slideLeft {
-    0% { transform: translateX(calc(var(--translate-x, 0px) + 100px)); }
-  }
-
-  @keyframes slideRight {
-    0% { transform: translateX(calc(var(--translate-x, 0px) - 100px)); }
+    opacity: 0.55;
   }
 
   /* Track info */
@@ -403,46 +357,46 @@
   }
 
   /* Responsive */
-  @media (max-width: 900px) {
+  @media (max-width: 1100px) {
     .coverflow-item.left-1 {
-      transform: translateX(-140px) rotateY(45deg) scale(0.8);
-      --hover-x: -130px;
+      transform: translateX(-160px) rotateY(45deg) scale(0.78);
+      --hover-x: -150px;
     }
 
     .coverflow-item.left-2 {
-      transform: translateX(-230px) rotateY(55deg) scale(0.65);
-      --hover-x: -220px;
+      transform: translateX(-270px) rotateY(55deg) scale(0.6);
+      --hover-x: -260px;
     }
 
     .coverflow-item.right-1 {
-      transform: translateX(140px) rotateY(-45deg) scale(0.8);
-      --hover-x: 130px;
+      transform: translateX(160px) rotateY(-45deg) scale(0.78);
+      --hover-x: 150px;
     }
 
     .coverflow-item.right-2 {
-      transform: translateX(230px) rotateY(-55deg) scale(0.65);
-      --hover-x: 220px;
+      transform: translateX(270px) rotateY(-55deg) scale(0.6);
+      --hover-x: 260px;
     }
   }
 
   @media (max-width: 768px) {
     .coverflow-panel {
-      padding: 70px 16px 130px;
+      padding: 60px 16px 100px;
       gap: 16px;
     }
 
     .cover-wrapper {
-      width: min(30vh, 200px);
-      height: min(30vh, 200px);
+      width: min(32vh, 240px);
+      height: min(32vh, 240px);
     }
 
     .coverflow-item.center .cover-wrapper {
-      width: min(38vh, 260px);
-      height: min(38vh, 260px);
+      width: min(42vh, 320px);
+      height: min(42vh, 320px);
     }
 
     .coverflow-item.left-1 {
-      transform: translateX(-100px) rotateY(45deg) scale(0.75);
+      transform: translateX(-120px) rotateY(45deg) scale(0.72);
     }
 
     .coverflow-item.left-2 {
@@ -450,7 +404,7 @@
     }
 
     .coverflow-item.right-1 {
-      transform: translateX(100px) rotateY(-45deg) scale(0.75);
+      transform: translateX(120px) rotateY(-45deg) scale(0.72);
     }
 
     .coverflow-item.right-2 {
@@ -460,13 +414,13 @@
 
   @media (max-height: 600px) {
     .cover-wrapper {
-      width: min(28vh, 180px);
-      height: min(28vh, 180px);
+      width: min(30vh, 200px);
+      height: min(30vh, 200px);
     }
 
     .coverflow-item.center .cover-wrapper {
-      width: min(32vh, 220px);
-      height: min(32vh, 220px);
+      width: min(38vh, 280px);
+      height: min(38vh, 280px);
     }
 
     .track-info {

@@ -26,6 +26,44 @@ function getStreamingQuality(): string {
   if (typeof localStorage === 'undefined') return 'Hi-Res+';
   return getUserItem('qbz-streaming-quality') || 'Hi-Res+';
 }
+
+/** Quality tier ordering for min() comparison */
+const QUALITY_RANK: Record<string, number> = {
+  'MP3': 0,
+  'CD Quality': 1,
+  'Hi-Res': 2,
+  'Hi-Res+': 3,
+};
+
+/**
+ * Determine the optimal quality for a track: the minimum of what the track
+ * offers and what the user's max setting allows. Avoids requesting UltraHiRes
+ * for a 44.1kHz/24bit track (which would cascade through API quality fallbacks).
+ */
+function effectiveQuality(track: PlayingTrack): string {
+  const userMax = getStreamingQuality();
+
+  // If no track metadata, use user preference
+  if (!track.bitDepth && !track.samplingRate) return userMax;
+
+  // Determine what the track actually offers
+  let trackQuality: string;
+  const bd = track.bitDepth ?? 16;
+  const sr = track.samplingRate ?? 44.1; // kHz
+
+  if (bd >= 24 && sr > 96) {
+    trackQuality = 'Hi-Res+';
+  } else if (bd >= 24) {
+    trackQuality = 'Hi-Res';
+  } else {
+    trackQuality = 'CD Quality';
+  }
+
+  // Return the lower of user max and track max
+  const userRank = QUALITY_RANK[userMax] ?? 3;
+  const trackRank = QUALITY_RANK[trackQuality] ?? 3;
+  return userRank <= trackRank ? userMax : trackQuality;
+}
 import {
   setCurrentTrack,
   setIsPlaying,
@@ -214,7 +252,7 @@ export async function playTrack(
         } else {
           const result = await invoke<PlayTrackResult>('v2_play_track', {
             trackId: track.id,
-            quality: getStreamingQuality(),
+            quality: effectiveQuality(track),
             durationSecs: track.duration ? Math.round(track.duration) : null,
             forceLowestQuality: forceLowestQuality || null
           });

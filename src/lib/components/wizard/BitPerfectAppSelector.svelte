@@ -98,7 +98,7 @@
 
   {#if selectedApps.filter(a => !predefinedApps.some(p => p.binary === a)).length > 0}
     <div class="custom-apps">
-      <span class="custom-apps-label">Custom apps:</span>
+      <span class="custom-apps-label">{$t('dacWizard.pulseConfig.customApps')}</span>
       {#each selectedApps.filter(a => !predefinedApps.some(p => p.binary === a)) as app}
         <span class="custom-app-tag">
           {app}

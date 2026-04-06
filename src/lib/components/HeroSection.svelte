@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Play, Ellipsis } from 'lucide-svelte';
+  import { t } from 'svelte-i18n';
 
   interface Props {
     artwork: string;
@@ -29,11 +30,11 @@
         onmouseleave={() => (playBtnHovered = false)}
       >
         <Play size={16} fill="white" color="white" />
-        <span>Play</span>
+        <span>{ $t('actions.play') }</span>
       </button>
       <button class="more-btn">
         <Ellipsis size={16} color="white" />
-        <span>More</span>
+        <span>{ $t('actions.more') }</span>
       </button>
     </div>
   </div>

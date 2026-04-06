@@ -21,7 +21,7 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 
 # Filesystem
 walkdir = "2"
-dirs = "5"
+dirs = "6"
 
 # Audio metadata
 lofty = "0.23"

@@ -7,6 +7,7 @@ description = "Qobuz API client for QBZ"
 
 [dependencies]
 qbz-models = { path = "../qbz-models" }
+qbz-cmaf = { path = "../qbz-cmaf" }
 
 # Async
 tokio = { workspace = true }

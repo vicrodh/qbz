@@ -36,7 +36,7 @@
     </div>
   {:else if error}
     <div class="lyrics-state">
-      <span class="no-lyrics">{$t('player.noLyrics') || 'No lyrics available'}</span>
+      <span class="no-lyrics">{$t('player.noLyrics')}</span>
     </div>
   {:else if hasLyrics}
     <div class="lyrics-container">
@@ -52,7 +52,7 @@
     </div>
   {:else}
     <div class="lyrics-state">
-      <span class="no-lyrics">{$t('player.noLyrics') || 'No lyrics available'}</span>
+      <span class="no-lyrics">{$t('player.noLyrics')}</span>
     </div>
   {/if}
 </div>
@@ -73,15 +73,15 @@
     mask-image: linear-gradient(
       to bottom,
       transparent 0%,
-      black 8%,
-      black 85%,
+      black 5%,
+      black 88%,
       transparent 100%
     );
     -webkit-mask-image: linear-gradient(
       to bottom,
       transparent 0%,
-      black 8%,
-      black 85%,
+      black 5%,
+      black 88%,
       transparent 100%
     );
   }
@@ -93,27 +93,6 @@
     --bg-tertiary: transparent;
     padding: 0;
     height: 100%;
-    /* Firefox - hide scrollbar by default */
-    scrollbar-color: transparent transparent;
-  }
-
-  /* Show scrollbar on hover - Firefox */
-  .lyrics-container:hover :global(.lyrics-lines) {
-    scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
-  }
-
-  /* WebKit - hide scrollbar thumb by default */
-  .lyrics-container :global(.lyrics-lines::-webkit-scrollbar-thumb) {
-    background: transparent !important;
-  }
-
-  /* Show scrollbar on hover - WebKit */
-  .lyrics-container:hover :global(.lyrics-lines::-webkit-scrollbar-thumb) {
-    background: rgba(255, 255, 255, 0.3) !important;
-  }
-
-  .lyrics-container:hover :global(.lyrics-lines::-webkit-scrollbar-thumb:hover) {
-    background: rgba(255, 255, 255, 0.5) !important;
   }
 
   .lyrics-state {

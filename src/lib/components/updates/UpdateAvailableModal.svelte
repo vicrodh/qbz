@@ -1,5 +1,6 @@
 <script lang="ts">
   import Modal from '../Modal.svelte';
+  import { t } from '$lib/i18n';
 
   interface Props {
     isOpen: boolean;
@@ -16,9 +17,9 @@
   }
 </script>
 
-<Modal {isOpen} onClose={onClose} title="New release available" maxWidth="560px">
+<Modal {isOpen} onClose={onClose} title={ $t('updates.newReleaseAvailable') } maxWidth="560px">
   <div class="update-modal">
-    <p class="lead">A new version of QBZ has been released</p>
+    <p class="lead">{$t('updates.newVersionReleased')}</p>
 
     <div class="version-row" aria-label="Version change">
       <span class="version-chip">v{currentVersion}</span>
@@ -27,14 +28,14 @@
     </div>
 
     <button class="download-btn" onclick={handleVisit} type="button">
-      Download on GitHub
+      {$t('actions.downloadOnGitHub')}
     </button>
   </div>
 
   {#snippet footer()}
     <div class="footer-actions">
-      <button class="btn btn-ghost" type="button" onclick={onClose}>Close</button>
-      <button class="btn btn-primary" type="button" onclick={handleVisit}>Visit release page</button>
+      <button class="btn btn-ghost" type="button" onclick={onClose}>{$t('actions.close')}</button>
+      <button class="btn btn-primary" type="button" onclick={handleVisit}>{$t('actions.visitReleasePage')}</button>
     </div>
   {/snippet}
 </Modal>

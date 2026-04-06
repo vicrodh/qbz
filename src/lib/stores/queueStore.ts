@@ -369,10 +369,23 @@ export async function addTracksToQueueNext(tracks: BackendQueueTrack[]): Promise
 }
 
 /**
+ * Queue epoch counter — incremented on every setQueue/clearQueue call.
+ * Used by nextTrackGuarded() to discard stale auto-advance results
+ * that arrive after a context switch (album/playlist change).
+ */
+let queueEpoch = 0;
+
+/** Current queue epoch (read-only for callers). */
+export function getQueueEpoch(): number {
+  return queueEpoch;
+}
+
+/**
  * Set queue with new tracks (V2)
  */
 export async function setQueue(tracks: BackendQueueTrack[], startIndex: number, clearLocal = true): Promise<boolean> {
   try {
+    queueEpoch++;
     await invoke('v2_set_queue', { tracks, startIndex });
     if (clearLocal) {
       localTrackIds = new Set();
@@ -390,6 +403,7 @@ export async function setQueue(tracks: BackendQueueTrack[], startIndex: number, 
  */
 export async function clearQueue(): Promise<boolean> {
   try {
+    queueEpoch++;
     await invoke('v2_clear_queue');
     return true;
   } catch (err) {
@@ -420,6 +434,20 @@ export async function nextTrack(): Promise<BackendQueueTrack | null> {
     console.error('Failed to get next track:', err);
     return null;
   }
+}
+
+/**
+ * Get next track, but discard the result if the queue changed while
+ * the invoke was in-flight (prevents ghost auto-advance after context switch).
+ */
+export async function nextTrackGuarded(): Promise<BackendQueueTrack | null> {
+  const epochBefore = queueEpoch;
+  const result = await nextTrack();
+  if (queueEpoch !== epochBefore) {
+    console.warn('[Queue] Discarding stale next_track result (queue changed during invoke)');
+    return null;
+  }
+  return result;
 }
 
 /**

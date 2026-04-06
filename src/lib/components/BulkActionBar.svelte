@@ -79,11 +79,11 @@
           <div class="queue-dropdown">
             <button class="dropdown-item" onclick={handlePlayNext}>
               <ListPlus size={14} />
-              <span>Play next</span>
+              <span>{$t('actions.playNext')}</span>
             </button>
             <button class="dropdown-item" onclick={handlePlayLater}>
               <ListEnd size={14} />
-              <span>Add to queue</span>
+              <span>{$t('actions.addToQueue')}</span>
             </button>
           </div>
         {/if}
@@ -122,7 +122,7 @@
         </button>
       {/if}
 
-      <button class="clear-btn" onclick={onClearSelection} title="Clear selection">
+      <button class="clear-btn" onclick={onClearSelection} title={ $t('actions.clearSelection') }>
         <X size={16} />
       </button>
     </div>

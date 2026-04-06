@@ -358,7 +358,7 @@
     <div class="suggestions-header">
       <div class="header-left">
         <Sparkles size={18} class="sparkle-icon" />
-        <h3>Suggested songs</h3>
+        <h3>{ $t('playlist.suggestedSongs') }</h3>
       </div>
       <button
         class="refresh-btn"
@@ -374,12 +374,12 @@
     {#if loading && pool.length === 0}
       <div class="loading-state">
         <div class="spinner"></div>
-        <p>Finding similar artists...</p>
+        <p>{ $t('toast.findingSimilarArtists') }</p>
       </div>
     {:else if error}
       <div class="error-state">
         <p>{error}</p>
-        <button onclick={() => loadSuggestions(false)}>Retry</button>
+        <button onclick={() => loadSuggestions(false)}>{ $t('actions.retry') }</button>
       </div>
     {:else}
       <div class="suggestions-list">

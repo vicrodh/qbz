@@ -1,6 +1,7 @@
 <script lang="ts">
   import Modal from '../Modal.svelte';
   import type { UpdateCheckStatus } from '$lib/stores/updatesStore';
+  import { t } from '$lib/i18n';
 
   interface Props {
     isOpen: boolean;
@@ -13,20 +14,20 @@
   let { isOpen, status, newVersion, onClose, onVisitReleasePage }: Props = $props();
 </script>
 
-<Modal {isOpen} onClose={onClose} title="Check for updates" maxWidth="460px">
+<Modal {isOpen} onClose={onClose} title={ $t('updates.checkForUpdates') } maxWidth="460px">
   <div class="result-body">
     {#if status === 'update_available'}
-      <p class="message">New version available: v{newVersion}</p>
+      <p class="message">{$t('updates.newVersionAvailable', { values: { version: newVersion } })}</p>
     {:else}
-      <p class="message">No updates found.</p>
+      <p class="message">{$t('updates.noUpdatesFound')}</p>
     {/if}
   </div>
 
   {#snippet footer()}
     <div class="footer-actions">
-      <button class="btn btn-ghost" type="button" onclick={onClose}>Close</button>
+      <button class="btn btn-ghost" type="button" onclick={onClose}>{$t('actions.close')}</button>
       {#if status === 'update_available'}
-        <button class="btn btn-primary" type="button" onclick={onVisitReleasePage}>Visit release page</button>
+        <button class="btn btn-primary" type="button" onclick={onVisitReleasePage}>{$t('actions.visitReleasePage')}</button>
       {/if}
     </div>
   {/snippet}

@@ -7,24 +7,47 @@ use tauri::{AppHandle, Emitter};
 
 use super::{CacheProgress, OfflineCacheStatus};
 
-/// StreamFetcher handles fetching audio streams and caching them to disk
-pub struct StreamFetcher {
-    client: reqwest::Client,
-}
+/// Maximum number of download retry attempts
+const MAX_RETRIES: u32 = 3;
+
+/// Backoff durations for each retry attempt
+const RETRY_BACKOFFS: [Duration; 3] = [
+    Duration::from_secs(1),
+    Duration::from_secs(3),
+    Duration::from_secs(5),
+];
+
+/// StreamFetcher handles fetching audio streams and caching them to disk.
+///
+/// Creates a fresh HTTP client per download to avoid HTTP/2 connection pool
+/// poisoning: when a CDN connection breaks mid-transfer, a persistent client's
+/// pool can keep reusing the dead connection, causing all subsequent downloads
+/// to fail after 1 byte. Ephemeral clients guarantee a clean connection pool.
+pub struct StreamFetcher;
 
 impl StreamFetcher {
     pub fn new() -> Self {
-        let client = reqwest::Client::builder()
+        Self
+    }
+
+    /// Build a fresh reqwest::Client for a single download.
+    ///
+    /// Each download gets its own client to prevent HTTP/2 connection pool
+    /// poisoning from affecting subsequent downloads.
+    fn build_client() -> Result<reqwest::Client, String> {
+        reqwest::Client::builder()
             .timeout(Duration::from_secs(300)) // 5 minute timeout for large files
             .connect_timeout(Duration::from_secs(15))
             .use_native_tls()
             .build()
-            .expect("Failed to create HTTP client");
-
-        Self { client }
+            .map_err(|e| format!("Failed to create HTTP client: {}", e))
     }
 
-    /// Fetch a stream and cache it to disk with progress updates
+    /// Fetch a stream and cache it to disk with progress updates.
+    ///
+    /// Retries up to MAX_RETRIES times with exponential backoff on transient
+    /// failures (connection reset, EOF, timeout). Each retry creates a fresh
+    /// HTTP client to avoid reusing a poisoned connection pool.
     pub async fn fetch_to_file(
         &self,
         url: &str,
@@ -40,9 +63,65 @@ impl StreamFetcher {
                 .map_err(|e| format!("Failed to create directory: {}", e))?;
         }
 
-        // Start fetching
-        let response = self
-            .client
+        let temp_path = dest_path.with_extension("tmp");
+
+        let mut last_error = String::new();
+        for attempt in 0..=MAX_RETRIES {
+            if attempt > 0 {
+                let backoff = RETRY_BACKOFFS[(attempt - 1) as usize];
+                log::info!(
+                    "[Offline] Retry {}/{} for track {} after {}s",
+                    attempt,
+                    MAX_RETRIES,
+                    track_id,
+                    backoff.as_secs()
+                );
+                tokio::time::sleep(backoff).await;
+            }
+
+            // Fresh client per attempt — prevents connection pool poisoning
+            let client = Self::build_client()?;
+
+            match self
+                .try_download(&client, url, &temp_path, track_id, app_handle)
+                .await
+            {
+                Ok(size) => {
+                    // Move temp file to final destination
+                    std::fs::rename(&temp_path, dest_path)
+                        .map_err(|e| format!("Failed to move temp file: {}", e))?;
+                    log::info!("Caching complete for track {}: {} bytes", track_id, size);
+                    return Ok(size);
+                }
+                Err(e) => {
+                    last_error = e;
+                    // Clean up partial temp file before retry
+                    let _ = std::fs::remove_file(&temp_path);
+                    if attempt < MAX_RETRIES {
+                        log::warn!(
+                            "[Offline] Download attempt {} failed for track {}: {}",
+                            attempt + 1,
+                            track_id,
+                            last_error
+                        );
+                    }
+                }
+            }
+        }
+
+        Err(last_error)
+    }
+
+    /// Single download attempt: stream response body to a temp file.
+    async fn try_download(
+        &self,
+        client: &reqwest::Client,
+        url: &str,
+        temp_path: &Path,
+        track_id: u64,
+        app_handle: Option<&AppHandle>,
+    ) -> Result<u64, String> {
+        let response = client
             .get(url)
             .header("User-Agent", "Mozilla/5.0")
             .send()
@@ -60,9 +139,7 @@ impl StreamFetcher {
             total_size
         );
 
-        // Create temp file for caching
-        let temp_path = dest_path.with_extension("tmp");
-        let mut file = std::fs::File::create(&temp_path)
+        let mut file = std::fs::File::create(temp_path)
             .map_err(|e| format!("Failed to create temp file: {}", e))?;
 
         let mut cached: u64 = 0;
@@ -70,7 +147,6 @@ impl StreamFetcher {
         let mut last_emit_time = Instant::now();
         const MIN_EMIT_INTERVAL: Duration = Duration::from_millis(200);
 
-        // Stream the response body
         let mut stream = response.bytes_stream();
         use futures_util::StreamExt;
 
@@ -101,7 +177,6 @@ impl StreamFetcher {
             let progress = if let Some(total) = total_size {
                 ((cached as f64 / total as f64) * 100.0) as u8
             } else {
-                // If we don't know total size, report bytes cached
                 0
             };
 
@@ -142,19 +217,14 @@ impl StreamFetcher {
             .map_err(|e| format!("Failed to flush file: {}", e))?;
         drop(file);
 
-        // Move temp file to final destination
-        std::fs::rename(&temp_path, dest_path)
-            .map_err(|e| format!("Failed to move temp file: {}", e))?;
-
-        log::info!("Caching complete for track {}: {} bytes", track_id, cached);
-
         Ok(cached)
     }
 
     /// Fetch to memory (for smaller files or streaming)
     pub async fn fetch_to_memory(&self, url: &str) -> Result<Vec<u8>, String> {
-        let response = self
-            .client
+        let client = Self::build_client()?;
+
+        let response = client
             .get(url)
             .header("User-Agent", "Mozilla/5.0")
             .send()

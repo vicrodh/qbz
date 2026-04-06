@@ -206,6 +206,15 @@
     border-radius: 3px;
   }
 
+  /* Immersive mode: hide scrollbar but keep scrolling */
+  .lyrics-lines.immersive {
+    scrollbar-width: none;
+  }
+
+  .lyrics-lines.immersive::-webkit-scrollbar {
+    display: none;
+  }
+
   .lyrics-spacer {
     min-height: 40vh;
     flex-shrink: 0;
@@ -240,17 +249,18 @@
   /* Immersive mode - larger text with Oswald font */
   /* Performance: uses CSS classes for opacity instead of inline styles */
   .lyrics-lines.immersive {
-    gap: 20px;
-    padding: 24px;
+    gap: clamp(18px, 2.5vh, 30px);
+    padding: 16px 24px;
     /* Containment: isolate layout/paint to this subtree */
     contain: layout style;
   }
 
   .lyrics-lines.immersive .lyrics-line {
-    font-family: 'Oswald', var(--font-sans), sans-serif;
-    font-size: 28px;
-    font-weight: 400;
-    letter-spacing: 0.02em;
+    font-family: 'Montserrat', var(--font-sans), sans-serif;
+    font-size: clamp(24px, 2.6vw, 34px);
+    font-weight: 500;
+    line-height: 1.35;
+    letter-spacing: 0.01em;
     /* Text shadow for contrast against any background */
     text-shadow:
       0 1px 2px rgba(0, 0, 0, 0.5),
@@ -276,8 +286,8 @@
   }
 
   .lyrics-lines.immersive .lyrics-line.active {
-    font-size: 30px;
-    font-weight: 600;
+    font-size: clamp(28px, 3.2vw, 42px);
+    font-weight: 700;
     color: #ffffff !important;
     opacity: 1;
   }

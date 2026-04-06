@@ -70,7 +70,12 @@
     "topTracksLabel": "PRINCIPAIS FAIXAS",
     "topTracksBy": "Por {artist}",
     "andMore": "e mais",
-    "playlistLabel": "PLAYLIST"
+    "playlistLabel": "PLAYLIST",
+    "continueTracks": "Continuar ouvindo",
+    "mostStreamed": "Álbuns populares",
+    "favoriteAlbums": "Mais dos favoritos",
+    "recentAlbums": "Jogado recentemente",
+    "topArtists": "Seus principais artistas"
   },
   "discover": {
     "newReleases": "Novos Lançamentos",
@@ -265,7 +270,10 @@
     "refreshMetadata": "Atualizar metadados",
     "albumSettings": "Configurações do álbum",
     "albumArtwork": "Capa do Álbum",
-    "uploadCover": "Enviar capa"
+    "uploadCover": "Enviar capa",
+    "background": "Fundo",
+    "explicit": "Explícito",
+    "folderName": "Nome"
   },
   "album": {
     "tracks": "faixas",
@@ -301,7 +309,9 @@
     "bookletRotate": "Girar",
     "bookletDownload": "Salvar encarte",
     "sameArtist": "Do mesmo artista",
-    "seeFullDiscography": "Ver discografia completa"
+    "seeFullDiscography": "Ver discografia completa",
+    "releasedOn": "em",
+    "releasedBy": "Lançado pela"
   },
   "artist": {
     "albums": "Álbuns",
@@ -360,7 +370,10 @@
       "nextResult": "Próximo resultado",
       "close": "Fechar busca",
       "searchInPage": "Buscar nesta página"
-    }
+    },
+    "noAlbumAppearancesFound": "Nenhuma aparição em álbum encontrada",
+    "noAlbumsFound": "Nenhum álbum encontrado",
+    "bandProjects": "Bandas"
   },
   "sort": {
     "nameAZ": "Nome (A-Z)",
@@ -373,7 +386,13 @@
     "oldest": "Mais Antigos",
     "titleAZ": "Título (A-Z)",
     "titleZA": "Título (Z-A)",
-    "artist": "Artista"
+    "artist": "Artista",
+    "album": "Álbum",
+    "addedRecently": "Adicionado recentemente",
+    "duration": "Duração",
+    "sort": "Organizar",
+    "title": "Título",
+    "label": "Selo"
   },
   "playlist": {
     "tracks": "faixas",
@@ -458,7 +477,10 @@
     "playlists": "playlists",
     "folders": "Pastas",
     "dragPlaylists": "Arraste playlists para reordená-las",
-    "dropOntoFolder": "ou solte sobre uma pasta para mover."
+    "dropOntoFolder": "ou solte sobre uma pasta para mover.",
+    "newFolder": "Nova pasta",
+    "folderNamePlaceholder": "Digite o nome da pasta",
+    "suggestedSongs": "Músicas sugeridas"
   },
   "favorites": {
     "title": "Favoritos",
@@ -614,7 +636,19 @@
     "miniWindowControls": "Controles do Mini Player",
     "miniAlwaysOnTopEnable": "Sempre no Topo",
     "miniAlwaysOnTopDisable": "Desativar Sempre no Topo",
-    "miniAlwaysOnTopLimited": "Sempre no topo é limitado pelo seu gerenciador de janelas"
+    "miniAlwaysOnTopLimited": "Sempre no topo é limitado pelo seu gerenciador de janelas",
+    "disableInfinitePlay": "Desativar Infinite Play",
+    "enableInfinitePlay": "Ativar Infinite Play",
+    "exitFullscreenWithKey": "Sair da tela cheia ({key})",
+    "exitImmersiveWithKey": "Sair da imersão ({key})",
+    "fullscreenWithKey": "Tela cheia ({key})",
+    "qobuzConnect": "Qobuz Connect",
+    "restoreWindow": "Janela Restaurar",
+    "qobuzConnectManage": "Qobuz Connect - Clique para gerenciar",
+    "maximizeWindow": "Maximizar janela",
+    "windowControls": "Controles de janela",
+    "closeApp": "Fechar aplicativo",
+    "connectedTo": "Conectado a"
   },
   "audioBadges": {
     "castingTo": "Transmitindo para",
@@ -722,7 +756,27 @@
     },
     "newFolder": "Nova pasta",
     "previousArtists": "Artistas anteriores",
-    "nextArtists": "Próximos artistas"
+    "nextArtists": "Próximos artistas",
+    "switchToImmersiveView": "Mudar para visualização imersiva (V)",
+    "switchToSplitView": "Mudar para visualização dividida (V)",
+    "visitReleasePage": "Visite a página de lançamento",
+    "moveUp": "Subir",
+    "moveDown": "Mover para baixo",
+    "backToHome": "De volta para casa",
+    "clearSelection": "Limpar seleção",
+    "copyCommand": "Comando copiar",
+    "downloadOnGitHub": "Baixe no GitHub",
+    "findAvailableVersion": "Encontre a versão disponível",
+    "gotIt": "Entendi",
+    "okClose": "OK, feche",
+    "playFromHere": "Jogue daqui",
+    "playRadio": "Tocar rádio",
+    "playTrackOnly": "Reproduzir apenas a faixa",
+    "qobuzLink": "Link Qobuz™",
+    "removeOfflineCopy": "Remover cópia off-line",
+    "selectAll": "Selecionar tudo",
+    "startOffline": "Comece off-line",
+    "tryAgain": "Tente novamente"
   },
   "settings": {
     "title": "Configurações",
@@ -802,7 +856,8 @@
       "resetConfirmTitle": "Redefinir Configurações de Áudio e Reprodução?",
       "resetConfirmDesc": "Isso irá redefinir todas as configurações de saída de áudio, backend e reprodução para os padrões. A reprodução será interrompida.",
       "resetSuccess": "Configurações de áudio e reprodução foram redefinidas para os padrões.",
-      "resetError": "Falha ao redefinir configurações de áudio: {error}"
+      "resetError": "Falha ao redefinir configurações de áudio: {error}",
+      "noDevicesFound": "Nenhum dispositivo encontrado"
     },
     "playback": {
       "title": "Reprodução",
@@ -991,11 +1046,11 @@
         }
       },
       "fpsOptions": {
-        "disabled": "Desativado",
         "15": "15 FPS (Baixo)",
         "30": "30 FPS (Médio)",
         "60": "60 FPS (Suave)",
-        "120": "120 FPS (Ultra)"
+        "120": "120 FPS (Ultra)",
+        "disabled": "Desativado"
       },
       "miniplayerDefaultView": "Visualização padrão do mini player",
       "miniplayerViews": {
@@ -1220,7 +1275,9 @@
       "qobuzLinkHandlerDesc": "Registrar o QBZ como o aplicativo padrão para links qobuzapp:// do seu navegador.",
       "qobuzLinkHandlerError": "Falha ao atualizar o registro do manipulador de links.",
       "qconnectDeviceName": "Nome do dispositivo",
-      "qconnectDeviceNameDesc": "Nome exibido no Qobuz Connect"
+      "qconnectDeviceNameDesc": "Nome exibido no Qobuz Connect",
+      "noProtocolDeviceFound": "Nenhum dispositivo {protocol} encontrado",
+      "noProtocolDeviceFoundHint": "Certifique-se de que os dispositivos estejam na mesma rede"
     },
     "storage": {
       "title": "Armazenamento",
@@ -1364,7 +1421,13 @@
       "clearAllCaches": "Limpar Todos os Caches",
       "clearAllCachesDesc": "Limpa todos os dados em cache acima",
       "cachesDesc": "Caches de fila, letras, capas e metadados"
-    }
+    },
+    "immersive": {
+      "title": "Desempenho degradado",
+      "perfDegraded": "Desempenho degradado",
+      "perfDontShowAgain": "Não mostre novamente"
+    },
+    "noMatchesFound": "Nenhuma correspondência encontrada"
   },
   "metadata": {
     "editMetadata": "Editar metadados",
@@ -1411,7 +1474,7 @@
   },
   "legal": {
     "brandingLine": "Este aplicativo utiliza a API do Qobuz, mas não é certificado pelo Qobuz™.",
-    "brandingLineSuffix": "",
+    "brandingLineSuffix": "Este aplicativo usa a API Qobuz™, mas não é certificado pela Qobuz™.",
     "tosAgreementPrefix": "Eu li os",
     "tosLinkText": "Termos de Serviço do Qobuz™",
     "tosRequiredToLogin": "Confirme que você leu os Termos de Serviço do Qobuz™ para continuar.",
@@ -1444,7 +1507,8 @@
     "loadFailed": "Falha ao carregar",
     "playbackFailed": "Falha na reprodução",
     "cachingFailed": "Falha ao preparar para offline",
-    "saveFailed": "Falha ao salvar"
+    "saveFailed": "Falha ao salvar",
+    "failedToLoad": "Falha ao carregar"
   },
   "time": {
     "hours": "h",
@@ -1492,7 +1556,8 @@
     "sectionsDesc": "Reordene com as setas. Alterne a visibilidade com o interruptor.",
     "moveUp": "Mover para cima",
     "moveDown": "Mover para baixo",
-    "resetToDefaults": "Restaurar padrões"
+    "resetToDefaults": "Restaurar padrões",
+    "itemsToShow": "Itens para mostrar"
   },
   "toast": {
     "loadingAlbum": "Carregando álbum...",
@@ -1601,7 +1666,18 @@
     "failedSaveAutoplay": "Falha ao salvar preferência de reprodução automática",
     "failedSaveIconVisibility": "Falha ao salvar preferência de visibilidade do ícone",
     "failedRepairOffline": "Falha ao reparar biblioteca offline: {error}",
-    "failedOpenCacheFolder": "Falha ao abrir pasta de cache"
+    "failedOpenCacheFolder": "Falha ao abrir pasta de cache",
+    "loadingDevices": "Carregando dispositivos...",
+    "addedToPlaylist": "Adicionado à lista de reprodução",
+    "copied": "Copiado!",
+    "loadingCredits": "Carregando créditos...",
+    "blacklist": {
+      "disabled": "desabilitado",
+      "enabled": "habilitado",
+      "newState": "Lista negra {status}"
+    },
+    "laodingDevices": "Carregando dispositivos...",
+    "findingSimilarArtists": "Encontrando artistas semelhantes..."
   },
   "offline": {
     "title": "Modo Offline",
@@ -1657,7 +1733,9 @@
     "failed": "Falha ao armazenar para offline (clique para tentar novamente)"
   },
   "filter": {
-    "all": "Todos"
+    "all": "Todos",
+    "hidden": "Escondido",
+    "visible": "Visível"
   },
   "genreFilter": {
     "title": "Filtrar por gênero",
@@ -1831,7 +1909,8 @@
         "custom": "Personalizado..."
       },
       "customPlaceholder": "Nome do binário (ex.: my-player)",
-      "warning": "Melhores resultados: use bit-perfect apenas por aplicativo. Bit-perfect global do Pulse pode quebrar navegadores e aplicativos que enviam 48kHz fixo."
+      "warning": "Melhores resultados: use bit-perfect apenas por aplicativo. Bit-perfect global do Pulse pode quebrar navegadores e aplicativos que enviam 48kHz fixo.",
+      "customApps": "Aplicativos personalizados:"
     },
     "wireplumberConfig": {
       "title": "Direcionar Apenas ao Seu DAC",
@@ -1890,7 +1969,8 @@
       "restart": "Reiniciar",
       "verify": "Verificar",
       "done": "Concluído"
-    }
+    },
+    "title": "Assistente DAC"
   },
   "remoteControlWizard": {
     "steps": {
@@ -2160,7 +2240,8 @@
   "playlistManager": {
     "switchToFlat": "Visualização plana",
     "switchToFolders": "Visualização por pastas",
-    "emptyFolder": "Pasta vazia"
+    "emptyFolder": "Pasta vazia",
+    "heading": "Gerenciador de lista"
   },
   "linkResolver": {
     "title": "Abrir Link de Música",
@@ -2241,5 +2322,255 @@
     "rememberChoice": "Lembrar minha escolha",
     "autoRetrying": "Tentando novamente com qualidade mais baixa...",
     "autoSkipping": "Pulando faixa (problema no servidor)..."
+  },
+  "fileFormat": {
+    "aac": "AAC",
+    "alac": "ALAC",
+    "flac": "FLAC",
+    "mp3": "MP3",
+    "opus": "Opus"
+  },
+  "keys": {
+    "esc": "Esc",
+    "enter": "Enter",
+    "shift": "Shift"
+  },
+  "platforms": {
+    "appleMusic": "Apple Music",
+    "deezer": "Deezer",
+    "qobuz": "Qobuz",
+    "spotify": "Spotify",
+    "tidal": "Tidal"
+  },
+  "updates": {
+    "snap": {
+      "intro": "Alguns plugues de áudio precisam ser conectados manualmente para obter a melhor experiência.",
+      "note": "Execute esses comandos em um terminal e reinicie o QBZ. Isso só precisa ser feito uma vez.",
+      "optional": "Opcional (para unidades externas/NAS):",
+      "requiredPlugConnections": "Conexões de plugue necessárias:"
+    },
+    "checkForUpdates": "Verifique se há atualizações",
+    "flatpak": {
+      "intro": "Existem algumas considerações para garantir a melhor experiência.",
+      "note": "Verifique a seção <strong>Flatpak Sandbox</strong> em Configurações para obter instruções detalhadas e comandos de copiar e colar.",
+      "whatYouShouldKnow": {
+        "audioFeatures": "Alguns recursos de áudio podem se comportar de maneira diferente devido às restrições do sandbox",
+        "settingsPage": "A página <strong>Configurações</strong> inclui comandos específicos do Flatpak que você pode copiar e executar",
+        "externalMusicFolderAccess": "O acesso a pastas de música externas (NAS, montagens de rede) requer permissões manuais",
+        "heading": "O que você deve saber:"
+      }
+    },
+    "whatsNew": {
+      "whatsNew": "O que há de novo",
+      "whatsNewIn": "O que há de novo em v{version}",
+      "releaseNotesNotAvailable": "As notas de versão não estão disponíveis.",
+      "releaseNotesNotAvailableForVersion": "As notas de lançamento não estão disponíveis para esta versão."
+    },
+    "newVersionAvailable": "Nova versão disponível: v{version}",
+    "runningIn": "Executando em {env}",
+    "noUpdatesFound": "Nenhuma atualização encontrada.",
+    "updateReminder": {
+      "hint": "Pode ser reativado em Configurações",
+      "doNotNotifyAboutReleases": "Não me avise sobre novos lançamentos",
+      "doNotNotifyAgain": "Não me avise novamente sobre este lançamento",
+      "newVersionReminder": "Lembrete de nova versão",
+      "remindMeLater": "Lembre-me mais tarde"
+    },
+    "runningInsideSandbox": "QBZ detectou que está sendo executado dentro de um <strong>{env} sandbox</strong>.",
+    "newReleaseAvailable": "Novo lançamento disponível",
+    "newVersionReleased": "Uma nova versão do QBZ foi lançada"
+  },
+  "common": {
+    "name": "Nome"
+  },
+  "integrations": {
+    "connecting": "Conectando..."
+  },
+  "about": {
+    "attributions": {
+      "lrclibDesc": "Provedor de letras sincronizadas",
+      "lucideDesc": "Biblioteca de ícones",
+      "lyricsOVHDesc": "API de letras",
+      "musicBrainzDesc": "Banco de dados de metadados musicais",
+      "rodioSymphoniaDesc": "Mecanismo de reprodução de áudio",
+      "qobuzDesc": "Serviço de streaming de música e API",
+      "songLinkOdesliDesc": "API de agregação de links de música",
+      "svelteDesc": "Estrutura de IU",
+      "tauriDesc": "Estrutura do aplicativo",
+      "heading": "Agradecimentos"
+    },
+    "author": "Autor",
+    "buildInfo": {
+      "build": "Construir",
+      "codename": "Codinome",
+      "heading": "Informações de construção",
+      "license": "Licença",
+      "platform": "Plataforma",
+      "version": "Versão"
+    },
+    "contributors": "Colaboradores",
+    "release": "Liberar",
+    "description": "Um cliente nativo de streaming de música para Linux, projetado para audiófilos que precisam de reprodução Hi-Fi perfeita, sem limitações de taxa de amostragem do navegador.",
+    "signatureDetail": "Ódio contra todas aquelas empresas que discriminam a comunidade Linux e não nos fornecem um cliente decente para seus produtos.",
+    "website": "Site"
+  },
+  "tracklist": {
+    "album": "Álbum",
+    "duration": "Duração",
+    "quality": "Qualidade",
+    "title": "Título"
+  },
+  "musician": {
+    "knownFor": "Conhecido por",
+    "viewArtistPage": "Ver página do artista"
+  },
+  "performerRoles": {
+    "a&R": "Artistas e Repertório",
+    "acousticGuitar": "Guitarra acústica",
+    "additionalEngineer": "Engenheiro Adicional",
+    "additionalKeyboard": "Teclado Adicional",
+    "additionalVocalist": "Vocalista Adicional",
+    "arranger": "Arranjador",
+    "assistantEngineer": "Engenheiro Assistente",
+    "assistantMixer": "Mixador Assistente",
+    "associatedPerformer": "Artista Associado",
+    "backgroundVocalist": "Vocalista de fundo",
+    "bass": "Baixo",
+    "bassGuitar": "Baixo",
+    "choir": "Coro",
+    "coProducer": "Coprodutor",
+    "composer": "Compositor",
+    "composerLyricist": "Compositor Letrista",
+    "digitalEditingEngineer": "Engenheiro de Edição Digital",
+    "drum": "Tambor",
+    "drumKit": "Bateria",
+    "drums": "Bateria",
+    "electricGuitar": "Guitarra elétrica",
+    "engineer": "Engenheiro",
+    "featuredArtist": "Artista em destaque",
+    "guitar": "Guitarra",
+    "keyboard": "Teclado",
+    "keyboards": "Teclados",
+    "lyricist": "Letrista",
+    "mainArtist": "Artista Principal",
+    "masteringEngineer": "Engenheiro de Masterização",
+    "mixer": "Misturador",
+    "mixingEngineer": "Engenheiro de mixagem",
+    "musicPublisher": "Editora musical",
+    "organ": "Órgão",
+    "percussion": "Percussão",
+    "performance": "Desempenho",
+    "piano": "Piano",
+    "producer": "Produtor",
+    "recordingEngineer": "Engenheiro de Gravação",
+    "programmer": "Programador",
+    "recordingSecondEngineer": "Segundo Engenheiro de Gravação",
+    "remixer": "Remixador",
+    "secondEngineer": "Segundo Engenheiro",
+    "stringArranger": "Arranjador de cordas",
+    "strings": "Cordas",
+    "studioPersonnel": "Pessoal do estúdio",
+    "ukulele": "Ukulele",
+    "vocal": "Vocal",
+    "vocalEditingEngineer": "Engenheiro de edição vocal",
+    "vocalist": "Vocalista",
+    "vocals": "Vocais",
+    "writer": "Escritor",
+    "a&RDirector": "Diretor de Artistas e Repertório",
+    "aAndRCoordinator": "UM",
+    "accordion": "Acordeão",
+    "additionalMusic": "Música Adicional",
+    "additionalProduction": "Produção Adicional",
+    "additionalProgrammer": "Programador Adicional",
+    "additionalStudioProducer": "Produtor de estúdio adicional",
+    "additionalVocals": "Vocais Adicionais",
+    "artDirector": "Diretor de Arte",
+    "artist": "Artista",
+    "assistant": "Assistente",
+    "assistantMixingEngineer": "Engenheiro Assistente de Mixagem",
+    "associatedProducer": "Produtor Associado",
+    "author": "Autor",
+    "backgroundVocal": "Vocal de fundo",
+    "backgroundVocals": "Vocais de fundo",
+    "backingVocals": "Vocais de apoio",
+    "baritoneSaxophone": "Saxofone Barítono",
+    "celesta": "Celeste",
+    "cello": "Violoncelo",
+    "chamberOrchestra": "Orquestra de Câmara",
+    "choirArranger": "Arranjador de Coro",
+    "choirConductor": "Maestro do Coro",
+    "coachVocals": "Treinador de Vocais",
+    "conductor": "Condutor",
+    "consultant": "Consultor",
+    "contractor": "Contratante",
+    "designer": "Designer",
+    "doubleBass": "Contrabaixo",
+    "drumMachine": "Bateria eletrônica",
+    "drumProgrammer": "Programador de bateria",
+    "drumProgramming": "Programação de bateria",
+    "editingEngineer": "Engenheiro de Edição",
+    "electricBassGuitar": "Baixo elétrico",
+    "executiveProducer": "Produtor Executivo",
+    "fiddle": "Violino",
+    "frenchHorn": "Trompa Francesa",
+    "glockenspiel": "Glockenspiel",
+    "hammondOrgan": "Órgão Hammond",
+    "harp": "Harpa",
+    "horn": "Buzina",
+    "horns": "Chifres",
+    "instrumentation": "Instrumentação",
+    "leadGuitar": "Guitarra solo",
+    "leadViolin": "Violino principal",
+    "leadVocals": "Vocais principais",
+    "manager": "Gerente",
+    "masterer": "Mestre",
+    "mixEngineer": "Engenheiro de mixagem",
+    "mixingSecondEngineer": "Segundo engenheiro de mixagem",
+    "music": "Música",
+    "musicDirector": "Diretor Musical",
+    "musicEditor": "Editor musical",
+    "musicSupervisor": "Supervisor Musical",
+    "nylonStringGuitar": "Guitarra de corda de náilon",
+    "orchestra": "Orquestra",
+    "orchestralContractor": "Empreiteiro Orquestral",
+    "orchestration": "Orquestração",
+    "other": "Outro",
+    "oud": "Oud",
+    "performer": "Intérprete",
+    "production": "Produção",
+    "programming": "Programação",
+    "programmingEngineer": "Engenheiro de Programação",
+    "rapVocalist": "Vocalista de rap",
+    "recordedby": "Gravado por",
+    "recordingArranger": "Arranjador de Gravação",
+    "recordingProducer": "Produtor de gravação",
+    "remasteringEngineer": "Engenheiro de Remasterização",
+    "remixingSecondEngineer": "Remixando Segundo Engenheiro",
+    "rhythmGuitar": "ritmoGuitarra",
+    "samples": "Amostras",
+    "saxophone": "Saxofone",
+    "singer": "Cantor",
+    "slideguitar&Pad": "Guitarra deslizante",
+    "songwriter": "Compositor",
+    "studioAssistant": "Assistente de estúdio",
+    "synthesizer": "Sintetizador",
+    "synthesizerProgrammer": "Programador Sintetizador",
+    "synthesizerProgramming": "Programação do Sintetizador",
+    "technicalAssistant": "Assistente Técnico",
+    "technicalEngineer": "Engenheiro Técnico",
+    "technician": "Técnico",
+    "trombone": "Trombone",
+    "trumpet": "Trombeta",
+    "tuba": "Tuba",
+    "unknown": "Desconhecido",
+    "vibraphone": "Vibrafone",
+    "viola": "Viola",
+    "violin": "Violino",
+    "vocalArranger": "Arranjador Vocal",
+    "vocalEngineer": "Engenheiro Vocal",
+    "vocalProducer": "Produtor vocal",
+    "vocals&Guitar": "Vocais",
+    "voice": "Voz",
+    "workArranger": "Organizador de Trabalho"
   }
 }

@@ -264,7 +264,7 @@
           {option}
         </button>
       {:else}
-        <div class="no-results">No matches found</div>
+        <div class="no-results">{$t('settings.noMatchesFound')}</div>
       {/each}
     </div>
   </div>

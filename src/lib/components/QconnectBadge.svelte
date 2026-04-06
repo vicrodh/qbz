@@ -114,7 +114,7 @@
       {/if}
     </span>
     <span class="badge-text">
-      <span class="badge-label">Qobuz</span>
+      <span class="badge-label">{ $t('platforms.qobuz') }</span>
       <span class="badge-label">Connect</span>
     </span>
   </button>

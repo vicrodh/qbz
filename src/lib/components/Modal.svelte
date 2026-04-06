@@ -1,5 +1,6 @@
 <script lang="ts">
   import { X } from 'lucide-svelte';
+  import { t } from '$lib/i18n';
   import type { Snippet } from 'svelte';
 
   interface Props {
@@ -58,7 +59,7 @@
             <div></div>
           {/if}
           {#if showCloseButton}
-            <button class="close-btn" onclick={onClose} title="Close">
+            <button class="close-btn" onclick={onClose} title={$t('actions.close')}>
               <X size={20} />
             </button>
           {/if}

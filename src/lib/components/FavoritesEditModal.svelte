@@ -28,7 +28,7 @@
     const key = `favorites.tabLabels.${tab}`;
     const translated = $t(key);
     if (translated && !translated.startsWith('favorites.tabLabels.')) return translated;
-    const fallback: Record<string, string> = { tracks: 'Tracks', albums: 'Albums', artists: 'Artists', playlists: 'Playlists' };
+    const fallback: Record<string, string> = { tracks: $t('favorites.tabLabels.tracks'), albums: $t('favorites.tabLabels.albums'), artists: $t('favorites.tabLabels.artists'), playlists: $t('favorites.tabLabels.playlists') };
     return fallback[tab] || tab;
   }
 
@@ -100,7 +100,7 @@
                 class="tab-move-btn"
                 onclick={() => moveUp(index)}
                 disabled={index === 0}
-                title={$t('actions.moveUp')}
+                title={ $t('actions.moveUp') }
               >
                 ↑
               </button>
@@ -108,7 +108,7 @@
                 class="tab-move-btn"
                 onclick={() => moveDown(index)}
                 disabled={index === tabOrder.length - 1}
-                title={$t('actions.moveDown')}
+                title={ $t('actions.moveDown') }
               >
                 ↓
               </button>

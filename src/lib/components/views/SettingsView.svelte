@@ -13,6 +13,7 @@
   import RemoteControlSetupGuide from '../RemoteControlSetupGuide.svelte';
   import LogsModal from '../LogsModal.svelte';
   import DiagnosticsPanel from '../DiagnosticsPanel.svelte';
+  import { platform } from '$lib/utils/platform';
   import VolumeSlider from '../VolumeSlider.svelte';
   import UpdateCheckResultModal from '../updates/UpdateCheckResultModal.svelte';
   import WhatsNewModal from '../updates/WhatsNewModal.svelte';
@@ -1470,9 +1471,11 @@
       updatesCurrentVersion = getUpdatesCurrentVersion();
     });
 
-    // Detect sandbox environments
-    loadFlatpakStatus();
-    loadSnapStatus();
+    // Detect sandbox environments (Linux-only)
+    if (platform === 'linux') {
+      loadFlatpakStatus();
+      loadSnapStatus();
+    }
 
     // Check for legacy cached files
     checkLegacyCachedFiles();
@@ -3882,6 +3885,7 @@
       />
     </div>
     {/if}
+    {#if platform === 'linux'}
     <div class="setting-row">
       <div class="setting-info">
         <span class="setting-label">{$t('settings.audio.audioBackend')}</span>
@@ -3915,6 +3919,7 @@
         {/if}
       </div>
     </div>
+    {/if}
     <div class="setting-row">
       <div class="setting-info">
         <span class="setting-label">{$t('settings.audio.outputDevice')}</span>
@@ -3983,6 +3988,7 @@
         </div>
       {/if}
     </div>
+    {#if platform === 'linux'}
     {#if showAlsaPluginSelector}
     <div class="setting-row">
       <div class="setting-info">
@@ -4008,6 +4014,7 @@
       <Toggle enabled={alsaHardwareVolume} onchange={handleAlsaHardwareVolumeChange} />
     </div>
     {/if}
+    {/if}
     <div class="setting-row">
       <div class="setting-info">
         <span class="setting-label">{$t('settings.audio.exclusiveMode')} <span class="help-tip" title={$t('settings.audio.exclusiveModeHelp')}>(?)</span></span>
@@ -4025,6 +4032,7 @@
     {#if dacPassthrough}
     <small class="setting-note">{$t('settings.audio.dacPassthroughNote')}</small>
     {/if}
+    {#if platform === 'linux'}
     {#if isFlatpak && selectedBackend === 'PipeWire' && dacPassthrough}
     <div class="flatpak-warning">
       <div class="warning-icon">⚠️</div>
@@ -4045,6 +4053,7 @@
     </div>
     {#if pwForceBitperfect}
     <small class="setting-note">{$t('settings.audio.pwForceBitperfectNote')}</small>
+    {/if}
     {/if}
     {/if}
     <div class="setting-row">
@@ -4369,7 +4378,7 @@
       <Toggle enabled={systemNotificationsEnabled} onchange={(v) => { systemNotificationsEnabled = v; setSystemNotificationsEnabled(v); }} />
     </div>
     <!-- Title bar toggles: hidden on macOS (always uses native overlay title bar) -->
-    {#if !document.documentElement.classList.contains('macos')}
+    {#if platform !== 'macos'}
     <div class="setting-row">
       <div class="setting-info">
         <span class="setting-label">{$t('settings.appearance.useSystemTitleBar')}</span>
@@ -4386,7 +4395,7 @@
     </div>
     {/if}
     <!-- Title bar customization: hidden on macOS (uses native overlay title bar) -->
-    {#if !document.documentElement.classList.contains('macos')}
+    {#if platform !== 'macos'}
     <div class="setting-row">
       <div class="setting-info">
         <span class="setting-label">{$t('settings.appearance.searchInTitleBar')}</span>
@@ -4573,15 +4582,15 @@
     </div>
 
     <!-- System Tray / Menu Bar subsection -->
-    <h4 class="subsection-title">{$t(document.documentElement.classList.contains('macos') ? 'settings.appearance.tray.titleMacos' : 'settings.appearance.tray.title')}</h4>
+    <h4 class="subsection-title">{$t(platform === 'macos' ? 'settings.appearance.tray.titleMacos' : 'settings.appearance.tray.title')}</h4>
     <div class="setting-row">
       <div class="setting-info">
-        <span class="setting-label">{$t(document.documentElement.classList.contains('macos') ? 'settings.appearance.tray.enableTrayMacos' : 'settings.appearance.tray.enableTray')}</span>
-        <span class="setting-desc">{$t(document.documentElement.classList.contains('macos') ? 'settings.appearance.tray.enableTrayDescMacos' : 'settings.appearance.tray.enableTrayDesc')}</span>
+        <span class="setting-label">{$t(platform === 'macos' ? 'settings.appearance.tray.enableTrayMacos' : 'settings.appearance.tray.enableTray')}</span>
+        <span class="setting-desc">{$t(platform === 'macos' ? 'settings.appearance.tray.enableTrayDescMacos' : 'settings.appearance.tray.enableTrayDesc')}</span>
       </div>
       <Toggle enabled={enableTray} onchange={(v) => handleEnableTrayChange(v)} />
     </div>
-    {#if !document.documentElement.classList.contains('macos')}
+    {#if platform !== 'macos'}
     <div class="setting-row">
       <div class="setting-info">
         <span class="setting-label">{$t('settings.appearance.tray.minimizeToTray')}</span>
@@ -4609,7 +4618,8 @@
       />
     </div>
 
-    <!-- Composition subsection (collapsible) -->
+    <!-- Composition subsection (collapsible, Linux-only: GDK/GSK/X11/Wayland/DMA-BUF) -->
+    {#if platform === 'linux'}
     <div class="collapsible-section composition-subsection">
       <button class="section-title-btn" onclick={() => compositionCollapsed = !compositionCollapsed}>
         <div class="section-title-row">
@@ -4760,6 +4770,7 @@
         </div>
       {/if}
     </div>
+    {/if}
 
     <div class="setting-row">
       <div class="setting-info">
@@ -4979,8 +4990,8 @@
   <section class="section">
     <h3 class="section-title">{$t('settings.integrations.title')}</h3>
 
-    <!-- Qobuz Link Handler (Linux only — macOS registers via Info.plist at build time) -->
-    {#if !document.documentElement.classList.contains('macos')}
+    <!-- Qobuz Link Handler (Linux only — macOS registers via Info.plist, Windows via registry) -->
+    {#if platform === 'linux'}
     <div class="setting-row">
       <div class="setting-info">
         <span class="setting-label">{$t('settings.integrations.qobuzLinkHandler')}</span>

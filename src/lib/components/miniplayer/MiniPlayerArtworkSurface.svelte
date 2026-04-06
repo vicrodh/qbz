@@ -75,7 +75,7 @@
         <span class="title-text" bind:this={titleTextRef}>{title ?? $t('player.noTrackPlaying')}</span>
       </div>
       {#if explicit}
-        <span class="explicit-badge" title="Explicit"></span>
+        <span class="explicit-badge" title="{ $t('library.explicit') }"></span>
       {/if}
     </div>
 

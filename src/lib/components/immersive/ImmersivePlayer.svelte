@@ -706,7 +706,7 @@
             <div class="split-title-row">
               <h2 class="split-track-title">{trackTitle}</h2>
               {#if explicit}
-                <span class="explicit-badge" title="Explicit"></span>
+                <span class="explicit-badge" title="{ $t('library.explicit') }"></span>
               {/if}
             </div>
             <p class="split-track-artist">{artist}</p>
@@ -880,6 +880,14 @@
     }
   }
 
+  /* Quality badge — subtle dark tint for legibility, keep glassy feel */
+  .immersive-player :global(.quality-badge) {
+    background: rgba(0, 0, 0, 0.25);
+    border-color: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
   /* Split mode layout */
   .immersive-main {
     position: absolute;
@@ -887,13 +895,13 @@
     left: 50%;
     transform: translateX(-50%);
     width: 100%;
-    max-width: 1400px;
+    max-width: 1600px;
     height: 100%;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 80px 48px 140px;
-    gap: 60px;
+    padding: 52px 40px 88px;
+    gap: 40px;
     z-index: 1;
   }
 
@@ -903,12 +911,13 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 20px;
+    gap: 16px;
+    padding: 0 clamp(20px, 3vw, 50px);
   }
 
   .split-track-info {
     text-align: center;
-    max-width: 380px;
+    max-width: 500px;
   }
 
   .split-title-row {
@@ -955,7 +964,7 @@
   .split-track-album {
     font-size: clamp(12px, 1.5vw, 14px);
     color: var(--alpha-50, rgba(255, 255, 255, 0.5));
-    margin: 0 0 12px 0;
+    margin: 0 0 6px 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -964,16 +973,15 @@
   .split-quality-badge {
     display: flex;
     justify-content: center;
-    margin-top: 8px;
+    margin-top: 4px;
   }
 
   .panel-section {
     flex: 1;
     min-width: 0;
     min-height: 0;
-    max-width: 700px;
+    max-width: 800px;
     height: 100%;
-    max-height: 80vh;
     display: flex;
     flex-direction: column;
     align-self: center;
@@ -1009,12 +1017,12 @@
   /* Responsive */
   @media (max-width: 1200px) {
     .immersive-main {
-      padding: 70px 32px 130px;
-      gap: 40px;
+      padding: 64px 28px 100px;
+      gap: 32px;
     }
 
     .panel-section {
-      max-width: 620px;
+      max-width: 700px;
     }
 
     .focus-panel {
@@ -1025,8 +1033,8 @@
   @media (max-width: 900px) {
     .immersive-main {
       flex-direction: column;
-      padding: 70px 24px 140px;
-      gap: 24px;
+      padding: 64px 24px 110px;
+      gap: 20px;
       justify-content: flex-start;
     }
 
@@ -1051,8 +1059,8 @@
 
   @media (max-width: 600px) {
     .immersive-main {
-      padding: 60px 16px 130px;
-      gap: 20px;
+      padding: 56px 16px 100px;
+      gap: 16px;
     }
 
     .focus-panel {

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte';
+  import { t } from 'svelte-i18n';
   import {
     ChevronRight,
     Ellipsis,
@@ -500,31 +501,31 @@
             {#if onPlayNow}
               <button class="menu-item" onclick={() => handleAction(onPlayNow)}>
                 <Play size={14} />
-                <span>Play now</span>
+                <span>{ $t('actions.playNow') }</span>
               </button>
             {/if}
             {#if onPlayTrackOnly}
               <button class="menu-item" onclick={() => handleAction(onPlayTrackOnly)}>
                 <Play size={14} />
-                <span>Play track only</span>
+                <span>{ $t('actions.playTrackOnly') }</span>
               </button>
             {/if}
             {#if onPlayFromHere}
               <button class="menu-item" onclick={() => handleAction(onPlayFromHere)}>
                 <Play size={14} />
-                <span>Play from here</span>
+                <span>{ $t('actions.playFromHere') }</span>
               </button>
             {/if}
             {#if onPlayNext}
               <button class="menu-item" onclick={() => handleAction(onPlayNext)}>
                 <ListPlus size={14} />
-                <span>Play next</span>
+                <span>{ $t('actions.playNext') }</span>
               </button>
             {/if}
             {#if onPlayLater}
               <button class="menu-item" onclick={() => handleAction(onPlayLater)}>
                 <ListEnd size={14} />
-                <span>Add to queue</span>
+                <span>{ $t('actions.addToQueue') }</span>
               </button>
             {/if}
             {#if hasRadio}
@@ -548,7 +549,7 @@
                   }}
                 >
                   <Radio size={14} />
-                  <span>Create radio</span>
+                  <span>{ $t('radio.createRadio') }</span>
                   <ChevronRight size={14} class="chevron" />
                   {#if radioOpen}
                     <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -563,11 +564,11 @@
                     >
                       <button class="menu-item" onclick={() => handleAction(onCreateQbzRadio)}>
                         <Radio size={14} />
-                        <span>QBZ Radio</span>
+                        <span>{ $t('radio.qbzRadio') }</span>
                       </button>
                       <button class="menu-item" onclick={() => handleAction(onCreateQobuzRadio)}>
                         <Radio size={14} />
-                        <span>Qobuz Radio</span>
+                        <span>{ $t('radio.qobuzRadio') }</span>
                       </button>
                     </div>
                   {/if}
@@ -575,7 +576,7 @@
               {:else}
                 <button class="menu-item" onclick={() => handleAction(onCreateQbzRadio || onCreateQobuzRadio)}>
                   <Radio size={14} />
-                  <span>Create radio</span>
+                  <span>{ $t('radio.createRadio') }</span>
                 </button>
               {/if}
             {/if}
@@ -589,25 +590,25 @@
             {#if onAddFavorite}
               <button class="menu-item" onclick={() => handleAction(onAddFavorite)}>
                 <Heart size={14} />
-                <span>Add to favorites</span>
+                <span>{ $t('actions.addToFavorites') }</span>
               </button>
             {/if}
             {#if onAddToPlaylist && !shouldHidePlaylistFeatures()}
               <button class="menu-item" onclick={() => handleAction(onAddToPlaylist)}>
                 <ListMusic size={14} />
-                <span>Add to playlist</span>
+                <span>{ $t('actions.addToPlaylist') }</span>
               </button>
             {/if}
             {#if onRemoveFromPlaylist}
               <button class="menu-item danger" onclick={() => handleAction(onRemoveFromPlaylist)}>
                 <Trash2 size={14} />
-                <span>Remove from playlist</span>
+                <span>{ $t('actions.removeFromPlaylist') }</span>
               </button>
             {/if}
             {#if onFindReplacement}
               <button class="menu-item" onclick={() => handleAction(onFindReplacement)}>
                 <Search size={14} />
-                <span>Find available version</span>
+                <span>{ $t('actions.findAvailableVersion') }</span>
               </button>
             {/if}
           {/if}
@@ -636,7 +637,7 @@
               }}
             >
               <Share2 size={14} />
-              <span>Share</span>
+              <span>{ $t('actions.share') }</span>
               <ChevronRight size={14} class="chevron" />
               {#if shareOpen}
                 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -652,7 +653,7 @@
                   {#if onShareQobuz}
                     <button class="menu-item" onclick={() => handleAction(onShareQobuz)}>
                       <Link size={14} />
-                      <span>Qobuz™ link</span>
+                      <span>{ $t('actions.qobuzLink') }</span>
                     </button>
                   {/if}
                   {#if onShareSonglink}
@@ -691,7 +692,7 @@
                 }}
               >
                 <CloudDownload size={14} />
-                <span>Make available offline</span>
+                <span>{ $t('actions.makeAvailableOffline') }</span>
                 <ChevronRight size={14} class="chevron" />
                 {#if downloadOpen}
                   <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -707,13 +708,13 @@
                     {#if onReDownload}
                       <button class="menu-item" onclick={() => handleAction(onReDownload)}>
                         <RefreshCw size={14} />
-                        <span>Refresh offline copy</span>
+                        <span>{ $t('actions.refreshOfflineCopy') }</span>
                       </button>
                     {/if}
                     {#if onRemoveDownload}
                       <button class="menu-item danger" onclick={() => handleAction(onRemoveDownload)}>
                         <Trash2 size={14} />
-                        <span>Remove offline copy</span>
+                        <span>{ $t('actions.removeOfflineCopy') }</span>
                       </button>
                     {/if}
                   </div>
@@ -722,7 +723,7 @@
             {:else}
               <button class="menu-item" onclick={() => handleAction(onDownload)}>
                 <CloudDownload size={14} />
-                <span>Make available offline</span>
+                <span>{ $t('actions.makeAvailableOffline') }</span>
               </button>
             {/if}
           {/if}
@@ -735,19 +736,19 @@
             {#if onGoToAlbum}
               <button class="menu-item" onclick={() => handleAction(onGoToAlbum)}>
                 <Disc3 size={14} />
-                <span>Go to album</span>
+                <span>{ $t('actions.goToAlbum') }</span>
               </button>
             {/if}
             {#if onGoToArtist}
               <button class="menu-item" onclick={() => handleAction(onGoToArtist)}>
                 <User size={14} />
-                <span>Go to artist</span>
+                <span>{ $t('actions.goToArtist') }</span>
               </button>
             {/if}
             {#if onShowInfo}
               <button class="menu-item" onclick={() => handleAction(onShowInfo)}>
                 <Info size={14} />
-                <span>Track info</span>
+                <span>{ $t('actions.trackInfo') }</span>
               </button>
             {/if}
           {/if}

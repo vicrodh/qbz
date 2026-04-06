@@ -22,7 +22,7 @@
     <div class="title-row">
       <div class="title">{title ?? $t('player.noTrackPlaying')}</div>
       {#if explicit}
-        <span class="explicit-badge" title="Explicit"></span>
+        <span class="explicit-badge" title="{ $t('library.explicit') }"></span>
       {/if}
     </div>
     <div class="artist">{artist ?? '—'}</div>

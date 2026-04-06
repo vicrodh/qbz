@@ -32,11 +32,11 @@
   let inputEl = $state<HTMLInputElement | undefined>(undefined);
 
   const platformConfig: Record<string, { logo: string; alt: string; color: string }> = {
-    qobuz: { logo: '/qobuz-logo.svg', alt: 'Qobuz', color: '#0170ef' },
-    spotify: { logo: '/spotify-logo.svg', alt: 'Spotify', color: '#1DB954' },
-    apple: { logo: '/apple-music-logo.svg', alt: 'Apple Music', color: '#fa233b' },
-    tidal: { logo: '/tidal-tidal.svg', alt: 'Tidal', color: '#ffffff' },
-    deezer: { logo: '/deezer-logo.svg', alt: 'Deezer', color: '#00c7f2' },
+    qobuz: { logo: '/qobuz-logo.svg', alt: $t('platforms.qobuz'), color: '#0170ef' },
+    spotify: { logo: '/spotify-logo.svg', alt: $t('platforms.spotify'), color: '#1DB954' },
+    apple: { logo: '/apple-music-logo.svg', alt: $t('platforms.appleMusic'), color: '#fa233b' },
+    tidal: { logo: '/tidal-tidal.svg', alt: $t('platforms.tidal'), color: '#ffffff' },
+    deezer: { logo: '/deezer-logo.svg', alt: $t('platforms.deezer'), color: '#00c7f2' },
   };
 
   function detectPlatform(value: string): Platform {
