@@ -3893,6 +3893,8 @@ pub async fn v2_cast_play_track(
 
     let content_type = stream_url.mime_type.clone();
     let cache = app_state.audio_cache.clone();
+    // TODO: Add CMAF fallback when CoreBridge is accessible here
+    // (currently uses legacy QobuzClient via AppState; needs CoreBridgeState param)
     let audio_data = if let Some(cached) = cache.get(track_id) {
         cached.data
     } else {
@@ -4034,6 +4036,8 @@ pub async fn v2_dlna_play_track(
 
     let content_type = stream_url.mime_type.clone();
     let cache = app_state.audio_cache.clone();
+    // TODO: Add CMAF fallback when CoreBridge is accessible here
+    // (currently uses legacy QobuzClient via AppState; needs CoreBridgeState param)
     let audio_data = if let Some(cached) = cache.get(track_id) {
         cached.data
     } else {
@@ -7932,6 +7936,20 @@ pub async fn v2_prefetch_track(
         }
 
         let bridge_guard = bridge.get().await;
+
+        // Try CMAF first (Akamai CDN), fall back to legacy
+        match try_cmaf_full_download(&*bridge_guard, track_id, final_quality).await {
+            Ok(data) => {
+                log::info!("[V2/CMAF] Prefetch succeeded for track {}", track_id);
+                drop(bridge_guard);
+                cache.insert(track_id, data);
+                return Ok(());
+            }
+            Err(e) => {
+                log::warn!("[V2/CMAF] Prefetch CMAF failed for track {}: {}, trying legacy", track_id, e);
+            }
+        }
+
         let stream_url = bridge_guard
             .get_stream_url(track_id, final_quality)
             .await
@@ -8429,15 +8447,28 @@ pub async fn v2_play_track(
                 );
                 let effective_quality = Quality::from_id(stream_url.format_id)
                     .unwrap_or(final_quality);
-                let (audio_data, worked_url) = download_with_backoff(
-                    &stream_url.url,
-                    track_id,
-                    effective_quality,
-                    &*bridge_guard,
-                )
-                .await
-                .map_err(RuntimeError::Internal)?;
-                stream_url = worked_url;
+
+                // Try CMAF full download first (Akamai CDN), fall back to legacy
+                let audio_data = match try_cmaf_full_download(&*bridge_guard, track_id, effective_quality).await {
+                    Ok(data) => {
+                        log::info!("[V2/CMAF] Streaming-fallback download succeeded for track {}", track_id);
+                        data
+                    }
+                    Err(cmaf_err) => {
+                        log::warn!("[V2/CMAF] Streaming-fallback CMAF failed for track {}: {}, trying legacy", track_id, cmaf_err);
+                        let (data, worked) = download_with_backoff(
+                            &stream_url.url,
+                            track_id,
+                            effective_quality,
+                            &*bridge_guard,
+                        )
+                        .await
+                        .map_err(RuntimeError::Internal)?;
+                        stream_url = worked;
+                        data
+                    }
+                };
+
                 let data_size = audio_data.len();
                 if !streaming_only {
                     cache.insert(track_id, audio_data.clone());
@@ -8548,15 +8579,28 @@ pub async fn v2_play_track(
     );
     let effective_quality = Quality::from_id(stream_url.format_id)
         .unwrap_or(final_quality);
-    let (audio_data, worked_url) = download_with_backoff(
-        &stream_url.url,
-        track_id,
-        effective_quality,
-        &*bridge_guard,
-    )
-    .await
-    .map_err(RuntimeError::Internal)?;
-    stream_url = worked_url;
+
+    // Try CMAF full download first (Akamai CDN), fall back to legacy
+    let audio_data = match try_cmaf_full_download(&*bridge_guard, track_id, effective_quality).await {
+        Ok(data) => {
+            log::info!("[V2/CMAF] Standard download succeeded for track {}", track_id);
+            data
+        }
+        Err(cmaf_err) => {
+            log::warn!("[V2/CMAF] Standard download CMAF failed for track {}: {}, trying legacy", track_id, cmaf_err);
+            let (data, worked) = download_with_backoff(
+                &stream_url.url,
+                track_id,
+                effective_quality,
+                &*bridge_guard,
+            )
+            .await
+            .map_err(RuntimeError::Internal)?;
+            stream_url = worked;
+            data
+        }
+    };
+
     let data_size = audio_data.len();
 
     // Cache it (unless streaming_only mode)
@@ -12189,6 +12233,9 @@ fn spawn_track_cache_download(
             serde_json::json!({ "trackId": track_id }),
         );
 
+        // TODO: Add CMAF fallback when CoreBridge is accessible here
+        // (currently uses legacy QobuzClient; spawn_track_cache_download would need
+        // an Arc<RwLock<Option<CoreBridge>>> parameter to call try_cmaf_full_download)
         let stream_url = {
             let client_guard = client.read().await;
             client_guard
