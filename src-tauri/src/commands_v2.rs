@@ -390,12 +390,23 @@ fn cached_audio_incompatible_with_hw(
 /// Downloads audio data from a CDN URL.
 /// Uses a connect timeout but no total timeout because Hi-Res+ tracks
 /// can be 100-200MB and take several minutes on slower connections.
+/// Waits for any active streaming download to finish before starting,
+/// to avoid CDN rate limiting from concurrent downloads.
 async fn download_audio(url: &str) -> Result<Vec<u8>, String> {
     use std::time::Duration;
 
+    // Wait for streaming download to finish (CDN kills concurrent connections)
+    while CDN_STREAMING_ACTIVE.load(std::sync::atomic::Ordering::Acquire) > 0 {
+        log::debug!("[V2] download_audio waiting for streaming download to finish...");
+        CDN_STREAM_DONE.notified().await;
+    }
+
+    // Force HTTP/1.1 — Qobuz CDN sends RST_STREAM on large downloads over HTTP/2,
+    // causing "1 byte then EOF". curl (HTTP/1.1) downloads the same URLs successfully.
     let client = reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(10))
         .use_native_tls()
+        .http1_only()
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 
@@ -410,6 +421,22 @@ async fn download_audio(url: &str) -> Result<Vec<u8>, String> {
 
     if !response.status().is_success() {
         return Err(format!("HTTP error: {}", response.status()));
+    }
+
+    // Log response headers for CDN diagnostics (helps debug "1 byte EOF" issues)
+    {
+        let headers = response.headers();
+        let h_ce = headers.get("content-encoding").map(|v| v.to_str().unwrap_or("?"));
+        let h_te = headers.get("transfer-encoding").map(|v| v.to_str().unwrap_or("?"));
+        let h_conn = headers.get("connection").map(|v| v.to_str().unwrap_or("?"));
+        let h_server = headers.get("server").map(|v| v.to_str().unwrap_or("?"));
+        let h_ct = headers.get("content-type").map(|v| v.to_str().unwrap_or("?"));
+        let h_via = headers.get("via").map(|v| v.to_str().unwrap_or("?"));
+        log::info!(
+            "[V2] CDN response: status={}, content-encoding={:?}, transfer-encoding={:?}, connection={:?}, server={:?}, content-type={:?}, via={:?}, version={:?}",
+            response.status(),
+            h_ce, h_te, h_conn, h_server, h_ct, h_via, response.version()
+        );
     }
 
     let content_length = response.content_length();
@@ -630,6 +657,137 @@ async fn download_with_backoff(
     ))
 }
 
+/// Download audio via CMAF segmented pipeline.
+/// Fetches init segment + audio segments, decrypts, returns standard FLAC bytes.
+async fn download_audio_cmaf(
+    url_template: &str,
+    n_segments: u8,
+    content_key: &[u8; 16],
+) -> Result<Vec<u8>, String> {
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .use_native_tls()
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+    // Fetch init segment (s=0)
+    let init_url = url_template.replace("$SEGMENT$", "0");
+    log::info!("[CMAF] Fetching init segment");
+    let init_data = client
+        .get(&init_url)
+        .header("User-Agent", "Mozilla/5.0")
+        .send()
+        .await
+        .map_err(|e| format!("Failed to fetch init segment: {}", e))?
+        .bytes()
+        .await
+        .map_err(|e| format!("Failed to read init segment: {}", e))?;
+
+    let init_info = qbz_cmaf::parse_init_segment(&init_data)
+        .map_err(|e| format!("Failed to parse init segment: {}", e))?;
+
+    log::info!(
+        "[CMAF] Init: FLAC header {}B, {} entries in segment table",
+        init_info.flac_header.len(),
+        init_info.segment_table.len()
+    );
+
+    // Pre-allocate output
+    let total_size: usize = init_info.flac_header.len()
+        + init_info
+            .segment_table
+            .iter()
+            .map(|s| s.byte_len as usize)
+            .sum::<usize>();
+    let mut output = Vec::with_capacity(total_size);
+    output.extend_from_slice(&init_info.flac_header);
+
+    // Fetch and decrypt audio segments (s=1..n_segments-1)
+    for seg_idx in 1..n_segments {
+        let seg_url = url_template.replace("$SEGMENT$", &seg_idx.to_string());
+        let seg_data = client
+            .get(&seg_url)
+            .header("User-Agent", "Mozilla/5.0")
+            .send()
+            .await
+            .map_err(|e| format!("Segment {} fetch failed: {}", seg_idx, e))?
+            .bytes()
+            .await
+            .map_err(|e| format!("Segment {} read failed: {}", seg_idx, e))?;
+
+        let crypto = qbz_cmaf::parse_segment_crypto(&seg_data)
+            .map_err(|e| format!("Segment {} parse failed: {}", seg_idx, e))?;
+
+        let mut data_pos = crypto.data_offset;
+        for entry in &crypto.entries {
+            let frame_end = data_pos + entry.size as usize;
+            if frame_end > seg_data.len() {
+                return Err(format!("Segment {} frame overflows data", seg_idx));
+            }
+            let mut frame = seg_data[data_pos..frame_end].to_vec();
+            if entry.flags != 0 {
+                qbz_cmaf::decrypt_frame(content_key, &entry.iv, &mut frame);
+            }
+            output.extend_from_slice(&frame);
+            data_pos = frame_end;
+        }
+
+        // Trailing unencrypted data
+        if data_pos < crypto.mdat_end && crypto.mdat_end <= seg_data.len() {
+            output.extend_from_slice(&seg_data[data_pos..crypto.mdat_end]);
+        }
+
+        if seg_idx % 10 == 0 || seg_idx == n_segments - 1 {
+            log::info!(
+                "[CMAF] Segment {}/{} ({:.1} MB)",
+                seg_idx,
+                n_segments - 1,
+                output.len() as f64 / (1024.0 * 1024.0)
+            );
+        }
+    }
+
+    log::info!(
+        "[CMAF] Complete: {:.2} MB FLAC",
+        output.len() as f64 / (1024.0 * 1024.0)
+    );
+    Ok(output)
+}
+
+/// Try downloading a track via the CMAF pipeline (Akamai CDN, encrypted segments).
+/// Returns `(audio_bytes, format_id, sample_rate, bit_depth)` on success.
+async fn try_cmaf_download(
+    bridge: &CoreBridge,
+    track_id: u64,
+    quality: Quality,
+) -> Result<(Vec<u8>, u32, Option<u32>, Option<u32>), String> {
+    let file_url = bridge.get_file_url(track_id, quality).await?;
+
+    let url_template = file_url
+        .url_template
+        .as_ref()
+        .ok_or("No url_template in file/url response")?;
+    let key_str = file_url
+        .key
+        .as_ref()
+        .ok_or("No key in file/url response")?;
+
+    let (_session_id, infos) = bridge.ensure_cmaf_session().await?;
+
+    let session_key = qbz_cmaf::derive_session_key(&infos)
+        .map_err(|e| format!("Session key derivation failed: {}", e))?;
+    let content_key = qbz_cmaf::unwrap_content_key(&session_key, key_str)
+        .map_err(|e| format!("Content key unwrap failed: {}", e))?;
+
+    let audio_data = download_audio_cmaf(url_template, file_url.n_segments, &content_key).await?;
+
+    let format_id = file_url.format_id.unwrap_or(quality.id());
+    let sampling_rate = file_url.sampling_rate;
+    let bit_depth = file_url.bits_depth.or(file_url.bit_depth);
+
+    Ok((audio_data, format_id, sampling_rate, bit_depth))
+}
+
 /// Stream info from probing a URL (HEAD + first 64KB)
 struct V2StreamInfo {
     content_length: u64,
@@ -647,6 +805,7 @@ async fn v2_get_stream_info(url: &str) -> Result<V2StreamInfo, String> {
         .timeout(Duration::from_secs(30))
         .connect_timeout(Duration::from_secs(10))
         .use_native_tls()
+        .http1_only()
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 
@@ -721,7 +880,9 @@ async fn v2_get_stream_info(url: &str) -> Result<V2StreamInfo, String> {
     })
 }
 
-/// Download audio chunks and push them to the player's streaming buffer
+/// Download audio chunks and push them to the player's streaming buffer.
+/// Signals CDN_STREAMING_ACTIVE so prefetch waits until we finish,
+/// preventing concurrent CDN downloads that trigger rate limiting.
 async fn v2_download_and_stream(
     url: &str,
     writer: qbz_player::BufferWriter,
@@ -733,10 +894,24 @@ async fn v2_download_and_stream(
     use futures_util::StreamExt;
     use std::time::{Duration, Instant};
 
+    // Signal that a streaming download is active — prefetch will wait
+    CDN_STREAMING_ACTIVE.fetch_add(1, std::sync::atomic::Ordering::Release);
+
+    // Ensure we clear the flag and notify waiters when done (even on error)
+    struct StreamingGuard;
+    impl Drop for StreamingGuard {
+        fn drop(&mut self) {
+            CDN_STREAMING_ACTIVE.fetch_sub(1, std::sync::atomic::Ordering::Release);
+            CDN_STREAM_DONE.notify_waiters();
+        }
+    }
+    let _guard = StreamingGuard;
+
     let client = reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(10))
         .timeout(Duration::from_secs(300))
         .use_native_tls()
+        .http1_only()
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 
@@ -1802,7 +1977,15 @@ lazy_static::lazy_static! {
     /// Semaphore to limit concurrent prefetch operations
     static ref V2_PREFETCH_SEMAPHORE: tokio::sync::Semaphore =
         tokio::sync::Semaphore::new(V2_MAX_CONCURRENT_PREFETCH);
+
+    /// Notify waiters when streaming download finishes.
+    /// Prefetch waits on this if a streaming download is active.
+    static ref CDN_STREAM_DONE: tokio::sync::Notify = tokio::sync::Notify::new();
 }
+
+/// Number of active streaming downloads (for the currently-playing track).
+/// Prefetch checks this and waits if > 0 to avoid CDN rate limiting.
+static CDN_STREAMING_ACTIVE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 
 /// Spawn background tasks to prefetch upcoming Qobuz tracks (V2)
 /// Takes upcoming tracks directly from CoreBridge (not legacy AppState queue)
@@ -7886,6 +8069,56 @@ pub async fn v2_play_track(
             "[V2] Track {} not in cache, fetching from network...",
             track_id
         );
+    }
+
+    // Try CMAF pipeline first (Akamai CDN, encrypted segments)
+    log::info!("[V2/CMAF] Attempting CMAF download for track {}", track_id);
+    match try_cmaf_download(&*bridge_guard, track_id, final_quality).await {
+        Ok((audio_data, format_id, _sample_rate, _bit_depth)) => {
+            log::info!(
+                "[V2/CMAF] Success: {} bytes, format_id={}",
+                audio_data.len(),
+                format_id
+            );
+            let data_size = audio_data.len();
+
+            // Cache it (unless streaming_only mode)
+            if !streaming_only {
+                cache.insert(track_id, audio_data.clone());
+                log::info!("[V2/CACHED] Track {} stored in memory cache (via CMAF)", track_id);
+            } else {
+                log::info!(
+                    "[V2/NOT CACHED] Track {} - streaming_only mode active",
+                    track_id
+                );
+            }
+
+            // Play it via qbz-player
+            player
+                .play_data(audio_data, track_id)
+                .map_err(RuntimeError::Internal)?;
+            log::info!("[V2] Playing track {} ({} bytes, via CMAF)", track_id, data_size);
+
+            // Prefetch next tracks in background
+            let upcoming_tracks = bridge_guard.peek_upcoming(V2_PREFETCH_LOOKAHEAD).await;
+            drop(bridge_guard);
+            spawn_v2_prefetch_with_hw_check(
+                bridge.0.clone(),
+                cache,
+                upcoming_tracks,
+                final_quality,
+                streaming_only,
+                hw_device_id,
+            );
+
+            return Ok(V2PlayTrackResult {
+                format_id: Some(format_id),
+            });
+        }
+        Err(e) => {
+            log::warn!("[V2/CMAF] Failed: {}, falling back to legacy download", e);
+            // Fall through to existing legacy path
+        }
     }
 
     let stream_url_result = bridge_guard

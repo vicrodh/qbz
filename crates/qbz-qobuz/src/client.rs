@@ -1857,7 +1857,7 @@ impl QobuzClient {
 
     /// Ensure we have a valid CMAF session, renewing if expired.
     /// Returns `(session_id, infos)` for use with file/url and key derivation.
-    async fn ensure_cmaf_session(&self) -> Result<(String, String)> {
+    pub async fn ensure_cmaf_session(&self) -> Result<(String, String)> {
         let now = get_timestamp();
 
         // Check existing session (with 60s safety margin)
