@@ -7634,7 +7634,7 @@ pub async fn v2_pause_playback(
 ) -> Result<(), RuntimeError> {
     runtime
         .manager()
-        .check_requirements(CommandRequirement::RequiresClientInit)
+        .check_requirements(CommandRequirement::RequiresUserSession)
         .await?;
     log::info!("[V2] Command: pause_playback");
     app_state.media_controls.set_playback(false);
@@ -7651,7 +7651,7 @@ pub async fn v2_resume_playback(
 ) -> Result<(), RuntimeError> {
     runtime
         .manager()
-        .check_requirements(CommandRequirement::RequiresClientInit)
+        .check_requirements(CommandRequirement::RequiresUserSession)
         .await?;
     log::info!("[V2] Command: resume_playback");
     app_state.media_controls.set_playback(true);
@@ -7668,7 +7668,7 @@ pub async fn v2_stop_playback(
 ) -> Result<(), RuntimeError> {
     runtime
         .manager()
-        .check_requirements(CommandRequirement::RequiresClientInit)
+        .check_requirements(CommandRequirement::RequiresUserSession)
         .await?;
     log::info!("[V2] Command: stop_playback");
     app_state.media_controls.set_stopped();
@@ -7686,7 +7686,7 @@ pub async fn v2_seek(
 ) -> Result<(), RuntimeError> {
     runtime
         .manager()
-        .check_requirements(CommandRequirement::RequiresClientInit)
+        .check_requirements(CommandRequirement::RequiresUserSession)
         .await?;
     log::info!("[V2] Command: seek {}", position);
     let bridge_guard = bridge.get().await;
@@ -7717,7 +7717,7 @@ pub async fn v2_set_volume(
 ) -> Result<(), RuntimeError> {
     runtime
         .manager()
-        .check_requirements(CommandRequirement::RequiresClientInit)
+        .check_requirements(CommandRequirement::RequiresUserSession)
         .await?;
 
     // Force 100% volume when ALSA Direct hw: is active
