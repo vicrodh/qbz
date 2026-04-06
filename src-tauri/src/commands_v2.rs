@@ -7719,24 +7719,23 @@ pub async fn v2_play_next_gapless(
     }
 
     // Check local library
-    let track_id_i64 = track_id_to_play
-        .try_into()
-        .map_err(|_| RuntimeError::Internal("Track ID too large for i64".to_string()))?;
-
-    let tracks = v2_library_get_tracks_by_ids(vec![track_id_i64], library_state.clone())
-        .await
-        .map_err(|e| RuntimeError::Internal(format!("Failed to get local track: {}", e)))?;
-
-    if let Some(local_track) = tracks.into_iter().next() {
-        let path = std::path::Path::new(&local_track.file_path);
-        if path.exists() {
-            log::info!("[V2/GAPLESS] Track {} from LOCAL library", track_id_to_play);
-            let audio_data = std::fs::read(path)
-                .map_err(|e| RuntimeError::Internal(format!("Failed to read local file: {}", e)))?;
-            bridge.get().await.player()
-                .play_next(audio_data, track_id_to_play)
-                .map_err(RuntimeError::Internal)?;
-            return Ok(true);
+    if let Ok(track_id_i64) = track_id_to_play.try_into() {
+        if let Ok(tracks) = 
+            v2_library_get_tracks_by_ids(vec![track_id_i64], library_state.clone())
+            .await 
+        {
+            if let Some(local_track) = tracks.into_iter().next() {
+                let path = std::path::Path::new(&local_track.file_path);
+                if path.exists() {
+                    log::info!("[V2/GAPLESS] Track {} from LOCAL library", track_id_to_play);
+                    let audio_data = std::fs::read(path)
+                        .map_err(|e| RuntimeError::Internal(format!("Failed to read local file: {}", e)))?;
+                    bridge.get().await.player()
+                        .play_next(audio_data, track_id_to_play)
+                        .map_err(RuntimeError::Internal)?;
+                    return Ok(true);
+                }
+            }
         }
     }
 
