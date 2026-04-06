@@ -189,7 +189,7 @@
     </div>
 
     <!-- Close Button -->
-    <button class="close-btn" class:visible={showControls} onclick={onClose} title={$t('actions.close') + ' (Esc)'}>
+    <button class="close-btn" class:visible={showControls} onclick={onClose} title={$t('actions.close') + ` (${$t('keys.esc')})`}>
       <ChevronDown size={28} />
     </button>
 

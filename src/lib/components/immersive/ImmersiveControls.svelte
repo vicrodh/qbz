@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Shuffle, SkipBack, Play, Pause, SkipForward, Repeat, Heart } from 'lucide-svelte';
+  import { t } from '$lib/i18n';
   import ProgressBar from './shared/ProgressBar.svelte';
   import VolumeSlider from './shared/VolumeSlider.svelte';
   import QualityBadge from '../QualityBadge.svelte';
@@ -61,7 +62,7 @@
         class="control-btn secondary"
         class:active={isShuffle}
         onclick={onToggleShuffle}
-        title="Shuffle"
+        title={$t('player.shuffle')}
       >
         <Shuffle size={18} />
       </button>
@@ -70,7 +71,7 @@
         class="control-btn"
         onclick={onSkipBack}
         disabled={!onSkipBack}
-        title="Previous"
+        title={$t('player.previous')}
       >
         <SkipBack size={20} />
       </button>
@@ -78,7 +79,7 @@
       <button
         class="control-btn play-btn"
         onclick={onTogglePlay}
-        title={isPlaying ? 'Pause' : 'Play'}
+        title={isPlaying ? $t('player.pause') : $t('player.play')}
       >
         {#if isPlaying}
           <Pause size={24} />
@@ -91,7 +92,7 @@
         class="control-btn"
         onclick={onSkipForward}
         disabled={!onSkipForward}
-        title="Next"
+        title={$t('player.next')}
       >
         <SkipForward size={20} />
       </button>
@@ -100,7 +101,7 @@
         class="control-btn secondary"
         class:active={repeatMode !== 'off'}
         onclick={onToggleRepeat}
-        title={repeatMode === 'off' ? 'Repeat' : repeatMode === 'all' ? 'Repeat All' : 'Repeat One'}
+        title={repeatMode === 'off' ? $t('player.repeat') : repeatMode === 'all' ? $t('player.repeatAll') : $t('player.repeatOne')}
       >
         <Repeat size={18} />
         {#if repeatMode === 'one'}
@@ -120,7 +121,7 @@
       class="action-btn"
       class:active={isFavorite}
       onclick={onToggleFavorite}
-      title={isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}
+      title={isFavorite ? $t('actions.removeFromFavorites') : $t('actions.addToFavorites')}
     >
       <Heart
         size={18}

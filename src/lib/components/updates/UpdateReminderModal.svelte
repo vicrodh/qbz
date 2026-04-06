@@ -1,5 +1,6 @@
 <script lang="ts">
   import Modal from '../Modal.svelte';
+  import { t } from '$lib/i18n';
 
   type ReminderChoice = 'later' | 'ignore_release' | 'disable_all';
 
@@ -27,29 +28,29 @@
   }
 </script>
 
-<Modal {isOpen} onClose={onClose} title="New version reminder" maxWidth="600px">
+<Modal {isOpen} onClose={onClose} title={$t('updates.updateReminder.newVersionReminder')} maxWidth="600px">
   <div class="reminder-modal">
     <label class="option">
       <input type="radio" name="reminder" bind:group={choice} value="later" />
-      <span>Remind me later</span>
+      <span>{$t('updates.updateReminder.remindMeLater')}</span>
     </label>
 
     <label class="option">
       <input type="radio" name="reminder" bind:group={choice} value="ignore_release" />
-      <span>Do not notify me again about this release</span>
+      <span>{$t('updates.updateReminder.doNotNotifyAgain')}</span>
     </label>
 
     <label class="option">
       <input type="radio" name="reminder" bind:group={choice} value="disable_all" />
-      <span>Do not notify me about new releases</span>
+      <span>{$t('updates.updateReminder.doNotNotifyAboutReleases')}</span>
     </label>
 
-    <p class="hint">Can be re-enabled from Settings</p>
+    <p class="hint">{$t('updates.updateReminder.hint')}</p>
   </div>
 
   {#snippet footer()}
     <div class="footer-actions">
-      <button class="btn btn-primary" type="button" onclick={handleSubmit}>OK, close</button>
+      <button class="btn btn-primary" type="button" onclick={handleSubmit}>{ $t('actions.okClose') }</button>
     </div>
   {/snippet}
 </Modal>

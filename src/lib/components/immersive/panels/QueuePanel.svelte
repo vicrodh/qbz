@@ -88,7 +88,7 @@
     <!-- Now Playing -->
     {#if currentTrack}
       <div class="section">
-        <div class="section-label">{$t('player.nowPlaying') || 'Now Playing'}</div>
+        <div class="section-label">{$t('player.nowPlaying')}</div>
         <div class="track-item current">
           <img use:cachedSrc={currentTrack.artwork} alt="" class="track-artwork" />
           <div class="track-info">
@@ -102,7 +102,7 @@
 
     <!-- Up Next -->
     <div class="section list-section">
-      <div class="section-label">{$t('player.upNext') || 'Up Next'}</div>
+      <div class="section-label">{$t('player.upNext')}</div>
 
       {#if hasUpcoming}
         <div class="tracks-list">
@@ -112,7 +112,7 @@
               <button
                 class="play-btn"
                 onclick={() => onPlayTrack(actualIndex)}
-                title={$t('actions.playNow') || 'Play now'}
+                title={$t('actions.playNow')}
               >
                 <Play size={14} />
               </button>
@@ -127,7 +127,7 @@
         </div>
       {:else}
         <div class="empty-state">
-          <span>{$t('player.queueEmpty') || 'Queue is empty'}</span>
+          <span>{$t('player.queueEmpty')}</span>
         </div>
       {/if}
     </div>
@@ -141,7 +141,7 @@
               <button
                 class="play-btn"
                 onclick={() => onPlayHistoryTrack?.(String(track.id))}
-                title={$t('actions.playNow') || 'Play now'}
+                title={$t('actions.playNow')}
               >
                 <Play size={14} />
               </button>
@@ -156,7 +156,7 @@
         </div>
       {:else}
         <div class="empty-state">
-          <span>{$t('player.noHistoryYet') || 'No history yet'}</span>
+          <span>{$t('player.noHistoryYet')}</span>
         </div>
       {/if}
     </div>

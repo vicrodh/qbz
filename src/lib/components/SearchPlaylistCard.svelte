@@ -1,5 +1,6 @@
 <script lang="ts">
   import { tick, onMount } from 'svelte';
+  import { t } from 'svelte-i18n';
   import { Play, Heart, Ellipsis, ListPlus, Library, Share2, ListMusic } from 'lucide-svelte';
   import PlaylistCollage from './PlaylistCollage.svelte';
   import type { Playlist } from '$lib/stores/searchState';
@@ -182,10 +183,10 @@
         </div>
       {/if}
       <div class="action-buttons">
-        <button class="overlay-btn overlay-btn--minor" type="button" title="Add to favorites">
+        <button class="overlay-btn overlay-btn--minor" type="button" title={ $t('actions.addToFavorites') }>
           <Heart size={18} />
         </button>
-        <button class="overlay-btn" type="button" onclick={handlePlay} title="Play">
+        <button class="overlay-btn" type="button" onclick={handlePlay} title={ $t('actions.play') }>
           <Play size={18} fill="white" />
         </button>
         <button
@@ -193,7 +194,7 @@
           type="button"
           bind:this={menuTriggerRef}
           onclick={toggleMenu}
-          title="More options"
+          title={ $t('actions.moreOptions') }
         >
           <Ellipsis size={18} />
         </button>
@@ -213,7 +214,7 @@
     <div class="card-subtitle">
       <span class="owner">{playlist.owner.name}</span>
       <span class="separator">-</span>
-      <span class="tracks">{playlist.tracks_count} tracks</span>
+      <span class="tracks">{ $t('playlist.trackCount', { values: { count: playlist.tracks_count } }) }</span>
     </div>
   </div>
 </div>
@@ -221,18 +222,18 @@
 {#if menuOpen}
   <div class="playlist-menu" bind:this={menuEl} style={menuStyle} use:portal>
     <button class="menu-item" onclick={() => { onPlayNext?.(); closeMenu(); }}>
-      <ListPlus size={14} /> <span>Play next</span>
+      <ListPlus size={14} /> <span>{ $t('actions.playNext') }</span>
     </button>
     <button class="menu-item" onclick={() => { onPlayLater?.(); closeMenu(); }}>
-      <ListMusic size={14} /> <span>Add to queue</span>
+      <ListMusic size={14} /> <span>{ $t('actions.addToQueue') }</span>
     </button>
     <div class="menu-separator"></div>
     <button class="menu-item" onclick={() => { onCopyToLibrary?.(); closeMenu(); }}>
-      <Library size={14} /> <span>Copy to library</span>
+      <Library size={14} /> <span>{ $t('playlist.copyToLibrary') }</span>
     </button>
     <div class="menu-separator"></div>
     <button class="menu-item" onclick={() => { onShareQobuz?.(); closeMenu(); }}>
-      <Share2 size={14} /> <span>Share (Qobuz)</span>
+      <Share2 size={14} /> <span>{ $t('actions.shareQobuz') }</span>
     </button>
   </div>
 {/if}

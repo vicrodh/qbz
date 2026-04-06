@@ -1815,7 +1815,7 @@
         title: 'Are you absolutely sure?',
         kind: 'warning',
         okLabel: 'Clear Library',
-        cancelLabel: 'Cancel'
+        cancelLabel: $t('actions.cancel')
       }
     );
 
@@ -3378,7 +3378,7 @@
           {/if}
           <button class="stop-scan-btn" onclick={handleStopScan} title="Stop scanning">
             <X size={14} />
-            <span>Stop</span>
+            <span>{ $t('library.stopScan') }</span>
           </button>
         </div>
       </div>
@@ -3576,7 +3576,7 @@
             </div>
           </div>
         {:else}
-          <button class="search-toggle" onclick={toggleSearch} title="Search">
+          <button class="search-toggle" onclick={toggleSearch} title={ $t('search.title') }>
             <Search size={18} />
           </button>
         {/if}
@@ -3640,7 +3640,7 @@
                       </div>
                     </div>
                     <button class="show-album-btn" onclick={() => handleShowAlbum(album)} title="Show album">
-                      <span>Show</span>
+                      <span>{ $t('actions.show') }</span>
                     </button>
                   </div>
                 {/each}
@@ -4234,7 +4234,7 @@
                           class="carousel-btn"
                           onclick={prevDiscogsPage}
                           disabled={!hasPrevDiscogsPages}
-                          title="Previous"
+                          title={ $t('player.previous') }
                         >
                           <ChevronLeft size={16} />
                         </button>
@@ -4245,7 +4245,7 @@
                           class="carousel-btn"
                           onclick={nextDiscogsPage}
                           disabled={!hasMoreDiscogsPages}
-                          title="Next"
+                          title={ $t('player.next') }
                         >
                           <ChevronRight size={16} />
                         </button>

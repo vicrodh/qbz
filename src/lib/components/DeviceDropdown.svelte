@@ -356,7 +356,7 @@
           {/each}
         </div>
       {:else}
-        <div class="no-results">No devices found</div>
+        <div class="no-results">{$t('settings.audio.noDevicesFound')}</div>
       {/each}
     </div>
   </div>

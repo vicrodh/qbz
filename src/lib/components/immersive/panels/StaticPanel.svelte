@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from 'svelte-i18n';
   import QualityBadge from '$lib/components/QualityBadge.svelte';
 
   interface Props {
@@ -48,13 +49,13 @@
           <span class="bar"></span>
           <span class="bar"></span>
         </div>
-        <span>Now Playing</span>
+        <span>{$t('player.nowPlaying')}</span>
       </div>
     {/if}
     <div class="track-title-row">
       <h1 class="track-title">{trackTitle}</h1>
       {#if explicit}
-        <span class="explicit-badge" title="Explicit"></span>
+        <span class="explicit-badge" title="{ $t('library.explicit') }"></span>
       {/if}
     </div>
     <p class="track-artist">{artist}</p>

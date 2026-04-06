@@ -132,7 +132,7 @@
               </div>
 
               <span class="section-label">
-                {section.label}
+                { $t(`home.${section.id}`) }
                 {#if section.source === 'qobuz'}
                   <span class="source-badge qobuz">Qobuz™</span>
                 {:else if section.source === 'ml'}
@@ -152,7 +152,7 @@
 
             {#if section.id === 'recentAlbums' && section.visible}
               <div class="section-limit">
-                <label class="limit-label" for="limit-recent">Items to show</label>
+                <label class="limit-label" for="limit-recent">{ $t('homeSettings.itemsToShow') }</label>
                 <input
                   id="limit-recent"
                   type="number"
@@ -165,7 +165,7 @@
               </div>
             {:else if section.id === 'continueTracks' && section.visible}
               <div class="section-limit">
-                <label class="limit-label" for="limit-continue">Items to show</label>
+                <label class="limit-label" for="limit-continue">{ $t('homeSettings.itemsToShow') }</label>
                 <input
                   id="limit-continue"
                   type="number"
@@ -178,7 +178,7 @@
               </div>
             {:else if section.id === 'topArtists' && section.visible}
               <div class="section-limit">
-                <label class="limit-label" for="limit-artists">Items to show</label>
+                <label class="limit-label" for="limit-artists">{ $t('homeSettings.itemsToShow') }</label>
                 <input
                   id="limit-artists"
                   type="number"
@@ -191,7 +191,7 @@
               </div>
             {:else if section.id === 'favoriteAlbums' && section.visible}
               <div class="section-limit">
-                <label class="limit-label" for="limit-fav-albums">Items to show</label>
+                <label class="limit-label" for="limit-fav-albums">{ $t('homeSettings.itemsToShow') }</label>
                 <input
                   id="limit-fav-albums"
                   type="number"
@@ -204,7 +204,7 @@
               </div>
             {:else if (section.id === 'newReleases' || section.id === 'pressAwards' || section.id === 'mostStreamed' || section.id === 'qobuzissimes' || section.id === 'editorPicks') && section.visible}
               <div class="section-limit">
-                <label class="limit-label" for="limit-featured">Items to show</label>
+                <label class="limit-label" for="limit-featured">{ $t('homeSettings.itemsToShow') }</label>
                 <input
                   id="limit-featured-{section.id}"
                   type="number"

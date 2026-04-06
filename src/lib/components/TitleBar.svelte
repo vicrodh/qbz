@@ -138,7 +138,7 @@
       <button
         class="control-btn close"
         onclick={handleClose}
-        title="Close"
+        title={ $t('actions.close') }
         aria-label="Close window"
         style={btnStyle(controlsColors?.close)}
         data-tauri-drag-region="false"
@@ -162,7 +162,7 @@
       <button
         class="control-btn minimize"
         onclick={handleMinimize}
-        title="Minimize"
+        title={ $t('player.minimize') }
         aria-label="Minimize window"
         style={btnStyle(controlsColors?.minimize)}
         data-tauri-drag-region="false"
@@ -180,7 +180,7 @@
       <button
         class="control-btn minimize"
         onclick={handleMinimize}
-        title="Minimize"
+        title={ $t('player.minimize') }
         aria-label="Minimize window"
         style={btnStyle(controlsColors?.minimize)}
         data-tauri-drag-region="false"
@@ -204,7 +204,7 @@
       <button
         class="control-btn close"
         onclick={handleClose}
-        title="Close"
+        title={ $t('actions.close') }
         aria-label="Close window"
         style={btnStyle(controlsColors?.close)}
         data-tauri-drag-region="false"

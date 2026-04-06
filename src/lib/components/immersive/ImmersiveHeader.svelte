@@ -168,7 +168,7 @@
     <button
       class="mode-toggle"
       onclick={() => onViewModeChange(isFocusMode ? 'split' : 'focus')}
-      title={isFocusMode ? 'Switch to Split View (V)' : 'Switch to Immersive View (V)'}
+      title={isFocusMode ? $t('actions.switchToSplitView') : $t('actions.switchToImmersiveView')}
     >
       <img
         src={isFocusMode ? '/split-view.svg' : '/lotus.svg'}
@@ -336,7 +336,7 @@
         <button
           class="window-btn"
           onclick={onToggleFullscreen}
-          title={isFullscreen ? 'Exit Fullscreen (F11)' : 'Fullscreen (F11)'}
+          title={isFullscreen ? $t('player.exitFullscreenWithKey', { values: { key: "F11" } }) : $t('player.fullscreenWithKey', { values: { key: "F11" } })}
         >
           {#if isFullscreen}
             <Minimize size={16} />
@@ -347,7 +347,7 @@
         <button
           class="window-btn"
           onclick={onToggleMaximize}
-          title={isMaximized ? 'Restore Window' : 'Maximize Window'}
+          title={isMaximized ? $t('player.restoreWindow') : $t('player.maximizeWindow')}
         >
           {#if isMaximized}
             <Copy size={14} />
@@ -358,28 +358,28 @@
         <button
           class="window-btn"
           onclick={onMinimize}
-          title="Minimize"
+          title={$t('player.minimize')}
         >
           <Minus size={16} />
         </button>
         <button
           class="window-btn"
           onclick={onClose}
-          title="Exit Immersive (Esc)"
+          title={$t('player.exitImmersiveWithKey', { values: { key: $t('keys.esc') } })}
         >
           <ChevronDown size={16} />
         </button>
         <button
           class="window-btn close"
           onclick={handleCloseApp}
-          title="Close App"
+          title={$t('player.closeApp')}
         >
           <X size={16} />
         </button>
       </div>
 
       <!-- Default icon (window) -->
-      <button class="window-trigger" title="Window Controls">
+      <button class="window-trigger" title="{ $t('player.windowControls') }">
         <img src="/window.svg" alt="Window" class="window-icon" />
       </button>
     </div>

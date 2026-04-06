@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { t } from 'svelte-i18n';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import { invoke } from '@tauri-apps/api/core';
   import QualityBadge from '$lib/components/QualityBadge.svelte';
@@ -89,11 +90,11 @@
 
   function formatTypeLabel(): string {
     const raw = (format || '').toLowerCase();
-    if (raw.includes('flac')) return 'FLAC (Free Lossless Audio Codec)';
-    if (raw.includes('mp3')) return 'MP3';
-    if (raw.includes('aac')) return 'AAC';
-    if (raw.includes('opus')) return 'Opus';
-    if (raw.includes('alac')) return 'ALAC';
+    if (raw.includes('flac')) return $t('fileFormat.flac');
+    if (raw.includes('mp3')) return $t('fileFormat.mp3');
+    if (raw.includes('aac')) return $t('fileFormat.aac');
+    if (raw.includes('opus')) return $t('fileFormat.opus');
+    if (raw.includes('alac')) return $t('fileFormat.alac');
     return 'Audio Stream';
   }
 
@@ -573,7 +574,7 @@
     <div class="track-meta">
       <span class="track-title">{trackTitle}</span>
       {#if explicit}
-        <span class="explicit-badge" title="Explicit"></span>
+        <span class="explicit-badge" title="{ $t('library.explicit') }"></span>
       {/if}
       {#if album}
         <span class="track-album">{album}</span>

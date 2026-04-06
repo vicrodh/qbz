@@ -1,6 +1,7 @@
 <script lang="ts">
   import Modal from '../Modal.svelte';
   import { Package, Copy, Check } from 'lucide-svelte';
+  import { t } from '$lib/i18n';
 
   interface Props {
     isOpen: boolean;
@@ -33,13 +34,15 @@ sudo snap connect qbz-player:mpris`;
       // Clipboard API may fail in some environments
     }
   }
+
+  const environment = "Snap";
 </script>
 
 <div class="snap-welcome-modal">
   <Modal
     {isOpen}
     onClose={onClose}
-    title="Running in Snap"
+    title={$t('updates.runningIn', { values: { env: environment } })}
     maxWidth="560px"
   >
     <div class="modal-content">
@@ -48,25 +51,24 @@ sudo snap connect qbz-player:mpris`;
       </div>
 
       <p class="intro">
-        QBZ detected it's running inside a <strong>Snap sandbox</strong>.
-        Some audio plugs need to be connected manually for the best experience.
+        {$t('updates.runningInsideSandbox', { values: { env: environment } })} {$t('updates.snap.intro')}
       </p>
 
       <div class="info-box">
         <div class="info-header">
-          <h4>Required plug connections:</h4>
+          <h4>{$t('updates.snap.requiredPlugConnections')}</h4>
           <button
             class="copy-btn"
             type="button"
             onclick={() => copyToClipboard(requiredCommands, 'required')}
-            title="Copy commands"
+            title={$t('actions.copyCommand')}
           >
             {#if copiedRequired}
               <Check size={14} />
-              <span>Copied</span>
+              <span>{$t('dacWizard.buttons.copied')}</span>
             {:else}
               <Copy size={14} />
-              <span>Copy</span>
+              <span>{$t('dacWizard.buttons.copy')}</span>
             {/if}
           </button>
         </div>
@@ -75,19 +77,19 @@ sudo snap connect qbz-player:mpris`;
 
       <div class="info-box optional">
         <div class="info-header">
-          <h4>Optional (for external drives / NAS):</h4>
+          <h4>{$t('updates.snap.optional')}</h4>
           <button
             class="copy-btn"
             type="button"
             onclick={() => copyToClipboard(optionalCommands, 'optional')}
-            title="Copy command"
+            title={$t('actions.copyCommand')}
           >
             {#if copiedOptional}
               <Check size={14} />
-              <span>Copied</span>
+              <span>{$t('dacWizard.buttons.copied')}</span>
             {:else}
               <Copy size={14} />
-              <span>Copy</span>
+              <span>{$t('dacWizard.buttons.copy')}</span>
             {/if}
           </button>
         </div>
@@ -95,14 +97,14 @@ sudo snap connect qbz-player:mpris`;
       </div>
 
       <p class="note">
-        Run these commands in a terminal, then restart QBZ. This only needs to be done once.
+        {$t('updates.snap.note')}
       </p>
     </div>
 
     {#snippet footer()}
       <div class="footer-actions">
         <button class="btn btn-primary" type="button" onclick={onClose}>
-          Got it
+          {$t('actions.gotIt')}
         </button>
       </div>
     {/snippet}

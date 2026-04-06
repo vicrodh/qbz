@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
   import Modal from '../Modal.svelte';
+  import { t } from '$lib/i18n';
   import type { ReleaseInfo } from '$lib/stores/updatesStore';
   import {
     formatReleaseDate,
@@ -57,12 +58,6 @@
       target.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }
-
-  const modalTitle = $derived(
-    release
-      ? `What's new in v${release.version}, ${releaseDate}`
-      : "What's new"
-  );
 </script>
 
 <div
@@ -76,7 +71,9 @@
   <Modal
     {isOpen}
     onClose={onClose}
-    title={modalTitle}
+    title={release
+      ? $t('updates.whatsNew.whatsNewIn', { values: { version: release.version } }) + ` (${releaseDate})`
+      : $t('updates.whatsNew.whatsNew')}
     maxWidth="910px"
   >
     {#if release}
@@ -98,15 +95,15 @@
           {@html releaseHtml}
         </div>
       {:else}
-        <p class="empty">Release notes are not available for this version.</p>
+        <p class="empty">{$t('updates.whatsNew.releaseNotesNotAvailableForVersion')}</p>
       {/if}
     {:else}
-      <p class="empty">Release notes are not available.</p>
+      <p class="empty">{$t('updates.whatsNew.releaseNotesNotAvailable')}</p>
     {/if}
 
     {#snippet footer()}
       <div class="footer-actions">
-        <button class="btn btn-primary" type="button" onclick={onClose}>Close</button>
+        <button class="btn btn-primary" type="button" onclick={onClose}>{$t('actions.close')}</button>
       </div>
     {/snippet}
   </Modal>

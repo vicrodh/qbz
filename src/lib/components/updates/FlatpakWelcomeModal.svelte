@@ -1,6 +1,7 @@
 <script lang="ts">
   import Modal from '../Modal.svelte';
   import { Package } from 'lucide-svelte';
+  import { t } from '$lib/i18n';
 
   interface Props {
     isOpen: boolean;
@@ -8,13 +9,14 @@
   }
 
   let { isOpen, onClose }: Props = $props();
+  let environment = "Flatpak";
 </script>
 
 <div class="flatpak-welcome-modal">
   <Modal
     {isOpen}
     onClose={onClose}
-    title="Running in Flatpak"
+    title={$t('updates.runningIn', { values: { env: environment } })}
     maxWidth="520px"
   >
     <div class="modal-content">
@@ -23,28 +25,27 @@
       </div>
 
       <p class="intro">
-        QBZ detected it's running inside a <strong>Flatpak sandbox</strong>.
-        There are some considerations to ensure the best experience.
+        {$t('updates.runningInsideSandbox', { values: { env: environment } })} {$t('updates.flatpak.intro')}
       </p>
 
       <div class="info-box">
-        <h4>What you should know:</h4>
+        <h4>{$t('updates.flatpak.whatYouShouldKnow.heading')}</h4>
         <ul>
-          <li>Access to external music folders (NAS, network mounts) requires manual permission grants</li>
-          <li>Some audio features may behave differently due to sandbox restrictions</li>
-          <li>The <strong>Settings</strong> page includes Flatpak-specific commands you can copy and run</li>
+          <li>{$t('updates.flatpak.whatYouShouldKnow.externalMusicFolderAccess')}</li>
+          <li>{$t('updates.flatpak.whatYouShouldKnow.audioFeatures')}</li>
+          <li>{$t('updates.flatpak.whatYouShouldKnow.settingsPage')}</li>
         </ul>
       </div>
 
       <p class="note">
-        Check the <strong>Flatpak Sandbox</strong> section in Settings for detailed instructions and copy-paste commands.
+        {$t('updates.flatpak.note')}
       </p>
     </div>
 
     {#snippet footer()}
       <div class="footer-actions">
         <button class="btn btn-primary" type="button" onclick={onClose}>
-          Got it
+          {$t('actions.gotIt')}
         </button>
       </div>
     {/snippet}

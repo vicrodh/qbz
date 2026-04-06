@@ -397,7 +397,7 @@
                   {#if onShareQobuz}
                     <button class="menu-item" onclick={() => handleAction(onShareQobuz)}>
                       <Link size={14} />
-                      <span>Qobuz™ link</span>
+                      <span>{$t('actions.qobuzLink')}</span>
                     </button>
                   {/if}
                   {#if onShareSonglink}

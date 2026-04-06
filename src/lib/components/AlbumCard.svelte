@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import { Play, Disc3, Heart, HardDrive } from 'lucide-svelte';
-  import { locale } from 'svelte-i18n';
+  import { t, locale } from 'svelte-i18n';
   import AlbumMenu from './AlbumMenu.svelte';
   import {
     subscribe as subscribeAlbumFavorites,
@@ -247,7 +247,7 @@
               aria-disabled={!favoriteAvailable || isToggling}
               disabled={!favoriteAvailable || isToggling}
               onclick={handleToggleFavorite}
-              title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+              title={isFavorite ? $t('actions.removeFromFavorites') : $t('actions.addToFavorites')}
             >
               <Heart size={18} fill={isFavorite ? 'white' : 'none'} color="white" />
             </button>
@@ -256,7 +256,7 @@
             <div class="overlay-btn--spacer"></div>
           {/if}
           {#if onPlay}
-            <button class="overlay-btn" type="button" onclick={handlePlay} title="Play">
+            <button class="overlay-btn" type="button" onclick={handlePlay} title={$t('actions.play')}>
               <Play size={18} fill="white" color="white" />
             </button>
           {/if}

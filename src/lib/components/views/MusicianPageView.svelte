@@ -92,7 +92,7 @@
 <div class="musician-page">
   <!-- Header -->
   <header class="page-header">
-    <button class="back-btn" onclick={onBack} title="Go back">
+    <button class="back-btn" onclick={onBack} title={ $t('actions.back') }>
       <ArrowLeft size={20} />
     </button>
 
@@ -151,7 +151,7 @@
       {:else if appearances.length === 0}
         <div class="empty-state">
           <Disc size={32} />
-          <span>No album appearances found</span>
+          <span>{ $t('artist.noAlbumAppearancesFound') }</span>
         </div>
       {:else}
         <div class="albums-grid">

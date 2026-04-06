@@ -36,7 +36,7 @@
     </div>
   {:else if error}
     <div class="lyrics-state">
-      <span class="no-lyrics">{$t('player.noLyrics') || 'No lyrics available'}</span>
+      <span class="no-lyrics">{$t('player.noLyrics')}</span>
     </div>
   {:else if hasLyrics}
     <div class="lyrics-container">
@@ -52,7 +52,7 @@
     </div>
   {:else}
     <div class="lyrics-state">
-      <span class="no-lyrics">{$t('player.noLyrics') || 'No lyrics available'}</span>
+      <span class="no-lyrics">{$t('player.noLyrics')}</span>
     </div>
   {/if}
 </div>

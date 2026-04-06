@@ -591,10 +591,10 @@
         <div class="track-list-header">
           <div class="col-number">#</div>
           <div class="col-artwork"></div>
-          <div class="col-title">{$t('common.title')}</div>
-          <div class="col-album">{$t('purchases.sort.album')}</div>
-          <div class="col-duration">{$t('album.duration')}</div>
-          <div class="col-quality">{$t('album.quality')}</div>
+          <div class="col-title">{ $t('tracklist.title') }</div>
+          <div class="col-album">{ $t('tracklist.album') }</div>
+          <div class="col-duration">{ $t('tracklist.duration') }</div>
+          <div class="col-quality">{ $t('tracklist.quality') }</div>
           <div class="col-spacer"></div>
         </div>
 

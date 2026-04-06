@@ -37,10 +37,10 @@
   <div class="panel-header">
     <div class="header-title">
       <History size={18} />
-      <span>{$t('player.history') || 'History'}</span>
+      <span>{ $t('player.history' )}</span>
     </div>
     {#if hasHistory}
-      <span class="track-count">{tracks.length} {$t('player.tracks') || 'tracks'}</span>
+      <span class="track-count">{tracks.length} { $t('library.tracks') }</span>
     {/if}
   </div>
 
@@ -53,7 +53,7 @@
             <button
               class="play-btn"
               onclick={() => onPlayTrack(String(track.id))}
-              title={$t('actions.playNow') || 'Play now'}
+              title={ $t('actions.playNow' )}
             >
               <Play size={14} />
             </button>

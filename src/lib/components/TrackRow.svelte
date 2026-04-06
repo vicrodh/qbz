@@ -243,7 +243,7 @@
     <div class="track-title-row">
       <span class="track-title" class:active={isActiveTrack || isPlaying}>{title}</span>
       {#if explicit}
-        <span class="explicit-badge" title="Explicit"></span>
+        <span class="explicit-badge" title={ $t('library.explicit') }></span>
       {/if}
     </div>
     {#if artist && !compact}

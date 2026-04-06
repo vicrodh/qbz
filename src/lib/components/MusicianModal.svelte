@@ -13,6 +13,7 @@
    */
   import { X, User, Music, Info } from 'lucide-svelte';
   import type { ResolvedMusician } from '$lib/types';
+  import { t } from 'svelte-i18n';
 
   interface Props {
     musician: ResolvedMusician;
@@ -82,7 +83,7 @@
           <span class="role">{musician.role}</span>
         </div>
       </div>
-      <button class="close-btn" onclick={onClose} title="Close">
+      <button class="close-btn" onclick={onClose} title={ $t('actions.close') }>
         <X size={18} />
       </button>
     </div>
@@ -92,7 +93,7 @@
       <!-- Bands & Projects -->
       {#if musician.bands.length > 0}
         <div class="section">
-          <h3>Known for</h3>
+          <h3>{ $t('musician.knownFor') }</h3>
           <div class="bands-list">
             {#each musician.bands as band}
               <div class="band-item">
@@ -116,7 +117,7 @@
       {#if showArtistCta}
         <div class="section cta-section">
           <button class="cta-btn" onclick={handleNavigateToArtist}>
-            View Artist Page
+            { $t('musician.viewArtistPage') }
           </button>
         </div>
       {/if}

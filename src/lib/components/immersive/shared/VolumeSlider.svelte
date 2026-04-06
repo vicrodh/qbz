@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n';
   import { Volume2, VolumeX } from 'lucide-svelte';
   import { toggleMute as playerToggleMute } from '$lib/stores/playerStore';
 
@@ -49,7 +50,7 @@
 
 <div class="volume-container">
   {#if showIcon}
-    <button class="volume-icon" onclick={toggleMute} title={volume > 0 ? 'Mute' : 'Unmute'}>
+    <button class="volume-icon" onclick={toggleMute} title={volume > 0 ? $t('player.mute') : $t('player.unmute')}>
       {#if volume === 0}
         <VolumeX size={18} />
       {:else}

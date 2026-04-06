@@ -1,5 +1,6 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
+  import { t } from '$lib/i18n';
   import { X, Shuffle, SkipBack, Play, Pause, SkipForward, Repeat, Heart, List, Maximize2, Ellipsis, Cast } from 'lucide-svelte';
   import QualityBadge from './QualityBadge.svelte';
   import StackIcon from './StackIcon.svelte';
@@ -239,7 +240,7 @@
     </div>
 
     <!-- Close Button -->
-    <button class="close-btn" onclick={onClose} title="Close (Esc)">
+    <button class="close-btn" onclick={onClose} title={$t('actions.close') + ` (${$t('keys.esc')})`}>
       <X size={24} />
     </button>
 
@@ -256,7 +257,7 @@
           <div class="artist-album-row">
             <StackIcon size={16} class="stack-icon" onClick={onContextClick} />
             <h2 class="artist">{artist}</h2>
-            <span class="separator">·</span>
+            <span class="separator">&middot;</span>
             <h3 class="album">{album}</h3>
           </div>
           <div class="quality-info">
@@ -291,28 +292,28 @@
             class="control-btn"
             class:active={isShuffle}
             onclick={onToggleShuffle}
-            title="Shuffle"
+            title={$t('player.shuffle')}
           >
             <Shuffle size={22} />
           </button>
-          <button class="control-btn primary" onclick={onSkipBack} title="Previous">
+          <button class="control-btn primary" onclick={onSkipBack} title={$t('player.previous')}>
             <SkipBack size={28} />
           </button>
-          <button class="control-btn primary play-pause" onclick={onTogglePlay} title={isPlaying ? 'Pause' : 'Play'}>
+          <button class="control-btn primary play-pause" onclick={onTogglePlay} title={isPlaying ? $t('player.pause') : $t('player.play')}>
             {#if isPlaying}
               <Pause size={36} />
             {:else}
               <Play size={36} class="play-icon" />
             {/if}
           </button>
-          <button class="control-btn primary" onclick={onSkipForward} title="Next">
+          <button class="control-btn primary" onclick={onSkipForward} title={$t('player.next')}>
             <SkipForward size={28} />
           </button>
           <button
             class="control-btn"
             class:active={repeatMode !== 'off'}
             onclick={onToggleRepeat}
-            title={repeatMode === 'off' ? 'Repeat' : repeatMode === 'all' ? 'Repeat All' : 'Repeat One'}
+            title={repeatMode === 'off' ? $t('player.repeat') : repeatMode === 'all' ? $t('player.repeatAll') : $t('player.repeatOne')}
           >
             <Repeat size={22} />
             {#if repeatMode === 'one'}
@@ -333,7 +334,7 @@
             aria-valuenow={volume}
             aria-valuemin={0}
             aria-valuemax={100}
-            title="Volume"
+            title={$t('player.volume')}
           >
             <div class="volume-fill" style="width: {volume}%"></div>
             <div class="volume-thumb" style="left: {volume}%"></div>
@@ -342,17 +343,17 @@
 
         <!-- Bottom Actions -->
         <div class="bottom-actions">
-          <button class="action-btn" onclick={onOpenQueue} title="Queue">
+          <button class="action-btn" onclick={onOpenQueue} title={$t('player.queue')}>
             <List size={22} />
           </button>
-          <button class="action-btn" onclick={onOpenFocusMode} title="Immersive Mode">
+          <button class="action-btn" onclick={onOpenFocusMode} title={$t('player.fullScreen')}>
             <Maximize2 size={22} />
           </button>
           <button
             class="action-btn"
             class:cast-active={isCastConnected}
             onclick={onCast}
-            title={isCastConnected ? 'Casting - Click to manage' : 'Cast to device'}
+            title={isCastConnected ? $t('player.castingManage') : $t('player.castToDevice')}
           >
             <Cast size={22} />
           </button>
@@ -360,11 +361,11 @@
             class="action-btn"
             class:active={isFavorite}
             onclick={onToggleFavorite}
-            title={isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}
+            title={isFavorite ? $t('actions.removeFromFavorites') : $t('actions.addToFavorites')}
           >
             <Heart size={22} fill={isFavorite ? 'var(--accent-primary)' : 'none'} color={isFavorite ? 'var(--accent-primary)' : 'currentColor'} />
           </button>
-          <button class="action-btn" title="More options">
+          <button class="action-btn" title={$t('actions.moreOptions')}>
             <Ellipsis size={22} />
           </button>
         </div>
@@ -375,7 +376,7 @@
         {#if lyricsLoading}
           <div class="lyrics-state">
             <div class="spinner"></div>
-            <span>Loading lyrics...</span>
+            <span>{$t('player.fetchingLyrics')}</span>
           </div>
         {:else if lyricsError}
           <div class="lyrics-state">
@@ -395,7 +396,7 @@
           </div>
         {:else}
           <div class="lyrics-state">
-            <span class="no-lyrics">No lyrics available</span>
+            <span class="no-lyrics">{$t('player.noLyrics')}</span>
           </div>
         {/if}
       </div>

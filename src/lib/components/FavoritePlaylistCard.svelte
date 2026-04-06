@@ -1,5 +1,6 @@
 <script lang="ts">
   import { tick, onMount } from 'svelte';
+  import { t } from '$lib/i18n';
   import { Play, Heart, Ellipsis, ListPlus, Share2, ListMusic, Trash2 } from 'lucide-svelte';
   import PlaylistCollage from './PlaylistCollage.svelte';
   import {
@@ -182,11 +183,11 @@
           class:active={true}
           type="button"
           onclick={handleRemoveFavorite}
-          title="Remove from favorites"
+          title={$t('actions.removeFromFavorites')}
         >
           <Heart size={18} fill="currentColor" />
         </button>
-        <button class="overlay-btn" type="button" onclick={handlePlay} title="Play">
+        <button class="overlay-btn" type="button" onclick={handlePlay} title={$t('actions.play')}>
           <Play size={18} fill="white" />
         </button>
         <button
@@ -194,7 +195,7 @@
           type="button"
           bind:this={menuTriggerRef}
           onclick={toggleMenu}
-          title="More options"
+          title={$t('actions.moreOptions')}
         >
           <Ellipsis size={18} />
         </button>
@@ -214,7 +215,7 @@
     <div class="card-subtitle">
       <span class="owner">{playlist.owner.name}</span>
       <span class="separator">-</span>
-      <span class="tracks">{playlist.tracks_count} tracks</span>
+      <span class="tracks">{playlist.tracks_count} {$t('playlist.tracks')}</span>
     </div>
   </div>
 </div>
@@ -222,18 +223,18 @@
 {#if menuOpen}
   <div class="playlist-menu" bind:this={menuEl} style={menuStyle} use:portal>
     <button class="menu-item" onclick={() => { onPlayNext?.(); closeMenu(); }}>
-      <ListPlus size={14} /> <span>Play next</span>
+      <ListPlus size={14} /> <span>{$t('actions.playNext')}</span>
     </button>
     <button class="menu-item" onclick={() => { onPlayLater?.(); closeMenu(); }}>
-      <ListMusic size={14} /> <span>Add to queue</span>
+      <ListMusic size={14} /> <span>{$t('actions.addToQueue')}</span>
     </button>
     <div class="menu-separator"></div>
     <button class="menu-item" onclick={() => { onShareQobuz?.(); closeMenu(); }}>
-      <Share2 size={14} /> <span>Share (Qobuz)</span>
+      <Share2 size={14} /> <span>{$t('actions.shareQobuz')}</span>
     </button>
     <div class="menu-separator"></div>
     <button class="menu-item menu-item--danger" onclick={() => { onRemoveFavorite?.(); closeMenu(); }}>
-      <Trash2 size={14} /> <span>Remove from favorites</span>
+      <Trash2 size={14} /> <span>{$t('actions.removeFromFavorites')}</span>
     </button>
   </div>
 {/if}
