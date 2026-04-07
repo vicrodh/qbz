@@ -73,6 +73,7 @@
     onSeek: (time: number) => void;
     onVolumeChange: (volume: number) => void;
     onToggleMute: () => void;
+    volumeLocked?: boolean;
     onToggleShuffle: () => void;
     onToggleRepeat: () => void;
     onToggleFavorite: () => void;
@@ -129,6 +130,7 @@
     onSeek,
     onVolumeChange,
     onToggleMute,
+    volumeLocked = false,
     onToggleShuffle,
     onToggleRepeat,
     onToggleFavorite,
@@ -780,6 +782,7 @@
       {onToggleInfinitePlay}
       {onVolumeChange}
       {onToggleMute}
+      {volumeLocked}
       {isFullscreen}
       {isMaximized}
       onClose={handleExitImmersive}

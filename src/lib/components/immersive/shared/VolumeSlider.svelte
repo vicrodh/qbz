@@ -7,15 +7,17 @@
     volume: number;
     onVolumeChange: (volume: number) => void;
     showIcon?: boolean;
+    volumeLocked?: boolean;
   }
 
-  let { volume, onVolumeChange, showIcon = true }: Props = $props();
+  let { volume, onVolumeChange, showIcon = true, volumeLocked = false }: Props = $props();
 
   let volumeRef: HTMLDivElement | null = $state(null);
   let isDragging = $state(false);
   let showValue = $state(false);
 
   function handleMouseDown(e: MouseEvent) {
+    if (volumeLocked) return;
     isDragging = true;
     showValue = true;
     updateVolume(e);
@@ -44,14 +46,20 @@
   }
 
   function toggleMute() {
+    if (volumeLocked) return;
     playerToggleMute();
   }
 </script>
 
-<div class="volume-container">
+<div class="volume-container" class:volume-locked={volumeLocked}>
   {#if showIcon}
-    <button class="volume-icon" onclick={toggleMute} title={volume > 0 ? $t('player.mute') : $t('player.unmute')}>
-      {#if volume === 0}
+    <button
+      class="volume-icon"
+      onclick={toggleMute}
+      disabled={volumeLocked}
+      title={volumeLocked ? $t('player.volumeLockedHw') : (volume > 0 ? $t('player.mute') : $t('player.unmute'))}
+    >
+      {#if volume === 0 && !volumeLocked}
         <VolumeX size={18} />
       {:else}
         <Volume2 size={18} />
@@ -60,20 +68,23 @@
   {/if}
 
   <div class="volume-slider">
-    <div class="volume-value" class:visible={showValue}>{volume}</div>
+    {#if !volumeLocked}
+      <div class="volume-value" class:visible={showValue}>{volume}</div>
+    {/if}
     <div
       class="volume-track"
       bind:this={volumeRef}
       onmousedown={handleMouseDown}
       role="slider"
-      tabindex="0"
-      aria-valuenow={volume}
+      tabindex={volumeLocked ? -1 : 0}
+      aria-valuenow={volumeLocked ? 100 : volume}
       aria-valuemin={0}
       aria-valuemax={100}
       aria-label="Volume"
+      aria-disabled={volumeLocked}
     >
-      <div class="volume-fill" style="width: {volume}%"></div>
-      <div class="volume-thumb" style="left: {volume}%"></div>
+      <div class="volume-fill" style="width: {volumeLocked ? 100 : volume}%"></div>
+      <div class="volume-thumb" style="left: {volumeLocked ? 100 : volume}%"></div>
     </div>
   </div>
 </div>
@@ -158,5 +169,10 @@
 
   .volume-track:hover .volume-thumb {
     opacity: 1;
+  }
+
+  .volume-locked {
+    opacity: 0.4;
+    pointer-events: none;
   }
 </style>
