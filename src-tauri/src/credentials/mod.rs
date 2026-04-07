@@ -512,27 +512,31 @@ fn get_oauth_token_path() -> Option<PathBuf> {
 
 const OAUTH_TOKEN_KEY: &str = "qobuz-oauth-token";
 
-/// Persist the OAuth `user_auth_token` to keyring (primary) and encrypted file (fallback).
+/// Persist the OAuth `user_auth_token`.
+/// Tries system keyring first. Only falls back to encrypted file if keyring is unavailable.
 pub fn save_oauth_token(token: &str) -> Result<(), String> {
-    // Try keyring first (Secret Service D-Bus API: GNOME Keyring, KWallet with bridge)
-    match Entry::new(SERVICE_NAME, OAUTH_TOKEN_KEY) {
-        Ok(entry) => match entry.set_password(token) {
-            Ok(()) => log::info!("[Credentials] OAuth token saved to system keyring"),
-            Err(e) => log::warn!(
-                "[Credentials] Keyring save failed: {}. Token will be stored in encrypted file only. \
-                 KDE users: ensure org.freedesktop.secrets is enabled in KWallet settings.",
-                e
-            ),
-        },
-        Err(e) => log::warn!(
-            "[Credentials] Keyring not available: {}. Using encrypted file only.",
-            e
-        ),
+    // Try keyring (Secret Service D-Bus: GNOME Keyring, KWallet with bridge)
+    if let Ok(entry) = Entry::new(SERVICE_NAME, OAUTH_TOKEN_KEY) {
+        if entry.set_password(token).is_ok() {
+            log::info!("[Credentials] OAuth token saved to system keyring");
+            // Keyring succeeded — remove any leftover file from previous versions
+            if let Some(path) = get_oauth_token_path() {
+                if path.exists() {
+                    let _ = fs::remove_file(&path);
+                    log::info!("[Credentials] Removed legacy OAuth token file (migrated to keyring)");
+                }
+            }
+            return Ok(());
+        }
     }
 
-    // Always save encrypted file as fallback
-    let path = get_oauth_token_path().ok_or("Could not determine config directory")?;
+    // Keyring unavailable — fall back to encrypted file
+    log::warn!(
+        "[Credentials] System keyring unavailable. Storing OAuth token in encrypted file. \
+         KDE users: enable 'Use KWallet for the Secret Service interface' in KWallet settings."
+    );
 
+    let path = get_oauth_token_path().ok_or("Could not determine config directory")?;
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
             .map_err(|e| format!("Failed to create config directory: {}", e))?;
@@ -545,7 +549,7 @@ pub fn save_oauth_token(token: &str) -> Result<(), String> {
     let encrypted = encrypt_credentials(&placeholder)?;
     fs::write(&path, encrypted).map_err(|e| format!("Failed to write OAuth token file: {}", e))?;
 
-    log::info!("[Credentials] OAuth token saved to encrypted file");
+    log::info!("[Credentials] OAuth token saved to encrypted file (keyring fallback)");
     Ok(())
 }
 
@@ -585,10 +589,11 @@ pub fn load_oauth_token() -> Result<Option<String>, String> {
     match decrypt_credentials(&content) {
         Ok(placeholder) => {
             log::info!("[Credentials] OAuth token loaded from encrypted file");
-            // Migrate to keyring for next time
+            // Migrate: save to keyring and remove file
             if let Ok(entry) = Entry::new(SERVICE_NAME, OAUTH_TOKEN_KEY) {
                 if entry.set_password(&placeholder.email).is_ok() {
-                    log::info!("[Credentials] OAuth token migrated to system keyring");
+                    let _ = fs::remove_file(&path);
+                    log::info!("[Credentials] OAuth token migrated to keyring, file removed");
                 }
             }
             Ok(Some(placeholder.email))
