@@ -1380,7 +1380,7 @@ pub struct PipewireSink {
 #[cfg(target_os = "linux")]
 #[tauri::command]
 pub fn get_pipewire_sinks() -> Result<Vec<PipewireSink>, String> {
-    log::info!("Command: get_pipewire_sinks (Linux, using CPAL)");
+    log::debug!("Command: get_pipewire_sinks (Linux, using CPAL)");
 
     use rodio::cpal::traits::{DeviceTrait, HostTrait};
 
@@ -1391,7 +1391,7 @@ pub fn get_pipewire_sinks() -> Result<Vec<PipewireSink>, String> {
         .default_output_device()
         .and_then(|d| cpal_device_name(&d));
 
-    log::info!("CPAL default device: {:?}", default_device_name);
+    log::debug!("CPAL default device: {:?}", default_device_name);
 
     // Enumerate all output devices using CPAL
     let sinks: Vec<PipewireSink> = host
@@ -1425,7 +1425,7 @@ pub fn get_pipewire_sinks() -> Result<Vec<PipewireSink>, String> {
                 })
                 .unwrap_or_else(|| "no configs".to_string());
 
-            log::info!(
+            log::debug!(
                 "  [{}] Device: '{}' (default: {}) - Configs: {}",
                 idx,
                 name,
@@ -1444,7 +1444,7 @@ pub fn get_pipewire_sinks() -> Result<Vec<PipewireSink>, String> {
         })
         .collect();
 
-    log::info!("Found {} audio output devices via CPAL", sinks.len());
+    log::debug!("Found {} audio output devices via CPAL", sinks.len());
 
     Ok(sinks)
 }

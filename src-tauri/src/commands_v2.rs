@@ -8762,7 +8762,7 @@ pub async fn v2_get_playlist(
         .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
         .await?;
 
-    log::info!("[V2] get_playlist: {}", playlistId);
+    log::debug!("[V2] get_playlist: {}", playlistId);
     let bridge = bridge.get().await;
     bridge
         .get_playlist(playlistId)

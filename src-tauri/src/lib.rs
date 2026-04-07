@@ -477,10 +477,12 @@ pub fn run() {
     }
 
     // Initialize logging with TeeWriter (captures to ring buffer + stderr)
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
-        .format_timestamp_millis()
-        .target(env_logger::Target::Pipe(Box::new(logging::TeeWriter)))
-        .init();
+    env_logger::Builder::from_env(
+        env_logger::Env::default().default_filter_or("info,zbus=warn,tracing=warn"),
+    )
+    .format_timestamp_millis()
+    .target(env_logger::Target::Pipe(Box::new(logging::TeeWriter)))
+    .init();
 
     log::info!("QBZ starting...");
 

@@ -1274,7 +1274,7 @@ impl QobuzClient {
         }
 
         let elapsed = start.elapsed();
-        log::info!(
+        log::debug!(
             "[API] get_playlist({}) complete: {} tracks in {:.2}s",
             playlist_id,
             playlist.tracks.as_ref().map(|t| t.items.len()).unwrap_or(0),
