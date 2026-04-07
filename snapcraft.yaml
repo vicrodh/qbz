@@ -85,13 +85,6 @@ apps:
       - gsettings
       - alsa
       - pipewire
-    slots:
-      - mpris
-
-slots:
-  mpris:
-    interface: mpris
-    name: qbz
 
 parts:
   qbz:
