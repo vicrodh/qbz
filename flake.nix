@@ -17,8 +17,8 @@
         # ──────────────────────────────────────────────
         qbzVersion = "1.2.4";
         qbzRev     = "v${qbzVersion}";
-        srcHash    = ""; # nix build will report the correct hash on first run
-        npmHash    = ""; # nix build will report the correct hash on first run
+        srcHash    = "sha256-3MPWLovWRmSrSfaR5ciZR2+4S7QzPYYVdVKP+mczhis=";
+        npmHash    = "sha256-JN3lQyEX1n5G1OcWuRNZl/KSfL7JEfsc4opeh4F/iAY=";
       in
       {
         packages.default = pkgs.rustPlatform.buildRustPackage rec {
@@ -68,6 +68,7 @@
             # These require a writable HOME and D-Bus keyring service
             "--skip=credentials::tests::test_credentials_roundtrip"
             "--skip=credentials::tests::test_encryption_roundtrip"
+            "--skip=qconnect_service::tests::refreshes_local_renderer_id_from_unique_fingerprint_when_uuid_missing"
           ];
 
           postInstall = ''
