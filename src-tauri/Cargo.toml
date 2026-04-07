@@ -1,6 +1,6 @@
 [package]
 name = "qbz-nix"
-version = "1.2.3"
+version = "1.2.4"
 description = "Native high-fidelity client for Qobuz™ subscribers on Linux with Hi-Fi audio support (uses the Qobuz API; not certified by Qobuz)"
 authors = ["blitzkriegfc"]
 edition = "2021"
@@ -145,7 +145,7 @@ futures-util = "0.3"
 # Platform-specific dependencies
 [target.'cfg(target_os = "linux")'.dependencies]
 tauri-plugin-dialog = { version = "2.6.0" }
-ashpd = { version = "0.13", default-features = false, features = ["tokio", "notification", "inhibit"] }
+ashpd = { version = "0.13", default-features = false, features = ["tokio", "notification", "inhibit", "secret"] }
 mupdf = { version = "0.6", features = ["sys-lib-zlib", "sys-lib-harfbuzz", "sys-lib-freetype"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]

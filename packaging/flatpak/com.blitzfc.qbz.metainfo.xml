@@ -53,6 +53,18 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="1.2.4" date="2026-04-07">
+      <description>
+        <p>Quick-fix release: fixes tracks ending ~9 seconds early when streamed via CMAF, and improves credential security with encrypted keyring storage and XDG portal secret integration.</p>
+        <ul>
+          <li>Fixed CMAF segment off-by-one: last audio segment was skipped, cutting ~9 seconds from every track</li>
+          <li>OAuth tokens now encrypted (AES-256-GCM) before storing in system keyring</li>
+          <li>Key derivation uses XDG Desktop Portal secret when available (DE-agnostic, Flatpak-safe)</li>
+          <li>Logout now properly clears stored credentials from keyring and file</li>
+          <li>Reduced log noise: device enumeration, playlist fetches, and zbus internals moved to debug level</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.2.3" date="2026-04-06">
       <description>
         <p>Qobuz has been migrating their audio delivery infrastructure to encrypted segmented streaming. This was silently breaking playback for certain tracks. This release implements the new streaming pipeline end-to-end, making QBZ compatible with Qobuz's current and future audio delivery.</p>

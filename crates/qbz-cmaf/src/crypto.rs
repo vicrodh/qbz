@@ -5,23 +5,21 @@ use sha2::Sha256;
 
 use crate::error::CmafError;
 
-const RNG_INIT: &str = "abb21364945c0583309667d13ca3d93a";
-
 type Aes128CbcDec = cbc::Decryptor<aes::Aes128>;
 type Aes128Ctr = ctr::Ctr128BE<aes::Aes128>;
 
 fn hex_decode(hex: &str) -> Vec<u8> {
     (0..hex.len())
         .step_by(2)
-        .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).expect("RNG_INIT is valid hex"))
+        .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap_or(0))
         .collect()
 }
 
 /// Derive the 16-byte session key from the session/start `infos` field.
 ///
 /// `infos` format: `"salt_b64url.info_b64url"`
-/// IKM = hex-decoded RNG_INIT (16 bytes)
-pub fn derive_session_key(infos: &str) -> Result<[u8; 16], CmafError> {
+/// `seed` is the hex-encoded app seed used as IKM for HKDF (provided by caller).
+pub fn derive_session_key(seed: &str, infos: &str) -> Result<[u8; 16], CmafError> {
     let parts: Vec<&str> = infos.split('.').collect();
     if parts.len() < 2 {
         return Err(CmafError::InvalidInfos(
@@ -32,7 +30,7 @@ pub fn derive_session_key(infos: &str) -> Result<[u8; 16], CmafError> {
     let salt = URL_SAFE_NO_PAD.decode(parts[0])?;
     let info = URL_SAFE_NO_PAD.decode(parts[1])?;
 
-    let ikm = hex_decode(RNG_INIT);
+    let ikm = hex_decode(seed);
 
     let hk = Hkdf::<Sha256>::new(Some(&salt), &ikm);
     let mut okm = [0u8; 16];
@@ -91,12 +89,14 @@ pub fn decrypt_frame(content_key: &[u8; 16], iv_8: &[u8; 8], data: &mut [u8]) {
 
 /// Compute the MD5 request signature for Qobuz CMAF API calls.
 ///
-/// Concatenates method + sorted key-value pairs + timestamp + RNG_INIT,
+/// Concatenates method + sorted key-value pairs + timestamp + seed,
 /// then returns the lowercase hex MD5 digest.
+/// `seed` is the app seed provided by the caller.
 pub fn compute_request_sig(
     method: &str,
     args: &std::collections::BTreeMap<&str, String>,
     timestamp: &str,
+    seed: &str,
 ) -> String {
     use md5::{Digest, Md5};
 
@@ -107,7 +107,7 @@ pub fn compute_request_sig(
         hasher.update(v.as_bytes());
     }
     hasher.update(timestamp.as_bytes());
-    hasher.update(RNG_INIT.as_bytes());
+    hasher.update(seed.as_bytes());
 
     format!("{:x}", hasher.finalize())
 }
@@ -116,21 +116,22 @@ pub fn compute_request_sig(
 mod tests {
     use super::*;
 
+    const TEST_SEED: &str = "00112233445566778899aabbccddeeff";
+
     #[test]
     fn test_compute_request_sig() {
         let mut args = std::collections::BTreeMap::new();
         args.insert("profile", "qbz-1".to_string());
-        let sig = compute_request_sig("sessionstart", &args, "1775500000");
-        assert_eq!(sig.len(), 32); // MD5 hex = 32 chars
-        // Verify deterministic
-        let sig2 = compute_request_sig("sessionstart", &args, "1775500000");
+        let sig = compute_request_sig("sessionstart", &args, "1775500000", TEST_SEED);
+        assert_eq!(sig.len(), 32);
+        let sig2 = compute_request_sig("sessionstart", &args, "1775500000", TEST_SEED);
         assert_eq!(sig, sig2);
     }
 
     #[test]
     fn test_decrypt_frame_roundtrip() {
-        let key = [0x42u8; 16];
-        let iv = [0x01u8; 8];
+        let key = [1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+        let iv = [1u8, 2, 3, 4, 5, 6, 7, 8];
         let original = b"Hello FLAC frame data here!".to_vec();
         let mut data = original.clone();
         decrypt_frame(&key, &iv, &mut data);
@@ -141,7 +142,7 @@ mod tests {
 
     #[test]
     fn test_derive_session_key_invalid_infos() {
-        let result = derive_session_key("no_dot_here");
+        let result = derive_session_key(TEST_SEED, "no_dot_here");
         assert!(result.is_err());
     }
 

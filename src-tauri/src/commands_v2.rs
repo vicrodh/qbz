@@ -774,7 +774,7 @@ async fn try_cmaf_streaming_setup(
 
     let (_session_id, infos) = bridge.ensure_cmaf_session().await?;
 
-    let session_key = qbz_cmaf::derive_session_key(&infos)
+    let session_key = qbz_cmaf::derive_session_key(qbz_qobuz::auth::CMAF_SEED, &infos)
         .map_err(|e| format!("Session key derivation failed: {}", e))?;
     let content_key = qbz_cmaf::unwrap_content_key(&session_key, key_str)
         .map_err(|e| format!("Content key unwrap failed: {}", e))?;
@@ -8762,7 +8762,7 @@ pub async fn v2_get_playlist(
         .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
         .await?;
 
-    log::info!("[V2] get_playlist: {}", playlistId);
+    log::debug!("[V2] get_playlist: {}", playlistId);
     let bridge = bridge.get().await;
     bridge
         .get_playlist(playlistId)

@@ -154,13 +154,51 @@ fn get_machine_id() -> Result<Vec<u8>, String> {
     load_or_create_machine_id_fallback()
 }
 
-/// Derive encryption key from machine ID
+/// Retrieve per-app secret from XDG Desktop Portal (cached for session lifetime).
+/// Returns None if portal is unavailable (headless, old DEs, non-Linux).
+#[cfg(target_os = "linux")]
+fn get_portal_secret() -> Option<Vec<u8>> {
+    use std::sync::OnceLock;
+    static PORTAL_SECRET: OnceLock<Option<Vec<u8>>> = OnceLock::new();
+    PORTAL_SECRET
+        .get_or_init(|| {
+            let rt = tokio::runtime::Handle::try_current().ok()?;
+            let (tx, rx) = std::sync::mpsc::channel();
+            rt.spawn(async move {
+                let _ = tx.send(ashpd::desktop::secret::retrieve().await.ok());
+            });
+            match rx.recv_timeout(std::time::Duration::from_secs(3)) {
+                Ok(secret) => {
+                    if secret.is_some() {
+                        log::info!("[Credentials] Using XDG portal secret for key derivation");
+                    }
+                    secret
+                }
+                Err(_) => {
+                    log::debug!("[Credentials] XDG portal secret unavailable (timeout/missing)");
+                    None
+                }
+            }
+        })
+        .clone()
+}
+
+/// Derive encryption key from XDG portal secret + machine ID + installation salt.
+/// Portal secret adds DE-agnostic, Flatpak-safe entropy when available.
 fn derive_key() -> Result<[u8; 32], String> {
     let machine_id = get_machine_id()?;
     let installation_salt = load_or_create_installation_salt()?;
 
+    #[cfg(target_os = "linux")]
+    let portal_secret = get_portal_secret();
+    #[cfg(not(target_os = "linux"))]
+    let portal_secret: Option<Vec<u8>> = None;
+
     let mut hasher = Sha256::new();
     hasher.update(&installation_salt);
+    if let Some(ref secret) = portal_secret {
+        hasher.update(secret);
+    }
     hasher.update(&machine_id);
     hasher.update(&installation_salt);
 
@@ -512,51 +550,67 @@ fn get_oauth_token_path() -> Option<PathBuf> {
 
 const OAUTH_TOKEN_KEY: &str = "qobuz-oauth-token";
 
-/// Persist the OAuth `user_auth_token` to keyring (primary) and encrypted file (fallback).
+/// Persist the OAuth `user_auth_token`.
+/// Tries system keyring first (encrypted). Only falls back to encrypted file if keyring is unavailable.
+/// The token is AES-256-GCM encrypted before storing in keyring — `secret-tool` shows ciphertext, not the raw token.
 pub fn save_oauth_token(token: &str) -> Result<(), String> {
-    // Try keyring first (Secret Service D-Bus API: GNOME Keyring, KWallet with bridge)
-    match Entry::new(SERVICE_NAME, OAUTH_TOKEN_KEY) {
-        Ok(entry) => match entry.set_password(token) {
-            Ok(()) => log::info!("[Credentials] OAuth token saved to system keyring"),
-            Err(e) => log::warn!(
-                "[Credentials] Keyring save failed: {}. Token will be stored in encrypted file only. \
-                 KDE users: ensure org.freedesktop.secrets is enabled in KWallet settings.",
-                e
-            ),
-        },
-        Err(e) => log::warn!(
-            "[Credentials] Keyring not available: {}. Using encrypted file only.",
-            e
-        ),
-    }
-
-    // Always save encrypted file as fallback
-    let path = get_oauth_token_path().ok_or("Could not determine config directory")?;
-
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create config directory: {}", e))?;
-    }
-
+    // Encrypt token before storing anywhere
     let placeholder = QobuzCredentials {
         email: token.to_string(),
         password: String::new(),
     };
     let encrypted = encrypt_credentials(&placeholder)?;
-    fs::write(&path, encrypted).map_err(|e| format!("Failed to write OAuth token file: {}", e))?;
 
-    log::info!("[Credentials] OAuth token saved to encrypted file");
+    // Try keyring (Secret Service D-Bus: GNOME Keyring, KWallet with bridge)
+    if let Ok(entry) = Entry::new(SERVICE_NAME, OAUTH_TOKEN_KEY) {
+        if entry.set_password(&encrypted).is_ok() {
+            log::info!("[Credentials] OAuth token saved to system keyring (encrypted)");
+            // Keyring succeeded — remove any leftover file from previous versions
+            if let Some(path) = get_oauth_token_path() {
+                if path.exists() {
+                    let _ = fs::remove_file(&path);
+                    log::info!("[Credentials] Removed legacy OAuth token file (migrated to keyring)");
+                }
+            }
+            return Ok(());
+        }
+    }
+
+    // Keyring unavailable — fall back to encrypted file
+    log::warn!(
+        "[Credentials] System keyring unavailable. Storing OAuth token in encrypted file. \
+         KDE users: enable 'Use KWallet for the Secret Service interface' in KWallet settings."
+    );
+
+    let path = get_oauth_token_path().ok_or("Could not determine config directory")?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create config directory: {}", e))?;
+    }
+    fs::write(&path, &encrypted).map_err(|e| format!("Failed to write OAuth token file: {}", e))?;
+
+    log::info!("[Credentials] OAuth token saved to encrypted file (keyring fallback)");
     Ok(())
 }
 
 /// Load a previously saved OAuth `user_auth_token`, or `None` if absent.
-/// Tries system keyring first, falls back to encrypted file.
+/// Tries system keyring first (encrypted), falls back to encrypted file.
 pub fn load_oauth_token() -> Result<Option<String>, String> {
-    // Try keyring first
+    // Try keyring first — value is AES-256-GCM encrypted JSON
     if let Ok(entry) = Entry::new(SERVICE_NAME, OAUTH_TOKEN_KEY) {
         match entry.get_password() {
-            Ok(token) if !token.is_empty() => {
-                log::info!("[Credentials] OAuth token loaded from system keyring");
+            Ok(encrypted) if !encrypted.is_empty() => {
+                // Try decrypting (new format: encrypted JSON in keyring)
+                if let Ok(placeholder) = decrypt_credentials(&encrypted) {
+                    log::info!("[Credentials] OAuth token loaded from system keyring (encrypted)");
+                    return Ok(Some(placeholder.email));
+                }
+                // Might be old format (plaintext token in keyring) — migrate
+                log::info!("[Credentials] Migrating plaintext keyring entry to encrypted format");
+                let token = encrypted;
+                if let Ok(()) = save_oauth_token(&token) {
+                    log::info!("[Credentials] Keyring entry re-encrypted");
+                }
                 return Ok(Some(token));
             }
             Ok(_) => {}
@@ -585,10 +639,17 @@ pub fn load_oauth_token() -> Result<Option<String>, String> {
     match decrypt_credentials(&content) {
         Ok(placeholder) => {
             log::info!("[Credentials] OAuth token loaded from encrypted file");
-            // Migrate to keyring for next time
+            // Migrate: save to keyring (encrypted) and remove file
             if let Ok(entry) = Entry::new(SERVICE_NAME, OAUTH_TOKEN_KEY) {
-                if entry.set_password(&placeholder.email).is_ok() {
-                    log::info!("[Credentials] OAuth token migrated to system keyring");
+                let re_encrypted = encrypt_credentials(&QobuzCredentials {
+                    email: placeholder.email.clone(),
+                    password: String::new(),
+                });
+                if let Ok(encrypted_str) = re_encrypted {
+                    if entry.set_password(&encrypted_str).is_ok() {
+                        let _ = fs::remove_file(&path);
+                        log::info!("[Credentials] OAuth token migrated to keyring (encrypted), file removed");
+                    }
                 }
             }
             Ok(Some(placeholder.email))

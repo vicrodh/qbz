@@ -1274,7 +1274,7 @@ impl QobuzClient {
         }
 
         let elapsed = start.elapsed();
-        log::info!(
+        log::debug!(
             "[API] get_playlist({}) complete: {} tracks in {:.2}s",
             playlist_id,
             playlist.tracks.as_ref().map(|t| t.items.len()).unwrap_or(0),
@@ -1899,8 +1899,8 @@ impl QobuzClient {
         let resp: SessionStartResponse = response.json().await?;
         let infos = resp.infos.unwrap_or_default();
         log::info!(
-            "[CMAF] Session started: id={}, expires_at={}",
-            resp.session_id,
+            "[CMAF] Session started: id={}..., expires_at={}",
+            &resp.session_id[..resp.session_id.len().min(8)],
             resp.expires_at
         );
 
