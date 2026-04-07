@@ -311,6 +311,24 @@ impl AudioSettingsStore {
                 params![backend_json],
             )
             .map_err(|e| format!("Failed to set backend type: {}", e))?;
+
+        // When switching to ALSA, ensure alsa_plugin has a value (default to Hw)
+        if backend == Some(AudioBackendType::Alsa) {
+            let current_plugin: Option<String> = self
+                .conn
+                .query_row(
+                    "SELECT alsa_plugin FROM audio_settings WHERE id = 1",
+                    [],
+                    |row| row.get(0),
+                )
+                .map_err(|e| format!("Failed to check alsa_plugin: {}", e))?;
+
+            if current_plugin.is_none() {
+                log::info!("[AudioSettings] ALSA backend selected with no plugin set, defaulting to Hw");
+                self.set_alsa_plugin(Some(AlsaPlugin::Hw))?;
+            }
+        }
+
         Ok(())
     }
 
