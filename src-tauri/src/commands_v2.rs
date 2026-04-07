@@ -696,7 +696,7 @@ async fn try_cmaf_full_download(
     let mut output = Vec::with_capacity(total_size);
     output.extend_from_slice(&setup.flac_header);
 
-    for seg_idx in 1..setup.n_segments {
+    for seg_idx in 1..=setup.n_segments {
         let seg_url = setup.url_template.replace("$SEGMENT$", &seg_idx.to_string());
         let seg_data = client
             .get(&seg_url)
@@ -728,8 +728,13 @@ async fn try_cmaf_full_download(
     }
 
     log::info!(
-        "[V2/CMAF-PREFETCH] Complete: track {} ({:.2} MB FLAC)",
-        track_id, output.len() as f64 / (1024.0 * 1024.0)
+        "[V2/CMAF-PREFETCH] Complete: track {} ({:.2} MB FLAC, expected {:.2} MB, segments 1..{}, table={} entries, n_segments={})",
+        track_id,
+        output.len() as f64 / (1024.0 * 1024.0),
+        total_size as f64 / (1024.0 * 1024.0),
+        setup.n_segments - 1,
+        setup.segment_table.len(),
+        setup.n_segments
     );
     Ok(output)
 }
@@ -800,12 +805,26 @@ async fn try_cmaf_streaming_setup(
     let init_info = qbz_cmaf::parse_init_segment(&init_data)
         .map_err(|e| format!("Failed to parse init segment: {}", e))?;
 
+    // Detailed diagnostics: segment table vs API n_segments
+    let table_total_bytes: u64 = init_info.segment_table.iter().map(|s| s.byte_len as u64).sum();
+    let table_total_samples: u64 = init_info.segment_table.iter().map(|s| s.sample_count as u64).sum();
     log::info!(
-        "[V2/CMAF] Init segment: FLAC header {}B, {} entries in segment table, fetched in {}ms",
+        "[V2/CMAF] Init segment: FLAC header {}B, segment_table={} entries, API n_segments={}, \
+         table_total_bytes={}, table_total_samples={}, fetched in {}ms",
         init_info.flac_header.len(),
         init_info.segment_table.len(),
+        file_url.n_segments,
+        table_total_bytes,
+        table_total_samples,
         init_fetch_ms
     );
+    if init_info.segment_table.len() != file_url.n_segments as usize {
+        log::warn!(
+            "[V2/CMAF] MISMATCH: segment_table has {} entries but API says n_segments={}",
+            init_info.segment_table.len(),
+            file_url.n_segments
+        );
+    }
 
     let format_id = file_url.format_id.unwrap_or(quality.id());
     let sampling_rate = file_url.sampling_rate;
@@ -1087,7 +1106,7 @@ async fn v2_cmaf_stream(
     };
     let start = Instant::now();
 
-    for seg_idx in 1..n_segments {
+    for seg_idx in 1..=n_segments {
         let seg_url = url_template.replace("$SEGMENT$", &seg_idx.to_string());
         let seg_data = client
             .get(&seg_url)
@@ -1137,7 +1156,7 @@ async fn v2_cmaf_stream(
         }
 
         // Progress logging every 5 segments or on last segment
-        if seg_idx % 5 == 0 || seg_idx == n_segments - 1 {
+        if seg_idx % 5 == 0 || seg_idx == n_segments {
             let elapsed = start.elapsed().as_secs_f64();
             log::info!(
                 "[V2/CMAF-STREAM] Segment {}/{} ({:.1} MB, {:.1} MB/s)",
@@ -1159,9 +1178,11 @@ async fn v2_cmaf_stream(
     }
 
     log::info!(
-        "[V2/CMAF-STREAM] Complete: {:.2} MB in {:.1}s",
+        "[V2/CMAF-STREAM] Complete: {:.2} MB written in {:.1}s, segments fetched: 1..{} (loop ran {} iterations)",
         total_written as f64 / (1024.0 * 1024.0),
-        start.elapsed().as_secs_f64()
+        start.elapsed().as_secs_f64(),
+        n_segments - 1,
+        (n_segments as u32).saturating_sub(1)
     );
 
     // Cache the complete FLAC (header + decrypted frames) if enabled
