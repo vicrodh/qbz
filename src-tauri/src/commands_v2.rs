@@ -7904,16 +7904,18 @@ pub async fn v2_play_next_gapless(
     bridge: State<'_, CoreBridgeState>,
     offline_cache: State<'_, OfflineCacheState>,
     app_state: State<'_, AppState>,
+    library_state: State<'_, LibraryState>,
 ) -> Result<bool, RuntimeError> {
     log::info!("[V2] Command: play_next_gapless for track {}", track_id);
 
     let bridge_guard = bridge.get().await;
     let player = bridge_guard.player();
     let current_track_id = player.state.current_track_id();
+    let repeat_mode = bridge_guard.get_queue_state().await.repeat;
 
     // Defensive guard: never queue the currently playing track as "next".
     // This avoids infinite one-track loops when frontend queue state is stale.
-    if current_track_id != 0 && current_track_id == track_id {
+    if current_track_id != 0 && repeat_mode != RepeatMode::One && current_track_id == track_id {
         log::warn!(
             "[V2/GAPLESS] Ignoring play_next_gapless for current track {}",
             track_id
@@ -7976,6 +7978,27 @@ pub async fn v2_play_next_gapless(
                 .play_next(audio_data, track_id)
                 .map_err(RuntimeError::Internal)?;
             return Ok(true);
+        }
+    }
+
+    // Check local library
+    if let Ok(track_id_i64) = track_id.try_into() {
+        if let Ok(tracks) = 
+            v2_library_get_tracks_by_ids(vec![track_id_i64], library_state.clone())
+            .await 
+        {
+            if let Some(local_track) = tracks.into_iter().next() {
+                let path = std::path::Path::new(&local_track.file_path);
+                if path.exists() {
+                    log::info!("[V2/GAPLESS] Track {} from LOCAL library", track_id);
+                    let audio_data = std::fs::read(path)
+                        .map_err(|e| RuntimeError::Internal(format!("Failed to read local file: {}", e)))?;
+                    bridge.get().await.player()
+                        .play_next(audio_data, track_id)
+                        .map_err(RuntimeError::Internal)?;
+                    return Ok(true);
+                }
+            }
         }
     }
 

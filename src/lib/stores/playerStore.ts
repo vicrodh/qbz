@@ -797,6 +797,7 @@ async function handlePlaybackEvent(event: PlaybackEvent): Promise<void> {
           })
           .finally(() => {
             gaplessRequestInFlight = false;
+            gaplessAttemptTrackId = null;
           });
       }
     }
