@@ -408,6 +408,23 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
             .map_err(CoreError::Api)
     }
 
+    /// Catalog search (combined: albums, tracks, artists, playlists, most_popular).
+    /// Returns raw JSON for the caller to parse.
+    pub async fn catalog_search(
+        &self,
+        query: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<serde_json::Value, CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+
+        client
+            .catalog_search(query, limit, offset)
+            .await
+            .map_err(CoreError::Api)
+    }
+
     /// Get album by ID
     pub async fn get_album(&self, album_id: &str) -> Result<Album, CoreError> {
         let client = self.client.read().await;

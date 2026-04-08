@@ -7370,43 +7370,20 @@ pub async fn v2_search_artists(
 #[tauri::command]
 pub async fn v2_search_all(
     query: String,
-    state: State<'_, AppState>,
+    core_bridge: State<'_, CoreBridgeState>,
     blacklist_state: State<'_, BlacklistState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<V2SearchAllResults, RuntimeError> {
     runtime
         .manager()
-        .check_requirements(CommandRequirement::RequiresUserSession)
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
         .await?;
 
-    let url = crate::api::endpoints::build_url(crate::api::endpoints::paths::CATALOG_SEARCH);
-    let response: serde_json::Value = {
-        let client = state.client.read().await;
-        client
-            .get_http()
-            .get(&url)
-            .header(
-                "X-App-Id",
-                client
-                    .app_id()
-                    .await
-                    .map_err(|e| RuntimeError::Internal(e.to_string()))?,
-            )
-            .header(
-                "X-User-Auth-Token",
-                client
-                    .auth_token()
-                    .await
-                    .map_err(|e| RuntimeError::Internal(e.to_string()))?,
-            )
-            .query(&[("query", query.as_str()), ("limit", "30"), ("offset", "0")])
-            .send()
-            .await
-            .map_err(|e| RuntimeError::Internal(format!("Request failed: {}", e)))?
-            .json()
-            .await
-            .map_err(|e| RuntimeError::Internal(format!("JSON parse failed: {}", e)))?
-    };
+    let bridge = core_bridge.get().await;
+    let response: serde_json::Value = bridge
+        .catalog_search(&query, 30, 0)
+        .await
+        .map_err(RuntimeError::Internal)?;
 
     let mut albums: SearchResultsPage<Album> = response
         .get("albums")

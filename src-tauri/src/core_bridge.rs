@@ -261,6 +261,19 @@ impl CoreBridge {
             .map_err(|e| e.to_string())
     }
 
+    /// Catalog search (combined: albums, tracks, artists, playlists, most_popular).
+    pub async fn catalog_search(
+        &self,
+        query: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<serde_json::Value, String> {
+        self.core
+            .catalog_search(query, limit, offset)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
     /// Get album by ID
     pub async fn get_album(&self, album_id: &str) -> Result<Album, String> {
         self.core

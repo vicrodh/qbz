@@ -7,7 +7,7 @@ use tokio::sync::RwLock;
 
 use super::auth::{
     get_timestamp, parse_login_response, sign_file_url, sign_get_favorites, sign_get_file_url,
-    sign_session_start,
+    sign_search, sign_session_start,
 };
 use super::bundle::{extract_bundle_tokens, BundleTokens};
 use super::endpoints::{self, paths};
@@ -422,13 +422,19 @@ impl QobuzClient {
         search_type: Option<&str>,
     ) -> Result<SearchResultsPage<Album>> {
         let url = endpoints::build_url(paths::ALBUM_SEARCH);
+        let timestamp = get_timestamp();
+        let secret = self.secret().await?;
+        let signature = sign_search("albumsearch", query, limit, offset, search_type, timestamp, &secret);
         let limit_str = limit.to_string();
         let offset_str = offset.to_string();
+        let ts_str = timestamp.to_string();
 
         let mut params: Vec<(&str, &str)> = vec![
             ("query", query),
             ("limit", &limit_str),
             ("offset", &offset_str),
+            ("request_ts", &ts_str),
+            ("request_sig", &signature),
         ];
 
         if let Some(st) = search_type {
@@ -462,13 +468,19 @@ impl QobuzClient {
         search_type: Option<&str>,
     ) -> Result<SearchResultsPage<Track>> {
         let url = endpoints::build_url(paths::TRACK_SEARCH);
+        let timestamp = get_timestamp();
+        let secret = self.secret().await?;
+        let signature = sign_search("tracksearch", query, limit, offset, search_type, timestamp, &secret);
         let limit_str = limit.to_string();
         let offset_str = offset.to_string();
+        let ts_str = timestamp.to_string();
 
         let mut params: Vec<(&str, &str)> = vec![
             ("query", query),
             ("limit", &limit_str),
             ("offset", &offset_str),
+            ("request_ts", &ts_str),
+            ("request_sig", &signature),
         ];
 
         if let Some(st) = search_type {
@@ -502,13 +514,19 @@ impl QobuzClient {
         search_type: Option<&str>,
     ) -> Result<SearchResultsPage<Artist>> {
         let url = endpoints::build_url(paths::ARTIST_SEARCH);
+        let timestamp = get_timestamp();
+        let secret = self.secret().await?;
+        let signature = sign_search("artistsearch", query, limit, offset, search_type, timestamp, &secret);
         let limit_str = limit.to_string();
         let offset_str = offset.to_string();
+        let ts_str = timestamp.to_string();
 
         let mut params: Vec<(&str, &str)> = vec![
             ("query", query),
             ("limit", &limit_str),
             ("offset", &offset_str),
+            ("request_ts", &ts_str),
+            ("request_sig", &signature),
         ];
 
         if let Some(st) = search_type {
@@ -530,6 +548,35 @@ impl QobuzClient {
             .ok_or_else(|| ApiError::ApiResponse("No artists in response".to_string()))?;
 
         Ok(serde_json::from_value(artists.clone())?)
+    }
+
+    /// Catalog search (combined: albums, tracks, artists, playlists, most_popular).
+    /// Returns raw JSON for caller to parse — the response shape is complex.
+    pub async fn catalog_search(&self, query: &str, limit: u32, offset: u32) -> Result<Value> {
+        let url = endpoints::build_url(paths::CATALOG_SEARCH);
+        let timestamp = get_timestamp();
+        let secret = self.secret().await?;
+        let signature = sign_search("catalogsearch", query, limit, offset, None, timestamp, &secret);
+        let limit_str = limit.to_string();
+        let offset_str = offset.to_string();
+        let ts_str = timestamp.to_string();
+
+        let http_response = self
+            .http
+            .get(&url)
+            .headers(self.api_headers().await?)
+            .query(&[
+                ("query", query),
+                ("limit", &limit_str),
+                ("offset", &offset_str),
+                ("request_ts", &ts_str),
+                ("request_sig", &signature),
+            ])
+            .send()
+            .await?;
+        log::debug!("[API] catalog_search status={}", http_response.status());
+        let response: Value = http_response.json().await?;
+        Ok(response)
     }
 
     /// Get similar artists for an artist ID
@@ -1544,14 +1591,23 @@ impl QobuzClient {
         offset: u32,
     ) -> Result<SearchResultsPage<Playlist>> {
         let url = endpoints::build_url(paths::PLAYLIST_SEARCH);
+        let timestamp = get_timestamp();
+        let secret = self.secret().await?;
+        let signature = sign_search("playlistsearch", query, limit, offset, None, timestamp, &secret);
+        let limit_str = limit.to_string();
+        let offset_str = offset.to_string();
+        let ts_str = timestamp.to_string();
+
         let http_response = self
             .http
             .get(&url)
             .headers(self.api_headers().await?)
             .query(&[
                 ("query", query),
-                ("limit", &limit.to_string()),
-                ("offset", &offset.to_string()),
+                ("limit", &limit_str),
+                ("offset", &offset_str),
+                ("request_ts", &ts_str),
+                ("request_sig", &signature),
             ])
             .send()
             .await?;

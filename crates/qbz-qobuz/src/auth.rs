@@ -28,6 +28,25 @@ pub fn sign_get_favorites(timestamp: u64, secret: &str) -> String {
     generate_signature("favoritegetUserFavorites", "", timestamp, secret)
 }
 
+/// Generate signature for search endpoints.
+/// `method` is the concatenated endpoint name (e.g. "catalogsearch", "albumsearch").
+/// Query params are sorted alphabetically: limit, offset, query, [type].
+pub fn sign_search(
+    method: &str,
+    query: &str,
+    limit: u32,
+    offset: u32,
+    search_type: Option<&str>,
+    timestamp: u64,
+    secret: &str,
+) -> String {
+    let mut params = format!("limit{}offset{}query{}", limit, offset, query);
+    if let Some(st) = search_type {
+        params.push_str(&format!("type{}", st));
+    }
+    generate_signature(method, &params, timestamp, secret)
+}
+
 /// Get current Unix timestamp
 pub fn get_timestamp() -> u64 {
     SystemTime::now()
