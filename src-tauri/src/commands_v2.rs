@@ -2258,14 +2258,20 @@ pub async fn v2_start_system_browser_oauth(
 
 // ==================== Prefetch (V2) ====================
 
-/// Number of Qobuz tracks to prefetch (not total tracks, just Qobuz)
-const V2_PREFETCH_COUNT: usize = 2;
+/// Number of Qobuz tracks to prefetch (not total tracks, just Qobuz).
+/// Higher values keep more upcoming tracks in cache for instant playback.
+/// CMAF segment downloads are ~24s per Hi-Res track, so 5 tracks means
+/// the cache stays ~2 minutes ahead of playback.
+const V2_PREFETCH_COUNT: usize = 5;
 
-/// How far ahead to look for tracks to prefetch (to handle mixed playlists)
-const V2_PREFETCH_LOOKAHEAD: usize = 10;
+/// How far ahead to look for tracks to prefetch (to handle mixed playlists
+/// with local/offline tracks interspersed with Qobuz tracks)
+const V2_PREFETCH_LOOKAHEAD: usize = 15;
 
-/// Maximum concurrent prefetch downloads
-const V2_MAX_CONCURRENT_PREFETCH: usize = 1;
+/// Maximum concurrent prefetch downloads (track-level, not segment-level).
+/// 2 tracks downloading simultaneously keeps the cache filling while
+/// one download is in its cooldown/decryption phase.
+const V2_MAX_CONCURRENT_PREFETCH: usize = 2;
 
 lazy_static::lazy_static! {
     /// Semaphore to limit concurrent prefetch operations
