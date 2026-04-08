@@ -40,6 +40,7 @@
     onToggleInfinitePlay?: () => void;
     onVolumeChange: (volume: number) => void;
     onToggleMute: () => void;
+    volumeLocked?: boolean;
     // Window controls
     isFullscreen?: boolean;
     isMaximized?: boolean;
@@ -69,6 +70,7 @@
     onToggleInfinitePlay,
     onVolumeChange,
     onToggleMute,
+    volumeLocked = false,
     isFullscreen = false,
     isMaximized = false,
     onClose,
@@ -271,13 +273,14 @@
 
       <!-- Right: Volume + Menu -->
       <div class="controls-group right">
-        <div class="volume-group">
+        <div class="volume-group" class:volume-locked={volumeLocked}>
           <button
             class="control-btn"
             onclick={onToggleMute}
-            title={volume === 0 ? $t('player.unmute') : $t('player.mute')}
+            disabled={volumeLocked}
+            title={volumeLocked ? $t('player.volumeLockedHw') : (volume === 0 ? $t('player.unmute') : $t('player.mute'))}
           >
-            {#if volume === 0}
+            {#if volume === 0 && !volumeLocked}
               <VolumeX size={12} />
             {:else}
               <Volume2 size={12} />
@@ -286,15 +289,16 @@
           <div
             class="volume-bar"
             bind:this={volumeRef}
-            onmousedown={handleVolumeMouseDown}
+            onmousedown={volumeLocked ? undefined : handleVolumeMouseDown}
             role="slider"
-            tabindex="0"
-            aria-valuenow={volume}
+            tabindex={volumeLocked ? -1 : 0}
+            aria-valuenow={volumeLocked ? 100 : volume}
             aria-valuemin={0}
             aria-valuemax={100}
+            aria-disabled={volumeLocked}
           >
             <div class="volume-track">
-              <div class="volume-fill" style="width: {volume}%"></div>
+              <div class="volume-fill" style="width: {volumeLocked ? 100 : volume}%"></div>
             </div>
           </div>
         </div>
@@ -519,6 +523,11 @@
     display: flex;
     align-items: center;
     gap: 8px;
+  }
+
+  .volume-group.volume-locked {
+    opacity: 0.4;
+    pointer-events: none;
   }
 
   .volume-bar {

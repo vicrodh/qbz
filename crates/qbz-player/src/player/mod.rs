@@ -1145,8 +1145,18 @@ impl Player {
                                     } else {
                                         log::info!("Creating initial audio stream");
                                     }
-                                    // Drop old stream
+                                    // Stop engine FIRST so its writer thread releases its
+                                    // Arc<AlsaDirectStream> reference before we drop the stream.
+                                    // Without this, snd_pcm_open() races against the old PCM
+                                    // handle and fails with EBUSY.
+                                    if let Some(engine) = current_engine.take() {
+                                        engine.stop();
+                                        std::thread::sleep(Duration::from_millis(50));
+                                    }
+                                    // Now this drop is the last Arc ref — PCM actually closes
                                     drop(stream_opt.take());
+                                    // Give kernel time to fully release the ALSA device
+                                    std::thread::sleep(Duration::from_millis(50));
                                 }
 
                                 log::info!(
@@ -1585,7 +1595,18 @@ impl Player {
                                         mode
                                     );
                                     }
+                                    // Stop engine FIRST so its writer thread releases its
+                                    // Arc<AlsaDirectStream> reference before we drop the stream.
+                                    // Without this, snd_pcm_open() races against the old PCM
+                                    // handle and fails with EBUSY.
+                                    if let Some(engine) = current_engine.take() {
+                                        engine.stop();
+                                        std::thread::sleep(Duration::from_millis(50));
+                                    }
+                                    // Now this drop is the last Arc ref — PCM actually closes
                                     drop(stream_opt.take());
+                                    // Give kernel time to fully release the ALSA device
+                                    std::thread::sleep(Duration::from_millis(50));
                                 }
 
                                 let stream_result = if let Some(settings) =

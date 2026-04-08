@@ -192,6 +192,7 @@
   let draggedPlaylistId = $state<number | null>(null);
   let draggedFromFolderId = $state<string | null>(null);
   let dragOverFolderId = $state<string | null>(null);
+  let trackDropTargetId = $state<number | null>(null);
 
   // Collapsed folder popover state
   let folderPopover = $state<{
@@ -1389,6 +1390,40 @@
     handlePlaylistDragEnd();
   }
 
+  // --- Track drop onto playlists ---
+  function hasTrackData(e: DragEvent): boolean {
+    return e.dataTransfer?.types.includes('application/x-qbz-tracks') ?? false;
+  }
+
+  function handleTrackDragOver(e: DragEvent, playlistId: number) {
+    if (!hasTrackData(e)) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+    trackDropTargetId = playlistId;
+  }
+
+  function handleTrackDragLeave(playlistId: number) {
+    if (trackDropTargetId === playlistId) trackDropTargetId = null;
+  }
+
+  async function handleTrackDrop(e: DragEvent, playlistId: number) {
+    e.preventDefault();
+    trackDropTargetId = null;
+
+    const raw = e.dataTransfer?.getData('application/x-qbz-tracks');
+    if (!raw) return;
+
+    try {
+      const trackIds: number[] = JSON.parse(raw);
+      if (!trackIds.length) return;
+
+      await invoke('v2_add_tracks_to_playlist', { playlistId, trackIds });
+      console.log(`[Sidebar] Dropped ${trackIds.length} track(s) onto playlist ${playlistId}`);
+    } catch (err) {
+      console.error('[Sidebar] Track drop failed:', err);
+    }
+  }
+
   // Close context menu and folder popover when clicking outside
   function handleGlobalClick(e: MouseEvent) {
     if (contextMenu.visible) {
@@ -1745,9 +1780,13 @@
                     <div
                       class="playlist-drag-wrapper"
                       class:dragging={draggedPlaylistId === item.playlist.id}
+                      class:track-drop-target={trackDropTargetId === item.playlist.id}
                       draggable={!isOffline && isExpanded}
                       ondragstart={(e) => handlePlaylistDragStart(e, item.playlist.id)}
                       ondragend={handlePlaylistDragEnd}
+                      ondragover={(e) => handleTrackDragOver(e, item.playlist.id)}
+                      ondragleave={() => handleTrackDragLeave(item.playlist.id)}
+                      ondrop={(e) => handleTrackDrop(e, item.playlist.id)}
                     >
                       <NavigationItem
                         label={item.playlist.name}
@@ -1767,9 +1806,13 @@
                     <div
                       class="playlist-drag-wrapper"
                       class:dragging={draggedPlaylistId === item.playlist.id}
+                      class:track-drop-target={trackDropTargetId === item.playlist.id}
                       draggable={!isOffline && isExpanded}
                       ondragstart={(e) => handlePlaylistDragStart(e, item.playlist.id)}
                       ondragend={handlePlaylistDragEnd}
+                      ondragover={(e) => handleTrackDragOver(e, item.playlist.id)}
+                      ondragleave={() => handleTrackDragLeave(item.playlist.id)}
+                      ondrop={(e) => handleTrackDrop(e, item.playlist.id)}
                     >
                       <NavigationItem
                         label={item.playlist.name}
@@ -2355,6 +2398,12 @@
 
   .playlist-drag-wrapper.dragging {
     opacity: 0.55;
+  }
+
+  .playlist-drag-wrapper.track-drop-target {
+    background: rgba(34, 197, 94, 0.15);
+    border-radius: 6px;
+    outline: 1px solid rgba(34, 197, 94, 0.4);
   }
 
   .playlists-scroll {

@@ -2393,6 +2393,9 @@
               isUnavailable={removedFromQobuz && isOwnPlaylist}
               unavailableTooltip={removedFromQobuz ? $t('player.trackUnavailable') : undefined}
               isBlacklisted={trackBlacklisted}
+              dragTrackIds={multiSelectMode && multiSelectedKeys.has(getTrackKey(track))
+                ? displayTracks.filter(trk => multiSelectedKeys.has(getTrackKey(trk)) && !trk.isLocal).map(trk => trk.id)
+                : undefined}
               hideFavorite={track.isLocal || removedFromQobuz || trackBlacklisted}
               hideDownload={track.isLocal || removedFromQobuz || trackBlacklisted}
               downloadStatus={downloadInfo.status}

@@ -492,9 +492,9 @@ impl AlsaBackend {
             }
         }
 
-        log::info!("[ALSA Backend] Enumerated {} ALSA devices", devices.len());
+        log::debug!("[ALSA Backend] Enumerated {} ALSA devices", devices.len());
         for (idx, dev) in devices.iter().enumerate() {
-            log::info!(
+            log::debug!(
                 "  [{}] {} - {} (max_rate: {:?}, rates: {:?})",
                 idx,
                 dev.name,
@@ -621,7 +621,7 @@ impl AlsaBackend {
                             .args(["suspend-sink", "@DEFAULT_SINK@", "1"])
                             .output();
 
-                        let retry_delays_ms = [50, 100, 200, 400];
+                        let retry_delays_ms = [50, 100, 200, 400, 800];
                         for (i, delay_ms) in retry_delays_ms.iter().enumerate() {
                             std::thread::sleep(std::time::Duration::from_millis(*delay_ms));
 
@@ -716,7 +716,7 @@ impl AlsaBackend {
                         .args(["suspend-sink", "@DEFAULT_SINK@", "1"])
                         .output();
 
-                    let retry_delays_ms = [50, 100, 200, 400];
+                    let retry_delays_ms = [50, 100, 200, 400, 800];
                     for (i, delay_ms) in retry_delays_ms.iter().enumerate() {
                         std::thread::sleep(std::time::Duration::from_millis(*delay_ms));
 

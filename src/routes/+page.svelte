@@ -5762,6 +5762,7 @@
         {volume}
         onVolumeChange={handleVolumeChange}
         onToggleMute={handleToggleMute}
+        volumeLocked={isAlsaDirectHw && !qconnectPeerRendererActive}
         {isShuffle}
         onToggleShuffle={toggleShuffle}
         {repeatMode}
