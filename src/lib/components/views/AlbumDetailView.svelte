@@ -649,6 +649,7 @@
           isBlacklisted={trackBlacklisted}
           selectable={multiSelectMode}
           selected={multiSelectedIds.has(track.id)}
+          dragTrackIds={multiSelectMode && multiSelectedIds.has(track.id) ? [...multiSelectedIds] : undefined}
           onToggleSelect={() => toggleMultiSelect(track.id)}
           downloadStatus={downloadInfo.status}
           downloadProgress={downloadInfo.progress}

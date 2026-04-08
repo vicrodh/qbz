@@ -562,6 +562,7 @@
           isBlacklisted={trackBlacklisted}
           selectable={multiSelectMode}
           selected={multiSelectedIds.has(track.id)}
+          dragTrackIds={multiSelectMode && multiSelectedIds.has(track.id) ? [...multiSelectedIds] : undefined}
           onToggleSelect={() => toggleMultiSelect(track.id)}
           hideDownload={trackBlacklisted}
           hideFavorite={trackBlacklisted}
