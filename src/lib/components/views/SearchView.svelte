@@ -1659,6 +1659,18 @@
                     class:playing={isActiveTrack}
                     role="button"
                     tabindex="0"
+                    draggable={true}
+                    ondragstart={(e) => {
+                      if (!e.dataTransfer) return;
+                      e.dataTransfer.effectAllowed = 'copy';
+                      e.dataTransfer.setData('application/x-qbz-tracks', JSON.stringify([track.id]));
+                      const ghost = document.createElement('div');
+                      Object.assign(ghost.style, { position: 'fixed', top: '-1000px', padding: '8px 14px', maxWidth: '260px', borderRadius: '8px', background: 'rgba(30,30,40,0.85)', color: '#fff', fontSize: '12px', lineHeight: '1.4', boxShadow: '0 4px 12px rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', opacity: '0.9' });
+                      const titleEl = document.createElement('div'); titleEl.textContent = track.title; Object.assign(titleEl.style, { fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }); ghost.appendChild(titleEl);
+                      const sub = [track.performer?.name, track.album?.title].filter(Boolean).join(' · ');
+                      if (sub) { const subEl = document.createElement('div'); subEl.textContent = sub; Object.assign(subEl.style, { fontSize: '10px', color: 'rgba(255,255,255,0.55)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: '1px' }); ghost.appendChild(subEl); }
+                      document.body.appendChild(ghost); e.dataTransfer.setDragImage(ghost, 0, 20); requestAnimationFrame(() => ghost.remove());
+                    }}
                     onclick={() => handleSearchTrackPlay(track, index)}
                     onkeydown={(e) => e.key === 'Enter' && handleSearchTrackPlay(track, index)}
                     oncontextmenu={(e) => {
@@ -1849,6 +1861,18 @@
                     class:playing={isActiveTrack}
                     role="button"
                     tabindex="0"
+                    draggable={true}
+                    ondragstart={(e) => {
+                      if (!e.dataTransfer) return;
+                      e.dataTransfer.effectAllowed = 'copy';
+                      e.dataTransfer.setData('application/x-qbz-tracks', JSON.stringify([track.id]));
+                      const ghost = document.createElement('div');
+                      Object.assign(ghost.style, { position: 'fixed', top: '-1000px', padding: '8px 14px', maxWidth: '260px', borderRadius: '8px', background: 'rgba(30,30,40,0.85)', color: '#fff', fontSize: '12px', lineHeight: '1.4', boxShadow: '0 4px 12px rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', opacity: '0.9' });
+                      const titleEl = document.createElement('div'); titleEl.textContent = track.title; Object.assign(titleEl.style, { fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }); ghost.appendChild(titleEl);
+                      const sub = [track.performer?.name, track.album?.title].filter(Boolean).join(' · ');
+                      if (sub) { const subEl = document.createElement('div'); subEl.textContent = sub; Object.assign(subEl.style, { fontSize: '10px', color: 'rgba(255,255,255,0.55)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: '1px' }); ghost.appendChild(subEl); }
+                      document.body.appendChild(ghost); e.dataTransfer.setDragImage(ghost, 0, 20); requestAnimationFrame(() => ghost.remove());
+                    }}
                     onclick={() => handleSearchTrackPlay(track, index)}
                     onkeydown={(e) => e.key === 'Enter' && handleSearchTrackPlay(track, index)}
                     oncontextmenu={(e) => {

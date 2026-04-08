@@ -2051,6 +2051,23 @@
               role="button"
               tabindex="0"
               data-track-id={track.id}
+              draggable={true}
+              ondragstart={(e) => {
+                if (!e.dataTransfer) return;
+                e.dataTransfer.effectAllowed = 'copy';
+                const ids = multiSelectMode && multiSelectedIds.has(track.id)
+                  ? [...multiSelectedIds]
+                  : [track.id];
+                e.dataTransfer.setData('application/x-qbz-tracks', JSON.stringify(ids));
+                const ghost = document.createElement('div');
+                Object.assign(ghost.style, { position: 'fixed', top: '-1000px', padding: '8px 14px', maxWidth: '260px', borderRadius: '8px', background: 'rgba(30,30,40,0.85)', color: '#fff', fontSize: '12px', lineHeight: '1.4', boxShadow: '0 4px 12px rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', opacity: '0.9' });
+                if (ids.length > 1) { ghost.textContent = `${ids.length} tracks`; ghost.style.fontWeight = '500'; }
+                else {
+                  const t1 = document.createElement('div'); t1.textContent = track.title; Object.assign(t1.style, { fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }); ghost.appendChild(t1);
+                  const sub = track.album?.title || ''; if (sub) { const t2 = document.createElement('div'); t2.textContent = sub; Object.assign(t2.style, { fontSize: '10px', color: 'rgba(255,255,255,0.55)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: '1px' }); ghost.appendChild(t2); }
+                }
+                document.body.appendChild(ghost); e.dataTransfer.setDragImage(ghost, 0, 20); requestAnimationFrame(() => ghost.remove());
+              }}
               onclick={() => multiSelectMode ? toggleMultiSelect(track.id) : handleTrackPlay(track, index)}
               onkeydown={(e) => e.key === 'Enter' && (multiSelectMode ? toggleMultiSelect(track.id) : handleTrackPlay(track, index))}
               oncontextmenu={(e) => {
