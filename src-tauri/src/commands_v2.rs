@@ -1613,6 +1613,20 @@ pub async fn v2_init_client(
     Ok(manager.get_status().await)
 }
 
+/// Shared cancel signal for system browser OAuth flow.
+/// Managed as Tauri state so the frontend can cancel the wait.
+pub struct OAuthCancelState {
+    pub cancel: Arc<tokio::sync::Notify>,
+}
+
+impl OAuthCancelState {
+    pub fn new() -> Self {
+        Self {
+            cancel: Arc::new(tokio::sync::Notify::new()),
+        }
+    }
+}
+
 /// Auto-login response matching legacy LoginResponse
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -1904,6 +1918,30 @@ pub async fn v2_start_oauth_login(
 
 /// Complete the OAuth login flow after obtaining an authorization code.
 ///
+/// Cancel the system browser OAuth flow.
+/// Triggers the cancel signal so v2_start_system_browser_oauth returns immediately.
+#[tauri::command]
+pub async fn v2_cancel_system_browser_oauth(
+    cancel_state: State<'_, OAuthCancelState>,
+) -> Result<(), String> {
+    log::info!("[OAuth] System browser OAuth cancelled by user");
+    cancel_state.cancel.notify_one();
+    Ok(())
+}
+
+/// Cancel the WebView OAuth flow by closing all OAuth windows.
+#[tauri::command]
+pub async fn v2_cancel_oauth_login(app: tauri::AppHandle) -> Result<(), String> {
+    log::info!("[OAuth] WebView OAuth cancelled by user");
+    for win in app.webview_windows().values() {
+        let label = win.label().to_string();
+        if label == "qobuz-oauth" || label.starts_with("qobuz-oauth-popup-") {
+            let _ = win.close();
+        }
+    }
+    Ok(())
+}
+
 /// Frontend-agnostic: does not depend on how the code was obtained (WebView,
 /// system browser, manual paste, etc.). Suitable for GUI, TUI, and headless.
 ///
@@ -2061,6 +2099,7 @@ pub async fn v2_start_system_browser_oauth(
     app_state: State<'_, AppState>,
     core_bridge: State<'_, CoreBridgeState>,
     legal_state: State<'_, LegalSettingsState>,
+    cancel_state: State<'_, OAuthCancelState>,
 ) -> Result<V2LoginResponse, String> {
     log::info!("[V2] System browser OAuth starting...");
 
@@ -2135,18 +2174,25 @@ pub async fn v2_start_system_browser_oauth(
         });
     }
 
-    // Wait up to 5 minutes for the redirect
-    let code = tokio::time::timeout(
-        std::time::Duration::from_secs(300),
-        rx.recv(),
-    )
-    .await;
+    // Race: code received vs timeout vs user cancel
+    let cancel = cancel_state.cancel.clone();
+    enum OAuthResult {
+        Code(Option<String>),
+        Timeout,
+        Cancelled,
+    }
+    let result = tokio::select! {
+        code = rx.recv() => OAuthResult::Code(code),
+        _ = tokio::time::sleep(std::time::Duration::from_secs(120)) => OAuthResult::Timeout,
+        _ = cancel.notified() => OAuthResult::Cancelled,
+    };
 
     server_handle.abort();
 
-    let code = match code {
-        Ok(Some(c)) => c,
-        Ok(None) => {
+    let code = match result {
+        OAuthResult::Code(Some(c)) => c,
+        OAuthResult::Code(None) | OAuthResult::Cancelled => {
+            log::info!("[OAuth] System browser login cancelled");
             return Ok(V2LoginResponse {
                 success: false,
                 user_name: None,
@@ -2157,14 +2203,15 @@ pub async fn v2_start_system_browser_oauth(
                 error_code: Some("oauth_cancelled".to_string()),
             });
         }
-        Err(_) => {
+        OAuthResult::Timeout => {
+            log::info!("[OAuth] System browser login timed out");
             return Ok(V2LoginResponse {
                 success: false,
                 user_name: None,
                 user_id: None,
                 subscription: None,
                 subscription_valid_until: None,
-                error: Some("OAuth login timed out after 5 minutes".to_string()),
+                error: Some("OAuth login timed out after 2 minutes".to_string()),
                 error_code: Some("oauth_timeout".to_string()),
             });
         }

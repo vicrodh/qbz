@@ -755,6 +755,7 @@ pub fn run() {
             audio_settings,
         ))
         .manage(core_bridge::CoreBridgeState::new())
+        .manage(commands_v2::OAuthCancelState::new())
         .manage(runtime::RuntimeManagerState::new())
         .manage(qconnect_service::QconnectServiceState::new())
         .manage(user_data_paths)
@@ -1221,6 +1222,8 @@ pub fn run() {
             commands_v2::v2_manual_login,
             commands_v2::v2_start_oauth_login,
             commands_v2::v2_start_system_browser_oauth,
+            commands_v2::v2_cancel_oauth_login,
+            commands_v2::v2_cancel_system_browser_oauth,
             commands_v2::v2_get_user_info,
             commands_v2::v2_save_credentials,
             commands_v2::v2_clear_saved_credentials,
