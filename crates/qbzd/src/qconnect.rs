@@ -204,9 +204,13 @@ async fn run_event_loop(app: &Arc<App>, device_name: &str) {
     loop {
         match rx.recv().await {
             Ok(event) => {
+                // Log event type for debugging
+                log::debug!("[qbzd/qconnect] Transport event: {:?}", std::mem::discriminant(&event));
+
                 // Wait for SESSION_STATE to do deferred renderer join
                 if !renderer_joined {
                     if let qconnect_transport_ws::TransportEvent::InboundQueueServerEvent(ref evt) = event {
+                        log::info!("[qbzd/qconnect] Queue server event: {}", evt.message_type());
                         if evt.message_type() == "MESSAGE_TYPE_SRVR_CTRL_SESSION_STATE" {
                             if let Some(session_uuid) = evt.payload.get("session_uuid").and_then(|v| v.as_str()) {
                                 renderer_joined = true;

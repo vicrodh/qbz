@@ -48,11 +48,17 @@ pub async fn play_track(
 
     log::info!("[qbzd/play] Playing track {} (quality: {:?})", req.track_id, quality);
 
+    // Signal orchestrator to not auto-advance during download
+    daemon.skip_auto_advance.store(true, std::sync::atomic::Ordering::Release);
+
     // Stop current playback
     let _ = daemon.core.stop();
 
     // Download audio
     let audio_data = crate::daemon::download_track(&daemon, req.track_id).await?;
+
+    // Clear the skip flag
+    daemon.skip_auto_advance.store(false, std::sync::atomic::Ordering::Release);
 
     // Feed to player
     daemon.core.player()
@@ -122,10 +128,14 @@ pub async fn play_album(
         _ => qbz_models::Quality::HiRes,
     };
 
+    // Signal orchestrator to not auto-advance during download
+    daemon.skip_auto_advance.store(true, std::sync::atomic::Ordering::Release);
+
     // Stop current playback
     let _ = daemon.core.stop();
 
     let audio_data = crate::daemon::download_track(&daemon, first_track_id).await?;
+    daemon.skip_auto_advance.store(false, std::sync::atomic::Ordering::Release);
     daemon.core.player().play_data(audio_data, first_track_id)
         .map_err(|e| format!("Player error: {}", e))?;
 

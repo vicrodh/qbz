@@ -22,6 +22,8 @@ pub struct DaemonCore {
     pub event_bus: broadcast::Sender<DaemonEvent>,
     /// Per-user state, populated after login + session activation
     pub user: RwLock<Option<UserSession>>,
+    /// Flag to prevent orchestrator auto-advance during explicit play commands
+    pub skip_auto_advance: std::sync::atomic::AtomicBool,
 }
 
 /// Run the daemon main loop.
@@ -75,6 +77,7 @@ pub async fn run(mut config: DaemonConfig) -> Result<(), String> {
         audio_cache,
         event_bus: event_tx.clone(),
         user: RwLock::new(None),
+        skip_auto_advance: std::sync::atomic::AtomicBool::new(false),
     });
 
     // Try auto-login from saved OAuth token
@@ -308,7 +311,7 @@ fn spawn_playback_orchestrator(daemon: Arc<DaemonCore>) {
             // This handles the case when gapless wasn't available or failed.
             let track_ended = was_playing && !is_playing && track_id == 0 && last_track_id != 0;
 
-            if track_ended {
+            if track_ended && !daemon.skip_auto_advance.load(std::sync::atomic::Ordering::Acquire) {
                 let queue_state = daemon.core.get_queue_state().await;
                 let repeat_mode = queue_state.repeat;
 
