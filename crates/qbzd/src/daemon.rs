@@ -106,7 +106,12 @@ pub async fn run(mut config: DaemonConfig) -> Result<(), String> {
     };
 
     // Start playback state polling loop (broadcasts to event bus + MPRIS)
-    spawn_playback_loop(daemon.core.clone(), daemon.event_bus.clone(), mpris_handle);
+    spawn_playback_loop(daemon.core.clone(), daemon.event_bus.clone(), mpris_handle.clone());
+
+    // Spawn MPRIS metadata updater (listens to event bus for TrackStarted)
+    if let Some(ref mc) = mpris_handle {
+        spawn_mpris_metadata_updater(daemon.event_bus.subscribe(), mc.clone());
+    }
 
     // Register mDNS service for LAN discovery
     let _mdns_handle = if config.mdns.enabled {
@@ -246,6 +251,40 @@ fn register_mdns(config: &DaemonConfig) -> Result<mdns_sd::ServiceDaemon, String
         .map_err(|e| format!("mDNS register error: {}", e))?;
 
     Ok(mdns)
+}
+
+/// Listen for CoreEvent::TrackStarted on the event bus and update MPRIS metadata.
+fn spawn_mpris_metadata_updater(
+    mut rx: broadcast::Receiver<DaemonEvent>,
+    mc: Arc<std::sync::Mutex<souvlaki::MediaControls>>,
+) {
+    tokio::spawn(async move {
+        loop {
+            match rx.recv().await {
+                Ok(DaemonEvent::Core(qbz_models::CoreEvent::TrackStarted { track, .. })) => {
+                    crate::mpris::update_mpris_metadata(
+                        &mc,
+                        &track.title,
+                        &track.artist,
+                        &track.album,
+                        track.duration_secs,
+                    );
+                    log::debug!("[qbzd/mpris] Metadata: {} - {}", track.artist, track.title);
+                }
+                Ok(DaemonEvent::Core(qbz_models::CoreEvent::LoggedOut)) => {
+                    // Clear metadata on logout
+                    if let Ok(mut controls) = mc.lock() {
+                        let _ = controls.set_playback(souvlaki::MediaPlayback::Stopped);
+                    }
+                }
+                Err(broadcast::error::RecvError::Lagged(n)) => {
+                    log::debug!("[qbzd/mpris] Lagged {} events", n);
+                }
+                Err(broadcast::error::RecvError::Closed) => break,
+                _ => {}
+            }
+        }
+    });
 }
 
 /// Spawn the playback state polling loop.
