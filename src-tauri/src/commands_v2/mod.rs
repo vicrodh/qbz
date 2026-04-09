@@ -5,42 +5,6 @@
 //!
 //! Playback flows through CoreBridge -> QbzCore -> Player (qbz-player crate).
 
-use tauri::State;
-
-use qbz_models::{
-    Album, Artist, DiscoverAlbum, DiscoverData, DiscoverPlaylistsResponse, DiscoverResponse,
-    GenreInfo, LabelDetail, LabelExploreResponse, LabelPageData, PageArtistResponse, Playlist,
-    PlaylistTag, SearchResultsPage,
-    Track, UserSession,
-};
-
-use crate::api::models::{
-    PlaylistDuplicateResult, PlaylistWithTrackIds,
-};
-use crate::artist_blacklist::BlacklistState;
-use crate::audio::{AlsaPlugin, AudioBackendType, AudioDevice, BackendManager};
-use crate::cache::CacheStats;
-use crate::config::audio_settings::{AudioSettings, AudioSettingsState};
-use crate::config::developer_settings::DeveloperSettingsState;
-use crate::config::favorites_preferences::FavoritesPreferences;
-use crate::config::graphics_settings::GraphicsSettingsState;
-use crate::config::legal_settings::LegalSettingsState;
-use crate::config::playback_preferences::{
-    AutoplayMode, PlaybackPreferences, PlaybackPreferencesState,
-};
-use crate::config::tray_settings::TraySettings;
-use crate::config::tray_settings::TraySettingsState;
-use crate::config::window_settings::WindowSettingsState;
-use crate::core_bridge::CoreBridgeState;
-use crate::library::LibraryState;
-use crate::reco_store::RecoState;
-use crate::runtime::{
-    CommandRequirement, RuntimeError, RuntimeManagerState,
-};
-use crate::AppState;
-use crate::integrations_v2::MusicBrainzV2State;
-use std::collections::HashSet;
-
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct V2SuggestionArtistInput {
     pub name: String,
