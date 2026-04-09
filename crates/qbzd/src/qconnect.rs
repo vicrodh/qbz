@@ -154,23 +154,41 @@ pub async fn start_qconnect(
     Some(app)
 }
 
-/// Bootstrap: send CtrlSrvrJoinSession + AskForQueueState.
+/// Bootstrap: send CtrlSrvrJoinSession, wait, then AskForQueueState.
+/// Matches desktop's bootstrap_remote_presence exactly.
 async fn bootstrap_remote_presence(app: &Arc<App>, device_name: &str) -> Result<(), String> {
     let device_info = build_device_info(device_name);
 
-    // Controller JoinSession
+    // Controller JoinSession (the server responds with session topology)
     let join_payload = serde_json::json!({
         "session_uuid": null,
         "device_info": device_info,
     });
     let join_cmd = app.build_queue_command(QueueCommandType::CtrlSrvrJoinSession, join_payload).await;
-    let _ = app.send_queue_command(join_cmd).await
+    let join_uuid = app.send_queue_command(join_cmd).await
         .map_err(|e| format!("join_session failed: {}", e))?;
 
-    // Ask for queue state
+    // Clear pending so the next command isn't blocked (JoinSession response
+    // is session topology, not a queue reducer event)
+    {
+        let handle = app.state_handle();
+        let mut state = handle.lock().await;
+        state.pending.clear();
+    }
+
+    // Small delay to let the server process the join
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+    // Ask for current queue state
     let ask_cmd = app.build_queue_command(QueueCommandType::CtrlSrvrAskForQueueState, serde_json::json!({})).await;
-    let _ = app.send_queue_command(ask_cmd).await
+    let ask_uuid = app.send_queue_command(ask_cmd).await
         .map_err(|e| format!("ask_queue_state failed: {}", e))?;
+
+    {
+        let handle = app.state_handle();
+        let mut state = handle.lock().await;
+        state.pending.clear();
+    }
 
     log::info!("[qbzd/qconnect] Bootstrap: controller joined, queue requested");
     Ok(())
