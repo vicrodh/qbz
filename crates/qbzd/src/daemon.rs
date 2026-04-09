@@ -26,9 +26,7 @@ pub struct DaemonCore {
 
 /// Run the daemon main loop.
 pub async fn run(mut config: DaemonConfig) -> Result<(), String> {
-    // Resolve token
-    config.resolve_token();
-    log::info!("[qbzd] API token: {}...", &config.server.token[..8.min(config.server.token.len())]);
+    log::info!("[qbzd] Access: LAN-only (no authentication required on local network)");
 
     // Create event bus (bounded, slow SSE clients get dropped)
     let (event_tx, _) = broadcast::channel::<DaemonEvent>(256);
@@ -153,6 +151,7 @@ pub async fn run(mut config: DaemonConfig) -> Result<(), String> {
         ctrl_c.await.ok();
     };
 
+    let app = app.into_make_service_with_connect_info::<std::net::SocketAddr>();
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown)
         .await
@@ -338,7 +337,8 @@ macro_rules! with_daemon {
 /// Build the Axum HTTP router.
 fn build_router(daemon: Arc<DaemonCore>) -> axum::Router {
     use axum::routing::{get, post, patch, put, delete};
-    use crate::api::{audio, catalog, catalog_ext, discover, favorites, integrations, library, playback, playlists, queue, search, system};
+    use axum::middleware as axum_mw;
+    use crate::api::{audio, catalog, catalog_ext, discover, favorites, integrations, library, middleware, playback, playlists, queue, search, system};
 
     axum::Router::new()
         // System
@@ -422,6 +422,8 @@ fn build_router(daemon: Arc<DaemonCore>) -> axum::Router {
         // System / Resources
         .route("/api/system/resources", get(with_daemon!(daemon, system::get_resources)))
         .route("/api/cache", delete(with_daemon!(daemon, system::clear_cache)))
+        // LAN-only: reject requests from non-private IPs
+        .layer(axum_mw::from_fn(middleware::lan_only))
 }
 
 async fn ping_handler() -> &'static str {
