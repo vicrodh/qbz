@@ -151,7 +151,7 @@ mupdf = { version = "0.6", features = ["sys-lib-zlib", "sys-lib-harfbuzz", "sys-
 
 [target.'cfg(target_os = "macos")'.dependencies]
 tauri-plugin-dialog = { version = "2.7.0" }
-notify-rust = "4.13.0"
+notify-rust = "4.14.0"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 tauri-plugin-dialog = { version = "2.7.0" }
