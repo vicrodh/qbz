@@ -265,7 +265,7 @@ fn register_mdns(config: &DaemonConfig) -> Result<mdns_sd::ServiceDaemon, String
     let service_info = mdns_sd::ServiceInfo::new(
         "_qbz._tcp.local.",
         &service_name,
-        &format!("{}.", hostname::get().ok().and_then(|h| h.into_string().ok()).unwrap_or_else(|| "localhost".to_string())),
+        &format!("{}.local.", hostname::get().ok().and_then(|h| h.into_string().ok()).unwrap_or_else(|| "localhost".to_string())),
         "",
         config.server.port,
         None,

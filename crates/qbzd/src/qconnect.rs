@@ -307,7 +307,11 @@ async fn fetch_qws_credentials(client: &qbz_qobuz::QobuzClient) -> Option<(Strin
         .post("https://www.qobuz.com/api.json/0.2/qws/createToken")
         .header("X-App-Id", &app_id)
         .header("X-User-Auth-Token", &auth_token)
-        .header("Content-Length", "0")
+        .form(&[
+            ("jwt", "jwt_qws"),
+            ("user_auth_token_needed", "true"),
+            ("strong_auth_needed", "true"),
+        ])
         .send()
         .await
         .ok()?;
@@ -318,14 +322,9 @@ async fn fetch_qws_credentials(client: &qbz_qobuz::QobuzClient) -> Option<(Strin
     }
 
     let body: serde_json::Value = resp.json().await.ok()?;
-    let endpoint = body.get("endpoint_url")?.as_str()?.to_string();
-    let jwt = body.get("tokens")
-        .and_then(|t| t.as_array())
-        .and_then(|arr| arr.iter().find_map(|t| {
-            if t.get("kind")?.as_str()? == "jwt_qws" {
-                Some(t.get("token")?.as_str()?.to_string())
-            } else { None }
-        }))?;
+    let jwt_qws = body.get("jwt_qws")?;
+    let endpoint = jwt_qws.get("endpoint")?.as_str()?.to_string();
+    let jwt = jwt_qws.get("jwt")?.as_str()?.to_string();
 
     Some((endpoint, jwt))
 }
