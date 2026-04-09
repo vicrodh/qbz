@@ -329,12 +329,16 @@ macro_rules! with_daemon {
         let d = $daemon.clone();
         move |p, q| $handler(d.clone(), p, q)
     }};
+    ($daemon:expr, $handler:path, path_json) => {{
+        let d = $daemon.clone();
+        move |p, j| $handler(d.clone(), p, j)
+    }};
 }
 
 /// Build the Axum HTTP router.
 fn build_router(daemon: Arc<DaemonCore>) -> axum::Router {
-    use axum::routing::{get, post, patch};
-    use crate::api::{audio, playback, queue, search, catalog};
+    use axum::routing::{get, post, patch, put, delete};
+    use crate::api::{audio, catalog, catalog_ext, discover, favorites, playback, playlists, queue, search, system};
 
     axum::Router::new()
         // System
@@ -375,6 +379,34 @@ fn build_router(daemon: Arc<DaemonCore>) -> axum::Router {
         .route("/api/audio/backends", get(with_daemon!(daemon, audio::get_backends)))
         .route("/api/audio/devices", get(with_daemon!(daemon, audio::get_devices, query)))
         .route("/api/audio/hardware-status", get(with_daemon!(daemon, audio::get_hardware_status)))
+        // Discover / Home
+        .route("/api/discover", get(with_daemon!(daemon, discover::get_discover_index, query)))
+        .route("/api/discover/playlists", get(with_daemon!(daemon, discover::get_discover_playlists, query)))
+        .route("/api/discover/featured", get(with_daemon!(daemon, discover::get_featured, query)))
+        .route("/api/genres", get(with_daemon!(daemon, discover::get_genres)))
+        // Favorites
+        .route("/api/favorites", get(with_daemon!(daemon, favorites::get_favorites, query)))
+        .route("/api/favorites", post(with_daemon!(daemon, favorites::add_favorite, json)))
+        .route("/api/favorites", delete(with_daemon!(daemon, favorites::remove_favorite, json)))
+        // Playlists
+        .route("/api/playlists", get(with_daemon!(daemon, playlists::get_playlists)))
+        .route("/api/playlists", post(with_daemon!(daemon, playlists::create_playlist, json)))
+        .route("/api/playlists/search", get(with_daemon!(daemon, playlists::search_playlists, query)))
+        .route("/api/playlists/{id}", get(with_daemon!(daemon, playlists::get_playlist, path)))
+        .route("/api/playlists/{id}", put(with_daemon!(daemon, playlists::update_playlist, path_json)))
+        .route("/api/playlists/{id}", delete(with_daemon!(daemon, playlists::delete_playlist, path)))
+        .route("/api/playlists/{id}/tracks", post(with_daemon!(daemon, playlists::add_tracks, path_json)))
+        .route("/api/playlists/{id}/tracks", delete(with_daemon!(daemon, playlists::remove_tracks, path_json)))
+        // Extended catalog
+        .route("/api/artists/{id}/page", get(with_daemon!(daemon, catalog_ext::get_artist_page, path)))
+        .route("/api/artists/{id}/similar", get(with_daemon!(daemon, catalog_ext::get_similar_artists, path_query)))
+        .route("/api/labels/{id}", get(with_daemon!(daemon, catalog_ext::get_label, path_query)))
+        .route("/api/labels/{id}/page", get(with_daemon!(daemon, catalog_ext::get_label_page, path)))
+        .route("/api/labels/explore", get(with_daemon!(daemon, catalog_ext::get_label_explore, query)))
+        .route("/api/playlist-tags", get(with_daemon!(daemon, catalog_ext::get_playlist_tags)))
+        // System / Resources
+        .route("/api/system/resources", get(with_daemon!(daemon, system::get_resources)))
+        .route("/api/cache", delete(with_daemon!(daemon, system::clear_cache)))
 }
 
 async fn ping_handler() -> &'static str {
