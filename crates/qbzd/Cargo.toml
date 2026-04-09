@@ -44,3 +44,6 @@ sysinfo = "0.34"
 
 # Database
 rusqlite = { version = "0.31", features = ["bundled"] }
+
+# Credentials (shared keyring with desktop app)
+keyring = { version = "3", features = ["async-secret-service", "crypto-rust"] }
