@@ -6,6 +6,7 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
+import { cmdPause, cmdResume, cmdStop, cmdSeek, cmdSetVolume, cmdPlayTrack } from '$lib/services/commandRouter';
 import { saveSessionVolume } from '$lib/services/sessionService';
 import { getUserItem, setUserItem, removeUserItem } from '$lib/utils/userStorage';
 
@@ -237,7 +238,7 @@ async function flushPendingSeek(): Promise<void> {
 
   seekRequestInFlight = true;
   try {
-    await invoke('v2_seek', { position: Math.floor(targetPosition) });
+    await cmdSeek(targetPosition);
   } catch (err) {
     console.error('Failed to seek:', err);
   } finally {
@@ -416,18 +417,14 @@ export async function togglePlay(): Promise<void> {
           await invoke('v2_library_play_track', { trackId: localTrackId });
         } else {
           // Qobuz track - use v2_play_track
-          await invoke('v2_play_track', {
-            trackId: currentTrack.id,
-            quality: getStreamingQuality(),
-            durationSecs: currentTrack.duration ? Math.round(currentTrack.duration) : null
-          });
+          await cmdPlayTrack(currentTrack.id, getStreamingQuality());
         }
 
       } else {
-        await invoke('v2_resume_playback');
+        await cmdResume();
       }
     } else {
-      await invoke('v2_pause_playback');
+      await cmdPause();
     }
   } catch (err) {
     console.error('Failed to toggle playback:', err);
@@ -474,7 +471,7 @@ export async function resyncPersistedVolume(): Promise<void> {
   volume = persistedVolume;
   notifyListeners();
   try {
-    await invoke('v2_set_volume', { volume: persistedVolume / 100 });
+    await cmdSetVolume(persistedVolume / 100);
     console.log('[Player] Resynced volume after login:', persistedVolume);
   } catch {
     console.debug('[Player] Could not resync volume to backend');
@@ -500,7 +497,7 @@ export async function setVolume(newVolume: number): Promise<void> {
     }
 
     // Try to set volume on backend - will fail silently if no track is loaded
-    await invoke('v2_set_volume', { volume: clampedVolume / 100 });
+    await cmdSetVolume(clampedVolume / 100);
   } catch (err) {
     // Ignore errors when nothing is playing - volume is saved and will apply on next play
     console.debug('Volume set locally (no active playback):', clampedVolume);
@@ -542,7 +539,7 @@ export async function stop(): Promise<void> {
     if (isCasting()) {
       await castStop();
     } else {
-      await invoke('v2_stop_playback');
+      await cmdStop();
     }
     isPlaying = false;
     currentTrack = null;
@@ -844,7 +841,7 @@ export async function startPolling(): Promise<void> {
     // the unscoped key. resyncPersistedVolume() is called after login to fix this.
     const persistedVolume = loadPersistedVolume();
     try {
-      await invoke('v2_set_volume', { volume: persistedVolume / 100 });
+      await cmdSetVolume(persistedVolume / 100);
       console.log('[Player] Synced persisted volume to backend:', persistedVolume);
     } catch {
       // Backend might not be ready yet, volume will be applied on first interaction
