@@ -23,7 +23,7 @@ jobs:
       - name: Install dev headers
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev libdbus-1-dev pkg-config
 
-      - name: Build qbzd (x86_64, glibc 2.31)
+      - name: Build qbzd (x86_64, glibc 2.35)
         working-directory: crates
         run: cargo zigbuild --release --target x86_64-unknown-linux-gnu.2.35 -p qbzd
 
@@ -40,48 +40,31 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build in Debian Bookworm aarch64 (QEMU)
+        uses: uraimo/run-on-arch-action@v2
         with:
-          targets: aarch64-unknown-linux-gnu
-      - uses: mlugg/setup-zig@v2
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: crates -> target
-      - run: cargo install cargo-zigbuild
-
-      - name: Install cross-compilation deps
-        run: |
-          sudo dpkg --add-architecture arm64
-          # Force ALL existing sources to amd64-only (sources.list + sources.list.d/*)
-          sudo sed -i 's/^deb \(http\|https\)/deb [arch=amd64] \1/' /etc/apt/sources.list
-          sudo find /etc/apt/sources.list.d/ -name '*.list' -exec \
-            sed -i 's/^deb \(http\|https\)/deb [arch=amd64] \1/' {} \;
-          # Add arm64 sources from ports
-          echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ jammy main universe" | sudo tee /etc/apt/sources.list.d/arm64-ports.list
-          echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ jammy-updates main universe" | sudo tee -a /etc/apt/sources.list.d/arm64-ports.list
-          sudo apt-get update
-          sudo apt-get install -y \
-            gcc-aarch64-linux-gnu \
-            pkg-config \
-            libasound2-dev:arm64 \
-            libdbus-1-dev:arm64
-
-      - name: Build qbzd (aarch64, glibc 2.31)
-        working-directory: crates
-        env:
-          PKG_CONFIG_SYSROOT_DIR: /usr/aarch64-linux-gnu
-          PKG_CONFIG_PATH: /usr/lib/aarch64-linux-gnu/pkgconfig
-          PKG_CONFIG_ALLOW_CROSS: 1
-        run: cargo zigbuild --release --target aarch64-unknown-linux-gnu.2.35 -p qbzd
-
-      - name: Strip binary
-        run: aarch64-linux-gnu-strip crates/target/aarch64-unknown-linux-gnu/release/qbzd
+          arch: aarch64
+          distro: bookworm
+          githubToken: ${{ github.token }}
+          setup: mkdir -p "${PWD}/artifacts"
+          dockerRunArgs: --volume "${PWD}/artifacts:/artifacts"
+          install: |
+            apt-get update
+            apt-get install -y curl build-essential libasound2-dev libdbus-1-dev pkg-config
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+          run: |
+            source "$HOME/.cargo/env"
+            cd crates
+            cargo build --release -p qbzd
+            strip target/release/qbzd
+            cp target/release/qbzd /artifacts/qbzd
 
       - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
           name: qbzd-aarch64
-          path: crates/target/aarch64-unknown-linux-gnu/release/qbzd
+          path: artifacts/qbzd
 
   release:
     needs: [build-x86_64, build-aarch64]
