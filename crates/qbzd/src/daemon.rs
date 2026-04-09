@@ -261,33 +261,68 @@ fn spawn_playback_loop(
     });
 }
 
+/// Macro to reduce boilerplate for route handlers that take Arc<DaemonCore>
+macro_rules! with_daemon {
+    ($daemon:expr, $handler:path) => {{
+        let d = $daemon.clone();
+        move || $handler(d.clone())
+    }};
+    ($daemon:expr, $handler:path, json) => {{
+        let d = $daemon.clone();
+        move |body| $handler(d.clone(), body)
+    }};
+    ($daemon:expr, $handler:path, query) => {{
+        let d = $daemon.clone();
+        move |q| $handler(d.clone(), q)
+    }};
+    ($daemon:expr, $handler:path, path) => {{
+        let d = $daemon.clone();
+        move |p| $handler(d.clone(), p)
+    }};
+    ($daemon:expr, $handler:path, path_query) => {{
+        let d = $daemon.clone();
+        move |p, q| $handler(d.clone(), p, q)
+    }};
+}
+
 /// Build the Axum HTTP router.
 fn build_router(daemon: Arc<DaemonCore>) -> axum::Router {
-    use axum::routing::get;
+    use axum::routing::{get, post};
+    use crate::api::{playback, queue, search, catalog};
 
     axum::Router::new()
+        // System
         .route("/api/ping", get(ping_handler))
-        .route(
-            "/api/info",
-            get({
-                let d = daemon.clone();
-                move || info_handler(d.clone())
-            }),
-        )
-        .route(
-            "/api/status",
-            get({
-                let d = daemon.clone();
-                move || status_handler(d.clone())
-            }),
-        )
-        .route(
-            "/api/events",
-            get({
-                let d = daemon.clone();
-                move || crate::api::events::sse_handler(d.clone())
-            }),
-        )
+        .route("/api/info", get(with_daemon!(daemon, info_handler)))
+        .route("/api/status", get(with_daemon!(daemon, status_handler)))
+        .route("/api/events", get(with_daemon!(daemon, crate::api::events::sse_handler)))
+        // Playback
+        .route("/api/playback", get(with_daemon!(daemon, playback::get_playback)))
+        .route("/api/playback/play", post(with_daemon!(daemon, playback::play)))
+        .route("/api/playback/pause", post(with_daemon!(daemon, playback::pause)))
+        .route("/api/playback/stop", post(with_daemon!(daemon, playback::stop)))
+        .route("/api/playback/next", post(with_daemon!(daemon, playback::next)))
+        .route("/api/playback/previous", post(with_daemon!(daemon, playback::previous)))
+        .route("/api/playback/seek", post(with_daemon!(daemon, playback::seek, json)))
+        .route("/api/playback/volume", post(with_daemon!(daemon, playback::volume, json)))
+        // Queue
+        .route("/api/queue", get(with_daemon!(daemon, queue::get_queue)))
+        .route("/api/queue/set", post(with_daemon!(daemon, queue::set_queue, json)))
+        .route("/api/queue/add", post(with_daemon!(daemon, queue::add, json)))
+        .route("/api/queue/add-next", post(with_daemon!(daemon, queue::add_next, json)))
+        .route("/api/queue/play-index", post(with_daemon!(daemon, queue::play_index, json)))
+        .route("/api/queue/remove", post(with_daemon!(daemon, queue::remove, json)))
+        .route("/api/queue/move", post(with_daemon!(daemon, queue::move_track, json)))
+        .route("/api/queue/clear", post(with_daemon!(daemon, queue::clear)))
+        .route("/api/queue/shuffle", post(with_daemon!(daemon, queue::shuffle, json)))
+        .route("/api/queue/repeat", post(with_daemon!(daemon, queue::repeat, json)))
+        // Search
+        .route("/api/search", get(with_daemon!(daemon, search::search, query)))
+        // Catalog
+        .route("/api/albums/{id}", get(with_daemon!(daemon, catalog::get_album, path)))
+        .route("/api/artists/{id}", get(with_daemon!(daemon, catalog::get_artist, path)))
+        .route("/api/tracks/{id}", get(with_daemon!(daemon, catalog::get_track, path)))
+        .route("/api/tracks/batch", get(with_daemon!(daemon, catalog::get_tracks_batch, query)))
 }
 
 async fn ping_handler() -> &'static str {
