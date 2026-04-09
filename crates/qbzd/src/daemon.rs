@@ -338,7 +338,7 @@ macro_rules! with_daemon {
 /// Build the Axum HTTP router.
 fn build_router(daemon: Arc<DaemonCore>) -> axum::Router {
     use axum::routing::{get, post, patch, put, delete};
-    use crate::api::{audio, catalog, catalog_ext, discover, favorites, playback, playlists, queue, search, system};
+    use crate::api::{audio, catalog, catalog_ext, discover, favorites, integrations, library, playback, playlists, queue, search, system};
 
     axum::Router::new()
         // System
@@ -404,6 +404,20 @@ fn build_router(daemon: Arc<DaemonCore>) -> axum::Router {
         .route("/api/labels/{id}/page", get(with_daemon!(daemon, catalog_ext::get_label_page, path)))
         .route("/api/labels/explore", get(with_daemon!(daemon, catalog_ext::get_label_explore, query)))
         .route("/api/playlist-tags", get(with_daemon!(daemon, catalog_ext::get_playlist_tags)))
+        // Library (local files)
+        .route("/api/library/albums", get(with_daemon!(daemon, library::get_albums)))
+        .route("/api/library/artists", get(with_daemon!(daemon, library::get_artists)))
+        .route("/api/library/albums/{key}/tracks", get(with_daemon!(daemon, library::get_album_tracks, path)))
+        .route("/api/library/search", get(with_daemon!(daemon, library::search_library, query)))
+        .route("/api/library/stats", get(with_daemon!(daemon, library::get_stats)))
+        .route("/api/library/folders", get(with_daemon!(daemon, library::get_folders)))
+        .route("/api/library/folders", post(with_daemon!(daemon, library::add_folder, json)))
+        .route("/api/library/folders", delete(with_daemon!(daemon, library::remove_folder, json)))
+        // Integrations
+        .route("/api/integrations/listenbrainz", get(with_daemon!(daemon, integrations::get_listenbrainz_status)))
+        .route("/api/integrations/listenbrainz/connect", post(with_daemon!(daemon, integrations::connect_listenbrainz, json)))
+        .route("/api/integrations/listenbrainz", delete(with_daemon!(daemon, integrations::disconnect_listenbrainz)))
+        .route("/api/integrations/lastfm", get(with_daemon!(daemon, integrations::get_lastfm_status)))
         // System / Resources
         .route("/api/system/resources", get(with_daemon!(daemon, system::get_resources)))
         .route("/api/cache", delete(with_daemon!(daemon, system::clear_cache)))

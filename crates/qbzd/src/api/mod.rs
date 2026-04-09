@@ -4,6 +4,8 @@ pub mod catalog_ext;
 pub mod discover;
 pub mod events;
 pub mod favorites;
+pub mod integrations;
+pub mod library;
 pub mod playback;
 pub mod playlists;
 pub mod queue;
