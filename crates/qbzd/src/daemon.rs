@@ -126,6 +126,9 @@ pub async fn run(mut config: DaemonConfig) -> Result<(), String> {
     // Start playback state polling loop (broadcasts to event bus + MPRIS)
     spawn_playback_loop(daemon.core.clone(), daemon.event_bus.clone(), mpris_handle.clone());
 
+    // Start auto-advance: when a track ends, play the next one in the queue
+    spawn_auto_advance(daemon.clone());
+
     // Spawn MPRIS metadata updater (listens to event bus for TrackStarted)
     if let Some(ref mc) = mpris_handle {
         spawn_mpris_metadata_updater(daemon.event_bus.subscribe(), mc.clone());
@@ -246,6 +249,71 @@ fn load_oauth_token() -> Option<String> {
     }
 
     None
+}
+
+/// Auto-advance: monitors playback and plays next track when current ends.
+fn spawn_auto_advance(daemon: Arc<DaemonCore>) {
+    tokio::spawn(async move {
+        let mut last_track_id: u64 = 0;
+        let mut was_playing = false;
+
+        loop {
+            let player = daemon.core.player();
+            let state = &player.state;
+            let track_id = state.current_track_id();
+            let is_playing = state.is_playing();
+            let position = state.current_position();
+            let duration = state.duration();
+
+            // Detect track end: was playing, now stopped, and position >= duration
+            let track_ended = was_playing && !is_playing && track_id == 0 && last_track_id != 0;
+
+            // Also detect when position reaches duration while still "playing"
+            let position_ended = is_playing && duration > 0 && position >= duration && track_id != 0;
+
+            if track_ended || (last_track_id != 0 && track_id == 0 && was_playing) {
+                log::info!("[qbzd/auto-advance] Track {} ended, advancing...", last_track_id);
+
+                // Get next track from queue
+                if let Some(next_track) = daemon.core.next_track().await {
+                    let next_id = next_track.id;
+                    log::info!("[qbzd/auto-advance] Next: {} - {}", next_track.artist, next_track.title);
+
+                    // Download and play
+                    let quality = qbz_models::Quality::HiRes;
+                    match daemon.core.get_stream_url(next_id, quality).await {
+                        Ok(stream_url) => {
+                            let http = reqwest::Client::builder()
+                                .connect_timeout(std::time::Duration::from_secs(10))
+                                .build();
+                            if let Ok(client) = http {
+                                if let Ok(resp) = client.get(&stream_url.url).send().await {
+                                    if let Ok(bytes) = resp.bytes().await {
+                                        let data = bytes.to_vec();
+                                        log::info!("[qbzd/auto-advance] Downloaded {} bytes", data.len());
+                                        if let Err(e) = daemon.core.player().play_data(data, next_id) {
+                                            log::error!("[qbzd/auto-advance] Play failed: {}", e);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            log::error!("[qbzd/auto-advance] Stream URL failed: {}", e);
+                        }
+                    }
+                } else {
+                    log::info!("[qbzd/auto-advance] Queue empty, playback stopped");
+                }
+            }
+
+            last_track_id = track_id;
+            was_playing = is_playing;
+
+            // Poll rate: check every 500ms
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        }
+    });
 }
 
 /// Register the daemon as a `_qbz._tcp` mDNS service for LAN discovery.
@@ -440,6 +508,7 @@ fn build_router(daemon: Arc<DaemonCore>) -> axum::Router {
         .route("/api/playback", get(with_daemon!(daemon, playback::get_playback)))
         .route("/api/playback/play", post(with_daemon!(daemon, playback::play)))
         .route("/api/playback/play-track", post(with_daemon!(daemon, playback::play_track, json)))
+        .route("/api/playback/play-album", post(with_daemon!(daemon, playback::play_album, json)))
         .route("/api/playback/pause", post(with_daemon!(daemon, playback::pause)))
         .route("/api/playback/stop", post(with_daemon!(daemon, playback::stop)))
         .route("/api/playback/next", post(with_daemon!(daemon, playback::next)))

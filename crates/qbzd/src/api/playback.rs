@@ -99,6 +99,88 @@ pub async fn play_track(
     })))
 }
 
+/// Play an album by ID. Sets the queue with all album tracks and starts playing.
+#[derive(Deserialize)]
+pub struct PlayAlbumRequest {
+    pub album_id: String,
+    pub start_index: Option<usize>,
+    pub quality: Option<String>,
+}
+
+pub async fn play_album(
+    daemon: Arc<DaemonCore>,
+    Json(req): Json<PlayAlbumRequest>,
+) -> Result<Json<serde_json::Value>, String> {
+    // Fetch album with tracks
+    let album = daemon.core.get_album(&req.album_id).await
+        .map_err(|e| format!("Album fetch failed: {}", e))?;
+
+    let album_tracks = album.tracks.as_ref()
+        .map(|tc| &tc.items)
+        .ok_or("Album has no tracks")?;
+
+    let tracks: Vec<qbz_models::QueueTrack> = album_tracks.iter().map(|track| {
+        qbz_models::QueueTrack {
+            id: track.id,
+            title: track.title.clone(),
+            artist: track.performer.as_ref().map(|p| p.name.clone()).unwrap_or_default(),
+            album: album.title.clone(),
+            duration_secs: track.duration as u64,
+            artwork_url: album.image.large.clone(),
+            hires: track.hires_streamable,
+            bit_depth: track.maximum_bit_depth,
+            sample_rate: track.maximum_sampling_rate,
+            is_local: false,
+            album_id: Some(album.id.clone()),
+            artist_id: Some(album.artist.id),
+            streamable: true,
+            source: Some("qobuz".to_string()),
+            parental_warning: track.parental_warning,
+        }
+    }).collect();
+
+    if tracks.is_empty() {
+        return Err("Album has no tracks".to_string());
+    }
+
+    let start = req.start_index.unwrap_or(0);
+    let first_track_id = tracks[start].id;
+
+    // Set queue
+    daemon.core.set_queue(tracks, Some(start)).await;
+
+    // Play the first track
+    let quality = match req.quality.as_deref() {
+        Some("Hi-Res+") | Some("UltraHiRes") => qbz_models::Quality::UltraHiRes,
+        Some("Hi-Res") | Some("HiRes") => qbz_models::Quality::HiRes,
+        _ => qbz_models::Quality::HiRes,
+    };
+
+    let stream_url = daemon.core.get_stream_url(first_track_id, quality).await
+        .map_err(|e| format!("Stream URL failed: {}", e))?;
+
+    let http = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("HTTP error: {}", e))?;
+
+    let audio_data = http.get(&stream_url.url).send().await
+        .map_err(|e| format!("Download failed: {}", e))?
+        .bytes().await
+        .map_err(|e| format!("Read failed: {}", e))?
+        .to_vec();
+
+    daemon.core.player().play_data(audio_data, first_track_id)
+        .map_err(|e| format!("Player error: {}", e))?;
+
+    Ok(Json(serde_json::json!({
+        "playing": true,
+        "track_id": first_track_id,
+        "album": album.title,
+        "tracks_count": album_tracks.len(),
+    })))
+}
+
 pub async fn play(daemon: Arc<DaemonCore>) -> Result<&'static str, String> {
     daemon.core.resume().map_err(|e| e.to_string())?;
     Ok("ok")
