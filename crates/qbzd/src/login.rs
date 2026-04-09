@@ -1,33 +1,33 @@
 //! Interactive Qobuz login via system browser OAuth.
 //!
-//! Same flow as the desktop app's v2_start_system_browser_oauth:
-//! 1. Extract bundle tokens (app_id, secrets, private_key)
-//! 2. Start local HTTP server on random port
-//! 3. Open system browser to Qobuz OAuth URL
-//! 4. Capture authorization code from redirect
-//! 5. Exchange code for session token
-//! 6. Save token to system keyring
+//! Supports both local and remote (headless) operation:
+//! - Local: opens browser automatically, callback to localhost
+//! - Remote/headless: prints URL for user to open on another device,
+//!   callback to the daemon's LAN IP so the redirect works from
+//!   any browser on the same network.
 
 use qbz_qobuz::QobuzClient;
 
-const OAUTH_TIMEOUT_SECS: u64 = 120;
+const OAUTH_TIMEOUT_SECS: u64 = 300; // 5 min for remote login (user needs time to copy URL)
 
 pub async fn interactive_login() -> Result<(), String> {
     println!("Initializing Qobuz client...");
 
-    // Create client and extract bundle tokens
     let client = QobuzClient::new().map_err(|e| format!("Client error: {}", e))?;
     client.init().await.map_err(|e| format!("Bundle extraction failed: {}", e))?;
 
     let app_id = client.app_id().await.map_err(|e| format!("No app_id: {}", e))?;
 
-    // Bind to random available port
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+    // Bind to 0.0.0.0 so the callback works from any device on the LAN
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:0")
         .await
         .map_err(|e| format!("Failed to bind listener: {}", e))?;
     let port = listener.local_addr().map_err(|e| e.to_string())?.port();
 
-    let redirect_url = format!("http://localhost:{}", port);
+    // Detect LAN IP for the redirect URL
+    let lan_ip = detect_lan_ip().unwrap_or_else(|| "localhost".to_string());
+    let redirect_url = format!("http://{}:{}", lan_ip, port);
+
     let oauth_url = format!(
         "https://www.qobuz.com/signin/oauth?ext_app_id={}&redirect_url={}",
         app_id,
@@ -67,16 +67,16 @@ pub async fn interactive_login() -> Result<(), String> {
         axum::serve(listener, handler).await.ok();
     });
 
-    // Open system browser
-    println!("\nOpening browser for Qobuz login...");
-    println!("If the browser doesn't open, visit:\n  {}\n", oauth_url);
+    // Always print the URL (works for both local and headless)
+    println!("\n╔══════════════════════════════════════════════════╗");
+    println!("║  Open this URL in any browser on your network:  ║");
+    println!("╚══════════════════════════════════════════════════╝\n");
+    println!("  {}\n", oauth_url);
+    println!("Callback listening on: {}", redirect_url);
+    println!("Waiting for login ({}s timeout)...\n", OAUTH_TIMEOUT_SECS);
 
-    if let Err(e) = open::that(&oauth_url) {
-        eprintln!("Failed to open browser: {}", e);
-        eprintln!("Please open this URL manually:\n  {}\n", oauth_url);
-    }
-
-    println!("Waiting for login ({}s timeout)...", OAUTH_TIMEOUT_SECS);
+    // Try to open browser (works on local, silently fails on headless)
+    let _ = open::that(&oauth_url);
 
     // Wait for code
     let code = tokio::time::timeout(
@@ -95,7 +95,6 @@ pub async fn interactive_login() -> Result<(), String> {
 
     println!("Authorization code received. Exchanging for session...");
 
-    // Exchange code for session via QobuzClient
     let session = client
         .login_with_oauth_code(&code)
         .await
@@ -128,4 +127,18 @@ fn save_token_to_keyring(token: &str) -> Result<(), String> {
 
     println!("Token saved to system keyring (service: {}, key: {})", SERVICE, KEY);
     Ok(())
+}
+
+/// Detect the primary LAN IP address of this machine.
+fn detect_lan_ip() -> Option<String> {
+    // Try to get the default route interface IP by connecting to a public DNS
+    // (no actual data is sent, just gets the local IP used for routing)
+    let socket = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
+    socket.connect("8.8.8.8:80").ok()?;
+    let addr = socket.local_addr().ok()?;
+    let ip = addr.ip().to_string();
+    if ip == "0.0.0.0" || ip == "127.0.0.1" {
+        return None;
+    }
+    Some(ip)
 }
