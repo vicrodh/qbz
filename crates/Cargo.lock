@@ -3035,6 +3035,7 @@ dependencies = [
  "qbz-player",
  "qbz-qobuz",
  "qconnect-app",
+ "qconnect-core",
  "qconnect-transport-ws",
  "ratatui",
  "reqwest",
@@ -3048,6 +3049,7 @@ dependencies = [
  "toml",
  "tower-http",
  "urlencoding",
+ "uuid",
 ]
 
 [[package]]
