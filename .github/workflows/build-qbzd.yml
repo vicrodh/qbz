@@ -52,13 +52,13 @@ jobs:
       - name: Install cross-compilation deps
         run: |
           sudo dpkg --add-architecture arm64
-          # Use Ubuntu ports for arm64 packages
-          cat <<'SOURCES' | sudo tee /etc/apt/sources.list.d/arm64.list
-          deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ jammy main universe
-          deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ jammy-updates main universe
-          SOURCES
-          # Restrict default sources to amd64
-          sudo sed -i 's/^deb http/deb [arch=amd64] http/' /etc/apt/sources.list
+          # Force ALL existing sources to amd64-only (sources.list + sources.list.d/*)
+          sudo sed -i 's/^deb \(http\|https\)/deb [arch=amd64] \1/' /etc/apt/sources.list
+          sudo find /etc/apt/sources.list.d/ -name '*.list' -exec \
+            sed -i 's/^deb \(http\|https\)/deb [arch=amd64] \1/' {} \;
+          # Add arm64 sources from ports
+          echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ jammy main universe" | sudo tee /etc/apt/sources.list.d/arm64-ports.list
+          echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ jammy-updates main universe" | sudo tee -a /etc/apt/sources.list.d/arm64-ports.list
           sudo apt-get update
           sudo apt-get install -y \
             gcc-aarch64-linux-gnu \
