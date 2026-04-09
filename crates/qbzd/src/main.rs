@@ -2,6 +2,7 @@ mod config;
 mod daemon;
 mod adapter;
 mod resources;
+mod session;
 
 use clap::{Parser, Subcommand};
 

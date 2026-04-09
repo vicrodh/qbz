@@ -7,8 +7,11 @@ use qbz_cache::AudioCache;
 use qbz_core::QbzCore;
 use qbz_player::Player;
 
+use tokio::sync::RwLock;
+
 use crate::adapter::{DaemonAdapter, DaemonEvent};
 use crate::config::DaemonConfig;
+use crate::session::UserSession;
 
 /// Central state container for the headless daemon.
 /// Replaces Tauri's app.state::<T>() with direct field access.
@@ -17,6 +20,8 @@ pub struct DaemonCore {
     pub core: Arc<QbzCore<DaemonAdapter>>,
     pub audio_cache: Arc<AudioCache>,
     pub event_bus: broadcast::Sender<DaemonEvent>,
+    /// Per-user state, populated after login + session activation
+    pub user: RwLock<Option<UserSession>>,
 }
 
 /// Run the daemon main loop.
@@ -59,25 +64,40 @@ pub async fn run(mut config: DaemonConfig) -> Result<(), String> {
     core.init().await.map_err(|e| format!("QbzCore init failed: {}", e))?;
     log::info!("[qbzd] QbzCore initialized");
 
-    // Try auto-login from saved OAuth token
-    let logged_in = try_auto_login(&core).await;
-    if logged_in {
-        log::info!("[qbzd] Auto-login successful");
-    } else {
-        log::warn!("[qbzd] No saved credentials. Run `qbzd login` to authenticate.");
-    }
-
     // Create audio cache with configured sizes
     let cache_bytes = config.memory_cache_bytes();
     let audio_cache = Arc::new(AudioCache::new(cache_bytes));
     log::info!("[qbzd] Audio cache: {} MB", config.cache.memory_mb);
 
+    let core = Arc::new(core);
+
     let daemon = Arc::new(DaemonCore {
         config: config.clone(),
-        core: Arc::new(core),
+        core: core.clone(),
         audio_cache,
-        event_bus: event_tx,
+        event_bus: event_tx.clone(),
+        user: RwLock::new(None),
     });
+
+    // Try auto-login from saved OAuth token
+    match try_auto_login(&core).await {
+        Some(user_id) => {
+            log::info!("[qbzd] Auto-login successful (user_id: {})", user_id);
+            // Activate per-user session (initialize stores, sync settings)
+            match crate::session::activate_session(user_id, &core, &event_tx).await {
+                Ok(session) => {
+                    *daemon.user.write().await = Some(session);
+                    log::info!("[qbzd] User session activated");
+                }
+                Err(e) => {
+                    log::error!("[qbzd] Session activation failed: {}", e);
+                }
+            }
+        }
+        None => {
+            log::warn!("[qbzd] No saved credentials. Run `qbzd login` to authenticate.");
+        }
+    }
 
     log::info!(
         "[qbzd] Daemon ready on {}:{}",
@@ -128,12 +148,9 @@ pub async fn run(mut config: DaemonConfig) -> Result<(), String> {
 }
 
 /// Try to restore session from saved OAuth token in keyring.
-async fn try_auto_login(core: &QbzCore<DaemonAdapter>) -> bool {
-    // Try loading token from keyring (same storage as desktop app)
-    let token = match load_oauth_token() {
-        Some(t) => t,
-        None => return false,
-    };
+/// Returns the user_id on success.
+async fn try_auto_login(core: &QbzCore<DaemonAdapter>) -> Option<u64> {
+    let token = load_oauth_token()?;
 
     match core.login_with_token(&token).await {
         Ok(session) => {
@@ -142,11 +159,11 @@ async fn try_auto_login(core: &QbzCore<DaemonAdapter>) -> bool {
                 session.display_name,
                 session.user_id
             );
-            true
+            Some(session.user_id)
         }
         Err(e) => {
             log::warn!("[qbzd] Saved token expired or invalid: {}", e);
-            false
+            None
         }
     }
 }
