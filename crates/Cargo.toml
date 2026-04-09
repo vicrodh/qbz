@@ -47,7 +47,7 @@ thiserror = "2"
 anyhow = "1"
 
 # Crypto (Qobuz auth)
-md-5 = "0.10"
+md-5 = "0.11"
 base64 = "0.22"
 
 # Time
