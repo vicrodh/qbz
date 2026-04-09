@@ -11,6 +11,21 @@
     type CastProtocol,
     type CastDevice
   } from '$lib/stores/castStore';
+  import {
+    connectToRemote,
+    disconnectFromRemote,
+    isRemoteMode,
+    playbackTarget,
+  } from '$lib/stores/playbackTargetStore';
+  import { connectRemoteEvents, disconnectRemoteEvents } from '$lib/services/remoteEvents';
+  import { pingRemote } from '$lib/services/remoteApi';
+
+  interface QbzdDevice {
+    name: string;
+    host: string;
+    port: number;
+    baseUrl: string;
+  }
 
   interface Props {
     isOpen: boolean;
@@ -19,10 +34,11 @@
 
   let { isOpen, onClose }: Props = $props();
 
-  let activeProtocol = $state<CastProtocol>('chromecast');
+  let activeProtocol = $state<CastProtocol | 'qbzd'>('qbzd');
   let chromecastDevices = $state<CastDevice[]>([]);
   let dlnaDevices = $state<CastDevice[]>([]);
   let airplayDevices = $state<CastDevice[]>([]);
+  let qbzdDevices = $state<QbzdDevice[]>([]);
   let loading = $state(false);
   let error = $state<string | null>(null);
   let discoveryStarted = $state(false);
@@ -36,6 +52,7 @@
       case 'chromecast': return chromecastDevices;
       case 'dlna': return dlnaDevices;
       case 'airplay': return airplayDevices;
+      case 'qbzd': return [];  // qbzd uses its own list
     }
   });
 
@@ -76,8 +93,8 @@
       // Note: AirPlay discovery disabled until RAOP streaming is implemented
       await Promise.allSettled([
         invoke('v2_cast_start_discovery'),
-        invoke('v2_dlna_start_discovery')
-        // invoke('v2_airplay_start_discovery')  // Disabled - see docs/AIRPLAY_IMPLEMENTATION_STATUS.md
+        invoke('v2_dlna_start_discovery'),
+        invoke('v2_qbzd_start_discovery'),
       ]);
       // Poll for devices
       pollDevices();
@@ -92,8 +109,8 @@
     try {
       await Promise.allSettled([
         invoke('v2_cast_stop_discovery'),
-        invoke('v2_dlna_stop_discovery')
-        // invoke('v2_airplay_stop_discovery')  // Disabled
+        invoke('v2_dlna_stop_discovery'),
+        invoke('v2_qbzd_stop_discovery'),
       ]);
     } catch (err) {
       console.error('Failed to stop discovery:', err);
@@ -106,10 +123,10 @@
     try {
       // Poll active protocols in parallel
       // Note: AirPlay polling disabled until RAOP streaming is implemented
-      const [chromecast, dlna] = await Promise.allSettled([
+      const [chromecast, dlna, qbzd] = await Promise.allSettled([
         invoke<CastDevice[]>('v2_cast_get_devices'),
-        invoke<CastDevice[]>('v2_dlna_get_devices')
-        // invoke<CastDevice[]>('v2_airplay_get_devices')  // Disabled
+        invoke<CastDevice[]>('v2_dlna_get_devices'),
+        invoke<QbzdDevice[]>('v2_qbzd_get_devices'),
       ]);
 
       if (chromecast.status === 'fulfilled') {
@@ -118,10 +135,9 @@
       if (dlna.status === 'fulfilled') {
         dlnaDevices = dlna.value;
       }
-      // AirPlay disabled
-      // if (airplay.status === 'fulfilled') {
-      //   airplayDevices = airplay.value;
-      // }
+      if (qbzd.status === 'fulfilled') {
+        qbzdDevices = qbzd.value;
+      }
     } catch (err) {
       console.error('Failed to get devices:', err);
     }
@@ -138,7 +154,7 @@
     connecting = true;
     error = null;
     try {
-      await connectToDevice(device, activeProtocol);
+      await connectToDevice(device, activeProtocol as CastProtocol);
       onClose();
     } catch (err) {
       error = String(err);
@@ -149,22 +165,48 @@
 
   async function handleDisconnect() {
     try {
-      await disconnect();
+      if ($isRemoteMode) {
+        disconnectRemoteEvents();
+        disconnectFromRemote();
+      } else {
+        await disconnect();
+      }
     } catch (err) {
       error = String(err);
     }
   }
 
-  function getProtocolIcon(protocol: CastProtocol) {
+  async function handleQbzdConnect(device: QbzdDevice) {
+    connecting = true;
+    error = null;
+    try {
+      const reachable = await pingRemote(device.baseUrl, '');
+      if (!reachable) {
+        error = `Cannot reach ${device.name} at ${device.baseUrl}`;
+        return;
+      }
+      connectToRemote(device.baseUrl, '', device.name);
+      connectRemoteEvents();
+      onClose();
+    } catch (err) {
+      error = String(err);
+    } finally {
+      connecting = false;
+    }
+  }
+
+  function getProtocolIcon(protocol: CastProtocol | 'qbzd') {
     switch (protocol) {
+      case 'qbzd': return Monitor;
       case 'chromecast': return Cast;
       case 'dlna': return Tv;
       case 'airplay': return Speaker;
     }
   }
 
-  function getProtocolLabel(protocol: CastProtocol): string {
+  function getProtocolLabel(protocol: CastProtocol | 'qbzd'): string {
     switch (protocol) {
+      case 'qbzd': return 'QBZ Daemon';
       case 'chromecast': return 'Chromecast';
       case 'dlna': return 'DLNA';
       case 'airplay': return 'AirPlay';
@@ -183,7 +225,21 @@
       </div>
 
       <!-- Connected Device Banner -->
-      {#if castState.isConnected && castState.device}
+      {#if $isRemoteMode}
+        <div class="connected-banner">
+          <div class="connected-info">
+            <Monitor size={20} />
+            <div class="connected-text">
+              <span class="connected-label">{$t('player.connectedTo')}</span>
+              <span class="connected-name">{$playbackTarget.name}</span>
+            </div>
+          </div>
+          <button class="disconnect-btn" onclick={handleDisconnect}>
+            <Power size={16} />
+            <span>{$t('settings.integrations.disconnect')}</span>
+          </button>
+        </div>
+      {:else if castState.isConnected && castState.device}
         {@const ProtocolIcon = getProtocolIcon(castState.protocol!)}
         <div class="connected-banner">
           <div class="connected-info">
@@ -201,6 +257,17 @@
       {:else}
         <!-- Protocol Tabs (only show when not connected) -->
         <div class="protocol-tabs">
+          <button
+            class="protocol-tab"
+            class:active={activeProtocol === 'qbzd'}
+            onclick={() => activeProtocol = 'qbzd'}
+          >
+            <Monitor size={16} />
+            <span>QBZ Daemon</span>
+            {#if qbzdDevices.length > 0}
+              <span class="count">{qbzdDevices.length}</span>
+            {/if}
+          </button>
           <button
             class="protocol-tab"
             class:active={activeProtocol === 'chromecast'}
@@ -233,14 +300,41 @@
               <LoaderCircle size={32} class="spin" />
               <p>{$t('integrations.connecting')}</p>
             </div>
+          {:else if error}
+            <div class="error">
+              <p>{error}</p>
+            </div>
+          {:else if activeProtocol === 'qbzd'}
+            <!-- QBZ Daemon devices -->
+            {#if loading && qbzdDevices.length === 0}
+              <div class="loading">
+                <LoaderCircle size={32} class="spin" />
+                <p>{$t('toast.loadingDevices')}</p>
+              </div>
+            {:else if qbzdDevices.length === 0}
+              <div class="empty">
+                <Monitor size={32} />
+                <p>{$t('player.noQbzdFound')}</p>
+                <p class="hint">{$t('player.noQbzdFoundHint')}</p>
+              </div>
+            {:else}
+              <div class="devices">
+                {#each qbzdDevices as device}
+                  <button class="device" onclick={() => handleQbzdConnect(device)}>
+                    <Monitor size={24} />
+                    <div class="device-info">
+                      <span class="device-name">{device.name}</span>
+                      <span class="device-ip">{device.host}:{device.port}</span>
+                    </div>
+                    <Wifi size={20} class="cast-icon" />
+                  </button>
+                {/each}
+              </div>
+            {/if}
           {:else if loading && devices().length === 0}
             <div class="loading">
               <LoaderCircle size={32} class="spin" />
               <p>{$t('toast.loadingDevices')}</p>
-            </div>
-          {:else if error}
-            <div class="error">
-              <p>{error}</p>
             </div>
           {:else if devices().length === 0}
             <div class="empty">

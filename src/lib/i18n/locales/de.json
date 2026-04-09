@@ -563,6 +563,8 @@
   "player": {
     "nowPlaying": "Aktuell abgespielt",
     "controllingRemote": "Steuert: {name}",
+    "noQbzdFound": "Keine QBZ-Daemons in Ihrem Netzwerk gefunden",
+    "noQbzdFoundHint": "Stellen Sie sicher, dass qbzd auf dem Zielgerat lauft",
     "queue": "Warteschlange",
     "upNext": "Als Nächstes",
     "ofTotal": "von",
