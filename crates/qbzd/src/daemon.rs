@@ -100,6 +100,14 @@ pub async fn run(mut config: DaemonConfig) -> Result<(), String> {
     // Start playback state polling loop (broadcasts to event bus)
     spawn_playback_loop(daemon.core.clone(), daemon.event_bus.clone());
 
+    // Start MPRIS media controls (Linux D-Bus, headless)
+    let _mpris = if config.mpris.enabled {
+        crate::mpris::start_mpris(daemon.core.clone())
+    } else {
+        log::info!("[qbzd] MPRIS disabled via config");
+        None
+    };
+
     // Register mDNS service for LAN discovery
     let _mdns_handle = if config.mdns.enabled {
         match register_mdns(&config) {
@@ -422,6 +430,13 @@ fn build_router(daemon: Arc<DaemonCore>) -> axum::Router {
         // System / Resources
         .route("/api/system/resources", get(with_daemon!(daemon, system::get_resources)))
         .route("/api/cache", delete(with_daemon!(daemon, system::clear_cache)))
+        // CORS: allow qbz-control PWA and any LAN origin
+        .layer(
+            tower_http::cors::CorsLayer::new()
+                .allow_origin(tower_http::cors::Any)
+                .allow_methods(tower_http::cors::Any)
+                .allow_headers(tower_http::cors::Any)
+        )
         // LAN-only: reject requests from non-private IPs
         .layer(axum_mw::from_fn(middleware::lan_only))
 }

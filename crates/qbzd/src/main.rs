@@ -3,6 +3,7 @@ mod config;
 mod daemon;
 mod adapter;
 mod login;
+mod mpris;
 mod resources;
 mod session;
 

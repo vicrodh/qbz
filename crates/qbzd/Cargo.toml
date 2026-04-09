@@ -57,3 +57,6 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 
 # Credentials (shared keyring with desktop app)
 keyring = { version = "3", features = ["async-secret-service", "crypto-rust"] }
+
+# MPRIS media controls (Linux D-Bus, headless)
+souvlaki = "0.8"
