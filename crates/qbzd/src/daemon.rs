@@ -333,8 +333,8 @@ macro_rules! with_daemon {
 
 /// Build the Axum HTTP router.
 fn build_router(daemon: Arc<DaemonCore>) -> axum::Router {
-    use axum::routing::{get, post};
-    use crate::api::{playback, queue, search, catalog};
+    use axum::routing::{get, post, patch};
+    use crate::api::{audio, playback, queue, search, catalog};
 
     axum::Router::new()
         // System
@@ -369,6 +369,12 @@ fn build_router(daemon: Arc<DaemonCore>) -> axum::Router {
         .route("/api/artists/{id}", get(with_daemon!(daemon, catalog::get_artist, path)))
         .route("/api/tracks/{id}", get(with_daemon!(daemon, catalog::get_track, path)))
         .route("/api/tracks/batch", get(with_daemon!(daemon, catalog::get_tracks_batch, query)))
+        // Audio settings
+        .route("/api/audio/settings", get(with_daemon!(daemon, audio::get_settings)))
+        .route("/api/audio/settings", patch(with_daemon!(daemon, audio::update_settings, json)))
+        .route("/api/audio/backends", get(with_daemon!(daemon, audio::get_backends)))
+        .route("/api/audio/devices", get(with_daemon!(daemon, audio::get_devices, query)))
+        .route("/api/audio/hardware-status", get(with_daemon!(daemon, audio::get_hardware_status)))
 }
 
 async fn ping_handler() -> &'static str {

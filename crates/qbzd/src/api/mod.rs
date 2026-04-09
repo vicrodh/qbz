@@ -1,3 +1,4 @@
+pub mod audio;
 pub mod catalog;
 pub mod events;
 pub mod playback;

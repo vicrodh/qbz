@@ -13,6 +13,19 @@ import { invoke } from '@tauri-apps/api/core';
 import { getTarget } from '$lib/stores/playbackTargetStore';
 import { remotePost, remoteGet } from '$lib/services/remoteApi';
 
+// ==================== Remote-Aware Helpers ====================
+
+/** Check if currently targeting a remote daemon */
+export function isRemote(): boolean {
+  return getTarget().type === 'qbzd';
+}
+
+/** Fetch from remote API (GET), or null if local */
+export async function remoteGetOrNull<T>(path: string): Promise<T | null> {
+  if (!isRemote()) return null;
+  return remoteGet<T>(path);
+}
+
 // ==================== Playback ====================
 
 export async function cmdPause(): Promise<void> {
@@ -166,5 +179,57 @@ export async function cmdSetRepeatMode(mode: string): Promise<void> {
     // Map frontend mode names to V2 command format
     const v2Mode = mode === 'one' ? 'One' : mode === 'all' ? 'All' : 'Off';
     await invoke('v2_set_repeat_mode', { mode: v2Mode });
+  }
+}
+
+// ==================== Audio Settings ====================
+
+export async function cmdGetAudioSettings(): Promise<unknown> {
+  const target = getTarget();
+  if (target.type === 'qbzd') {
+    return remoteGet('/api/audio/settings');
+  } else {
+    return invoke('v2_get_audio_settings');
+  }
+}
+
+export async function cmdGetAvailableBackends(): Promise<unknown> {
+  const target = getTarget();
+  if (target.type === 'qbzd') {
+    return remoteGet('/api/audio/backends');
+  } else {
+    return invoke('v2_get_available_backends');
+  }
+}
+
+export async function cmdGetDevicesForBackend(backendType: string): Promise<unknown> {
+  const target = getTarget();
+  if (target.type === 'qbzd') {
+    return remoteGet(`/api/audio/devices?backend=${encodeURIComponent(backendType)}`);
+  } else {
+    return invoke('v2_get_devices_for_backend', { backendType });
+  }
+}
+
+export async function cmdGetHardwareAudioStatus(): Promise<unknown> {
+  const target = getTarget();
+  if (target.type === 'qbzd') {
+    return remoteGet('/api/audio/hardware-status');
+  } else {
+    return invoke('v2_get_hardware_audio_status');
+  }
+}
+
+export async function cmdUpdateAudioSettings(patch: Record<string, unknown>): Promise<unknown> {
+  const target = getTarget();
+  if (target.type === 'qbzd') {
+    return remotePost('/api/audio/settings', patch);
+  } else {
+    // Local: individual invoke calls per field
+    if ('backend_type' in patch) await invoke('v2_set_audio_backend', { backendType: patch.backend_type });
+    if ('output_device' in patch) await invoke('v2_set_audio_device', { deviceName: patch.output_device });
+    if ('exclusive_mode' in patch) await invoke('v2_set_exclusive_mode', { enabled: patch.exclusive_mode });
+    if ('dac_passthrough' in patch) await invoke('v2_set_dac_passthrough', { enabled: patch.dac_passthrough });
+    return invoke('v2_get_audio_settings');
   }
 }
