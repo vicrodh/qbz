@@ -63,6 +63,12 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 # Credentials (shared keyring with desktop app)
 keyring = { version = "3", features = ["async-secret-service", "crypto-rust"] }
 
+# UUID (for QConnect renderer reports)
+uuid = { version = "1", features = ["v4"] }
+
+# QConnect core types
+qconnect-core = { path = "../qconnect-core" }
+
 # MPRIS media controls (Linux D-Bus, headless)
 souvlaki = "0.8"
 
