@@ -565,6 +565,8 @@
     "controllingRemote": "Controle : {name}",
     "noQbzdFound": "Aucun daemon QBZ trouve sur votre reseau",
     "noQbzdFoundHint": "Assurez-vous que qbzd est en cours d'execution sur l'appareil cible",
+    "recentDaemons": "Recents",
+    "discoveredDaemons": "Decouverts sur le reseau",
     "queue": "File d'attente",
     "upNext": "À suivre",
     "ofTotal": "de",

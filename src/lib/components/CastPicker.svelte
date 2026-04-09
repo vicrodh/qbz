@@ -27,6 +27,34 @@
     baseUrl: string;
   }
 
+  const QBZD_STORAGE_KEY = 'qbzd-saved-daemons';
+
+  interface SavedDaemon {
+    name: string;
+    baseUrl: string;
+    lastConnected: number;
+  }
+
+  function loadSavedDaemons(): SavedDaemon[] {
+    try {
+      const raw = localStorage.getItem(QBZD_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+  }
+
+  function saveDaemon(name: string, baseUrl: string) {
+    const saved = loadSavedDaemons().filter(d => d.baseUrl !== baseUrl);
+    saved.unshift({ name, baseUrl, lastConnected: Date.now() });
+    // Keep max 5 recent
+    localStorage.setItem(QBZD_STORAGE_KEY, JSON.stringify(saved.slice(0, 5)));
+  }
+
+  function removeSavedDaemon(baseUrl: string) {
+    const saved = loadSavedDaemons().filter(d => d.baseUrl !== baseUrl);
+    localStorage.setItem(QBZD_STORAGE_KEY, JSON.stringify(saved));
+    savedDaemons = loadSavedDaemons();
+  }
+
   interface Props {
     isOpen: boolean;
     onClose: () => void;
@@ -35,6 +63,8 @@
   let { isOpen, onClose }: Props = $props();
 
   let activeProtocol = $state<CastProtocol | 'qbzd'>('qbzd');
+  let manualAddress = $state('');
+  let savedDaemons = $state<SavedDaemon[]>(loadSavedDaemons());
   let chromecastDevices = $state<CastDevice[]>([]);
   let dlnaDevices = $state<CastDevice[]>([]);
   let airplayDevices = $state<CastDevice[]>([]);
@@ -187,6 +217,70 @@
       }
       connectToRemote(device.baseUrl, '', device.name);
       connectRemoteEvents();
+      saveDaemon(device.name, device.baseUrl);
+      savedDaemons = loadSavedDaemons();
+      onClose();
+    } catch (err) {
+      error = String(err);
+    } finally {
+      connecting = false;
+    }
+  }
+
+  async function handleManualConnect() {
+    let addr = manualAddress.trim();
+    if (!addr) return;
+    // Add http:// if missing
+    if (!addr.startsWith('http://') && !addr.startsWith('https://')) {
+      addr = `http://${addr}`;
+    }
+    // Add default port if missing
+    try {
+      const url = new URL(addr);
+      if (!url.port) {
+        addr = `${url.protocol}//${url.hostname}:8182`;
+      }
+    } catch {
+      error = 'Invalid address';
+      return;
+    }
+
+    connecting = true;
+    error = null;
+    try {
+      const reachable = await pingRemote(addr, '');
+      if (!reachable) {
+        error = `Cannot reach daemon at ${addr}`;
+        return;
+      }
+      // Extract name from hostname
+      const name = new URL(addr).hostname;
+      connectToRemote(addr, '', name);
+      connectRemoteEvents();
+      saveDaemon(name, addr);
+      savedDaemons = loadSavedDaemons();
+      manualAddress = '';
+      onClose();
+    } catch (err) {
+      error = String(err);
+    } finally {
+      connecting = false;
+    }
+  }
+
+  async function handleSavedConnect(saved: SavedDaemon) {
+    connecting = true;
+    error = null;
+    try {
+      const reachable = await pingRemote(saved.baseUrl, '');
+      if (!reachable) {
+        error = `Cannot reach ${saved.name} at ${saved.baseUrl}`;
+        return;
+      }
+      connectToRemote(saved.baseUrl, '', saved.name);
+      connectRemoteEvents();
+      saveDaemon(saved.name, saved.baseUrl);
+      savedDaemons = loadSavedDaemons();
       onClose();
     } catch (err) {
       error = String(err);
@@ -305,32 +399,67 @@
               <p>{error}</p>
             </div>
           {:else if activeProtocol === 'qbzd'}
-            <!-- QBZ Daemon devices -->
-            {#if loading && qbzdDevices.length === 0}
-              <div class="loading">
-                <LoaderCircle size={32} class="spin" />
-                <p>{$t('toast.loadingDevices')}</p>
+            <!-- QBZ Daemon: manual connect + saved + discovered -->
+            <div class="qbzd-section">
+              <!-- Manual connect -->
+              <div class="manual-connect">
+                <input
+                  type="text"
+                  class="manual-input"
+                  bind:value={manualAddress}
+                  placeholder="192.168.1.50:8182"
+                  onkeydown={(e) => e.key === 'Enter' && handleManualConnect()}
+                />
+                <button class="connect-btn" onclick={handleManualConnect} disabled={!manualAddress.trim()}>
+                  {$t('integrations.connect')}
+                </button>
               </div>
-            {:else if qbzdDevices.length === 0}
-              <div class="empty">
-                <Monitor size={32} />
-                <p>{$t('player.noQbzdFound')}</p>
-                <p class="hint">{$t('player.noQbzdFoundHint')}</p>
-              </div>
-            {:else}
-              <div class="devices">
-                {#each qbzdDevices as device}
-                  <button class="device" onclick={() => handleQbzdConnect(device)}>
-                    <Monitor size={24} />
-                    <div class="device-info">
-                      <span class="device-name">{device.name}</span>
-                      <span class="device-ip">{device.host}:{device.port}</span>
+
+              <!-- Saved (recent) daemons -->
+              {#if savedDaemons.length > 0}
+                <div class="section-label">{$t('player.recentDaemons')}</div>
+                <div class="devices">
+                  {#each savedDaemons as saved}
+                    <div class="device-row">
+                      <button class="device" onclick={() => handleSavedConnect(saved)}>
+                        <Monitor size={24} />
+                        <div class="device-info">
+                          <span class="device-name">{saved.name}</span>
+                          <span class="device-ip">{saved.baseUrl}</span>
+                        </div>
+                        <Wifi size={20} class="cast-icon" />
+                      </button>
+                      <button class="remove-saved" onclick={() => removeSavedDaemon(saved.baseUrl)} title="Remove">
+                        <X size={14} />
+                      </button>
                     </div>
-                    <Wifi size={20} class="cast-icon" />
-                  </button>
-                {/each}
-              </div>
-            {/if}
+                  {/each}
+                </div>
+              {/if}
+
+              <!-- Discovered via mDNS -->
+              {#if qbzdDevices.length > 0}
+                <div class="section-label">{$t('player.discoveredDaemons')}</div>
+                <div class="devices">
+                  {#each qbzdDevices as device}
+                    <button class="device" onclick={() => handleQbzdConnect(device)}>
+                      <Monitor size={24} />
+                      <div class="device-info">
+                        <span class="device-name">{device.name}</span>
+                        <span class="device-ip">{device.host}:{device.port}</span>
+                      </div>
+                      <Wifi size={20} class="cast-icon" />
+                    </button>
+                  {/each}
+                </div>
+              {:else if loading}
+                <div class="section-label">{$t('player.discoveredDaemons')}</div>
+                <div class="scanning-hint">
+                  <LoaderCircle size={14} class="spin" />
+                  <span>{$t('toast.loadingDevices')}</span>
+                </div>
+              {/if}
+            </div>
           {:else if loading && devices().length === 0}
             <div class="loading">
               <LoaderCircle size={32} class="spin" />
@@ -526,6 +655,111 @@
   }
 
   .device-ip {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .qbzd-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .manual-connect {
+    display: flex;
+    gap: 8px;
+    padding: 0 16px;
+  }
+
+  .manual-input {
+    flex: 1;
+    padding: 8px 12px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-family: monospace;
+  }
+
+  .manual-input::placeholder {
+    color: var(--text-muted);
+  }
+
+  .manual-input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+  }
+
+  .connect-btn {
+    padding: 8px 16px;
+    background: var(--accent-primary);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .connect-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .connect-btn:hover:not(:disabled) {
+    filter: brightness(1.1);
+  }
+
+  .section-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 0 16px;
+  }
+
+  .device-row {
+    display: flex;
+    align-items: center;
+  }
+
+  .device-row .device {
+    flex: 1;
+  }
+
+  .remove-saved {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 50%;
+    margin-right: 8px;
+    opacity: 0;
+    transition: opacity 150ms ease;
+  }
+
+  .device-row:hover .remove-saved {
+    opacity: 1;
+  }
+
+  .remove-saved:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .scanning-hint {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
     font-size: 12px;
     color: var(--text-muted);
   }
