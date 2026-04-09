@@ -1,0 +1,46 @@
+[package]
+name = "qbzd"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "QBZ headless music daemon for SBCs and servers"
+
+[[bin]]
+name = "qbzd"
+path = "src/main.rs"
+
+[dependencies]
+# Core crates (all Tauri-free)
+qbz-models = { path = "../qbz-models" }
+qbz-core = { path = "../qbz-core" }
+qbz-player = { path = "../qbz-player" }
+qbz-audio = { path = "../qbz-audio" }
+qbz-qobuz = { path = "../qbz-qobuz" }
+qbz-library = { path = "../qbz-library" }
+qbz-cache = { path = "../qbz-cache" }
+qbz-integrations = { path = "../qbz-integrations" }
+
+# HTTP server
+axum = { version = "0.8", features = ["ws"] }
+tower-http = { version = "0.6", features = ["cors"] }
+
+# Async
+tokio = { workspace = true }
+async-trait = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Config
+toml = "0.8"
+clap = { version = "4", features = ["derive"] }
+
+# System
+dirs = "6"
+log = { workspace = true }
+env_logger = "0.11"
+sysinfo = "0.34"
+
+# Database
+rusqlite = { version = "0.31", features = ["bundled"] }
