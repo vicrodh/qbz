@@ -15,16 +15,19 @@ jobs:
         with:
           targets: x86_64-unknown-linux-gnu
       - uses: mlugg/setup-zig@v2
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates -> target
       - run: cargo install cargo-zigbuild
 
       - name: Install ALSA dev headers
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev
 
       - name: Build qbzd (x86_64, glibc 2.31)
-        run: cargo zigbuild --release --target x86_64-unknown-linux-gnu.2.31 -p qbzd
         working-directory: crates
+        run: cargo zigbuild --release --target x86_64-unknown-linux-gnu.2.31 -p qbzd
 
-      - name: Upload artifact
+      - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
           name: qbzd-x86_64
@@ -38,6 +41,9 @@ jobs:
         with:
           targets: aarch64-unknown-linux-gnu
       - uses: mlugg/setup-zig@v2
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates -> target
       - run: cargo install cargo-zigbuild
 
       - name: Install cross-compilation deps
@@ -49,13 +55,13 @@ jobs:
           sudo apt-get install -y libasound2-dev:arm64 gcc-aarch64-linux-gnu
 
       - name: Build qbzd (aarch64, glibc 2.31)
+        working-directory: crates
         run: |
           export PKG_CONFIG_SYSROOT_DIR=/usr/aarch64-linux-gnu
           export PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig
           cargo zigbuild --release --target aarch64-unknown-linux-gnu.2.31 -p qbzd
-        working-directory: crates
 
-      - name: Upload artifact
+      - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
           name: qbzd-aarch64
@@ -65,7 +71,13 @@ jobs:
     needs: [build-x86_64, build-aarch64]
     if: startsWith(github.ref, 'refs/tags/qbzd-v')
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: crates/qbzd/service-files
+
       - uses: actions/download-artifact@v4
         with:
           name: qbzd-x86_64
@@ -75,16 +87,20 @@ jobs:
           name: qbzd-aarch64
           path: artifacts/aarch64
 
-      - name: Rename binaries
+      - name: Package release
         run: |
           mv artifacts/x86_64/qbzd artifacts/qbzd-linux-x86_64
           mv artifacts/aarch64/qbzd artifacts/qbzd-linux-aarch64
           chmod +x artifacts/qbzd-*
+          # Bundle service files
+          tar czf artifacts/qbzd-service-files.tar.gz -C crates/qbzd service-files/
 
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
           prerelease: true
+          generate_release_notes: true
           files: |
             artifacts/qbzd-linux-x86_64
             artifacts/qbzd-linux-aarch64
+            artifacts/qbzd-service-files.tar.gz
