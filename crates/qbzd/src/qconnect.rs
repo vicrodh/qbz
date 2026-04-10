@@ -96,21 +96,27 @@ async fn handle_renderer_command(
                 }
             }
 
-            // Step 2: Apply playing state
+            // Step 2: Apply playing state (only if it actually changes)
             if let Some(state) = playing_state {
+                let player = core.player();
+                let already_playing = player.state.is_playing();
                 match *state {
-                    PLAYING_STATE_PLAYING => { let _ = core.resume(); }
-                    PLAYING_STATE_PAUSED => { let _ = core.pause(); }
+                    PLAYING_STATE_PLAYING if !already_playing => { let _ = core.resume(); }
+                    PLAYING_STATE_PAUSED if already_playing => { let _ = core.pause(); }
                     PLAYING_STATE_STOPPED => { let _ = core.stop(); }
                     _ => {}
                 }
             }
 
-            // Step 3: Seek if position differs significantly
+            // Step 3: Seek only for intentional seeks (>2s diff),
+            // but ignore server echoes that want position 0 when we're already playing
             if let Some(pos_ms) = current_position_ms {
                 let target_secs = *pos_ms / 1000;
                 let current_secs = core.player().state.current_position();
-                if current_secs.abs_diff(target_secs) > 2 {
+                let is_playing = core.player().state.is_playing();
+                // Skip seek-to-zero echoes from server refresh while playing
+                let is_server_echo = target_secs <= 1 && is_playing && current_secs > 2;
+                if current_secs.abs_diff(target_secs) > 2 && !is_server_echo {
                     let _ = core.seek(target_secs);
                 }
             }
