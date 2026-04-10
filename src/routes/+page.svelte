@@ -154,7 +154,6 @@
   import { loadAlbumFavorites } from '$lib/stores/albumFavoritesStore';
   import { loadArtistFavorites } from '$lib/stores/artistFavoritesStore';
   import { getDefaultFavoritesTab } from '$lib/utils/favorites';
-  import { platform } from '$lib/utils/platform';
   import type { FavoritesPreferences, ResolvedMusician } from '$lib/types';
 
   // Navigation state management
@@ -221,7 +220,6 @@
     clearQueue,
     playQueueIndex,
     nextTrack,
-    nextTrackGuarded,
     previousTrack,
     moveQueueTrack,
     setLocalTrackIds,
@@ -442,7 +440,7 @@
   import KeybindingsSettings from '$lib/components/KeybindingsSettings.svelte';
   import LinkResolverModal from '$lib/components/LinkResolverModal.svelte';
   import type { ReleaseInfo } from '$lib/stores/updatesStore';
-  import { refreshUpdatePreferences, resetUpdatesStore } from '$lib/stores/updatesStore';
+  import { refreshUpdatePreferences, resetUpdatesStore, isAutoUpdateEligible } from '$lib/stores/updatesStore';
   import { getShowPurchases, setShowPurchases, rehydratePurchasesStore } from '$lib/stores/purchasesStore';
   import {
     decideLaunchModals,
@@ -451,8 +449,11 @@
     markFlatpakWelcomeShown,
     markSnapWelcomeShown,
     openReleasePageAndAcknowledge,
+    performAutoUpdate,
     resetLaunchFlow,
   } from '$lib/services/updatesService';
+  import type { AutoUpdateProgress } from '$lib/services/updatesService';
+  import UpdateProgressModal from '$lib/components/updates/UpdateProgressModal.svelte';
 
   // Offline state
   import {
@@ -481,6 +482,7 @@
   // Title Bar State (from titleBarStore subscription)
   let showTitleBar = $state(shouldShowTitleBar());
   let showWindowControls = $state(getShowWindowControls());
+  const isMacOS = typeof document !== 'undefined' && document.documentElement.classList.contains('macos');
 
   // Search Bar Location State
   let searchBarLocationPref = $state(getSearchBarLocation());
@@ -518,6 +520,10 @@
   // Sequential modal queue: Flatpak → What's new → Update available
   let pendingWhatsNewRelease = $state<ReleaseInfo | null>(null);
   let pendingUpdateRelease = $state<ReleaseInfo | null>(null);
+
+  // Auto-update state
+  let isAutoUpdating = $state(false);
+  let autoUpdateProgress = $state<AutoUpdateProgress>({ state: 'checking' });
 
   // Global back-to-top button
   let mainContentEl: HTMLElement | null = $state(null);
@@ -805,6 +811,34 @@
 
   function handleReminderDisableUpdates(): void {
     void disableUpdateChecks();
+  }
+
+  function handleAutoUpdate(): void {
+    isUpdateModalOpen = false;
+    isAutoUpdating = true;
+    autoUpdateProgress = { state: 'checking' };
+    void performAutoUpdate(
+      (progress) => {
+        if (isAutoUpdating) autoUpdateProgress = progress;
+      },
+      () => !isAutoUpdating,
+    );
+  }
+
+  function handleAutoUpdateCancel(): void {
+    isAutoUpdating = false;
+    // Re-open the update modal so user can choose another action
+    if (updateRelease) {
+      isUpdateModalOpen = true;
+    }
+  }
+
+  function handleAutoUpdateFallbackManual(): void {
+    isAutoUpdating = false;
+    if (updateRelease) {
+      void openReleasePageAndAcknowledge(updateRelease);
+      updateRelease = null;
+    }
   }
 
   function handleFlatpakWelcomeClose(): void {
@@ -4370,7 +4404,7 @@
         return;
       }
       const previousTrackId = currentTrack?.id ?? null;
-      const nextTrackResult = await nextTrackGuarded();
+      const nextTrackResult = await nextTrack();
       if (nextTrackResult) {
         // Defensive fallback for issue #80:
         // if backend returns same track on auto-advance while repeat-one is off,
@@ -4384,7 +4418,7 @@
             '[Player] Auto-advance returned same track id, forcing one extra nextTrack()',
             previousTrackId
           );
-          const forcedNext = await nextTrackGuarded();
+          const forcedNext = await nextTrack();
           if (forcedNext && forcedNext.id !== previousTrackId) {
             await playQueueTrack(forcedNext);
             return;
@@ -4472,13 +4506,8 @@
       try {
         const queueState = getQueueState();
         if (queueState.queue.length > 0) {
-          const currentId = currentTrack?.id ?? null;
-
-          if (queueState.repeatMode == 'one') {
-            return currentId;
-          }
-          
           const firstId = Number(queueState.queue[0].id);
+          const currentId = currentTrack?.id ?? null;
           if (!Number.isNaN(firstId) && firstId > 0 && firstId !== currentId) {
             return firstId;
           }
@@ -4502,7 +4531,7 @@
       if (qconnectSuppressLocalPlaybackAutomation) return;
       console.log('[Gapless] Handling transition to track', trackId);
       // Advance the queue to match backend state
-      const advanced = await nextTrackGuarded();
+      const advanced = await nextTrack();
       if (advanced && advanced.id === trackId) {
         // Queue advanced successfully — update UI metadata
         await playQueueTrack(advanced, undefined, true);
@@ -4889,7 +4918,7 @@
 {:else}
   <div class="app" class:no-titlebar={!showTitleBar} class:floating={isWindowFloating}>
     <!-- macOS: drag region for window movement (overlay title bar has no native drag area) -->
-    {#if !showTitleBar && platform === 'macos'}
+    {#if !showTitleBar && isMacOS}
       <div class="macos-drag-region" data-tauri-drag-region></div>
     {/if}
     <!-- Custom Title Bar (CSD) -->
@@ -5767,7 +5796,6 @@
         {volume}
         onVolumeChange={handleVolumeChange}
         onToggleMute={handleToggleMute}
-        volumeLocked={isAlsaDirectHw && !qconnectPeerRendererActive}
         {isShuffle}
         onToggleShuffle={toggleShuffle}
         {repeatMode}
@@ -5884,8 +5912,10 @@
         isOpen={isUpdateModalOpen}
         currentVersion={updatesCurrentVersion}
         newVersion={updateRelease.version}
+        autoUpdateEligible={isAutoUpdateEligible()}
         onClose={handleUpdateClose}
         onVisitReleasePage={handleUpdateVisit}
+        onAutoUpdate={handleAutoUpdate}
       />
 
       <UpdateReminderModal
@@ -5894,6 +5924,13 @@
         onRemindLater={handleReminderLater}
         onIgnoreRelease={handleReminderIgnoreRelease}
         onDisableAllUpdates={handleReminderDisableUpdates}
+      />
+
+      <UpdateProgressModal
+        isOpen={isAutoUpdating}
+        progress={autoUpdateProgress}
+        onCancel={handleAutoUpdateCancel}
+        onFallbackManual={handleAutoUpdateFallbackManual}
       />
     {/if}
 
@@ -6009,7 +6046,7 @@
     display: flex;
     flex: 1;
     min-width: 0;
-    height: calc(100vh - var(--player-bar-height, 104px) - 44px);
+    height: calc(100vh - 148px); /* 104px NowPlayingBar + 44px TitleBar */
     overflow: hidden;
     position: relative;
   }
@@ -6017,7 +6054,7 @@
   .main-content {
     flex: 1;
     min-width: 0;
-    height: calc(100vh - var(--player-bar-height, 104px) - 44px);
+    height: calc(100vh - 148px); /* 104px NowPlayingBar + 44px TitleBar */
     overflow: hidden; /* Views handle their own scrolling */
     padding-right: 8px; /* Gap between scrollbar and window edge */
     background-color: var(--bg-primary, #0f0f0f);
@@ -6026,7 +6063,7 @@
   /* Adjust heights when title bar is hidden */
   .app.no-titlebar .content-area,
   .app.no-titlebar .main-content {
-    height: calc(100vh - var(--player-bar-height, 104px));
+    height: calc(100vh - 104px); /* Only 104px NowPlayingBar, no title bar */
   }
 
   /* macOS: pad main content to clear native overlay title bar */
