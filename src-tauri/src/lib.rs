@@ -751,6 +751,8 @@ pub fn run() {
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .manage(AppState::with_device_and_settings(
             saved_device,
             audio_settings,
@@ -1490,6 +1492,7 @@ pub fn run() {
             commands_v2::v2_has_whats_new_been_shown,
             commands_v2::v2_mark_whats_new_shown,
             commands_v2::v2_mark_flatpak_welcome_shown,
+            commands_v2::v2_is_auto_update_eligible,
             commands_v2::v2_get_backend_logs,
             commands_v2::v2_upload_logs_to_paste,
             commands_v2::v2_get_download_settings,
