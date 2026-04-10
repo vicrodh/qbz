@@ -34,14 +34,17 @@ type App = QconnectApp<NativeWsTransport, HeadlessQconnectSink>;
 pub struct HeadlessQconnectSink {
     event_tx: broadcast::Sender<DaemonEvent>,
     core: Arc<qbz_core::QbzCore<DaemonAdapter>>,
+    /// Channel to notify event loop when SESSION_STATE arrives with session_uuid
+    session_uuid_tx: tokio::sync::mpsc::Sender<String>,
 }
 
 impl HeadlessQconnectSink {
     pub fn new(
         event_tx: broadcast::Sender<DaemonEvent>,
         core: Arc<qbz_core::QbzCore<DaemonAdapter>>,
+        session_uuid_tx: tokio::sync::mpsc::Sender<String>,
     ) -> Self {
-        Self { event_tx, core }
+        Self { event_tx, core, session_uuid_tx }
     }
 }
 
@@ -61,6 +64,15 @@ impl QconnectEventSink for HeadlessQconnectSink {
             }
             QconnectAppEvent::QueueUpdated(queue_state) => {
                 log::info!("[qbzd/qconnect] Queue: {} items", queue_state.queue_items.len());
+            }
+            QconnectAppEvent::SessionManagementEvent { message_type, payload } => {
+                log::info!("[qbzd/qconnect] Session mgmt: {} payload={}", message_type, payload);
+                if message_type == "MESSAGE_TYPE_SRVR_CTRL_SESSION_STATE" {
+                    if let Some(uuid) = payload.get("session_uuid").and_then(|v| v.as_str()) {
+                        log::info!("[qbzd/qconnect] Got session_uuid: {}", uuid);
+                        let _ = self.session_uuid_tx.send(uuid.to_string()).await;
+                    }
+                }
             }
             _ => {}
         }
@@ -121,8 +133,10 @@ pub async fn start_qconnect(
     let (endpoint_url, jwt_qws) = fetch_qws_credentials(client).await?;
     drop(client_guard);
 
+    let (session_uuid_tx, session_uuid_rx) = tokio::sync::mpsc::channel::<String>(1);
+
     let transport = Arc::new(NativeWsTransport::new());
-    let sink = Arc::new(HeadlessQconnectSink::new(event_tx, core.clone()));
+    let sink = Arc::new(HeadlessQconnectSink::new(event_tx, core.clone(), session_uuid_tx));
     let app = Arc::new(QconnectApp::new(transport.clone(), sink));
 
     let config = WsTransportConfig {
@@ -143,11 +157,11 @@ pub async fn start_qconnect(
         log::error!("[qbzd/qconnect] Bootstrap failed: {}", e);
     }
 
-    // Step 3: Start event loop (handles transport events + deferred renderer join)
+    // Step 3: Start event loop + listen for session_uuid from sink
     let app_for_loop = app.clone();
     let device_name_for_loop = device_name.to_string();
     tokio::spawn(async move {
-        run_event_loop(&app_for_loop, &device_name_for_loop).await;
+        run_event_loop(&app_for_loop, &device_name_for_loop, session_uuid_rx).await;
     });
 
     log::info!("[qbzd/qconnect] Started as '{}'", device_name);
@@ -194,38 +208,45 @@ async fn bootstrap_remote_presence(app: &Arc<App>, device_name: &str) -> Result<
     Ok(())
 }
 
-/// Event loop: listen for transport events, handle deferred renderer join.
-async fn run_event_loop(app: &Arc<App>, device_name: &str) {
-    let mut rx = app.subscribe_transport_events();
+/// Event loop: forward transport events + wait for session_uuid from sink
+/// to do deferred renderer join.
+async fn run_event_loop(
+    app: &Arc<App>,
+    device_name: &str,
+    mut session_uuid_rx: tokio::sync::mpsc::Receiver<String>,
+) {
+    let mut transport_rx = app.subscribe_transport_events();
     let mut renderer_joined = false;
 
     log::info!("[qbzd/qconnect] Event loop started");
 
     loop {
-        match rx.recv().await {
-            Ok(event) => {
-                // Log event type for debugging
-                log::debug!("[qbzd/qconnect] Transport event: {:?}", std::mem::discriminant(&event));
-
-                // Wait for SESSION_STATE to do deferred renderer join
-                if !renderer_joined {
-                    if let qconnect_transport_ws::TransportEvent::InboundQueueServerEvent(ref evt) = event {
-                        log::info!("[qbzd/qconnect] Queue server event: {}", evt.message_type());
-                        if evt.message_type() == "MESSAGE_TYPE_SRVR_CTRL_SESSION_STATE" {
-                            if let Some(session_uuid) = evt.payload.get("session_uuid").and_then(|v| v.as_str()) {
-                                renderer_joined = true;
-                                deferred_renderer_join(app, session_uuid, device_name).await;
-                            }
+        tokio::select! {
+            // Forward transport events to QconnectApp
+            event = transport_rx.recv() => {
+                match event {
+                    Ok(evt) => {
+                        if let Err(e) = app.handle_transport_event(evt).await {
+                            log::error!("[qbzd/qconnect] Transport event error: {}", e);
                         }
                     }
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                        log::warn!("[qbzd/qconnect] Transport lagged {} events", n);
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                        log::info!("[qbzd/qconnect] Transport channel closed");
+                        break;
+                    }
                 }
-
-                // Forward to QconnectApp for protocol handling
-                app.handle_transport_event(event).await;
             }
-            Err(e) => {
-                log::warn!("[qbzd/qconnect] Event loop recv error: {:?}", e);
-                break;
+            // Wait for session_uuid from sink (SessionManagementEvent)
+            session_uuid = session_uuid_rx.recv() => {
+                if let Some(uuid) = session_uuid {
+                    if !renderer_joined {
+                        renderer_joined = true;
+                        deferred_renderer_join(app, &uuid, device_name).await;
+                    }
+                }
             }
         }
     }
