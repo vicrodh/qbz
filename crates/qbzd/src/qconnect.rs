@@ -1,11 +1,12 @@
 //! Headless QConnect integration.
 //!
-//! Full protocol implementation:
-//! 1. Connect WebSocket
-//! 2. Listen for transport events
-//! 3. Bootstrap: CtrlSrvrJoinSession + AskForQueueState
-//! 4. On SESSION_STATE: deferred renderer join with device_info
-//! 5. Handle renderer commands (play/pause/stop/seek/volume)
+//! Replicates the exact flow from qconnect_service.rs in the desktop app:
+//! 1. Create transport + sink + app
+//! 2. Connect transport
+//! 3. Subscribe to transport events
+//! 4. Start event loop (checks InboundQueueServerEvent for SESSION_STATE)
+//! 5. Bootstrap: CtrlSrvrJoinSession + AskForQueueState
+//! 6. Event loop receives SESSION_STATE → deferred renderer join
 
 use std::sync::Arc;
 use async_trait::async_trait;
@@ -29,22 +30,18 @@ const AUDIO_QUALITY_HIRES_LEVEL2: i32 = 4;
 
 type App = QconnectApp<NativeWsTransport, HeadlessQconnectSink>;
 
-/// Event sink that handles QConnect protocol events and translates
-/// renderer commands to QbzCore playback actions.
+/// Event sink — handles renderer commands for playback.
 pub struct HeadlessQconnectSink {
     event_tx: broadcast::Sender<DaemonEvent>,
     core: Arc<qbz_core::QbzCore<DaemonAdapter>>,
-    /// Channel to notify event loop when SESSION_STATE arrives with session_uuid
-    session_uuid_tx: tokio::sync::mpsc::Sender<String>,
 }
 
 impl HeadlessQconnectSink {
     pub fn new(
         event_tx: broadcast::Sender<DaemonEvent>,
         core: Arc<qbz_core::QbzCore<DaemonAdapter>>,
-        session_uuid_tx: tokio::sync::mpsc::Sender<String>,
     ) -> Self {
-        Self { event_tx, core, session_uuid_tx }
+        Self { event_tx, core }
     }
 }
 
@@ -66,13 +63,7 @@ impl QconnectEventSink for HeadlessQconnectSink {
                 log::info!("[qbzd/qconnect] Queue: {} items", queue_state.queue_items.len());
             }
             QconnectAppEvent::SessionManagementEvent { message_type, payload } => {
-                log::info!("[qbzd/qconnect] Session mgmt: {} payload={}", message_type, payload);
-                if message_type == "MESSAGE_TYPE_SRVR_CTRL_SESSION_STATE" {
-                    if let Some(uuid) = payload.get("session_uuid").and_then(|v| v.as_str()) {
-                        log::info!("[qbzd/qconnect] Got session_uuid: {}", uuid);
-                        let _ = self.session_uuid_tx.send(uuid.to_string()).await;
-                    }
-                }
+                log::info!("[qbzd/qconnect] Session mgmt: {}", message_type);
             }
             _ => {}
         }
@@ -120,60 +111,134 @@ async fn handle_renderer_command(
     }
 }
 
-/// Start QConnect with full protocol: connect, bootstrap, renderer join.
+/// Start QConnect — exact replica of desktop's QconnectServiceState::connect().
 pub async fn start_qconnect(
     core: &Arc<qbz_core::QbzCore<DaemonAdapter>>,
     event_tx: broadcast::Sender<DaemonEvent>,
     device_name: &str,
 ) -> Option<Arc<App>> {
+    // Step 1: Get credentials
     let client_arc = core.client();
     let client_guard = client_arc.read().await;
     let client = client_guard.as_ref()?;
-
     let (endpoint_url, jwt_qws) = fetch_qws_credentials(client).await?;
     drop(client_guard);
 
-    let (session_uuid_tx, session_uuid_rx) = tokio::sync::mpsc::channel::<String>(1);
-
+    // Step 2: Create transport + sink + app
     let transport = Arc::new(NativeWsTransport::new());
-    let sink = Arc::new(HeadlessQconnectSink::new(event_tx, core.clone(), session_uuid_tx));
-    let app = Arc::new(QconnectApp::new(transport.clone(), sink));
+    let sink = Arc::new(HeadlessQconnectSink::new(event_tx, core.clone()));
+    let app = Arc::new(QconnectApp::new(transport, sink));
 
+    // Step 3: Connect transport
     let config = WsTransportConfig {
         endpoint_url,
         jwt_qws: Some(jwt_qws),
         ..Default::default()
     };
-
-    // Step 1: Connect WebSocket
     if let Err(e) = app.connect(config).await {
         log::warn!("[qbzd/qconnect] Connect failed: {}", e);
         return None;
     }
 
-    // Step 2: Bootstrap remote presence (controller join + ask queue)
-    let device_name_owned = device_name.to_string();
-    if let Err(e) = bootstrap_remote_presence(&app, &device_name_owned).await {
-        log::error!("[qbzd/qconnect] Bootstrap failed: {}", e);
-    }
+    // Step 4: Subscribe to transport events BEFORE bootstrap
+    // (desktop does this at line 1238, before bootstrap at line 1405)
+    let mut transport_rx = app.subscribe_transport_events();
 
-    // Step 3: Start event loop + listen for session_uuid from sink
+    // Step 5: Start event loop (same pattern as desktop lines 1242-1391)
     let app_for_loop = app.clone();
-    let device_name_for_loop = device_name.to_string();
+    let device_name_owned = device_name.to_string();
     tokio::spawn(async move {
-        run_event_loop(&app_for_loop, &device_name_for_loop, session_uuid_rx).await;
+        log::info!("[qbzd/qconnect] Event loop started");
+        let mut renderer_joined = false;
+        let mut has_disconnected = false;
+
+        loop {
+            match transport_rx.recv().await {
+                Ok(event) => {
+                    // Check for SESSION_STATE to trigger deferred renderer join
+                    // (desktop line 1249-1265)
+                    if !renderer_joined {
+                        if let qconnect_transport_ws::TransportEvent::InboundQueueServerEvent(
+                            ref evt,
+                        ) = event
+                        {
+                            log::info!("[qbzd/qconnect] Queue server event: {}", evt.message_type());
+                            if evt.message_type() == "MESSAGE_TYPE_SRVR_CTRL_SESSION_STATE" {
+                                if let Some(session_uuid) =
+                                    evt.payload.get("session_uuid").and_then(|v| v.as_str())
+                                {
+                                    renderer_joined = true;
+                                    deferred_renderer_join(&app_for_loop, session_uuid, &device_name_owned).await;
+                                } else {
+                                    log::warn!("[qbzd/qconnect] SESSION_STATE but no session_uuid: {}", evt.payload);
+                                }
+                            }
+                        }
+                    }
+
+                    // Handle transport state changes (desktop lines 1267-1374)
+                    match &event {
+                        qconnect_transport_ws::TransportEvent::Connected => {
+                            log::info!("[qbzd/qconnect] WebSocket connected");
+                        }
+                        qconnect_transport_ws::TransportEvent::Disconnected => {
+                            log::warn!("[qbzd/qconnect] WebSocket disconnected, resetting renderer_joined");
+                            renderer_joined = false;
+                            has_disconnected = true;
+                        }
+                        qconnect_transport_ws::TransportEvent::Authenticated => {
+                            log::info!("[qbzd/qconnect] Authenticated with JWT");
+                        }
+                        qconnect_transport_ws::TransportEvent::Subscribed => {
+                            log::info!("[qbzd/qconnect] Subscribed to channels");
+                            if has_disconnected {
+                                log::info!("[qbzd/qconnect] Re-bootstrapping after reconnect...");
+                                if let Err(e) = bootstrap_remote_presence(&app_for_loop, &device_name_owned).await {
+                                    log::error!("[qbzd/qconnect] Re-bootstrap failed: {}", e);
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+
+                    // Forward to QconnectApp for protocol handling
+                    // (desktop line 1375)
+                    if let Err(e) = app_for_loop.handle_transport_event(event).await {
+                        log::error!("[qbzd/qconnect] Transport event error: {}", e);
+                    }
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                    log::warn!("[qbzd/qconnect] Transport lagged {} events", n);
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                    log::info!("[qbzd/qconnect] Transport channel closed");
+                    break;
+                }
+            }
+        }
+        log::info!("[qbzd/qconnect] Event loop ended");
     });
+
+    // Step 6: Bootstrap AFTER event loop starts
+    // (desktop line 1405)
+    let device_name_for_bootstrap = device_name.to_string();
+    if let Err(e) = bootstrap_remote_presence(&app, &device_name_for_bootstrap).await {
+        log::error!("[qbzd/qconnect] Bootstrap failed: {}", e);
+        // Desktop disconnects on bootstrap failure (line 1406)
+        let _ = app.disconnect().await;
+        return None;
+    }
 
     log::info!("[qbzd/qconnect] Started as '{}'", device_name);
     Some(app)
 }
 
-/// Bootstrap: send CtrlSrvrJoinSession, wait, then AskForQueueState.
-/// Matches desktop's bootstrap_remote_presence exactly.
+/// Bootstrap: controller JoinSession + AskForQueueState.
+/// Exact replica of desktop's bootstrap_remote_presence (lines 3801-3846).
 async fn bootstrap_remote_presence(app: &Arc<App>, device_name: &str) -> Result<(), String> {
     let device_info = build_device_info(device_name);
 
-    // Controller JoinSession (the server responds with session topology)
+    // 1. Controller JoinSession (works without session_uuid)
     let join_payload = serde_json::json!({
         "session_uuid": null,
         "device_info": device_info,
@@ -182,18 +247,14 @@ async fn bootstrap_remote_presence(app: &Arc<App>, device_name: &str) -> Result<
     let join_uuid = app.send_queue_command(join_cmd).await
         .map_err(|e| format!("join_session failed: {}", e))?;
 
-    // Clear pending so the next command isn't blocked (JoinSession response
-    // is session topology, not a queue reducer event)
+    // Clear pending (desktop line 3825)
     {
         let handle = app.state_handle();
         let mut state = handle.lock().await;
         state.pending.clear();
     }
 
-    // Small delay to let the server process the join
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-
-    // Ask for current queue state
+    // 2. Ask for current queue state from server
     let ask_cmd = app.build_queue_command(QueueCommandType::CtrlSrvrAskForQueueState, serde_json::json!({})).await;
     let ask_uuid = app.send_queue_command(ask_cmd).await
         .map_err(|e| format!("ask_queue_state failed: {}", e))?;
@@ -204,72 +265,21 @@ async fn bootstrap_remote_presence(app: &Arc<App>, device_name: &str) -> Result<
         state.pending.clear();
     }
 
-    log::info!("[qbzd/qconnect] Bootstrap: controller joined, queue requested");
-
-    // Wait a moment for server to process, then do immediate renderer join
-    // (without session_uuid — the server should assign one)
-    tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
-    deferred_renderer_join(app, "", device_name).await;
-
+    log::info!("[qbzd/qconnect] Bootstrap: controller joined, queue requested. Renderer join deferred until SESSION_STATE.");
     Ok(())
 }
 
-/// Event loop: forward transport events + wait for session_uuid from sink
-/// to do deferred renderer join.
-async fn run_event_loop(
-    app: &Arc<App>,
-    device_name: &str,
-    mut session_uuid_rx: tokio::sync::mpsc::Receiver<String>,
-) {
-    let mut transport_rx = app.subscribe_transport_events();
-    let mut renderer_joined = false;
-
-    log::info!("[qbzd/qconnect] Event loop started");
-
-    loop {
-        tokio::select! {
-            // Forward transport events to QconnectApp
-            event = transport_rx.recv() => {
-                match event {
-                    Ok(evt) => {
-                        if let Err(e) = app.handle_transport_event(evt).await {
-                            log::error!("[qbzd/qconnect] Transport event error: {}", e);
-                        }
-                    }
-                    Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
-                        log::warn!("[qbzd/qconnect] Transport lagged {} events", n);
-                    }
-                    Err(tokio::sync::broadcast::error::RecvError::Closed) => {
-                        log::info!("[qbzd/qconnect] Transport channel closed");
-                        break;
-                    }
-                }
-            }
-            // Wait for session_uuid from sink (SessionManagementEvent)
-            session_uuid = session_uuid_rx.recv() => {
-                if let Some(uuid) = session_uuid {
-                    if !renderer_joined {
-                        renderer_joined = true;
-                        deferred_renderer_join(app, &uuid, device_name).await;
-                    }
-                }
-            }
-        }
-    }
-
-    log::info!("[qbzd/qconnect] Event loop ended");
-}
-
-/// Deferred renderer join: register as a visible renderer in the session.
+/// Deferred renderer join — called when SESSION_STATE arrives with session_uuid.
+/// Exact replica of desktop's deferred_renderer_join (lines 3849-3948).
 async fn deferred_renderer_join(app: &Arc<App>, session_uuid: &str, device_name: &str) {
     let device_info = build_device_info(device_name);
     let queue_version = app.queue_state_snapshot().await.version;
 
     log::info!("[qbzd/qconnect] Renderer join with session_uuid={}", session_uuid);
 
-    // 1. Renderer JoinSession
+    // 1. Renderer JoinSession with session_uuid
     let join_payload = serde_json::json!({
-        "session_uuid": if session_uuid.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(session_uuid.to_string()) },
+        "session_uuid": session_uuid,
         "device_info": device_info,
         "is_active": true,
         "reason": JOIN_SESSION_REASON_CONTROLLER_REQUEST,
@@ -329,7 +339,7 @@ async fn deferred_renderer_join(app: &Arc<App>, session_uuid: &str, device_name:
     );
     let _ = app.send_renderer_report_command(quality_report).await;
 
-    // 5. Refresh session state
+    // 5. Refresh session state (desktop line 3936-3947)
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     let refresh_cmd = app.build_queue_command(QueueCommandType::CtrlSrvrAskForQueueState, serde_json::json!({})).await;
     let _ = app.send_queue_command(refresh_cmd).await;
