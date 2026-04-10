@@ -99,6 +99,9 @@ jobs:
         run: npm ci
 
       - name: Build DEB/RPM/AppImage
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: npm run tauri build -- --bundles deb,rpm,appimage
 
       - name: Collect artifacts
@@ -110,6 +113,7 @@ jobs:
           cp -v src-tauri/target/release/bundle/deb/*.deb dist/ || true
           cp -v src-tauri/target/release/bundle/rpm/*.rpm dist/ || true
           cp -v src-tauri/target/release/bundle/appimage/*.AppImage dist/ || true
+          cp -v src-tauri/target/release/bundle/appimage/*.AppImage.sig dist/ || true
 
           # Create tarball for AUR with proper structure
           TARBALL_DIR="qbz_${VERSION}_amd64"

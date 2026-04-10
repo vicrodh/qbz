@@ -1198,6 +1198,11 @@ pub async fn v2_remote_control_get_pairing_qr(
 }
 
 #[tauri::command]
+pub fn v2_is_auto_update_eligible() -> bool {
+    crate::updates::is_auto_update_eligible()
+}
+
+#[tauri::command]
 pub fn v2_is_running_in_flatpak() -> bool {
     crate::flatpak::is_running_in_flatpak()
 }

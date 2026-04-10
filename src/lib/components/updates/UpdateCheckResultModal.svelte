@@ -1,33 +1,43 @@
 <script lang="ts">
   import Modal from '../Modal.svelte';
   import type { UpdateCheckStatus } from '$lib/stores/updatesStore';
-  import { t } from '$lib/i18n';
 
   interface Props {
     isOpen: boolean;
     status: UpdateCheckStatus;
     newVersion: string;
+    autoUpdateEligible?: boolean;
     onClose: () => void;
     onVisitReleasePage: () => void;
+    onAutoUpdate?: () => void;
   }
 
-  let { isOpen, status, newVersion, onClose, onVisitReleasePage }: Props = $props();
+  let { isOpen, status, newVersion, autoUpdateEligible = false, onClose, onVisitReleasePage, onAutoUpdate }: Props = $props();
+
+  function handleAutoUpdate(): void {
+    onAutoUpdate?.();
+  }
 </script>
 
-<Modal {isOpen} onClose={onClose} title={ $t('updates.checkForUpdates') } maxWidth="460px">
+<Modal {isOpen} onClose={onClose} title="Check for updates" maxWidth="460px">
   <div class="result-body">
     {#if status === 'update_available'}
-      <p class="message">{$t('updates.newVersionAvailable', { values: { version: newVersion } })}</p>
+      <p class="message">New version available: v{newVersion}</p>
     {:else}
-      <p class="message">{$t('updates.noUpdatesFound')}</p>
+      <p class="message">No updates found.</p>
     {/if}
   </div>
 
   {#snippet footer()}
     <div class="footer-actions">
-      <button class="btn btn-ghost" type="button" onclick={onClose}>{$t('actions.close')}</button>
+      <button class="btn btn-ghost" type="button" onclick={onClose}>Close</button>
       {#if status === 'update_available'}
-        <button class="btn btn-primary" type="button" onclick={onVisitReleasePage}>{$t('actions.visitReleasePage')}</button>
+        {#if autoUpdateEligible}
+          <button class="btn btn-ghost" type="button" onclick={onVisitReleasePage}>Visit release page</button>
+          <button class="btn btn-primary" type="button" onclick={handleAutoUpdate}>Download &amp; Install</button>
+        {:else}
+          <button class="btn btn-primary" type="button" onclick={onVisitReleasePage}>Visit release page</button>
+        {/if}
       {/if}
     </div>
   {/snippet}

@@ -1,5 +1,4 @@
 import { invoke } from '@tauri-apps/api/core';
-import { skipIfRemote } from '$lib/services/commandRouter';
 
 export interface UpdatePreferences {
   checkOnLaunch: boolean;
@@ -31,8 +30,10 @@ let preferences: UpdatePreferences = {
 };
 
 let currentVersion = '';
+let autoUpdateEligible = false;
 let versionLoaded = false;
 let prefsLoaded = false;
+let eligibilityLoaded = false;
 
 const listeners = new Set<() => void>();
 
@@ -63,8 +64,11 @@ export function getCurrentVersion(): string {
   return currentVersion;
 }
 
+export function isAutoUpdateEligible(): boolean {
+  return autoUpdateEligible;
+}
+
 export async function initUpdatesStore(): Promise<void> {
-  if (skipIfRemote()) return;
   // get_current_version never needs a session (compile-time value).
   // Only fetch once.
   if (!versionLoaded) {
@@ -73,6 +77,16 @@ export async function initUpdatesStore(): Promise<void> {
       versionLoaded = true;
     } catch (error) {
       console.error('[Updates] Failed to get current version:', error);
+    }
+  }
+
+  // Auto-update eligibility is a compile-time + runtime check (no session needed).
+  if (!eligibilityLoaded) {
+    try {
+      autoUpdateEligible = await invoke<boolean>('v2_is_auto_update_eligible');
+      eligibilityLoaded = true;
+    } catch (error) {
+      console.debug('[Updates] Failed to check auto-update eligibility:', error);
     }
   }
 
@@ -92,7 +106,6 @@ export async function initUpdatesStore(): Promise<void> {
 }
 
 export async function refreshUpdatePreferences(): Promise<void> {
-  if (skipIfRemote()) return;
   try {
     preferences = await invoke<UpdatePreferences>('v2_get_update_preferences');
     notify();
@@ -102,7 +115,6 @@ export async function refreshUpdatePreferences(): Promise<void> {
 }
 
 export async function setCheckOnLaunch(enabled: boolean): Promise<void> {
-  if (skipIfRemote()) return;
   try {
     await invoke('v2_set_update_check_on_launch', { enabled });
     preferences.checkOnLaunch = enabled;
@@ -114,7 +126,6 @@ export async function setCheckOnLaunch(enabled: boolean): Promise<void> {
 }
 
 export async function setShowWhatsNewOnLaunch(enabled: boolean): Promise<void> {
-  if (skipIfRemote()) return;
   try {
     await invoke('v2_set_show_whats_new_on_launch', { enabled });
     preferences.showWhatsNewOnLaunch = enabled;
@@ -126,7 +137,6 @@ export async function setShowWhatsNewOnLaunch(enabled: boolean): Promise<void> {
 }
 
 export async function checkForUpdates(mode: 'launch' | 'manual'): Promise<UpdateCheckResult> {
-  if (skipIfRemote()) return { status: 'no_updates', currentVersion: '', release: null };
   const result = await invoke<UpdateCheckResult>('v2_check_for_updates', { mode });
   return {
     ...result,
@@ -135,7 +145,6 @@ export async function checkForUpdates(mode: 'launch' | 'manual'): Promise<Update
 }
 
 export async function fetchReleaseForVersion(version: string): Promise<ReleaseInfo | null> {
-  if (skipIfRemote()) return null;
   try {
     const release = await invoke<ReleaseInfo | null>('v2_fetch_release_for_version', { version });
     return release ?? null;
@@ -146,17 +155,14 @@ export async function fetchReleaseForVersion(version: string): Promise<ReleaseIn
 }
 
 export async function acknowledgeRelease(version: string): Promise<void> {
-  if (skipIfRemote()) return;
   await invoke('v2_acknowledge_release', { version });
 }
 
 export async function ignoreRelease(version: string): Promise<void> {
-  if (skipIfRemote()) return;
   await invoke('v2_ignore_release', { version });
 }
 
 export async function hasWhatsNewBeenShown(version: string): Promise<boolean> {
-  if (skipIfRemote()) return false;
   try {
     return await invoke<boolean>('v2_has_whats_new_been_shown', { version });
   } catch (error) {
@@ -166,7 +172,6 @@ export async function hasWhatsNewBeenShown(version: string): Promise<boolean> {
 }
 
 export async function markWhatsNewShown(version: string): Promise<void> {
-  if (skipIfRemote()) return;
   try {
     await invoke('v2_mark_whats_new_shown', { version });
   } catch (error) {

@@ -13,7 +13,6 @@
   import RemoteControlSetupGuide from '../RemoteControlSetupGuide.svelte';
   import LogsModal from '../LogsModal.svelte';
   import DiagnosticsPanel from '../DiagnosticsPanel.svelte';
-  import { platform } from '$lib/utils/platform';
   import VolumeSlider from '../VolumeSlider.svelte';
   import UpdateCheckResultModal from '../updates/UpdateCheckResultModal.svelte';
   import WhatsNewModal from '../updates/WhatsNewModal.svelte';
@@ -133,6 +132,7 @@
     fetchReleaseForVersion,
     getCurrentVersion as getUpdatesCurrentVersion,
     getPreferences as getUpdatePreferences,
+    isAutoUpdateEligible,
     initUpdatesStore,
     setCheckOnLaunch,
     setShowWhatsNewOnLaunch,
@@ -140,7 +140,9 @@
     type UpdateCheckStatus,
     type UpdatePreferences
   } from '$lib/stores/updatesStore';
-  import { openReleasePageAndAcknowledge } from '$lib/services/updatesService';
+  import { openReleasePageAndAcknowledge, performAutoUpdate } from '$lib/services/updatesService';
+  import type { AutoUpdateProgress } from '$lib/services/updatesService';
+  import UpdateProgressModal from '../updates/UpdateProgressModal.svelte';
   import {
     getCount as getBlacklistCount,
     isEnabled as isBlacklistEnabled,
@@ -327,6 +329,8 @@
   let isSettingsWhatsNewOpen = $state(false);
   let settingsWhatsNewRelease = $state<ReleaseInfo | null>(null);
   let isFetchingChangelog = $state(false);
+  let isSettingsAutoUpdating = $state(false);
+  let settingsAutoUpdateProgress = $state<AutoUpdateProgress>({ state: 'checking' });
 
   // Blacklist state
   let blacklistCount = $state(getBlacklistCount());
@@ -464,6 +468,29 @@
     if (!updateResultRelease) return;
     void openReleasePageAndAcknowledge(updateResultRelease);
     isUpdateResultOpen = false;
+  }
+
+  function handleSettingsAutoUpdate(): void {
+    isUpdateResultOpen = false;
+    isSettingsAutoUpdating = true;
+    settingsAutoUpdateProgress = { state: 'checking' };
+    void performAutoUpdate(
+      (progress) => {
+        if (isSettingsAutoUpdating) settingsAutoUpdateProgress = progress;
+      },
+      () => !isSettingsAutoUpdating,
+    );
+  }
+
+  function handleSettingsAutoUpdateCancel(): void {
+    isSettingsAutoUpdating = false;
+  }
+
+  function handleSettingsAutoUpdateFallback(): void {
+    isSettingsAutoUpdating = false;
+    if (updateResultRelease) {
+      void openReleasePageAndAcknowledge(updateResultRelease);
+    }
   }
 
   async function handleShowCurrentChangelog(): Promise<void> {
@@ -1471,11 +1498,9 @@
       updatesCurrentVersion = getUpdatesCurrentVersion();
     });
 
-    // Detect sandbox environments (Linux-only)
-    if (platform === 'linux') {
-      loadFlatpakStatus();
-      loadSnapStatus();
-    }
+    // Detect sandbox environments
+    loadFlatpakStatus();
+    loadSnapStatus();
 
     // Check for legacy cached files
     checkLegacyCachedFiles();
@@ -3885,7 +3910,6 @@
       />
     </div>
     {/if}
-    {#if platform === 'linux'}
     <div class="setting-row">
       <div class="setting-info">
         <span class="setting-label">{$t('settings.audio.audioBackend')}</span>
@@ -3919,7 +3943,6 @@
         {/if}
       </div>
     </div>
-    {/if}
     <div class="setting-row">
       <div class="setting-info">
         <span class="setting-label">{$t('settings.audio.outputDevice')}</span>
@@ -3988,7 +4011,6 @@
         </div>
       {/if}
     </div>
-    {#if platform === 'linux'}
     {#if showAlsaPluginSelector}
     <div class="setting-row">
       <div class="setting-info">
@@ -4014,7 +4036,6 @@
       <Toggle enabled={alsaHardwareVolume} onchange={handleAlsaHardwareVolumeChange} />
     </div>
     {/if}
-    {/if}
     <div class="setting-row">
       <div class="setting-info">
         <span class="setting-label">{$t('settings.audio.exclusiveMode')} <span class="help-tip" title={$t('settings.audio.exclusiveModeHelp')}>(?)</span></span>
@@ -4032,7 +4053,6 @@
     {#if dacPassthrough}
     <small class="setting-note">{$t('settings.audio.dacPassthroughNote')}</small>
     {/if}
-    {#if platform === 'linux'}
     {#if isFlatpak && selectedBackend === 'PipeWire' && dacPassthrough}
     <div class="flatpak-warning">
       <div class="warning-icon">⚠️</div>
@@ -4053,7 +4073,6 @@
     </div>
     {#if pwForceBitperfect}
     <small class="setting-note">{$t('settings.audio.pwForceBitperfectNote')}</small>
-    {/if}
     {/if}
     {/if}
     <div class="setting-row">
@@ -4378,7 +4397,7 @@
       <Toggle enabled={systemNotificationsEnabled} onchange={(v) => { systemNotificationsEnabled = v; setSystemNotificationsEnabled(v); }} />
     </div>
     <!-- Title bar toggles: hidden on macOS (always uses native overlay title bar) -->
-    {#if platform !== 'macos'}
+    {#if !document.documentElement.classList.contains('macos')}
     <div class="setting-row">
       <div class="setting-info">
         <span class="setting-label">{$t('settings.appearance.useSystemTitleBar')}</span>
@@ -4395,7 +4414,7 @@
     </div>
     {/if}
     <!-- Title bar customization: hidden on macOS (uses native overlay title bar) -->
-    {#if platform !== 'macos'}
+    {#if !document.documentElement.classList.contains('macos')}
     <div class="setting-row">
       <div class="setting-info">
         <span class="setting-label">{$t('settings.appearance.searchInTitleBar')}</span>
@@ -4582,15 +4601,15 @@
     </div>
 
     <!-- System Tray / Menu Bar subsection -->
-    <h4 class="subsection-title">{$t(platform === 'macos' ? 'settings.appearance.tray.titleMacos' : 'settings.appearance.tray.title')}</h4>
+    <h4 class="subsection-title">{$t(document.documentElement.classList.contains('macos') ? 'settings.appearance.tray.titleMacos' : 'settings.appearance.tray.title')}</h4>
     <div class="setting-row">
       <div class="setting-info">
-        <span class="setting-label">{$t(platform === 'macos' ? 'settings.appearance.tray.enableTrayMacos' : 'settings.appearance.tray.enableTray')}</span>
-        <span class="setting-desc">{$t(platform === 'macos' ? 'settings.appearance.tray.enableTrayDescMacos' : 'settings.appearance.tray.enableTrayDesc')}</span>
+        <span class="setting-label">{$t(document.documentElement.classList.contains('macos') ? 'settings.appearance.tray.enableTrayMacos' : 'settings.appearance.tray.enableTray')}</span>
+        <span class="setting-desc">{$t(document.documentElement.classList.contains('macos') ? 'settings.appearance.tray.enableTrayDescMacos' : 'settings.appearance.tray.enableTrayDesc')}</span>
       </div>
       <Toggle enabled={enableTray} onchange={(v) => handleEnableTrayChange(v)} />
     </div>
-    {#if platform !== 'macos'}
+    {#if !document.documentElement.classList.contains('macos')}
     <div class="setting-row">
       <div class="setting-info">
         <span class="setting-label">{$t('settings.appearance.tray.minimizeToTray')}</span>
@@ -4618,8 +4637,7 @@
       />
     </div>
 
-    <!-- Composition subsection (collapsible, Linux-only: GDK/GSK/X11/Wayland/DMA-BUF) -->
-    {#if platform === 'linux'}
+    <!-- Composition subsection (collapsible) -->
     <div class="collapsible-section composition-subsection">
       <button class="section-title-btn" onclick={() => compositionCollapsed = !compositionCollapsed}>
         <div class="section-title-row">
@@ -4770,7 +4788,6 @@
         </div>
       {/if}
     </div>
-    {/if}
 
     <div class="setting-row">
       <div class="setting-info">
@@ -4990,8 +5007,8 @@
   <section class="section">
     <h3 class="section-title">{$t('settings.integrations.title')}</h3>
 
-    <!-- Qobuz Link Handler (Linux only — macOS registers via Info.plist, Windows via registry) -->
-    {#if platform === 'linux'}
+    <!-- Qobuz Link Handler (Linux only — macOS registers via Info.plist at build time) -->
+    {#if !document.documentElement.classList.contains('macos')}
     <div class="setting-row">
       <div class="setting-info">
         <span class="setting-label">{$t('settings.integrations.qobuzLinkHandler')}</span>
@@ -5444,10 +5461,19 @@
       isOpen={isUpdateResultOpen}
       status={updateResultStatus}
       newVersion={updateResultRelease?.version ?? ''}
+      autoUpdateEligible={isAutoUpdateEligible()}
       onClose={handleCloseUpdateResult}
       onVisitReleasePage={handleVisitReleaseFromResult}
+      onAutoUpdate={handleSettingsAutoUpdate}
     />
   {/if}
+
+  <UpdateProgressModal
+    isOpen={isSettingsAutoUpdating}
+    progress={settingsAutoUpdateProgress}
+    onCancel={handleSettingsAutoUpdateCancel}
+    onFallbackManual={handleSettingsAutoUpdateFallback}
+  />
 
   {#if settingsWhatsNewRelease}
     <WhatsNewModal

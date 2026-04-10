@@ -1,5 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { openUrl } from '@tauri-apps/plugin-opener';
+import { check } from '@tauri-apps/plugin-updater';
+import { relaunch } from '@tauri-apps/plugin-process';
 import {
   acknowledgeRelease,
   checkForUpdates,
@@ -314,5 +316,81 @@ export async function disableUpdateChecks(): Promise<void> {
     await setCheckOnLaunch(false);
   } catch (error) {
     console.debug('[Updates] Failed to disable update checks:', error);
+  }
+}
+
+// ==================== Auto-update ====================
+
+export type AutoUpdateProgress =
+  | { state: 'checking' }
+  | { state: 'downloading'; downloadedBytes: number; totalBytes?: number }
+  | { state: 'installing' }
+  | { state: 'restarting' }
+  | { state: 'error'; error: string };
+
+let autoUpdateInProgress = false;
+
+export function isAutoUpdateInProgress(): boolean {
+  return autoUpdateInProgress;
+}
+
+/**
+ * Perform an in-app auto-update: download, install, and relaunch.
+ *
+ * Pass a `cancelled` function that returns true to abort before relaunch.
+ * Returns true if the update was initiated (app will restart), false otherwise.
+ */
+export async function performAutoUpdate(
+  onProgress: (progress: AutoUpdateProgress) => void,
+  isCancelled?: () => boolean,
+): Promise<boolean> {
+  if (autoUpdateInProgress) {
+    console.debug('[Updates] Auto-update already in progress');
+    return false;
+  }
+  autoUpdateInProgress = true;
+  try {
+    onProgress({ state: 'checking' });
+    const update = await check();
+    if (!update) {
+      return false;
+    }
+
+    if (isCancelled?.()) return false;
+
+    let totalBytes: number | undefined;
+    let downloadedBytes = 0;
+
+    onProgress({ state: 'downloading', downloadedBytes: 0 });
+
+    await update.downloadAndInstall((event) => {
+      switch (event.event) {
+        case 'Started':
+          totalBytes = event.data.contentLength ?? undefined;
+          onProgress({ state: 'downloading', downloadedBytes: 0, totalBytes });
+          break;
+        case 'Progress':
+          downloadedBytes += event.data.chunkLength;
+          onProgress({ state: 'downloading', downloadedBytes, totalBytes });
+          break;
+        case 'Finished':
+          onProgress({ state: 'installing' });
+          break;
+      }
+    });
+
+    // Guard against relaunch if user cancelled while download was in flight
+    if (isCancelled?.()) return false;
+
+    onProgress({ state: 'restarting' });
+    await relaunch();
+    return true;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[Updates] Auto-update failed:', message);
+    onProgress({ state: 'error', error: message });
+    return false;
+  } finally {
+    autoUpdateInProgress = false;
   }
 }
