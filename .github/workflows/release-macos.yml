@@ -95,13 +95,20 @@ jobs:
       - name: Install JS dependencies
         run: npm ci
 
-      - name: Build DMG
-        run: npm run tauri build -- --target ${{ matrix.target }} --bundles dmg
+      - name: Build macOS bundles
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npm run tauri build -- --target ${{ matrix.target }}
 
       - name: Collect artifacts
         run: |
           mkdir -p dist
+          # DMG for manual distribution
           cp -v src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg dist/ || true
+          # .app.tar.gz + .sig for auto-updater
+          cp -v src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.tar.gz dist/ || true
+          cp -v src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.tar.gz.sig dist/ || true
           ls -la dist
 
       - name: Upload artifacts
