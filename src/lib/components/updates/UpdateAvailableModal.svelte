@@ -1,25 +1,30 @@
 <script lang="ts">
   import Modal from '../Modal.svelte';
-  import { t } from '$lib/i18n';
 
   interface Props {
     isOpen: boolean;
     currentVersion: string;
     newVersion: string;
+    autoUpdateEligible?: boolean;
     onClose: () => void;
     onVisitReleasePage: () => void;
+    onAutoUpdate?: () => void;
   }
 
-  let { isOpen, currentVersion, newVersion, onClose, onVisitReleasePage }: Props = $props();
+  let { isOpen, currentVersion, newVersion, autoUpdateEligible = false, onClose, onVisitReleasePage, onAutoUpdate }: Props = $props();
 
   function handleVisit(): void {
     onVisitReleasePage();
   }
+
+  function handleAutoUpdate(): void {
+    onAutoUpdate?.();
+  }
 </script>
 
-<Modal {isOpen} onClose={onClose} title={ $t('updates.newReleaseAvailable') } maxWidth="560px">
+<Modal {isOpen} onClose={onClose} title="New release available" maxWidth="560px">
   <div class="update-modal">
-    <p class="lead">{$t('updates.newVersionReleased')}</p>
+    <p class="lead">A new version of QBZ has been released</p>
 
     <div class="version-row" aria-label="Version change">
       <span class="version-chip">v{currentVersion}</span>
@@ -28,14 +33,19 @@
     </div>
 
     <button class="download-btn" onclick={handleVisit} type="button">
-      {$t('actions.downloadOnGitHub')}
+      View on GitHub
     </button>
   </div>
 
   {#snippet footer()}
     <div class="footer-actions">
-      <button class="btn btn-ghost" type="button" onclick={onClose}>{$t('actions.close')}</button>
-      <button class="btn btn-primary" type="button" onclick={handleVisit}>{$t('actions.visitReleasePage')}</button>
+      <button class="btn btn-ghost" type="button" onclick={onClose}>Close</button>
+      {#if autoUpdateEligible}
+        <button class="btn btn-ghost" type="button" onclick={handleVisit}>Visit release page</button>
+        <button class="btn btn-primary" type="button" onclick={handleAutoUpdate}>Download &amp; Install</button>
+      {:else}
+        <button class="btn btn-primary" type="button" onclick={handleVisit}>Visit release page</button>
+      {/if}
     </div>
   {/snippet}
 </Modal>
