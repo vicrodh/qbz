@@ -75,7 +75,28 @@ async fn handle_renderer_command(
     command: &RendererCommand,
 ) {
     match command {
-        RendererCommand::SetState { playing_state, current_position_ms, .. } => {
+        RendererCommand::SetState { playing_state, current_position_ms, current_track, .. } => {
+            // Step 1: If a current_track is specified, ensure it's loaded
+            // (matches desktop's ensure_remote_track_loaded pattern)
+            if let Some(track) = current_track {
+                let player = core.player();
+                let loaded_track_id = player.state.current_track_id();
+                if loaded_track_id != track.track_id {
+                    log::info!(
+                        "[qbzd/qconnect] New track from renderer: {} (was {})",
+                        track.track_id, loaded_track_id
+                    );
+                    match download_and_play_track(core, track.track_id).await {
+                        Ok(()) => log::info!("[qbzd/qconnect] Track {} loaded", track.track_id),
+                        Err(e) => {
+                            log::error!("[qbzd/qconnect] Failed to load track {}: {}", track.track_id, e);
+                            return;
+                        }
+                    }
+                }
+            }
+
+            // Step 2: Apply playing state
             if let Some(state) = playing_state {
                 match *state {
                     PLAYING_STATE_PLAYING => { let _ = core.resume(); }
@@ -84,8 +105,14 @@ async fn handle_renderer_command(
                     _ => {}
                 }
             }
+
+            // Step 3: Seek if position differs significantly
             if let Some(pos_ms) = current_position_ms {
-                let _ = core.seek(*pos_ms / 1000);
+                let target_secs = *pos_ms / 1000;
+                let current_secs = core.player().state.current_position();
+                if current_secs.abs_diff(target_secs) > 2 {
+                    let _ = core.seek(target_secs);
+                }
             }
         }
         RendererCommand::SetVolume { volume, .. } => {
@@ -109,6 +136,41 @@ async fn handle_renderer_command(
         }
         _ => {}
     }
+}
+
+/// Download a track and feed it to the player.
+/// Mirrors desktop's load_remote_track_into_player → download fallback path.
+async fn download_and_play_track(
+    core: &qbz_core::QbzCore<DaemonAdapter>,
+    track_id: u64,
+) -> Result<(), String> {
+    let quality = qbz_models::Quality::HiRes;
+    let stream_url = core.get_stream_url(track_id, quality).await
+        .map_err(|e| format!("Stream URL failed for {}: {}", track_id, e))?;
+
+    log::info!(
+        "[qbzd/qconnect] Downloading track {} ({:.0}kHz/{}bit)",
+        track_id, stream_url.sampling_rate, stream_url.bit_depth.unwrap_or(0)
+    );
+
+    let http = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("HTTP client error: {}", e))?;
+
+    let data = http.get(&stream_url.url).send().await
+        .map_err(|e| format!("Download failed for {}: {}", track_id, e))?
+        .bytes().await
+        .map_err(|e| format!("Read failed for {}: {}", track_id, e))?
+        .to_vec();
+
+    log::info!("[qbzd/qconnect] Track {} downloaded ({} bytes)", track_id, data.len());
+
+    core.player()
+        .play_data(data, track_id)
+        .map_err(|e| format!("Player error for {}: {}", track_id, e))?;
+
+    Ok(())
 }
 
 /// Start QConnect — exact replica of desktop's QconnectServiceState::connect().
