@@ -578,6 +578,151 @@ pub async fn v2_start_oauth_login(
     finalize_oauth_login(&code, &app, &runtime, &app_state, &core_bridge, &legal_state).await
 }
 
+/// Login using an existing Qobuz `user_auth_token`.
+#[tauri::command]
+pub async fn v2_login_with_token(
+    app: tauri::AppHandle,
+    token: String,
+    runtime: State<'_, RuntimeManagerState>,
+    app_state: State<'_, AppState>,
+    core_bridge: State<'_, CoreBridgeState>,
+    legal_state: State<'_, LegalSettingsState>,
+) -> Result<V2LoginResponse, String> {
+    let trimmed = token.trim();
+    if trimmed.is_empty() {
+        return Ok(V2LoginResponse {
+            success: false,
+            user_name: None,
+            user_id: None,
+            subscription: None,
+            subscription_valid_until: None,
+            error: Some("Please enter a Qobuz user_auth_token.".to_string()),
+            error_code: Some("token_missing".to_string()),
+        });
+    }
+
+    let session = {
+        let client = app_state.client.read().await;
+        match client.login_with_token(trimmed).await {
+            Ok(session) => session,
+            Err(e) => {
+                return Ok(V2LoginResponse {
+                    success: false,
+                    user_name: None,
+                    user_id: None,
+                    subscription: None,
+                    subscription_valid_until: None,
+                    error: Some(e.to_string()),
+                    error_code: Some("token_login_failed".to_string()),
+                });
+            }
+        }
+    };
+
+    let manager = runtime.manager();
+    manager.set_legacy_auth(true, Some(session.user_id)).await;
+    let _ = app.emit(
+        "runtime:event",
+        RuntimeEvent::AuthChanged {
+            logged_in: true,
+            user_id: Some(session.user_id),
+        },
+    );
+
+    // Convert api::models::UserSession -> qbz_models::UserSession for CoreBridge.
+    let core_session: UserSession =
+        match serde_json::to_value(&session).and_then(serde_json::from_value) {
+            Ok(s) => s,
+            Err(e) => {
+                log::error!("[Token] Failed to convert session for CoreBridge: {}", e);
+                rollback_auth_state(&manager, &app).await;
+                return Ok(V2LoginResponse {
+                    success: false,
+                    user_name: None,
+                    user_id: None,
+                    subscription: None,
+                    subscription_valid_until: None,
+                    error: Some(format!("Session conversion error: {}", e)),
+                    error_code: Some("internal_error".to_string()),
+                });
+            }
+        };
+
+    // Inject session into CoreBridge.
+    if let Some(bridge) = core_bridge.try_get().await {
+        match bridge.login_with_session(core_session).await {
+            Ok(_) => manager.set_corebridge_auth(true).await,
+            Err(e) => {
+                log::error!("[Token] CoreBridge session injection failed: {}", e);
+                rollback_auth_state(&manager, &app).await;
+                let _ = app.emit(
+                    "runtime:event",
+                    RuntimeEvent::CoreBridgeAuthFailed {
+                        error: e.to_string(),
+                    },
+                );
+                return Ok(V2LoginResponse {
+                    success: false,
+                    user_name: Some(session.display_name),
+                    user_id: Some(session.user_id),
+                    subscription: Some(session.subscription_label),
+                    subscription_valid_until: session.subscription_valid_until,
+                    error: Some(format!("V2 authentication failed: {}", e)),
+                    error_code: Some("v2_auth_failed".to_string()),
+                });
+            }
+        }
+    } else {
+        rollback_auth_state(&manager, &app).await;
+        return Ok(V2LoginResponse {
+            success: false,
+            user_name: Some(session.display_name),
+            user_id: Some(session.user_id),
+            subscription: Some(session.subscription_label),
+            subscription_valid_until: session.subscription_valid_until,
+            error: Some("V2 CoreBridge not initialized".to_string()),
+            error_code: Some("v2_not_initialized".to_string()),
+        });
+    }
+
+    if let Err(e) = crate::session_lifecycle::activate_session(&app, session.user_id).await {
+        log::error!("[Token] Session activation failed: {}", e);
+        rollback_auth_state(&manager, &app).await;
+        return Ok(V2LoginResponse {
+            success: false,
+            user_name: Some(session.display_name.clone()),
+            user_id: Some(session.user_id),
+            subscription: Some(session.subscription_label.clone()),
+            subscription_valid_until: session.subscription_valid_until.clone(),
+            error: Some(format!("Session activation failed: {}", e)),
+            error_code: Some("session_activation_failed".to_string()),
+        });
+    }
+
+    // Persist token for runtime_bootstrap session restore.
+    if let Err(e) = crate::credentials::save_oauth_token(&session.user_auth_token) {
+        log::warn!("[Token] Failed to persist token: {}", e);
+    }
+
+    accept_tos_best_effort(&legal_state);
+    let _ = app.emit(
+        "runtime:event",
+        RuntimeEvent::RuntimeReady {
+            user_id: session.user_id,
+        },
+    );
+
+    Ok(V2LoginResponse {
+        success: true,
+        user_name: Some(session.display_name),
+        user_id: Some(session.user_id),
+        subscription: Some(session.subscription_label),
+        subscription_valid_until: session.subscription_valid_until,
+        error: None,
+        error_code: None,
+    })
+}
+
 /// Complete the OAuth login flow after obtaining an authorization code.
 ///
 /// Cancel the system browser OAuth flow.

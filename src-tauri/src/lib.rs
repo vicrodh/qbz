@@ -1229,6 +1229,7 @@ pub fn run() {
             qbzd_discovery::v2_qbzd_start_discovery,
             qbzd_discovery::v2_qbzd_stop_discovery,
             qbzd_discovery::v2_qbzd_get_devices,
+            commands_v2::v2_login_with_token,
             commands_v2::v2_get_user_info,
             commands_v2::v2_save_credentials,
             commands_v2::v2_clear_saved_credentials,
