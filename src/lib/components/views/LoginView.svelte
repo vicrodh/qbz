@@ -21,12 +21,15 @@
 
   let isOAuthLoading = $state(false);
   let isSystemBrowserLoading = $state(false);
+  let isTokenLoading = $state(false);
   let isInitializing = $state(true);
   let initStatus = $state('Connecting to Qobuz™...');
   let error = $state<string | null>(null);
   let initError = $state<string | null>(null);
   let isTimedOut = $state(false);
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  let qobuzToken = $state('');
+  let showTokenLogin = $state(false);
 
   const LOGIN_TIMEOUT_MS = 60000; // 60 seconds
 
@@ -217,6 +220,10 @@
       error = $t('auth.v2NotInitialized');
     } else if (response.error_code === 'oauth_cancelled') {
       error = null;
+    } else if (response.error_code === 'token_missing') {
+      error = $t('auth.tokenMissing');
+    } else if (response.error_code === 'token_login_failed') {
+      error = response.error || $t('auth.tokenLoginError');
     } else {
       error = response.error || 'Login failed';
     }
@@ -272,110 +279,182 @@
       isSystemBrowserLoading = false;
     }
   }
+
+  async function handleTokenLogin() {
+    if (!get(qobuzTosAccepted)) {
+      error = $t('legal.tosRequiredToLogin');
+      return;
+    }
+
+    isTokenLoading = true;
+    error = null;
+
+    try {
+      await setTosAcceptance(true);
+    } catch { /* continue */ }
+
+    try {
+      const response = await invoke<OAuthResponse>('v2_login_with_token', {
+        token: qobuzToken
+      });
+      if (handleOAuthResponse(response)) {
+        qobuzToken = '';
+      }
+    } catch (err) {
+      console.error('Token login error:', err);
+      error = formatErrorMessage(err);
+    } finally {
+      isTokenLoading = false;
+    }
+  }
+
+  function toggleTokenLogin() {
+    showTokenLogin = !showTokenLogin;
+  }
 </script>
 
 <div class="login-wrapper">
   <TitleBar />
   <div class="login-view">
     <div class="login-card">
-    <!-- Logo -->
-    <div class="logo">
-      <img src="/logo.png" alt="QBZ Logo" class="logo-img" />
-    </div>
+      <!-- Logo -->
+      <div class="logo">
+        <img src="/logo.png" alt="QBZ Logo" class="logo-img" />
+      </div>
 
-    {#if isTimedOut}
-      <div class="timeout-box">
-        <p class="timeout-title">Connection is taking too long</p>
-        <p class="timeout-detail">
-          Unable to connect to Qobuz™ after 60 seconds. This could be a network issue or Qobuz™ may be temporarily unavailable.
-        </p>
-        <div class="timeout-actions">
-          <button class="retry-btn" onclick={handleRetryLogin}>{ $t('actions.tryAgain') }</button>
-          <button class="offline-btn" onclick={handleStartOffline}>{ $t('actions.startOffline') }</button>
-        </div>
-      </div>
-    {:else if isInitializing}
-      <div class="initializing">
-        <div class="spinner"></div>
-        <p>{initStatus}</p>
-      </div>
-    {:else if initError}
-      <div class="error-box">
-        <p>{$t('auth.connectionFailed')}</p>
-        <p class="error-detail">{initError}</p>
-        <div class="timeout-actions">
-          <button class="retry-btn" onclick={initializeClient}>{$t('actions.retry')}</button>
-          <button class="offline-btn" onclick={handleStartOffline}>{$t('offline.startWithoutLogin')}</button>
-        </div>
-      </div>
-    {:else}
-      <div class="login-body">
-        <div class="login-actions">
-          <div class="remember-me tos-remember">
-            <label>
-              <input type="checkbox" bind:checked={$qobuzTosAccepted} disabled={isOAuthLoading || isSystemBrowserLoading} />
-              <span>
-                {$t('legal.tosAgreementPrefix')}
-                <a href="https://www.qobuz.com/us-en/legal/terms" target="_blank" rel="noopener">
-                  {$t('legal.tosLinkText')}
-                </a>
-              </span>
-            </label>
+      {#if isTimedOut}
+        <div class="timeout-box">
+          <p class="timeout-title">Connection is taking too long</p>
+          <p class="timeout-detail">
+            Unable to connect to Qobuz™ after 60 seconds. This could be a network issue or Qobuz™ may be temporarily unavailable.
+          </p>
+          <div class="timeout-actions">
+            <button class="retry-btn" onclick={handleRetryLogin}>{ $t('actions.tryAgain') }</button>
+            <button class="offline-btn" onclick={handleStartOffline}>{ $t('actions.startOffline') }</button>
           </div>
+        </div>
+      {:else if isInitializing}
+        <div class="initializing">
+          <div class="spinner"></div>
+          <p>{initStatus}</p>
+        </div>
+      {:else if initError}
+        <div class="error-box">
+          <p>{$t('auth.connectionFailed')}</p>
+          <p class="error-detail">{initError}</p>
+          <div class="timeout-actions">
+            <button class="retry-btn" onclick={initializeClient}>{$t('actions.retry')}</button>
+            <button class="offline-btn" onclick={handleStartOffline}>{$t('offline.startWithoutLogin')}</button>
+          </div>
+        </div>
+      {:else}
+        <div class="login-body">
+          <div class="login-actions">
+            <div class="remember-me tos-remember">
+              <label>
+                <input type="checkbox" bind:checked={$qobuzTosAccepted} disabled={isOAuthLoading || isSystemBrowserLoading || isTokenLoading} />
+                <span>
+                  {$t('legal.tosAgreementPrefix')}
+                  <a href="https://www.qobuz.com/us-en/legal/terms" target="_blank" rel="noopener">
+                    {$t('legal.tosLinkText')}
+                  </a>
+                </span>
+              </label>
+            </div>
 
-          {#if error}
-            <div class="error-message">{error}</div>
-          {/if}
-
-          <button
-            type="button"
-            class="oauth-btn"
-            disabled={isOAuthLoading || isSystemBrowserLoading || !$qobuzTosAccepted}
-            onclick={handleOAuthLogin}
-          >
-            {#if isOAuthLoading}
-              <div class="spinner small"></div>
-              <span>{$t('auth.oauthLoading')}</span>
-            {:else}
-              <span>{$t('auth.oauthButton')}</span>
+            {#if error}
+              <div class="error-message">{error}</div>
             {/if}
-          </button>
 
-          <p class="system-browser-link">
-            {#if isSystemBrowserLoading}
-              <small><span class="link-button">{$t('auth.systemBrowserLoading')}</span></small>
-            {:else}
+            <button
+              type="button"
+              class="oauth-btn"
+              disabled={isOAuthLoading || isSystemBrowserLoading || isTokenLoading || !$qobuzTosAccepted}
+              onclick={handleOAuthLogin}
+            >
+              {#if isOAuthLoading}
+                <div class="spinner small"></div>
+                <span>{$t('auth.oauthLoading')}</span>
+              {:else}
+                <span>{$t('auth.oauthButton')}</span>
+              {/if}
+            </button>
+
+            <p class="system-browser-link">
+              {#if isSystemBrowserLoading}
+                <small><span class="link-button">{$t('auth.systemBrowserLoading')}</span></small>
+              {:else}
+                <small>
+                  <button
+                    type="button"
+                    class="link-button"
+                    disabled={isOAuthLoading || isSystemBrowserLoading || isTokenLoading || !$qobuzTosAccepted}
+                    onclick={handleSystemBrowserLogin}
+                  >
+                    {$t('auth.systemBrowserButton')}
+                  </button>
+                </small>
+              {/if}
+            </p>
+
+            <p class="token-link">
               <small>
                 <button
                   type="button"
                   class="link-button"
-                  disabled={isOAuthLoading || isSystemBrowserLoading || !$qobuzTosAccepted}
-                  onclick={handleSystemBrowserLogin}
+                  disabled={isOAuthLoading || isSystemBrowserLoading || isTokenLoading}
+                  onclick={toggleTokenLogin}
                 >
-                  {$t('auth.systemBrowserButton')}
+                  {$t('auth.tokenButton')}
                 </button>
               </small>
+            </p>
+
+            {#if showTokenLogin}
+              <div class="token-login">
+                <label class="token-label" for="qobuz-token">{$t('auth.tokenLabel')}</label>
+                <textarea
+                  id="qobuz-token"
+                  class="token-input"
+                  bind:value={qobuzToken}
+                  rows="3"
+                  placeholder={$t('auth.tokenPlaceholder')}
+                  disabled={isOAuthLoading || isSystemBrowserLoading || isTokenLoading}
+                ></textarea>
+                <button
+                  type="button"
+                  class="token-btn"
+                  disabled={isOAuthLoading || isSystemBrowserLoading || isTokenLoading || !$qobuzTosAccepted || qobuzToken.trim().length === 0}
+                  onclick={handleTokenLogin}
+                >
+                  {#if isTokenLoading}
+                    <div class="spinner small"></div>
+                    <span>{$t('auth.tokenLoading')}</span>
+                  {:else}
+                    <span>{$t('auth.tokenButton')}</span>
+                  {/if}
+                </button>
+                <p class="token-help">{$t('auth.tokenHelp')}</p>
+              </div>
             {/if}
-          </p>
 
-          <p class="offline-link">
-            <small>
-              <button type="button" class="link-button" onclick={handleStartOffline}>
-                {$t('offline.startWithoutLogin')}
-              </button>
-            </small>
-          </p>
+            <p class="offline-link">
+              <small>
+                <button type="button" class="link-button" onclick={handleStartOffline}>
+                  {$t('offline.startWithoutLogin')}
+                </button>
+              </small>
+            </p>
+          </div>
+
+          <div class="login-footer">
+            <p class="footer-copy">
+              {$t('auth.activeSubscriptionRequired')}<br />
+              {$t('auth.APIUse')} {$t('legal.trademarkNotice')}
+            </p>
+          </div>
         </div>
-
-        <div class="login-footer">
-          <p class="footer-copy">
-            {$t('auth.activeSubscriptionRequired')}<br />
-            {$t('auth.APIUse')} {$t('legal.trademarkNotice')}
-          </p>
-        </div>
-      </div>
-
-    {/if}
+      {/if}
     </div>
   </div>
 </div>
@@ -396,19 +475,19 @@
     background-color: var(--bg-primary);
   }
 
-	  .login-card {
-	    width: 100%;
-	    max-width: 720px;
-	    padding: 52px;
-	    background-color: var(--bg-secondary);
-	    border-radius: 16px;
-	    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-	    display: flex;
-	    flex-direction: column;
-	    min-height: min(480px, 70vh);
-	    max-height: 90vh;
-	    overflow-y: auto;
-	  }
+  .login-card {
+    width: 100%;
+    max-width: 720px;
+    padding: 52px;
+    background-color: var(--bg-secondary);
+    border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    display: flex;
+    flex-direction: column;
+    min-height: min(480px, 70vh);
+    max-height: 90vh;
+    overflow-y: auto;
+  }
 
   .logo {
     text-align: center;
@@ -621,6 +700,80 @@
   .offline-link {
     margin-top: 4px;
     text-align: center;
+  }
+
+  .token-link {
+    margin-top: -8px;
+    text-align: center;
+  }
+
+  .token-login {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 12px;
+    padding: 14px;
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  .token-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .token-input {
+    width: 100%;
+    resize: vertical;
+    min-height: 88px;
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: 'Source Sans 3', monospace;
+    font-size: 13px;
+  }
+
+  .token-input:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+  }
+
+  .token-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    min-height: 44px;
+    padding: 10px 18px;
+    border: 1px solid var(--accent-primary);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--accent-primary);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 150ms ease, color 150ms ease, opacity 150ms ease;
+  }
+
+  .token-btn:hover:not(:disabled) {
+    background: var(--accent-primary);
+    color: #fff;
+  }
+
+  .token-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  .token-help {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--text-muted);
   }
 
   .link-button {

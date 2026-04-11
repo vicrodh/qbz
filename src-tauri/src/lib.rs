@@ -1221,6 +1221,7 @@ pub fn run() {
             commands_v2::v2_manual_login,
             commands_v2::v2_start_oauth_login,
             commands_v2::v2_start_system_browser_oauth,
+            commands_v2::v2_login_with_token,
             commands_v2::v2_get_user_info,
             commands_v2::v2_save_credentials,
             commands_v2::v2_clear_saved_credentials,

@@ -1446,6 +1446,13 @@
     "oauthLoading": "Browser wird geöffnet...",
     "systemBrowserButton": "Stattdessen Systembrowser verwenden",
     "systemBrowserLoading": "Warte auf Anmeldung...",
+    "tokenLabel": "Qobuz-Token",
+    "tokenPlaceholder": "Fügen Sie hier Ihren Qobuz user_auth_token ein",
+    "tokenButton": "Mit Token anmelden",
+    "tokenLoading": "Anmeldung mit Token...",
+    "tokenHelp": "Verwenden Sie einen gültigen Qobuz user_auth_token. QBZ prüft ihn bei Qobuz und speichert ihn für zukünftige Starts.",
+    "tokenMissing": "Bitte fügen Sie einen Qobuz user_auth_token ein.",
+    "tokenLoginError": "Token-Anmeldung fehlgeschlagen. Bitte prüfen Sie den Token und versuchen Sie es erneut.",
     "activeSubscriptionRequired": "QBZ erfordert ein aktives Qobuz™-Abonnement. Ihre Anmeldedaten werden direkt an Qobuz™ gesendet.",
     "APIUse": "Diese Anwendung verwendet die Qobuz-API, ist jedoch nicht von Qobuz zertifiziert."
   },

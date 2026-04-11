@@ -1446,6 +1446,13 @@
     "oauthLoading": "Ouverture du navigateur...",
     "systemBrowserButton": "Utiliser votre navigateur système",
     "systemBrowserLoading": "En attente de connexion...",
+    "tokenLabel": "Jeton Qobuz",
+    "tokenPlaceholder": "Collez votre Qobuz user_auth_token ici",
+    "tokenButton": "Se connecter avec un jeton",
+    "tokenLoading": "Connexion avec le jeton...",
+    "tokenHelp": "Utilisez un Qobuz user_auth_token valide. QBZ le vérifiera auprès de Qobuz et l'enregistrera pour les prochains lancements.",
+    "tokenMissing": "Veuillez coller un Qobuz user_auth_token.",
+    "tokenLoginError": "La connexion par jeton a échoué. Vérifiez le jeton et réessayez.",
     "activeSubscriptionRequired": "QBZ requiert un abonnement à Qobuz™ actif. Vos identifiants sont directement envoyés à Qobuz™.",
     "APIUse": "Cette application utilise l'API Qobuz™ mais n'est pas certifiée par Qobuz™."
   },

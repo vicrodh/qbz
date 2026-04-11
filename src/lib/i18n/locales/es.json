@@ -1469,6 +1469,13 @@
     "oauthLoading": "Abriendo navegador...",
     "systemBrowserButton": "Usar tu navegador del sistema",
     "systemBrowserLoading": "Esperando inicio de sesión...",
+    "tokenLabel": "Token de Qobuz",
+    "tokenPlaceholder": "Pega aquí tu Qobuz user_auth_token",
+    "tokenButton": "Iniciar sesión con token",
+    "tokenLoading": "Iniciando sesión con token...",
+    "tokenHelp": "Usa un Qobuz user_auth_token válido. QBZ lo verificará con Qobuz y lo guardará para futuros inicios.",
+    "tokenMissing": "Pega un Qobuz user_auth_token.",
+    "tokenLoginError": "El inicio de sesión con token falló. Verifica el token e inténtalo de nuevo.",
     "activeSubscriptionRequired": "QBZ requiere una suscripción activa a Qobuz™. Tus datos de acceso se envían directamente a Qobuz™.",
     "APIUse": "Esta aplicación utiliza la API de Qobuz, pero no está certificada por Qobuz."
   },
