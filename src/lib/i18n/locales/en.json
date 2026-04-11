@@ -1476,6 +1476,13 @@
     "systemBrowserLoading": "Waiting for login...",
     "captchaHint": "Having trouble with captcha? The built-in browser may not support it well.",
     "trySystemBrowser": "Cancel and try your system browser instead",
+    "tokenLabel": "Qobuz token",
+    "tokenPlaceholder": "Paste your Qobuz user_auth_token here",
+    "tokenButton": "Sign in with token",
+    "tokenLoading": "Signing in with token...",
+    "tokenHelp": "Use a valid Qobuz user_auth_token. QBZ will verify it with Qobuz and save it for future launches.",
+    "tokenMissing": "Please paste a Qobuz user_auth_token.",
+    "tokenLoginError": "Token login failed. Please verify the token and try again.",
     "activeSubscriptionRequired": "QBZ requires an active Qobuz™ subscription. Your credentials are sent directly to Qobuz™.",
     "APIUse": "This application uses the Qobuz API but is not certified by Qobuz."
   },
