@@ -1203,6 +1203,11 @@ pub fn v2_is_running_in_flatpak() -> bool {
 }
 
 #[tauri::command]
+pub fn v2_is_auto_update_eligible() -> bool {
+    crate::updates::is_auto_update_eligible()
+}
+
+#[tauri::command]
 pub fn v2_is_running_in_snap() -> bool {
     crate::snap::is_running_in_snap()
 }

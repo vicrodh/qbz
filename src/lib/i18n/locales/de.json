@@ -771,6 +771,8 @@
     "clearSelection": "Klare Auswahl",
     "copyCommand": "Befehl kopieren",
     "downloadOnGitHub": "Auf GitHub herunterladen",
+    "downloadAndInstall": "Herunterladen & Installieren",
+    "downloadManually": "Manuell herunterladen",
     "findAvailableVersion": "Finden Sie die verfügbare Version",
     "gotIt": "Habe es",
     "okClose": "OK, schließen",
@@ -2275,7 +2277,16 @@
     },
     "runningInsideSandbox": "QBZ hat erkannt, dass es in einer <strong>{env}-Sandbox</strong> ausgeführt wird.",
     "newReleaseAvailable": "Neue Version verfügbar",
-    "newVersionReleased": "Eine neue Version von QBZ wurde veröffentlicht"
+    "newVersionReleased": "Eine neue Version von QBZ wurde veröffentlicht",
+    "autoUpdate": {
+      "title": "QBZ wird aktualisiert",
+      "checking": "Suche nach Updates...",
+      "downloading": "Update wird heruntergeladen...",
+      "downloadingProgress": "Update wird heruntergeladen... {percent}%",
+      "installing": "Update wird installiert...",
+      "restarting": "Wird neu gestartet...",
+      "failed": "Update fehlgeschlagen"
+    }
   },
   "common": {
     "name": "Name"

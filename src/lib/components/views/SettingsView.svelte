@@ -134,13 +134,16 @@
     getCurrentVersion as getUpdatesCurrentVersion,
     getPreferences as getUpdatePreferences,
     initUpdatesStore,
+    isAutoUpdateEligible,
     setCheckOnLaunch,
     setShowWhatsNewOnLaunch,
     type ReleaseInfo,
     type UpdateCheckStatus,
     type UpdatePreferences
   } from '$lib/stores/updatesStore';
-  import { openReleasePageAndAcknowledge } from '$lib/services/updatesService';
+  import { openReleasePageAndAcknowledge, performAutoUpdate } from '$lib/services/updatesService';
+  import type { AutoUpdateProgress } from '$lib/services/updatesService';
+  import UpdateProgressModal from '../updates/UpdateProgressModal.svelte';
   import {
     getCount as getBlacklistCount,
     isEnabled as isBlacklistEnabled,
@@ -327,6 +330,8 @@
   let isSettingsWhatsNewOpen = $state(false);
   let settingsWhatsNewRelease = $state<ReleaseInfo | null>(null);
   let isFetchingChangelog = $state(false);
+  let isSettingsAutoUpdating = $state(false);
+  let settingsAutoUpdateProgress = $state<AutoUpdateProgress>({ state: 'checking' });
 
   // Blacklist state
   let blacklistCount = $state(getBlacklistCount());
@@ -464,6 +469,29 @@
     if (!updateResultRelease) return;
     void openReleasePageAndAcknowledge(updateResultRelease);
     isUpdateResultOpen = false;
+  }
+
+  function handleSettingsAutoUpdate(): void {
+    isUpdateResultOpen = false;
+    isSettingsAutoUpdating = true;
+    settingsAutoUpdateProgress = { state: 'checking' };
+    void performAutoUpdate(
+      (progress) => {
+        if (isSettingsAutoUpdating) settingsAutoUpdateProgress = progress;
+      },
+      () => !isSettingsAutoUpdating,
+    );
+  }
+
+  function handleSettingsAutoUpdateCancel(): void {
+    isSettingsAutoUpdating = false;
+  }
+
+  function handleSettingsAutoUpdateFallback(): void {
+    isSettingsAutoUpdating = false;
+    if (updateResultRelease) {
+      void openReleasePageAndAcknowledge(updateResultRelease);
+    }
   }
 
   async function handleShowCurrentChangelog(): Promise<void> {
@@ -5444,10 +5472,19 @@
       isOpen={isUpdateResultOpen}
       status={updateResultStatus}
       newVersion={updateResultRelease?.version ?? ''}
+      autoUpdateEligible={isAutoUpdateEligible()}
       onClose={handleCloseUpdateResult}
       onVisitReleasePage={handleVisitReleaseFromResult}
+      onAutoUpdate={handleSettingsAutoUpdate}
     />
   {/if}
+
+  <UpdateProgressModal
+    isOpen={isSettingsAutoUpdating}
+    progress={settingsAutoUpdateProgress}
+    onCancel={handleSettingsAutoUpdateCancel}
+    onFallbackManual={handleSettingsAutoUpdateFallback}
+  />
 
   {#if settingsWhatsNewRelease}
     <WhatsNewModal

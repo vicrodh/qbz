@@ -765,6 +765,8 @@
     "clearSelection": "Effacer la sélection",
     "copyCommand": "Copier la commande",
     "downloadOnGitHub": "Télécharger sur GitHub",
+    "downloadAndInstall": "Télécharger et installer",
+    "downloadManually": "Télécharger manuellement",
     "findAvailableVersion": "Rechercher la version disponible",
     "gotIt": "J'ai compris",
     "okClose": "OK, fermer",
@@ -2425,6 +2427,15 @@
       "releaseNotesNotAvailableForVersion": "Les notes de version ne sont pas disponibles pour cette version.",
       "whatsNew": "Quoi de neuf",
       "whatsNewIn": "Quoi de neuf dans v{version}"
+    },
+    "autoUpdate": {
+      "title": "Mise à jour de QBZ",
+      "checking": "Recherche de mises à jour...",
+      "downloading": "Téléchargement de la mise à jour...",
+      "downloadingProgress": "Téléchargement de la mise à jour... {percent}%",
+      "installing": "Installation de la mise à jour...",
+      "restarting": "Redémarrage...",
+      "failed": "Échec de la mise à jour"
     }
   },
   "musician": {

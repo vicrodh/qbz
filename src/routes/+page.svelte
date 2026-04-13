@@ -442,7 +442,7 @@
   import KeybindingsSettings from '$lib/components/KeybindingsSettings.svelte';
   import LinkResolverModal from '$lib/components/LinkResolverModal.svelte';
   import type { ReleaseInfo } from '$lib/stores/updatesStore';
-  import { refreshUpdatePreferences, resetUpdatesStore } from '$lib/stores/updatesStore';
+  import { isAutoUpdateEligible, refreshUpdatePreferences, resetUpdatesStore } from '$lib/stores/updatesStore';
   import { getShowPurchases, setShowPurchases, rehydratePurchasesStore } from '$lib/stores/purchasesStore';
   import {
     decideLaunchModals,
@@ -451,8 +451,11 @@
     markFlatpakWelcomeShown,
     markSnapWelcomeShown,
     openReleasePageAndAcknowledge,
+    performAutoUpdate,
     resetLaunchFlow,
   } from '$lib/services/updatesService';
+  import type { AutoUpdateProgress } from '$lib/services/updatesService';
+  import UpdateProgressModal from '$lib/components/updates/UpdateProgressModal.svelte';
 
   // Offline state
   import {
@@ -518,6 +521,10 @@
   // Sequential modal queue: Flatpak → What's new → Update available
   let pendingWhatsNewRelease = $state<ReleaseInfo | null>(null);
   let pendingUpdateRelease = $state<ReleaseInfo | null>(null);
+
+  // Auto-update state
+  let isAutoUpdating = $state(false);
+  let autoUpdateProgress = $state<AutoUpdateProgress>({ state: 'checking' });
 
   // Global back-to-top button
   let mainContentEl: HTMLElement | null = $state(null);
@@ -786,6 +793,33 @@
     isUpdateModalOpen = false;
     if (updateRelease) {
       isReminderModalOpen = true;
+    }
+  }
+
+  function handleAutoUpdate(): void {
+    isUpdateModalOpen = false;
+    isAutoUpdating = true;
+    autoUpdateProgress = { state: 'checking' };
+    void performAutoUpdate(
+      (progress) => {
+        if (isAutoUpdating) autoUpdateProgress = progress;
+      },
+      () => !isAutoUpdating,
+    );
+  }
+
+  function handleAutoUpdateCancel(): void {
+    isAutoUpdating = false;
+    if (updateRelease) {
+      isUpdateModalOpen = true;
+    }
+  }
+
+  function handleAutoUpdateFallbackManual(): void {
+    isAutoUpdating = false;
+    if (updateRelease) {
+      void openReleasePageAndAcknowledge(updateRelease);
+      updateRelease = null;
     }
   }
 
@@ -5884,8 +5918,10 @@
         isOpen={isUpdateModalOpen}
         currentVersion={updatesCurrentVersion}
         newVersion={updateRelease.version}
+        autoUpdateEligible={isAutoUpdateEligible()}
         onClose={handleUpdateClose}
         onVisitReleasePage={handleUpdateVisit}
+        onAutoUpdate={handleAutoUpdate}
       />
 
       <UpdateReminderModal
@@ -5894,6 +5930,13 @@
         onRemindLater={handleReminderLater}
         onIgnoreRelease={handleReminderIgnoreRelease}
         onDisableAllUpdates={handleReminderDisableUpdates}
+      />
+
+      <UpdateProgressModal
+        isOpen={isAutoUpdating}
+        progress={autoUpdateProgress}
+        onCancel={handleAutoUpdateCancel}
+        onFallbackManual={handleAutoUpdateFallbackManual}
       />
     {/if}
 
