@@ -31,8 +31,10 @@ let preferences: UpdatePreferences = {
 };
 
 let currentVersion = '';
+let autoUpdateEligible = false;
 let versionLoaded = false;
 let prefsLoaded = false;
+let eligibilityLoaded = false;
 
 const listeners = new Set<() => void>();
 
@@ -63,6 +65,10 @@ export function getCurrentVersion(): string {
   return currentVersion;
 }
 
+export function isAutoUpdateEligible(): boolean {
+  return autoUpdateEligible;
+}
+
 export async function initUpdatesStore(): Promise<void> {
   if (skipIfRemote()) return;
   // get_current_version never needs a session (compile-time value).
@@ -73,6 +79,17 @@ export async function initUpdatesStore(): Promise<void> {
       versionLoaded = true;
     } catch (error) {
       console.error('[Updates] Failed to get current version:', error);
+    }
+  }
+
+  // Auto-update eligibility is compile-time + runtime (APPIMAGE env, flatpak/snap
+  // detection). No session required. Only fetch once.
+  if (!eligibilityLoaded) {
+    try {
+      autoUpdateEligible = await invoke<boolean>('v2_is_auto_update_eligible');
+      eligibilityLoaded = true;
+    } catch (error) {
+      console.debug('[Updates] Failed to check auto-update eligibility:', error);
     }
   }
 
