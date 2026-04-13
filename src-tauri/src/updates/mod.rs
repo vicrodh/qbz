@@ -14,6 +14,9 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+#[cfg(target_os = "linux")]
+use std::env;
+
 const GITHUB_RELEASES_URL: &str = "https://api.github.com/repos/vicrodh/qbz/releases";
 const UPDATE_MIN_AGE_HOURS: i64 = 12;
 const NETWORK_TIMEOUT_SECONDS: u64 = 4;
@@ -649,4 +652,31 @@ pub async fn fetch_release_for_version(
         return Ok(None);
     }
     Ok(to_release_info(release))
+}
+
+/// Determine if the current install method supports in-app auto-updating.
+///
+/// Auto-update is supported for:
+/// - macOS (always — updater uses .app.tar.gz bundles)
+/// - Linux AppImage (detected via APPIMAGE env var)
+///
+/// Not supported for Flatpak, Snap, DEB, RPM, AUR, Gentoo (they have their own update channels).
+pub fn is_auto_update_eligible() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        return true;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        if crate::flatpak::is_flatpak() || crate::snap::is_snap() {
+            return false;
+        }
+        return env::var("APPIMAGE").is_ok();
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    {
+        false
+    }
 }
