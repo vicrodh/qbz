@@ -770,6 +770,8 @@
     "copyCommand": "Copy command",
     "downloadOnGitHub": "Download on GitHub",
     "visitReleasePage": "Visit release page",
+    "downloadAndInstall": "Download & Install",
+    "downloadManually": "Download manually",
     "okClose": "OK, close",
     "tryAgain": "Try Again",
     "startOffline": "Start Offline",
@@ -2405,7 +2407,16 @@
       "releaseNotesNotAvailableForVersion": "Release notes are not available for this version."
     },
     "newReleaseAvailable": "New release available",
-    "checkForUpdates": "Check for updates"
+    "checkForUpdates": "Check for updates",
+    "autoUpdate": {
+      "title": "Updating QBZ",
+      "checking": "Checking for updates...",
+      "downloading": "Downloading update...",
+      "downloadingProgress": "Downloading update... {percent}%",
+      "installing": "Installing update...",
+      "restarting": "Restarting...",
+      "failed": "Update failed"
+    }
   },
   "performerRoles": {
     "a&R": "Artists and Repertoire",
