@@ -8,7 +8,7 @@
   import { onDestroy } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { t } from '$lib/i18n';
-  import { ArrowLeft, Award as AwardIcon, Heart, LoaderCircle, ArrowRight } from 'lucide-svelte';
+  import { ArrowLeft, Heart, LoaderCircle, ArrowRight } from 'lucide-svelte';
   import AlbumCard from '../AlbumCard.svelte';
   import HorizontalScrollRow from '../HorizontalScrollRow.svelte';
   import type { AwardPageData, QobuzAlbum } from '$lib/types';
@@ -239,7 +239,7 @@
         />
       {:else}
         <div class="award-image-placeholder">
-          <AwardIcon size={56} />
+          <img src="/laurels.svg" alt="" class="laurel-icon" />
         </div>
       {/if}
     </div>
@@ -358,7 +358,7 @@
                     />
                   {:else}
                     <div class="award-mini-placeholder">
-                      <AwardIcon size={32} />
+                      <img src="/laurels.svg" alt="" class="laurel-icon-sm" />
                     </div>
                   {/if}
                 </div>
@@ -414,6 +414,13 @@
     width: 100%; height: 100%;
     display: flex; align-items: center; justify-content: center;
     background: linear-gradient(135deg, #b45309 0%, #eab308 100%); color: white;
+  }
+  /* Laurel wreath — black-fill SVG filtered to white so it reads on the
+     gold placeholder gradient. */
+  .laurel-icon {
+    width: 68%; height: 68%;
+    filter: brightness(0) invert(1);
+    pointer-events: none;
   }
   .award-header-info {
     flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center;
@@ -555,6 +562,12 @@
     justify-content: center;
     background: linear-gradient(135deg, #b45309 0%, #eab308 100%);
     color: #fff;
+  }
+  .laurel-icon-sm {
+    width: 56%;
+    height: 56%;
+    filter: brightness(0) invert(1);
+    pointer-events: none;
   }
   .award-mini-name {
     font-size: 13px;

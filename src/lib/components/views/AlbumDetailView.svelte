@@ -11,7 +11,7 @@
     setCustomAlbumCover,
     removeCustomAlbumCover as removeCustomCoverFromStore
   } from '$lib/stores/customAlbumCoverStore';
-  import { ArrowLeft, Play, Shuffle, Heart, Radio, CloudDownload, ChevronLeft, ChevronRight, LoaderCircle, SquareCheckBig, BookOpen, Award, Disc3 } from 'lucide-svelte';
+  import { ArrowLeft, Play, Shuffle, Heart, Radio, CloudDownload, ChevronLeft, ChevronRight, LoaderCircle, SquareCheckBig, BookOpen, Disc3 } from 'lucide-svelte';
   import { cachedSrc } from '$lib/actions/cachedImage';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackRow from '../TrackRow.svelte';
@@ -768,7 +768,7 @@
                 disabled={!onAwardClick}
               >
                 <div class="sidebar-entity-avatar award-avatar">
-                  <Award size={22} />
+                  <img src="/laurels.svg" alt="" class="laurel-icon-xs" />
                 </div>
                 <div class="sidebar-entity-name">{award.name}</div>
               </button>
@@ -1418,6 +1418,12 @@
   }
   .sidebar-entity-avatar.award-avatar {
     background: linear-gradient(135deg, #b45309 0%, #eab308 100%);
+  }
+  .laurel-icon-xs {
+    width: 58%;
+    height: 58%;
+    filter: brightness(0) invert(1);
+    pointer-events: none;
   }
   .sidebar-entity-name {
     font-size: 13px;
