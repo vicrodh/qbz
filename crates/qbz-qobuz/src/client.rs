@@ -819,31 +819,41 @@ impl QobuzClient {
 
         let response: Value = serde_json::from_str(&body_text)?;
 
-        if let Some(obj) = response.as_object() {
-            log::info!(
-                "[API] get_release_watch response keys: {:?}",
-                obj.keys().collect::<Vec<_>>()
+        // Shape is V2GenericListDto<AlbumDto> per x20/b.java — a thin
+        // pagination envelope: {has_more: bool, items: [...]}. No total/
+        // offset/limit fields are returned. We only need items for the UI
+        // and the caller already knows the offset/limit it asked for, so
+        // we project onto SearchResultsPage<Album> to stay compatible with
+        // the rest of the album-list plumbing.
+        let items_value = response.get("items").cloned().unwrap_or(Value::Null);
+        let items: Vec<Album> = serde_json::from_value(items_value).map_err(|e| {
+            log::warn!(
+                "[API] get_release_watch items parse error: {}. Body (first 600 chars): {}",
+                e,
+                body_text.chars().take(600).collect::<String>()
             );
-        }
+            ApiError::ApiResponse(format!("get_release_watch items parse: {}", e))
+        })?;
 
-        // Response is V2GenericListDto<AlbumDto> per x20/b.java. Qobuz
-        // wraps paginated album lists under `albums` by convention; try that
-        // first, fall back to root.
-        let page_value = response.get("albums").cloned().unwrap_or(response);
-        match serde_json::from_value::<SearchResultsPage<Album>>(page_value) {
-            Ok(page) => Ok(page),
-            Err(e) => {
-                log::warn!(
-                    "[API] get_release_watch response did not match SearchResultsPage<Album>: {}. Body (first 600 chars): {}",
-                    e,
-                    body_text.chars().take(600).collect::<String>()
-                );
-                Err(ApiError::ApiResponse(format!(
-                    "get_release_watch deserialize: {}",
-                    e
-                )))
-            }
-        }
+        let has_more = response
+            .get("has_more")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        let total_hint = if has_more {
+            // We don't know the real total; signal "at least one more page"
+            // by bumping past the items we have.
+            offset + items.len() as u32 + 1
+        } else {
+            offset + items.len() as u32
+        };
+
+        Ok(SearchResultsPage::<Album> {
+            items,
+            total: total_hint,
+            offset,
+            limit,
+        })
     }
 
     /// Get list of genres
