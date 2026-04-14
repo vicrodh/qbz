@@ -3,7 +3,7 @@
   import { cmdAddTracksToQueue, cmdAddTracksToQueueNext } from '$lib/services/commandRouter';
   import { resolveArtistImage } from '$lib/stores/customArtistImageStore';
   import { onMount, onDestroy } from 'svelte';
-  import { ArrowLeft, Disc3, Play, Music, Ellipsis, Heart, User, ChevronDown, ChevronUp, SquareCheckBig } from 'lucide-svelte';
+  import { ArrowLeft, Disc3, Play, Music, Ellipsis, Heart, User, UserPlus, Check, ChevronDown, ChevronUp, SquareCheckBig } from 'lucide-svelte';
   import BulkActionBar from '../BulkActionBar.svelte';
   import { t } from '$lib/i18n';
   import AlbumCard from '../AlbumCard.svelte';
@@ -1266,22 +1266,23 @@
                       onerror={() => handleLabelImageError(item.id)}
                     />
                   {/if}
-                  <button
-                    class="label-card-fav"
-                    class:is-favorite={itemFav}
-                    onclick={(e) => toggleLabelFavoriteById(e, item.id)}
-                    disabled={itemBusy}
-                    title={itemFav ? $t('label.unfollow') : $t('label.follow')}
-                    aria-label={itemFav ? $t('label.unfollow') : $t('label.follow')}
-                  >
-                    {#if itemFav}
-                      <Heart size={16} fill="var(--accent-primary)" color="var(--accent-primary)" />
-                    {:else}
-                      <Heart size={16} />
-                    {/if}
-                  </button>
                 </div>
                 <div class="label-card-name">{item.name}</div>
+                <button
+                  class="label-card-follow-btn"
+                  class:is-following={itemFav}
+                  onclick={(e) => toggleLabelFavoriteById(e, item.id)}
+                  disabled={itemBusy}
+                  aria-label={itemFav ? $t('label.unfollow') : $t('label.follow')}
+                >
+                  {#if itemFav}
+                    <Check size={12} />
+                    <span>{$t('label.followingShort')}</span>
+                  {:else}
+                    <UserPlus size={12} />
+                    <span>{$t('label.followShort')}</span>
+                  {/if}
+                </button>
               </div>
             {/each}
             <div class="spacer"></div>
@@ -1668,35 +1669,36 @@
     text-align: center; overflow: hidden; text-overflow: ellipsis;
     white-space: nowrap; width: 100%;
   }
-  /* Heart overlay on label card image — hidden until card hover, visible
-     persistently when the label is followed so the state is glanceable. */
-  .label-card-fav {
-    position: absolute;
-    top: 6px;
-    right: 6px;
-    z-index: 2;
-    width: 28px;
-    height: 28px;
-    display: flex;
+  /* Pill-shaped Follow/Following button below the label card, matching
+     the mobile app's "Sigue" affordance. */
+  .label-card-follow-btn {
+    display: inline-flex;
     align-items: center;
-    justify-content: center;
-    background: rgba(0, 0, 0, 0.55);
-    color: white;
-    border: none;
-    border-radius: 50%;
+    gap: 6px;
+    padding: 5px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-primary);
+    background: transparent;
+    border: 1px solid var(--text-secondary);
+    border-radius: 999px;
     cursor: pointer;
-    opacity: 0;
-    transition: opacity 150ms ease, background 150ms ease;
+    transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, opacity 150ms ease;
+    white-space: nowrap;
   }
-  .label-card:hover .label-card-fav,
-  .label-card-fav.is-favorite,
-  .label-card-fav:focus-visible {
-    opacity: 1;
+  .label-card-follow-btn:hover:not(:disabled) {
+    background: var(--bg-secondary);
+    border-color: var(--text-primary);
   }
-  .label-card-fav:hover:not(:disabled) {
-    background: rgba(0, 0, 0, 0.75);
+  .label-card-follow-btn.is-following {
+    color: var(--accent-primary);
+    border-color: var(--accent-primary);
   }
-  .label-card-fav:disabled {
+  .label-card-follow-btn.is-following:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
+  }
+  .label-card-follow-btn:disabled {
+    opacity: 0.6;
     cursor: not-allowed;
   }
   .spacer { width: 8px; flex-shrink: 0; }

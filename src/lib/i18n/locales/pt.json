@@ -140,7 +140,9 @@
     "showMore": "Mostrar mais",
     "showLess": "Mostrar menos",
     "follow": "Seguir selo",
-    "unfollow": "Deixar de seguir"
+    "unfollow": "Deixar de seguir",
+    "followShort": "Seguir",
+    "followingShort": "Seguindo"
   },
   "labelReleases": {
     "albumCount": "{count} álbuns",

@@ -140,7 +140,9 @@
     "showMore": "Show more",
     "showLess": "Show less",
     "follow": "Follow label",
-    "unfollow": "Unfollow label"
+    "unfollow": "Unfollow label",
+    "followShort": "Follow",
+    "followingShort": "Following"
   },
   "labelReleases": {
     "albumCount": "{count} albums",
