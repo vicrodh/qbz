@@ -797,27 +797,31 @@ impl QobuzClient {
             .await?;
 
         let status = http_response.status();
-        log::debug!(
+        log::info!(
             "[API] get_release_watch(limit={}, offset={}) status={}",
             limit,
             offset,
             status
         );
 
+        // Capture body as text first so we can log it on unexpected shape
+        // regardless of JSON parse success.
+        let body_text = http_response.text().await?;
         if !status.is_success() {
+            log::warn!(
+                "[API] get_release_watch non-success body (first 400 chars): {}",
+                body_text.chars().take(400).collect::<String>()
+            );
             return Err(ApiError::ApiResponse(format!(
                 "get_release_watch status {}",
                 status
             )));
         }
 
-        let response: Value = http_response.json().await?;
+        let response: Value = serde_json::from_str(&body_text)?;
 
-        // Log the response shape once so we can adjust the unwrap target if
-        // Qobuz returns something unexpected (empty follows can yield
-        // {albums: {items: []}} or {items: []} depending on deployment).
         if let Some(obj) = response.as_object() {
-            log::debug!(
+            log::info!(
                 "[API] get_release_watch response keys: {:?}",
                 obj.keys().collect::<Vec<_>>()
             );
@@ -826,7 +830,20 @@ impl QobuzClient {
         // Typical Qobuz paginated album wrapper: {albums: {items, total, ...}}.
         // Fall back to root-level items if the server flattened it.
         let page_value = response.get("albums").cloned().unwrap_or(response);
-        Ok(serde_json::from_value(page_value)?)
+        match serde_json::from_value::<SearchResultsPage<Album>>(page_value) {
+            Ok(page) => Ok(page),
+            Err(e) => {
+                log::warn!(
+                    "[API] get_release_watch response did not match SearchResultsPage<Album>: {}. Body (first 600 chars): {}",
+                    e,
+                    body_text.chars().take(600).collect::<String>()
+                );
+                Err(ApiError::ApiResponse(format!(
+                    "get_release_watch deserialize: {}",
+                    e
+                )))
+            }
+        }
     }
 
     /// Get list of genres
