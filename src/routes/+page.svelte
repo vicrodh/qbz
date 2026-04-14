@@ -5331,6 +5331,7 @@
           onReDownloadAlbum={reDownloadAlbumById}
           onAddAlbumToPlaylist={addAlbumToPlaylistById}
           onNavigateAwardAlbums={handleNavigateAwardAlbums}
+          onAwardClick={handleAwardClick}
           {downloadStateVersion}
           onArtistClick={handleArtistClick}
         />

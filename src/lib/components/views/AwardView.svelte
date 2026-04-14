@@ -10,6 +10,7 @@
   import { t } from '$lib/i18n';
   import { ArrowLeft, Award as AwardIcon, Heart, LoaderCircle, ArrowRight } from 'lucide-svelte';
   import AlbumCard from '../AlbumCard.svelte';
+  import HorizontalScrollRow from '../HorizontalScrollRow.svelte';
   import type { AwardPageData, QobuzAlbum } from '$lib/types';
   import { formatQuality, getQobuzImage } from '$lib/adapters/qobuzAdapters';
   import {
@@ -49,6 +50,8 @@
     onArtistClick?: (artistId: number) => void;
     /** Navigate to the full paginated listing of this award's albums. */
     onNavigateAwardAlbums?: (awardId: string, awardName: string) => void;
+    /** Navigate into another award from the 'Other awards' carousel. */
+    onAwardClick?: (awardId: string, awardName: string) => void;
   }
 
   let {
@@ -69,7 +72,15 @@
     downloadStateVersion,
     onArtistClick,
     onNavigateAwardAlbums,
+    onAwardClick,
   }: Props = $props();
+
+  interface OtherAward {
+    id: string;
+    name: string;
+    image?: string;
+    magazine?: string;
+  }
 
   const PAGE_SIZE = 20;
 
@@ -80,6 +91,9 @@
   let loading = $state(true);
   let error = $state<string | null>(null);
   let heroImageFailed = $state(false);
+
+  let otherAwards = $state<OtherAward[]>([]);
+  let failedOtherImages = $state<Set<string>>(new Set());
 
   /** Adapts a QobuzAlbum (shape returned by /award/getAlbums) into
    * what AlbumCard consumes. */
@@ -133,6 +147,33 @@
     onNavigateAwardAlbums?.(awardId, displayName);
   }
 
+  /** Populate the 'Other awards' carousel from /award/explore. Filter
+   *  out the current award so we never show "go to the page you're
+   *  already on". */
+  async function loadOtherAwards() {
+    try {
+      const result = await invoke<{ items?: Array<{ id?: string | number; name?: string; image?: string; magazine?: { name?: string } }> }>(
+        'v2_get_award_explore',
+        { limit: 30, offset: 0 }
+      );
+      const items = result.items ?? [];
+      otherAwards = items
+        .filter(it => it?.id != null && it?.name && String(it.id) !== String(awardId))
+        .map(it => ({
+          id: String(it.id),
+          name: it!.name!,
+          image: it!.image ?? undefined,
+          magazine: it!.magazine?.name ?? undefined,
+        }));
+    } catch (err) {
+      console.warn('[AwardView] failed to load other awards:', err);
+    }
+  }
+
+  function handleOtherImageError(id: string) {
+    failedOtherImages = new Set(failedOtherImages).add(id);
+  }
+
   // Subscribe to the favorites store so the Follow button's visual
   // state updates in real time (and from other views that may mutate it).
   let awardFavoritesVersion = $state(0);
@@ -157,6 +198,7 @@
   onMount(() => {
     loadHero();
     loadAlbums();
+    loadOtherAwards();
   });
 
   const displayName = $derived(page?.name ?? awardName ?? '');
@@ -273,6 +315,49 @@
           />
         {/each}
       </div>
+    {/if}
+
+    <!-- Other awards carousel (mirrors mobile's "Más premios" rail). -->
+    {#if otherAwards.length > 0}
+      <section class="other-awards-section">
+        <HorizontalScrollRow title={$t('award.otherAwards')}>
+          {#snippet children()}
+            {#each otherAwards as other (other.id)}
+              {@const imgBroken = failedOtherImages.has(other.id)}
+              <!-- svelte-ignore a11y_click_events_have_key_events -->
+              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <div
+                class="award-mini-card"
+                role="button"
+                tabindex="0"
+                onclick={() => onAwardClick?.(other.id, other.name)}
+              >
+                <div class="award-mini-image-wrapper">
+                  {#if other.image && !imgBroken}
+                    <img
+                      src={other.image}
+                      alt={other.name}
+                      class="award-mini-image"
+                      loading="lazy"
+                      decoding="async"
+                      onerror={() => handleOtherImageError(other.id)}
+                    />
+                  {:else}
+                    <div class="award-mini-placeholder">
+                      <AwardIcon size={32} />
+                    </div>
+                  {/if}
+                </div>
+                <div class="award-mini-name">{other.name}</div>
+                {#if other.magazine}
+                  <div class="award-mini-magazine">{other.magazine}</div>
+                {/if}
+              </div>
+            {/each}
+            <div class="spacer"></div>
+          {/snippet}
+        </HorizontalScrollRow>
+      </section>
     {/if}
   </main>
 </div>
@@ -421,4 +506,62 @@
   }
   .retry-btn:hover { background: var(--bg-secondary); }
   .spacer { width: 8px; flex-shrink: 0; }
+
+  /* Other awards carousel */
+  .other-awards-section {
+    margin-top: 48px;
+  }
+  .award-mini-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    width: 140px;
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 8px;
+  }
+  .award-mini-image-wrapper {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    overflow: hidden;
+    background: var(--bg-tertiary);
+    position: relative;
+  }
+  .award-mini-image { width: 100%; height: 100%; object-fit: cover; }
+  .award-mini-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #b45309 0%, #eab308 100%);
+    color: #fff;
+  }
+  .award-mini-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    line-height: 1.3;
+    width: 100%;
+  }
+  .award-mini-magazine {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    width: 100%;
+  }
 </style>

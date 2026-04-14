@@ -454,8 +454,15 @@
     border-left-color: #8b5cf6;
   }
 
+  /* Press accolades get a solid gold ribbon with dark, readable text —
+     distinct from the Qobuz-branded variants (which stay dark with a
+     coloured left border). */
   .editorial-ribbon.ribbon-press {
-    border-left-color: #ef4444;
+    background: linear-gradient(135deg, #f5c042 0%, #d49511 100%);
+    color: #1f1407;
+    border-left: none;
+    padding-left: 10px;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.15);
   }
 
   .source-badge {
