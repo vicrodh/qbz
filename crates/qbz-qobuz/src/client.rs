@@ -771,9 +771,8 @@ impl QobuzClient {
     /// and awards the user follows. Exposed on mobile/web as "Release Watch"
     /// or "Radar de Novedades".
     ///
-    /// Returns the same `{items, offset, limit, total}` page structure as
-    /// `get_featured_albums`. Requires the user to be authenticated; the
-    /// endpoint uses the follows on the caller's account.
+    /// Requires the user to be authenticated; the endpoint uses the follows
+    /// on the caller's account.
     pub async fn get_release_watch(
         &self,
         limit: u32,
@@ -796,16 +795,61 @@ impl QobuzClient {
         );
         let response: Value = http_response.json().await?;
 
-        // The mobile client calls into /albums/releaseWatch and expects an
-        // `albums` key wrapping the page. If the server changes this someday
-        // (e.g. to `releaseWatch`), fall back transparently.
-        let page = response
-            .get("albums")
-            .or_else(|| response.get("releaseWatch"))
-            .cloned()
-            .unwrap_or(response);
+        // The mobile client's /albums/releaseWatch response shape isn't
+        // documented publicly — it may wrap items in `albums`, `releaseWatch`
+        // or serve a flat page at the root. Try every known shape and log
+        // the top-level keys when we fall through so future breakage is
+        // diagnosable from logs.
+        if let Some(obj) = response.as_object() {
+            log::debug!(
+                "[API] get_release_watch response keys: {:?}",
+                obj.keys().collect::<Vec<_>>()
+            );
+        }
 
-        Ok(serde_json::from_value(page)?)
+        // Candidate wrappers in order of plausibility.
+        let candidates: &[&str] = &["albums", "releaseWatch", "release_watch", "items_albums"];
+        for key in candidates {
+            if let Some(inner) = response.get(*key) {
+                // The wrapper might be the page directly, or an object with
+                // a nested `items` array.
+                if inner.get("items").is_some() {
+                    return Ok(serde_json::from_value(inner.clone())?);
+                }
+                // If it's an array, wrap it into a page manually
+                if let Some(arr) = inner.as_array() {
+                    let page = SearchResultsPage::<Album> {
+                        items: serde_json::from_value(Value::Array(arr.clone()))?,
+                        total: arr.len() as u32,
+                        offset,
+                        limit,
+                    };
+                    return Ok(page);
+                }
+            }
+        }
+
+        // Root-level `{items, total, ...}` shape
+        if response.get("items").is_some() {
+            return Ok(serde_json::from_value(response)?);
+        }
+
+        // Nothing matched — log and return an empty page instead of erroring,
+        // so the UI section just hides rather than killing adjacent loaders.
+        log::warn!(
+            "[API] get_release_watch: unrecognised response shape; returning empty page. Raw body: {}",
+            serde_json::to_string(&response)
+                .unwrap_or_else(|_| "<unserializable>".to_string())
+                .chars()
+                .take(400)
+                .collect::<String>()
+        );
+        Ok(SearchResultsPage::<Album> {
+            items: vec![],
+            total: 0,
+            offset,
+            limit,
+        })
     }
 
     /// Get list of genres
