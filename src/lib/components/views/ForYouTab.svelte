@@ -186,7 +186,16 @@
   // Phase 2: Artists to Follow
   let suggestedArtists = $state<SuggestedArtist[]>([]);
   let loadingSuggestedArtists = $state(false);
-  let forYouLoaded = $state(false);
+
+  // Per-section load guards so a section that depends on a prop (e.g.
+  // topArtists) does not permanently skip loading when the prop is empty
+  // at mount and arrives later.
+  let artistsToFollowLoaded = false;
+  let spotlightLoaded = false;
+  let similarAlbumsLoaded = false;
+  let forgottenLoaded = false;
+  let essentialsLoaded = false;
+  let releaseWatchLoaded = false;
 
   // Phase 2: Spotlight
   let spotlightData = $state<SpotlightData | null>(null);
@@ -269,16 +278,32 @@
     }
   });
 
-  // Load Phase 2+3 sections when component mounts (once)
+  // Sections that do not depend on props fire once at mount.
   onMount(() => {
-    if (!forYouLoaded) {
-      forYouLoaded = true;
+    if (!forgottenLoaded) { forgottenLoaded = true; loadForgottenFavorites(); }
+    if (!essentialsLoaded) { essentialsLoaded = true; loadEssentials(); }
+    if (!releaseWatchLoaded) { releaseWatchLoaded = true; loadReleaseWatch(); }
+  });
+
+  // Sections that consume HomeView-provided props fire as soon as the
+  // relevant prop becomes non-empty. Without this, switching to For You
+  // before Home finishes loading leaves these rails permanently blank.
+  $effect(() => {
+    if (!artistsToFollowLoaded && topArtists.length > 0) {
+      artistsToFollowLoaded = true;
       loadArtistsToFollow();
+    }
+  });
+  $effect(() => {
+    if (!spotlightLoaded && topArtists.length > 0) {
+      spotlightLoaded = true;
       loadSpotlight();
+    }
+  });
+  $effect(() => {
+    if (!similarAlbumsLoaded && recentAlbums.length > 0) {
+      similarAlbumsLoaded = true;
       loadSimilarAlbums();
-      loadForgottenFavorites();
-      loadEssentials();
-      loadReleaseWatch();
     }
   });
 
