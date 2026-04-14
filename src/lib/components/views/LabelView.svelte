@@ -1669,37 +1669,34 @@
     text-align: center; overflow: hidden; text-overflow: ellipsis;
     white-space: nowrap; width: 100%;
   }
-  /* Pill-shaped Follow/Following button below the label card, matching
-     the mobile app's "Sigue" affordance. */
+  /* Follow/Following button below the label card — same shape as the
+     artist Follow button used in ForYouTab (rounded rectangle, 6px). */
   .label-card-follow-btn {
-    display: inline-flex;
+    display: flex;
     align-items: center;
     gap: 6px;
-    padding: 5px 12px;
+    padding: 6px 14px;
     font-size: 12px;
     font-weight: 500;
-    color: var(--text-primary);
+    color: var(--text-secondary);
     background: transparent;
-    border: 1px solid var(--text-secondary);
-    border-radius: 999px;
+    border: 1px solid var(--border-primary);
+    border-radius: 6px;
     cursor: pointer;
     transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, opacity 150ms ease;
     white-space: nowrap;
   }
   .label-card-follow-btn:hover:not(:disabled) {
-    background: var(--bg-secondary);
-    border-color: var(--text-primary);
+    background: var(--bg-tertiary);
+    border-color: var(--text-muted);
   }
   .label-card-follow-btn.is-following {
     color: var(--accent-primary);
     border-color: var(--accent-primary);
   }
-  .label-card-follow-btn.is-following:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
-  }
   .label-card-follow-btn:disabled {
     opacity: 0.6;
-    cursor: not-allowed;
+    cursor: wait;
   }
   .spacer { width: 8px; flex-shrink: 0; }
 </style>
