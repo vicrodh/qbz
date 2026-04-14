@@ -147,7 +147,10 @@ modules:
     build-commands:
       - npm ci
       - export PATH="$PWD/node_modules/.bin:$PATH" && npm run build
-      - export PATH="$PWD/node_modules/.bin:$PATH" && npm run tauri build -- --no-bundle
+      # Flathub policy: no competing auto-updaters. Disable the `updater`
+      # Cargo feature so tauri-plugin-updater / tauri-plugin-process are
+      # not linked into the Flatpak binary.
+      - export PATH="$PWD/node_modules/.bin:$PATH" && npm run tauri build -- --no-bundle -- --no-default-features
       - install -Dm755 src-tauri/target/release/qbz /app/bin/qbz
       - install -Dm644 packaging/flatpak/com.blitzfc.qbz.desktop /app/share/applications/com.blitzfc.qbz.desktop
       - install -Dm644 packaging/flatpak/com.blitzfc.qbz.metainfo.xml /app/share/metainfo/com.blitzfc.qbz.metainfo.xml

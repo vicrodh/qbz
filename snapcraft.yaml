@@ -161,7 +161,9 @@ parts:
 
       # Build frontend
       npm ci
-      npm run tauri build -- --no-bundle
+      # Snap Store policy prohibits competing auto-updaters; disable
+      # the `updater` Cargo feature so tauri-plugin-updater is not linked.
+      npm run tauri build -- --no-bundle -- --no-default-features
 
       # Install binary, desktop file, and icon
       mkdir -p $SNAPCRAFT_PART_INSTALL/bin
