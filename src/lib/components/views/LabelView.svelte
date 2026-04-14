@@ -691,6 +691,22 @@
     await toggleLabelFavorite(labelId);
   }
 
+  // Reactive helpers for arbitrary label IDs (e.g. cards in the More Labels
+  // row). Reading the version triggers re-evaluation when the store mutates.
+  function labelFavReact(id: number): boolean {
+    void labelFavoritesVersion;
+    return isLabelFavorite(id);
+  }
+  function labelTogglingReact(id: number): boolean {
+    void labelFavoritesVersion;
+    return isLabelToggling(id);
+  }
+  async function toggleLabelFavoriteById(event: Event, id: number) {
+    event.stopPropagation();
+    event.preventDefault();
+    await toggleLabelFavorite(id);
+  }
+
   onMount(() => {
     loadLabelPage();
     loadLabelAlbumsAndDescription();
@@ -1231,7 +1247,11 @@
           {#snippet children()}
             {#each moreLabels as item}
               {@const itemImage = parseLabelExploreImage(item)}
-              <button class="label-card" onclick={() => onLabelClick?.(item.id, item.name)}>
+              {@const itemFav = labelFavReact(item.id)}
+              {@const itemBusy = labelTogglingReact(item.id)}
+              <!-- svelte-ignore a11y_click_events_have_key_events -->
+              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <div class="label-card" onclick={() => onLabelClick?.(item.id, item.name)} role="button" tabindex="0">
                 <div class="label-card-image-wrapper">
                   <div class="label-card-image-placeholder">
                     <Disc3 size={36} />
@@ -1246,9 +1266,23 @@
                       onerror={() => handleLabelImageError(item.id)}
                     />
                   {/if}
+                  <button
+                    class="label-card-fav"
+                    class:is-favorite={itemFav}
+                    onclick={(e) => toggleLabelFavoriteById(e, item.id)}
+                    disabled={itemBusy}
+                    title={itemFav ? $t('label.unfollow') : $t('label.follow')}
+                    aria-label={itemFav ? $t('label.unfollow') : $t('label.follow')}
+                  >
+                    {#if itemFav}
+                      <Heart size={16} fill="var(--accent-primary)" color="var(--accent-primary)" />
+                    {:else}
+                      <Heart size={16} />
+                    {/if}
+                  </button>
                 </div>
                 <div class="label-card-name">{item.name}</div>
-              </button>
+              </div>
             {/each}
             <div class="spacer"></div>
           {/snippet}
@@ -1633,6 +1667,37 @@
     font-size: 13px; font-weight: 500; color: var(--text-primary);
     text-align: center; overflow: hidden; text-overflow: ellipsis;
     white-space: nowrap; width: 100%;
+  }
+  /* Heart overlay on label card image — hidden until card hover, visible
+     persistently when the label is followed so the state is glanceable. */
+  .label-card-fav {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    z-index: 2;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.55);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 150ms ease, background 150ms ease;
+  }
+  .label-card:hover .label-card-fav,
+  .label-card-fav.is-favorite,
+  .label-card-fav:focus-visible {
+    opacity: 1;
+  }
+  .label-card-fav:hover:not(:disabled) {
+    background: rgba(0, 0, 0, 0.75);
+  }
+  .label-card-fav:disabled {
+    cursor: not-allowed;
   }
   .spacer { width: 8px; flex-shrink: 0; }
 </style>
