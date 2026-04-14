@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
+  import { listen } from '@tauri-apps/api/event';
   import ViewTransition from '../ViewTransition.svelte';
   import { getCurrentWebview } from '@tauri-apps/api/webview';
   import { writeText as copyToClipboard } from '@tauri-apps/plugin-clipboard-manager';
@@ -1453,6 +1454,15 @@
       loadAlsaPlugins()
     ]).then(() => loadAudioSettings());
 
+    // Re-sync audio settings when the backend notifies us of a mutation
+    // outside this view (e.g., set_manual_offline flipping stream_first_track
+    // per issue #279).
+    const unlistenAudioSettings = listen('audio-settings-changed', () => {
+      loadAudioSettings().catch((err) => {
+        console.warn('[Settings] Failed to reload audio settings after event:', err);
+      });
+    });
+
     // Load Last.fm state
     loadLastfmState();
 
@@ -1578,6 +1588,7 @@
       if (plexAuthPollTimer) {
         clearInterval(plexAuthPollTimer);
       }
+      unlistenAudioSettings.then((fn) => fn()).catch(() => {});
       unsubscribeOffline();
       unsubscribeDegraded();
       unsubscribeZoom();

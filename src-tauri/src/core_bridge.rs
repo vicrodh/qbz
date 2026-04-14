@@ -498,6 +498,19 @@ impl CoreBridge {
             .map_err(|e| e.to_string())
     }
 
+    /// Get Release Watch — releases from followed artists/labels/awards.
+    pub async fn get_release_watch(
+        &self,
+        release_type: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<SearchResultsPage<Album>, String> {
+        self.core
+            .get_release_watch(release_type, limit, offset)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
     /// Get artist page (full artist details with albums, tracks, similar)
     pub async fn get_artist_page(
         &self,

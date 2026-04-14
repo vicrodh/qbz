@@ -258,6 +258,58 @@ pub async fn v2_get_featured_albums(
     Ok(results)
 }
 
+/// Get Release Watch (V2 — releases from followed artists/labels/awards).
+///
+/// Calls `/favorite/getNewReleases?type=...` — the same endpoint the mobile
+/// client uses for its "Radar de Novedades" feed. `release_type` defaults to
+/// `"artists"` (the mobile default tab) and accepts `"labels"` or `"awards"`.
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_get_release_watch(
+    releaseType: Option<String>,
+    limit: Option<u32>,
+    offset: Option<u32>,
+    bridge: State<'_, CoreBridgeState>,
+    blacklist_state: State<'_, BlacklistState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<SearchResultsPage<Album>, RuntimeError> {
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
+
+    let release_type = releaseType.unwrap_or_else(|| "artists".to_string());
+    let limit = limit.unwrap_or(20);
+    let offset = offset.unwrap_or(0);
+    log::info!(
+        "[V2] get_release_watch: type={}, limit={}, offset={}",
+        release_type,
+        limit,
+        offset
+    );
+
+    let bridge = bridge.get().await;
+    let mut results = bridge
+        .get_release_watch(&release_type, limit, offset)
+        .await
+        .map_err(RuntimeError::Internal)?;
+
+    let original_count = results.items.len();
+    results
+        .items
+        .retain(|album| !blacklist_state.is_blacklisted(album.artist.id));
+    let filtered_count = original_count - results.items.len();
+    if filtered_count > 0 {
+        log::debug!(
+            "[V2/Blacklist] Filtered {} albums from release watch",
+            filtered_count
+        );
+        results.total = results.total.saturating_sub(filtered_count as u32);
+    }
+
+    Ok(results)
+}
+
 /// Get artist page (V2 - uses QbzCore)
 #[tauri::command]
 #[allow(non_snake_case)]

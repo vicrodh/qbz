@@ -46,6 +46,11 @@ pub mod paths {
     pub const FAVORITE_GET_USER_FAVORITES: &str = "/favorite/getUserFavorites";
     pub const FAVORITE_CREATE: &str = "/favorite/create";
     pub const FAVORITE_DELETE: &str = "/favorite/delete";
+    // New releases from followed artists / labels / awards — the "Radar de
+    // Novedades" feed in the mobile Qobuz client. Path confirmed in
+    // qbz-nix-docs/qobuz-api-inferred-openapi-v9.7.0.3.yaml
+    // (source: x20/b.java Retrofit interface).
+    pub const FAVORITE_GET_NEW_RELEASES: &str = "/favorite/getNewReleases";
 
     // Label
     pub const LABEL_GET: &str = "/label/get";

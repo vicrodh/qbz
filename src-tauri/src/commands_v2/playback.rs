@@ -149,24 +149,54 @@ fn spawn_v2_prefetch_with_hw_check(
                 }
             };
 
-            // Determine effective quality (may be downgraded for hardware compatibility)
+            // Determine effective quality (may be downgraded for hardware compatibility).
+            // Iterates down the quality ladder until the returned stream sample rate is
+            // something the hardware can play. Both UltraHiRes and HiRes can yield
+            // 96 kHz streams, so a single UltraHiRes→HiRes step is not enough for
+            // DACs that top out at 48 kHz — we continue to Lossless (44.1 kHz) if needed.
             let effective_quality = {
                 let mut eq = quality;
                 #[cfg(target_os = "linux")]
                 if let Some(ref device_id) = hw_device_clone {
-                    if quality == Quality::UltraHiRes {
-                        let bridge_guard = bridge_clone.read().await;
-                        if let Some(bridge) = bridge_guard.as_ref() {
-                            if let Ok(stream_url) = bridge.get_stream_url(track_id, quality).await {
-                                let track_rate = (stream_url.sampling_rate * 1000.0) as u32;
-                                if qbz_audio::device_supports_sample_rate(device_id, track_rate)
-                                    == Some(false)
-                                {
-                                    log::info!(
-                                        "[V2/PREFETCH] Track {} at {}Hz incompatible with hardware, prefetching at Hi-Res",
-                                        track_id, track_rate
-                                    );
-                                    eq = Quality::HiRes;
+                    let bridge_guard = bridge_clone.read().await;
+                    if let Some(bridge) = bridge_guard.as_ref() {
+                        if let Ok(initial_url) = bridge.get_stream_url(track_id, quality).await {
+                            let track_rate = (initial_url.sampling_rate * 1000.0) as u32;
+                            if qbz_audio::device_supports_sample_rate(device_id, track_rate)
+                                == Some(false)
+                            {
+                                for try_quality in [Quality::HiRes, Quality::Lossless] {
+                                    if try_quality >= quality {
+                                        continue;
+                                    }
+                                    match bridge.get_stream_url(track_id, try_quality).await {
+                                        Ok(alt_url) => {
+                                            let alt_rate =
+                                                (alt_url.sampling_rate * 1000.0) as u32;
+                                            if qbz_audio::device_supports_sample_rate(
+                                                device_id, alt_rate,
+                                            ) != Some(false)
+                                            {
+                                                log::info!(
+                                                    "[V2/PREFETCH] Track {} at {}Hz incompatible with hardware, prefetching at {:?} ({}Hz)",
+                                                    track_id,
+                                                    track_rate,
+                                                    try_quality,
+                                                    alt_rate
+                                                );
+                                                eq = try_quality;
+                                                break;
+                                            }
+                                        }
+                                        Err(e) => {
+                                            log::debug!(
+                                                "[V2/PREFETCH] Failed to probe {:?} for track {}: {}",
+                                                try_quality,
+                                                track_id,
+                                                e
+                                            );
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -417,6 +447,13 @@ pub async fn v2_play_next_gapless(
         };
         if let Some(file_path) = cached_path {
             let path = std::path::Path::new(&file_path);
+            if !path.exists() {
+                log::warn!(
+                    "[V2/GAPLESS/CACHE STALE] Track {} DB entry points to missing file {:?}",
+                    track_id,
+                    path
+                );
+            }
             if path.exists() {
                 log::info!("[V2/GAPLESS] Track {} from OFFLINE cache", track_id);
                 let audio_data = std::fs::read(path).map_err(|e| {
@@ -559,6 +596,13 @@ pub async fn v2_prefetch_track(
             };
             if let Some(file_path) = cached_path {
                 let path = std::path::Path::new(&file_path);
+                if !path.exists() {
+                    log::warn!(
+                        "[V2/PREFETCH/CACHE STALE] Track {} DB entry points to missing file {:?}",
+                        track_id,
+                        path
+                    );
+                }
                 if path.exists() {
                     log::info!("[V2] Prefetching track {} from offline cache", track_id);
                     let audio_data = std::fs::read(path).map_err(|e| {
@@ -628,6 +672,7 @@ pub async fn v2_play_track(
     bridge: State<'_, CoreBridgeState>,
     offline_cache: State<'_, OfflineCacheState>,
     audio_settings: State<'_, AudioSettingsState>,
+    offline_state: State<'_, crate::offline::OfflineState>,
     app_state: State<'_, AppState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<V2PlayTrackResult, RuntimeError> {
@@ -675,14 +720,34 @@ pub async fn v2_play_track(
         final_quality
     };
 
-    // Check streaming settings
+    // Manual offline mode — read once up front so the cache-miss branch
+    // below knows whether to fail loudly instead of silently reaching for
+    // the network (issue #279).
+    let manual_offline_mode = {
+        let guard = offline_state
+            .store
+            .lock()
+            .map_err(|e| RuntimeError::Internal(format!("Offline state lock error: {}", e)))?;
+        guard
+            .as_ref()
+            .and_then(|s| s.get_settings().ok())
+            .map(|s| s.manual_offline_mode)
+            .unwrap_or(false)
+    };
+
+    // Check streaming settings. In manual offline mode we also force
+    // stream-first off at read time in case the set_manual_offline command
+    // raced with a fresh settings write.
     let (stream_first_enabled, streaming_only) = {
         let guard = audio_settings
             .store
             .lock()
             .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
         match guard.as_ref().and_then(|s| s.get_settings().ok()) {
-            Some(s) => (s.stream_first_track, s.streaming_only),
+            Some(s) => {
+                let stream_first = s.stream_first_track && !manual_offline_mode;
+                (stream_first, s.streaming_only)
+            }
             None => (false, false),
         }
     };
@@ -743,6 +808,16 @@ pub async fn v2_play_track(
         };
         if let Some(file_path) = cached_path {
             let path = std::path::Path::new(&file_path);
+            if !path.exists() {
+                // DB said cached, disk says no. Without this log the bug is
+                // invisible — the app silently reaches for the network. See
+                // issue #279.
+                log::warn!(
+                    "[V2/CACHE STALE] Track {} DB entry points to missing file {:?} — entry is orphaned (filesystem moved/unmounted/cleaned?)",
+                    track_id,
+                    path
+                );
+            }
             if path.exists() {
                 log::info!(
                     "[V2/CACHE HIT] Track {} from OFFLINE cache: {:?}",
@@ -894,6 +969,23 @@ pub async fn v2_play_track(
         );
     }
 
+    // Offline guard: if the user has manual offline mode enabled and we got
+    // this far (meaning no cache had a usable hit), refuse to reach the
+    // network. Returning an explicit error lets the frontend show a clear
+    // "not available offline" toast instead of streaming invisibly — that
+    // silent fallback was the root of issue #279.
+    //
+    // If we have a low-quality fallback in memory we play that instead; the
+    // user at least hears something, which is better than nothing, and a
+    // partial match is a real offline cache hit (just at a degraded tier).
+    if manual_offline_mode && low_quality_fallback.is_none() {
+        log::warn!(
+            "[V2/OFFLINE] Track {} not in any cache and manual offline mode is ON — refusing network fetch",
+            track_id
+        );
+        return Err(RuntimeError::TrackNotAvailableOffline);
+    }
+
     // Try CMAF streaming pipeline (Akamai CDN, encrypted segments)
     // Only the init segment is fetched synchronously; audio segments stream in background.
     log::info!("[V2/CMAF] Attempting CMAF streaming for track {}", track_id);
@@ -1040,25 +1132,49 @@ pub async fn v2_play_track(
     );
 
     // Smart quality downgrade for ALSA Direct: if the hardware doesn't support
-    // the track's sample rate, re-request at a lower quality that IS supported.
-    // This avoids resampling and keeps bit-perfect playback.
+    // the track's sample rate, re-request at progressively lower qualities until
+    // one returns a stream the DAC can play. Both UltraHiRes and HiRes may yield
+    // 96 kHz content, so a single downgrade step is not always enough (e.g., a
+    // 48 kHz-only DAC requires falling through to Lossless at 44.1 kHz).
     if let Some(ref device_id) = hw_device_id {
-        if final_quality == Quality::UltraHiRes {
-            let track_rate = (stream_url.sampling_rate * 1000.0) as u32;
-            if qbz_audio::device_supports_sample_rate(device_id, track_rate) == Some(false) {
-                log::info!(
-                    "[V2/Quality] Hardware doesn't support {}Hz, downgrading to Hi-Res",
-                    track_rate
-                );
-                stream_url = bridge_guard
-                    .get_stream_url(track_id, Quality::HiRes)
-                    .await
-                    .map_err(RuntimeError::Internal)?;
-                log::info!(
-                    "[V2/Quality] Got fallback stream URL (format_id={}, rate={}kHz)",
-                    stream_url.format_id,
-                    stream_url.sampling_rate
-                );
+        let track_rate = (stream_url.sampling_rate * 1000.0) as u32;
+        if qbz_audio::device_supports_sample_rate(device_id, track_rate) == Some(false) {
+            log::info!(
+                "[V2/Quality] Hardware doesn't support {}Hz, searching for compatible quality tier",
+                track_rate
+            );
+            for try_quality in [Quality::HiRes, Quality::Lossless] {
+                if try_quality >= final_quality {
+                    continue;
+                }
+                match bridge_guard.get_stream_url(track_id, try_quality).await {
+                    Ok(alt_url) => {
+                        let alt_rate = (alt_url.sampling_rate * 1000.0) as u32;
+                        if qbz_audio::device_supports_sample_rate(device_id, alt_rate)
+                            != Some(false)
+                        {
+                            log::info!(
+                                "[V2/Quality] Falling back to {:?} ({}kHz) for hardware compatibility",
+                                try_quality,
+                                alt_url.sampling_rate
+                            );
+                            stream_url = alt_url;
+                            break;
+                        }
+                        log::debug!(
+                            "[V2/Quality] {:?} returns {}Hz — still incompatible, trying next tier",
+                            try_quality,
+                            alt_rate
+                        );
+                    }
+                    Err(e) => {
+                        log::warn!(
+                            "[V2/Quality] Failed to probe {:?} stream URL: {}",
+                            try_quality,
+                            e
+                        );
+                    }
+                }
             }
         }
     }

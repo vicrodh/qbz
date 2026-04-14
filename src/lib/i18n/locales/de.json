@@ -75,7 +75,8 @@
     "mostStreamed": "Beliebte Alben",
     "favoriteAlbums": "Mehr von Favoriten",
     "recentAlbums": "Kürzlich gespielt",
-    "topArtists": "Ihre Top-Künstler"
+    "topArtists": "Ihre Top-Künstler",
+    "releaseWatch": "Release-Radar"
   },
   "discover": {
     "newReleases": "Neuerscheinungen",
@@ -91,7 +92,11 @@
     "pressAccolades": "Presseauszeichnungen",
     "qobuzPlaylists": "Qobuz-Playlists",
     "searchPlaylistsPlaceholder": "Playlists suchen...",
-    "noPlaylistResults": "Keine Playlists gefunden"
+    "noPlaylistResults": "Keine Playlists gefunden",
+    "releaseWatch": {
+      "title": "Release-Radar",
+      "subtitle": "Die neuesten Releases der Künstler, Labels und Auszeichnungen, denen Sie folgen."
+    }
   },
   "search": {
     "title": "Suchen",
@@ -621,6 +626,7 @@
     "castToDevice": "An Gerät übertragen",
     "castingManage": "Casting – klicken, um zu verwalten",
     "miniPlayer": "Mini-Player",
+    "moreControls": "Weitere Steuerelemente",
     "fullScreen": "Immersiv-Modus",
     "exitFullScreen": "Immersiv-Modus beenden",
     "maximize": "Maximieren",
@@ -687,6 +693,9 @@
       "output": "Ausgabe",
       "resampled": "Vom System resampled",
       "qualityAdjusted": "Qualität für Gerätekompatibilität angepasst — bit-perfekt, kein Resampling",
+      "plughwFallback": "Von ALSA resampelt (plughw)",
+      "plughwFix": "Der DAC unterstützt diese Abtastrate nicht nativ. Wählen Sie eine Quelle mit niedrigerer Rate oder einen DAC mit breiterer Unterstützung.",
+      "bitPerfect": "Bit-perfekt: direkte Hardware-Ausgabe",
       "fix": "Aktiviere DAC Passthrough oder Exklusivmodus in den Einstellungen"
     },
     "stereo": "Stereo",
@@ -1687,6 +1696,7 @@
     "someLocal": "Teilweise offline verfügbar",
     "notAvailable": "Offline nicht verfügbar",
     "trackNotAvailable": "Dieser Titel ist offline nicht verfügbar",
+    "trackNotAvailableOffline": "\"{title}\" ist nicht für die Offline-Wiedergabe gespeichert",
     "featureDisabled": "Diese Funktion erfordert eine Internetverbindung",
     "startWithoutLogin": "Offline starten (kein Zugriff auf Qobuz™-Dienste)",
     "noPreviousSession": "Sie müssen sich mindestens einmal anmelden, bevor Sie den Offline-Modus verwenden können. Stellen Sie eine Internetverbindung her und melden Sie sich an.",

@@ -75,7 +75,8 @@
     "mostStreamed": "Top albums",
     "favoriteAlbums": "Plus de favoris",
     "recentAlbums": "Récemment écouté",
-    "topArtists": "Vos artistes favoris"
+    "topArtists": "Vos artistes favoris",
+    "releaseWatch": "Radar des sorties"
   },
   "discover": {
     "newReleases": "Nouveautés",
@@ -91,7 +92,11 @@
     "pressAccolades": "Distinctions de la presse",
     "qobuzPlaylists": "Playlists Qobuz",
     "searchPlaylistsPlaceholder": "Rechercher des playlists...",
-    "noPlaylistResults": "Aucune playlist trouvée"
+    "noPlaylistResults": "Aucune playlist trouvée",
+    "releaseWatch": {
+      "title": "Radar des sorties",
+      "subtitle": "Sorties des artistes, labels et récompenses que vous suivez."
+    }
   },
   "search": {
     "title": "Recherche",
@@ -621,6 +626,7 @@
     "castToDevice": "Caster vers un appareil",
     "castingManage": "Casting - Cliquez pour gérer",
     "miniPlayer": "Mini lecteur",
+    "moreControls": "Plus de commandes",
     "fullScreen": "Mode Immersif",
     "exitFullScreen": "Quitter le Mode Immersif",
     "maximize": "Agrandir",
@@ -687,6 +693,9 @@
       "output": "Sortie",
       "resampled": "Rééchantillonné par le système",
       "qualityAdjusted": "Qualité ajustée pour compatibilité — bit-perfect, sans rééchantillonnage",
+      "plughwFallback": "Rééchantillonné par ALSA (plughw)",
+      "plughwFix": "Le DAC ne prend pas en charge cette fréquence nativement. Choisissez une source à fréquence plus basse ou un DAC avec un support plus large.",
+      "bitPerfect": "Bit-perfect : sortie matérielle directe",
       "fix": "Activez DAC Passthrough ou Mode Exclusif dans les Paramètres"
     },
     "stereo": "Stéréo",
@@ -1687,6 +1696,7 @@
     "someLocal": "Partiellement disponible hors ligne",
     "notAvailable": "Non disponible hors ligne",
     "trackNotAvailable": "Ce titre n'est pas disponible hors ligne",
+    "trackNotAvailableOffline": "\"{title}\" n'est pas enregistré pour la lecture hors ligne",
     "featureDisabled": "Cette fonctionnalité nécessite une connexion Internet",
     "startWithoutLogin": "Démarrer hors ligne (pas d'accès aux services Qobuz™)",
     "noPreviousSession": "Vous devez vous connecter au moins une fois avant d'utiliser le mode hors ligne. Connectez-vous à Internet et identifiez-vous pour créer votre profil.",

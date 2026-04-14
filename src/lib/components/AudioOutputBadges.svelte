@@ -4,6 +4,11 @@
   import { t } from 'svelte-i18n';
   import { getDevicePrettyName, isExternalDevice } from '$lib/utils/audioDeviceNames';
   import { isCasting, getConnectedDevice, getConnectedProtocol, subscribe as subscribeCast } from '$lib/stores/castStore';
+  import {
+    subscribe as subscribePlayer,
+    getIsPlaying,
+    getCurrentTrack,
+  } from '$lib/stores/playerStore';
 
   interface AudioSettings {
     output_device: string | null;
@@ -168,18 +173,39 @@
     }
   });
 
-  // Note: Removed the $effect that reloaded status when is_playing changed.
-  // It caused an infinite loop because loadStatus() updates outputStatus,
-  // which re-triggers the effect. The mouseenter handler and polling are sufficient.
+  // Refresh the badges on two player-store edges:
+  //  1) is_playing goes false → true (playback starts)
+  //  2) current_track.id changes (new track)
+  //
+  // Using edge-detection (not every subscribe notification) avoids the
+  // infinite loop that killed the previous `$effect` approach: loadStatus()
+  // writes outputStatus which itself would re-trigger a naive effect that
+  // watched is_playing. The player store's is_playing / track_id don't get
+  // touched by loadStatus(), so reacting to them is loop-safe.
+  let prevIsPlaying = false;
+  let prevTrackId: number | null = null;
 
   onMount(() => {
     loadStatus();
-    
+    prevIsPlaying = getIsPlaying();
+    prevTrackId = getCurrentTrack()?.id ?? null;
+
     // Subscribe to cast state
     const unsubscribeCast = subscribeCast(() => {
       castConnected = isCasting();
       castDeviceName = getConnectedDevice()?.name ?? null;
       castProtocol = getConnectedProtocol();
+    });
+
+    // Refresh when playback state transitions matter
+    const unsubscribePlayer = subscribePlayer(() => {
+      const nowPlaying = getIsPlaying();
+      const nowTrackId = getCurrentTrack()?.id ?? null;
+      if ((nowPlaying && !prevIsPlaying) || nowTrackId !== prevTrackId) {
+        loadStatus();
+      }
+      prevIsPlaying = nowPlaying;
+      prevTrackId = nowTrackId;
     });
 
     // Lightweight polling: update hardware status + output device name
@@ -203,6 +229,7 @@
     return () => {
       clearInterval(pollInterval);
       unsubscribeCast();
+      unsubscribePlayer();
     };
   });
 </script>

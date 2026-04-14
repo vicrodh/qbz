@@ -357,8 +357,25 @@ export async function playTrack(
     console.error('Failed to play track:', err);
     dismissBuffering();
 
-    // Check if track is unavailable on Qobuz
+    // Check for offline-mode refusal first. The backend returns
+    // RuntimeError::TrackNotAvailableOffline when manual offline is on and
+    // the track has no local copy — see issue #279. Tauri serializes typed
+    // errors with the variant name as `code`; we match either the JSON
+    // payload or the stringified form depending on how Tauri round-trips it.
     const errorStr = String(err);
+    const isOfflineUnavailable =
+      errorStr.includes('TrackNotAvailableOffline') ||
+      (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'TrackNotAvailableOffline');
+    if (isOfflineUnavailable) {
+      const { get } = await import('svelte/store');
+      const { t } = await import('$lib/i18n');
+      const msg = get(t)('offline.trackNotAvailableOffline', { values: { title: track.title } });
+      showToast(msg, 'error');
+      setIsPlaying(false);
+      return false;
+    }
+
+    // Check if track is unavailable on Qobuz
     if (errorStr.includes('no longer available') || errorStr.includes('TrackUnavailable')) {
       // Mark track as unavailable for future reference
       markTrackUnavailable(track.id);

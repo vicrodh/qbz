@@ -210,6 +210,11 @@
   let essentialsAlbums = $state<AlbumCardData[]>([]);
   let loadingEssentials = $state(false);
 
+  // Release Watch — the Qobuz mobile "Radar de Novedades" feed: new releases
+  // from artists, labels, and awards the user follows.
+  let releaseWatchAlbums = $state<AlbumCardData[]>([]);
+  let loadingReleaseWatch = $state(false);
+
   // Radio Stations: mix of 3 recent + 3 favorites + 3 top-artist albums, no dupes
   let radioAlbums = $state<AlbumCardData[]>([]);
   let radioBuilt = false;
@@ -273,8 +278,37 @@
       loadSimilarAlbums();
       loadForgottenFavorites();
       loadEssentials();
+      loadReleaseWatch();
     }
   });
+
+  async function loadReleaseWatch() {
+    loadingReleaseWatch = true;
+    try {
+      const result = await invoke<{ items: AlbumSuggestResult[]; total: number }>(
+        'v2_get_release_watch',
+        { limit: 20, offset: 0 }
+      );
+      releaseWatchAlbums = (result.items || []).map(album => ({
+        id: album.id,
+        artwork: album.image?.large || album.image?.small || '',
+        title: album.title,
+        artist: album.artist?.name || '',
+        artistId: album.artist?.id,
+        genre: album.genre?.name || '',
+        quality: formatQuality(
+          album.hires,
+          album.maximum_bit_depth,
+          album.maximum_sampling_rate
+        ),
+        releaseDate: album.release_date_original
+      }));
+    } catch (err) {
+      console.error('Failed to load release watch:', err);
+    } finally {
+      loadingReleaseWatch = false;
+    }
+  }
 
   async function loadArtistsToFollow() {
     if (topArtists.length === 0) return;
@@ -845,6 +879,56 @@
     </button>
   </div>
 </div>
+
+<!-- Release Watch — mobile "Radar de Novedades": new releases from
+     followed artists/labels/awards. Placed right after Your Mixes so
+     the personal-feed sections sit together at the top of For You. -->
+{#if loadingReleaseWatch}
+  <div class="skeleton-section">
+    <div class="skeleton-title"></div>
+    <div class="skeleton-row">
+      {#each { length: 6 } as _}<div class="skeleton-card"></div>{/each}
+    </div>
+  </div>
+{:else if releaseWatchAlbums.length > 0}
+  <HorizontalScrollRow>
+    {#snippet header()}
+      <div class="section-header-col">
+        <h2 class="section-title">{$t('home.releaseWatch')}</h2>
+        <p class="section-subtitle">{$t('discover.releaseWatch.subtitle')}</p>
+      </div>
+    {/snippet}
+    {#snippet children()}
+      {#each releaseWatchAlbums as album}
+        <AlbumCard
+          albumId={album.id}
+          artwork={album.artwork}
+          title={album.title}
+          artist={album.artist}
+          artistId={album.artistId}
+          onArtistClick={onArtistClick}
+          genre={album.genre}
+          releaseDate={album.releaseDate}
+          size="large"
+          quality={album.quality}
+          onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
+          onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
+          onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
+          onAddAlbumToPlaylist={onAddAlbumToPlaylist ? () => onAddAlbumToPlaylist(album.id) : undefined}
+          onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
+          onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
+          onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
+          isAlbumFullyDownloaded={isAlbumDownloaded(album.id)}
+          onOpenContainingFolder={onOpenAlbumFolder ? () => onOpenAlbumFolder(album.id) : undefined}
+          onReDownloadAlbum={onReDownloadAlbum ? () => onReDownloadAlbum(album.id) : undefined}
+          {downloadStateVersion}
+          onclick={() => { onAlbumClick?.(album.id); loadAlbumDownloadStatus(album.id); }}
+        />
+      {/each}
+      <div class="spacer"></div>
+    {/snippet}
+  </HorizontalScrollRow>
+{/if}
 
 <!-- Radio Stations -->
 {#if loadingRecentAlbums || loadingFavoriteAlbums}
@@ -1771,7 +1855,6 @@
     content: '';
     position: absolute;
     inset: -40%;
-    will-change: transform;
   }
 
   .mix-gradient-daily::before {
@@ -1782,7 +1865,6 @@
       radial-gradient(ellipse at 70% 60%, rgba(255, 200, 50, 0.4) 0%, transparent 50%),
       radial-gradient(ellipse at 20% 80%, rgba(255, 140, 0, 0.5) 0%, transparent 60%),
       linear-gradient(135deg, #e8a020 0%, #d4781a 30%, #c45e18 60%, #a04010 100%);
-    animation: silk-daily 30s ease-in-out infinite alternate;
   }
 
   .mix-gradient-weekly::before {
@@ -1793,23 +1875,6 @@
       radial-gradient(ellipse at 70% 50%, rgba(200, 150, 255, 0.4) 0%, transparent 50%),
       radial-gradient(ellipse at 20% 70%, rgba(130, 80, 200, 0.5) 0%, transparent 60%),
       linear-gradient(135deg, #b060d0 0%, #8040b0 30%, #6030a0 60%, #402080 100%);
-    animation: silk-weekly 34s ease-in-out infinite alternate;
-  }
-
-  @keyframes silk-daily {
-    0%   { transform: translate(5%, 3%) rotate(0deg) scale(1); }
-    25%  { transform: translate(-8%, 6%) rotate(6deg) scale(1.03); }
-    50%  { transform: translate(3%, -5%) rotate(-4deg) scale(0.98); }
-    75%  { transform: translate(-4%, 8%) rotate(8deg) scale(1.02); }
-    100% { transform: translate(6%, -3%) rotate(-2deg) scale(1); }
-  }
-
-  @keyframes silk-weekly {
-    0%   { transform: translate(-3%, 6%) rotate(2deg) scale(1.01); }
-    20%  { transform: translate(7%, -4%) rotate(-5deg) scale(0.98); }
-    45%  { transform: translate(-6%, -2%) rotate(7deg) scale(1.03); }
-    70%  { transform: translate(4%, 7%) rotate(-3deg) scale(1); }
-    100% { transform: translate(-5%, 3%) rotate(4deg) scale(0.99); }
   }
 
   .mix-gradient-favq::before {
@@ -1820,7 +1885,6 @@
       radial-gradient(ellipse at 70% 60%, rgba(255, 50, 50, 0.4) 0%, transparent 50%),
       radial-gradient(ellipse at 20% 80%, rgba(200, 0, 0, 0.5) 0%, transparent 60%),
       linear-gradient(135deg, #e82020 0%, #c41818 30%, #a01010 60%, #800808 100%);
-    animation: silk-favq 28s ease-in-out infinite alternate;
   }
 
   .mix-gradient-topq::before {
@@ -1831,23 +1895,6 @@
       radial-gradient(ellipse at 70% 60%, rgba(50, 100, 255, 0.4) 0%, transparent 50%),
       radial-gradient(ellipse at 20% 80%, rgba(0, 50, 200, 0.5) 0%, transparent 60%),
       linear-gradient(135deg, #2060e8 0%, #1848c4 30%, #1030a0 60%, #081880 100%);
-    animation: silk-topq 32s ease-in-out infinite alternate;
-  }
-
-  @keyframes silk-favq {
-    0%   { transform: translate(5%, 3%) rotate(0deg) scale(1); }
-    25%  { transform: translate(-8%, 6%) rotate(6deg) scale(1.03); }
-    50%  { transform: translate(3%, -5%) rotate(-4deg) scale(0.98); }
-    75%  { transform: translate(-4%, 8%) rotate(8deg) scale(1.02); }
-    100% { transform: translate(6%, -3%) rotate(-2deg) scale(1); }
-  }
-
-  @keyframes silk-topq {
-    0%   { transform: translate(-3%, 6%) rotate(2deg) scale(1.01); }
-    20%  { transform: translate(7%, -4%) rotate(-5deg) scale(0.98); }
-    45%  { transform: translate(-6%, -2%) rotate(7deg) scale(1.03); }
-    70%  { transform: translate(4%, 7%) rotate(-3deg) scale(1); }
-    100% { transform: translate(-5%, 3%) rotate(4deg) scale(0.99); }
   }
 
   .mix-card-badge {

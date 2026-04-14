@@ -929,9 +929,10 @@ pub fn v2_get_offline_settings(
 pub async fn v2_set_manual_offline(
     enabled: bool,
     state: State<'_, OfflineState>,
+    audio_state: State<'_, crate::config::audio_settings::AudioSettingsState>,
     app_handle: tauri::AppHandle,
 ) -> Result<crate::offline::OfflineStatus, String> {
-    crate::offline::commands::set_manual_offline(enabled, state, app_handle).await
+    crate::offline::commands::set_manual_offline(enabled, state, audio_state, app_handle).await
 }
 
 #[tauri::command]

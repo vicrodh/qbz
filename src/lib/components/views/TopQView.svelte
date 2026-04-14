@@ -772,16 +772,6 @@
       radial-gradient(ellipse at 70% 60%, rgba(50, 100, 255, 0.4) 0%, transparent 50%),
       radial-gradient(ellipse at 20% 80%, rgba(0, 50, 200, 0.5) 0%, transparent 60%),
       linear-gradient(135deg, #2060e8 0%, #1848c4 30%, #1030a0 60%, #081880 100%);
-    will-change: transform;
-    animation: silk-topq 32s ease-in-out infinite alternate;
-  }
-
-  @keyframes silk-topq {
-    0%   { transform: translate(-3%, 6%) rotate(2deg) scale(1.01); }
-    20%  { transform: translate(7%, -4%) rotate(-5deg) scale(0.98); }
-    45%  { transform: translate(-6%, -2%) rotate(7deg) scale(1.03); }
-    70%  { transform: translate(4%, 7%) rotate(-3deg) scale(1); }
-    100% { transform: translate(-5%, 3%) rotate(4deg) scale(0.99); }
   }
 
   .metadata {

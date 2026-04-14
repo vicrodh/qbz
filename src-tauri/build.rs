@@ -20,8 +20,20 @@ fn main() {
     let capability_path = Path::new("capabilities/auto-updater.json");
 
     if cfg!(feature = "updater") {
-        if let Err(e) = fs::write(capability_path, AUTO_UPDATER_CAPABILITY) {
-            panic!("Failed to emit auto-updater capability: {e}");
+        // IMPORTANT: only write if contents actually changed. tauri-build emits
+        // `cargo:rerun-if-changed=capabilities` which makes cargo re-run this
+        // build script whenever anything in that directory is touched. If we
+        // unconditionally `fs::write` we update the file's mtime every run,
+        // which re-triggers the build script AND makes `tauri dev`'s file
+        // watcher rebuild the app in an infinite loop.
+        let needs_write = match fs::read_to_string(capability_path) {
+            Ok(existing) => existing != AUTO_UPDATER_CAPABILITY,
+            Err(_) => true,
+        };
+        if needs_write {
+            if let Err(e) = fs::write(capability_path, AUTO_UPDATER_CAPABILITY) {
+                panic!("Failed to emit auto-updater capability: {e}");
+            }
         }
     } else if capability_path.exists() {
         if let Err(e) = fs::remove_file(capability_path) {

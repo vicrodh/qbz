@@ -75,7 +75,8 @@
     "recentAlbums": "Recently Played",
     "continueTracks": "Continue Listening",
     "topArtists": "Your Top Artists",
-    "favoriteAlbums": "More From Favorites"
+    "favoriteAlbums": "More From Favorites",
+    "releaseWatch": "Release Watch"
   },
   "discover": {
     "newReleases": "New Releases",
@@ -91,7 +92,11 @@
     "pressAccolades": "Press Accolades",
     "qobuzPlaylists": "Qobuz Playlists",
     "searchPlaylistsPlaceholder": "Search playlists...",
-    "noPlaylistResults": "No playlists found"
+    "noPlaylistResults": "No playlists found",
+    "releaseWatch": {
+      "title": "Release Watch",
+      "subtitle": "Releases from artists, labels and awards you follow."
+    }
   },
   "search": {
     "title": "Search",
@@ -626,6 +631,7 @@
     "qobuzConnect": "Qobuz Connect",
     "qobuzConnectManage": "Qobuz Connect - Click to manage",
     "miniPlayer": "Mini Player",
+    "moreControls": "More controls",
     "fullScreen": "Immersive Mode",
     "exitFullScreen": "Exit Immersive Mode",
     "maximize": "Maximize",
@@ -687,7 +693,10 @@
       "output": "Output",
       "resampled": "Resampled by system",
       "qualityAdjusted": "Quality adjusted for device compatibility — bit-perfect, no resampling",
-      "fix": "Enable DAC Passthrough or Exclusive Mode in Settings"
+      "fix": "Enable DAC Passthrough or Exclusive Mode in Settings",
+      "plughwFallback": "Resampled by ALSA (plughw)",
+      "plughwFix": "DAC doesn't support this sample rate natively. Pick a lower-rate source or a DAC with broader rate support.",
+      "bitPerfect": "Bit-perfect: direct hardware output"
     },
     "stereo": "Stereo",
     "mono": "Mono"
@@ -1710,6 +1719,7 @@
     "someLocal": "Partially Available Offline",
     "notAvailable": "Not Available Offline",
     "trackNotAvailable": "This track is not available offline",
+    "trackNotAvailableOffline": "\"{title}\" isn't saved for offline playback",
     "featureDisabled": "This feature requires internet connection",
     "startWithoutLogin": "Start offline (no access to Qobuz™ services)",
     "noPreviousSession": "You need to log in at least once before using offline mode. Connect to the internet and log in to create your profile.",

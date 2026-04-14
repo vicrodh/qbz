@@ -25,7 +25,7 @@ use rodio::cpal::{
 use rodio::{Decoder, DeviceSinkBuilder, MixerDeviceSink, Source};
 use std::io::{BufReader, Cursor, Read, Seek, SeekFrom};
 use std::panic::{self, AssertUnwindSafe};
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError, Sender, SyncSender};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -43,7 +43,8 @@ use playback_engine::PlaybackEngine;
 use qbz_audio::{
     calculate_gain_factor, db_to_linear, extract_replaygain, AnalyzerMessage, AnalyzerTap,
     AudioBackendType, AudioDiagnostic, AudioSettings, BackendConfig, BackendManager,
-    DiagnosticSource, DynamicAmplify, LoudnessAnalyzer, LoudnessCache, TappedSource, VisualizerTap,
+    BitPerfectMode, DiagnosticSource, DynamicAmplify, LoudnessAnalyzer, LoudnessCache,
+    TappedSource, VisualizerTap,
 };
 use qbz_models::Quality;
 use qbz_qobuz::QobuzClient;
@@ -464,6 +465,7 @@ fn try_init_stream_with_backend(
     audio_settings: &AudioSettings,
     sample_rate: u32,
     channels: u16,
+    state: &SharedState,
 ) -> Option<Result<StreamType, String>> {
     // Check if backend system is configured.
     // On non-Linux, default to SystemDefault when not explicitly set,
@@ -527,6 +529,7 @@ fn try_init_stream_with_backend(
                     if let Some(result) = alsa_backend.try_create_direct_stream(&config) {
                         return Some(result.map(|(stream, mode)| {
                             log::info!("ALSA Direct stream created with mode: {:?}", mode);
+                            state.set_bit_perfect_mode(Some(mode));
                             StreamType::AlsaDirect(Arc::new(stream))
                         }));
                     }
@@ -543,6 +546,7 @@ fn try_init_stream_with_backend(
                 backend_type,
                 sample_rate
             );
+            state.set_bit_perfect_mode(Some(BitPerfectMode::Disabled));
             Some(Ok(StreamType::Rodio(mixer_sink)))
         }
         Err(e) => {
@@ -576,6 +580,12 @@ pub struct PlaybackEvent {
     /// Track ID of the gapless-queued next track (0 = none queued)
     #[serde(default)]
     pub gapless_next_track_id: u64,
+    /// Bit-perfect mode of the current stream. None when no stream is active.
+    /// Lets the UI show whether playback is direct-hardware bit-perfect, going
+    /// through plughw software resample, or running on a shared system path
+    /// (pipewire/pulse/cpal) where bit-perfect is not guaranteed.
+    #[serde(default)]
+    pub bit_perfect_mode: Option<BitPerfectMode>,
 }
 
 /// Shared state between main thread and audio thread
@@ -613,6 +623,10 @@ pub struct SharedState {
     gapless_next_track_id: Arc<AtomicU64>,
     /// Streaming buffer progress (0.0-1.0 stored as f32 bits, 0 = not streaming)
     buffer_progress: Arc<AtomicU32>,
+    /// Current bit-perfect mode encoded as u8 (see `bit_perfect_mode_from_u8`).
+    /// 0 = Unknown (no stream active yet), 1 = Disabled (CPAL/Rodio / shared
+    /// system path), 2 = DirectHardware (ALSA hw:), 3 = PluginFallback (plughw:).
+    bit_perfect_mode: Arc<AtomicU8>,
 }
 
 impl Default for SharedState {
@@ -640,6 +654,7 @@ impl SharedState {
             gapless_ready: Arc::new(AtomicBool::new(false)),
             gapless_next_track_id: Arc::new(AtomicU64::new(0)),
             buffer_progress: Arc::new(AtomicU32::new(0)),
+            bit_perfect_mode: Arc::new(AtomicU8::new(0)),
         }
     }
 
@@ -654,6 +669,30 @@ impl SharedState {
     pub fn set_stream_quality(&self, sample_rate: u32, bit_depth: u32) {
         self.sample_rate.store(sample_rate, Ordering::SeqCst);
         self.bit_depth.store(bit_depth, Ordering::SeqCst);
+    }
+
+    /// Set the current bit-perfect mode for the active stream.
+    /// Pass None when no stream is active (e.g., after stop).
+    pub fn set_bit_perfect_mode(&self, mode: Option<BitPerfectMode>) {
+        let code = match mode {
+            None => 0,
+            Some(BitPerfectMode::Disabled) => 1,
+            Some(BitPerfectMode::DirectHardware) => 2,
+            Some(BitPerfectMode::PluginFallback) => 3,
+        };
+        self.bit_perfect_mode.store(code, Ordering::SeqCst);
+    }
+
+    /// Get the current bit-perfect mode for the active stream.
+    /// Returns None when no stream has been initialized yet.
+    pub fn get_bit_perfect_mode(&self) -> Option<BitPerfectMode> {
+        match self.bit_perfect_mode.load(Ordering::SeqCst) {
+            0 => None,
+            1 => Some(BitPerfectMode::Disabled),
+            2 => Some(BitPerfectMode::DirectHardware),
+            3 => Some(BitPerfectMode::PluginFallback),
+            _ => None,
+        }
     }
 
     pub fn get_sample_rate(&self) -> u32 {
@@ -937,7 +976,8 @@ impl Player {
                             sample_rate,
                             channels
                         );
-                        match try_init_stream_with_backend(&settings, sample_rate, channels) {
+                        match try_init_stream_with_backend(&settings, sample_rate, channels, state)
+                        {
                             Some(Ok(stream_type)) => {
                                 // Set device name from settings for backend system
                                 let device_name = settings
@@ -1174,6 +1214,7 @@ impl Player {
                                         &settings,
                                         sample_rate,
                                         channels,
+                                        &thread_state,
                                     ) {
                                         Some(result) => {
                                             // Backend system handled it - set device name from settings
@@ -1616,6 +1657,7 @@ impl Player {
                                         &settings,
                                         sample_rate,
                                         channels,
+                                        &thread_state,
                                     ) {
                                         Some(result) => {
                                             // Set device name from settings for backend system
@@ -2936,6 +2978,7 @@ impl Player {
             normalization_gain: self.state.get_normalization_gain(),
             gapless_ready: self.state.is_gapless_ready(),
             gapless_next_track_id: self.state.get_gapless_next_track_id(),
+            bit_perfect_mode: self.state.get_bit_perfect_mode(),
         }
     }
 }

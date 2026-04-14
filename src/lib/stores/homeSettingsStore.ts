@@ -18,7 +18,8 @@ export type HomeSectionId =
   | 'continueTracks'
   | 'topArtists'
   | 'favoriteAlbums'
-  | 'yourMixes';
+  | 'yourMixes'
+  | 'releaseWatch';
 
 export interface HomeSection {
   id: HomeSectionId;
@@ -49,6 +50,7 @@ const STORAGE_KEY = 'qbz-home-settings';
 // Default section order and visibility
 const DEFAULT_SECTIONS: HomeSection[] = [
   { id: 'newReleases', label: 'New Releases', visible: true, source: 'qobuz' },
+  { id: 'releaseWatch', label: 'Release Watch', visible: true, source: 'qobuz' },
   { id: 'pressAwards', label: 'Press Awards', visible: true, source: 'qobuz' },
   { id: 'mostStreamed', label: 'Popular Albums', visible: false, source: 'qobuz' },
   { id: 'qobuzissimes', label: 'Qobuzissimes', visible: false, source: 'qobuz' },

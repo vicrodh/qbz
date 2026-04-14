@@ -75,7 +75,8 @@
     "mostStreamed": "Álbumes populares",
     "favoriteAlbums": "Más de Favoritos",
     "recentAlbums": "Jugado recientemente",
-    "topArtists": "Tus mejores artistas"
+    "topArtists": "Tus mejores artistas",
+    "releaseWatch": "Radar de Novedades"
   },
   "discover": {
     "newReleases": "Novedades",
@@ -91,7 +92,11 @@
     "pressAccolades": "Reconocimientos de Prensa",
     "qobuzPlaylists": "Playlists de Qobuz",
     "searchPlaylistsPlaceholder": "Buscar playlists...",
-    "noPlaylistResults": "No se encontraron playlists"
+    "noPlaylistResults": "No se encontraron playlists",
+    "releaseWatch": {
+      "title": "Radar de Novedades",
+      "subtitle": "Novedades de los artistas, sellos y premios que sigues."
+    }
   },
   "search": {
     "title": "Buscar",
@@ -623,6 +628,7 @@
     "qobuzConnect": "Qobuz Connect",
     "qobuzConnectManage": "Qobuz Connect - Clic para administrar",
     "miniPlayer": "Mini Reproductor",
+    "moreControls": "Más controles",
     "fullScreen": "Modo Inmersivo",
     "exitFullScreen": "Salir del Modo Inmersivo",
     "maximize": "Maximizar",
@@ -687,6 +693,9 @@
       "output": "Salida",
       "resampled": "Remuestreado por el sistema",
       "qualityAdjusted": "Calidad ajustada por compatibilidad — bit-perfect, sin remuestreo",
+      "plughwFallback": "Remuestreado por ALSA (plughw)",
+      "plughwFix": "El DAC no soporta esta tasa de muestreo nativamente. Elige una fuente de menor tasa o un DAC con mayor soporte.",
+      "bitPerfect": "Bit-perfect: salida directa al hardware",
       "fix": "Activa DAC Passthrough o Modo Exclusivo en Ajustes"
     },
     "stereo": "Estéreo",
@@ -1710,6 +1719,7 @@
     "someLocal": "Parcialmente Disponible Offline",
     "notAvailable": "No Disponible Offline",
     "trackNotAvailable": "Esta pista no esta disponible offline",
+    "trackNotAvailableOffline": "\"{title}\" no está guardada para reproducción offline",
     "featureDisabled": "Esta funcion requiere conexion a internet",
     "startWithoutLogin": "Iniciar en modo offline (sin acceso a los servicios de Qobuz™)",
     "noPreviousSession": "Necesitas iniciar sesión al menos una vez antes de usar el modo offline. Conéctate a internet e inicia sesión para crear tu perfil.",

@@ -56,6 +56,8 @@ pub mod session_store;
 pub mod share;
 pub mod snap;
 pub mod tray;
+#[cfg(target_os = "linux")]
+pub mod tray_linux_ksni;
 pub mod updates;
 pub mod user_data;
 pub mod visualizer;
@@ -569,13 +571,11 @@ pub fn run() {
     let mut saved_win_height = window_settings.window_height;
     let saved_win_maximized = window_settings.is_maximized;
 
-    // Safety: clamp obviously corrupt window sizes.
-    // Only catches absurd values (>8K) — the window manager handles the rest.
-    // Previous approach used xdpyinfo which returns combined multi-monitor
-    // resolution (e.g. 6000x1600 for dual monitors), causing false positives.
-    #[cfg(target_os = "linux")]
+    // First-pass clamp: catch corrupt persisted sizes (>8K) before we even
+    // query monitors. The stricter fit-to-current-monitor clamp runs below
+    // inside setup() where the Tauri app handle is available.
     {
-        const MAX_SANE_WIDTH: f64 = 7680.0;  // 8K
+        const MAX_SANE_WIDTH: f64 = 7680.0; // 8K
         const MAX_SANE_HEIGHT: f64 = 4320.0; // 8K
         const FALLBACK_WIDTH: f64 = 1920.0;
         const FALLBACK_HEIGHT: f64 = 1080.0;
@@ -778,6 +778,45 @@ pub fn run() {
                 "Main window transparency: {} (override with QBZ_FORCE_TRANSPARENT_WINDOWS=1 or QBZ_FORCE_OPAQUE_WINDOWS=1)",
                 main_window_transparent
             );
+
+            // Fit-to-monitor clamp: when the persisted size is larger than
+            // any available monitor the window would open partly off-screen
+            // and become unreachable until the user drags it back (or worse,
+            // when decorations are hidden there's no way to grab it). Query
+            // monitors at startup and shrink the saved size to 95% of the
+            // largest monitor's logical dimensions when it overflows.
+            {
+                let monitors = app.available_monitors().unwrap_or_default();
+                let max_logical = monitors
+                    .iter()
+                    .map(|m| {
+                        let scale = m.scale_factor();
+                        let size = m.size();
+                        (size.width as f64 / scale, size.height as f64 / scale)
+                    })
+                    .fold((0.0_f64, 0.0_f64), |acc, (w, h)| {
+                        (acc.0.max(w), acc.1.max(h))
+                    });
+                let (mon_w, mon_h) = max_logical;
+                if mon_w > 0.0 && mon_h > 0.0 {
+                    let fit_w = mon_w * 0.95;
+                    let fit_h = mon_h * 0.95;
+                    if saved_win_width > fit_w || saved_win_height > fit_h {
+                        log::warn!(
+                            "Persisted window size {}x{} exceeds available monitor ({}x{} logical); clamping to {}x{}",
+                            saved_win_width as u32,
+                            saved_win_height as u32,
+                            mon_w as u32,
+                            mon_h as u32,
+                            fit_w as u32,
+                            fit_h as u32
+                        );
+                        saved_win_width = saved_win_width.min(fit_w);
+                        saved_win_height = saved_win_height.min(fit_h);
+                    }
+                }
+            }
+
             #[allow(unused_mut)]
             let mut builder = tauri::WebviewWindowBuilder::new(
                 app,
@@ -1555,6 +1594,7 @@ pub fn run() {
             commands_v2::v2_get_playlist_tags,
             commands_v2::v2_get_discover_albums,
             commands_v2::v2_get_featured_albums,
+            commands_v2::v2_get_release_watch,
             commands_v2::v2_get_artist_page,
             commands_v2::v2_get_similar_artists,
             commands_v2::v2_get_artist_with_albums,

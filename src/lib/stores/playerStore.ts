@@ -70,6 +70,12 @@ interface BackendPlaybackState {
   volume: number;
 }
 
+/**
+ * Bit-perfect mode of the active audio stream, reported by the Rust backend.
+ * Matches the `qbz_audio::BitPerfectMode` enum via serde.
+ */
+export type BitPerfectMode = 'DirectHardware' | 'PluginFallback' | 'Disabled';
+
 // Event payload from backend
 interface PlaybackEvent {
   is_playing: boolean;
@@ -83,6 +89,7 @@ interface PlaybackEvent {
   gapless_ready: boolean;       // Backend wants next track queued for gapless
   gapless_next_track_id: number; // Track ID queued for gapless (0 = none)
   buffer_progress?: number | null; // Streaming buffer progress (0-1, null = fully cached)
+  bit_perfect_mode?: BitPerfectMode | null; // None until first stream opens
 }
 
 // Queue track from backend (for external track sync)
@@ -147,6 +154,7 @@ let isSkipping = false;
 let queueEnded = false;
 let normalizationGain: number | null = null;  // Current normalization gain (null = not active)
 let bufferProgress: number | null = null;  // Streaming buffer progress (0-1, null = fully cached)
+let bitPerfectMode: BitPerfectMode | null = null;  // Reported by backend when stream opens
 let pendingSeekPosition: number | null = null;
 let seekRequestInFlight = false;
 let seekTargetPosition: number | null = null;
@@ -225,6 +233,10 @@ export function getIsSkipping(): boolean {
 
 export function getNormalizationGain(): number | null {
   return normalizationGain;
+}
+
+export function getBitPerfectMode(): BitPerfectMode | null {
+  return bitPerfectMode;
 }
 
 async function flushPendingSeek(): Promise<void> {
@@ -766,6 +778,7 @@ async function handlePlaybackEvent(event: PlaybackEvent): Promise<void> {
     // Update normalization gain state
     normalizationGain = event.normalization_gain;
     bufferProgress = event.buffer_progress ?? null;
+    bitPerfectMode = event.bit_perfect_mode ?? null;
 
     notifyListeners();
 

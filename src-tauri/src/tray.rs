@@ -1,27 +1,31 @@
-//! System tray icon implementation for QBZ
+//! System tray icon implementation for QBZ.
 //!
-//! Provides system tray integration with playback controls and window management.
+//! On Linux we use a custom [`ksni`] (StatusNotifierItem) implementation so
+//! primary-click actually toggles the window (Tauri's libayatana-appindicator
+//! backend cannot dispatch left-click — issue #310). On macOS we keep the
+//! Tauri tray. No Windows client is shipped, so the windows cfg is absent.
 
+#[cfg(target_os = "linux")]
+use crate::tray_linux_ksni;
+
+#[cfg(not(target_os = "linux"))]
 use image::GenericImageView;
-use std::path::PathBuf;
+#[cfg(not(target_os = "linux"))]
 use tauri::{
     image::Image,
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Emitter, Manager,
+    Emitter, Manager,
 };
+use tauri::AppHandle;
 
-// Embed tray icon at compile time (transparent background)
+#[cfg(not(target_os = "linux"))]
 const TRAY_ICON_PNG: &[u8] = include_bytes!("../icons/tray.png");
-
-/// Check if running inside Flatpak sandbox
-fn is_flatpak() -> bool {
-    std::env::var("FLATPAK_ID").is_ok() || std::path::Path::new("/.flatpak-info").exists()
-}
 
 /// Ensure tray icon is available in the user's icon theme directory.
 /// This makes the icon discoverable by libayatana-appindicator via
 /// StatusNotifierItem name lookup on DEs where pixmap data is not supported.
+#[cfg(not(target_os = "linux"))]
 fn ensure_tray_icon_in_theme() {
     let icon_dirs = [
         // Flatpak: /app has icons installed by manifest
@@ -51,7 +55,15 @@ fn ensure_tray_icon_in_theme() {
     }
 }
 
+/// Check if running inside Flatpak sandbox (macOS has no Flatpak; this is
+/// kept for symmetry with the older Linux path)
+#[cfg(not(target_os = "linux"))]
+fn is_flatpak() -> bool {
+    std::env::var("FLATPAK_ID").is_ok() || std::path::Path::new("/.flatpak-info").exists()
+}
+
 /// Get the tray icon - loads from file in Flatpak, embedded data otherwise
+#[cfg(not(target_os = "linux"))]
 fn load_tray_icon() -> Image<'static> {
     // In Flatpak, try to use the installed icon file first
     // This works better with StatusNotifierItem/libayatana-appindicator
@@ -77,9 +89,24 @@ fn load_tray_icon() -> Image<'static> {
     Image::new_owned(rgba, width, height)
 }
 
-/// Initialize the system tray icon with menu
+/// Initialize the system tray icon. Dispatches to the platform-specific
+/// backend: ksni on Linux (see `tray_linux_ksni`), Tauri's built-in tray on
+/// macOS. Falls back to a clean error on unknown targets.
 pub fn init_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
-    log::info!("Initializing system tray icon");
+    #[cfg(target_os = "linux")]
+    {
+        return tray_linux_ksni::init(app);
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    init_tray_tauri(app)
+}
+
+/// Tauri-backed tray implementation used on macOS. Kept as a separate fn so
+/// the Linux path doesn't pay to compile the Tauri tray at all.
+#[cfg(not(target_os = "linux"))]
+fn init_tray_tauri(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
+    log::info!("Initializing system tray icon (Tauri backend)");
 
     // Create menu items
     let play_pause = MenuItem::with_id(app, "play_pause", "Play/Pause", true, None::<&str>)?;

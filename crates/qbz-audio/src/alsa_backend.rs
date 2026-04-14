@@ -564,33 +564,45 @@ impl AlsaBackend {
         // before opening the PCM device. This avoids the "device busy" issue
         // where ALSA Direct opens the device, fails to configure the rate, and
         // leaves the device in a state CPAL can't open afterwards.
+        //
+        // When the rate is unsupported, we skip the hw: attempt and fall through
+        // to the plughw: path below, which lets ALSA auto-resample in kernel/
+        // userspace. Falling back to CPAL is not an option because CPAL's device
+        // enumeration does not reliably expose raw hw: devices by the same name
+        // the UI stored (front:CARD=X,DEV=Y vs hw:CARD=X,DEV=Y), and the lookup
+        // fails with a misleading "Device not found" error. See issue #288.
+        let mut hw_rate_unsupported = false;
         if let Some(card_name) = extract_card_name_from_device(device_id) {
             if let Some(hw_rates) = get_hw_supported_rates(&card_name) {
                 if !hw_rates.contains(&config.sample_rate) {
                     log::info!(
-                        "[ALSA Backend] Hardware rates for '{}': {:?}. {}Hz not supported, skipping ALSA Direct",
+                        "[ALSA Backend] Hardware rates for '{}': {:?}. {}Hz not supported natively — falling back to plughw for software resample",
                         card_name, hw_rates, config.sample_rate
                     );
-                    return None;
+                    hw_rate_unsupported = true;
+                } else {
+                    log::info!(
+                        "[ALSA Backend] Hardware confirms support for {}Hz (card '{}', rates: {:?})",
+                        config.sample_rate,
+                        card_name,
+                        hw_rates
+                    );
                 }
-                log::info!(
-                    "[ALSA Backend] Hardware confirms support for {}Hz (card '{}', rates: {:?})",
-                    config.sample_rate,
-                    card_name,
-                    hw_rates
-                );
             }
         }
 
-        // Respect ALSA plugin selection from settings
+        // Respect ALSA plugin selection from settings. When /proc/asound already
+        // told us the hw device won't accept the rate, skip straight to plughw
+        // even if the user prefers Hw — plughw with resample is the only path
+        // that produces sound.
         let try_hw_first = match config.alsa_plugin {
-            Some(AlsaPlugin::Hw) => true,
+            Some(AlsaPlugin::Hw) => !hw_rate_unsupported,
             Some(AlsaPlugin::PlugHw) => false, // Skip hw, go directly to plughw
             Some(AlsaPlugin::Pcm) => {
                 log::info!("[ALSA Backend] PCM mode selected, not using direct ALSA");
                 return None; // Use CPAL instead
             }
-            None => true, // Default: try hw first
+            None => !hw_rate_unsupported, // Default: try hw first if rate is supported
         };
 
         if try_hw_first {
@@ -886,7 +898,13 @@ impl AudioBackend for AlsaBackend {
             config.alsa_plugin
         );
 
-        // Find the device by name/id
+        // Find the device by name/id.
+        //
+        // If /proc/asound shows this device exists but CPAL's enumeration
+        // cannot match it, the app stored a name format CPAL does not expose
+        // (e.g. front:CARD=X,DEV=Y when CPAL only yields hw:CARD=X,DEV=Y for
+        // the raw device). Surface that distinction in the error so users
+        // don't chase ghosts wondering why their DAC "disappeared".
         let device = if let Some(device_id) = &config.device_id {
             log::info!("[ALSA Backend] Looking for device: {}", device_id);
             self.host
@@ -898,7 +916,22 @@ impl AudioBackend for AlsaBackend {
                         .map(|desc| desc.name() == device_id.as_str())
                         .unwrap_or(false)
                 })
-                .ok_or_else(|| format!("Device '{}' not found", device_id))?
+                .ok_or_else(|| {
+                    let proc_found = extract_card_name_from_device(device_id)
+                        .and_then(|card| get_hw_supported_rates(&card))
+                        .is_some();
+                    if proc_found {
+                        format!(
+                            "Device '{}' is present in /proc/asound but CPAL cannot open it (usually a sample-rate/format mismatch — track rate {}Hz, or an ALSA name format mismatch). Try the plughw plugin in audio settings.",
+                            device_id, config.sample_rate
+                        )
+                    } else {
+                        format!(
+                            "Device '{}' not found by the ALSA backend (disconnected, renamed, or handled by another app)",
+                            device_id
+                        )
+                    }
+                })?
         } else {
             log::info!("[ALSA Backend] Using default device");
             self.host
