@@ -898,7 +898,13 @@ impl AudioBackend for AlsaBackend {
             config.alsa_plugin
         );
 
-        // Find the device by name/id
+        // Find the device by name/id.
+        //
+        // If /proc/asound shows this device exists but CPAL's enumeration
+        // cannot match it, the app stored a name format CPAL does not expose
+        // (e.g. front:CARD=X,DEV=Y when CPAL only yields hw:CARD=X,DEV=Y for
+        // the raw device). Surface that distinction in the error so users
+        // don't chase ghosts wondering why their DAC "disappeared".
         let device = if let Some(device_id) = &config.device_id {
             log::info!("[ALSA Backend] Looking for device: {}", device_id);
             self.host
@@ -910,7 +916,22 @@ impl AudioBackend for AlsaBackend {
                         .map(|desc| desc.name() == device_id.as_str())
                         .unwrap_or(false)
                 })
-                .ok_or_else(|| format!("Device '{}' not found", device_id))?
+                .ok_or_else(|| {
+                    let proc_found = extract_card_name_from_device(device_id)
+                        .and_then(|card| get_hw_supported_rates(&card))
+                        .is_some();
+                    if proc_found {
+                        format!(
+                            "Device '{}' is present in /proc/asound but CPAL cannot open it (usually a sample-rate/format mismatch — track rate {}Hz, or an ALSA name format mismatch). Try the plughw plugin in audio settings.",
+                            device_id, config.sample_rate
+                        )
+                    } else {
+                        format!(
+                            "Device '{}' not found by the ALSA backend (disconnected, renamed, or handled by another app)",
+                            device_id
+                        )
+                    }
+                })?
         } else {
             log::info!("[ALSA Backend] Using default device");
             self.host
