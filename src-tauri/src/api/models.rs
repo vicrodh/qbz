@@ -811,6 +811,10 @@ pub struct DiscoverAlbum {
     pub genre: Option<Genre>,
     pub dates: Option<DiscoverAlbumDates>,
     pub audio_info: Option<DiscoverAudioInfo>,
+    /// Editorial awards attached to the album. Id 88 = Qobuzissime,
+    /// id 151 = Qobuz Album of the Week (locale-stable).
+    #[serde(default)]
+    pub awards: Option<Vec<PageArtistAward>>,
 }
 
 /// Album image from discover endpoint
