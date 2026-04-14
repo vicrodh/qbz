@@ -1,15 +1,20 @@
 /**
- * Award catalog — resolves award ids by name for the cases where
- * /album/get returns an award entry without an id. Backed by
- * /award/explore (paginated), fetched once per session and cached
- * in-memory. Names are compared normalized (NFD + diacritics
- * stripped + lowercase + whitespace collapsed) so locale changes
- * affecting accent/case don't break the match.
+ * Award catalog — resolves award ids by name for cases where
+ * /album/get returns an award entry without an id. Agnostic, no
+ * hardcoded name→id mappings.
  *
- * No hardcoded name→id mappings — the catalog is entirely what the
- * Qobuz API returns in the user's current session locale, so the
- * match is agnostic and always in sync with whatever Qobuz is
- * currently labelling awards.
+ * Two sources feed the catalog, in priority order:
+ *   1. Harvested pairs from album responses the user naturally
+ *      encounters (Home discover rails, Release Watch, AlbumView,
+ *      AwardView, etc). Album responses from /discover/*, /album/get,
+ *      /favorite/getNewReleases etc. embed awards with ids already —
+ *      we capture them as they flow by. Persisted to sessionStorage
+ *      so they survive tab navigation.
+ *   2. /award/explore (paginated). Returns a curated subset, only
+ *      useful as a last resort.
+ *
+ * Names compared normalized (NFD + diacritics stripped + lowercase +
+ * whitespace collapsed) so accent/case/locale differences still match.
  */
 
 import { invoke } from '@tauri-apps/api/core';
@@ -20,12 +25,14 @@ interface ExploreResponse {
 }
 
 const PAGE_SIZE = 100;
-const MAX_PAGES = 40; // 4000 items ceiling — safety net, real catalog is ~hundreds
+const MAX_PAGES = 40;
+const STORAGE_KEY = 'qbz-award-catalog';
 
 // normalized name → id
 let byName = new Map<string, string>();
 let catalogLoaded = false;
 let inflight: Promise<void> | null = null;
+let dirty = false;
 
 function normalize(name: string): string {
   return name
@@ -34,6 +41,63 @@ function normalize(name: string): string {
     .trim()
     .toLowerCase()
     .replace(/\s+/g, ' ');
+}
+
+function loadFromSession(): void {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as Record<string, string>;
+    for (const [k, v] of Object.entries(parsed)) {
+      if (k && v) byName.set(k, v);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function persist(): void {
+  if (!dirty) return;
+  dirty = false;
+  try {
+    const obj: Record<string, string> = {};
+    for (const [k, v] of byName) obj[k] = v;
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(obj));
+  } catch {
+    // ignore (quota / disabled)
+  }
+}
+
+// Load any previously harvested pairs on module init.
+loadFromSession();
+
+/** Record a single (id, name) pair. No-op on empty inputs. */
+export function rememberAward(id: string | number | null | undefined, name: string | null | undefined): void {
+  if (id == null || !name) return;
+  const key = normalize(name);
+  if (!key) return;
+  const idStr = String(id);
+  if (byName.get(key) === idStr) return;
+  byName.set(key, idStr);
+  dirty = true;
+  // Coalesce writes — persist on next microtask.
+  queueMicrotask(persist);
+}
+
+/** Record every award in a list. Accepts any shape with id and name. */
+export function rememberAwards(
+  awards: Array<{ id?: string | number | null; name?: string | null }> | null | undefined
+): void {
+  if (!awards) return;
+  for (const a of awards) rememberAward(a?.id, a?.name);
+}
+
+/** Walk a list of album-shaped objects and harvest their awards. */
+export function rememberAwardsFromAlbums(
+  albums: Array<{ awards?: Array<{ id?: string | number | null; name?: string | null }> | null }> | null | undefined
+): void {
+  if (!albums) return;
+  for (const album of albums) if (album?.awards) rememberAwards(album.awards);
 }
 
 async function loadCatalog(): Promise<void> {

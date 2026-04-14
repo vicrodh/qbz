@@ -1375,6 +1375,13 @@
       showToast($t('toast.loadingAlbum'), 'info');
       const album = await invoke<QobuzAlbum>('v2_get_album', { albumId });
 
+      // DEBUG: full album payload from /album/get (including awards) so
+      // we can see exactly what Qobuz returns for each field.
+      console.log('[AlbumView] /album/get raw response:', JSON.parse(JSON.stringify(album)));
+      if (album.awards) {
+        console.log('[AlbumView] awards array:', JSON.parse(JSON.stringify(album.awards)));
+      }
+
       const converted = convertQobuzAlbum(album);
 
       if (!converted || !converted.id) {
