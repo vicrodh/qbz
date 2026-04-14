@@ -2609,5 +2609,9 @@
     "vocals&Guitar": "Voix",
     "voice": "Voix",
     "workArranger": "Arrangeur de travail"
+  },
+  "ribbon": {
+    "albumOfTheWeek": "Album de la semaine",
+    "qobuzissime": "Qobuzissime"
   }
 }

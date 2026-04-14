@@ -516,6 +516,7 @@ export interface DiscoverAlbum {
   genre?: { name: string };
   dates?: DiscoverAlbumDates;
   audio_info?: DiscoverAudioInfo;
+  awards?: { id: number; name: string; awarded_at?: string }[];
 }
 
 export interface DiscoverAlbumImage {

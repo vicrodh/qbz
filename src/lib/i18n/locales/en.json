@@ -2609,5 +2609,9 @@
   "musician": {
     "knownFor": "Known for",
     "viewArtistPage": "View Artist Page"
+  },
+  "ribbon": {
+    "albumOfTheWeek": "Album of the Week",
+    "qobuzissime": "Qobuzissime"
   }
 }

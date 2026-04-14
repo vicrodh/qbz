@@ -42,6 +42,9 @@
     sourceBadge?: 'user' | 'qobuz_download' | 'qobuz_purchase' | 'plex';
     artistId?: number;
     onArtistClick?: (artistId: number) => void;
+    /** Editorial ribbon — Qobuz "Album of the Week" (award id 151)
+     *  or "Qobuzissime" (award id 88). */
+    ribbon?: 'albumOfTheWeek' | 'qobuzissime';
   }
 
   let {
@@ -71,7 +74,8 @@
     downloadStateVersion,
     sourceBadge,
     artistId,
-    onArtistClick
+    onArtistClick,
+    ribbon
   }: Props = $props();
   
   const isDownloaded = $derived.by(() => {
@@ -282,6 +286,14 @@
       </div>
     {/if}
 
+    <!-- Editorial ribbon (Album of the Week / Qobuzissime). Rendered
+         after the action-overlay so it stays visible on hover. -->
+    {#if ribbon}
+      <div class="editorial-ribbon" class:ribbon-aotw={ribbon === 'albumOfTheWeek'} class:ribbon-qbz={ribbon === 'qobuzissime'}>
+        {ribbon === 'albumOfTheWeek' ? $t('ribbon.albumOfTheWeek') : $t('ribbon.qobuzissime')}
+      </div>
+    {/if}
+
     <!-- Source Badge (Local Library only) -->
     {#if sourceBadge}
       <div
@@ -399,6 +411,41 @@
   }
 
   /* Source badge for Local Library albums */
+  /* Editorial ribbon — sits at top-left of the artwork. z-index
+     above the action-overlay so it remains legible on hover. */
+  .editorial-ribbon {
+    position: absolute;
+    top: 8px;
+    left: 0;
+    z-index: 4;
+    padding: 3px 10px 3px 8px;
+    font-family: var(--font-sans);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #fff;
+    background: rgba(0, 0, 0, 0.75);
+    border-left: 3px solid var(--accent-primary);
+    border-top-right-radius: 3px;
+    border-bottom-right-radius: 3px;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    pointer-events: none;
+    white-space: nowrap;
+    max-width: calc(100% - 12px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .editorial-ribbon.ribbon-aotw {
+    border-left-color: #eab308;
+  }
+
+  .editorial-ribbon.ribbon-qbz {
+    border-left-color: #8b5cf6;
+  }
+
   .source-badge {
     position: absolute;
     bottom: 6px;

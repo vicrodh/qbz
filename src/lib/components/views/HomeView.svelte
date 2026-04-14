@@ -73,6 +73,24 @@
     genre: string;
     quality?: string;
     releaseDate?: string;
+    ribbon?: 'albumOfTheWeek' | 'qobuzissime';
+  }
+
+  /**
+   * Qobuz award IDs are stable across locales (unlike the award `name`
+   * which is translated). Stable IDs taken from decompiled API samples:
+   *   88  = Qobuzissime
+   *   151 = Álbum de la semana Qobuz / Qobuz Album of the Week
+   */
+  function pickAlbumRibbon(
+    awards?: { id: number }[] | null
+  ): 'albumOfTheWeek' | 'qobuzissime' | undefined {
+    if (!awards || awards.length === 0) return undefined;
+    for (const award of awards) {
+      if (award.id === 151) return 'albumOfTheWeek';
+      if (award.id === 88) return 'qobuzissime';
+    }
+    return undefined;
   }
 
   interface ArtistCardData {
@@ -595,7 +613,8 @@
         album.audio_info?.maximum_bit_depth,
         album.audio_info?.maximum_sampling_rate
       ),
-      releaseDate: album.dates?.original
+      releaseDate: album.dates?.original,
+      ribbon: pickAlbumRibbon(album.awards)
     };
   }
 
@@ -1055,6 +1074,7 @@
                 releaseDate={album.releaseDate}
                 size="large"
                 quality={album.quality}
+                ribbon={album.ribbon}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                 onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
                 onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
@@ -1106,6 +1126,7 @@
                 releaseDate={album.releaseDate}
                 size="large"
                 quality={album.quality}
+                ribbon={album.ribbon}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                 onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
                 onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
@@ -1157,6 +1178,7 @@
                 releaseDate={album.releaseDate}
                 size="large"
                 quality={album.quality}
+                ribbon={album.ribbon}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                 onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
                 onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
@@ -1208,6 +1230,7 @@
                 releaseDate={album.releaseDate}
                 size="large"
                 quality={album.quality}
+                ribbon={album.ribbon}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                 onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
                 onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
@@ -1259,6 +1282,7 @@
                 releaseDate={album.releaseDate}
                 size="large"
                 quality={album.quality}
+                ribbon={album.ribbon}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                 onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
                 onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
@@ -1365,6 +1389,7 @@
                 releaseDate={album.releaseDate}
                 size="large"
                 quality={album.quality}
+                ribbon={album.ribbon}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                 onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
                 onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
@@ -1420,6 +1445,7 @@
                   album.audio_info?.maximum_bit_depth,
                   album.audio_info?.maximum_sampling_rate
                 )}
+                ribbon={pickAlbumRibbon(album.awards)}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                 onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
                 onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
@@ -1463,6 +1489,7 @@
                 releaseDate={album.releaseDate}
                 size="large"
                 quality={album.quality}
+                ribbon={album.ribbon}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                 onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
                 onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
@@ -1612,6 +1639,7 @@
                 releaseDate={album.releaseDate}
                 size="large"
                 quality={album.quality}
+                ribbon={album.ribbon}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                 onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
                 onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
@@ -1713,6 +1741,7 @@
               releaseDate={album.releaseDate}
               size="large"
               quality={album.quality}
+              ribbon={album.ribbon}
               onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
               onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
               onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
@@ -1763,6 +1792,7 @@
               releaseDate={album.releaseDate}
               size="large"
               quality={album.quality}
+              ribbon={album.ribbon}
               onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
               onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
               onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
@@ -1813,6 +1843,7 @@
               releaseDate={album.releaseDate}
               size="large"
               quality={album.quality}
+              ribbon={album.ribbon}
               onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
               onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
               onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
@@ -1863,6 +1894,7 @@
               releaseDate={album.releaseDate}
               size="large"
               quality={album.quality}
+              ribbon={album.ribbon}
               onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
               onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
               onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
@@ -1913,6 +1945,7 @@
               releaseDate={album.releaseDate}
               size="large"
               quality={album.quality}
+              ribbon={album.ribbon}
               onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
               onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
               onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
@@ -1967,6 +2000,7 @@
                 album.audio_info?.maximum_bit_depth,
                 album.audio_info?.maximum_sampling_rate
               )}
+              ribbon={pickAlbumRibbon(album.awards)}
               onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
               onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
               onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
