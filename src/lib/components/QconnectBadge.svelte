@@ -242,12 +242,12 @@
     opacity: 0.85;
   }
 
-  /* Compact variant: icon-only square, matches height of surrounding controls. */
+  /* Compact variant: icon-only, keeps the full bar height so it lines up with
+     the quality badge and audio-output row. Only width is reduced. */
   .qconnect-badge.compact {
     flex-direction: row;
     width: 36px;
-    height: 36px;
-    padding: 0;
+    padding: 0 4px;
     gap: 0;
   }
 
