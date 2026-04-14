@@ -20,10 +20,6 @@ pub mod paths {
     pub const ALBUM_GET: &str = "/album/get";
     pub const ALBUM_SEARCH: &str = "/album/search";
     pub const ALBUM_GET_FEATURED: &str = "/album/getFeatured";
-    // Release Watch: releases from artists, labels, and awards the user
-    // follows. Mobile/web apps expose this in Discover as "Release Watch" /
-    // "Radar de Novedades". Endpoint path uses the `/albums` (plural) prefix.
-    pub const ALBUMS_RELEASE_WATCH: &str = "/albums/releaseWatch";
 
     // Artist
     pub const ARTIST_GET: &str = "/artist/get";

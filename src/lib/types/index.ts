@@ -461,6 +461,7 @@ export interface DiscoverContainers {
   most_streamed?: DiscoverContainer<DiscoverAlbum>;
   press_awards?: DiscoverContainer<DiscoverAlbum>;
   album_of_the_week?: DiscoverContainer<DiscoverAlbum>;
+  release_watch?: DiscoverContainer<DiscoverAlbum>;
 }
 
 export interface DiscoverContainer<T> {

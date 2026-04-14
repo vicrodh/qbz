@@ -793,6 +793,14 @@
         loadingEditorPicks = false;
       }
 
+      // Release Watch (mobile app's "Radar de Novedades") — /discover/index
+      // returns it alongside the editorial sections. Strictly followed-artist
+      // content, so we mirror the page-limit pattern used for new_releases.
+      if (c.release_watch?.data?.items) {
+        releaseWatchAlbums = c.release_watch.data.items.slice(0, homeLimits.featuredAlbums).map(discoverAlbumToCardData);
+      }
+      loadingReleaseWatch = false;
+
       // Extract playlists (limited) - initial load without tag filter
       if (c.playlists?.data?.items) {
         qobuzPlaylists = c.playlists.data.items.slice(0, LIMITS.qobuzPlaylists);
@@ -820,6 +828,7 @@
       loadingEditorPicks = false;
       loadingQobuzPlaylists = false;
       loadingEssentialDiscography = false;
+      loadingReleaseWatch = false;
     }
   }
 
@@ -845,11 +854,10 @@
     const genreIds = Array.from(getSelectedGenreIds());
 
     // Two parallel paths:
-    // 1. Single Qobuz discover API call (all editorial content)
+    // 1. Single Qobuz discover API call (all editorial content, including
+    //    Release Watch from the user's follows)
     // 2. ML seeds from local SQLite -> user-specific sections
-    // Plus release-watch which is its own endpoint.
     const discoverPromise = fetchAllDiscoverData(genreIds);
-    const releaseWatchPromise = fetchReleaseWatch();
 
     // Single IPC call returns fully-resolved card data (3-tier cache in Rust)
     const mlPromise = invoke<HomeResolved>('v2_reco_get_home_resolved', {
@@ -887,9 +895,8 @@
       loadingFavoriteAlbums = false;
     }
 
-    // Ensure discover + release watch promises complete (errors already
-    // handled internally)
-    await Promise.all([discoverPromise, releaseWatchPromise]);
+    // Ensure discover promise completes (errors already handled internally)
+    await discoverPromise;
 
     // Single batch download status check for ALL albums at once
     const allAlbums = [
@@ -898,20 +905,6 @@
       ...recentAlbums, ...favoriteAlbums, ...releaseWatchAlbums
     ];
     loadAllAlbumDownloadStatusesBatch(allAlbums).catch(() => {});
-  }
-
-  async function fetchReleaseWatch() {
-    try {
-      const result = await invoke<{ items: QobuzAlbum[]; total: number }>(
-        'v2_get_release_watch',
-        { limit: 20, offset: 0 }
-      );
-      releaseWatchAlbums = (result.items || []).map(toAlbumCard);
-    } catch (err) {
-      console.error('fetchReleaseWatch failed:', err);
-    } finally {
-      loadingReleaseWatch = false;
-    }
   }
 </script>
 

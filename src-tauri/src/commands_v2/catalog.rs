@@ -258,50 +258,6 @@ pub async fn v2_get_featured_albums(
     Ok(results)
 }
 
-/// Get Release Watch (V2 — releases from followed artists, labels and awards)
-///
-/// Surfaces the mobile client's "Radar de Novedades" / "Release Watch" feed.
-/// Filtered through the user's artist blacklist like other album results.
-#[tauri::command]
-#[allow(non_snake_case)]
-pub async fn v2_get_release_watch(
-    limit: Option<u32>,
-    offset: Option<u32>,
-    bridge: State<'_, CoreBridgeState>,
-    blacklist_state: State<'_, BlacklistState>,
-    runtime: State<'_, RuntimeManagerState>,
-) -> Result<SearchResultsPage<Album>, RuntimeError> {
-    runtime
-        .manager()
-        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
-        .await?;
-
-    let limit = limit.unwrap_or(20);
-    let offset = offset.unwrap_or(0);
-    log::info!("[V2] get_release_watch: limit={}, offset={}", limit, offset);
-
-    let bridge = bridge.get().await;
-    let mut results = bridge
-        .get_release_watch(limit, offset)
-        .await
-        .map_err(RuntimeError::Internal)?;
-
-    let original_count = results.items.len();
-    results
-        .items
-        .retain(|album| !blacklist_state.is_blacklisted(album.artist.id));
-    let filtered_count = original_count - results.items.len();
-    if filtered_count > 0 {
-        log::debug!(
-            "[V2/Blacklist] Filtered {} albums from release watch",
-            filtered_count
-        );
-        results.total = results.total.saturating_sub(filtered_count as u32);
-    }
-
-    Ok(results)
-}
-
 /// Get artist page (V2 - uses QbzCore)
 #[tauri::command]
 #[allow(non_snake_case)]

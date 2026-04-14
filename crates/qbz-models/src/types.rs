@@ -548,6 +548,14 @@ pub struct DiscoverContainers {
     pub most_streamed: Option<DiscoverContainer<DiscoverAlbum>>,
     pub press_awards: Option<DiscoverContainer<DiscoverAlbum>>,
     pub album_of_the_week: Option<DiscoverContainer<DiscoverAlbum>>,
+    /// Release Watch — new releases from artists, labels and awards the user
+    /// follows. The mobile client surfaces this as "Radar de Novedades" /
+    /// "Release Watch". Comes back from `/discover/index` alongside the
+    /// editorial sections; we consume it in the same response rather than
+    /// calling the separate `/albums/releaseWatch` endpoint used by the
+    /// Android app (which the web API doesn't route).
+    #[serde(default, alias = "releaseWatch", alias = "releasewatch")]
+    pub release_watch: Option<DiscoverContainer<DiscoverAlbum>>,
 }
 
 /// Generic discover container
