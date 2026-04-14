@@ -56,6 +56,8 @@ pub mod session_store;
 pub mod share;
 pub mod snap;
 pub mod tray;
+#[cfg(target_os = "linux")]
+pub mod tray_linux_ksni;
 pub mod updates;
 pub mod user_data;
 pub mod visualizer;

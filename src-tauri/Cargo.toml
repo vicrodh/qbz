@@ -157,6 +157,11 @@ futures-util = "0.3"
 tauri-plugin-dialog = { version = "2.7.0" }
 ashpd = { version = "0.13", default-features = false, features = ["tokio", "notification", "inhibit", "secret"] }
 mupdf = { version = "0.6", features = ["sys-lib-zlib", "sys-lib-harfbuzz", "sys-lib-freetype"] }
+# Linux tray via StatusNotifierItem with primary-activate support.
+# Tauri's built-in tray uses libayatana-appindicator which does not dispatch
+# left-click events to clients (by design — primary click always shows the
+# menu). ksni is a pure-Rust SNI impl that exposes Activate. See issue #310.
+ksni = { version = "0.3", features = ["blocking"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 tauri-plugin-dialog = { version = "2.7.0" }
