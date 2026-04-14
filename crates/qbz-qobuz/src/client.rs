@@ -825,7 +825,34 @@ impl QobuzClient {
         // and the caller already knows the offset/limit it asked for, so
         // we project onto SearchResultsPage<Album> to stay compatible with
         // the rest of the album-list plumbing.
-        let items_value = response.get("items").cloned().unwrap_or(Value::Null);
+        //
+        // Note on shape: AlbumDto carries both `artist` (singular, legacy)
+        // and `artists` (array, current). `/favorite/getNewReleases` tends
+        // to omit `artist` and only populate `artists[]`, which made our
+        // `Album` struct deserialize an empty `artist` and the UI show
+        // "Unknown Artist". Backfill `artist` from `artists[0]` before
+        // parsing so the existing deserializer just works.
+        let mut items_value = response.get("items").cloned().unwrap_or(Value::Null);
+        if let Some(items_arr) = items_value.as_array_mut() {
+            for item in items_arr {
+                if let Some(obj) = item.as_object_mut() {
+                    let needs_backfill = obj
+                        .get("artist")
+                        .map(|v| v.is_null())
+                        .unwrap_or(true);
+                    if needs_backfill {
+                        if let Some(first_artist) = obj
+                            .get("artists")
+                            .and_then(|a| a.as_array())
+                            .and_then(|arr| arr.first())
+                            .cloned()
+                        {
+                            obj.insert("artist".to_string(), first_artist);
+                        }
+                    }
+                }
+            }
+        }
         let items: Vec<Album> = serde_json::from_value(items_value).map_err(|e| {
             log::warn!(
                 "[API] get_release_watch items parse error: {}. Body (first 600 chars): {}",
