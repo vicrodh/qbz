@@ -969,14 +969,24 @@ pub struct PageArtistAward {
 }
 
 /// Tolerant award struct used in Album responses where Qobuz is
-/// inconsistent about field types. id is emitted as String downstream.
+/// inconsistent about field types. Aliases cover LegacyAwardDto's
+/// awardId / awardedAt field names used in /album/get responses.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AlbumAward {
-    #[serde(default, deserialize_with = "deserialize_album_award_id")]
+    #[serde(
+        default,
+        alias = "awardId",
+        alias = "award_id",
+        deserialize_with = "deserialize_album_award_id"
+    )]
     pub id: Option<String>,
     #[serde(default)]
     pub name: String,
-    #[serde(default, deserialize_with = "deserialize_album_awarded_at")]
+    #[serde(
+        default,
+        alias = "awardedAt",
+        deserialize_with = "deserialize_album_awarded_at"
+    )]
     pub awarded_at: Option<String>,
 }
 

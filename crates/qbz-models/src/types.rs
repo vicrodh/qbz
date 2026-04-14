@@ -849,18 +849,32 @@ pub struct PageArtistAward {
 }
 
 /// Award attached to an album. Shape is intentionally lenient because
-/// Qobuz returns different field types across endpoints:
-/// - `/discover/index` — id=int, name=string, awarded_at="YYYY-MM-DD"
-/// - `/album/get`      — id=string, awarded_at may be Unix epoch int
+/// Qobuz uses three different embedded shapes across endpoints:
+/// - `/discover/index` — {id: int, name, awarded_at: "YYYY-MM-DD"}
+/// - `/album/get`      — LegacyAwardDto {awardId: string, name,
+///                        publicationId, publicationName, awardSlug,
+///                        awardedAt: long, …}
+/// - `/artist/page`    — PageArtistAward {id: int, name, awarded_at}
 /// id is emitted as String downstream so the frontend has a single
-/// type to carry into /award/page and /award/getAlbums.
+/// type to carry into /award/page and /award/getAlbums. The `alias`
+/// list covers the LegacyAwardDto field name the web app never sees
+/// but the mobile API uses.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AlbumAward {
-    #[serde(default, deserialize_with = "deserialize_award_id")]
+    #[serde(
+        default,
+        alias = "awardId",
+        alias = "award_id",
+        deserialize_with = "deserialize_award_id"
+    )]
     pub id: Option<String>,
     #[serde(default)]
     pub name: String,
-    #[serde(default, deserialize_with = "deserialize_award_awarded_at")]
+    #[serde(
+        default,
+        alias = "awardedAt",
+        deserialize_with = "deserialize_award_awarded_at"
+    )]
     pub awarded_at: Option<String>,
 }
 
