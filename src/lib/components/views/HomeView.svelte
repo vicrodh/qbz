@@ -92,12 +92,13 @@
    * sidebar will render the full stack.
    */
   function pickAlbumRibbon(
-    awards?: { id: number; name: string }[] | null
+    awards?: { id?: string | number; name: string }[] | null
   ): AlbumRibbon | undefined {
     if (!awards || awards.length === 0) return undefined;
     const last = awards[awards.length - 1];
-    if (last.id === 88) return { kind: 'qobuzissime', label: last.name };
-    if (last.id === 151) return { kind: 'albumOfTheWeek', label: last.name };
+    const idStr = last.id !== undefined && last.id !== null ? String(last.id) : '';
+    if (idStr === '88') return { kind: 'qobuzissime', label: last.name };
+    if (idStr === '151') return { kind: 'albumOfTheWeek', label: last.name };
     return { kind: 'press', label: last.name };
   }
 

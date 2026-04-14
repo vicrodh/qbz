@@ -851,17 +851,29 @@ pub struct PageArtistAward {
 /// Award attached to an album. Shape is intentionally lenient because
 /// Qobuz returns different field types across endpoints:
 /// - `/discover/index` — id=int, name=string, awarded_at="YYYY-MM-DD"
-/// - `/album/get` — id may be missing, awarded_at may be Unix epoch int
-/// Keeps the parent Album struct from blowing up on any of those
-/// variations while still giving the UI enough to render a ribbon.
+/// - `/album/get`      — id=string, awarded_at may be Unix epoch int
+/// id is emitted as String downstream so the frontend has a single
+/// type to carry into /award/page and /award/getAlbums.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AlbumAward {
-    #[serde(default)]
-    pub id: Option<u64>,
+    #[serde(default, deserialize_with = "deserialize_award_id")]
+    pub id: Option<String>,
     #[serde(default)]
     pub name: String,
     #[serde(default, deserialize_with = "deserialize_award_awarded_at")]
     pub awarded_at: Option<String>,
+}
+
+fn deserialize_award_id<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(match value {
+        Some(serde_json::Value::String(s)) if !s.is_empty() => Some(s),
+        Some(serde_json::Value::Number(n)) => Some(n.to_string()),
+        _ => None,
+    })
 }
 
 fn deserialize_award_awarded_at<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>

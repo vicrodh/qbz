@@ -58,8 +58,8 @@
   }
 
   interface Award {
-    /** Optional — some /album/get entries omit the id. */
-    id?: number;
+    /** String id — normalized from int or string by the backend. */
+    id?: string;
     name: string;
     awardedAt?: string;
   }
@@ -86,7 +86,7 @@
     onBack: () => void;
     onArtistClick?: () => void;
     onLabelClick?: (labelId: number, labelName: string) => void;
-    onAwardClick?: (awardId: number, awardName: string) => void;
+    onAwardClick?: (awardId: string, awardName: string) => void;
     onTrackPlay?: (track: Track) => void;
     onTrackPlayNext?: (track: Track) => void;
     onTrackPlayLater?: (track: Track) => void;
@@ -764,8 +764,8 @@
               <button
                 class="sidebar-entity-card"
                 type="button"
-                onclick={() => { if (award.id !== undefined && onAwardClick) onAwardClick(award.id, award.name); }}
-                disabled={!onAwardClick || award.id === undefined}
+                onclick={() => { if (award.id && onAwardClick) onAwardClick(award.id, award.name); }}
+                disabled={!onAwardClick || !award.id}
               >
                 <div class="sidebar-entity-avatar award-avatar">
                   <Award size={22} />

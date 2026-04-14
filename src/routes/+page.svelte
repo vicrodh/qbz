@@ -1528,9 +1528,10 @@
     navigateTo('label-releases', labelId);
   }
 
-  function handleAwardClick(awardId: number, awardName: string) {
-    selectedAward = { id: String(awardId), name: awardName };
-    navigateTo('award', String(awardId));
+  function handleAwardClick(awardId: string, awardName: string) {
+    if (!awardId) return;
+    selectedAward = { id: awardId, name: awardName };
+    navigateTo('award', awardId);
   }
 
   /**

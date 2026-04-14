@@ -1478,12 +1478,13 @@ impl QobuzClient {
     }
 
     /// Get award page — hero info + categorized award-winning releases.
-    /// Mirrors Android's AwardDto shape from /award/page.
+    /// Mirrors Android's AwardDto shape from /award/page. Uses auth
+    /// headers (app_id + user token) — region-gated catalog.
     pub async fn get_award_page(&self, award_id: &str) -> Result<qbz_models::AwardPageData> {
         let url = endpoints::build_url(paths::AWARD_PAGE);
         log::debug!("[API] get_award_page({})", award_id);
         let response: serde_json::Value = self
-            .signed_get(&url, "awardpage", &[("award_id", award_id.to_string())])
+            .signed_get_auth(&url, "awardpage", &[("award_id", award_id.to_string())])
             .await?
             .json()
             .await?;
@@ -1491,6 +1492,10 @@ impl QobuzClient {
     }
 
     /// Get paginated albums for a single award (/award/getAlbums).
+    /// Response is V2AlbumGenericListDto = {has_more, items:[DiscographyAlbumDto]}
+    /// per k20/b.java. DiscographyAlbumDto carries artists[] plural and
+    /// artist singular as an optional DiscographyArtistDto — we backfill
+    /// artist from artists[0] when missing (same trick as release watch).
     pub async fn get_award_albums(
         &self,
         award_id: &str,
@@ -1498,9 +1503,14 @@ impl QobuzClient {
         offset: u32,
     ) -> Result<SearchResultsPage<Album>> {
         let url = endpoints::build_url(paths::AWARD_GET_ALBUMS);
-        log::debug!("[API] get_award_albums({}, limit={}, offset={})", award_id, limit, offset);
-        let response: serde_json::Value = self
-            .signed_get(
+        log::debug!(
+            "[API] get_award_albums({}, limit={}, offset={})",
+            award_id,
+            limit,
+            offset
+        );
+        let http_response = self
+            .signed_get_auth(
                 &url,
                 "awardgetAlbums",
                 &[
@@ -1509,17 +1519,57 @@ impl QobuzClient {
                     ("offset", offset.to_string()),
                 ],
             )
-            .await?
-            .json()
             .await?;
+        let status = http_response.status();
+        let body_text = http_response.text().await?;
+        if !status.is_success() {
+            log::warn!(
+                "[API] get_award_albums non-success body (first 400 chars): {}",
+                body_text.chars().take(400).collect::<String>()
+            );
+            return Err(ApiError::ApiResponse(format!(
+                "get_award_albums status {}",
+                status
+            )));
+        }
+        let response: serde_json::Value = serde_json::from_str(&body_text)?;
 
-        // Response envelope may be V2GenericListDto {has_more,items} or the
-        // search-style {albums: {items,total,offset,limit}}. Try both.
+        // Legacy shape some endpoints use: {albums: {items, total, offset, limit}}
         if let Some(albums_obj) = response.get("albums") {
             return Ok(serde_json::from_value(albums_obj.clone())?);
         }
-        let items_value = response.get("items").cloned().unwrap_or(serde_json::Value::Null);
-        let items: Vec<Album> = serde_json::from_value(items_value).unwrap_or_default();
+
+        // Current shape: V2AlbumGenericListDto {has_more, items}.
+        let mut items_value = response.get("items").cloned().unwrap_or(serde_json::Value::Null);
+        if let Some(items_arr) = items_value.as_array_mut() {
+            for item in items_arr {
+                if let Some(obj) = item.as_object_mut() {
+                    let needs_backfill = obj
+                        .get("artist")
+                        .map(|v| v.is_null())
+                        .unwrap_or(true);
+                    if needs_backfill {
+                        if let Some(first_artist) = obj
+                            .get("artists")
+                            .and_then(|a| a.as_array())
+                            .and_then(|arr| arr.first())
+                            .cloned()
+                        {
+                            obj.insert("artist".to_string(), first_artist);
+                        }
+                    }
+                }
+            }
+        }
+        let items: Vec<Album> = serde_json::from_value(items_value).map_err(|e| {
+            log::warn!(
+                "[API] get_award_albums items parse error: {}. Body (first 600 chars): {}",
+                e,
+                body_text.chars().take(600).collect::<String>()
+            );
+            ApiError::ApiResponse(format!("get_award_albums items parse: {}", e))
+        })?;
+
         let has_more = response
             .get("has_more")
             .and_then(|v| v.as_bool())
@@ -1529,6 +1579,12 @@ impl QobuzClient {
         } else {
             offset + items.len() as u32
         };
+        log::info!(
+            "[API] get_award_albums({}) parsed {} items (has_more={})",
+            award_id,
+            items.len(),
+            has_more
+        );
         Ok(SearchResultsPage::<Album> {
             items,
             total: total_hint,

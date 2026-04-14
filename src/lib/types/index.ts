@@ -106,7 +106,7 @@ export interface QobuzAlbum {
   parental_warning?: boolean;
   upc?: string;
   goodies?: QobuzGoody[];
-  awards?: { id?: number; name: string; awarded_at?: string }[];
+  awards?: { id?: string; name: string; awarded_at?: string }[];
 }
 
 export interface QobuzGoody {
@@ -182,8 +182,10 @@ export interface Track {
 }
 
 export interface AlbumAward {
-  /** Optional because /album/get sometimes omits the award id. */
-  id?: number;
+  /** String because Qobuz inconsistently types this across endpoints;
+   *  the backend normalizes int or string to string. Optional — some
+   *  /album/get entries omit id entirely. */
+  id?: string;
   name: string;
   awardedAt?: string;
 }

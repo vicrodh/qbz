@@ -969,15 +969,27 @@ pub struct PageArtistAward {
 }
 
 /// Tolerant award struct used in Album responses where Qobuz is
-/// inconsistent about optional id and awarded_at types.
+/// inconsistent about field types. id is emitted as String downstream.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AlbumAward {
-    #[serde(default)]
-    pub id: Option<u64>,
+    #[serde(default, deserialize_with = "deserialize_album_award_id")]
+    pub id: Option<String>,
     #[serde(default)]
     pub name: String,
     #[serde(default, deserialize_with = "deserialize_album_awarded_at")]
     pub awarded_at: Option<String>,
+}
+
+fn deserialize_album_award_id<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(match value {
+        Some(serde_json::Value::String(s)) if !s.is_empty() => Some(s),
+        Some(serde_json::Value::Number(n)) => Some(n.to_string()),
+        _ => None,
+    })
 }
 
 fn deserialize_album_awarded_at<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
