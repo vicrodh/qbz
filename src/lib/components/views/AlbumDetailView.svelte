@@ -11,7 +11,7 @@
     setCustomAlbumCover,
     removeCustomAlbumCover as removeCustomCoverFromStore
   } from '$lib/stores/customAlbumCoverStore';
-  import { ArrowLeft, Play, Shuffle, Heart, Radio, CloudDownload, ChevronLeft, ChevronRight, LoaderCircle, SquareCheckBig, BookOpen } from 'lucide-svelte';
+  import { ArrowLeft, Play, Shuffle, Heart, Radio, CloudDownload, ChevronLeft, ChevronRight, LoaderCircle, SquareCheckBig, BookOpen, Award, Disc3 } from 'lucide-svelte';
   import { cachedSrc } from '$lib/actions/cachedImage';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackRow from '../TrackRow.svelte';
@@ -57,6 +57,12 @@
     releaseDate?: string;
   }
 
+  interface Award {
+    id: number;
+    name: string;
+    awardedAt?: string;
+  }
+
   interface Props {
     album: {
       id: string;
@@ -74,10 +80,12 @@
       duration: string;
       tracks: Track[];
       goodies?: QobuzGoody[];
+      awards?: Award[];
     };
     onBack: () => void;
     onArtistClick?: () => void;
     onLabelClick?: (labelId: number, labelName: string) => void;
+    onAwardClick?: (awardId: number, awardName: string) => void;
     onTrackPlay?: (track: Track) => void;
     onTrackPlayNext?: (track: Track) => void;
     onTrackPlayLater?: (track: Track) => void;
@@ -127,6 +135,7 @@
     onBack,
     onArtistClick,
     onLabelClick,
+    onAwardClick,
     onTrackPlay,
     onTrackPlayNext,
     onTrackPlayLater,
@@ -628,6 +637,8 @@
   <!-- Divider -->
   <div class="divider"></div>
 
+  <!-- Track list + right-side metadata sidebar (label + awards) -->
+  <div class="track-sidebar-layout">
   <!-- Track List -->
   <div class="track-list">
     <!-- Table Header -->
@@ -721,6 +732,51 @@
       onAddFavorites={onTrackAddFavorite ? handleBulkAddFavorites : undefined}
       onClearSelection={() => { multiSelectedIds = new Set(); }}
     />
+  </div>
+
+  <!-- Album metadata sidebar (label + awards stack). Matches Qobuz web
+       where the label and press accolades sit to the right of the track
+       list; collapses under the tracks below 1100px. -->
+  {#if (album.labelId && album.label) || (album.awards && album.awards.length > 0)}
+    <aside class="album-sidebar">
+      {#if album.labelId && album.label}
+        <section class="sidebar-section">
+          <h3 class="sidebar-section-title">{$t('album.sidebar.label')}</h3>
+          <button
+            class="sidebar-entity-card"
+            type="button"
+            onclick={() => onLabelClick?.(album.labelId!, album.label)}
+            disabled={!onLabelClick}
+          >
+            <div class="sidebar-entity-avatar label-avatar">
+              <Disc3 size={24} />
+            </div>
+            <div class="sidebar-entity-name">{album.label}</div>
+          </button>
+        </section>
+      {/if}
+      {#if album.awards && album.awards.length > 0}
+        <section class="sidebar-section">
+          <h3 class="sidebar-section-title">{$t('album.sidebar.awards')}</h3>
+          <div class="sidebar-awards-list">
+            {#each album.awards as award (award.id + ':' + award.name)}
+              <button
+                class="sidebar-entity-card"
+                type="button"
+                onclick={() => onAwardClick?.(award.id, award.name)}
+                disabled={!onAwardClick}
+              >
+                <div class="sidebar-entity-avatar award-avatar">
+                  <Award size={22} />
+                </div>
+                <div class="sidebar-entity-name">{award.name}</div>
+              </button>
+            {/each}
+          </div>
+        </section>
+      {/if}
+    </aside>
+  {/if}
   </div>
 
   <!-- By the same artist Section -->
@@ -1286,5 +1342,105 @@
     height: 1px;
     background: var(--border-subtle);
     margin: 4px 8px;
+  }
+
+  /* ---- Album metadata sidebar (label + awards) ---- */
+  .track-sidebar-layout {
+    display: flex;
+    flex-direction: row;
+    gap: 32px;
+    align-items: flex-start;
+  }
+  .track-sidebar-layout .track-list {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .album-sidebar {
+    flex: 0 0 280px;
+    width: 280px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    padding-top: 4px;
+  }
+  .sidebar-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .sidebar-section-title {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin: 0;
+  }
+  .sidebar-awards-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .sidebar-entity-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 10px;
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    text-align: left;
+    transition: background-color 150ms ease;
+    color: var(--text-primary);
+    width: 100%;
+    min-width: 0;
+  }
+  .sidebar-entity-card:hover:not(:disabled) {
+    background: var(--bg-tertiary);
+  }
+  .sidebar-entity-card:disabled {
+    cursor: default;
+  }
+  .sidebar-entity-avatar {
+    flex: 0 0 44px;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+  }
+  .sidebar-entity-avatar.label-avatar {
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  }
+  .sidebar-entity-avatar.award-avatar {
+    background: linear-gradient(135deg, #b45309 0%, #eab308 100%);
+  }
+  .sidebar-entity-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    line-height: 1.3;
+    min-width: 0;
+    flex: 1;
+  }
+
+  /* Collapse sidebar under tracks on narrow windows */
+  @media (max-width: 1100px) {
+    .track-sidebar-layout {
+      flex-direction: column;
+      gap: 24px;
+    }
+    .album-sidebar {
+      flex: 1 1 auto;
+      width: 100%;
+    }
   }
 </style>

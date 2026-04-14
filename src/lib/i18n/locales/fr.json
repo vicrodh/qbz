@@ -320,7 +320,11 @@
     "seeFullDiscography": "Voir la discographie complète",
     "releasedOn": "le",
     "releasedBy": "Parution chez",
-    "loadError": "Impossible de charger les pistes de l'album. Veuillez réessayer."
+    "loadError": "Impossible de charger les pistes de l'album. Veuillez réessayer.",
+    "sidebar": {
+      "label": "Label",
+      "awards": "Récompenses"
+    }
   },
   "artist": {
     "albums": "Albums",

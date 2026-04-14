@@ -320,7 +320,11 @@
     "bookletRotate": "Rotate",
     "bookletDownload": "Save booklet",
     "sameArtist": "By the same artist",
-    "seeFullDiscography": "See full discography"
+    "seeFullDiscography": "See full discography",
+    "sidebar": {
+      "label": "Label",
+      "awards": "Awards"
+    }
   },
   "artist": {
     "albums": "Albums",

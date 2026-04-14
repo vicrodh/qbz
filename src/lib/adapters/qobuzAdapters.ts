@@ -390,7 +390,8 @@ export function convertQobuzAlbum(album: QobuzAlbum): AlbumDetail {
       parental_warning: track.parental_warning ?? false
     })) || [],
     upc: album.upc,
-    goodies: album.goodies
+    goodies: album.goodies,
+    awards: album.awards?.map(a => ({ id: a.id, name: a.name, awardedAt: a.awarded_at }))
   };
 }
 

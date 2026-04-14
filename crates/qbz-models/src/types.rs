@@ -265,6 +265,9 @@ pub struct Album {
     /// Album goodies (booklets, liner notes PDFs)
     #[serde(default)]
     pub goodies: Option<Vec<Goody>>,
+    /// Editorial awards (Qobuzissime, Album of the Week, press accolades).
+    #[serde(default)]
+    pub awards: Option<Vec<PageArtistAward>>,
 }
 
 /// A downloadable extra bundled with an album (e.g. PDF booklet)

@@ -106,6 +106,7 @@ export interface QobuzAlbum {
   parental_warning?: boolean;
   upc?: string;
   goodies?: QobuzGoody[];
+  awards?: { id: number; name: string; awarded_at?: string }[];
 }
 
 export interface QobuzGoody {
@@ -180,6 +181,12 @@ export interface Track {
   parental_warning?: boolean;
 }
 
+export interface AlbumAward {
+  id: number;
+  name: string;
+  awardedAt?: string;
+}
+
 export interface AlbumDetail {
   id: string;
   artwork: string;
@@ -197,6 +204,7 @@ export interface AlbumDetail {
   tracks: Track[];
   upc?: string; // Universal Product Code for album.link sharing
   goodies?: QobuzGoody[];
+  awards?: AlbumAward[];
 }
 
 export interface ArtistDetail {

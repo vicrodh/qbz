@@ -320,7 +320,11 @@
     "seeFullDiscography": "Vollständige Diskografie ansehen",
     "loadError": "Albumtitel konnten nicht geladen werden. Bitte versuchen Sie es erneut.",
     "releasedOn": "am",
-    "releasedBy": "Erschienen bei"
+    "releasedBy": "Erschienen bei",
+    "sidebar": {
+      "label": "Label",
+      "awards": "Auszeichnungen"
+    }
   },
   "artist": {
     "albums": "Alben",

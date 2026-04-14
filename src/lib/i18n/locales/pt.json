@@ -320,7 +320,11 @@
     "sameArtist": "Do mesmo artista",
     "seeFullDiscography": "Ver discografia completa",
     "releasedOn": "em",
-    "releasedBy": "Lançado pela"
+    "releasedBy": "Lançado pela",
+    "sidebar": {
+      "label": "Selo",
+      "awards": "Prêmios"
+    }
   },
   "artist": {
     "albums": "Álbuns",

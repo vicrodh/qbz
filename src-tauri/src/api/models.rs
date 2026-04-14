@@ -230,6 +230,9 @@ pub struct Album {
     pub upc: Option<String>,
     /// Editorial description/review of the album
     pub description: Option<String>,
+    /// Editorial awards attached to the album.
+    #[serde(default)]
+    pub awards: Option<Vec<PageArtistAward>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
