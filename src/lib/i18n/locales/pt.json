@@ -91,7 +91,11 @@
     "pressAccolades": "Elogios da Crítica",
     "qobuzPlaylists": "Playlists Qobuz",
     "searchPlaylistsPlaceholder": "Buscar playlists...",
-    "noPlaylistResults": "Nenhuma playlist encontrada"
+    "noPlaylistResults": "Nenhuma playlist encontrada",
+    "releaseWatch": {
+      "title": "Radar de Novidades",
+      "subtitle": "Lançamentos dos artistas, selos e prêmios que você segue."
+    }
   },
   "search": {
     "title": "Buscar",

@@ -269,13 +269,14 @@
   let loadingFavoriteAlbums = $state(true);
   let loadingQobuzPlaylists = $state(true);
   let loadingEssentialDiscography = $state(true);
+  let loadingReleaseWatch = $state(true);
 
   // True when all sections have finished loading (for empty state detection)
   const anyLoading = $derived(
     loadingNewReleases || loadingPressAwards || loadingMostStreamed ||
     loadingQobuzissimes || loadingEditorPicks || loadingRecentAlbums ||
     loadingContinueTracks || loadingTopArtists || loadingFavoriteAlbums ||
-    loadingQobuzPlaylists || loadingEssentialDiscography
+    loadingQobuzPlaylists || loadingEssentialDiscography || loadingReleaseWatch
   );
 
   // Featured albums (from Qobuz editorial)
@@ -284,6 +285,10 @@
   let mostStreamed = $state<AlbumCardData[]>([]);
   let qobuzissimes = $state<AlbumCardData[]>([]);
   let editorPicks = $state<AlbumCardData[]>([]);
+
+  // Release Watch — followed-artists/labels/awards feed from the mobile
+  // client (Qobuz "Radar de Novedades").
+  let releaseWatchAlbums = $state<AlbumCardData[]>([]);
 
   // User-specific content
   let recentAlbums = $state<AlbumCardData[]>([]);
@@ -359,6 +364,7 @@
     || favoriteAlbums.length > 0
     || qobuzPlaylists.length > 0
     || essentialDiscography.length > 0
+    || releaseWatchAlbums.length > 0
   );
 
 
@@ -832,6 +838,7 @@
       loadingFavoriteAlbums = true;
       loadingQobuzPlaylists = true;
       loadingEssentialDiscography = true;
+      loadingReleaseWatch = true;
     }
 
     // Get current genre filter (array of IDs for multi-select)
@@ -840,7 +847,9 @@
     // Two parallel paths:
     // 1. Single Qobuz discover API call (all editorial content)
     // 2. ML seeds from local SQLite -> user-specific sections
+    // Plus release-watch which is its own endpoint.
     const discoverPromise = fetchAllDiscoverData(genreIds);
+    const releaseWatchPromise = fetchReleaseWatch();
 
     // Single IPC call returns fully-resolved card data (3-tier cache in Rust)
     const mlPromise = invoke<HomeResolved>('v2_reco_get_home_resolved', {
@@ -878,16 +887,31 @@
       loadingFavoriteAlbums = false;
     }
 
-    // Ensure discover promise completes (errors already handled internally)
-    await discoverPromise;
+    // Ensure discover + release watch promises complete (errors already
+    // handled internally)
+    await Promise.all([discoverPromise, releaseWatchPromise]);
 
     // Single batch download status check for ALL albums at once
     const allAlbums = [
       ...newReleases, ...pressAwards, ...mostStreamed,
       ...qobuzissimes, ...editorPicks,
-      ...recentAlbums, ...favoriteAlbums
+      ...recentAlbums, ...favoriteAlbums, ...releaseWatchAlbums
     ];
     loadAllAlbumDownloadStatusesBatch(allAlbums).catch(() => {});
+  }
+
+  async function fetchReleaseWatch() {
+    try {
+      const result = await invoke<{ items: QobuzAlbum[]; total: number }>(
+        'v2_get_release_watch',
+        { limit: 20, offset: 0 }
+      );
+      releaseWatchAlbums = (result.items || []).map(toAlbumCard);
+    } catch (err) {
+      console.error('fetchReleaseWatch failed:', err);
+    } finally {
+      loadingReleaseWatch = false;
+    }
   }
 </script>
 
@@ -1301,6 +1325,55 @@
                 />
               {/each}
             {/if}
+            <div class="spacer"></div>
+          {/snippet}
+        </HorizontalScrollRow>
+      {/if}
+    {/if}
+
+    {#if sectionId === 'releaseWatch'}
+      {#if loadingReleaseWatch}
+        <div class="skeleton-section">
+          <div class="skeleton-title"></div>
+          <div class="skeleton-row">
+            {#each { length: 6 } as _}<div class="skeleton-card"></div>{/each}
+          </div>
+        </div>
+      {:else if releaseWatchAlbums.length > 0}
+        <HorizontalScrollRow>
+          {#snippet header()}
+            <div class="section-header-col">
+              <h2 class="section-title">{$t('discover.releaseWatch.title')}</h2>
+              <p class="section-subtitle">{$t('discover.releaseWatch.subtitle')}</p>
+            </div>
+          {/snippet}
+          {#snippet children()}
+            {#each releaseWatchAlbums as album (album.id)}
+              <AlbumCard
+                albumId={album.id}
+                artwork={album.artwork}
+                title={album.title}
+                artist={album.artist}
+                artistId={album.artistId}
+                onArtistClick={onArtistClick}
+                genre={album.genre}
+                releaseDate={album.releaseDate}
+                size="large"
+                quality={album.quality}
+                onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
+                onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
+                onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
+                onAddAlbumToPlaylist={onAddAlbumToPlaylist ? () => onAddAlbumToPlaylist(album.id) : undefined}
+                onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
+                onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
+                onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
+                isAlbumFullyDownloaded={isAlbumDownloaded(album.id)}
+                onOpenContainingFolder={onOpenAlbumFolder ? () => onOpenAlbumFolder(album.id) : undefined}
+                onReDownloadAlbum={onReDownloadAlbum ? () => onReDownloadAlbum(album.id) : undefined}
+                {downloadStateVersion}
+                onclick={() => { onAlbumClick?.(album.id); loadAlbumDownloadStatus(album.id); }}
+              />
+            {/each}
             <div class="spacer"></div>
           {/snippet}
         </HorizontalScrollRow>

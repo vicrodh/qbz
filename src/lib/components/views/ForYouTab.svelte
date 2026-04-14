@@ -210,6 +210,11 @@
   let essentialsAlbums = $state<AlbumCardData[]>([]);
   let loadingEssentials = $state(false);
 
+  // Release Watch — the Qobuz mobile "Radar de Novedades" feed: new releases
+  // from artists, labels, and awards the user follows.
+  let releaseWatchAlbums = $state<AlbumCardData[]>([]);
+  let loadingReleaseWatch = $state(false);
+
   // Radio Stations: mix of 3 recent + 3 favorites + 3 top-artist albums, no dupes
   let radioAlbums = $state<AlbumCardData[]>([]);
   let radioBuilt = false;
@@ -273,8 +278,37 @@
       loadSimilarAlbums();
       loadForgottenFavorites();
       loadEssentials();
+      loadReleaseWatch();
     }
   });
+
+  async function loadReleaseWatch() {
+    loadingReleaseWatch = true;
+    try {
+      const result = await invoke<{ items: AlbumSuggestResult[]; total: number }>(
+        'v2_get_release_watch',
+        { limit: 20, offset: 0 }
+      );
+      releaseWatchAlbums = (result.items || []).map(album => ({
+        id: album.id,
+        artwork: album.image?.large || album.image?.small || '',
+        title: album.title,
+        artist: album.artist?.name || '',
+        artistId: album.artist?.id,
+        genre: album.genre?.name || '',
+        quality: formatQuality(
+          album.hires,
+          album.maximum_bit_depth,
+          album.maximum_sampling_rate
+        ),
+        releaseDate: album.release_date_original
+      }));
+    } catch (err) {
+      console.error('Failed to load release watch:', err);
+    } finally {
+      loadingReleaseWatch = false;
+    }
+  }
 
   async function loadArtistsToFollow() {
     if (topArtists.length === 0) return;
@@ -1162,6 +1196,54 @@
     {/snippet}
     {#snippet children()}
       {#each forgottenAlbums as album}
+        <AlbumCard
+          albumId={album.id}
+          artwork={album.artwork}
+          title={album.title}
+          artist={album.artist}
+          artistId={album.artistId}
+          onArtistClick={onArtistClick}
+          genre={album.genre}
+          releaseDate={album.releaseDate}
+          size="large"
+          quality={album.quality}
+          onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
+          onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
+          onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
+          onAddAlbumToPlaylist={onAddAlbumToPlaylist ? () => onAddAlbumToPlaylist(album.id) : undefined}
+          onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
+          onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
+          onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
+          isAlbumFullyDownloaded={isAlbumDownloaded(album.id)}
+          onOpenContainingFolder={onOpenAlbumFolder ? () => onOpenAlbumFolder(album.id) : undefined}
+          onReDownloadAlbum={onReDownloadAlbum ? () => onReDownloadAlbum(album.id) : undefined}
+          {downloadStateVersion}
+          onclick={() => { onAlbumClick?.(album.id); loadAlbumDownloadStatus(album.id); }}
+        />
+      {/each}
+      <div class="spacer"></div>
+    {/snippet}
+  </HorizontalScrollRow>
+{/if}
+
+<!-- Release Watch — followed artists/labels/awards, Qobuz mobile parity -->
+{#if loadingReleaseWatch}
+  <div class="skeleton-section">
+    <div class="skeleton-title"></div>
+    <div class="skeleton-row">
+      {#each { length: 6 } as _}<div class="skeleton-card"></div>{/each}
+    </div>
+  </div>
+{:else if releaseWatchAlbums.length > 0}
+  <HorizontalScrollRow>
+    {#snippet header()}
+      <div class="section-header-col">
+        <h2 class="section-title">{$t('discover.releaseWatch.title')}</h2>
+        <p class="section-subtitle">{$t('discover.releaseWatch.subtitle')}</p>
+      </div>
+    {/snippet}
+    {#snippet children()}
+      {#each releaseWatchAlbums as album}
         <AlbumCard
           albumId={album.id}
           artwork={album.artwork}

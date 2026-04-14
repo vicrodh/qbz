@@ -767,6 +767,47 @@ impl QobuzClient {
         Ok(serde_json::from_value(albums.clone())?)
     }
 
+    /// Get Release Watch — new and upcoming releases from artists, labels
+    /// and awards the user follows. Exposed on mobile/web as "Release Watch"
+    /// or "Radar de Novedades".
+    ///
+    /// Returns the same `{items, offset, limit, total}` page structure as
+    /// `get_featured_albums`. Requires the user to be authenticated; the
+    /// endpoint uses the follows on the caller's account.
+    pub async fn get_release_watch(
+        &self,
+        limit: u32,
+        offset: u32,
+    ) -> Result<SearchResultsPage<Album>> {
+        let url = endpoints::build_url(paths::ALBUMS_RELEASE_WATCH);
+        let params: Vec<(&str, String)> = vec![
+            ("limit", limit.to_string()),
+            ("offset", offset.to_string()),
+        ];
+
+        let http_response = self
+            .signed_get_auth(&url, "albumsreleaseWatch", &params)
+            .await?;
+        log::debug!(
+            "[API] get_release_watch(limit={}, offset={}) status={}",
+            limit,
+            offset,
+            http_response.status()
+        );
+        let response: Value = http_response.json().await?;
+
+        // The mobile client calls into /albums/releaseWatch and expects an
+        // `albums` key wrapping the page. If the server changes this someday
+        // (e.g. to `releaseWatch`), fall back transparently.
+        let page = response
+            .get("albums")
+            .or_else(|| response.get("releaseWatch"))
+            .cloned()
+            .unwrap_or(response);
+
+        Ok(serde_json::from_value(page)?)
+    }
+
     /// Get list of genres
     pub async fn get_genres(&self, parent_id: Option<u64>) -> Result<Vec<GenreInfo>> {
         let url = endpoints::build_url(paths::GENRE_LIST);

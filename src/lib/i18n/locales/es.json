@@ -91,7 +91,11 @@
     "pressAccolades": "Reconocimientos de Prensa",
     "qobuzPlaylists": "Playlists de Qobuz",
     "searchPlaylistsPlaceholder": "Buscar playlists...",
-    "noPlaylistResults": "No se encontraron playlists"
+    "noPlaylistResults": "No se encontraron playlists",
+    "releaseWatch": {
+      "title": "Radar de Novedades",
+      "subtitle": "Novedades de los artistas, sellos y premios que sigues."
+    }
   },
   "search": {
     "title": "Buscar",
