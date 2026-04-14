@@ -20,6 +20,11 @@ pub mod paths {
     pub const ALBUM_GET: &str = "/album/get";
     pub const ALBUM_SEARCH: &str = "/album/search";
     pub const ALBUM_GET_FEATURED: &str = "/album/getFeatured";
+    // Mobile/plural namespace. Unlike /album/* (singular), these endpoints
+    // are REST-style — called with X-App-Id + X-User-Auth-Token headers and
+    // NO request_sig/request_ts. See ALBUMS_RELEASE_WATCH (issue: mobile
+    // "Radar de Novedades" feed of releases from followed artists/labels/awards).
+    pub const ALBUMS_RELEASE_WATCH: &str = "/albums/releaseWatch";
 
     // Artist
     pub const ARTIST_GET: &str = "/artist/get";

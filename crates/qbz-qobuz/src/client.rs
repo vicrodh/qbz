@@ -767,6 +767,68 @@ impl QobuzClient {
         Ok(serde_json::from_value(albums.clone())?)
     }
 
+    /// Get Release Watch — new releases from artists, labels and awards the
+    /// user follows. The Qobuz mobile client surfaces this as "Radar de
+    /// Novedades" / "Release Watch".
+    ///
+    /// This is a REST endpoint in the `/albums/*` plural namespace — called
+    /// with authenticated headers (X-App-Id + X-User-Auth-Token) and NO
+    /// request_sig/request_ts, same shape as the `/radio/*` endpoints. The
+    /// RPC signing protocol does NOT apply here and using it yields the
+    /// "no Service found" error.
+    pub async fn get_release_watch(
+        &self,
+        limit: u32,
+        offset: u32,
+    ) -> Result<SearchResultsPage<Album>> {
+        let url = endpoints::build_url(paths::ALBUMS_RELEASE_WATCH);
+        let limit_str = limit.to_string();
+        let offset_str = offset.to_string();
+
+        let http_response = self
+            .http
+            .get(&url)
+            .headers(self.authenticated_headers().await?)
+            .query(&[
+                ("limit", limit_str.as_str()),
+                ("offset", offset_str.as_str()),
+            ])
+            .send()
+            .await?;
+
+        let status = http_response.status();
+        log::debug!(
+            "[API] get_release_watch(limit={}, offset={}) status={}",
+            limit,
+            offset,
+            status
+        );
+
+        if !status.is_success() {
+            return Err(ApiError::ApiResponse(format!(
+                "get_release_watch status {}",
+                status
+            )));
+        }
+
+        let response: Value = http_response.json().await?;
+
+        // Log the response shape once so we can adjust the unwrap target if
+        // Qobuz returns something unexpected (empty follows can yield
+        // {albums: {items: []}} or {items: []} depending on deployment).
+        if let Some(obj) = response.as_object() {
+            log::debug!(
+                "[API] get_release_watch response keys: {:?}",
+                obj.keys().collect::<Vec<_>>()
+            );
+        }
+
+        // Typical Qobuz paginated album wrapper: {albums: {items, total, ...}}.
+        // Fall back to root-level items if the server flattened it.
+        let page_value = response.get("albums").cloned().unwrap_or(response);
+        Ok(serde_json::from_value(page_value)?)
+    }
+
     /// Get list of genres
     pub async fn get_genres(&self, parent_id: Option<u64>) -> Result<Vec<GenreInfo>> {
         let url = endpoints::build_url(paths::GENRE_LIST);

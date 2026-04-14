@@ -285,37 +285,23 @@
   async function loadReleaseWatch() {
     loadingReleaseWatch = true;
     try {
-      // Release Watch lives inside /discover/index (same call HomeView uses)
-      // rather than a dedicated /albums/releaseWatch endpoint, which the web
-      // API doesn't route — that path only exists on the mobile client.
-      type DiscoverAlbumItem = {
-        id: string;
-        title: string;
-        image?: { small?: string; large?: string };
-        artists?: Array<{ id?: number; name: string }>;
-        genre?: { name?: string };
-        audio_info?: { maximum_bit_depth?: number; maximum_sampling_rate?: number };
-        dates?: { original?: string };
-      };
-      const response = await invoke<{
-        containers?: {
-          release_watch?: { data?: { items?: DiscoverAlbumItem[] } };
-        };
-      }>('v2_get_discover_index', { genreIds: null });
-      const items = response?.containers?.release_watch?.data?.items ?? [];
-      releaseWatchAlbums = items.map((album): AlbumCardData => ({
+      const result = await invoke<{ items: AlbumSuggestResult[]; total: number }>(
+        'v2_get_release_watch',
+        { limit: 20, offset: 0 }
+      );
+      releaseWatchAlbums = (result.items || []).map(album => ({
         id: album.id,
-        artwork: album.image?.small || album.image?.large || '',
+        artwork: album.image?.large || album.image?.small || '',
         title: album.title,
-        artist: album.artists?.[0]?.name || 'Unknown Artist',
-        artistId: album.artists?.[0]?.id,
+        artist: album.artist?.name || '',
+        artistId: album.artist?.id,
         genre: album.genre?.name || '',
         quality: formatQuality(
-          (album.audio_info?.maximum_bit_depth ?? 16) > 16,
-          album.audio_info?.maximum_bit_depth,
-          album.audio_info?.maximum_sampling_rate
+          album.hires,
+          album.maximum_bit_depth,
+          album.maximum_sampling_rate
         ),
-        releaseDate: album.dates?.original
+        releaseDate: album.release_date_original
       }));
     } catch (err) {
       console.error('Failed to load release watch:', err);
