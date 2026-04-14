@@ -149,24 +149,54 @@ fn spawn_v2_prefetch_with_hw_check(
                 }
             };
 
-            // Determine effective quality (may be downgraded for hardware compatibility)
+            // Determine effective quality (may be downgraded for hardware compatibility).
+            // Iterates down the quality ladder until the returned stream sample rate is
+            // something the hardware can play. Both UltraHiRes and HiRes can yield
+            // 96 kHz streams, so a single UltraHiRes→HiRes step is not enough for
+            // DACs that top out at 48 kHz — we continue to Lossless (44.1 kHz) if needed.
             let effective_quality = {
                 let mut eq = quality;
                 #[cfg(target_os = "linux")]
                 if let Some(ref device_id) = hw_device_clone {
-                    if quality == Quality::UltraHiRes {
-                        let bridge_guard = bridge_clone.read().await;
-                        if let Some(bridge) = bridge_guard.as_ref() {
-                            if let Ok(stream_url) = bridge.get_stream_url(track_id, quality).await {
-                                let track_rate = (stream_url.sampling_rate * 1000.0) as u32;
-                                if qbz_audio::device_supports_sample_rate(device_id, track_rate)
-                                    == Some(false)
-                                {
-                                    log::info!(
-                                        "[V2/PREFETCH] Track {} at {}Hz incompatible with hardware, prefetching at Hi-Res",
-                                        track_id, track_rate
-                                    );
-                                    eq = Quality::HiRes;
+                    let bridge_guard = bridge_clone.read().await;
+                    if let Some(bridge) = bridge_guard.as_ref() {
+                        if let Ok(initial_url) = bridge.get_stream_url(track_id, quality).await {
+                            let track_rate = (initial_url.sampling_rate * 1000.0) as u32;
+                            if qbz_audio::device_supports_sample_rate(device_id, track_rate)
+                                == Some(false)
+                            {
+                                for try_quality in [Quality::HiRes, Quality::Lossless] {
+                                    if try_quality >= quality {
+                                        continue;
+                                    }
+                                    match bridge.get_stream_url(track_id, try_quality).await {
+                                        Ok(alt_url) => {
+                                            let alt_rate =
+                                                (alt_url.sampling_rate * 1000.0) as u32;
+                                            if qbz_audio::device_supports_sample_rate(
+                                                device_id, alt_rate,
+                                            ) != Some(false)
+                                            {
+                                                log::info!(
+                                                    "[V2/PREFETCH] Track {} at {}Hz incompatible with hardware, prefetching at {:?} ({}Hz)",
+                                                    track_id,
+                                                    track_rate,
+                                                    try_quality,
+                                                    alt_rate
+                                                );
+                                                eq = try_quality;
+                                                break;
+                                            }
+                                        }
+                                        Err(e) => {
+                                            log::debug!(
+                                                "[V2/PREFETCH] Failed to probe {:?} for track {}: {}",
+                                                try_quality,
+                                                track_id,
+                                                e
+                                            );
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -1040,25 +1070,49 @@ pub async fn v2_play_track(
     );
 
     // Smart quality downgrade for ALSA Direct: if the hardware doesn't support
-    // the track's sample rate, re-request at a lower quality that IS supported.
-    // This avoids resampling and keeps bit-perfect playback.
+    // the track's sample rate, re-request at progressively lower qualities until
+    // one returns a stream the DAC can play. Both UltraHiRes and HiRes may yield
+    // 96 kHz content, so a single downgrade step is not always enough (e.g., a
+    // 48 kHz-only DAC requires falling through to Lossless at 44.1 kHz).
     if let Some(ref device_id) = hw_device_id {
-        if final_quality == Quality::UltraHiRes {
-            let track_rate = (stream_url.sampling_rate * 1000.0) as u32;
-            if qbz_audio::device_supports_sample_rate(device_id, track_rate) == Some(false) {
-                log::info!(
-                    "[V2/Quality] Hardware doesn't support {}Hz, downgrading to Hi-Res",
-                    track_rate
-                );
-                stream_url = bridge_guard
-                    .get_stream_url(track_id, Quality::HiRes)
-                    .await
-                    .map_err(RuntimeError::Internal)?;
-                log::info!(
-                    "[V2/Quality] Got fallback stream URL (format_id={}, rate={}kHz)",
-                    stream_url.format_id,
-                    stream_url.sampling_rate
-                );
+        let track_rate = (stream_url.sampling_rate * 1000.0) as u32;
+        if qbz_audio::device_supports_sample_rate(device_id, track_rate) == Some(false) {
+            log::info!(
+                "[V2/Quality] Hardware doesn't support {}Hz, searching for compatible quality tier",
+                track_rate
+            );
+            for try_quality in [Quality::HiRes, Quality::Lossless] {
+                if try_quality >= final_quality {
+                    continue;
+                }
+                match bridge_guard.get_stream_url(track_id, try_quality).await {
+                    Ok(alt_url) => {
+                        let alt_rate = (alt_url.sampling_rate * 1000.0) as u32;
+                        if qbz_audio::device_supports_sample_rate(device_id, alt_rate)
+                            != Some(false)
+                        {
+                            log::info!(
+                                "[V2/Quality] Falling back to {:?} ({}kHz) for hardware compatibility",
+                                try_quality,
+                                alt_url.sampling_rate
+                            );
+                            stream_url = alt_url;
+                            break;
+                        }
+                        log::debug!(
+                            "[V2/Quality] {:?} returns {}Hz — still incompatible, trying next tier",
+                            try_quality,
+                            alt_rate
+                        );
+                    }
+                    Err(e) => {
+                        log::warn!(
+                            "[V2/Quality] Failed to probe {:?} stream URL: {}",
+                            try_quality,
+                            e
+                        );
+                    }
+                }
             }
         }
     }
