@@ -1648,9 +1648,7 @@
     gap: 8px; width: 140px; flex-shrink: 0;
     background: none; border: none; cursor: pointer;
     padding: 8px; border-radius: 8px;
-    transition: background-color 150ms ease;
   }
-  .label-card:hover { background-color: var(--bg-tertiary); }
   .label-card-image-wrapper {
     width: 120px; height: 120px; border-radius: 50%;
     overflow: hidden; position: relative; background: var(--bg-tertiary);
