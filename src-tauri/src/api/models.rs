@@ -965,7 +965,23 @@ pub struct PageArtistRights {
 pub struct PageArtistAward {
     pub id: u64,
     pub name: String,
+    /// Qobuz returns this either as "YYYY-MM-DD" or a Unix timestamp
+    /// integer depending on the endpoint — accept both.
+    #[serde(default, deserialize_with = "deserialize_awarded_at")]
     pub awarded_at: Option<String>,
+}
+
+fn deserialize_awarded_at<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(match value {
+        Some(serde_json::Value::String(s)) => Some(s),
+        Some(serde_json::Value::Number(n)) => Some(n.to_string()),
+        Some(serde_json::Value::Null) | None => None,
+        Some(_) => None,
+    })
 }
 
 /// Track from /artist/page (top_tracks or tracks_appears_on)

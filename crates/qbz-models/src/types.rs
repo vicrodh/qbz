@@ -467,6 +467,47 @@ pub struct LabelPageGenericList {
     pub items: Option<Vec<serde_json::Value>>,
 }
 
+// ============ Award Page Types (/award/page) ============
+
+/// Magazine/publisher behind a press award.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AwardMagazine {
+    pub id: Option<String>,
+    pub name: Option<String>,
+    pub image: Option<String>,
+}
+
+/// Top-level response from /award/page.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AwardPageData {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub image: Option<String>,
+    #[serde(default)]
+    pub awarded_at: Option<String>,
+    #[serde(default)]
+    pub magazine: Option<AwardMagazine>,
+    /// Categorized containers of award-winning releases (matches
+    /// Android's `releases: List<GenericContainerDto<AlbumDto>>`).
+    #[serde(default)]
+    pub releases: Option<Vec<AwardPageContainer>>,
+    #[serde(default)]
+    pub playlists: Option<AwardPageGenericList>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AwardPageContainer {
+    pub id: Option<String>,
+    pub data: Option<AwardPageGenericList>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AwardPageGenericList {
+    pub has_more: Option<bool>,
+    pub items: Option<Vec<serde_json::Value>>,
+}
+
 /// Response from /label/explore
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LabelExploreResponse {
@@ -785,7 +826,24 @@ pub struct PageArtistRights {
 pub struct PageArtistAward {
     pub id: u64,
     pub name: String,
+    /// Qobuz is inconsistent — /discover/index returns this as a
+    /// "YYYY-MM-DD" string, /album/get returns a Unix timestamp integer.
+    /// Accept both and emit a string downstream.
+    #[serde(default, deserialize_with = "deserialize_awarded_at")]
     pub awarded_at: Option<String>,
+}
+
+fn deserialize_awarded_at<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(match value {
+        Some(serde_json::Value::String(s)) => Some(s),
+        Some(serde_json::Value::Number(n)) => Some(n.to_string()),
+        Some(serde_json::Value::Null) | None => None,
+        Some(_) => None,
+    })
 }
 
 /// Track from /artist/page
