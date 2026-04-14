@@ -324,8 +324,8 @@ export interface LabelExploreResponse {
 
 /** Response from /award/page */
 export interface AwardPageData {
-  id: string;
-  name: string;
+  id?: string;
+  name?: string;
   image?: string | null;
   awarded_at?: string | null;
   magazine?: { id?: string; name?: string; image?: string } | null;

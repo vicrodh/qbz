@@ -472,19 +472,26 @@ pub struct LabelPageGenericList {
 /// Magazine/publisher behind a press award.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AwardMagazine {
+    #[serde(default, deserialize_with = "deserialize_string_or_int")]
     pub id: Option<String>,
+    #[serde(default)]
     pub name: Option<String>,
+    #[serde(default)]
     pub image: Option<String>,
 }
 
-/// Top-level response from /award/page.
+/// Top-level response from /award/page. Fields all Optional because
+/// Android's AwardDto marks everything nullable and Qobuz is loose
+/// about which ones come back on any given request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AwardPageData {
-    pub id: String,
-    pub name: String,
+    #[serde(default, deserialize_with = "deserialize_string_or_int")]
+    pub id: Option<String>,
+    #[serde(default)]
+    pub name: Option<String>,
     #[serde(default)]
     pub image: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_string_or_int")]
     pub awarded_at: Option<String>,
     #[serde(default)]
     pub magazine: Option<AwardMagazine>,
@@ -494,6 +501,18 @@ pub struct AwardPageData {
     pub releases: Option<Vec<AwardPageContainer>>,
     #[serde(default)]
     pub playlists: Option<AwardPageGenericList>,
+}
+
+fn deserialize_string_or_int<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(match value {
+        Some(serde_json::Value::String(s)) => Some(s),
+        Some(serde_json::Value::Number(n)) => Some(n.to_string()),
+        _ => None,
+    })
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
