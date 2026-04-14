@@ -75,7 +75,8 @@
     "recentAlbums": "Recently Played",
     "continueTracks": "Continue Listening",
     "topArtists": "Your Top Artists",
-    "favoriteAlbums": "More From Favorites"
+    "favoriteAlbums": "More From Favorites",
+    "releaseWatch": "Release Watch"
   },
   "discover": {
     "newReleases": "New Releases",

@@ -1344,7 +1344,7 @@
         <HorizontalScrollRow>
           {#snippet header()}
             <div class="section-header-col">
-              <h2 class="section-title">{$t('discover.releaseWatch.title')}</h2>
+              <h2 class="section-title">{$t('home.releaseWatch')}</h2>
               <p class="section-subtitle">{$t('discover.releaseWatch.subtitle')}</p>
             </div>
           {/snippet}

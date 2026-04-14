@@ -75,7 +75,8 @@
     "mostStreamed": "Top albums",
     "favoriteAlbums": "Plus de favoris",
     "recentAlbums": "Récemment écouté",
-    "topArtists": "Vos artistes favoris"
+    "topArtists": "Vos artistes favoris",
+    "releaseWatch": "Radar des sorties"
   },
   "discover": {
     "newReleases": "Nouveautés",

@@ -880,6 +880,56 @@
   </div>
 </div>
 
+<!-- Release Watch — mobile "Radar de Novedades": new releases from
+     followed artists/labels/awards. Placed right after Your Mixes so
+     the personal-feed sections sit together at the top of For You. -->
+{#if loadingReleaseWatch}
+  <div class="skeleton-section">
+    <div class="skeleton-title"></div>
+    <div class="skeleton-row">
+      {#each { length: 6 } as _}<div class="skeleton-card"></div>{/each}
+    </div>
+  </div>
+{:else if releaseWatchAlbums.length > 0}
+  <HorizontalScrollRow>
+    {#snippet header()}
+      <div class="section-header-col">
+        <h2 class="section-title">{$t('home.releaseWatch')}</h2>
+        <p class="section-subtitle">{$t('discover.releaseWatch.subtitle')}</p>
+      </div>
+    {/snippet}
+    {#snippet children()}
+      {#each releaseWatchAlbums as album}
+        <AlbumCard
+          albumId={album.id}
+          artwork={album.artwork}
+          title={album.title}
+          artist={album.artist}
+          artistId={album.artistId}
+          onArtistClick={onArtistClick}
+          genre={album.genre}
+          releaseDate={album.releaseDate}
+          size="large"
+          quality={album.quality}
+          onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
+          onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
+          onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
+          onAddAlbumToPlaylist={onAddAlbumToPlaylist ? () => onAddAlbumToPlaylist(album.id) : undefined}
+          onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
+          onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
+          onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
+          isAlbumFullyDownloaded={isAlbumDownloaded(album.id)}
+          onOpenContainingFolder={onOpenAlbumFolder ? () => onOpenAlbumFolder(album.id) : undefined}
+          onReDownloadAlbum={onReDownloadAlbum ? () => onReDownloadAlbum(album.id) : undefined}
+          {downloadStateVersion}
+          onclick={() => { onAlbumClick?.(album.id); loadAlbumDownloadStatus(album.id); }}
+        />
+      {/each}
+      <div class="spacer"></div>
+    {/snippet}
+  </HorizontalScrollRow>
+{/if}
+
 <!-- Radio Stations -->
 {#if loadingRecentAlbums || loadingFavoriteAlbums}
   <div class="skeleton-section">
@@ -1196,54 +1246,6 @@
     {/snippet}
     {#snippet children()}
       {#each forgottenAlbums as album}
-        <AlbumCard
-          albumId={album.id}
-          artwork={album.artwork}
-          title={album.title}
-          artist={album.artist}
-          artistId={album.artistId}
-          onArtistClick={onArtistClick}
-          genre={album.genre}
-          releaseDate={album.releaseDate}
-          size="large"
-          quality={album.quality}
-          onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
-          onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
-          onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
-          onAddAlbumToPlaylist={onAddAlbumToPlaylist ? () => onAddAlbumToPlaylist(album.id) : undefined}
-          onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
-          onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
-          onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
-          isAlbumFullyDownloaded={isAlbumDownloaded(album.id)}
-          onOpenContainingFolder={onOpenAlbumFolder ? () => onOpenAlbumFolder(album.id) : undefined}
-          onReDownloadAlbum={onReDownloadAlbum ? () => onReDownloadAlbum(album.id) : undefined}
-          {downloadStateVersion}
-          onclick={() => { onAlbumClick?.(album.id); loadAlbumDownloadStatus(album.id); }}
-        />
-      {/each}
-      <div class="spacer"></div>
-    {/snippet}
-  </HorizontalScrollRow>
-{/if}
-
-<!-- Release Watch — followed artists/labels/awards, Qobuz mobile parity -->
-{#if loadingReleaseWatch}
-  <div class="skeleton-section">
-    <div class="skeleton-title"></div>
-    <div class="skeleton-row">
-      {#each { length: 6 } as _}<div class="skeleton-card"></div>{/each}
-    </div>
-  </div>
-{:else if releaseWatchAlbums.length > 0}
-  <HorizontalScrollRow>
-    {#snippet header()}
-      <div class="section-header-col">
-        <h2 class="section-title">{$t('discover.releaseWatch.title')}</h2>
-        <p class="section-subtitle">{$t('discover.releaseWatch.subtitle')}</p>
-      </div>
-    {/snippet}
-    {#snippet children()}
-      {#each releaseWatchAlbums as album}
         <AlbumCard
           albumId={album.id}
           artwork={album.artwork}
