@@ -9,6 +9,9 @@
     sessionSnapshot: QconnectSessionSnapshot | null;
     onToggleConnection: () => void | Promise<void>;
     busy?: boolean;
+    /** Narrow-bar variant: icon-only square button, popup behavior unchanged.
+     *  Used by NowPlayingBar when the bar collapses (issue #303). */
+    compact?: boolean;
   }
 
   let {
@@ -16,6 +19,7 @@
     sessionSnapshot: sessionSnapshotProp = null,
     onToggleConnection,
     busy = false,
+    compact = false,
   }: Props = $props();
 
   // Local snapshot that can be refreshed independently of the prop
@@ -99,8 +103,10 @@
   <button
     class="qconnect-badge"
     class:active={connected}
+    class:compact
     onclick={togglePopup}
     title={connected ? $t('qconnect.statusConnected') : $t('qconnect.statusDisconnected')}
+    aria-label={$t('qconnect.title')}
   >
     <span class="badge-icon">
       {#if activeDeviceType === 'web'}
@@ -113,10 +119,12 @@
         <Monitor size={16} />
       {/if}
     </span>
-    <span class="badge-text">
-      <span class="badge-label">{ $t('platforms.qobuz') }</span>
-      <span class="badge-label">Connect</span>
-    </span>
+    {#if !compact}
+      <span class="badge-text">
+        <span class="badge-label">{ $t('platforms.qobuz') }</span>
+        <span class="badge-label">Connect</span>
+      </span>
+    {/if}
   </button>
 
   {#if isPopupOpen}
@@ -232,6 +240,19 @@
 
   .qconnect-badge:hover {
     opacity: 0.85;
+  }
+
+  /* Compact variant: icon-only square, matches height of surrounding controls. */
+  .qconnect-badge.compact {
+    flex-direction: row;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    gap: 0;
+  }
+
+  .qconnect-badge.compact .badge-icon {
+    flex: 0 0 auto;
   }
 
   .badge-icon {
