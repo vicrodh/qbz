@@ -623,6 +623,7 @@
       case 'favorites-tracks':
       case 'favorites-albums':
       case 'favorites-artists':
+      case 'favorites-labels':
       case 'favorites-playlists':
       case 'discover-new-releases':
       case 'discover-ideal-discography':
@@ -5372,6 +5373,7 @@
             onPlaylistRemoveFavorite={removePlaylistFavoriteById}
             onPlaylistShareQobuz={sharePlaylistQobuzLinkById}
             onRandomArtist={(artistId) => handleArtistClick(artistId)}
+            onLabelClick={handleLabelClick}
             selectedTab={getFavoritesTabFromView(activeView) ?? favoritesDefaultTab}
             onTabNavigate={(tab) => navigateToFavorites(tab)}
             activeTrackId={currentTrack?.id ?? null}

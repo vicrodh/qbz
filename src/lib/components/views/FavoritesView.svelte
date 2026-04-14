@@ -23,6 +23,7 @@
   import { syncCache as syncTrackCache, subscribe as subscribeFavorites, isTrackFavorite } from '$lib/stores/favoritesStore';
   import { syncCache as syncAlbumCache } from '$lib/stores/albumFavoritesStore';
   import { syncCache as syncArtistCache } from '$lib/stores/artistFavoritesStore';
+  import { syncCache as syncLabelCache } from '$lib/stores/labelFavoritesStore';
   import { categorizeAlbum, getQobuzImage, formatQuality } from '$lib/adapters/qobuzAdapters';
   import { replacePlaybackQueue } from '$lib/services/queuePlaybackService';
   import { getUserItem, setUserItem } from '$lib/utils/userStorage';
@@ -67,6 +68,13 @@
     id: number;
     name: string;
     image?: { small?: string; thumbnail?: string; large?: string };
+    albums_count?: number;
+  }
+
+  interface FavoriteLabel {
+    id: number;
+    name: string;
+    image?: string | Record<string, string>;
     albums_count?: number;
   }
 
@@ -119,6 +127,7 @@
     selectedTab?: TabType;
     onTabNavigate?: (tab: TabType) => void;
     onRandomArtist?: (artistId: number) => void;
+    onLabelClick?: (labelId: number, labelName?: string) => void;
     activeTrackId?: number | null;
     isPlaybackActive?: boolean;
   }
@@ -180,11 +189,12 @@
     selectedTab,
     onTabNavigate,
     onRandomArtist,
+    onLabelClick,
     activeTrackId = null,
     isPlaybackActive = false
   }: Props = $props();
 
-  type TabType = 'tracks' | 'albums' | 'artists' | 'playlists';
+  type TabType = 'tracks' | 'albums' | 'artists' | 'labels' | 'playlists';
   let activeTab = $state<TabType>('tracks');
   let preferencesLoaded = $state(false);
 
@@ -195,6 +205,7 @@
   let favoriteAlbums = $state<FavoriteAlbum[]>([]);
   let favoriteTracks = $state<FavoriteTrack[]>([]);
   let favoriteArtists = $state<FavoriteArtist[]>([]);
+  let favoriteLabels = $state<FavoriteLabel[]>([]);
   let favoritePlaylists = $state<FavoritePlaylist[]>([]);
   let followingPlaylists = $state<FavoritePlaylist[]>([]);
   type PlaylistSubTab = 'favorites' | 'following';
@@ -214,7 +225,7 @@
     custom_icon_path: null,
     custom_icon_preset: 'heart',
     icon_background: null,
-    tab_order: ['tracks', 'albums', 'artists', 'playlists'],
+    tab_order: ['tracks', 'albums', 'artists', 'labels', 'playlists'],
   });
 
   // Download status tracking
@@ -251,6 +262,7 @@
   let trackSearch = $state('');
   let albumSearch = $state('');
   let artistSearch = $state('');
+  let labelSearch = $state('');
   let playlistSearch = $state('');
   let searchExpanded = $state(false);
 
@@ -557,6 +569,21 @@
     );
   });
 
+  let filteredLabels = $derived.by(() => {
+    if (!labelSearch.trim()) return favoriteLabels;
+    const query = labelSearch.toLowerCase();
+    return favoriteLabels.filter(l =>
+      l.name.toLowerCase().includes(query)
+    );
+  });
+
+  function getLabelImageUrl(label: FavoriteLabel): string {
+    if (!label.image) return '';
+    if (typeof label.image === 'string') return label.image;
+    const img = label.image as Record<string, string>;
+    return img.large || img.thumbnail || img.small || '';
+  }
+
   let filteredPlaylists = $derived.by(() => {
     const source = playlistSubTab === 'following' ? followingPlaylists : favoritePlaylists;
     if (!playlistSearch.trim()) return source;
@@ -594,6 +621,7 @@
       case 'tracks': return trackSearch;
       case 'albums': return albumSearch;
       case 'artists': return artistSearch;
+      case 'labels': return labelSearch;
       case 'playlists': return playlistSearch;
       default: return '';
     }
@@ -604,6 +632,7 @@
       case 'tracks': trackSearch = value; break;
       case 'albums': albumSearch = value; break;
       case 'artists': artistSearch = value; break;
+      case 'labels': labelSearch = value; break;
       case 'playlists': playlistSearch = value; break;
     }
   }
@@ -618,6 +647,7 @@
       case 'tracks': return Music;
       case 'albums': return Disc3;
       case 'artists': return MicVocal;
+      case 'labels': return Disc3;
       case 'playlists': return ListMusic;
     }
   }
@@ -805,6 +835,10 @@
         // Sync to local cache for other views
         const artistIds = favoriteArtists.map(a => a.id);
         void syncArtistCache(artistIds);
+      } else if (type === 'labels') {
+        favoriteLabels = items as FavoriteLabel[];
+        const labelIds = favoriteLabels.map(l => l.id);
+        void syncLabelCache(labelIds);
       }
     } catch (err) {
       console.error(`Failed to load ${type} favorites:`, err);
@@ -906,6 +940,8 @@
     } else if (tab === 'albums' && favoriteAlbums.length === 0) {
       loadFavorites(tab);
     } else if (tab === 'artists' && favoriteArtists.length === 0) {
+      loadFavorites(tab);
+    } else if (tab === 'labels' && favoriteLabels.length === 0) {
       loadFavorites(tab);
     } else if (tab === 'playlists') {
       if (favoritePlaylists.length === 0 && followingPlaylists.length === 0) {
@@ -1426,6 +1462,8 @@
           {filteredAlbums.length}{albumSearch ? ` / ${favoriteAlbums.length}` : ''} {$t('favorites.albums').toLowerCase()}
         {:else if activeTab === 'artists'}
           {filteredArtists.length}{artistSearch ? ` / ${favoriteArtists.length}` : ''} {$t('favorites.artists').toLowerCase()}
+        {:else if activeTab === 'labels'}
+          {filteredLabels.length}{labelSearch ? ` / ${favoriteLabels.length}` : ''} {$t('favorites.labels').toLowerCase()}
         {:else}
           {filteredPlaylists.length}{playlistSearch ? ` / ${favoritePlaylists.length}` : ''} {$t('favorites.playlists').toLowerCase()}
         {/if}
@@ -2079,6 +2117,55 @@
               {/each}
             </div>
           {/if}
+        </div>
+      {/if}
+      </ViewTransition>
+    {:else if activeTab === 'labels'}
+      <ViewTransition duration={200} distance={12} direction="up">
+      {#if favoriteLabels.length === 0}
+        <div class="empty">
+          <Disc3 size={48} />
+          <p>{$t('favorites.noFavoriteLabels')}</p>
+          <p class="empty-hint">{$t('favorites.likeLabelsHint')}</p>
+        </div>
+      {:else if filteredLabels.length === 0}
+        <div class="empty">
+          <Search size={48} />
+          <p>{$t('favorites.noLabelsMatch', { values: { query: labelSearch } })}</p>
+        </div>
+      {:else}
+        <div class="label-grid">
+          {#each filteredLabels as label (label.id)}
+            {@const imageUrl = getLabelImageUrl(label)}
+            <!-- svelte-ignore a11y_click_events_have_key_events -->
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div
+              class="label-grid-card"
+              role="button"
+              tabindex="0"
+              onclick={() => onLabelClick?.(label.id, label.name)}
+              onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onLabelClick?.(label.id, label.name); } }}
+            >
+              <div class="label-grid-image-wrapper">
+                <div class="label-grid-image-placeholder">
+                  <Disc3 size={48} />
+                </div>
+                {#if imageUrl}
+                  <img
+                    src={imageUrl}
+                    alt={label.name}
+                    class="label-grid-image"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                {/if}
+              </div>
+              <div class="label-grid-name">{label.name}</div>
+              {#if label.albums_count !== undefined && label.albums_count !== null}
+                <div class="label-grid-count">{$t('library.albumCount', { values: { count: label.albums_count } })}</div>
+              {/if}
+            </div>
+          {/each}
         </div>
       {/if}
       </ViewTransition>
@@ -2981,5 +3068,76 @@
 
   .artist-albums-footer .link-btn:hover {
     text-decoration-color: var(--accent-primary);
+  }
+
+  .label-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 20px 16px;
+    padding: 8px 0 24px 0;
+  }
+
+  .label-grid-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    border-radius: 10px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    transition: background-color 150ms ease;
+  }
+
+  .label-grid-card:hover,
+  .label-grid-card:focus-visible {
+    background-color: var(--bg-tertiary);
+    outline: none;
+  }
+
+  .label-grid-image-wrapper {
+    width: 140px;
+    height: 140px;
+    border-radius: 50%;
+    overflow: hidden;
+    position: relative;
+    background: var(--bg-tertiary);
+  }
+
+  .label-grid-image-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    color: white;
+  }
+
+  .label-grid-image {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    z-index: 1;
+  }
+
+  .label-grid-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    width: 100%;
+  }
+
+  .label-grid-count {
+    font-size: 12px;
+    color: var(--text-secondary);
+    text-align: center;
   }
 </style>

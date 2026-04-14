@@ -1,6 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte';
-  import { Search, HardDrive, Plus, RefreshCw, ChevronDown, ChevronUp, Heart, ListMusic, Import, Settings, Ellipsis, ArrowUpDown, ChevronRight, ChevronLeft, Folder, FolderPlus, X, User, Disc, Music, ShoppingBag, Eye, EyeOff, Pencil } from 'lucide-svelte';
+  import { Search, HardDrive, Plus, RefreshCw, ChevronDown, ChevronUp, Heart, ListMusic, Import, Settings, Ellipsis, ArrowUpDown, ChevronRight, ChevronLeft, Folder, FolderPlus, X, User, Disc, Disc3, Music, ShoppingBag, Eye, EyeOff, Pencil } from 'lucide-svelte';
   import type { FavoritesPreferences } from '$lib/types';
   import { invoke } from '@tauri-apps/api/core';
   import { onMount } from 'svelte';
@@ -135,7 +135,7 @@
 
   // Favorites section state
   let favoritesExpanded = $state(false);
-  let favoritesTabOrder = $state<string[]>(['tracks', 'albums', 'artists', 'playlists']);
+  let favoritesTabOrder = $state<string[]>(['tracks', 'albums', 'artists', 'labels', 'playlists']);
   let showFavoritesMenu = $state(false);
   let favoritesMenuPos = $state({ x: 0, y: 0 });
 
@@ -934,7 +934,7 @@
   async function loadFavoritesPreferences() {
     try {
       const prefs = await invoke<FavoritesPreferences>('v2_get_favorites_preferences');
-      favoritesTabOrder = prefs.tab_order || ['tracks', 'albums', 'artists', 'playlists'];
+      favoritesTabOrder = prefs.tab_order || ['tracks', 'albums', 'artists', 'labels', 'playlists'];
     } catch (err) {
       console.debug('[Sidebar] Failed to load favorites preferences:', err);
     }
@@ -1548,6 +1548,8 @@
                     <Disc size={14} />
                   {:else if tab === 'tracks'}
                     <Music size={14} />
+                  {:else if tab === 'labels'}
+                    <Disc3 size={14} />
                   {:else if tab === 'playlists'}
                     <ListMusic size={14} />
                   {/if}
@@ -1933,6 +1935,8 @@
           <Disc size={14} />
         {:else if tab === 'tracks'}
           <Music size={14} />
+        {:else if tab === 'labels'}
+          <Disc3 size={14} />
         {:else if tab === 'playlists'}
           <ListMusic size={14} />
         {/if}

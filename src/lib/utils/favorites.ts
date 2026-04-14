@@ -1,6 +1,6 @@
 import type { FavoritesTab } from '$lib/stores/navigationStore';
 
-const FALLBACK_ORDER: FavoritesTab[] = ['tracks', 'albums', 'artists', 'playlists'];
+const FALLBACK_ORDER: FavoritesTab[] = ['tracks', 'albums', 'artists', 'labels', 'playlists'];
 
 export function normalizeFavoritesTabOrder(order?: string[] | null): FavoritesTab[] {
   const result: FavoritesTab[] = [];
