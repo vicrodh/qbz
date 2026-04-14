@@ -36,8 +36,6 @@
     "os:default",
     "dialog:default",
     "clipboard-manager:default",
-    "clipboard-manager:allow-write-text",
-    "updater:default",
-    "process:allow-restart"
+    "clipboard-manager:allow-write-text"
   ]
 }

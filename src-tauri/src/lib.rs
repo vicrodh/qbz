@@ -729,7 +729,7 @@ pub fn run() {
     // Initialize per-user data paths (no user active yet until login)
     let user_data_paths = user_data::UserDataPaths::new();
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             // Second instance launched — bring existing window to front
             if let Some(window) = app.get_webview_window("main") {
@@ -750,9 +750,14 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_clipboard_manager::init());
+
+    #[cfg(feature = "updater")]
+    let builder = builder
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_process::init());
+
+    builder
         .manage(AppState::with_device_and_settings(
             saved_device,
             audio_settings,

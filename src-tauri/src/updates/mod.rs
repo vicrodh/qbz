@@ -661,13 +661,20 @@ pub async fn fetch_release_for_version(
 /// - Linux AppImage (detected via APPIMAGE env var)
 ///
 /// Not supported for Flatpak, Snap, DEB, RPM, AUR, Gentoo (they have their own update channels).
+/// Also returns false unconditionally when the `updater` Cargo feature is disabled
+/// (i.e., sandboxed Flatpak/Snap builds that don't link tauri-plugin-updater).
 pub fn is_auto_update_eligible() -> bool {
-    #[cfg(target_os = "macos")]
+    #[cfg(not(feature = "updater"))]
+    {
+        return false;
+    }
+
+    #[cfg(all(feature = "updater", target_os = "macos"))]
     {
         return true;
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(all(feature = "updater", target_os = "linux"))]
     {
         if crate::flatpak::is_flatpak() || crate::snap::is_snap() {
             return false;
@@ -675,7 +682,7 @@ pub fn is_auto_update_eligible() -> bool {
         return env::var("APPIMAGE").is_ok();
     }
 
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    #[cfg(all(feature = "updater", not(any(target_os = "macos", target_os = "linux"))))]
     {
         false
     }

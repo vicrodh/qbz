@@ -16,6 +16,13 @@ path = "src/main.rs"
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
+[features]
+default = ["updater"]
+# Enables the in-app auto-updater (tauri-plugin-updater + tauri-plugin-process).
+# Disabled for sandboxed packaging targets (Flatpak, Snap) which have their own
+# update channels and whose store policies prohibit competing updaters.
+updater = ["dep:tauri-plugin-updater", "dep:tauri-plugin-process"]
+
 [dependencies]
 # QBZ Crates (extracted core functionality)
 qbz-models = { path = "../crates/qbz-models" }
@@ -39,8 +46,8 @@ tauri-plugin-opener = "2"
 tauri-plugin-os = "2"
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 tauri-plugin-deep-link = "2"
-tauri-plugin-updater = "2"
-tauri-plugin-process = "2"
+tauri-plugin-updater = { version = "2", optional = true }
+tauri-plugin-process = { version = "2", optional = true }
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
