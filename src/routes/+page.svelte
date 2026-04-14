@@ -154,6 +154,7 @@
   import { loadAlbumFavorites } from '$lib/stores/albumFavoritesStore';
   import { loadArtistFavorites } from '$lib/stores/artistFavoritesStore';
   import { loadLabelFavorites } from '$lib/stores/labelFavoritesStore';
+  import { loadAwardFavorites } from '$lib/stores/awardFavoritesStore';
   import { getDefaultFavoritesTab } from '$lib/utils/favorites';
   import { platform } from '$lib/utils/platform';
   import type { FavoritesPreferences, ResolvedMusician } from '$lib/types';
@@ -3679,6 +3680,7 @@
     loadAlbumFavorites();   // Album favorites
     loadArtistFavorites();  // Artist favorites
     loadLabelFavorites();   // Label favorites
+    loadAwardFavorites();   // Award favorites
 
     // Refresh offline status now that we're logged in
     refreshOfflineStatus().catch(err => console.debug('[Offline] Status refresh deferred:', err));

@@ -2638,6 +2638,8 @@
       "releases": "Acclaimed Releases",
       "new-releases": "New Releases",
       "classics": "Classics"
-    }
+    },
+    "follow": "Follow award",
+    "unfollow": "Unfollow award"
   }
 }

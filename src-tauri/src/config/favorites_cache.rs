@@ -95,6 +95,18 @@ impl FavoritesCacheStore {
         )
         .map_err(|e| format!("Failed to create favorite_labels table: {}", e))?;
 
+        // Awards — added as part of the Follow Award feature. award_id
+        // is TEXT because /favorite/create?award_ids=... takes string
+        // identifiers and the Android DTO declares id as String?.
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS favorite_awards (
+                award_id TEXT PRIMARY KEY,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )",
+            [],
+        )
+        .map_err(|e| format!("Failed to create favorite_awards table: {}", e))?;
+
         Ok(Self { conn })
     }
 
@@ -382,6 +394,74 @@ impl FavoritesCacheStore {
         Ok(())
     }
 
+    // ============ Award favorites ============
+
+    pub fn get_favorite_award_ids(&self) -> Result<Vec<String>, String> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT award_id FROM favorite_awards")
+            .map_err(|e| format!("Failed to prepare query: {}", e))?;
+
+        let rows = stmt
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(|e| format!("Failed to query favorite awards: {}", e))?;
+
+        let mut ids = Vec::new();
+        for row in rows {
+            ids.push(row.map_err(|e| format!("Failed to read row: {}", e))?);
+        }
+        Ok(ids)
+    }
+
+    pub fn is_award_favorite(&self, award_id: &str) -> Result<bool, String> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT 1 FROM favorite_awards WHERE award_id = ?1")
+            .map_err(|e| format!("Failed to prepare query: {}", e))?;
+
+        let exists = stmt
+            .exists(params![award_id])
+            .map_err(|e| format!("Failed to check favorite: {}", e))?;
+
+        Ok(exists)
+    }
+
+    pub fn add_favorite_award(&self, award_id: &str) -> Result<(), String> {
+        self.conn
+            .execute(
+                "INSERT OR IGNORE INTO favorite_awards (award_id) VALUES (?1)",
+                params![award_id],
+            )
+            .map_err(|e| format!("Failed to add favorite award: {}", e))?;
+        Ok(())
+    }
+
+    pub fn remove_favorite_award(&self, award_id: &str) -> Result<(), String> {
+        self.conn
+            .execute(
+                "DELETE FROM favorite_awards WHERE award_id = ?1",
+                params![award_id],
+            )
+            .map_err(|e| format!("Failed to remove favorite award: {}", e))?;
+        Ok(())
+    }
+
+    pub fn sync_favorite_awards(&self, award_ids: &[String]) -> Result<(), String> {
+        self.conn
+            .execute("DELETE FROM favorite_awards", [])
+            .map_err(|e| format!("Failed to clear favorite awards: {}", e))?;
+
+        for award_id in award_ids {
+            self.conn
+                .execute(
+                    "INSERT INTO favorite_awards (award_id) VALUES (?1)",
+                    params![award_id],
+                )
+                .map_err(|e| format!("Failed to insert favorite award: {}", e))?;
+        }
+        Ok(())
+    }
+
     // ============ Clear all (for logout) ============
 
     pub fn clear_all(&self) -> Result<(), String> {
@@ -397,6 +477,9 @@ impl FavoritesCacheStore {
         self.conn
             .execute("DELETE FROM favorite_labels", [])
             .map_err(|e| format!("Failed to clear favorite labels: {}", e))?;
+        self.conn
+            .execute("DELETE FROM favorite_awards", [])
+            .map_err(|e| format!("Failed to clear favorite awards: {}", e))?;
         Ok(())
     }
 }

@@ -5,14 +5,19 @@
    * hero info and uses the embedded releases arrays for the album
    * grids. Matches LabelView's overall structure.
    */
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { t } from '$lib/i18n';
-  import { ArrowLeft, Award as AwardIcon, LoaderCircle } from 'lucide-svelte';
+  import { ArrowLeft, Award as AwardIcon, Heart, LoaderCircle } from 'lucide-svelte';
   import AlbumCard from '../AlbumCard.svelte';
-  import HorizontalScrollRow from '../HorizontalScrollRow.svelte';
   import type { AwardPageData, QobuzAlbum } from '$lib/types';
-  import { formatQuality } from '$lib/adapters/qobuzAdapters';
+  import { formatQuality, getQobuzImage } from '$lib/adapters/qobuzAdapters';
+  import {
+    subscribe as subscribeAwardFavorites,
+    isAwardFavorite,
+    isAwardToggling,
+    toggleAwardFavorite,
+  } from '$lib/stores/awardFavoritesStore';
 
   interface AlbumCardData {
     id: string;
@@ -23,11 +28,6 @@
     genre: string;
     quality?: string;
     releaseDate?: string;
-  }
-
-  interface ReleasesSection {
-    id: string;
-    items: AlbumCardData[];
   }
 
   interface Props {
@@ -68,82 +68,109 @@
     onArtistClick,
   }: Props = $props();
 
+  const PAGE_SIZE = 50;
+
   let page = $state<AwardPageData | null>(null);
-  let sections = $state<ReleasesSection[]>([]);
+  let albums = $state<AlbumCardData[]>([]);
+  let offset = $state(0);
+  let totalEstimate = $state<number | null>(null);
+  let hasMore = $state(true);
   let loading = $state(true);
+  let loadingMore = $state(false);
   let error = $state<string | null>(null);
   let heroImageFailed = $state(false);
 
-  function toAlbumCard(item: Record<string, unknown>): AlbumCardData | null {
-    if (!item || typeof item !== 'object') return null;
-    const id = (item.id as string) ?? '';
-    if (!id) return null;
-    const image = item.image as { small?: string; thumbnail?: string; large?: string } | undefined;
-    const artists = (item.artists as { id: number; name: string }[]) ?? [];
-    const artist = (item.artist as { id?: number; name?: string }) ?? artists[0] ?? {};
-    const genre = item.genre as { name?: string } | undefined;
-    const audioInfo = item.audio_info as { maximum_bit_depth?: number; maximum_sampling_rate?: number } | undefined;
-    const dates = item.dates as { original?: string } | undefined;
-    const bitDepth = audioInfo?.maximum_bit_depth ?? 16;
-    const quality = formatQuality(
-      bitDepth > 16,
-      audioInfo?.maximum_bit_depth,
-      audioInfo?.maximum_sampling_rate
-    );
+  /** Adapts a QobuzAlbum (shape returned by /award/getAlbums) into
+   * what AlbumCard consumes. */
+  function qobuzToCard(album: QobuzAlbum): AlbumCardData {
+    const hires = (album.maximum_bit_depth ?? 16) > 16;
     return {
-      id: String(id),
-      artwork: image?.large || image?.small || image?.thumbnail || '',
-      title: (item.title as string) ?? '',
-      artist: artist?.name ?? 'Unknown Artist',
-      artistId: artist?.id,
-      genre: genre?.name ?? '',
-      quality,
-      releaseDate: dates?.original,
+      id: album.id,
+      artwork: getQobuzImage(album.image),
+      title: album.title,
+      artist: album.artist?.name ?? 'Unknown Artist',
+      artistId: album.artist?.id,
+      genre: album.genre?.name ?? '',
+      quality: formatQuality(hires, album.maximum_bit_depth, album.maximum_sampling_rate),
+      releaseDate: album.release_date_original,
     };
   }
 
-  async function loadPage() {
-    loading = true;
-    error = null;
+  async function loadHero() {
     try {
+      // /award/page is user-scoped (only returns releases from awards
+      // the user has favorited) so we only use it to hydrate the hero
+      // — name, image, magazine. The album grid below fills from
+      // /award/getAlbums which is the public catalog listing.
       const data = await invoke<AwardPageData>('v2_get_award_page', { awardId });
       page = data;
-
-      const builtSections: ReleasesSection[] = [];
-      for (const container of data.releases ?? []) {
-        const items = (container.data?.items ?? [])
-          .map(toAlbumCard)
-          .filter((a): a is AlbumCardData => a !== null);
-        if (items.length > 0) {
-          builtSections.push({
-            id: container.id ?? 'releases',
-            items,
-          });
-        }
-      }
-      sections = builtSections;
     } catch (err) {
-      console.error('[AwardView] failed to load:', err);
-      error = String(err);
-    } finally {
-      loading = false;
+      console.warn('[AwardView] /award/page failed, falling back to passed name:', err);
     }
   }
 
+  async function loadAlbums(reset: boolean) {
+    if (reset) {
+      offset = 0;
+      albums = [];
+      hasMore = true;
+      totalEstimate = null;
+      loading = true;
+    } else {
+      loadingMore = true;
+    }
+    try {
+      const result = await invoke<{ items: QobuzAlbum[]; total: number; offset: number; limit: number }>(
+        'v2_get_award_albums',
+        { awardId, limit: PAGE_SIZE, offset }
+      );
+      const mapped = (result.items ?? []).map(qobuzToCard);
+      albums = reset ? mapped : [...albums, ...mapped];
+      offset = albums.length;
+      totalEstimate = result.total;
+      hasMore = mapped.length >= PAGE_SIZE && offset < result.total;
+    } catch (err) {
+      console.error('[AwardView] failed to load albums:', err);
+      error = String(err);
+    } finally {
+      loading = false;
+      loadingMore = false;
+    }
+  }
+
+  function handleLoadMore() {
+    if (!loading && !loadingMore && hasMore) loadAlbums(false);
+  }
+
+  // Subscribe to the favorites store so the Follow button's visual
+  // state updates in real time (and from other views that may mutate it).
+  let awardFavoritesVersion = $state(0);
+  const unsubAwardFavorites = subscribeAwardFavorites(() => {
+    awardFavoritesVersion += 1;
+  });
+  onDestroy(() => unsubAwardFavorites());
+
+  const awardIsFavorite = $derived.by(() => {
+    void awardFavoritesVersion;
+    return isAwardFavorite(awardId);
+  });
+  const awardIsToggling = $derived.by(() => {
+    void awardFavoritesVersion;
+    return isAwardToggling(awardId);
+  });
+
+  async function handleToggleAwardFavorite() {
+    await toggleAwardFavorite(awardId);
+  }
+
   onMount(() => {
-    loadPage();
+    loadHero();
+    loadAlbums(true);
   });
 
   const displayName = $derived(page?.name ?? awardName ?? '');
   const magazineName = $derived(page?.magazine?.name ?? '');
   const heroImage = $derived(page?.image || page?.magazine?.image || '');
-
-  function getContainerTitle(id: string): string {
-    const key = `award.section.${id}`;
-    const translated = $t(key);
-    if (translated && !translated.startsWith('award.section.')) return translated;
-    return $t('award.section.releases');
-  }
 </script>
 
 <div class="award-detail-view">
@@ -175,10 +202,34 @@
       {#if magazineName}
         <div class="award-magazine">{magazineName}</div>
       {/if}
+
+      <div class="award-actions">
+        <button
+          class="favorite-btn"
+          class:is-favorite={awardIsFavorite}
+          onclick={handleToggleAwardFavorite}
+          disabled={awardIsToggling}
+          title={awardIsFavorite ? $t('award.unfollow') : $t('award.follow')}
+          aria-label={awardIsFavorite ? $t('award.unfollow') : $t('award.follow')}
+        >
+          {#if awardIsFavorite}
+            <Heart size={24} fill="var(--accent-primary)" color="var(--accent-primary)" />
+          {:else}
+            <Heart size={24} />
+          {/if}
+        </button>
+      </div>
     </div>
   </header>
 
   <main class="content">
+    <div class="section-header">
+      <h2 class="section-title">{$t('award.section.releases')}</h2>
+      {#if totalEstimate}
+        <span class="section-count">{totalEstimate}</span>
+      {/if}
+    </div>
+
     {#if loading}
       <div class="loading">
         <LoaderCircle size={28} class="spinner" />
@@ -188,48 +239,51 @@
       <div class="error">
         <p>{$t('favorites.failedLoadFavorites')}</p>
         <p class="error-detail">{error}</p>
-        <button class="retry-btn" onclick={loadPage}>{$t('actions.retry')}</button>
+        <button class="retry-btn" onclick={() => loadAlbums(true)}>{$t('actions.retry')}</button>
       </div>
-    {:else if sections.length === 0}
+    {:else if albums.length === 0}
       <div class="empty">
         <p>{$t('award.empty')}</p>
       </div>
     {:else}
-      {#each sections as section (section.id)}
-        <section class="rail">
-          <HorizontalScrollRow title={getContainerTitle(section.id)}>
-            {#snippet children()}
-              {#each section.items as album (album.id)}
-                <AlbumCard
-                  albumId={album.id}
-                  artwork={album.artwork}
-                  title={album.title}
-                  artist={album.artist}
-                  artistId={album.artistId}
-                  onArtistClick={onArtistClick}
-                  genre={album.genre}
-                  releaseDate={album.releaseDate}
-                  size="large"
-                  quality={album.quality}
-                  onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
-                  onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
-                  onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
-                  onAddAlbumToPlaylist={onAddAlbumToPlaylist ? () => onAddAlbumToPlaylist(album.id) : undefined}
-                  onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
-                  onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
-                  onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
-                  isAlbumFullyDownloaded={isAlbumDownloaded?.(album.id) ?? false}
-                  onOpenContainingFolder={onOpenAlbumFolder ? () => onOpenAlbumFolder(album.id) : undefined}
-                  onReDownloadAlbum={onReDownloadAlbum ? () => onReDownloadAlbum(album.id) : undefined}
-                  {downloadStateVersion}
-                  onclick={() => onAlbumClick?.(album.id)}
-                />
-              {/each}
-              <div class="spacer"></div>
-            {/snippet}
-          </HorizontalScrollRow>
-        </section>
-      {/each}
+      <div class="album-grid">
+        {#each albums as album (album.id)}
+          <AlbumCard
+            albumId={album.id}
+            artwork={album.artwork}
+            title={album.title}
+            artist={album.artist}
+            artistId={album.artistId}
+            onArtistClick={onArtistClick}
+            genre={album.genre}
+            releaseDate={album.releaseDate}
+            size="large"
+            quality={album.quality}
+            onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
+            onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
+            onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
+            onAddAlbumToPlaylist={onAddAlbumToPlaylist ? () => onAddAlbumToPlaylist(album.id) : undefined}
+            onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
+            onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
+            onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
+            isAlbumFullyDownloaded={isAlbumDownloaded?.(album.id) ?? false}
+            onOpenContainingFolder={onOpenAlbumFolder ? () => onOpenAlbumFolder(album.id) : undefined}
+            onReDownloadAlbum={onReDownloadAlbum ? () => onReDownloadAlbum(album.id) : undefined}
+            {downloadStateVersion}
+            onclick={() => onAlbumClick?.(album.id)}
+          />
+        {/each}
+      </div>
+      {#if hasMore}
+        <div class="load-more-wrapper">
+          <button class="load-more-btn" onclick={handleLoadMore} disabled={loadingMore}>
+            {#if loadingMore}
+              <LoaderCircle size={16} class="spinner" />
+            {/if}
+            <span>{loadingMore ? $t('album.loading') : $t('home.seeMore')}</span>
+          </button>
+        </div>
+      {/if}
     {/if}
   </main>
 </div>
@@ -288,12 +342,69 @@
     font-size: 14px; color: var(--text-secondary); line-height: 1.4;
   }
 
-  .content {
+  /* Follow button — matches LabelView / ArtistDetailView visual */
+  .award-actions {
     display: flex;
-    flex-direction: column;
-    gap: 48px;
+    gap: 12px;
+    margin-top: 20px;
   }
-  .rail { display: flex; flex-direction: column; }
+  .favorite-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    background: var(--bg-tertiary);
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: color 150ms ease, background-color 150ms ease, opacity 150ms ease;
+    flex-shrink: 0;
+  }
+  .favorite-btn:hover:not(:disabled) {
+    background: var(--bg-hover);
+    color: var(--accent-primary);
+  }
+  .favorite-btn.is-favorite {
+    background: rgba(var(--accent-primary-rgb, 139, 92, 246), 0.15);
+  }
+  .favorite-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .content { display: flex; flex-direction: column; gap: 20px; }
+  .section-header {
+    display: flex; align-items: baseline; gap: 12px;
+  }
+  .section-title {
+    font-size: 20px; font-weight: 600; color: var(--text-primary); margin: 0;
+  }
+  .section-count {
+    font-size: 12px; color: var(--text-muted);
+  }
+  .album-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 24px 16px;
+  }
+  .load-more-wrapper {
+    display: flex; justify-content: center; margin-top: 8px;
+  }
+  .load-more-btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 8px 20px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-primary);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 13px;
+    cursor: pointer;
+    transition: background-color 150ms ease;
+  }
+  .load-more-btn:hover:not(:disabled) { background: var(--bg-secondary); }
+  .load-more-btn:disabled { opacity: 0.6; cursor: wait; }
 
   .loading,
   .error,

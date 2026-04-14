@@ -427,3 +427,75 @@ pub async fn v2_uncache_favorite_label(
         .remove_favorite_label(labelId)
         .map_err(|e| RuntimeError::Internal(e))
 }
+
+// ============ Award favorites cache (mirrors label) ============
+
+#[tauri::command]
+pub async fn v2_get_cached_favorite_awards(
+    cache_state: State<'_, crate::config::favorites_cache::FavoritesCacheState>,
+) -> Result<Vec<String>, RuntimeError> {
+    let guard = cache_state
+        .store
+        .lock()
+        .map_err(|_| RuntimeError::Internal("Failed to lock favorites cache".to_string()))?;
+    let store = guard
+        .as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
+    store
+        .get_favorite_award_ids()
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_sync_cached_favorite_awards(
+    awardIds: Vec<String>,
+    cache_state: State<'_, crate::config::favorites_cache::FavoritesCacheState>,
+) -> Result<(), RuntimeError> {
+    let guard = cache_state
+        .store
+        .lock()
+        .map_err(|_| RuntimeError::Internal("Failed to lock favorites cache".to_string()))?;
+    let store = guard
+        .as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
+    store
+        .sync_favorite_awards(&awardIds)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_cache_favorite_award(
+    awardId: String,
+    cache_state: State<'_, crate::config::favorites_cache::FavoritesCacheState>,
+) -> Result<(), RuntimeError> {
+    let guard = cache_state
+        .store
+        .lock()
+        .map_err(|_| RuntimeError::Internal("Failed to lock favorites cache".to_string()))?;
+    let store = guard
+        .as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
+    store
+        .add_favorite_award(&awardId)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_uncache_favorite_award(
+    awardId: String,
+    cache_state: State<'_, crate::config::favorites_cache::FavoritesCacheState>,
+) -> Result<(), RuntimeError> {
+    let guard = cache_state
+        .store
+        .lock()
+        .map_err(|_| RuntimeError::Internal("Failed to lock favorites cache".to_string()))?;
+    let store = guard
+        .as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
+    store
+        .remove_favorite_award(&awardId)
+        .map_err(|e| RuntimeError::Internal(e))
+}
