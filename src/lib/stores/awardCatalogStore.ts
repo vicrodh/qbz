@@ -26,7 +26,10 @@ interface ExploreResponse {
 
 const PAGE_SIZE = 100;
 const MAX_PAGES = 40;
-const STORAGE_KEY = 'qbz-award-catalog';
+// Bump when the catalog population strategy changes so stale
+// sessionStorage entries don't shadow a better crawl.
+const CATALOG_SCHEMA_VERSION = 2;
+const STORAGE_KEY = `qbz-award-catalog-v${CATALOG_SCHEMA_VERSION}`;
 
 // normalized name → id
 let byName = new Map<string, string>();
@@ -108,6 +111,10 @@ async function loadCatalog(): Promise<void> {
     let offset = 0;
     let pages = 0;
     let totalSeen = 0;
+    const seenIds = new Set<string>();
+    // Keep paging until the endpoint returns an empty items array —
+    // don't early-exit on items.length < PAGE_SIZE, some Qobuz pages
+    // return fewer than the limit but still have has_more=true.
     while (pages < MAX_PAGES) {
       try {
         const result = await invoke<ExploreResponse>('v2_get_award_explore', {
@@ -115,14 +122,36 @@ async function loadCatalog(): Promise<void> {
           offset,
         });
         const items = result.items ?? [];
+        console.log(
+          `[AwardCatalog] /award/explore page=${pages + 1} offset=${offset} ` +
+          `returned=${items.length} has_more=${result.has_more}`
+        );
+        if (items.length === 0) {
+          console.log('[AwardCatalog] empty page — stopping pagination');
+          break;
+        }
+        // Detect servers that ignore offset (would loop forever returning
+        // the same items) by watching for repeated ids on consecutive pages.
+        let newOnThisPage = 0;
         for (const item of items) {
           if (item?.id == null || !item?.name) continue;
-          byName.set(normalize(item.name), String(item.id));
+          const idStr = String(item.id);
+          if (!seenIds.has(idStr)) {
+            seenIds.add(idStr);
+            newOnThisPage += 1;
+          }
+          byName.set(normalize(item.name), idStr);
         }
         totalSeen += items.length;
         pages += 1;
-        if (items.length < PAGE_SIZE) break;
-        if (result.has_more === false) break;
+        if (newOnThisPage === 0) {
+          console.log('[AwardCatalog] page repeated prior ids — stopping pagination');
+          break;
+        }
+        if (result.has_more === false) {
+          console.log('[AwardCatalog] has_more=false — stopping pagination');
+          break;
+        }
         offset += items.length;
       } catch (err) {
         console.error('[AwardCatalog] /award/explore failed at offset', offset, err);
@@ -131,7 +160,10 @@ async function loadCatalog(): Promise<void> {
     }
     catalogLoaded = true;
     inflight = null;
-    console.log(`[AwardCatalog] cached ${byName.size} distinct name keys from ${totalSeen} items across ${pages} page(s)`);
+    console.log(
+      `[AwardCatalog] cache ready: ${byName.size} distinct name keys, ` +
+      `${seenIds.size} unique ids, ${totalSeen} items seen across ${pages} page(s)`
+    );
   })();
 
   return inflight;
