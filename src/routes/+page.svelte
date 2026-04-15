@@ -104,6 +104,16 @@
     getShowWindowControls
   } from '$lib/stores/titleBarStore';
 
+  // Window chrome (match system decoration radius)
+  import {
+    initWindowChromeStore,
+    subscribe as subscribeWindowChrome,
+    getMatchSystemWindowChrome,
+    getCornerRadiusPx,
+    setCornerRadiusPx,
+  } from '$lib/stores/windowChromeStore';
+  import { detectDesktopThemeCached } from '$lib/stores/windowControlsStore';
+
   // Search bar location store
   import {
     subscribe as subscribeSearchBarLocation,
@@ -489,6 +499,8 @@
 
   // Title Bar State (from titleBarStore subscription)
   let showTitleBar = $state(shouldShowTitleBar());
+  let matchSystemChrome = $state(getMatchSystemWindowChrome());
+  let chromeRadiusPx = $state(getCornerRadiusPx());
   let showWindowControls = $state(getShowWindowControls());
 
   // Search Bar Location State
@@ -4213,6 +4225,20 @@
       showWindowControls = getShowWindowControls();
     });
 
+    // Window chrome: subscribe to the "match system" toggle and fetch the
+    // desktop corner radius once. The detection is already cached upstream
+    // so this is cheap to call multiple times.
+    initWindowChromeStore();
+    const unsubscribeWindowChrome = subscribeWindowChrome(() => {
+      matchSystemChrome = getMatchSystemWindowChrome();
+      chromeRadiusPx = getCornerRadiusPx();
+    });
+    void detectDesktopThemeCached().then((info) => {
+      if (info && typeof info.windowCornerRadiusPx === 'number') {
+        setCornerRadiusPx(info.windowCornerRadiusPx);
+      }
+    });
+
     // Initialize and subscribe to search bar location
     initSearchBarLocation();
     const unsubscribeSearchBarLocation = subscribeSearchBarLocation(() => {
@@ -4844,6 +4870,7 @@
       unsubscribeAuth();
       unsubscribeSidebar();
       unsubscribeTitleBar();
+      unsubscribeWindowChrome();
       unsubscribeSearchBarLocation();
       unsubscribeWindowControls();
       unsubscribeTitlebarNav();
@@ -4980,7 +5007,13 @@
 {#if !isLoggedIn}
   <LoginView onLoginSuccess={handleLoginSuccess} onStartOffline={handleStartOffline} />
 {:else}
-  <div class="app" class:no-titlebar={!showTitleBar} class:floating={isWindowFloating}>
+  <div
+    class="app"
+    class:no-titlebar={!showTitleBar}
+    class:floating={isWindowFloating}
+    class:match-chrome={matchSystemChrome && showTitleBar}
+    style="--chrome-radius: {chromeRadiusPx}px;"
+  >
     <!-- macOS: drag region for window movement (overlay title bar has no native drag area) -->
     {#if !showTitleBar && platform === 'macos'}
       <div class="macos-drag-region" data-tauri-drag-region></div>
@@ -6157,6 +6190,20 @@
     border-radius: 0;
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4), 0 0 1px rgba(0, 0, 0, 0.3);
     overflow: hidden;
+  }
+
+  /* Match system window chrome (Plasma / GNOME): apply the detected
+     decoration radius and a thin edge outline so the window reads as
+     its own surface against the desktop. Only takes effect in floating
+     state (not maximized) and when the custom title bar is active. */
+  .app.match-chrome.floating {
+    border-radius: var(--chrome-radius, 10px);
+    box-shadow:
+      0 12px 28px rgba(0, 0, 0, 0.55),
+      0 0 0 1px rgba(0, 0, 0, 0.65);
+  }
+  .app.match-chrome:not(.floating) {
+    border-radius: 0;
   }
 
   .app-body {

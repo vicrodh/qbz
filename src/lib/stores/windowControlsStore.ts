@@ -258,6 +258,8 @@ export interface DesktopThemeInfo {
   klassyButtonIconStyle?: string;
   klassyButtonShape?: string;
   klassyMatchAppColor?: boolean;
+  /** Best-effort default corner radius for the detected desktop (px). */
+  windowCornerRadiusPx?: number;
 }
 
 /**

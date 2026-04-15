@@ -89,6 +89,11 @@
     setShowWindowControls
   } from '$lib/stores/titleBarStore';
   import {
+    subscribe as subscribeWindowChrome,
+    getMatchSystemWindowChrome,
+    setMatchSystemWindowChrome,
+  } from '$lib/stores/windowChromeStore';
+  import {
     subscribe as subscribeSearchBarLocation,
     getSearchBarLocation,
     setSearchBarLocation,
@@ -980,6 +985,7 @@
   // Title bar settings
   let hideTitleBar = $state(getHideTitleBar());
   let useSystemTitleBar = $state(getUseSystemTitleBar());
+  let matchSystemWindowChromeState = $state(getMatchSystemWindowChrome());
   let windowControlsVisible = $state(getShowWindowControls());
 
   // Desktop theme detection (Plasma / Klassy → adaptive preset visibility).
@@ -1603,6 +1609,9 @@
       useSystemTitleBar = getUseSystemTitleBar();
       windowControlsVisible = getShowWindowControls();
     });
+    const unsubscribeWindowChrome = subscribeWindowChrome(() => {
+      matchSystemWindowChromeState = getMatchSystemWindowChrome();
+    });
 
     // Subscribe to search bar location changes
     const unsubscribeSearchBarLoc = subscribeSearchBarLocation(() => {
@@ -1636,6 +1645,7 @@
       unsubscribeDegraded();
       unsubscribeZoom();
       unsubscribeTitleBar();
+      unsubscribeWindowChrome();
       unsubscribeSearchBarLoc();
       unsubscribeTitlebarNavSub();
       unsubscribeWindowControls();
@@ -4474,6 +4484,17 @@
         <span class="setting-desc">{$t('settings.appearance.hideTitleBarDesc')}</span>
       </div>
       <Toggle enabled={hideTitleBar} onchange={(v) => setHideTitleBar(v)} disabled={useSystemTitleBar} />
+    </div>
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.appearance.matchSystemChrome')}</span>
+        <span class="setting-desc">{$t('settings.appearance.matchSystemChromeDesc')}</span>
+      </div>
+      <Toggle
+        enabled={matchSystemWindowChromeState}
+        onchange={(v) => setMatchSystemWindowChrome(v)}
+        disabled={hideTitleBar || useSystemTitleBar}
+      />
     </div>
     {/if}
     <!-- Title bar customization: hidden on macOS (uses native overlay title bar) -->

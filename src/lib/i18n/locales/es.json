@@ -1008,6 +1008,8 @@
       "windowControlsColorPresetMonochrome": "Monocromático",
       "windowControlsColorPresetKlassy": "Klassy (auto-detectar)",
       "windowControlsColorPresetPlasma": "Plasma (auto-detectar)",
+      "matchSystemChrome": "Integrar con el tema del sistema",
+      "matchSystemChromeDesc": "Redondea las esquinas de la ventana y agrega un borde sutil para que QBZ se integre con el tema del escritorio. Requiere la barra de título personalizada.",
       "windowControlsColorPresetCustom": "Personalizado",
       "windowControlsCustomColors": "Colores personalizados",
       "windowControlsClose": "Cerrar",

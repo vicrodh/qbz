@@ -23,6 +23,10 @@ pub struct DesktopThemeInfo {
     pub klassy_button_icon_style: Option<String>,
     pub klassy_button_shape: Option<String>,
     pub klassy_match_app_color: Option<bool>,
+    /// Best-effort default corner radius for the active desktop, in px.
+    /// Used by the "match system window chrome" feature to approximate
+    /// the decoration radius without transparent-window trickery.
+    pub window_corner_radius_px: u16,
 }
 
 /// Parse a `R,G,B` KDE color triplet into a `#rrggbb` hex string. Accepts
@@ -63,10 +67,25 @@ fn ini_get(path: &std::path::Path, section: &str, key: &str) -> Option<String> {
 
 /// Return a best-effort snapshot of the user's desktop decoration theme.
 /// Non-Plasma desktops yield `desktop="other"` with everything else `None`.
+/// Best-effort default window corner radius for a detected desktop.
+/// Plasma/Klassy leans to ~10px, Breeze to ~4px, GNOME/Adwaita to ~12px.
+/// Conservative for unknown desktops.
+fn default_corner_radius(desktop: &str, is_klassy: bool) -> u16 {
+    if is_klassy {
+        return 10;
+    }
+    match desktop {
+        "plasma-breeze" => 6,
+        "gnome" => 12,
+        _ => 8,
+    }
+}
+
 #[tauri::command]
 pub fn detect_desktop_theme() -> DesktopThemeInfo {
     let mut info = DesktopThemeInfo {
         desktop: "other".to_string(),
+        window_corner_radius_px: 8,
         ..Default::default()
     };
 
@@ -102,6 +121,8 @@ pub fn detect_desktop_theme() -> DesktopThemeInfo {
             .as_deref()
             .map(|v| v.eq_ignore_ascii_case("true") || v.starts_with('1'));
     }
+
+    info.window_corner_radius_px = default_corner_radius(&info.desktop, info.is_klassy);
 
     info.titlebar_active_bg = ini_get(&kdeglobals, "WM", "activeBackground").and_then(|v| kde_color_to_hex(&v));
     info.titlebar_active_fg = ini_get(&kdeglobals, "WM", "activeForeground").and_then(|v| kde_color_to_hex(&v));

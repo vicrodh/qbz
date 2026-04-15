@@ -1241,7 +1241,6 @@
                 releaseDate={album.releaseDate}
                 size="large"
                 quality={album.quality}
-                ribbon={album.ribbon}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                 onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
                 onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
@@ -1293,7 +1292,6 @@
                 releaseDate={album.releaseDate}
                 size="large"
                 quality={album.quality}
-                ribbon={album.ribbon}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                 onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
                 onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
@@ -1807,7 +1805,6 @@
               releaseDate={album.releaseDate}
               size="large"
               quality={album.quality}
-              ribbon={album.ribbon}
               onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
               onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
               onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
@@ -1858,7 +1855,6 @@
               releaseDate={album.releaseDate}
               size="large"
               quality={album.quality}
-              ribbon={album.ribbon}
               onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
               onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
               onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}

@@ -1008,6 +1008,8 @@
       "windowControlsColorPresetMonochrome": "Monochrome",
       "windowControlsColorPresetKlassy": "Klassy (auto-detect)",
       "windowControlsColorPresetPlasma": "Plasma (auto-detect)",
+      "matchSystemChrome": "Match system window chrome",
+      "matchSystemChromeDesc": "Round the window corners and add a subtle edge so QBZ blends with your desktop theme. Requires the custom title bar.",
       "windowControlsColorPresetCustom": "Custom",
       "windowControlsCustomColors": "Custom colors",
       "windowControlsClose": "Close",
