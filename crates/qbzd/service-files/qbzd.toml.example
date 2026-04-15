@@ -1,0 +1,42 @@
+# QBZ Daemon Configuration
+# Copy to ~/.config/qbz/qbzd.toml or /etc/qbz/qbzd.toml
+
+[server]
+bind = "0.0.0.0"
+port = 8182
+token = "auto"              # "auto" generates on first run
+
+[audio]
+backend = "pipewire"        # pipewire | alsa | pulse | system
+device = ""                 # empty = default device
+gapless = true
+normalization = false
+
+[cache]
+memory_mb = 0               # 0 = auto-detect from RAM (recommended for SBCs)
+disk_mb = 400               # persistent disk cache
+prefetch_count = 2          # tracks to prefetch ahead
+prefetch_concurrent = 1     # simultaneous track downloads
+cmaf_concurrent_segments = 2 # parallel CMAF segments per track
+
+[cache.auto]
+enabled = true              # auto-size memory cache from available RAM
+                            # 1 GB RAM -> 100 MB, 4 GB -> 200 MB, 8+ GB -> 400 MB
+
+[data]
+dir = ""                    # empty = ~/.local/share/qbz (or /var/lib/qbz for system service)
+
+[mpris]
+enabled = true              # D-Bus MPRIS media controls (Linux)
+
+[qconnect]
+enabled = true              # Qobuz Connect (control from Qobuz mobile app)
+device_name = ""            # empty = hostname
+
+[mdns]
+enabled = true              # LAN discovery via mDNS (_qbz._tcp)
+name = ""                   # empty = hostname
+
+[logging]
+level = "info"              # trace | debug | info | warn | error
+journal = true              # use systemd journal when available

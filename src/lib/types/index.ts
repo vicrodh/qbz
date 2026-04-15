@@ -106,6 +106,7 @@ export interface QobuzAlbum {
   parental_warning?: boolean;
   upc?: string;
   goodies?: QobuzGoody[];
+  awards?: { id?: string; name: string; awarded_at?: string }[];
 }
 
 export interface QobuzGoody {
@@ -180,6 +181,15 @@ export interface Track {
   parental_warning?: boolean;
 }
 
+export interface AlbumAward {
+  /** String because Qobuz inconsistently types this across endpoints;
+   *  the backend normalizes int or string to string. Optional — some
+   *  /album/get entries omit id entirely. */
+  id?: string;
+  name: string;
+  awardedAt?: string;
+}
+
 export interface AlbumDetail {
   id: string;
   artwork: string;
@@ -197,6 +207,7 @@ export interface AlbumDetail {
   tracks: Track[];
   upc?: string; // Universal Product Code for album.link sharing
   goodies?: QobuzGoody[];
+  awards?: AlbumAward[];
 }
 
 export interface ArtistDetail {
@@ -311,6 +322,22 @@ export interface LabelReleaseContainer {
 export interface LabelExploreResponse {
   has_more?: boolean;
   items?: LabelExploreItem[];
+}
+
+/** Response from /award/page */
+export interface AwardPageData {
+  id?: string;
+  name?: string;
+  image?: string | null;
+  awarded_at?: string | null;
+  magazine?: { id?: string; name?: string; image?: string } | null;
+  releases?: AwardPageContainer[];
+  playlists?: { has_more?: boolean; items?: Record<string, unknown>[] };
+}
+
+export interface AwardPageContainer {
+  id?: string | null;
+  data?: { has_more?: boolean; items?: Record<string, unknown>[] };
 }
 
 export interface LabelExploreItem {
@@ -516,6 +543,7 @@ export interface DiscoverAlbum {
   genre?: { name: string };
   dates?: DiscoverAlbumDates;
   audio_info?: DiscoverAudioInfo;
+  awards?: { id: number; name: string; awarded_at?: string }[];
 }
 
 export interface DiscoverAlbumImage {

@@ -6,6 +6,7 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
+import { cmdPause, cmdResume, cmdStop, cmdSeek, cmdSetVolume, cmdPlayTrack } from '$lib/services/commandRouter';
 import { saveSessionVolume } from '$lib/services/sessionService';
 import { getUserItem, setUserItem, removeUserItem } from '$lib/utils/userStorage';
 
@@ -69,6 +70,12 @@ interface BackendPlaybackState {
   volume: number;
 }
 
+/**
+ * Bit-perfect mode of the active audio stream, reported by the Rust backend.
+ * Matches the `qbz_audio::BitPerfectMode` enum via serde.
+ */
+export type BitPerfectMode = 'DirectHardware' | 'PluginFallback' | 'Disabled';
+
 // Event payload from backend
 interface PlaybackEvent {
   is_playing: boolean;
@@ -82,6 +89,7 @@ interface PlaybackEvent {
   gapless_ready: boolean;       // Backend wants next track queued for gapless
   gapless_next_track_id: number; // Track ID queued for gapless (0 = none)
   buffer_progress?: number | null; // Streaming buffer progress (0-1, null = fully cached)
+  bit_perfect_mode?: BitPerfectMode | null; // None until first stream opens
 }
 
 // Queue track from backend (for external track sync)
@@ -146,6 +154,7 @@ let isSkipping = false;
 let queueEnded = false;
 let normalizationGain: number | null = null;  // Current normalization gain (null = not active)
 let bufferProgress: number | null = null;  // Streaming buffer progress (0-1, null = fully cached)
+let bitPerfectMode: BitPerfectMode | null = null;  // Reported by backend when stream opens
 let pendingSeekPosition: number | null = null;
 let seekRequestInFlight = false;
 let seekTargetPosition: number | null = null;
@@ -226,6 +235,10 @@ export function getNormalizationGain(): number | null {
   return normalizationGain;
 }
 
+export function getBitPerfectMode(): BitPerfectMode | null {
+  return bitPerfectMode;
+}
+
 async function flushPendingSeek(): Promise<void> {
   if (seekRequestInFlight) return;
   if (pendingSeekPosition === null) return;
@@ -237,7 +250,7 @@ async function flushPendingSeek(): Promise<void> {
 
   seekRequestInFlight = true;
   try {
-    await invoke('v2_seek', { position: Math.floor(targetPosition) });
+    await cmdSeek(targetPosition);
   } catch (err) {
     console.error('Failed to seek:', err);
   } finally {
@@ -415,19 +428,22 @@ export async function togglePlay(): Promise<void> {
           const localTrackId = Math.abs(currentTrack.id);
           await invoke('v2_library_play_track', { trackId: localTrackId });
         } else {
-          // Qobuz track - use v2_play_track
-          await invoke('v2_play_track', {
-            trackId: currentTrack.id,
-            quality: getStreamingQuality(),
-            durationSecs: currentTrack.duration ? Math.round(currentTrack.duration) : null
-          });
+          // Qobuz track - use v2_play_track. Pass duration so the
+          // streaming backend's current_position() doesn't clamp to 0
+          // (the value flows into thread_state.duration and seekbar
+          // progress is capped by .min(duration)).
+          await cmdPlayTrack(
+            currentTrack.id,
+            getStreamingQuality(),
+            currentTrack.duration ? Math.round(currentTrack.duration) : null,
+          );
         }
 
       } else {
-        await invoke('v2_resume_playback');
+        await cmdResume();
       }
     } else {
-      await invoke('v2_pause_playback');
+      await cmdPause();
     }
   } catch (err) {
     console.error('Failed to toggle playback:', err);
@@ -474,7 +490,7 @@ export async function resyncPersistedVolume(): Promise<void> {
   volume = persistedVolume;
   notifyListeners();
   try {
-    await invoke('v2_set_volume', { volume: persistedVolume / 100 });
+    await cmdSetVolume(persistedVolume / 100);
     console.log('[Player] Resynced volume after login:', persistedVolume);
   } catch {
     console.debug('[Player] Could not resync volume to backend');
@@ -500,7 +516,7 @@ export async function setVolume(newVolume: number): Promise<void> {
     }
 
     // Try to set volume on backend - will fail silently if no track is loaded
-    await invoke('v2_set_volume', { volume: clampedVolume / 100 });
+    await cmdSetVolume(clampedVolume / 100);
   } catch (err) {
     // Ignore errors when nothing is playing - volume is saved and will apply on next play
     console.debug('Volume set locally (no active playback):', clampedVolume);
@@ -542,7 +558,7 @@ export async function stop(): Promise<void> {
     if (isCasting()) {
       await castStop();
     } else {
-      await invoke('v2_stop_playback');
+      await cmdStop();
     }
     isPlaying = false;
     currentTrack = null;
@@ -769,6 +785,7 @@ async function handlePlaybackEvent(event: PlaybackEvent): Promise<void> {
     // Update normalization gain state
     normalizationGain = event.normalization_gain;
     bufferProgress = event.buffer_progress ?? null;
+    bitPerfectMode = event.bit_perfect_mode ?? null;
 
     notifyListeners();
 
@@ -797,6 +814,7 @@ async function handlePlaybackEvent(event: PlaybackEvent): Promise<void> {
           })
           .finally(() => {
             gaplessRequestInFlight = false;
+            gaplessAttemptTrackId = null;
           });
       }
     }
@@ -843,7 +861,7 @@ export async function startPolling(): Promise<void> {
     // the unscoped key. resyncPersistedVolume() is called after login to fix this.
     const persistedVolume = loadPersistedVolume();
     try {
-      await invoke('v2_set_volume', { volume: persistedVolume / 100 });
+      await cmdSetVolume(persistedVolume / 100);
       console.log('[Player] Synced persisted volume to backend:', persistedVolume);
     } catch {
       // Backend might not be ready yet, volume will be applied on first interaction

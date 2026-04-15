@@ -261,6 +261,19 @@ impl CoreBridge {
             .map_err(|e| e.to_string())
     }
 
+    /// Catalog search (combined: albums, tracks, artists, playlists, most_popular).
+    pub async fn catalog_search(
+        &self,
+        query: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<serde_json::Value, String> {
+        self.core
+            .catalog_search(query, limit, offset)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
     /// Get album by ID
     pub async fn get_album(&self, album_id: &str) -> Result<Album, String> {
         self.core
@@ -485,6 +498,19 @@ impl CoreBridge {
             .map_err(|e| e.to_string())
     }
 
+    /// Get Release Watch — releases from followed artists/labels/awards.
+    pub async fn get_release_watch(
+        &self,
+        release_type: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<SearchResultsPage<Album>, String> {
+        self.core
+            .get_release_watch(release_type, limit, offset)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
     /// Get artist page (full artist details with albums, tracks, similar)
     pub async fn get_artist_page(
         &self,
@@ -540,6 +566,39 @@ impl CoreBridge {
     pub async fn get_label_page(&self, label_id: u64) -> Result<LabelPageData, String> {
         self.core
             .get_label_page(label_id)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Enumerate award catalog (/award/explore).
+    pub async fn get_award_explore(
+        &self,
+        limit: u32,
+        offset: u32,
+    ) -> Result<serde_json::Value, String> {
+        self.core
+            .get_award_explore(limit, offset)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Get award page — hero info + award-winning releases.
+    pub async fn get_award_page(&self, award_id: &str) -> Result<qbz_models::AwardPageData, String> {
+        self.core
+            .get_award_page(award_id)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Get paginated albums for an award (/award/getAlbums).
+    pub async fn get_award_albums(
+        &self,
+        award_id: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<SearchResultsPage<Album>, String> {
+        self.core
+            .get_award_albums(award_id, limit, offset)
             .await
             .map_err(|e| e.to_string())
     }

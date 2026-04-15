@@ -1,8 +1,9 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
+  import { cmdAddTracksToQueue, cmdAddTracksToQueueNext } from '$lib/services/commandRouter';
   import { resolveArtistImage } from '$lib/stores/customArtistImageStore';
   import { onMount, onDestroy } from 'svelte';
-  import { ArrowLeft, Disc3, Play, Music, Ellipsis, Heart, User, ChevronDown, ChevronUp, SquareCheckBig } from 'lucide-svelte';
+  import { ArrowLeft, Disc3, Play, Music, Ellipsis, Heart, User, UserPlus, Check, ChevronDown, ChevronUp, SquareCheckBig } from 'lucide-svelte';
   import BulkActionBar from '../BulkActionBar.svelte';
   import { t } from '$lib/i18n';
   import AlbumCard from '../AlbumCard.svelte';
@@ -19,6 +20,12 @@
     isTrackToggling,
     toggleTrackFavorite
   } from '$lib/stores/favoritesStore';
+  import {
+    subscribe as subscribeLabelFavorites,
+    isLabelFavorite,
+    isLabelToggling,
+    toggleLabelFavorite
+  } from '$lib/stores/labelFavoritesStore';
   import type { QobuzAlbum, LabelPageData, LabelExploreItem, DisplayTrack } from '$lib/types';
 
   interface Track {
@@ -203,15 +210,31 @@
     multiSelectedIds = next;
   }
 
+  function toggleSelectAll() {
+    const allIds = visibleTracks.map(track => track.id);
+    if (multiSelectedIds.size === allIds.length) {
+      multiSelectedIds = new Set();
+    } else {
+      multiSelectedIds = new Set(allIds);
+    }
+  }
+
+  const selectAllState = $derived(
+    !visibleTracks || visibleTracks.length === 0 ? 'none' as const
+    : multiSelectedIds.size === 0 ? 'none' as const
+    : multiSelectedIds.size === visibleTracks.length ? 'all' as const
+    : 'partial' as const
+  );
+
   async function handleBulkPlayNext() {
     const selected = visibleTracks.filter(trk => multiSelectedIds.has(trk.id));
-    await invoke('v2_add_tracks_to_queue_next', { tracks: buildTopTracksQueue(selected) });
+    await cmdAddTracksToQueueNext(buildTopTracksQueue(selected));
     multiSelectMode = false; multiSelectedIds = new Set();
   }
 
   async function handleBulkPlayLater() {
     const selected = visibleTracks.filter(trk => multiSelectedIds.has(trk.id));
-    await invoke('v2_add_tracks_to_queue', { tracks: buildTopTracksQueue(selected) });
+    await cmdAddTracksToQueue(buildTopTracksQueue(selected));
     multiSelectMode = false; multiSelectedIds = new Set();
   }
 
@@ -651,6 +674,39 @@
     return albumOfflineCacheStatuses.get(albumId) || false;
   }
 
+  // Label follow state — driven entirely by the labelFavoritesStore so any
+  // toggle elsewhere (e.g. a future favorites view) updates this view too.
+  let labelFavoritesVersion = $state(0);
+  let unsubLabelFavorites: (() => void) | null = null;
+  const labelIsFavorite = $derived.by(() => {
+    void labelFavoritesVersion;
+    return isLabelFavorite(labelId);
+  });
+  const labelIsToggling = $derived.by(() => {
+    void labelFavoritesVersion;
+    return isLabelToggling(labelId);
+  });
+
+  async function handleToggleLabelFavorite() {
+    await toggleLabelFavorite(labelId);
+  }
+
+  // Reactive helpers for arbitrary label IDs (e.g. cards in the More Labels
+  // row). Reading the version triggers re-evaluation when the store mutates.
+  function labelFavReact(id: number): boolean {
+    void labelFavoritesVersion;
+    return isLabelFavorite(id);
+  }
+  function labelTogglingReact(id: number): boolean {
+    void labelFavoritesVersion;
+    return isLabelToggling(id);
+  }
+  async function toggleLabelFavoriteById(event: Event, id: number) {
+    event.stopPropagation();
+    event.preventDefault();
+    await toggleLabelFavorite(id);
+  }
+
   onMount(() => {
     loadLabelPage();
     loadLabelAlbumsAndDescription();
@@ -658,10 +714,14 @@
     unsubFavorites = subscribeFavorites(() => {
       trackFavoritesVersion++;
     });
+    unsubLabelFavorites = subscribeLabelFavorites(() => {
+      labelFavoritesVersion++;
+    });
   });
 
   onDestroy(() => {
     unsubFavorites?.();
+    unsubLabelFavorites?.();
     jumpObserver?.disconnect();
   });
 
@@ -792,6 +852,24 @@
             {descriptionExpanded ? $t('label.readLess') : $t('label.readMore')}
           </button>
         {/if}
+
+        <!-- Follow Label — same heart/circle treatment as ArtistDetailView -->
+        <div class="label-actions">
+          <button
+            class="favorite-btn"
+            class:is-favorite={labelIsFavorite}
+            onclick={handleToggleLabelFavorite}
+            disabled={labelIsToggling}
+            title={labelIsFavorite ? $t('label.unfollow') : $t('label.follow')}
+            aria-label={labelIsFavorite ? $t('label.unfollow') : $t('label.follow')}
+          >
+            {#if labelIsFavorite}
+              <Heart size={24} fill="var(--accent-primary)" color="var(--accent-primary)" />
+            {:else}
+              <Heart size={24} />
+            {/if}
+          </button>
+        </div>
       </div>
     </header>
 
@@ -864,6 +942,19 @@
           </div>
         </div>
 
+        {#if multiSelectMode}
+          <div class="track-list-header">
+            <div class="col-select-all">
+              <input
+                type="checkbox"
+                checked={selectAllState === 'all'}
+                indeterminate={selectAllState === 'partial'}
+                onchange={toggleSelectAll}
+                title={$t('actions.selectAll')}
+              />
+            </div>
+          </div>
+        {/if}
         <div class="tracks-list">
           {#each visibleTracks as track, index}
             {@const isActiveTrack = isPlaybackActive && activeTrackId === track.id}
@@ -1156,7 +1247,11 @@
           {#snippet children()}
             {#each moreLabels as item}
               {@const itemImage = parseLabelExploreImage(item)}
-              <button class="label-card" onclick={() => onLabelClick?.(item.id, item.name)}>
+              {@const itemFav = labelFavReact(item.id)}
+              {@const itemBusy = labelTogglingReact(item.id)}
+              <!-- svelte-ignore a11y_click_events_have_key_events -->
+              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <div class="label-card" onclick={() => onLabelClick?.(item.id, item.name)} role="button" tabindex="0">
                 <div class="label-card-image-wrapper">
                   <div class="label-card-image-placeholder">
                     <Disc3 size={36} />
@@ -1173,7 +1268,22 @@
                   {/if}
                 </div>
                 <div class="label-card-name">{item.name}</div>
-              </button>
+                <button
+                  class="label-card-follow-btn"
+                  class:is-following={itemFav}
+                  onclick={(e) => toggleLabelFavoriteById(e, item.id)}
+                  disabled={itemBusy}
+                  aria-label={itemFav ? $t('label.unfollow') : $t('label.follow')}
+                >
+                  {#if itemFav}
+                    <Check size={12} />
+                    <span>{$t('label.followingShort')}</span>
+                  {:else}
+                    <UserPlus size={12} />
+                    <span>{$t('label.followShort')}</span>
+                  {/if}
+                </button>
+              </div>
             {/each}
             <div class="spacer"></div>
           {/snippet}
@@ -1264,6 +1374,42 @@
 
   /* Header */
   .label-header { display: flex; gap: 24px; margin-bottom: 40px; }
+
+  /* Follow button — visual parity with ArtistDetailView .artist-actions */
+  .label-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 20px;
+  }
+
+  .favorite-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    background: var(--bg-tertiary);
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
+    flex-shrink: 0;
+  }
+
+  .favorite-btn:hover:not(:disabled) {
+    background: var(--bg-hover);
+    color: var(--accent-primary);
+  }
+
+  .favorite-btn.is-favorite {
+    background: rgba(var(--accent-primary-rgb, 139, 92, 246), 0.15);
+  }
+
+  .favorite-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
   .label-image-wrapper {
     width: 180px; height: 180px; border-radius: 50%;
     overflow: hidden; flex-shrink: 0; background: var(--bg-tertiary);
@@ -1347,6 +1493,34 @@
 
   /* Tracks */
   .top-tracks-section { margin-bottom: 64px; }
+  .track-list-header {
+    width: 100%;
+    height: 40px;
+    padding: 0 16px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 16px;
+    font-size: 12px;
+    text-transform: uppercase;
+    color: #666666;
+    font-weight: 400;
+    box-sizing: border-box;
+    border-bottom: 1px solid var(--bg-tertiary);
+    margin-bottom: 8px;
+  }
+  .col-select-all {
+    width: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .col-select-all input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent-primary);
+    cursor: pointer;
+  }
   .tracks-list { display: flex; flex-direction: column; }
   .track-row {
     display: flex; align-items: center; gap: 12px;
@@ -1474,9 +1648,7 @@
     gap: 8px; width: 140px; flex-shrink: 0;
     background: none; border: none; cursor: pointer;
     padding: 8px; border-radius: 8px;
-    transition: background-color 150ms ease;
   }
-  .label-card:hover { background-color: var(--bg-tertiary); }
   .label-card-image-wrapper {
     width: 120px; height: 120px; border-radius: 50%;
     overflow: hidden; position: relative; background: var(--bg-tertiary);
@@ -1494,6 +1666,35 @@
     font-size: 13px; font-weight: 500; color: var(--text-primary);
     text-align: center; overflow: hidden; text-overflow: ellipsis;
     white-space: nowrap; width: 100%;
+  }
+  /* Follow/Following button below the label card — same shape as the
+     artist Follow button used in ForYouTab (rounded rectangle, 6px). */
+  .label-card-follow-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: transparent;
+    border: 1px solid var(--border-primary);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, opacity 150ms ease;
+    white-space: nowrap;
+  }
+  .label-card-follow-btn:hover:not(:disabled) {
+    background: var(--bg-tertiary);
+    border-color: var(--text-muted);
+  }
+  .label-card-follow-btn.is-following {
+    color: var(--accent-primary);
+    border-color: var(--accent-primary);
+  }
+  .label-card-follow-btn:disabled {
+    opacity: 0.6;
+    cursor: wait;
   }
   .spacer { width: 8px; flex-shrink: 0; }
 </style>

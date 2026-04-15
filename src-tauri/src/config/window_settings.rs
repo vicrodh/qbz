@@ -19,6 +19,10 @@ pub struct WindowSettings {
     pub window_height: f64,
     /// Whether the window was maximized when last closed
     pub is_maximized: bool,
+    /// Match the active desktop's window chrome (rounded corners, edge).
+    /// Implies building the window transparent on Linux so the corners
+    /// can be seen through to the desktop. Requires restart to take effect.
+    pub match_system_window_chrome: bool,
 }
 
 impl Default for WindowSettings {
@@ -28,6 +32,7 @@ impl Default for WindowSettings {
             window_width: 1280.0,
             window_height: 800.0,
             is_maximized: false,
+            match_system_window_chrome: false,
         }
     }
 }
@@ -76,6 +81,10 @@ impl WindowSettingsStore {
             "ALTER TABLE window_settings ADD COLUMN is_maximized INTEGER NOT NULL DEFAULT 0",
             [],
         );
+        let _ = conn.execute(
+            "ALTER TABLE window_settings ADD COLUMN match_system_window_chrome INTEGER NOT NULL DEFAULT 0",
+            [],
+        );
 
         info!("[WindowSettings] Database initialized");
 
@@ -96,7 +105,8 @@ impl WindowSettingsStore {
     pub fn get_settings(&self) -> Result<WindowSettings, String> {
         self.conn
             .query_row(
-                "SELECT use_system_titlebar, window_width, window_height, is_maximized
+                "SELECT use_system_titlebar, window_width, window_height, is_maximized,
+                        match_system_window_chrome
                  FROM window_settings WHERE id = 1",
                 [],
                 |row| {
@@ -104,6 +114,7 @@ impl WindowSettingsStore {
                     let window_width: f64 = row.get(1)?;
                     let window_height: f64 = row.get(2)?;
                     let is_maximized: i32 = row.get(3)?;
+                    let match_chrome: i32 = row.get(4)?;
                     let defaults = WindowSettings::default();
                     let (w, h) = if is_valid_window_size(window_width, window_height) {
                         (window_width, window_height)
@@ -120,10 +131,21 @@ impl WindowSettingsStore {
                         window_width: w,
                         window_height: h,
                         is_maximized: is_maximized != 0,
+                        match_system_window_chrome: match_chrome != 0,
                     })
                 },
             )
             .map_err(|e| format!("Failed to get window settings: {}", e))
+    }
+
+    pub fn set_match_system_window_chrome(&self, value: bool) -> Result<(), String> {
+        self.conn
+            .execute(
+                "UPDATE window_settings SET match_system_window_chrome = ?1 WHERE id = 1",
+                params![if value { 1 } else { 0 }],
+            )
+            .map_err(|e| format!("Failed to set match_system_window_chrome: {}", e))?;
+        Ok(())
     }
 
     pub fn set_use_system_titlebar(&self, value: bool) -> Result<(), String> {
@@ -229,6 +251,17 @@ impl WindowSettingsState {
             .ok_or("Window settings store not initialized")?;
         store.set_is_maximized(value)
     }
+
+    pub fn set_match_system_window_chrome(&self, value: bool) -> Result<(), String> {
+        let guard = self
+            .store
+            .lock()
+            .map_err(|_| "Failed to lock window settings store".to_string())?;
+        let store = guard
+            .as_ref()
+            .ok_or("Window settings store not initialized")?;
+        store.set_match_system_window_chrome(value)
+    }
 }
 
 /// Check that window dimensions are within a sane range.
@@ -260,4 +293,16 @@ pub fn set_use_system_titlebar(
 ) -> Result<(), String> {
     info!("[WindowSettings] Setting use_system_titlebar to {}", value);
     state.set_use_system_titlebar(value)
+}
+
+#[tauri::command]
+pub fn set_match_system_window_chrome(
+    value: bool,
+    state: tauri::State<WindowSettingsState>,
+) -> Result<(), String> {
+    info!(
+        "[WindowSettings] Setting match_system_window_chrome to {} (restart required)",
+        value
+    );
+    state.set_match_system_window_chrome(value)
 }

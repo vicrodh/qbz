@@ -408,6 +408,23 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
             .map_err(CoreError::Api)
     }
 
+    /// Catalog search (combined: albums, tracks, artists, playlists, most_popular).
+    /// Returns raw JSON for the caller to parse.
+    pub async fn catalog_search(
+        &self,
+        query: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<serde_json::Value, CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+
+        client
+            .catalog_search(query, limit, offset)
+            .await
+            .map_err(CoreError::Api)
+    }
+
     /// Get album by ID
     pub async fn get_album(&self, album_id: &str) -> Result<Album, CoreError> {
         let client = self.client.read().await;
@@ -743,6 +760,23 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
             .map_err(CoreError::Api)
     }
 
+    /// Get Release Watch — new releases from followed artists/labels/awards.
+    /// `release_type` must be one of "artists" | "labels" | "awards".
+    pub async fn get_release_watch(
+        &self,
+        release_type: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<SearchResultsPage<Album>, CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+
+        client
+            .get_release_watch(release_type, limit, offset)
+            .await
+            .map_err(CoreError::Api)
+    }
+
     /// Get artist page (full artist details with albums, tracks, similar)
     pub async fn get_artist_page(
         &self,
@@ -813,6 +847,48 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
 
         client
             .get_label_page(label_id)
+            .await
+            .map_err(CoreError::Api)
+    }
+
+    /// Enumerate award catalog (/award/explore).
+    pub async fn get_award_explore(
+        &self,
+        limit: u32,
+        offset: u32,
+    ) -> Result<serde_json::Value, CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+        client
+            .get_award_explore(limit, offset)
+            .await
+            .map_err(CoreError::Api)
+    }
+
+    /// Get award page — hero info + award-winning releases.
+    pub async fn get_award_page(
+        &self,
+        award_id: &str,
+    ) -> Result<qbz_models::AwardPageData, CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+        client
+            .get_award_page(award_id)
+            .await
+            .map_err(CoreError::Api)
+    }
+
+    /// Get paginated albums for an award (/award/getAlbums).
+    pub async fn get_award_albums(
+        &self,
+        award_id: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<SearchResultsPage<Album>, CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+        client
+            .get_award_albums(award_id, limit, offset)
             .await
             .map_err(CoreError::Api)
     }

@@ -1,0 +1,14 @@
+pub mod audio;
+pub mod catalog;
+pub mod catalog_ext;
+pub mod discover;
+pub mod events;
+pub mod favorites;
+pub mod integrations;
+pub mod library;
+pub mod middleware;
+pub mod playback;
+pub mod playlists;
+pub mod queue;
+pub mod search;
+pub mod system;

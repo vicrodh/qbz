@@ -230,6 +230,9 @@ pub struct Album {
     pub upc: Option<String>,
     /// Editorial description/review of the album
     pub description: Option<String>,
+    /// Editorial awards attached to the album.
+    #[serde(default)]
+    pub awards: Option<Vec<AlbumAward>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -811,6 +814,10 @@ pub struct DiscoverAlbum {
     pub genre: Option<Genre>,
     pub dates: Option<DiscoverAlbumDates>,
     pub audio_info: Option<DiscoverAudioInfo>,
+    /// Editorial awards attached to the album. Id 88 = Qobuzissime,
+    /// id 151 = Qobuz Album of the Week (locale-stable).
+    #[serde(default)]
+    pub awards: Option<Vec<PageArtistAward>>,
 }
 
 /// Album image from discover endpoint
@@ -959,6 +966,52 @@ pub struct PageArtistAward {
     pub id: u64,
     pub name: String,
     pub awarded_at: Option<String>,
+}
+
+/// Tolerant award struct used in Album responses where Qobuz is
+/// inconsistent about field types. Aliases cover LegacyAwardDto's
+/// awardId / awardedAt field names used in /album/get responses.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AlbumAward {
+    #[serde(
+        default,
+        alias = "awardId",
+        alias = "award_id",
+        deserialize_with = "deserialize_album_award_id"
+    )]
+    pub id: Option<String>,
+    #[serde(default)]
+    pub name: String,
+    #[serde(
+        default,
+        alias = "awardedAt",
+        deserialize_with = "deserialize_album_awarded_at"
+    )]
+    pub awarded_at: Option<String>,
+}
+
+fn deserialize_album_award_id<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(match value {
+        Some(serde_json::Value::String(s)) if !s.is_empty() => Some(s),
+        Some(serde_json::Value::Number(n)) => Some(n.to_string()),
+        _ => None,
+    })
+}
+
+fn deserialize_album_awarded_at<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(match value {
+        Some(serde_json::Value::String(s)) => Some(s),
+        Some(serde_json::Value::Number(n)) => Some(n.to_string()),
+        _ => None,
+    })
 }
 
 /// Track from /artist/page (top_tracks or tracks_appears_on)

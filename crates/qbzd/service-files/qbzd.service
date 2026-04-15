@@ -1,0 +1,23 @@
+[Unit]
+Description=QBZ Music Daemon
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/qbzd --config /etc/qbz/qbzd.toml
+Restart=on-failure
+RestartSec=5
+User=qbz
+Group=audio
+Environment=RUST_LOG=info
+Environment=XDG_RUNTIME_DIR=/run/user/%U
+
+# Sandboxing
+ProtectSystem=strict
+ReadWritePaths=/var/lib/qbz /run/user
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

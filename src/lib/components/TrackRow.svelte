@@ -42,6 +42,7 @@
     explicit?: boolean; // Parental advisory / explicit content
     selectable?: boolean; // Multi-select mode: show checkbox
     selected?: boolean;
+    dragTrackIds?: number[]; // When multi-selected, all selected IDs for drag
     onToggleSelect?: (e: MouseEvent) => void;
     onPlay?: () => void;
     onArtistClick?: () => void;
@@ -99,6 +100,7 @@
     artworkUrl,
     selectable = false,
     selected = false,
+    dragTrackIds,
     onToggleSelect,
     onPlay,
     onArtistClick,
@@ -154,6 +156,51 @@
     e.stopPropagation();
     void togglePlay();
   }
+
+  function handleDragStart(e: DragEvent) {
+    if (!e.dataTransfer || !trackId || isBlacklisted) return;
+    e.dataTransfer.effectAllowed = 'copy';
+    const ids = dragTrackIds?.length ? dragTrackIds : [trackId];
+    e.dataTransfer.setData('application/x-qbz-tracks', JSON.stringify(ids));
+    e.dataTransfer.setData('text/plain', title);
+
+    // Custom drag ghost: compact, semi-transparent pill
+    const ghost = document.createElement('div');
+    const count = ids.length;
+    Object.assign(ghost.style, {
+      position: 'fixed',
+      top: '-1000px',
+      padding: '8px 14px',
+      maxWidth: '260px',
+      borderRadius: '8px',
+      background: 'rgba(30, 30, 40, 0.85)',
+      color: '#fff',
+      fontSize: '12px',
+      lineHeight: '1.4',
+      boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+      border: '1px solid rgba(255,255,255,0.1)',
+      opacity: '0.9',
+    });
+    if (count > 1) {
+      ghost.textContent = `${count} tracks`;
+      ghost.style.fontWeight = '500';
+    } else {
+      const titleEl = document.createElement('div');
+      titleEl.textContent = title;
+      Object.assign(titleEl.style, { fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' });
+      ghost.appendChild(titleEl);
+      const sub = [artist, album].filter(Boolean).join(' · ');
+      if (sub) {
+        const subEl = document.createElement('div');
+        subEl.textContent = sub;
+        Object.assign(subEl.style, { fontSize: '10px', color: 'rgba(255,255,255,0.55)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: '1px' });
+        ghost.appendChild(subEl);
+      }
+    }
+    document.body.appendChild(ghost);
+    e.dataTransfer.setDragImage(ghost, 0, 20);
+    requestAnimationFrame(() => ghost.remove());
+  }
 </script>
 
 <div
@@ -164,6 +211,8 @@
   class:blacklisted={isBlacklisted}
   class:selected
   data-track-id={trackId ?? undefined}
+  draggable={!!trackId && !isBlacklisted}
+  ondragstart={handleDragStart}
   onmouseenter={() => (isHovered = true)}
   onmouseleave={() => (isHovered = false)}
   onclick={selectable ? onToggleSelect : (isBlacklisted ? undefined : onPlay)}

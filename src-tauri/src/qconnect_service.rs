@@ -1199,9 +1199,11 @@ pub struct QconnectServiceState {
 
 impl QconnectServiceState {
     pub fn new() -> Self {
+        // Load persisted device name from disk
+        let saved_name = load_persisted_device_name();
         Self {
             inner: Arc::new(Mutex::new(QconnectServiceInner::default())),
-            custom_device_name: Arc::new(tokio::sync::RwLock::new(None)),
+            custom_device_name: Arc::new(tokio::sync::RwLock::new(saved_name)),
         }
     }
 
@@ -4773,8 +4775,10 @@ pub async fn v2_qconnect_set_device_name(
     let mut guard = service.custom_device_name.write().await;
     if trimmed.is_empty() {
         *guard = None;
+        persist_device_name(None);
     } else {
-        *guard = Some(trimmed);
+        *guard = Some(trimmed.clone());
+        persist_device_name(Some(&trimmed));
     }
     Ok(())
 }
@@ -4806,6 +4810,56 @@ fn resolve_system_hostname() -> String {
 fn resolve_default_qconnect_device_name() -> String {
     let hostname = resolve_system_hostname();
     format!("Qbz - {hostname}")
+}
+
+/// Path to the QConnect settings database (global, not per-user).
+fn qconnect_settings_db_path() -> Option<std::path::PathBuf> {
+    let data_dir = dirs::data_dir()?.join("qbz");
+    std::fs::create_dir_all(&data_dir).ok()?;
+    Some(data_dir.join("qconnect_settings.db"))
+}
+
+/// Load the persisted custom device name from disk.
+/// Returns None if not set or on any error (fail-open).
+fn load_persisted_device_name() -> Option<String> {
+    let db_path = qconnect_settings_db_path()?;
+    let conn = rusqlite::Connection::open(&db_path).ok()?;
+    conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;").ok()?;
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )"
+    ).ok()?;
+    conn.query_row(
+        "SELECT value FROM settings WHERE key = 'device_name'",
+        [],
+        |row| row.get::<_, String>(0),
+    ).ok().filter(|v| !v.trim().is_empty())
+}
+
+/// Persist the custom device name to disk. None clears it.
+fn persist_device_name(name: Option<&str>) {
+    let Some(db_path) = qconnect_settings_db_path() else { return };
+    let Ok(conn) = rusqlite::Connection::open(&db_path) else { return };
+    let _ = conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;");
+    let _ = conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )"
+    );
+    match name {
+        Some(n) => {
+            let _ = conn.execute(
+                "INSERT OR REPLACE INTO settings (key, value) VALUES ('device_name', ?1)",
+                rusqlite::params![n],
+            );
+        }
+        None => {
+            let _ = conn.execute("DELETE FROM settings WHERE key = 'device_name'", []);
+        }
+    }
 }
 
 async fn resolve_transport_config(

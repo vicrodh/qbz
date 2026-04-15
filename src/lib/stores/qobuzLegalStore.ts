@@ -1,6 +1,7 @@
 import { browser } from '$app/environment';
 import { writable, get } from 'svelte/store';
 import { invoke } from '@tauri-apps/api/core';
+import { skipIfRemote } from '$lib/services/commandRouter';
 
 // Store for ToS acceptance - persisted in Rust (survives app updates)
 export const qobuzTosAccepted = writable<boolean>(false);
@@ -13,6 +14,7 @@ let initialized = false;
  * Should be called early in app initialization.
  */
 export async function loadTosAcceptance(): Promise<boolean> {
+  if (skipIfRemote()) return false;
   if (!browser) return false;
 
   try {
@@ -45,6 +47,7 @@ export async function loadTosAcceptance(): Promise<boolean> {
  * Set ToS acceptance state in Rust backend.
  */
 export async function setTosAcceptance(accepted: boolean): Promise<void> {
+  if (skipIfRemote()) return;
   if (!browser) return;
 
   try {

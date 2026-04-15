@@ -29,6 +29,7 @@
     onToggleRepeat: () => void;
     onToggleFavorite: () => void;
     onVolumeChange: (volume: number) => void;
+    volumeLocked?: boolean;
   }
 
   let {
@@ -50,7 +51,8 @@
     onToggleShuffle,
     onToggleRepeat,
     onToggleFavorite,
-    onVolumeChange
+    onVolumeChange,
+    volumeLocked = false
   }: Props = $props();
 </script>
 
@@ -130,7 +132,7 @@
     </button>
 
     <div class="volume-wrapper">
-      <VolumeSlider {volume} {onVolumeChange} />
+      <VolumeSlider {volume} {onVolumeChange} {volumeLocked} />
     </div>
 
     {#if quality}

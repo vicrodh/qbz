@@ -6,6 +6,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { cmdToggleShuffle, cmdSetRepeatMode, cmdAddToQueue, cmdAddToQueueNext, cmdAddTracksToQueue, cmdAddTracksToQueueNext, cmdSetQueue, cmdClearQueue } from '$lib/services/commandRouter';
 
 // ============ Types ============
 
@@ -277,7 +278,7 @@ export async function toggleShuffle(): Promise<{ success: boolean; enabled: bool
   const newState = !isShuffle;
 
   try {
-    await invoke('v2_toggle_shuffle');
+    await cmdToggleShuffle();
     return { success: true, enabled: newState };
   } catch (err) {
     console.error('Failed to set shuffle:', err);
@@ -291,11 +292,9 @@ export async function toggleShuffle(): Promise<{ success: boolean; enabled: bool
 export async function toggleRepeat(): Promise<{ success: boolean; mode: RepeatMode }> {
   const currentMode = await resolveAuthoritativeRepeatMode();
   const nextMode: RepeatMode = currentMode === 'off' ? 'all' : currentMode === 'all' ? 'one' : 'off';
-  // V2 expects capitalized repeat mode: 'Off' | 'All' | 'One'
-  const v2Mode = nextMode.charAt(0).toUpperCase() + nextMode.slice(1);
 
   try {
-    await invoke('v2_set_repeat_mode', { mode: v2Mode });
+    await cmdSetRepeatMode(nextMode);
     pendingRepeatMode = nextMode;
     return { success: true, mode: nextMode };
   } catch (err) {
@@ -310,7 +309,7 @@ export async function toggleRepeat(): Promise<{ success: boolean; mode: RepeatMo
  */
 export async function addToQueueNext(track: BackendQueueTrack, isLocal = false): Promise<boolean> {
   try {
-    await invoke('v2_add_to_queue_next', { track });
+    await cmdAddToQueueNext(track);
     if (isLocal) {
       localTrackIds = new Set([...localTrackIds, track.id]);
     }
@@ -327,7 +326,7 @@ export async function addToQueueNext(track: BackendQueueTrack, isLocal = false):
  */
 export async function addToQueue(track: BackendQueueTrack, isLocal = false): Promise<boolean> {
   try {
-    await invoke('v2_add_to_queue', { track });
+    await cmdAddToQueue(track);
     if (isLocal) {
       localTrackIds = new Set([...localTrackIds, track.id]);
     }
@@ -344,7 +343,7 @@ export async function addToQueue(track: BackendQueueTrack, isLocal = false): Pro
  */
 export async function addTracksToQueue(tracks: BackendQueueTrack[]): Promise<boolean> {
   try {
-    await invoke('v2_add_tracks_to_queue', { tracks });
+    await cmdAddTracksToQueue(tracks);
     await syncQueueState();
     return true;
   } catch (err) {
@@ -359,7 +358,7 @@ export async function addTracksToQueue(tracks: BackendQueueTrack[]): Promise<boo
  */
 export async function addTracksToQueueNext(tracks: BackendQueueTrack[]): Promise<boolean> {
   try {
-    await invoke('v2_add_tracks_to_queue_next', { tracks });
+    await cmdAddTracksToQueueNext(tracks);
     await syncQueueState();
     return true;
   } catch (err) {
@@ -386,7 +385,7 @@ export function getQueueEpoch(): number {
 export async function setQueue(tracks: BackendQueueTrack[], startIndex: number, clearLocal = true): Promise<boolean> {
   try {
     queueEpoch++;
-    await invoke('v2_set_queue', { tracks, startIndex });
+    await cmdSetQueue(tracks, startIndex);
     if (clearLocal) {
       localTrackIds = new Set();
     }
@@ -404,7 +403,7 @@ export async function setQueue(tracks: BackendQueueTrack[], startIndex: number, 
 export async function clearQueue(): Promise<boolean> {
   try {
     queueEpoch++;
-    await invoke('v2_clear_queue');
+    await cmdClearQueue();
     return true;
   } catch (err) {
     console.error('Failed to clear queue:', err);

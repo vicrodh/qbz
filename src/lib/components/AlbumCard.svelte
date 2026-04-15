@@ -42,6 +42,11 @@
     sourceBadge?: 'user' | 'qobuz_download' | 'qobuz_purchase' | 'plex';
     artistId?: number;
     onArtistClick?: (artistId: number) => void;
+    /** Editorial ribbon: Qobuz award (id 88 = Qobuzissime,
+     *  id 151 = Album of the Week) or a press accolade
+     *  (Pitchfork BNM, Rolling Stone 5★, etc.). `label` is the
+     *  display string the card renders. */
+    ribbon?: { kind: 'qobuzissime' | 'albumOfTheWeek' | 'press'; label: string };
   }
 
   let {
@@ -71,7 +76,8 @@
     downloadStateVersion,
     sourceBadge,
     artistId,
-    onArtistClick
+    onArtistClick,
+    ribbon
   }: Props = $props();
   
   const isDownloaded = $derived.by(() => {
@@ -282,6 +288,19 @@
       </div>
     {/if}
 
+    <!-- Editorial ribbon (Album of the Week / Qobuzissime / Press).
+         Only the last award in album.awards is shown on the card; the
+         full stack lives in AlbumView's sidebar. -->
+    {#if ribbon}
+      <div class="editorial-ribbon"
+           class:ribbon-aotw={ribbon.kind === 'albumOfTheWeek'}
+           class:ribbon-qbz={ribbon.kind === 'qobuzissime'}
+           class:ribbon-press={ribbon.kind === 'press'}
+           title={ribbon.label}>
+        {ribbon.label}
+      </div>
+    {/if}
+
     <!-- Source Badge (Local Library only) -->
     {#if sourceBadge}
       <div
@@ -399,6 +418,53 @@
   }
 
   /* Source badge for Local Library albums */
+  /* Editorial ribbon — sits at bottom-left of the artwork. z-index
+     below the action-overlay (z-index 2) so it hides on hover, as
+     requested. */
+  .editorial-ribbon {
+    position: absolute;
+    bottom: 8px;
+    left: 0;
+    z-index: 1;
+    padding: 3px 10px 3px 8px;
+    font-family: var(--font-sans);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #fff;
+    background: rgba(0, 0, 0, 0.75);
+    border-left: 3px solid var(--accent-primary);
+    border-top-right-radius: 3px;
+    border-bottom-right-radius: 3px;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    pointer-events: none;
+    white-space: nowrap;
+    max-width: calc(100% - 12px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .editorial-ribbon.ribbon-aotw {
+    border-left-color: #eab308;
+  }
+
+  .editorial-ribbon.ribbon-qbz {
+    border-left-color: #8b5cf6;
+  }
+
+  /* Press accolades get a solid gold ribbon with dark, readable text —
+     distinct from the Qobuz-branded variants (which stay dark with a
+     coloured left border). */
+  .editorial-ribbon.ribbon-press {
+    background: linear-gradient(135deg, #f5c042 0%, #d49511 100%);
+    color: #1f1407;
+    border-left: none;
+    padding-left: 10px;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.15);
+  }
+
   .source-badge {
     position: absolute;
     bottom: 6px;

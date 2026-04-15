@@ -1,0 +1,77 @@
+[package]
+name = "qbzd"
+version = "0.1.9"
+edition.workspace = true
+license.workspace = true
+description = "QBZ headless music daemon for SBCs and servers"
+
+[[bin]]
+name = "qbzd"
+path = "src/main.rs"
+
+[dependencies]
+# Core crates (all Tauri-free)
+qbz-models = { path = "../qbz-models" }
+qbz-core = { path = "../qbz-core" }
+qbz-player = { path = "../qbz-player" }
+qbz-audio = { path = "../qbz-audio" }
+qbz-qobuz = { path = "../qbz-qobuz" }
+qbz-library = { path = "../qbz-library" }
+qbz-cache = { path = "../qbz-cache" }
+qbz-integrations = { path = "../qbz-integrations" }
+qconnect-app = { path = "../qconnect-app" }
+qconnect-transport-ws = { path = "../qconnect-transport-ws" }
+
+# HTTP server
+axum = { version = "0.8", features = ["ws"] }
+tower-http = { version = "0.6", features = ["cors"] }
+
+# Async
+tokio = { workspace = true }
+tokio-stream = { workspace = true }
+async-trait = { workspace = true }
+futures-util = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# HTTP client (for status check + OAuth)
+reqwest = { workspace = true }
+
+# Config
+toml = "0.8"
+clap = { version = "4", features = ["derive"] }
+
+# Browser open + URL encoding (for OAuth login)
+open = "5"
+urlencoding = "2"
+
+# System
+dirs = "6"
+log = { workspace = true }
+env_logger = "0.11"
+sysinfo = "0.34"
+
+# mDNS discovery
+mdns-sd = "0.11"
+hostname = "0.4"
+
+# Database
+rusqlite = { version = "0.31", features = ["bundled"] }
+
+# Credentials (shared keyring with desktop app)
+keyring = { version = "3", features = ["async-secret-service", "crypto-rust"] }
+
+# UUID (for QConnect renderer reports)
+uuid = { version = "1", features = ["v4"] }
+
+# QConnect core types
+qconnect-core = { path = "../qconnect-core" }
+
+# MPRIS media controls (Linux D-Bus, headless)
+souvlaki = "0.8"
+
+# TUI wizard
+ratatui = "0.29"
+crossterm = "0.28"

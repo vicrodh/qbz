@@ -75,7 +75,8 @@
     "mostStreamed": "Álbuns populares",
     "favoriteAlbums": "Mais dos favoritos",
     "recentAlbums": "Jogado recentemente",
-    "topArtists": "Seus principais artistas"
+    "topArtists": "Seus principais artistas",
+    "releaseWatch": "Radar de Novidades"
   },
   "discover": {
     "newReleases": "Novos Lançamentos",
@@ -91,7 +92,11 @@
     "pressAccolades": "Elogios da Crítica",
     "qobuzPlaylists": "Playlists Qobuz",
     "searchPlaylistsPlaceholder": "Buscar playlists...",
-    "noPlaylistResults": "Nenhuma playlist encontrada"
+    "noPlaylistResults": "Nenhuma playlist encontrada",
+    "releaseWatch": {
+      "title": "Radar de Novidades",
+      "subtitle": "Lançamentos dos artistas, selos e prêmios que você segue."
+    }
   },
   "search": {
     "title": "Buscar",
@@ -133,7 +138,11 @@
     "readLess": "LEIA MENOS",
     "seeAll": "Ver tudo",
     "showMore": "Mostrar mais",
-    "showLess": "Mostrar menos"
+    "showLess": "Mostrar menos",
+    "follow": "Seguir selo",
+    "unfollow": "Deixar de seguir",
+    "followShort": "Seguir",
+    "followingShort": "Seguindo"
   },
   "labelReleases": {
     "albumCount": "{count} álbuns",
@@ -311,7 +320,12 @@
     "sameArtist": "Do mesmo artista",
     "seeFullDiscography": "Ver discografia completa",
     "releasedOn": "em",
-    "releasedBy": "Lançado pela"
+    "releasedBy": "Lançado pela",
+    "sidebar": {
+      "label": "Selo",
+      "awards": "Prêmios"
+    },
+    "loading": "Carregando…"
   },
   "artist": {
     "albums": "Álbuns",
@@ -487,20 +501,24 @@
     "albums": "Álbuns",
     "tracks": "Faixas",
     "artists": "Artistas",
+    "labels": "Selos",
     "playlists": "Playlists",
     "noFavorites": "Nenhum favorito ainda",
     "noFavoriteTracks": "Nenhuma faixa favorita ainda",
     "noFavoriteAlbums": "Nenhum álbum favorito ainda",
     "noFavoriteArtists": "Nenhum artista favorito ainda",
+    "noFavoriteLabels": "Você ainda não segue nenhum selo",
     "noFavoritePlaylists": "Nenhuma playlist favorita ainda",
     "noTracksMatch": "Nenhuma faixa corresponde a \"{query}\"",
     "noAlbumsMatch": "Nenhum álbum corresponde a \"{query}\"",
     "noArtistsMatch": "Nenhum artista corresponde a \"{query}\"",
+    "noLabelsMatch": "Nenhum selo corresponde a \"{query}\"",
     "noPlaylistsMatch": "Nenhuma playlist corresponde a \"{query}\"",
     "noAlbumsFound": "Nenhum álbum encontrado",
     "likeTracksHint": "Curta faixas para vê-las aqui",
     "likeAlbumsHint": "Curta álbuns para vê-los aqui",
     "likeArtistsHint": "Curta artistas para vê-los aqui",
+    "likeLabelsHint": "Siga selos para vê-los aqui",
     "likePlaylistsHint": "Clique no ícone de coração nas playlists para adicioná-las aqui",
     "noFollowingPlaylists": "Você não segue nenhuma playlist",
     "followPlaylistsHint": "Siga playlists no Qobuz para vê-las aqui",
@@ -529,6 +547,7 @@
       "tracks": "Faixas",
       "albums": "Álbuns",
       "artists": "Artistas",
+      "labels": "Selos",
       "playlists": "Playlists"
     },
     "moveUp": "Mover para cima",
@@ -562,6 +581,11 @@
   },
   "player": {
     "nowPlaying": "Tocando Agora",
+    "controllingRemote": "Controlando: {name}",
+    "noQbzdFound": "Nenhum daemon QBZ encontrado na sua rede",
+    "noQbzdFoundHint": "Certifique-se de que o qbzd esta em execucao no dispositivo alvo",
+    "recentDaemons": "Recentes",
+    "discoveredDaemons": "Descobertos na rede",
     "queue": "Fila",
     "upNext": "A Seguir",
     "ofTotal": "de",
@@ -616,6 +640,7 @@
     "castToDevice": "Transmitir para dispositivo",
     "castingManage": "Transmitindo - Clique para gerenciar",
     "miniPlayer": "Mini Player",
+    "moreControls": "Mais controles",
     "fullScreen": "Modo Imersivo",
     "exitFullScreen": "Sair do Modo Imersivo",
     "maximize": "Maximizar",
@@ -682,6 +707,9 @@
       "output": "Saída",
       "resampled": "Reamostrado pelo sistema",
       "qualityAdjusted": "Qualidade ajustada para compatibilidade do dispositivo — bit-perfect, sem reamostragem",
+      "plughwFallback": "Reamostrado pelo ALSA (plughw)",
+      "plughwFix": "O DAC não suporta esta taxa de amostragem nativamente. Escolha uma fonte de menor taxa ou um DAC com suporte mais amplo.",
+      "bitPerfect": "Bit-perfect: saída direta de hardware",
       "fix": "Ative DAC Passthrough ou Modo Exclusivo nas Configurações"
     },
     "stereo": "Estéreo",
@@ -766,6 +794,8 @@
     "clearSelection": "Limpar seleção",
     "copyCommand": "Comando copiar",
     "downloadOnGitHub": "Baixe no GitHub",
+    "downloadAndInstall": "Baixar e instalar",
+    "downloadManually": "Baixar manualmente",
     "findAvailableVersion": "Encontre a versão disponível",
     "gotIt": "Entendi",
     "okClose": "OK, feche",
@@ -1469,6 +1499,8 @@
     "oauthLoading": "Abrindo navegador...",
     "systemBrowserButton": "Usar o navegador do sistema",
     "systemBrowserLoading": "Aguardando login...",
+    "captchaHint": "Problemas com o captcha? O navegador integrado pode não suportá-lo bem.",
+    "trySystemBrowser": "Cancelar e usar o navegador do sistema",
     "activeSubscriptionRequired": "O QBZ requer uma assinatura ativa do Qobuz™. Suas credenciais são enviadas diretamente ao Qobuz™.",
     "APIUse": "Este aplicativo utiliza a API do Qobuz, mas não é certificado pelo Qobuz."
   },
@@ -1677,7 +1709,9 @@
       "newState": "Lista negra {status}"
     },
     "laodingDevices": "Carregando dispositivos...",
-    "findingSimilarArtists": "Encontrando artistas semelhantes..."
+    "findingSimilarArtists": "Encontrando artistas semelhantes...",
+    "awardUnavailable": "Detalhe não disponível para este prêmio.",
+    "audioDeviceMissing": "Dispositivo '{device}' não está mais disponível. Usando o padrão do sistema."
   },
   "offline": {
     "title": "Modo Offline",
@@ -1701,6 +1735,7 @@
     "someLocal": "Parcialmente Disponível Offline",
     "notAvailable": "Não Disponível Offline",
     "trackNotAvailable": "Esta faixa não está disponível offline",
+    "trackNotAvailableOffline": "\"{title}\" não está salva para reprodução offline",
     "featureDisabled": "Este recurso requer conexão com a internet",
     "startWithoutLogin": "Iniciar offline (sem acesso aos serviços do Qobuz™)",
     "noPreviousSession": "Você precisa fazer login pelo menos uma vez antes de usar o modo offline. Conecte-se à internet e faça login para criar seu perfil.",
@@ -2378,7 +2413,16 @@
     },
     "runningInsideSandbox": "QBZ detectou que está sendo executado dentro de um <strong>{env} sandbox</strong>.",
     "newReleaseAvailable": "Novo lançamento disponível",
-    "newVersionReleased": "Uma nova versão do QBZ foi lançada"
+    "newVersionReleased": "Uma nova versão do QBZ foi lançada",
+    "autoUpdate": {
+      "title": "Atualizando QBZ",
+      "checking": "Procurando atualizações...",
+      "downloading": "Baixando atualização...",
+      "downloadingProgress": "Baixando atualização... {percent}%",
+      "installing": "Instalando atualização...",
+      "restarting": "Reiniciando...",
+      "failed": "Falha na atualização"
+    }
   },
   "common": {
     "name": "Nome"
@@ -2572,5 +2616,33 @@
     "vocals&Guitar": "Vocais",
     "voice": "Voz",
     "workArranger": "Organizador de Trabalho"
+  },
+  "ribbon": {
+    "albumOfTheWeek": "Álbum da semana",
+    "qobuzissime": "Qobuzissime"
+  },
+  "releaseWatch": {
+    "tabs": {
+      "artists": "Artistas",
+      "labels": "Selos",
+      "awards": "Prêmios"
+    },
+    "empty": {
+      "artists": "Nenhuma novidade dos artistas que você segue.",
+      "labels": "Nenhuma novidade dos selos que você segue.",
+      "awards": "Nenhuma novidade dos prêmios que você segue."
+    }
+  },
+  "award": {
+    "kicker": "Prêmio",
+    "empty": "Ainda não há lançamentos premiados.",
+    "section": {
+      "releases": "Lançamentos aclamados",
+      "new-releases": "Novidades",
+      "classics": "Clássicos"
+    },
+    "follow": "Seguir prêmio",
+    "unfollow": "Deixar de seguir",
+    "otherAwards": "Mais prêmios"
   }
 }

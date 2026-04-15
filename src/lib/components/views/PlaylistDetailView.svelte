@@ -7,6 +7,7 @@
   import ViewTransition from '../ViewTransition.svelte';
   import { writeText } from '@tauri-apps/plugin-clipboard-manager';
   import { invoke } from '@tauri-apps/api/core';
+  import { cmdAddTracksToQueue, cmdAddTracksToQueueNext } from '$lib/services/commandRouter';
   import { open, ask } from '@tauri-apps/plugin-dialog';
   import TrackRow from '../TrackRow.svelte';
   import PlaylistSuggestions from '../PlaylistSuggestions.svelte';
@@ -1171,10 +1172,19 @@
     multiSelectedKeys = next;
   }
 
+  function toggleSelectAll() {
+    const allKeys = displayTracks.map(track => getTrackKey(track));
+    if (multiSelectedKeys.size === allKeys.length) {
+      multiSelectedKeys = new Set();
+    } else {
+      multiSelectedKeys = new Set(allKeys);
+    }
+  }
+
   async function handleBulkPlayNext() {
     const selected = displayTracks.filter(trk => multiSelectedKeys.has(getTrackKey(trk)));
     const { queueTracks } = buildQueueTracks(selected);
-    await invoke('v2_add_tracks_to_queue_next', { tracks: queueTracks });
+    await cmdAddTracksToQueueNext(queueTracks);
     multiSelectedKeys = new Set();
     multiSelectMode = false;
   }
@@ -1182,7 +1192,7 @@
   async function handleBulkPlayLater() {
     const selected = displayTracks.filter(trk => multiSelectedKeys.has(getTrackKey(trk)));
     const { queueTracks } = buildQueueTracks(selected);
-    await invoke('v2_add_tracks_to_queue', { tracks: queueTracks });
+    await cmdAddTracksToQueue(queueTracks);
     multiSelectedKeys = new Set();
     multiSelectMode = false;
   }
@@ -1461,6 +1471,13 @@
 
     return filtered;
   });
+
+  const selectAllState = $derived(
+    !displayTracks || displayTracks.length === 0 ? 'none' as const
+    : multiSelectedKeys.size === 0 ? 'none' as const
+    : multiSelectedKeys.size === displayTracks.length ? 'all' as const
+    : 'partial' as const
+  );
 
   // Virtual scrolling: total height of the track list
   const trackListTotalHeight = $derived(displayTracks.length * TRACK_ROW_HEIGHT);
@@ -1952,7 +1969,7 @@
     }));
 
     try {
-      await invoke('v2_add_tracks_to_queue_next', { tracks: queueTracks });
+      await cmdAddTracksToQueueNext(queueTracks);
 
       // Tell parent about local tracks added to queue
       if (localIds.length > 0) {
@@ -1997,7 +2014,7 @@
       .map(trk => Math.abs(trk.id));
 
     try {
-      await invoke('v2_add_tracks_to_queue', { tracks: queueTracks });
+      await cmdAddTracksToQueue(queueTracks);
 
       // Tell parent about local tracks added to queue
       if (localIds.length > 0) {
@@ -2282,7 +2299,17 @@
         </div>
       {/if}
       <div class="track-list-header">
-        {#if isCustomOrderMode || multiSelectMode}
+        {#if multiSelectMode}
+          <div class="col-select-all">
+            <input
+              type="checkbox"
+              checked={selectAllState === 'all'}
+              indeterminate={selectAllState === 'partial'}
+              onchange={toggleSelectAll}
+              title={$t('actions.selectAll')}
+            />
+          </div>
+        {:else if isCustomOrderMode}
           <div class="col-checkbox"></div>
         {/if}
         <div class="col-number">#</div>
@@ -2393,6 +2420,9 @@
               isUnavailable={removedFromQobuz && isOwnPlaylist}
               unavailableTooltip={removedFromQobuz ? $t('player.trackUnavailable') : undefined}
               isBlacklisted={trackBlacklisted}
+              dragTrackIds={multiSelectMode && multiSelectedKeys.has(getTrackKey(track))
+                ? displayTracks.filter(trk => multiSelectedKeys.has(getTrackKey(trk)) && !trk.isLocal).map(trk => trk.id)
+                : undefined}
               hideFavorite={track.isLocal || removedFromQobuz || trackBlacklisted}
               hideDownload={track.isLocal || removedFromQobuz || trackBlacklisted}
               downloadStatus={downloadInfo.status}
@@ -2831,6 +2861,20 @@
     box-sizing: border-box;
     border-bottom: 1px solid var(--bg-tertiary);
     margin-bottom: 8px;
+  }
+
+  .col-select-all {
+    width: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .col-select-all input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent-primary);
+    cursor: pointer;
   }
 
   .col-number {

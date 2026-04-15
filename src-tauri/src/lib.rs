@@ -12,6 +12,17 @@ pub mod session_lifecycle;
 pub mod tauri_adapter;
 
 pub mod auto_theme;
+pub mod desktop_theme;
+
+/// Captures whether the main Tauri window was built transparent for this
+/// session. Written once during setup, read by a Tauri command so the
+/// frontend can decide whether to paint the matching border-radius CSS.
+static MAIN_WINDOW_TRANSPARENT: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+pub fn main_window_built_transparent() -> bool {
+    MAIN_WINDOW_TRANSPARENT.load(std::sync::atomic::Ordering::SeqCst)
+}
 #[cfg(target_os = "linux")]
 pub mod autoconfig_graphics;
 
@@ -21,6 +32,7 @@ pub mod api_server;
 pub mod artist_blacklist;
 pub mod artist_vectors;
 pub mod audio;
+pub mod audio_device_watch;
 pub mod cache;
 pub mod cast;
 pub mod commands;
@@ -56,9 +68,12 @@ pub mod session_store;
 pub mod share;
 pub mod snap;
 pub mod tray;
+#[cfg(target_os = "linux")]
+pub mod tray_linux_ksni;
 pub mod updates;
 pub mod user_data;
 pub mod visualizer;
+pub mod qbzd_discovery;
 
 use rustls::crypto::{aws_lc_rs, CryptoProvider};
 use std::sync::Arc;
@@ -415,6 +430,17 @@ fn should_use_main_window_transparency() -> bool {
         return false;
     }
 
+    // Opt-in via persisted settings: "match system window chrome" wants
+    // rounded corners, which need a transparent window so the webview
+    // background stops painting white outside the radius.
+    if let Ok(store) = config::window_settings::WindowSettingsStore::new() {
+        if let Ok(settings) = store.get_settings() {
+            if settings.match_system_window_chrome {
+                return true;
+            }
+        }
+    }
+
     // Stability-first default on Linux.
     false
 }
@@ -568,13 +594,11 @@ pub fn run() {
     let mut saved_win_height = window_settings.window_height;
     let saved_win_maximized = window_settings.is_maximized;
 
-    // Safety: clamp obviously corrupt window sizes.
-    // Only catches absurd values (>8K) — the window manager handles the rest.
-    // Previous approach used xdpyinfo which returns combined multi-monitor
-    // resolution (e.g. 6000x1600 for dual monitors), causing false positives.
-    #[cfg(target_os = "linux")]
+    // First-pass clamp: catch corrupt persisted sizes (>8K) before we even
+    // query monitors. The stricter fit-to-current-monitor clamp runs below
+    // inside setup() where the Tauri app handle is available.
     {
-        const MAX_SANE_WIDTH: f64 = 7680.0;  // 8K
+        const MAX_SANE_WIDTH: f64 = 7680.0; // 8K
         const MAX_SANE_HEIGHT: f64 = 4320.0; // 8K
         const FALLBACK_WIDTH: f64 = 1920.0;
         const FALLBACK_HEIGHT: f64 = 1080.0;
@@ -728,7 +752,7 @@ pub fn run() {
     // Initialize per-user data paths (no user active yet until login)
     let user_data_paths = user_data::UserDataPaths::new();
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             // Second instance launched — bring existing window to front
             if let Some(window) = app.get_webview_window("main") {
@@ -749,12 +773,21 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_clipboard_manager::init());
+
+    #[cfg(feature = "updater")]
+    let builder = builder
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init());
+
+    builder
         .manage(AppState::with_device_and_settings(
             saved_device,
             audio_settings,
         ))
         .manage(core_bridge::CoreBridgeState::new())
+        .manage(commands_v2::OAuthCancelState::new())
+        .manage(qbzd_discovery::QbzdDiscoveryState::new())
         .manage(runtime::RuntimeManagerState::new())
         .manage(qconnect_service::QconnectServiceState::new())
         .manage(user_data_paths)
@@ -764,10 +797,50 @@ pub fn run() {
                 use_system_titlebar
             );
             let main_window_transparent = should_use_main_window_transparency();
+            MAIN_WINDOW_TRANSPARENT.store(main_window_transparent, std::sync::atomic::Ordering::SeqCst);
             log::info!(
                 "Main window transparency: {} (override with QBZ_FORCE_TRANSPARENT_WINDOWS=1 or QBZ_FORCE_OPAQUE_WINDOWS=1)",
                 main_window_transparent
             );
+
+            // Fit-to-monitor clamp: when the persisted size is larger than
+            // any available monitor the window would open partly off-screen
+            // and become unreachable until the user drags it back (or worse,
+            // when decorations are hidden there's no way to grab it). Query
+            // monitors at startup and shrink the saved size to 95% of the
+            // largest monitor's logical dimensions when it overflows.
+            {
+                let monitors = app.available_monitors().unwrap_or_default();
+                let max_logical = monitors
+                    .iter()
+                    .map(|m| {
+                        let scale = m.scale_factor();
+                        let size = m.size();
+                        (size.width as f64 / scale, size.height as f64 / scale)
+                    })
+                    .fold((0.0_f64, 0.0_f64), |acc, (w, h)| {
+                        (acc.0.max(w), acc.1.max(h))
+                    });
+                let (mon_w, mon_h) = max_logical;
+                if mon_w > 0.0 && mon_h > 0.0 {
+                    let fit_w = mon_w * 0.95;
+                    let fit_h = mon_h * 0.95;
+                    if saved_win_width > fit_w || saved_win_height > fit_h {
+                        log::warn!(
+                            "Persisted window size {}x{} exceeds available monitor ({}x{} logical); clamping to {}x{}",
+                            saved_win_width as u32,
+                            saved_win_height as u32,
+                            mon_w as u32,
+                            mon_h as u32,
+                            fit_w as u32,
+                            fit_h as u32
+                        );
+                        saved_win_width = saved_win_width.min(fit_w);
+                        saved_win_height = saved_win_height.min(fit_h);
+                    }
+                }
+            }
+
             #[allow(unused_mut)]
             let mut builder = tauri::WebviewWindowBuilder::new(
                 app,
@@ -1150,6 +1223,7 @@ pub fn run() {
         .manage(api_cache_state)
         .manage(session_store_state)
         .manage(audio_settings_state)
+        .manage(audio_device_watch::DeviceMissingThrottle::new())
         .manage(download_settings_state)
         .manage(subscription_state)
         .manage(offline_state)
@@ -1221,6 +1295,11 @@ pub fn run() {
             commands_v2::v2_manual_login,
             commands_v2::v2_start_oauth_login,
             commands_v2::v2_start_system_browser_oauth,
+            commands_v2::v2_cancel_oauth_login,
+            commands_v2::v2_cancel_system_browser_oauth,
+            qbzd_discovery::v2_qbzd_start_discovery,
+            qbzd_discovery::v2_qbzd_stop_discovery,
+            qbzd_discovery::v2_qbzd_get_devices,
             commands_v2::v2_get_user_info,
             commands_v2::v2_save_credentials,
             commands_v2::v2_clear_saved_credentials,
@@ -1253,6 +1332,8 @@ pub fn run() {
             config::favorites_cache::is_track_favorite,
             commands_v2::v2_set_api_locale,
             commands_v2::v2_set_use_system_titlebar,
+            commands_v2::v2_set_match_system_window_chrome,
+            commands_v2::v2_main_window_is_transparent,
             commands_v2::v2_set_enable_tray,
             commands_v2::v2_set_minimize_to_tray,
             commands_v2::v2_set_close_to_tray,
@@ -1482,6 +1563,7 @@ pub fn run() {
             commands_v2::v2_has_whats_new_been_shown,
             commands_v2::v2_mark_whats_new_shown,
             commands_v2::v2_mark_flatpak_welcome_shown,
+            commands_v2::v2_is_auto_update_eligible,
             commands_v2::v2_get_backend_logs,
             commands_v2::v2_upload_logs_to_paste,
             commands_v2::v2_get_download_settings,
@@ -1539,12 +1621,16 @@ pub fn run() {
             commands_v2::v2_get_playlist_tags,
             commands_v2::v2_get_discover_albums,
             commands_v2::v2_get_featured_albums,
+            commands_v2::v2_get_release_watch,
             commands_v2::v2_get_artist_page,
             commands_v2::v2_get_similar_artists,
             commands_v2::v2_get_artist_with_albums,
             commands_v2::v2_get_label,
             commands_v2::v2_get_label_page,
             commands_v2::v2_get_label_explore,
+            commands_v2::v2_get_award_page,
+            commands_v2::v2_get_award_albums,
+            commands_v2::v2_get_award_explore,
             commands_v2::v2_pause_playback,
             commands_v2::v2_resume_playback,
             commands_v2::v2_stop_playback,
@@ -1556,6 +1642,7 @@ pub fn run() {
             commands_v2::v2_play_next_gapless,
             commands_v2::v2_prefetch_track,
             commands_v2::v2_reinit_audio_device,
+            commands_v2::v2_check_audio_device_presence,
             commands_v2::v2_get_audio_settings,
             commands_v2::v2_set_audio_output_device,
             commands_v2::v2_set_audio_exclusive_mode,
@@ -1632,6 +1719,14 @@ pub fn run() {
             commands_v2::v2_sync_cached_favorite_artists,
             commands_v2::v2_cache_favorite_artist,
             commands_v2::v2_uncache_favorite_artist,
+            commands_v2::v2_get_cached_favorite_labels,
+            commands_v2::v2_sync_cached_favorite_labels,
+            commands_v2::v2_cache_favorite_label,
+            commands_v2::v2_uncache_favorite_label,
+            commands_v2::v2_get_cached_favorite_awards,
+            commands_v2::v2_sync_cached_favorite_awards,
+            commands_v2::v2_cache_favorite_award,
+            commands_v2::v2_uncache_favorite_award,
             commands_v2::v2_share_track_songlink,
             commands_v2::v2_share_album_songlink,
             commands_v2::v2_library_backfill_downloads,
@@ -1691,6 +1786,8 @@ pub fn run() {
             commands_v2::v2_set_image_cache_max_size,
             commands_v2::v2_get_image_cache_stats,
             commands_v2::v2_clear_image_cache,
+            // Desktop theme detection (KDE/Klassy → adaptive window controls)
+            desktop_theme::detect_desktop_theme,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

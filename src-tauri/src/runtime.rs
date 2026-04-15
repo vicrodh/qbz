@@ -106,6 +106,10 @@ pub enum RuntimeError {
     V2AuthFailed(String),
     /// V2 CoreBridge not initialized
     V2NotInitialized,
+    /// Manual offline mode is on and the requested track is not available
+    /// in any local cache. Emitted instead of silently streaming from the
+    /// network (see issue #279).
+    TrackNotAvailableOffline,
     /// Internal error
     Internal(String),
 }
@@ -122,6 +126,9 @@ impl std::fmt::Display for RuntimeError {
             Self::BootstrapInProgress => write!(f, "Bootstrap already in progress"),
             Self::V2AuthFailed(msg) => write!(f, "V2 authentication failed: {}", msg),
             Self::V2NotInitialized => write!(f, "V2 CoreBridge not initialized"),
+            Self::TrackNotAvailableOffline => {
+                write!(f, "Track not available in offline cache while in offline mode")
+            }
             Self::Internal(msg) => write!(f, "Internal error: {}", msg),
         }
     }

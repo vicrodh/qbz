@@ -13,13 +13,17 @@
     Volume2,
     VolumeX,
     Volume1,
+    Monitor,
     Cast,
     MicVocal,
     Maximize2,
     PictureInPicture2,
-    TriangleAlert
+    TriangleAlert,
+    MoreHorizontal
   } from 'lucide-svelte';
   import { t } from 'svelte-i18n';
+  import { isRemoteMode, playbackTarget } from '$lib/stores/playbackTargetStore';
+  import { disconnectFromRemote } from '$lib/stores/playbackTargetStore';
   import QualityBadge from './QualityBadge.svelte';
   import AudioOutputBadges from './AudioOutputBadges.svelte';
   import QconnectBadge from './QconnectBadge.svelte';
@@ -33,7 +37,12 @@
     refreshStatus,
     type OfflineReason
   } from '$lib/stores/offlineStore';
-  import { toggleMute } from '$lib/stores/playerStore';
+  import {
+    toggleMute,
+    getBitPerfectMode,
+    subscribe as subscribePlayer,
+    type BitPerfectMode,
+  } from '$lib/stores/playerStore';
   import {
     subscribe as subscribeDegraded,
     isDegraded
@@ -152,10 +161,58 @@
 
   let progressRef = $state<HTMLDivElement | null>(null);
   let volumeRef = $state<HTMLDivElement | null>(null);
+  let barRef = $state<HTMLElement | null>(null);
   let isDraggingProgress = $state(false);
   let isDraggingVolume = $state(false);
   let showArtworkPreview = $state(false);
   let dragPreviewTime = $state<number | null>(null);
+
+  // Narrow-layout detection (issue #303): below this width the right-section
+  // collapses into a hamburger popup and the quality/qconnect badges switch
+  // to compact variants so nothing overlaps. Uses ResizeObserver on the bar
+  // itself instead of a viewport media query so the breakpoint reacts to
+  // the actual space the bar gets (sidebar state, window chrome, etc.).
+  const NARROW_LAYOUT_PX = 1100;
+  let isNarrowBar = $state(false);
+  let isOverflowMenuOpen = $state(false);
+  let isVolumePopupOpen = $state(false);
+
+  $effect(() => {
+    if (!barRef) return;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const width = entry.contentRect.width;
+        const narrow = width > 0 && width < NARROW_LAYOUT_PX;
+        if (narrow !== isNarrowBar) {
+          isNarrowBar = narrow;
+          if (!narrow) {
+            isOverflowMenuOpen = false;
+            isVolumePopupOpen = false;
+          }
+        }
+      }
+    });
+    ro.observe(barRef);
+    return () => ro.disconnect();
+  });
+
+  function toggleOverflowMenu(): void {
+    isOverflowMenuOpen = !isOverflowMenuOpen;
+    if (isOverflowMenuOpen) isVolumePopupOpen = false;
+  }
+
+  function closeOverflowMenu(): void {
+    isOverflowMenuOpen = false;
+  }
+
+  function toggleVolumePopup(): void {
+    isVolumePopupOpen = !isVolumePopupOpen;
+    if (isVolumePopupOpen) isOverflowMenuOpen = false;
+  }
+
+  function closeVolumePopup(): void {
+    isVolumePopupOpen = false;
+  }
 
   // Offline state
   let isOffline = $state(checkIsOffline());
@@ -177,6 +234,16 @@
       isDegradedState = isDegraded();
     });
     return unsubDegraded;
+  });
+
+  // Bit-perfect mode reported by the audio backend (null until first stream).
+  let bitPerfectMode = $state<BitPerfectMode | null>(getBitPerfectMode());
+
+  $effect(() => {
+    const unsubPlayer = subscribePlayer(() => {
+      bitPerfectMode = getBitPerfectMode();
+    });
+    return unsubPlayer;
   });
 
   // Get human-readable offline reason
@@ -260,9 +327,22 @@
       };
     }
   });
+
+  // Set CSS variable for player bar height so page layout adjusts
+  $effect(() => {
+    const barHeight = $isRemoteMode ? 128 : 104;
+    document.documentElement.style.setProperty('--player-bar-height', `${barHeight}px`);
+  });
 </script>
 
-<div class="now-playing-bar">
+<div class="now-playing-bar" class:has-remote-banner={$isRemoteMode} class:narrow={isNarrowBar} bind:this={barRef}>
+  {#if $isRemoteMode}
+    <div class="remote-indicator">
+      <Monitor size={14} />
+      <span>{$t('player.controllingRemote', { values: { name: $playbackTarget.name || 'Remote' } })}</span>
+      <button class="remote-disconnect" onclick={disconnectFromRemote}>{$t('settings.integrations.disconnect')}</button>
+    </div>
+  {/if}
   <!-- Top: Full-width Seekbar -->
   <div class="seekbar-container">
     <span class="time current">{formatTime(currentTime)}</span>
@@ -422,9 +502,18 @@
             </div>
           </div>
 
-          <div class="badges-group">
+          <div class="badges-group" class:narrow={isNarrowBar}>
             <div class="quality-indicator">
-              <QualityBadge {quality} {bitDepth} {samplingRate} {originalBitDepth} {originalSamplingRate} {format} />
+              <QualityBadge
+                {quality}
+                {bitDepth}
+                {samplingRate}
+                {originalBitDepth}
+                {originalSamplingRate}
+                {format}
+                {bitPerfectMode}
+                compact={isNarrowBar}
+              />
               <div class="audio-badges-row">
                 <AudioOutputBadges {samplingRate} />
               </div>
@@ -434,6 +523,7 @@
               sessionSnapshot={qconnectSessionSnapshot}
               onToggleConnection={onToggleQconnectConnection ?? (() => {})}
               busy={qconnectBusy}
+              compact={isNarrowBar}
             />
           </div>
         </div>
@@ -467,67 +557,205 @@
         </div>
       {/if}
 
-      <button
-        class="control-btn"
-        class:cast-active={isCastConnected}
-        onclick={onCast}
-        title={isCastConnected ? $translateStore('player.castingManage') : $translateStore('player.castToDevice')}
-      >
-        <Cast size={16} />
-      </button>
-
-      {#if showQconnectDevButton}
-      <button
-        class="control-btn"
-        class:qconnect-active={isQobuzConnectConnected}
-        onclick={onQobuzConnect}
-        title={isQobuzConnectConnected ? $translateStore('player.qobuzConnectManage') : $translateStore('player.qobuzConnect')}
-      >
-        <span class="qconnect-icon" aria-hidden="true"></span>
-      </button>
-      {/if}
-
-      <button
-        class="control-btn"
-        class:active={lyricsActive && !isOffline}
-        class:disabled={isOffline}
-        onclick={isOffline ? undefined : onToggleLyrics}
-        disabled={isOffline}
-        title={isOffline ? $translateStore('offline.featureDisabled') : $translateStore('player.lyrics')}
-        aria-label={isOffline ? $translateStore('offline.featureDisabled') : $translateStore('player.lyrics')}
-      >
-        <MicVocal size={16} aria-hidden="true" />
-      </button>
-
-      {#if onOpenMiniPlayer}
-        <button class="control-btn" onclick={onOpenMiniPlayer} title={$translateStore('player.miniPlayer')}>
-          <PictureInPicture2 size={16} />
+      {#if !isNarrowBar}
+        <!-- Wide layout: each secondary control visible inline -->
+        <button
+          class="control-btn"
+          class:cast-active={isCastConnected}
+          onclick={onCast}
+          title={isCastConnected ? $translateStore('player.castingManage') : $translateStore('player.castToDevice')}
+        >
+          <Cast size={16} />
         </button>
+
+        {#if showQconnectDevButton}
+        <button
+          class="control-btn"
+          class:qconnect-active={isQobuzConnectConnected}
+          onclick={onQobuzConnect}
+          title={isQobuzConnectConnected ? $translateStore('player.qobuzConnectManage') : $translateStore('player.qobuzConnect')}
+        >
+          <span class="qconnect-icon" aria-hidden="true"></span>
+        </button>
+        {/if}
+
+        <button
+          class="control-btn"
+          class:active={lyricsActive && !isOffline}
+          class:disabled={isOffline}
+          onclick={isOffline ? undefined : onToggleLyrics}
+          disabled={isOffline}
+          title={isOffline ? $translateStore('offline.featureDisabled') : $translateStore('player.lyrics')}
+          aria-label={isOffline ? $translateStore('offline.featureDisabled') : $translateStore('player.lyrics')}
+        >
+          <MicVocal size={16} aria-hidden="true" />
+        </button>
+
+        {#if onOpenMiniPlayer}
+          <button class="control-btn" onclick={onOpenMiniPlayer} title={$translateStore('player.miniPlayer')}>
+            <PictureInPicture2 size={16} />
+          </button>
+        {/if}
+
+        <button class="control-btn" onclick={onOpenFullScreen} title={$translateStore('player.fullScreen')}>
+          <Maximize2 size={16} />
+        </button>
+
+        <button
+          class="control-btn"
+          class:active={normalizationEnabled && normalizationGain !== null && normalizationGain !== 1.0}
+          class:norm-enabled={normalizationEnabled && (normalizationGain === null || normalizationGain === 1.0)}
+          onclick={onToggleNormalization}
+          title={!normalizationEnabled
+            ? $translateStore('player.normalizationOff')
+            : normalizationGain !== null && normalizationGain !== 1.0
+              ? $translateStore('player.normalizationApplied')
+              : $translateStore('player.normalizationOn')}
+        >
+          <span
+            class="norm-icon"
+            class:norm-on={normalizationEnabled}
+            aria-hidden="true"
+          ></span>
+        </button>
+      {:else}
+        <!-- Narrow layout: collapse secondary controls into a hamburger menu -->
+        <div class="overflow-wrapper">
+          <button
+            class="control-btn overflow-btn"
+            class:active={isOverflowMenuOpen}
+            onclick={toggleOverflowMenu}
+            title={$translateStore('player.moreControls')}
+            aria-label={$translateStore('player.moreControls')}
+            aria-expanded={isOverflowMenuOpen}
+          >
+            <MoreHorizontal size={16} />
+          </button>
+
+          {#if isOverflowMenuOpen}
+            <!-- svelte-ignore a11y_click_events_have_key_events -->
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div class="popup-backdrop" onclick={closeOverflowMenu}></div>
+            <div class="overflow-menu" role="menu">
+              <button
+                class="overflow-item"
+                class:active={isCastConnected}
+                onclick={() => { closeOverflowMenu(); onCast?.(); }}
+              >
+                <Cast size={16} />
+                <span>{isCastConnected ? $translateStore('player.castingManage') : $translateStore('player.castToDevice')}</span>
+              </button>
+
+              {#if showQconnectDevButton}
+                <button
+                  class="overflow-item"
+                  class:active={isQobuzConnectConnected}
+                  onclick={() => { closeOverflowMenu(); onQobuzConnect?.(); }}
+                >
+                  <span class="qconnect-icon" aria-hidden="true"></span>
+                  <span>{isQobuzConnectConnected ? $translateStore('player.qobuzConnectManage') : $translateStore('player.qobuzConnect')}</span>
+                </button>
+              {/if}
+
+              <button
+                class="overflow-item"
+                class:active={lyricsActive && !isOffline}
+                disabled={isOffline}
+                onclick={() => { closeOverflowMenu(); if (!isOffline) onToggleLyrics?.(); }}
+              >
+                <MicVocal size={16} />
+                <span>{isOffline ? $translateStore('offline.featureDisabled') : $translateStore('player.lyrics')}</span>
+              </button>
+
+              {#if onOpenMiniPlayer}
+                <button
+                  class="overflow-item"
+                  onclick={() => { closeOverflowMenu(); onOpenMiniPlayer?.(); }}
+                >
+                  <PictureInPicture2 size={16} />
+                  <span>{$translateStore('player.miniPlayer')}</span>
+                </button>
+              {/if}
+
+              <button
+                class="overflow-item"
+                onclick={() => { closeOverflowMenu(); onOpenFullScreen?.(); }}
+              >
+                <Maximize2 size={16} />
+                <span>{$translateStore('player.fullScreen')}</span>
+              </button>
+
+              <button
+                class="overflow-item"
+                class:active={normalizationEnabled && normalizationGain !== null && normalizationGain !== 1.0}
+                onclick={() => { closeOverflowMenu(); onToggleNormalization?.(); }}
+              >
+                <span class="norm-icon" class:norm-on={normalizationEnabled} aria-hidden="true"></span>
+                <span>{!normalizationEnabled
+                  ? $translateStore('player.normalizationOff')
+                  : normalizationGain !== null && normalizationGain !== 1.0
+                    ? $translateStore('player.normalizationApplied')
+                    : $translateStore('player.normalizationOn')}</span>
+              </button>
+            </div>
+          {/if}
+        </div>
       {/if}
 
-      <button class="control-btn" onclick={onOpenFullScreen} title={$translateStore('player.fullScreen')}>
-        <Maximize2 size={16} />
-      </button>
+      <!-- Volume Control: inline at wide widths, popup button at narrow widths.
+           The popup variant keeps only the mute/unmute button on the bar and
+           opens a vertical slider upward on click (XP-style). Locked volume
+           (ALSA hw:) always shows the disabled inline variant so users can see
+           the 100% indicator without clicking. -->
+      {#if isNarrowBar && !volumeLocked}
+        <div class="volume-wrapper" class:volume-locked={volumeLocked}>
+          <button
+            class="control-btn volume-btn"
+            class:active={isVolumePopupOpen}
+            onclick={toggleVolumePopup}
+            title={volume === 0 ? $translateStore('player.unmute') : $translateStore('player.volume')}
+            aria-label={$translateStore('player.volume')}
+            aria-expanded={isVolumePopupOpen}
+          >
+            {#if volume === 0}
+              <VolumeX size={16} />
+            {:else if volume < 50}
+              <Volume1 size={16} />
+            {:else}
+              <Volume2 size={16} />
+            {/if}
+          </button>
 
-      <button
-        class="control-btn"
-        class:active={normalizationEnabled && normalizationGain !== null && normalizationGain !== 1.0}
-        class:norm-enabled={normalizationEnabled && (normalizationGain === null || normalizationGain === 1.0)}
-        onclick={onToggleNormalization}
-        title={!normalizationEnabled
-          ? $translateStore('player.normalizationOff')
-          : normalizationGain !== null && normalizationGain !== 1.0
-            ? $translateStore('player.normalizationApplied')
-            : $translateStore('player.normalizationOn')}
-      >
-        <span
-          class="norm-icon"
-          class:norm-on={normalizationEnabled}
-          aria-hidden="true"
-        ></span>
-      </button>
-
-      <!-- Volume Control -->
+          {#if isVolumePopupOpen}
+            <!-- svelte-ignore a11y_click_events_have_key_events -->
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div class="popup-backdrop" onclick={closeVolumePopup}></div>
+            <div class="volume-popup">
+              <span class="volume-popup-value">{volume}</span>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={volume}
+                class="volume-popup-slider"
+                oninput={(e) => onVolumeChange?.(Number((e.target as HTMLInputElement).value))}
+                aria-label={$translateStore('player.volume')}
+              />
+              <button
+                class="control-btn volume-popup-mute"
+                onclick={() => toggleMute()}
+                title={volume === 0 ? $translateStore('player.unmute') : $translateStore('player.mute')}
+              >
+                {#if volume === 0}
+                  <VolumeX size={14} />
+                {:else}
+                  <Volume2 size={14} />
+                {/if}
+              </button>
+            </div>
+          {/if}
+        </div>
+      {:else}
       <div class="volume-control" class:volume-locked={volumeLocked}>
         {#if volumeLocked}
           <button
@@ -601,6 +829,7 @@
           </button>
         {/if}
       </div>
+      {/if}
 
       <!-- Queue Button (far right) -->
       <button
@@ -631,6 +860,38 @@
     z-index: 2001;
     display: flex;
     flex-direction: column;
+  }
+
+  .now-playing-bar.has-remote-banner {
+    height: 128px;
+  }
+
+  .remote-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 4px 12px;
+    background: var(--accent-primary);
+    color: white;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+  }
+
+  .remote-disconnect {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: white;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-left: 4px;
+  }
+
+  .remote-disconnect:hover {
+    background: rgba(255, 255, 255, 0.35);
   }
 
   /* ===== Seekbar ===== */
@@ -1182,5 +1443,161 @@
   .volume-locked {
     opacity: 0.5;
     pointer-events: none;
+  }
+
+  /* ===== Narrow layout: hamburger + volume popup (issue #303) ===== */
+  .overflow-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .overflow-btn.active {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+  }
+
+  .popup-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 9998;
+  }
+
+  .overflow-menu {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    right: 0;
+    z-index: 9999;
+    min-width: 200px;
+    max-width: 260px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .overflow-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+    transition: background 150ms ease, color 150ms ease;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .overflow-item:hover:not(:disabled) {
+    background: var(--alpha-6);
+    color: var(--text-primary);
+  }
+
+  .overflow-item:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .overflow-item.active {
+    color: var(--text-primary);
+    background: var(--alpha-6);
+  }
+
+  .overflow-item > span:last-child {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* XP-style volume popup */
+  .volume-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .volume-popup {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    right: 50%;
+    transform: translateX(50%);
+    z-index: 9999;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    padding: 12px 10px 8px 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    width: 54px;
+  }
+
+  .volume-popup-value {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .volume-popup-slider {
+    -webkit-appearance: slider-vertical;
+    appearance: slider-vertical;
+    writing-mode: vertical-lr;
+    direction: rtl;
+    width: 22px;
+    height: 140px;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    background: transparent;
+  }
+
+  .volume-popup-slider::-webkit-slider-runnable-track {
+    width: 4px;
+    background: var(--alpha-15);
+    border-radius: 2px;
+  }
+
+  .volume-popup-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--text-primary);
+    border: 2px solid var(--bg-secondary);
+    cursor: pointer;
+  }
+
+  .volume-popup-slider::-moz-range-track {
+    width: 4px;
+    background: var(--alpha-15);
+    border-radius: 2px;
+  }
+
+  .volume-popup-slider::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--text-primary);
+    border: 2px solid var(--bg-secondary);
+    cursor: pointer;
+  }
+
+  .volume-popup-mute {
+    width: 28px;
+    height: 28px;
   }
 </style>

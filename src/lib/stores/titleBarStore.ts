@@ -9,6 +9,7 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
+import { skipIfRemote } from '$lib/services/commandRouter';
 import { platform } from '$lib/utils/platform';
 
 const STORAGE_KEY_HIDE = 'qbz-hide-titlebar';
@@ -33,6 +34,7 @@ function notifyListeners(): void {
  * Initialize the store from localStorage
  */
 export function initTitleBarStore(): void {
+  if (skipIfRemote()) return;
   try {
     const savedHide = localStorage.getItem(STORAGE_KEY_HIDE);
     if (savedHide !== null) {
@@ -142,6 +144,7 @@ export function setHideTitleBar(value: boolean): void {
  * decoration state — runtime toggling doesn't work reliably on Linux/Wayland.
  */
 export async function setUseSystemTitleBar(value: boolean): Promise<void> {
+  if (skipIfRemote()) return;
   useSystemTitleBar = value;
   try {
     localStorage.setItem(STORAGE_KEY_SYSTEM, String(value));

@@ -5,6 +5,7 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
+import { skipIfRemote } from '$lib/services/commandRouter';
 
 // ============ Types ============
 
@@ -38,6 +39,7 @@ function notifyListeners(): void {
  * Get current playback preferences
  */
 export async function getPlaybackPreferences(): Promise<PlaybackPreferences> {
+  if (skipIfRemote()) return preferences;
   const prefs = await invoke<PlaybackPreferences>('v2_get_playback_preferences');
   preferences = prefs;
   notifyListeners();
@@ -48,6 +50,7 @@ export async function getPlaybackPreferences(): Promise<PlaybackPreferences> {
  * Set autoplay mode
  */
 export async function setAutoplayMode(mode: AutoplayMode): Promise<void> {
+  if (skipIfRemote()) return;
   await invoke('v2_set_autoplay_mode', { mode });
   preferences.autoplay_mode = mode;
   notifyListeners();
@@ -66,6 +69,7 @@ export async function setAutoplayMode(mode: AutoplayMode): Promise<void> {
  * Set whether to show context icon in player
  */
 export async function setShowContextIcon(show: boolean): Promise<void> {
+  if (skipIfRemote()) return;
   await invoke('v2_set_show_context_icon', { show });
   preferences.show_context_icon = show;
   notifyListeners();
@@ -75,6 +79,7 @@ export async function setShowContextIcon(show: boolean): Promise<void> {
  * Set whether to persist session on close/restart
  */
 export async function setPersistSession(persist: boolean): Promise<void> {
+  if (skipIfRemote()) return;
   await invoke('v2_set_persist_session', { persist });
   preferences.persist_session = persist;
   notifyListeners();
@@ -108,5 +113,6 @@ export function subscribe(listener: () => void): () => void {
  * Initialize preferences store (call on app startup)
  */
 export async function initPlaybackPreferences(): Promise<void> {
+  if (skipIfRemote()) return;
   await getPlaybackPreferences();
 }

@@ -1,0 +1,16 @@
+#!/sbin/openrc-run
+# QBZ Music Daemon - OpenRC service
+
+name="QBZ Music Daemon"
+description="Headless music player daemon for Qobuz"
+
+command="/usr/bin/qbzd"
+command_args="--config /etc/qbz/qbzd.toml"
+command_user="qbz:audio"
+pidfile="/run/qbzd.pid"
+command_background=true
+
+depend() {
+    need net
+    after sound
+}

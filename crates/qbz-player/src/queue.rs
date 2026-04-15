@@ -751,7 +751,7 @@ impl QueueManager {
         let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
 
         for i in (1..order.len()).rev() {
-            let j = rng.gen_range(0..=i);
+            let j = rng.random_range(0..=i);
             order.swap(i, j);
         }
 

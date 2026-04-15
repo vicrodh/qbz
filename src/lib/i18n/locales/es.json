@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "QBZ",
-    "tagline": "Cliente Hi-Fi de streaming para Linux"
+    "tagline": "Qobuz\u2122 Player"
   },
   "nav": {
     "home": "Descubrir",
@@ -75,7 +75,8 @@
     "mostStreamed": "Álbumes populares",
     "favoriteAlbums": "Más de Favoritos",
     "recentAlbums": "Jugado recientemente",
-    "topArtists": "Tus mejores artistas"
+    "topArtists": "Tus mejores artistas",
+    "releaseWatch": "Radar de Novedades"
   },
   "discover": {
     "newReleases": "Novedades",
@@ -91,7 +92,11 @@
     "pressAccolades": "Reconocimientos de Prensa",
     "qobuzPlaylists": "Playlists de Qobuz",
     "searchPlaylistsPlaceholder": "Buscar playlists...",
-    "noPlaylistResults": "No se encontraron playlists"
+    "noPlaylistResults": "No se encontraron playlists",
+    "releaseWatch": {
+      "title": "Radar de Novedades",
+      "subtitle": "Novedades de los artistas, sellos y premios que sigues."
+    }
   },
   "search": {
     "title": "Buscar",
@@ -133,7 +138,11 @@
     "readLess": "LEER MENOS",
     "seeAll": "Ver todo",
     "showMore": "Ver más",
-    "showLess": "Ver menos"
+    "showLess": "Ver menos",
+    "follow": "Seguir sello",
+    "unfollow": "Dejar de seguir",
+    "followShort": "Sigue",
+    "followingShort": "Siguiendo"
   },
   "labelReleases": {
     "albumCount": "{count} albums",
@@ -311,7 +320,12 @@
     "sameArtist": "Del mismo artista...",
     "seeFullDiscography": "Ver discografía completa",
     "releasedOn": "el",
-    "releasedBy": "Publicado en"
+    "releasedBy": "Publicado en",
+    "sidebar": {
+      "label": "Sello",
+      "awards": "Premios"
+    },
+    "loading": "Cargando…"
   },
   "artist": {
     "albums": "Álbumes",
@@ -487,20 +501,24 @@
     "albums": "Álbumes",
     "tracks": "Pistas",
     "artists": "Artistas",
+    "labels": "Sellos",
     "playlists": "Listas",
     "noFavorites": "Aún no hay favoritos",
     "noFavoriteTracks": "Aún no hay pistas favoritas",
     "noFavoriteAlbums": "Aún no hay álbumes favoritos",
     "noFavoriteArtists": "Aún no hay artistas favoritos",
+    "noFavoriteLabels": "Aún no sigues ningún sello",
     "noFavoritePlaylists": "Aún no hay listas favoritas",
     "noTracksMatch": "Ninguna pista coincide con \"{query}\"",
     "noAlbumsMatch": "Ningún álbum coincide con \"{query}\"",
     "noArtistsMatch": "Ningún artista coincide con \"{query}\"",
+    "noLabelsMatch": "Ningún sello coincide con \"{query}\"",
     "noPlaylistsMatch": "Ninguna lista coincide con \"{query}\"",
     "noAlbumsFound": "No se encontraron álbumes",
     "likeTracksHint": "Da me gusta a pistas para verlas aquí",
     "likeAlbumsHint": "Da me gusta a álbumes para verlos aquí",
     "likeArtistsHint": "Da me gusta a artistas para verlos aquí",
+    "likeLabelsHint": "Sigue sellos para verlos aquí",
     "likePlaylistsHint": "Haz clic en el corazón de las listas para agregarlas aquí",
     "noFollowingPlaylists": "No sigues ninguna playlist",
     "followPlaylistsHint": "Sigue playlists en Qobuz para verlas aquí",
@@ -529,6 +547,7 @@
       "tracks": "Pistas",
       "albums": "Álbumes",
       "artists": "Artistas",
+      "labels": "Sellos",
       "playlists": "Listas"
     },
     "moveUp": "Subir",
@@ -562,6 +581,11 @@
   },
   "player": {
     "nowPlaying": "Reproduciendo",
+    "controllingRemote": "Controlando: {name}",
+    "noQbzdFound": "No se encontraron daemons QBZ en tu red",
+    "noQbzdFoundHint": "Asegurate de que qbzd este corriendo en el dispositivo",
+    "recentDaemons": "Recientes",
+    "discoveredDaemons": "Descubiertos en la red",
     "queue": "Cola",
     "upNext": "Siguiente",
     "ofTotal": "de",
@@ -618,6 +642,7 @@
     "qobuzConnect": "Qobuz Connect",
     "qobuzConnectManage": "Qobuz Connect - Clic para administrar",
     "miniPlayer": "Mini Reproductor",
+    "moreControls": "Más controles",
     "fullScreen": "Modo Inmersivo",
     "exitFullScreen": "Salir del Modo Inmersivo",
     "maximize": "Maximizar",
@@ -682,6 +707,9 @@
       "output": "Salida",
       "resampled": "Remuestreado por el sistema",
       "qualityAdjusted": "Calidad ajustada por compatibilidad — bit-perfect, sin remuestreo",
+      "plughwFallback": "Remuestreado por ALSA (plughw)",
+      "plughwFix": "El DAC no soporta esta tasa de muestreo nativamente. Elige una fuente de menor tasa o un DAC con mayor soporte.",
+      "bitPerfect": "Bit-perfect: salida directa al hardware",
       "fix": "Activa DAC Passthrough o Modo Exclusivo en Ajustes"
     },
     "stereo": "Estéreo",
@@ -765,6 +793,8 @@
     "clearSelection": "Borrar selección",
     "copyCommand": "comando copiar",
     "downloadOnGitHub": "Descargar en GitHub",
+    "downloadAndInstall": "Descargar e instalar",
+    "downloadManually": "Descargar manualmente",
     "findAvailableVersion": "Encuentra la versión disponible",
     "gotIt": "Entiendo",
     "okClose": "Bien, cerca",
@@ -962,6 +992,7 @@
       "windowControlsStyle": "Estilo de controles de ventana",
       "windowControlsStyleDesc": "Elegir la forma de los botones de control de ventana",
       "windowControlsStyleRectangular": "Rectangular",
+      "windowControlsStyleFullHeightRounded": "Rectángulo a la altura",
       "windowControlsStyleCircular": "Circular",
       "windowControlsStyleSquare": "Cuadrado",
       "windowControlsSize": "Tamaño de controles de ventana",
@@ -975,6 +1006,11 @@
       "windowControlsColorPresetMacOS": "macOS",
       "windowControlsColorPresetAdwaita": "Adwaita",
       "windowControlsColorPresetMonochrome": "Monocromático",
+      "windowControlsColorPresetKlassy": "Klassy (auto-detectar)",
+      "windowControlsColorPresetPlasma": "Plasma (auto-detectar)",
+      "matchSystemChrome": "Integrar con el tema del sistema",
+      "matchSystemChromeDesc": "Redondea las esquinas de la ventana y agrega un borde sutil para que QBZ se integre con el tema del escritorio. Requiere reiniciar la app (la ventana se reconstruye transparente para que las esquinas no se vean blancas).",
+      "matchSystemChromeRestart": "Reinicia QBZ para aplicar el cambio del chrome.",
       "windowControlsColorPresetCustom": "Personalizado",
       "windowControlsCustomColors": "Colores personalizados",
       "windowControlsClose": "Cerrar",
@@ -1469,6 +1505,8 @@
     "oauthLoading": "Abriendo navegador...",
     "systemBrowserButton": "Usar tu navegador del sistema",
     "systemBrowserLoading": "Esperando inicio de sesión...",
+    "captchaHint": "¿Problemas con el captcha? El navegador integrado puede no soportarlo bien.",
+    "trySystemBrowser": "Cancelar y usar tu navegador del sistema",
     "activeSubscriptionRequired": "QBZ requiere una suscripción activa a Qobuz™. Tus datos de acceso se envían directamente a Qobuz™.",
     "APIUse": "Esta aplicación utiliza la API de Qobuz, pero no está certificada por Qobuz."
   },
@@ -1677,7 +1715,9 @@
     "copied": "¡Copiado!",
     "loadingCredits": "Cargando créditos...",
     "laodingDevices": "Cargando dispositivos...",
-    "findingSimilarArtists": "Encontrar artistas similares..."
+    "findingSimilarArtists": "Encontrar artistas similares...",
+    "awardUnavailable": "No hay detalle disponible para este premio.",
+    "audioDeviceMissing": "El dispositivo '{device}' ya no está disponible. Usando el predeterminado del sistema."
   },
   "offline": {
     "title": "Modo Offline",
@@ -1701,6 +1741,7 @@
     "someLocal": "Parcialmente Disponible Offline",
     "notAvailable": "No Disponible Offline",
     "trackNotAvailable": "Esta pista no esta disponible offline",
+    "trackNotAvailableOffline": "\"{title}\" no está guardada para reproducción offline",
     "featureDisabled": "Esta funcion requiere conexion a internet",
     "startWithoutLogin": "Iniciar en modo offline (sin acceso a los servicios de Qobuz™)",
     "noPreviousSession": "Necesitas iniciar sesión al menos una vez antes de usar el modo offline. Conéctate a internet e inicia sesión para crear tu perfil.",
@@ -2412,7 +2453,16 @@
     },
     "runningInsideSandbox": "QBZ detectó que se está ejecutando dentro de un <strong>{env} sandbox</strong>.",
     "newReleaseAvailable": "Nueva versión disponible",
-    "newVersionReleased": "Se ha lanzado una nueva versión de QBZ."
+    "newVersionReleased": "Se ha lanzado una nueva versión de QBZ.",
+    "autoUpdate": {
+      "title": "Actualizando QBZ",
+      "checking": "Buscando actualizaciones...",
+      "downloading": "Descargando actualización...",
+      "downloadingProgress": "Descargando actualización... {percent}%",
+      "installing": "Instalando actualización...",
+      "restarting": "Reiniciando...",
+      "failed": "Error al actualizar"
+    }
   },
   "common": {
     "name": "Nombre"
@@ -2572,5 +2622,33 @@
     "vocals&Guitar": "Voz",
     "voice": "Voz",
     "workArranger": "Organizador de trabajo"
+  },
+  "ribbon": {
+    "albumOfTheWeek": "Álbum de la semana",
+    "qobuzissime": "Qobuzissime"
+  },
+  "releaseWatch": {
+    "tabs": {
+      "artists": "Artistas",
+      "labels": "Sellos",
+      "awards": "Premios"
+    },
+    "empty": {
+      "artists": "No hay novedades de los artistas que sigues.",
+      "labels": "No hay novedades de los sellos que sigues.",
+      "awards": "No hay novedades de los premios que sigues."
+    }
+  },
+  "award": {
+    "kicker": "Premio",
+    "empty": "Aún no hay lanzamientos premiados.",
+    "section": {
+      "releases": "Lanzamientos aclamados",
+      "new-releases": "Novedades",
+      "classics": "Clásicos"
+    },
+    "follow": "Seguir premio",
+    "unfollow": "Dejar de seguir",
+    "otherAwards": "Más premios"
   }
 }

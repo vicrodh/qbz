@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
+  import { listen } from '@tauri-apps/api/event';
   import ViewTransition from '../ViewTransition.svelte';
   import { getCurrentWebview } from '@tauri-apps/api/webview';
   import { writeText as copyToClipboard } from '@tauri-apps/plugin-clipboard-manager';
@@ -88,6 +89,11 @@
     setShowWindowControls
   } from '$lib/stores/titleBarStore';
   import {
+    subscribe as subscribeWindowChrome,
+    getMatchSystemWindowChrome,
+    setMatchSystemWindowChrome,
+  } from '$lib/stores/windowChromeStore';
+  import {
     subscribe as subscribeSearchBarLocation,
     getSearchBarLocation,
     setSearchBarLocation,
@@ -111,6 +117,8 @@
     setButtonShape,
     setButtonSize,
     applyPreset,
+    applyKlassyPreset,
+    detectDesktopThemeCached,
     setPresetCustom,
     setButtonColor,
     PRESETS,
@@ -118,7 +126,8 @@
     type ButtonShape,
     type ButtonSize,
     type ButtonColorSet,
-    type WindowControlsConfig
+    type WindowControlsConfig,
+    type DesktopThemeInfo
   } from '$lib/stores/windowControlsStore';
   import {
     getPlaybackPreferences,
@@ -134,13 +143,16 @@
     getCurrentVersion as getUpdatesCurrentVersion,
     getPreferences as getUpdatePreferences,
     initUpdatesStore,
+    isAutoUpdateEligible,
     setCheckOnLaunch,
     setShowWhatsNewOnLaunch,
     type ReleaseInfo,
     type UpdateCheckStatus,
     type UpdatePreferences
   } from '$lib/stores/updatesStore';
-  import { openReleasePageAndAcknowledge } from '$lib/services/updatesService';
+  import { openReleasePageAndAcknowledge, performAutoUpdate } from '$lib/services/updatesService';
+  import type { AutoUpdateProgress } from '$lib/services/updatesService';
+  import UpdateProgressModal from '../updates/UpdateProgressModal.svelte';
   import {
     getCount as getBlacklistCount,
     isEnabled as isBlacklistEnabled,
@@ -327,6 +339,8 @@
   let isSettingsWhatsNewOpen = $state(false);
   let settingsWhatsNewRelease = $state<ReleaseInfo | null>(null);
   let isFetchingChangelog = $state(false);
+  let isSettingsAutoUpdating = $state(false);
+  let settingsAutoUpdateProgress = $state<AutoUpdateProgress>({ state: 'checking' });
 
   // Blacklist state
   let blacklistCount = $state(getBlacklistCount());
@@ -464,6 +478,29 @@
     if (!updateResultRelease) return;
     void openReleasePageAndAcknowledge(updateResultRelease);
     isUpdateResultOpen = false;
+  }
+
+  function handleSettingsAutoUpdate(): void {
+    isUpdateResultOpen = false;
+    isSettingsAutoUpdating = true;
+    settingsAutoUpdateProgress = { state: 'checking' };
+    void performAutoUpdate(
+      (progress) => {
+        if (isSettingsAutoUpdating) settingsAutoUpdateProgress = progress;
+      },
+      () => !isSettingsAutoUpdating,
+    );
+  }
+
+  function handleSettingsAutoUpdateCancel(): void {
+    isSettingsAutoUpdating = false;
+  }
+
+  function handleSettingsAutoUpdateFallback(): void {
+    isSettingsAutoUpdating = false;
+    if (updateResultRelease) {
+      void openReleasePageAndAcknowledge(updateResultRelease);
+    }
   }
 
   async function handleShowCurrentChangelog(): Promise<void> {
@@ -948,7 +985,14 @@
   // Title bar settings
   let hideTitleBar = $state(getHideTitleBar());
   let useSystemTitleBar = $state(getUseSystemTitleBar());
+  let matchSystemWindowChromeState = $state(getMatchSystemWindowChrome());
   let windowControlsVisible = $state(getShowWindowControls());
+
+  // Desktop theme detection (Plasma / Klassy → adaptive preset visibility).
+  // `null` until the first detect call returns. `isKlassy=true` means a
+  // genuine Klassy install was detected; `desktop` starting with "plasma"
+  // means any KDE decoration theme (we can still pull colors).
+  let detectedTheme = $state<DesktopThemeInfo | null>(null);
 
   // Search bar location
   let searchInTitlebar = $state(getSearchBarLocation() === 'titlebar');
@@ -967,16 +1011,38 @@
   ];
   const SHAPE_ENTRIES: Array<{ key: ButtonShape; i18nSuffix: string }> = [
     { key: 'rectangular', i18nSuffix: 'Rectangular' },
+    { key: 'full-height-rounded', i18nSuffix: 'FullHeightRounded' },
     { key: 'circular', i18nSuffix: 'Circular' },
     { key: 'square', i18nSuffix: 'Square' },
   ];
-  const PRESET_ENTRIES: Array<{ key: string; i18nSuffix: string }> = [
-    { key: 'default', i18nSuffix: 'Default' },
-    { key: 'macos', i18nSuffix: 'MacOS' },
-    { key: 'adwaita', i18nSuffix: 'Adwaita' },
-    { key: 'monochrome', i18nSuffix: 'Monochrome' },
-    { key: 'custom', i18nSuffix: 'Custom' },
-  ];
+  const IS_LINUX = typeof navigator !== 'undefined' && /linux/i.test(navigator.platform || navigator.userAgent);
+
+  /**
+   * Preset list depends on detected desktop:
+   *  - No detection yet  → hide Klassy/Plasma option (avoids a flash of an
+   *    option we may end up removing).
+   *  - Klassy detected    → expose as "Klassy (auto-detect)".
+   *  - Plasma (any deco)  → expose as "Plasma (auto-detect)" — still pulls
+   *    colors from kdeglobals even without Klassy.
+   *  - Non-Plasma Linux / mac / Windows → no auto-detect preset.
+   */
+  const PRESET_ENTRIES = $derived.by(() => {
+    const base = [
+      { key: 'default', i18nSuffix: 'Default' },
+      { key: 'macos', i18nSuffix: 'MacOS' },
+      { key: 'adwaita', i18nSuffix: 'Adwaita' },
+      { key: 'monochrome', i18nSuffix: 'Monochrome' },
+    ];
+    if (IS_LINUX && detectedTheme) {
+      if (detectedTheme.isKlassy) {
+        base.push({ key: 'klassy', i18nSuffix: 'Klassy' });
+      } else if (detectedTheme.desktop.startsWith('plasma')) {
+        base.push({ key: 'klassy', i18nSuffix: 'Plasma' });
+      }
+    }
+    base.push({ key: 'custom', i18nSuffix: 'Custom' });
+    return base;
+  });
 
   function getWcPositionOptions(): string[] {
     return POSITION_ENTRIES.map(entry => $t(`settings.appearance.windowControlsPosition${entry.i18nSuffix}`));
@@ -1028,6 +1094,8 @@
       const presetKey = PRESET_ENTRIES[index].key;
       if (presetKey === 'custom') {
         setPresetCustom();
+      } else if (presetKey === 'klassy') {
+        void applyKlassyPreset();
       } else {
         applyPreset(presetKey);
       }
@@ -1331,6 +1399,16 @@
 
   // Load saved settings on mount
   onMount(() => {
+    // Fire desktop theme detection in the background (Plasma/Klassy). Used
+    // to decide whether to expose the "Klassy/Plasma (auto-detect)" preset
+    // in the Appearance section. Non-blocking — failure just leaves the
+    // option hidden.
+    if (IS_LINUX) {
+      void detectDesktopThemeCached().then((info) => {
+        detectedTheme = info;
+      });
+    }
+
     // Load theme (check for auto-theme first)
     const savedTheme = localStorage.getItem('qbz-theme') || '';
     if (savedTheme === 'auto') {
@@ -1424,6 +1502,15 @@
       loadBackends(),
       loadAlsaPlugins()
     ]).then(() => loadAudioSettings());
+
+    // Re-sync audio settings when the backend notifies us of a mutation
+    // outside this view (e.g., set_manual_offline flipping stream_first_track
+    // per issue #279).
+    const unlistenAudioSettings = listen('audio-settings-changed', () => {
+      loadAudioSettings().catch((err) => {
+        console.warn('[Settings] Failed to reload audio settings after event:', err);
+      });
+    });
 
     // Load Last.fm state
     loadLastfmState();
@@ -1522,6 +1609,9 @@
       useSystemTitleBar = getUseSystemTitleBar();
       windowControlsVisible = getShowWindowControls();
     });
+    const unsubscribeWindowChrome = subscribeWindowChrome(() => {
+      matchSystemWindowChromeState = getMatchSystemWindowChrome();
+    });
 
     // Subscribe to search bar location changes
     const unsubscribeSearchBarLoc = subscribeSearchBarLocation(() => {
@@ -1550,10 +1640,12 @@
       if (plexAuthPollTimer) {
         clearInterval(plexAuthPollTimer);
       }
+      unlistenAudioSettings.then((fn) => fn()).catch(() => {});
       unsubscribeOffline();
       unsubscribeDegraded();
       unsubscribeZoom();
       unsubscribeTitleBar();
+      unsubscribeWindowChrome();
       unsubscribeSearchBarLoc();
       unsubscribeTitlebarNavSub();
       unsubscribeWindowControls();
@@ -4393,6 +4485,20 @@
       </div>
       <Toggle enabled={hideTitleBar} onchange={(v) => setHideTitleBar(v)} disabled={useSystemTitleBar} />
     </div>
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.appearance.matchSystemChrome')}</span>
+        <span class="setting-desc">{$t('settings.appearance.matchSystemChromeDesc')}</span>
+      </div>
+      <Toggle
+        enabled={matchSystemWindowChromeState}
+        onchange={(v) => {
+          setMatchSystemWindowChrome(v);
+          showToast($t('settings.appearance.matchSystemChromeRestart'), 'info');
+        }}
+        disabled={hideTitleBar || useSystemTitleBar}
+      />
+    </div>
     {/if}
     <!-- Title bar customization: hidden on macOS (uses native overlay title bar) -->
     {#if platform !== 'macos'}
@@ -5444,10 +5550,19 @@
       isOpen={isUpdateResultOpen}
       status={updateResultStatus}
       newVersion={updateResultRelease?.version ?? ''}
+      autoUpdateEligible={isAutoUpdateEligible()}
       onClose={handleCloseUpdateResult}
       onVisitReleasePage={handleVisitReleaseFromResult}
+      onAutoUpdate={handleSettingsAutoUpdate}
     />
   {/if}
+
+  <UpdateProgressModal
+    isOpen={isSettingsAutoUpdating}
+    progress={settingsAutoUpdateProgress}
+    onCancel={handleSettingsAutoUpdateCancel}
+    onFallbackManual={handleSettingsAutoUpdateFallback}
+  />
 
   {#if settingsWhatsNewRelease}
     <WhatsNewModal
@@ -6011,7 +6126,6 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
   .dac-setup-btn .gandalf-icon {
     width: 24px;
     height: 24px;
-    filter: invert(1);
   }
 
   .dac-tooltip {
@@ -6045,6 +6159,7 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
     width: 36px;
     height: 36px;
     opacity: 0.9;
+    filter: invert(1);
   }
 
   .tooltip-content {

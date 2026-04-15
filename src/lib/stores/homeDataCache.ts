@@ -48,10 +48,14 @@ export interface HomeCacheData {
   essentialDiscography: DiscoverAlbum[];
   playlistTags: PlaylistTag[];
 
+  // Release Watch (REST /albums/releaseWatch)
+  releaseWatchAlbums: AlbumCardData[];
+
   // Metadata
   timestamp: number;
   genreIds: number[]; // snapshot of genre filter at cache time
   scrollTop: number;
+  schemaVersion?: number;
 }
 
 export type HomeCacheStatus = 'fresh' | 'stale' | 'empty';
@@ -59,6 +63,13 @@ export type HomeCacheStatus = 'fresh' | 'stale' | 'empty';
 const FRESH_TTL_MS = 5 * 60 * 1000;   // 5 minutes
 const MAX_TTL_MS = 60 * 60 * 1000;     // 60 minutes
 const SESSION_KEY = 'qbz-home-cache';
+/**
+ * Bump whenever the shape of HomeCacheData or AlbumCardData changes,
+ * so stale sessionStorage entries from older builds are discarded
+ * instead of being restored with missing fields (which caused the
+ * ribbon field to show up as undefined on cache-fresh loads).
+ */
+const CACHE_SCHEMA_VERSION = 2;
 
 let cache: HomeCacheData | null = null;
 
@@ -67,7 +78,13 @@ function restoreFromSession(): void {
   try {
     const stored = sessionStorage.getItem(SESSION_KEY);
     if (stored) {
-      cache = JSON.parse(stored);
+      const parsed = JSON.parse(stored);
+      if (parsed?.schemaVersion === CACHE_SCHEMA_VERSION) {
+        cache = parsed;
+      } else {
+        // Older schema — drop it so loadHome() runs fresh.
+        try { sessionStorage.removeItem(SESSION_KEY); } catch {}
+      }
     }
   } catch {
     // sessionStorage not available or corrupted
@@ -126,7 +143,8 @@ export function setHomeCache(data: Omit<HomeCacheData, 'timestamp' | 'scrollTop'
     ...data,
     timestamp: Date.now(),
     scrollTop: cache?.scrollTop ?? 0,
-  };
+    schemaVersion: CACHE_SCHEMA_VERSION,
+  } as HomeCacheData;
   persistToSession();
 }
 

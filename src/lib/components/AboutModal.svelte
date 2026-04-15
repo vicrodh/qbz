@@ -99,10 +99,10 @@
             <span class="label">{$t('about.buildInfo.version')}</span>
             <span class="value">{appVersion}</span>
             <span class="label">{$t('about.buildInfo.codename')}</span>
-            <span class="value codename">Hardening playback</span>
+            <span class="value codename">Accolade Watch</span>
             <span class="label">{$t('about.buildInfo.license')}</span>
             <span class="value">MIT</span>
-            <span class="label">{$t('about.buildInfo.license')}</span>
+            <span class="label">{$t('about.buildInfo.platform')}</span>
             <span class="value">{platformLabel}</span>
             <span class="label">{$t('about.buildInfo.build')}</span>
             <span class="value">{BUILD_DATE} {#if BUILD_COMMIT}<span class="commit">({BUILD_COMMIT})</span>{/if}</span>

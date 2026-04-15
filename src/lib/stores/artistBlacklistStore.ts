@@ -6,6 +6,7 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
+import { skipIfRemote } from '$lib/services/commandRouter';
 
 // ============ Types ============
 
@@ -45,6 +46,7 @@ function updateIdSet(): void {
  * Load blacklist from backend
  */
 export async function loadBlacklist(): Promise<BlacklistedArtist[]> {
+  if (skipIfRemote()) return [];
   const [list, settings] = await Promise.all([
     invoke<BlacklistedArtist[]>('v2_get_artist_blacklist'),
     invoke<BlacklistSettings>('v2_get_blacklist_settings')
@@ -64,6 +66,7 @@ export async function addToBlacklist(
   artistName: string,
   notes?: string
 ): Promise<void> {
+  if (skipIfRemote()) return;
   await invoke('v2_add_to_artist_blacklist', {
     artistId,
     artistName,
@@ -77,6 +80,7 @@ export async function addToBlacklist(
  * Remove an artist from the blacklist
  */
 export async function removeFromBlacklist(artistId: number): Promise<void> {
+  if (skipIfRemote()) return;
   await invoke('v2_remove_from_artist_blacklist', { artistId });
   // Update local state
   blacklist = blacklist.filter(a => a.artist_id !== artistId);
@@ -96,6 +100,7 @@ export function isBlacklisted(artistId: number): boolean {
  * Set the enabled state
  */
 export async function setEnabled(value: boolean): Promise<void> {
+  if (skipIfRemote()) return;
   await invoke('v2_set_blacklist_enabled', { enabled: value });
   enabled = value;
   notifyListeners();
@@ -126,6 +131,7 @@ export function getCount(): number {
  * Clear all blacklisted artists
  */
 export async function clearBlacklist(): Promise<void> {
+  if (skipIfRemote()) return;
   await invoke('v2_clear_artist_blacklist');
   blacklist = [];
   updateIdSet();
@@ -146,5 +152,6 @@ export function subscribe(listener: () => void): () => void {
  * Initialize blacklist store (call on app startup)
  */
 export async function initBlacklistStore(): Promise<void> {
+  if (skipIfRemote()) return;
   await loadBlacklist();
 }

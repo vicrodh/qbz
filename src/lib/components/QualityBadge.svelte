@@ -8,6 +8,8 @@
     is_active: boolean;
   }
 
+  type BitPerfectMode = 'DirectHardware' | 'PluginFallback' | 'Disabled';
+
   interface Props {
     quality?: string;
     bitDepth?: number;
@@ -16,6 +18,9 @@
     originalSamplingRate?: number;
     format?: string;
     compact?: boolean;
+    /** Reported by the audio backend when a stream is opened. Lets us distinguish
+     *  ALSA plughw software resample (PluginFallback) from system resampling. */
+    bitPerfectMode?: BitPerfectMode | null;
   }
 
   let {
@@ -25,7 +30,8 @@
     originalBitDepth,
     originalSamplingRate,
     format,
-    compact = false
+    compact = false,
+    bitPerfectMode = null,
   }: Props = $props();
 
   // Hardware sample rate from /proc/asound (sub-ms read)
@@ -68,6 +74,14 @@
     }
     return false;
   });
+
+  // ALSA plughw fallback is its own failure mode: the stream is being resampled
+  // inside the kernel/ALSA space because the DAC does not accept the source
+  // rate (see issue #288). Distinct from isDowngraded which is about the
+  // pipewire/system path — both get surfaced in the UI but with different
+  // explanations so users know where to look for the fix.
+  const isPluginFallback = $derived(bitPerfectMode === 'PluginFallback');
+  const isBitPerfect = $derived(bitPerfectMode === 'DirectHardware');
 
   // Quality adjustment detection: QBZ fetched lower quality for hardware compatibility.
   // Decoded rate < original metadata rate, but hardware plays it natively (no resampling).
@@ -156,12 +170,19 @@
     return '16-bit / 44.1 kHz';
   });
 
-  // Format the compact display text
+  // Format the compact display text (short form for narrow bar).
+  // Drops the "bit"/"kHz" suffixes so the badge fits in ~70px: "24/96", "16/44",
+  // "MP3". Hover tooltip still shows the full string via the title attr.
   const compactText = $derived.by(() => {
     if (tier === 'max' || tier === 'hires') {
       const depth = bitDepth || 24;
       const rate = samplingRate || (tier === 'max' ? 192 : 96);
-      return `${depth}bit/${rate}kHz`;
+      return `${depth}/${Math.round(rate)}`;
+    }
+    if (tier === 'cd') {
+      const depth = bitDepth || 16;
+      const rate = samplingRate || 44.1;
+      return `${depth}/${Math.round(rate)}`;
     }
     if (tier === 'mp3') {
       return 'MP3';
@@ -189,16 +210,47 @@
 </script>
 
 {#if compact}
-  <span class="quality-badge-compact" title="{tierLabel}: {displayText}">
-    {compactText}
-  </span>
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="quality-badge compact"
+    class:downgraded={isDowngraded}
+    class:adjusted={isQualityAdjusted}
+    class:plughw={isPluginFallback}
+    class:bitperfect={isBitPerfect}
+    title={`${tierLabel}: ${displayText}`}
+    onmouseenter={() => { isHovering = true; }}
+    onmouseleave={() => { isHovering = false; }}
+  >
+    <div class="icon-container compact-icon">
+      <img
+        src={iconPath}
+        alt={tierLabel}
+        class="badge-icon"
+        class:hires={isHiRes}
+      />
+    </div>
+    <div class="badge-text compact-text">
+      <span class="quality-info compact-quality">
+        {compactText}
+        <span
+          class="downgrade-indicator"
+          class:visible={isDowngraded || isQualityAdjusted || isPluginFallback}
+          class:adjusted={isQualityAdjusted}
+          class:plughw={isPluginFallback}
+        >↓</span>
+        <span class="bitperfect-indicator" class:visible={isBitPerfect}>✓</span>
+      </span>
+    </div>
+  </div>
 {:else}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="quality-badge"
     class:downgraded={isDowngraded}
     class:adjusted={isQualityAdjusted}
-    title={isDowngraded || isQualityAdjusted ? undefined : `${tierLabel}: ${displayText}`}
+    class:plughw={isPluginFallback}
+    class:bitperfect={isBitPerfect}
+    title={isDowngraded || isQualityAdjusted || isPluginFallback ? undefined : `${tierLabel}: ${displayText}`}
     onmouseenter={() => { isHovering = true; }}
     onmouseleave={() => { isHovering = false; }}
   >
@@ -216,13 +268,34 @@
     <div class="badge-text">
       <span class="tier-label">
         {tierLabel}
-        <span class="downgrade-indicator" class:visible={isDowngraded || isQualityAdjusted} class:adjusted={isQualityAdjusted}>↓</span>
+        <span
+          class="downgrade-indicator"
+          class:visible={isDowngraded || isQualityAdjusted || isPluginFallback}
+          class:adjusted={isQualityAdjusted}
+          class:plughw={isPluginFallback}
+        >↓</span>
+        <span class="bitperfect-indicator" class:visible={isBitPerfect} title={$t('quality.tooltip.bitPerfect')}>✓</span>
       </span>
       <span class="quality-info">{displayText}</span>
     </div>
 
+    <!-- Custom tooltip for ALSA plughw fallback (software resample inside ALSA) -->
+    {#if isPluginFallback && !isDowngraded && !isQualityAdjusted && isHovering}
+      <div class="quality-tooltip">
+        <div class="tooltip-section">
+          <div class="tooltip-label">{$t('quality.tooltip.source')}</div>
+          <div class="tooltip-value">{displayText}</div>
+        </div>
+        <div class="tooltip-section">
+          <div class="tooltip-label">{$t('quality.tooltip.output')}</div>
+          <div class="tooltip-value">{effectiveOutputRateKHz ? `${effectiveOutputRateKHz} kHz` : displayText}</div>
+        </div>
+        <div class="tooltip-divider"></div>
+        <div class="tooltip-warning">{$t('quality.tooltip.plughwFallback')}</div>
+        <div class="tooltip-fix">{$t('quality.tooltip.plughwFix')}</div>
+      </div>
     <!-- Custom tooltip for quality-adjusted state (QBZ chose lower quality for hw compat) -->
-    {#if isQualityAdjusted && isHovering}
+    {:else if isQualityAdjusted && isHovering}
       <div class="quality-tooltip">
         <div class="tooltip-section">
           <div class="tooltip-label">{$t('quality.tooltip.source')}</div>
@@ -255,14 +328,38 @@
 {/if}
 
 <style>
-  /* Compact mode styles - simple text like TrackRow */
-  .quality-badge-compact {
-    display: inline-block;
-    font-size: 12px;
-    color: #666666;
-    width: 80px;
-    text-align: center;
-    white-space: nowrap;
+  /* Compact mode: keeps the icon + color identity of the full badge but drops
+     the tier label row and shortens "24-bit / 96 kHz" to "24/96" so the whole
+     badge fits around 70px. Used by NowPlayingBar in narrow layouts (issue
+     #303). Downgrade/bit-perfect indicators still render next to the text. */
+  .quality-badge.compact {
+    min-width: 0;
+    width: auto;
+    padding: 4px 6px;
+    gap: 4px;
+  }
+
+  .quality-badge.compact .icon-container {
+    width: 20px;
+    height: 20px;
+  }
+
+  .quality-badge.compact .badge-icon {
+    width: 14px;
+    height: 14px;
+  }
+
+  .quality-badge.compact .badge-icon.hires {
+    width: 20px;
+    height: 20px;
+  }
+
+  .quality-badge.compact .compact-quality {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-primary);
+    letter-spacing: 0.2px;
+    font-family: 'LINE Seed JP', var(--font-sans);
   }
 
   /* Full mode styles */
@@ -332,6 +429,14 @@
     border-color: rgba(234, 179, 8, 0.3);
   }
 
+  .quality-badge.plughw {
+    border-color: rgba(168, 85, 247, 0.3);
+  }
+
+  .quality-badge.bitperfect {
+    border-color: rgba(34, 197, 94, 0.25);
+  }
+
   .downgrade-indicator {
     color: #eab308;
     font-weight: 600;
@@ -345,6 +450,21 @@
 
   .downgrade-indicator.adjusted {
     color: #60a5fa;
+  }
+
+  .downgrade-indicator.plughw {
+    color: #a855f7;
+  }
+
+  .bitperfect-indicator {
+    color: #22c55e;
+    font-weight: 600;
+    margin-left: 2px;
+    visibility: hidden;
+  }
+
+  .bitperfect-indicator.visible {
+    visibility: visible;
   }
 
   /* Custom tooltip for degraded quality */

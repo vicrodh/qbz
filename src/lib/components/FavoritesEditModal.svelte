@@ -28,7 +28,7 @@
     const key = `favorites.tabLabels.${tab}`;
     const translated = $t(key);
     if (translated && !translated.startsWith('favorites.tabLabels.')) return translated;
-    const fallback: Record<string, string> = { tracks: $t('favorites.tabLabels.tracks'), albums: $t('favorites.tabLabels.albums'), artists: $t('favorites.tabLabels.artists'), playlists: $t('favorites.tabLabels.playlists') };
+    const fallback: Record<string, string> = { tracks: $t('favorites.tabLabels.tracks'), albums: $t('favorites.tabLabels.albums'), artists: $t('favorites.tabLabels.artists'), labels: $t('favorites.tabLabels.labels'), playlists: $t('favorites.tabLabels.playlists') };
     return fallback[tab] || tab;
   }
 

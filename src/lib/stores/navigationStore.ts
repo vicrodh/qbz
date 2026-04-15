@@ -17,12 +17,15 @@ export type ViewType =
   | 'musician'
   | 'label'
   | 'label-releases'
+  | 'award'
+  | 'award-albums'
   | 'playlist'
   | 'playlist-manager'
   | 'blacklist-manager'
   | 'favorites-tracks'
   | 'favorites-albums'
   | 'favorites-artists'
+  | 'favorites-labels'
   | 'favorites-playlists'
   | 'discover-new-releases'
   | 'discover-ideal-discography'
@@ -31,6 +34,7 @@ export type ViewType =
   | 'discover-albums-of-the-week'
   | 'discover-press-accolades'
   | 'discover-playlists'
+  | 'discover-release-watch'
   | 'purchases'
   | 'purchase-album'
   | 'dailyq'
@@ -38,7 +42,7 @@ export type ViewType =
   | 'favq'
   | 'topq'
   | 'artists-by-location';
-export type FavoritesTab = 'tracks' | 'albums' | 'artists' | 'playlists';
+export type FavoritesTab = 'tracks' | 'albums' | 'artists' | 'labels' | 'playlists';
 
 // History entry: view + optional item identifier for granular back/forward
 export interface HistoryEntry {
@@ -77,6 +81,7 @@ const favoritesViewMap: Record<FavoritesTab, ViewType> = {
   tracks: 'favorites-tracks',
   albums: 'favorites-albums',
   artists: 'favorites-artists',
+  labels: 'favorites-labels',
   playlists: 'favorites-playlists'
 };
 
@@ -96,6 +101,8 @@ export function getFavoritesTabFromView(view: ViewType): FavoritesTab | null {
       return 'albums';
     case 'favorites-artists':
       return 'artists';
+    case 'favorites-labels':
+      return 'labels';
     case 'favorites-playlists':
       return 'playlists';
     default:

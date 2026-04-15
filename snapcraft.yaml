@@ -3,7 +3,7 @@
 
 name: qbz-player
 title: "QBZ — Native Qobuz Client for Linux"
-version: '1.2.4'
+version: '1.2.5'
 summary: Native Qobuz player for Linux with bit-perfect audio and DAC control
 description: |
   QBZ is a native Linux desktop client for Qobuz™, designed for high-fidelity playback.
@@ -24,6 +24,10 @@ description: |
   - Open source (MIT license)
 
   QBZ is built for Linux users and audiophiles who care about how audio actually reaches their hardware.
+
+  Note: When using ALSA exclusive mode or DAC passthrough, QBZ may block other
+  applications from recording or playing sound while audio is active. This is
+  expected behavior for bit-perfect playback and can be disabled in settings.
 
   Legal:
   QBZ uses the Qobuz™ API but is not affiliated with, endorsed by, or certified by Qobuz.
@@ -157,7 +161,9 @@ parts:
 
       # Build frontend
       npm ci
-      npm run tauri build -- --no-bundle
+      # Snap Store policy prohibits competing auto-updaters; disable
+      # the `updater` Cargo feature so tauri-plugin-updater is not linked.
+      npm run tauri build -- --no-bundle -- --no-default-features
 
       # Install binary, desktop file, and icon
       mkdir -p $SNAPCRAFT_PART_INSTALL/bin

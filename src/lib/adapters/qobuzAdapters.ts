@@ -390,7 +390,8 @@ export function convertQobuzAlbum(album: QobuzAlbum): AlbumDetail {
       parental_warning: track.parental_warning ?? false
     })) || [],
     upc: album.upc,
-    goodies: album.goodies
+    goodies: album.goodies,
+    awards: album.awards?.map(a => ({ id: a.id, name: a.name, awardedAt: a.awarded_at }))
   };
 }
 
@@ -705,6 +706,12 @@ export function convertPageArtist(response: PageArtistResponse): ArtistDetail {
   let totalAlbums = 0;
   const releaseHasMore: Record<string, boolean> = {};
 
+  // Dedup across categories AND across groups. /artist/page occasionally
+  // returns the same release under multiple groups (e.g. an album also
+  // listed under 'download') or repeated within the same group — that's
+  // what produced the side-by-side duplicates on the discography grid.
+  const seenIds = new Set<string>();
+
   for (const group of releaseGroups) {
     const groupCategory = mapReleaseType(group.type);
     // Normalize the key so the UI can use consistent names (ep, not epSingle)
@@ -713,6 +720,8 @@ export function convertPageArtist(response: PageArtistResponse): ArtistDetail {
     for (const release of group.items) {
       const summary = pageReleaseToSummary(release, response.id);
       if (!summary) continue;
+      if (seenIds.has(summary.id)) continue;
+      seenIds.add(summary.id);
 
       // Only re-categorize items from the "download" group by their individual release_type,
       // since "download" is a distribution channel, not a content type.
@@ -736,8 +745,8 @@ export function convertPageArtist(response: PageArtistResponse): ArtistDetail {
           others.push(summary);
           break;
       }
+      totalAlbums += 1;
     }
-    totalAlbums += group.items.length;
   }
 
   // Build compilations from tracks_appears_on (albums by other artists featuring this artist)

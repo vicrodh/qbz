@@ -345,8 +345,8 @@
     text-shadow:
       0 1px 3px rgba(0, 0, 0, 0.6),
       0 2px 10px rgba(0, 0, 0, 0.4),
-      0 0 40px rgba(99, 102, 241, 0.4),
-      0 0 80px rgba(99, 102, 241, 0.2);
+      0 0 40px color-mix(in srgb, var(--accent-primary) 40%, transparent),
+      0 0 80px color-mix(in srgb, var(--accent-primary) 20%, transparent);
   }
 
   .lyrics-lines.center .lyrics-line.active {
@@ -358,8 +358,8 @@
     --progress-pos: calc(var(--line-progress, 0) * 100%);
     background: linear-gradient(
       90deg,
-      #a78bfa 0%,
-      #a78bfa var(--progress-pos),
+      var(--accent-primary) 0%,
+      var(--accent-primary) var(--progress-pos),
       var(--text-primary) var(--progress-pos),
       var(--text-primary) 100%
     );

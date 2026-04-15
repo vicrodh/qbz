@@ -6,6 +6,7 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
+import { skipIfRemote } from '$lib/services/commandRouter';
 
 export interface PersistedQueueTrack {
   id: number;
@@ -51,6 +52,7 @@ export async function saveSessionState(
   viewContextId?: string | null,
   viewContextType?: string | null
 ): Promise<void> {
+  if (skipIfRemote()) return;
   try {
     await invoke('v2_save_session_state', {
       queueTracks,
@@ -74,6 +76,7 @@ export async function saveSessionState(
  * Load the persisted session state
  */
 export async function loadSessionState(): Promise<PersistedSession | null> {
+  if (skipIfRemote()) return null;
   try {
     const session = await invoke<PersistedSession>('v2_load_session_state');
     console.log('[Session] State loaded:', {
@@ -93,6 +96,7 @@ export async function loadSessionState(): Promise<PersistedSession | null> {
  * Quick save of just the playback position (debounced during playback)
  */
 export async function saveSessionPosition(positionSecs: number): Promise<void> {
+  if (skipIfRemote()) return;
   try {
     await invoke('v2_save_session_position', { positionSecs });
   } catch (err) {
@@ -104,6 +108,7 @@ export async function saveSessionPosition(positionSecs: number): Promise<void> {
  * Quick save of volume
  */
 export async function saveSessionVolume(volume: number): Promise<void> {
+  if (skipIfRemote()) return;
   try {
     await invoke('v2_save_session_volume', { volume });
   } catch (err) {
@@ -118,6 +123,7 @@ export async function saveSessionPlaybackMode(
   shuffle: boolean,
   repeatMode: string
 ): Promise<void> {
+  if (skipIfRemote()) return;
   try {
     await invoke('v2_save_session_playback_mode', { shuffle, repeatMode });
   } catch (err) {
@@ -129,6 +135,7 @@ export async function saveSessionPlaybackMode(
  * Clear the session (e.g., on logout)
  */
 export async function clearSession(): Promise<void> {
+  if (skipIfRemote()) return;
   try {
     await invoke('v2_clear_session');
     console.log('[Session] Session cleared');
@@ -173,6 +180,7 @@ export async function saveCurrentSession(
   getPlayerState: () => { currentTime: number; volume: number; isPlaying: boolean },
   getPlaybackMode: () => { shuffle: boolean; repeat: string }
 ): Promise<void> {
+  if (skipIfRemote()) return;
   const queueState = getQueueState();
   const playerState = getPlayerState();
   const playbackMode = getPlaybackMode();

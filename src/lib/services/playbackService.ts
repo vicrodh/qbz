@@ -12,6 +12,9 @@
 import { invoke } from '@tauri-apps/api/core';
 import { get } from 'svelte/store';
 import { t } from '$lib/i18n';
+import { cmdStop, cmdPlayTrack, skipIfRemote } from '$lib/services/commandRouter';
+import { getTarget } from '$lib/stores/playbackTargetStore';
+import { remotePost } from '$lib/services/remoteApi';
 import { getUserItem, setUserItem } from '$lib/utils/userStorage';
 import {
   isPlaybackSourceLocal,
@@ -179,6 +182,18 @@ export async function playTrack(
 
   try {
     let handledRemotely = false;
+    const target = getTarget();
+
+    // When controlling a qbzd daemon, send play directly to daemon.
+    // No local stop, no QConnect, no metadata — daemon handles everything.
+    if (target.type === 'qbzd') {
+      await remotePost('/api/playback/play-track', {
+        track_id: track.id,
+        quality: effectiveQuality(track),
+      });
+      setIsPlaying(true);
+      return true;
+    }
 
     if (!gaplessTransition && !isLocal && source !== 'plex') {
       handledRemotely = await handoffPlayTrackToRemoteRenderer(track.id);
@@ -192,7 +207,7 @@ export async function playTrack(
       // Stop any leftover local playback so the active remote renderer owns the session.
       if (!isCasting()) {
         try {
-          await invoke('v2_stop_playback');
+          await cmdStop();
         } catch {
           // Ignore errors - player might not be playing locally
         }
@@ -204,7 +219,7 @@ export async function playTrack(
       if (!isCasting()) {
         // Stop current playback immediately
         try {
-          await invoke('v2_stop_playback');
+          await cmdStop();
         } catch {
           // Ignore errors - player might not be playing
         }
@@ -250,19 +265,28 @@ export async function playTrack(
         } else if (isLocal) {
           await invoke('v2_library_play_track', { trackId: track.id });
         } else {
-          const result = await invoke<PlayTrackResult>('v2_play_track', {
-            trackId: track.id,
-            quality: effectiveQuality(track),
-            durationSecs: track.duration ? Math.round(track.duration) : null,
-            forceLowestQuality: forceLowestQuality || null
-          });
+          // Route to daemon or local based on playback target
+          const target = getTarget();
+          if (target.type === 'qbzd') {
+            await remotePost('/api/playback/play-track', {
+              track_id: track.id,
+              quality: effectiveQuality(track),
+            });
+          } else {
+            const result = await invoke<PlayTrackResult>('v2_play_track', {
+              trackId: track.id,
+              quality: effectiveQuality(track),
+              durationSecs: track.duration ? Math.round(track.duration) : null,
+              forceLowestQuality: forceLowestQuality || null
+            });
 
-          // Update track format based on actual stream format_id from Qobuz
-          const actualFormat = formatIdToString(result.format_id);
-          if (actualFormat) {
-            track.format = actualFormat;
-            // Re-set current track to update the UI with actual format
-            setCurrentTrack(track);
+            // Update track format based on actual stream format_id from Qobuz
+            const actualFormat = formatIdToString(result.format_id);
+            if (actualFormat) {
+              track.format = actualFormat;
+              // Re-set current track to update the UI with actual format
+              setCurrentTrack(track);
+            }
           }
         }
       }
@@ -333,8 +357,25 @@ export async function playTrack(
     console.error('Failed to play track:', err);
     dismissBuffering();
 
-    // Check if track is unavailable on Qobuz
+    // Check for offline-mode refusal first. The backend returns
+    // RuntimeError::TrackNotAvailableOffline when manual offline is on and
+    // the track has no local copy — see issue #279. Tauri serializes typed
+    // errors with the variant name as `code`; we match either the JSON
+    // payload or the stringified form depending on how Tauri round-trips it.
     const errorStr = String(err);
+    const isOfflineUnavailable =
+      errorStr.includes('TrackNotAvailableOffline') ||
+      (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'TrackNotAvailableOffline');
+    if (isOfflineUnavailable) {
+      const { get } = await import('svelte/store');
+      const { t } = await import('$lib/i18n');
+      const msg = get(t)('offline.trackNotAvailableOffline', { values: { title: track.title } });
+      showToast(msg, 'error');
+      setIsPlaying(false);
+      return false;
+    }
+
+    // Check if track is unavailable on Qobuz
     if (errorStr.includes('no longer available') || errorStr.includes('TrackUnavailable')) {
       // Mark track as unavailable for future reference
       markTrackUnavailable(track.id);
@@ -463,6 +504,7 @@ export async function playTrack(
  * Update system media controls metadata (V2)
  */
 export async function updateMediaMetadata(metadata: MediaMetadata): Promise<void> {
+  if (skipIfRemote()) return;
   try {
     const coverUrl = normalizeCoverUrlForMetadata(metadata.coverUrl);
     await invoke('v2_set_media_metadata', {
@@ -544,6 +586,7 @@ export async function showTrackNotification(
   bitDepth?: number,
   sampleRate?: number
 ): Promise<void> {
+  if (skipIfRemote()) return;
   // Skip if system notifications are disabled
   if (!systemNotificationsEnabled) {
     return;
@@ -634,6 +677,7 @@ export async function updateListenBrainzNowPlaying(
   trackId: number,
   isrc?: string
 ): Promise<void> {
+  if (skipIfRemote()) return;
   // Check if ListenBrainz is connected and enabled
   const status = await getListenBrainzStatus();
   if (!status?.connected || !status?.enabled) return;
@@ -725,6 +769,7 @@ export async function updateListenBrainzNowPlaying(
  * Call this when transitioning from offline to online
  */
 export async function flushListenBrainzQueue(): Promise<number> {
+  if (skipIfRemote()) return 0;
   // Check if ListenBrainz is connected and enabled
   const status = await getListenBrainzStatus();
   if (!status?.connected || !status?.enabled) return 0;
@@ -757,6 +802,7 @@ export async function updateLastfmNowPlaying(
   durationSecs: number,
   trackId: number
 ): Promise<void> {
+  if (skipIfRemote()) return;
   // Check if scrobbling is enabled
   const scrobblingEnabled = getUserItem('qbz-lastfm-scrobbling') !== 'false';
   const sessionKey = getUserItem('qbz-lastfm-session-key');
@@ -823,6 +869,7 @@ export async function updateLastfmNowPlaying(
  * Call this when transitioning from offline to online
  */
 export async function flushScrobbleQueue(): Promise<{ sent: number; failed: number }> {
+  if (skipIfRemote()) return { sent: 0, failed: 0 };
   // Check if scrobbling is enabled
   const scrobblingEnabled = getUserItem('qbz-lastfm-scrobbling') !== 'false';
   const sessionKey = getUserItem('qbz-lastfm-session-key');

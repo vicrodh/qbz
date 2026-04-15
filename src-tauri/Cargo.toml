@@ -1,6 +1,6 @@
 [package]
 name = "qbz-nix"
-version = "1.2.4"
+version = "1.2.5"
 description = "Native high-fidelity client for Qobuz™ subscribers on Linux with Hi-Fi audio support (uses the Qobuz API; not certified by Qobuz)"
 authors = ["blitzkriegfc"]
 edition = "2021"
@@ -16,6 +16,13 @@ path = "src/main.rs"
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
+[features]
+default = ["updater"]
+# Enables the in-app auto-updater (tauri-plugin-updater + tauri-plugin-process).
+# Disabled for sandboxed packaging targets (Flatpak, Snap) which have their own
+# update channels and whose store policies prohibit competing updaters.
+updater = ["dep:tauri-plugin-updater", "dep:tauri-plugin-process"]
+
 [dependencies]
 # QBZ Crates (extracted core functionality)
 qbz-models = { path = "../crates/qbz-models" }
@@ -28,6 +35,7 @@ qbz-cache = { path = "../crates/qbz-cache" }
 qbz-library = { path = "../crates/qbz-library" }
 qbz-cast = { path = "../crates/qbz-cast" }
 qbz-cmaf = { path = "../crates/qbz-cmaf" }
+mdns-sd = "0.11"
 qconnect-app = { path = "../crates/qconnect-app" }
 qconnect-core = { path = "../crates/qconnect-core" }
 qconnect-transport-ws = { path = "../crates/qconnect-transport-ws" }
@@ -38,6 +46,8 @@ tauri-plugin-opener = "2"
 tauri-plugin-os = "2"
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 tauri-plugin-deep-link = "2"
+tauri-plugin-updater = { version = "2", optional = true }
+tauri-plugin-process = { version = "2", optional = true }
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
@@ -144,16 +154,21 @@ futures-util = "0.3"
 
 # Platform-specific dependencies
 [target.'cfg(target_os = "linux")'.dependencies]
-tauri-plugin-dialog = { version = "2.6.0" }
+tauri-plugin-dialog = { version = "2.7.0" }
 ashpd = { version = "0.13", default-features = false, features = ["tokio", "notification", "inhibit", "secret"] }
 mupdf = { version = "0.6", features = ["sys-lib-zlib", "sys-lib-harfbuzz", "sys-lib-freetype"] }
+# Linux tray via StatusNotifierItem with primary-activate support.
+# Tauri's built-in tray uses libayatana-appindicator which does not dispatch
+# left-click events to clients (by design — primary click always shows the
+# menu). ksni is a pure-Rust SNI impl that exposes Activate. See issue #310.
+ksni = { version = "0.3", features = ["blocking"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-tauri-plugin-dialog = { version = "2.6.0" }
-notify-rust = "4.13.0"
+tauri-plugin-dialog = { version = "2.7.0" }
+notify-rust = "4.14.0"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-tauri-plugin-dialog = { version = "2.6.0" }
+tauri-plugin-dialog = { version = "2.7.0" }
 
 [dev-dependencies]
 tempfile = "3"

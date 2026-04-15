@@ -265,6 +265,9 @@ pub struct Album {
     /// Album goodies (booklets, liner notes PDFs)
     #[serde(default)]
     pub goodies: Option<Vec<Goody>>,
+    /// Editorial awards (Qobuzissime, Album of the Week, press accolades).
+    #[serde(default)]
+    pub awards: Option<Vec<AlbumAward>>,
 }
 
 /// A downloadable extra bundled with an album (e.g. PDF booklet)
@@ -464,6 +467,66 @@ pub struct LabelPageGenericList {
     pub items: Option<Vec<serde_json::Value>>,
 }
 
+// ============ Award Page Types (/award/page) ============
+
+/// Magazine/publisher behind a press award.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AwardMagazine {
+    #[serde(default, deserialize_with = "deserialize_string_or_int")]
+    pub id: Option<String>,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub image: Option<String>,
+}
+
+/// Top-level response from /award/page. Fields all Optional because
+/// Android's AwardDto marks everything nullable and Qobuz is loose
+/// about which ones come back on any given request.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AwardPageData {
+    #[serde(default, deserialize_with = "deserialize_string_or_int")]
+    pub id: Option<String>,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub image: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_string_or_int")]
+    pub awarded_at: Option<String>,
+    #[serde(default)]
+    pub magazine: Option<AwardMagazine>,
+    /// Categorized containers of award-winning releases (matches
+    /// Android's `releases: List<GenericContainerDto<AlbumDto>>`).
+    #[serde(default)]
+    pub releases: Option<Vec<AwardPageContainer>>,
+    #[serde(default)]
+    pub playlists: Option<AwardPageGenericList>,
+}
+
+fn deserialize_string_or_int<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(match value {
+        Some(serde_json::Value::String(s)) => Some(s),
+        Some(serde_json::Value::Number(n)) => Some(n.to_string()),
+        _ => None,
+    })
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AwardPageContainer {
+    pub id: Option<String>,
+    pub data: Option<AwardPageGenericList>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AwardPageGenericList {
+    pub has_more: Option<bool>,
+    pub items: Option<Vec<serde_json::Value>>,
+}
+
 /// Response from /label/explore
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LabelExploreResponse {
@@ -631,6 +694,10 @@ pub struct DiscoverAlbum {
     pub genre: Option<Genre>,
     pub dates: Option<DiscoverAlbumDates>,
     pub audio_info: Option<DiscoverAudioInfo>,
+    /// Editorial awards attached to the album. Id 88 = Qobuzissime,
+    /// id 151 = Qobuz Album of the Week (locale-stable).
+    #[serde(default)]
+    pub awards: Option<Vec<AlbumAward>>,
 }
 
 /// Album image from discover endpoint
@@ -779,6 +846,60 @@ pub struct PageArtistAward {
     pub id: u64,
     pub name: String,
     pub awarded_at: Option<String>,
+}
+
+/// Award attached to an album. Shape is intentionally lenient because
+/// Qobuz uses three different embedded shapes across endpoints:
+/// - `/discover/index` — {id: int, name, awarded_at: "YYYY-MM-DD"}
+/// - `/album/get`      — LegacyAwardDto {awardId: string, name,
+///                        publicationId, publicationName, awardSlug,
+///                        awardedAt: long, …}
+/// - `/artist/page`    — PageArtistAward {id: int, name, awarded_at}
+/// id is emitted as String downstream so the frontend has a single
+/// type to carry into /award/page and /award/getAlbums. The `alias`
+/// list covers the LegacyAwardDto field name the web app never sees
+/// but the mobile API uses.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AlbumAward {
+    #[serde(
+        default,
+        alias = "awardId",
+        alias = "award_id",
+        deserialize_with = "deserialize_award_id"
+    )]
+    pub id: Option<String>,
+    #[serde(default)]
+    pub name: String,
+    #[serde(
+        default,
+        alias = "awardedAt",
+        deserialize_with = "deserialize_award_awarded_at"
+    )]
+    pub awarded_at: Option<String>,
+}
+
+fn deserialize_award_id<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(match value {
+        Some(serde_json::Value::String(s)) if !s.is_empty() => Some(s),
+        Some(serde_json::Value::Number(n)) => Some(n.to_string()),
+        _ => None,
+    })
+}
+
+fn deserialize_award_awarded_at<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(match value {
+        Some(serde_json::Value::String(s)) => Some(s),
+        Some(serde_json::Value::Number(n)) => Some(n.to_string()),
+        _ => None,
+    })
 }
 
 /// Track from /artist/page

@@ -41,18 +41,51 @@
   <screenshots>
     <screenshot type="default">
       <caption xml:lang="en">Home and discovery view</caption>
-      <image>https://raw.githubusercontent.com/vicrodh/qbz/cff32e5da726719b983770c7f4c2ff52bb51e14d/packaging/flatpak/screenshots/home-discover.png</image>
+      <image>https://raw.githubusercontent.com/vicrodh/qbz/5f759514d35d4f07bec531c09a5384baea7fc073/packaging/flatpak/screenshots/home-discover.png</image>
     </screenshot>
     <screenshot>
       <caption xml:lang="en">Immersive cover flow mode</caption>
-      <image>https://raw.githubusercontent.com/vicrodh/qbz/cff32e5da726719b983770c7f4c2ff52bb51e14d/packaging/flatpak/screenshots/immersive-cover-flow.png</image>
+      <image>https://raw.githubusercontent.com/vicrodh/qbz/5f759514d35d4f07bec531c09a5384baea7fc073/packaging/flatpak/screenshots/immersive-cover-flow.png</image>
+    </screenshot>
+    <screenshot>
+      <caption xml:lang="en">Immersive line-bed playback view</caption>
+      <image>https://raw.githubusercontent.com/vicrodh/qbz/5f759514d35d4f07bec531c09a5384baea7fc073/packaging/flatpak/screenshots/immersive-line-bed.png</image>
+    </screenshot>
+    <screenshot>
+      <caption xml:lang="en">Artist page with editorial enrichment</caption>
+      <image>https://raw.githubusercontent.com/vicrodh/qbz/5f759514d35d4f07bec531c09a5384baea7fc073/packaging/flatpak/screenshots/enriched-artist-page.png</image>
     </screenshot>
     <screenshot>
       <caption xml:lang="en">Local library view</caption>
-      <image>https://raw.githubusercontent.com/vicrodh/qbz/cff32e5da726719b983770c7f4c2ff52bb51e14d/packaging/flatpak/screenshots/local-library.png</image>
+      <image>https://raw.githubusercontent.com/vicrodh/qbz/5f759514d35d4f07bec531c09a5384baea7fc073/packaging/flatpak/screenshots/local-library.png</image>
+    </screenshot>
+    <screenshot>
+      <caption xml:lang="en">Hi-Fi DAC setup wizard</caption>
+      <image>https://raw.githubusercontent.com/vicrodh/qbz/5f759514d35d4f07bec531c09a5384baea7fc073/packaging/flatpak/screenshots/hifi-wizard.png</image>
+    </screenshot>
+    <screenshot>
+      <caption xml:lang="en">Audio settings — backend, device, and quality</caption>
+      <image>https://raw.githubusercontent.com/vicrodh/qbz/5f759514d35d4f07bec531c09a5384baea7fc073/packaging/flatpak/screenshots/default-settings.png</image>
     </screenshot>
   </screenshots>
   <releases>
+    <release version="1.2.5" date="2026-04-15">
+      <description>
+        <p>"Accolade Watch" — a polish release focused on desktop integration, visual identity and small quality-of-life fixes.</p>
+        <ul>
+          <li>New matte-vinyl app icon applied across every size (Tauri, Windows Store, Android, Flatpak, tray) plus a monochrome symbolic variant for system trays</li>
+          <li>Window controls can now auto-detect KDE Plasma / Klassy and mirror the system decoration colors and button shape; new full-height-rounded button style added for Klassy's most common look</li>
+          <li>Opt-in "Match system window chrome": QBZ rounds its own corners to the detected desktop's radius (requires app restart — the window is rebuilt transparent so the corners don't show white)</li>
+          <li>Login screen refresh: larger logo, subtle shadow using the theme's muted color, and QBZ / Qobuz™ Player branding under the mark</li>
+          <li>Editor's Picks tab cleanup: removed redundant "Album of the Week" and "Qobuzissime" ribbons on cards inside their own eponymous sections</li>
+          <li>Playlist context menu in the sidebar now flips above the cursor when it would otherwise fall below the window</li>
+          <li>Sort submenu in the sidebar playlists menu no longer gets clipped by its parent dropdown</li>
+          <li>Genre filter popup uses its CSS max-height for collision detection so it flips above the trigger or clamps to the viewport instead of overflowing the bottom of the window</li>
+          <li>DAC Setup Wizard icon contrast fixed for light accent themes</li>
+          <li>Hardening to audio request signing (internal)</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.2.4" date="2026-04-07">
       <description>
         <p>Quick-fix release: fixes tracks ending ~9 seconds early when streamed via CMAF, and improves credential security with encrypted keyring storage and XDG portal secret integration.</p>

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
+  import { cmdAddTracksToQueue, cmdAddTracksToQueueNext } from '$lib/services/commandRouter';
   import { onMount, onDestroy } from 'svelte';
   import { ArrowLeft, CloudDownload, Heart, Info, ListPlus, Play, Search, Shuffle, X, SquareCheckBig } from 'lucide-svelte';
   import PlaylistModal from '$lib/components/PlaylistModal.svelte';
@@ -106,15 +107,24 @@
     multiSelectedIds = next;
   }
 
+  function toggleSelectAll() {
+    const allIds = filteredTracks.map(track => track.id);
+    if (multiSelectedIds.size === allIds.length) {
+      multiSelectedIds = new Set();
+    } else {
+      multiSelectedIds = new Set(allIds);
+    }
+  }
+
   async function handleBulkPlayNext() {
     const selected = filteredTracks.filter(trk => multiSelectedIds.has(trk.id));
-    await invoke('v2_add_tracks_to_queue_next', { tracks: buildQueueTracks(selected) });
+    await cmdAddTracksToQueueNext(buildQueueTracks(selected));
     multiSelectMode = false; multiSelectedIds = new Set();
   }
 
   async function handleBulkPlayLater() {
     const selected = filteredTracks.filter(trk => multiSelectedIds.has(trk.id));
-    await invoke('v2_add_tracks_to_queue', { tracks: buildQueueTracks(selected) });
+    await cmdAddTracksToQueue(buildQueueTracks(selected));
     multiSelectMode = false; multiSelectedIds = new Set();
   }
 
@@ -397,6 +407,13 @@
     });
   });
 
+  const selectAllState = $derived(
+    !filteredTracks || filteredTracks.length === 0 ? 'none' as const
+    : multiSelectedIds.size === 0 ? 'none' as const
+    : multiSelectedIds.size === filteredTracks.length ? 'all' as const
+    : 'partial' as const
+  );
+
   let showAlgoTooltip = $state(false);
   let algoTooltipTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -526,6 +543,17 @@
   {:else if result}
     <div class="track-list">
       <div class="track-list-header">
+        {#if multiSelectMode}
+          <div class="col-select-all">
+            <input
+              type="checkbox"
+              checked={selectAllState === 'all'}
+              indeterminate={selectAllState === 'partial'}
+              onchange={toggleSelectAll}
+              title={$t('actions.selectAll')}
+            />
+          </div>
+        {/if}
         <div class="col-number">#</div>
         <div class="col-artwork"></div>
         <div class="col-title">{$t('tracklist.title')}</div>
@@ -557,6 +585,7 @@
           isBlacklisted={trackBlacklisted}
           selectable={multiSelectMode}
           selected={multiSelectedIds.has(track.id)}
+          dragTrackIds={multiSelectMode && multiSelectedIds.has(track.id) ? [...multiSelectedIds] : undefined}
           onToggleSelect={() => toggleMultiSelect(track.id)}
           hideDownload={trackBlacklisted}
           hideFavorite={trackBlacklisted}
@@ -681,16 +710,6 @@
       radial-gradient(ellipse at 70% 50%, rgba(200, 150, 255, 0.4) 0%, transparent 50%),
       radial-gradient(ellipse at 20% 70%, rgba(130, 80, 200, 0.5) 0%, transparent 60%),
       linear-gradient(135deg, #b060d0 0%, #8040b0 30%, #6030a0 60%, #402080 100%);
-    will-change: transform;
-    animation: silk-weekly 34s ease-in-out infinite alternate;
-  }
-
-  @keyframes silk-weekly {
-    0%   { transform: translate(-3%, 6%) rotate(2deg) scale(1.01); }
-    20%  { transform: translate(7%, -4%) rotate(-5deg) scale(0.98); }
-    45%  { transform: translate(-6%, -2%) rotate(7deg) scale(1.03); }
-    70%  { transform: translate(4%, 7%) rotate(-3deg) scale(1); }
-    100% { transform: translate(-5%, 3%) rotate(4deg) scale(0.99); }
   }
 
   .metadata {
@@ -869,6 +888,20 @@
     box-sizing: border-box;
     border-bottom: 1px solid var(--bg-tertiary);
     margin-bottom: 8px;
+  }
+
+  .col-select-all {
+    width: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .col-select-all input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent-primary);
+    cursor: pointer;
   }
 
   .col-number {

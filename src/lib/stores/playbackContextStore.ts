@@ -6,6 +6,7 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
+import { skipIfRemote } from '$lib/services/commandRouter';
 
 // ============ Types ============
 
@@ -46,6 +47,7 @@ export async function setPlaybackContext(
   trackIds: number[],
   startPosition: number
 ): Promise<void> {
+  if (skipIfRemote()) return;
   console.log('[PlaybackContext] Setting context:', { contextType, id, label, trackIds: trackIds.length, startPosition });
   
   await invoke('v2_set_playback_context', {
@@ -75,6 +77,7 @@ export async function setPlaybackContext(
  * Clear the playback context (e.g., when playing single track)
  */
 export async function clearPlaybackContext(): Promise<void> {
+  if (skipIfRemote()) return;
   console.log('[PlaybackContext] Clearing context');
   await invoke('v2_clear_playback_context');
   currentContext = null;
@@ -86,6 +89,7 @@ export async function clearPlaybackContext(): Promise<void> {
  * Get the current playback context
  */
 export async function getPlaybackContext(): Promise<PlaybackContext | null> {
+  if (skipIfRemote()) return null;
   const context = await invoke<PlaybackContext | null>('v2_get_playback_context');
   currentContext = context;
   notifyListeners();
@@ -96,6 +100,7 @@ export async function getPlaybackContext(): Promise<PlaybackContext | null> {
  * Check if a context is active
  */
 export async function hasPlaybackContext(): Promise<boolean> {
+  if (skipIfRemote()) return false;
   return await invoke<boolean>('v2_has_playback_context');
 }
 
@@ -168,6 +173,7 @@ export function subscribe(listener: () => void): () => void {
  * Initialize context store (call on app startup)
  */
 export async function initPlaybackContextStore(): Promise<void> {
+  if (skipIfRemote()) return;
   // Sync initial state from backend
   await getPlaybackContext();
 }

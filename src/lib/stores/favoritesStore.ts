@@ -11,6 +11,7 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
+import { skipIfRemote } from '$lib/services/commandRouter';
 import { logRecoEvent } from '$lib/services/recoService';
 
 // State
@@ -104,6 +105,7 @@ export function isFavoritesLoaded(): boolean {
  * Call once on app init/login
  */
 export async function loadFavorites(): Promise<void> {
+  if (skipIfRemote()) return;
   if (isLoading) return;
 
   isLoading = true;
@@ -142,6 +144,7 @@ export async function loadFavorites(): Promise<void> {
  * Called on login and when FavoritesView loads
  */
 export async function syncFromApi(): Promise<void> {
+  if (skipIfRemote()) return;
   try {
     // Fetch all favorites from API (paginated)
     const allTrackIds: number[] = [];
@@ -187,6 +190,7 @@ export async function syncFromApi(): Promise<void> {
  * Returns the new favorite state
  */
 export async function toggleTrackFavorite(trackId: number): Promise<boolean> {
+  if (skipIfRemote()) return favoriteTrackIds.has(trackId);
   // Prevent double-toggling while API call is in progress
   if (togglingTrackIds.has(trackId)) {
     return favoriteTrackIds.has(trackId);
@@ -237,6 +241,7 @@ export async function toggleTrackFavorite(trackId: number): Promise<boolean> {
  * Add a track to favorites (used when we know it's not already favorite)
  */
 export async function addTrackFavorite(trackId: number): Promise<boolean> {
+  if (skipIfRemote()) return false;
   if (favoriteTrackIds.has(trackId)) return true;
   return toggleTrackFavorite(trackId);
 }
@@ -245,6 +250,7 @@ export async function addTrackFavorite(trackId: number): Promise<boolean> {
  * Remove a track from favorites
  */
 export async function removeTrackFavorite(trackId: number): Promise<boolean> {
+  if (skipIfRemote()) return false;
   if (!favoriteTrackIds.has(trackId)) return true;
   const result = await toggleTrackFavorite(trackId);
   return !result; // Returns true if successfully removed
@@ -255,6 +261,7 @@ export async function removeTrackFavorite(trackId: number): Promise<boolean> {
  * Used by FavoritesView after fetching from API
  */
 export async function syncCache(trackIds: number[]): Promise<void> {
+  if (skipIfRemote()) return;
   try {
     await invoke('v2_sync_cached_favorite_tracks', { trackIds });
     favoriteTrackIds = new Set(trackIds);
@@ -268,6 +275,7 @@ export async function syncCache(trackIds: number[]): Promise<void> {
  * Reset store (for logout)
  */
 export async function reset(): Promise<void> {
+  if (skipIfRemote()) return;
   try {
     await invoke('v2_clear_favorites_cache');
   } catch (err) {
@@ -282,6 +290,7 @@ export async function reset(): Promise<void> {
 
 // Legacy functions for backwards compatibility
 export function markAsFavorite(trackId: number): void {
+  if (skipIfRemote()) return;
   if (!favoriteTrackIds.has(trackId)) {
     favoriteTrackIds.add(trackId);
     // Also update cache
@@ -291,6 +300,7 @@ export function markAsFavorite(trackId: number): void {
 }
 
 export function unmarkAsFavorite(trackId: number): void {
+  if (skipIfRemote()) return;
   if (favoriteTrackIds.has(trackId)) {
     favoriteTrackIds.delete(trackId);
     // Also update cache

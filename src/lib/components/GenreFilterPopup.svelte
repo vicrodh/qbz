@@ -92,26 +92,39 @@
     if (!anchorEl || !popupEl) return;
 
     const anchorRect = anchorEl.getBoundingClientRect();
-    // Use expected width based on expanded state (CSS values)
+    // Use expected dimensions from CSS instead of the measured rect: the
+    // popup grows after this runs (the genre tree fills in async) and
+    // measuring once on mount gives a too-small height, which left the
+    // collision check thinking it fit when it actually overflowed.
     const popupWidth = showAllGenres ? 630 : 530;
-    const popupRect = popupEl.getBoundingClientRect();
+    const popupMaxHeight = showAllGenres ? 700 : 500;
+    const pad = 8;
 
     let left: number;
-    let top = anchorRect.bottom + 8;
+    let top = anchorRect.bottom + pad;
 
     if (align === 'right') {
       left = anchorRect.left;
-      if (left + popupWidth > window.innerWidth - 8) {
-        left = window.innerWidth - popupWidth - 8;
+      if (left + popupWidth > window.innerWidth - pad) {
+        left = window.innerWidth - popupWidth - pad;
       }
     } else {
       // Align right edge of popup with right edge of anchor (extends to the left)
       left = anchorRect.right - popupWidth;
-      if (left < 8) left = 8;
+      if (left < pad) left = pad;
     }
 
-    if (top + popupRect.height > window.innerHeight - 8) {
-      top = anchorRect.top - popupRect.height - 8;
+    if (top + popupMaxHeight > window.innerHeight - pad) {
+      // Try flipping above the anchor first.
+      const flipped = anchorRect.top - popupMaxHeight - pad;
+      if (flipped >= pad) {
+        top = flipped;
+      } else {
+        // Not enough room either way (small window): clamp so the popup
+        // sits flush with the bottom padding; its internal scroll handles
+        // the overflow.
+        top = Math.max(pad, window.innerHeight - popupMaxHeight - pad);
+      }
     }
 
     popupStyle = `left: ${left}px; top: ${top}px;`;

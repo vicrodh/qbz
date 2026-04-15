@@ -8,6 +8,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { skipIfRemote } from '$lib/services/commandRouter';
 import { showToast } from './toastStore';
 
 // Types matching Rust backend
@@ -113,6 +114,7 @@ export function getOfflineReason(): OfflineReason | null {
  * Fetch current offline status from backend
  */
 async function fetchStatus(): Promise<void> {
+  if (skipIfRemote()) return;
   try {
     const wasOffline = status.isOffline;
     const newStatus = await invoke<OfflineStatus>('v2_get_offline_status');
@@ -148,6 +150,7 @@ async function fetchStatus(): Promise<void> {
  * Fetch offline settings from backend
  */
 async function fetchSettings(): Promise<void> {
+  if (skipIfRemote()) return;
   try {
     settings = await invoke<OfflineSettings>('v2_get_offline_settings');
     notifyListeners();
@@ -165,6 +168,7 @@ async function fetchSettings(): Promise<void> {
  * Check network connectivity
  */
 export async function checkNetwork(): Promise<boolean> {
+  if (skipIfRemote()) return false;
   try {
     return await invoke<boolean>('v2_check_network');
   } catch (error) {
@@ -177,6 +181,7 @@ export async function checkNetwork(): Promise<boolean> {
  * Toggle manual offline mode
  */
 export async function setManualOffline(enabled: boolean): Promise<void> {
+  if (skipIfRemote()) return;
   try {
     const wasOffline = status.isOffline;
     console.log('[Offline] ========================================');
@@ -213,6 +218,7 @@ export async function setManualOffline(enabled: boolean): Promise<void> {
  * Set whether to show playlists with partial local content
  */
 export async function setShowPartialPlaylists(enabled: boolean): Promise<void> {
+  if (skipIfRemote()) return;
   try {
     await invoke('v2_set_show_partial_playlists', { enabled });
     settings.showPartialPlaylists = enabled;
@@ -227,6 +233,7 @@ export async function setShowPartialPlaylists(enabled: boolean): Promise<void> {
  * Set whether to allow Chromecast while in manual offline mode
  */
 export async function setAllowCastWhileOffline(enabled: boolean): Promise<void> {
+  if (skipIfRemote()) return;
   try {
     await invoke('v2_set_allow_cast_while_offline', { enabled });
     settings.allowCastWhileOffline = enabled;
@@ -241,6 +248,7 @@ export async function setAllowCastWhileOffline(enabled: boolean): Promise<void> 
  * Set whether to allow immediate scrobbling to Last.fm in manual offline mode
  */
 export async function setAllowImmediateScrobbling(enabled: boolean): Promise<void> {
+  if (skipIfRemote()) return;
   try {
     await invoke('v2_set_allow_immediate_scrobbling', { enabled });
     settings.allowImmediateScrobbling = enabled;
@@ -255,6 +263,7 @@ export async function setAllowImmediateScrobbling(enabled: boolean): Promise<voi
  * Set whether to queue scrobbles for later submission when back online
  */
 export async function setAllowAccumulatedScrobbling(enabled: boolean): Promise<void> {
+  if (skipIfRemote()) return;
   try {
     await invoke('v2_set_allow_accumulated_scrobbling', { enabled });
     settings.allowAccumulatedScrobbling = enabled;
@@ -269,6 +278,7 @@ export async function setAllowAccumulatedScrobbling(enabled: boolean): Promise<v
  * Set whether to show network folder content in manual offline mode
  */
 export async function setShowNetworkFoldersInManualOffline(enabled: boolean): Promise<void> {
+  if (skipIfRemote()) return;
   try {
     await invoke('v2_set_show_network_folders_in_manual_offline', { enabled });
     settings.showNetworkFoldersInManualOffline = enabled;
@@ -295,6 +305,7 @@ export async function refreshStatus(): Promise<void> {
  * - Listens for backend events
  */
 export async function initOfflineStore(): Promise<void> {
+  if (skipIfRemote()) return;
   if (initialized) return;
 
   // Fetch initial state
@@ -351,6 +362,7 @@ export async function createPendingPlaylist(
   trackIds: number[],
   localTrackPaths: string[]
 ): Promise<number> {
+  if (skipIfRemote()) return 0;
   return invoke<number>('v2_create_pending_playlist', {
     name,
     description,
@@ -364,6 +376,7 @@ export async function createPendingPlaylist(
  * Get all playlists pending sync
  */
 export async function getPendingPlaylists(): Promise<PendingPlaylist[]> {
+  if (skipIfRemote()) return [];
   return invoke<PendingPlaylist[]>('v2_get_pending_playlists');
 }
 
@@ -371,6 +384,7 @@ export async function getPendingPlaylists(): Promise<PendingPlaylist[]> {
  * Get count of pending playlists
  */
 export async function getPendingPlaylistCount(): Promise<number> {
+  if (skipIfRemote()) return 0;
   return invoke<number>('v2_get_pending_playlist_count');
 }
 
@@ -381,6 +395,7 @@ export async function markPendingPlaylistSynced(
   pendingId: number,
   qobuzPlaylistId: number
 ): Promise<void> {
+  if (skipIfRemote()) return;
   await invoke('v2_mark_pending_playlist_synced', { pendingId, qobuzPlaylistId });
 }
 
@@ -388,6 +403,7 @@ export async function markPendingPlaylistSynced(
  * Delete a pending playlist
  */
 export async function deletePendingPlaylist(pendingId: number): Promise<void> {
+  if (skipIfRemote()) return;
   await invoke('v2_delete_pending_playlist', { pendingId });
 }
 
@@ -412,6 +428,7 @@ export async function queueScrobble(
   album: string | null,
   timestamp: number
 ): Promise<number> {
+  if (skipIfRemote()) return 0;
   return invoke<number>('v2_queue_scrobble', {
     artist,
     track,
@@ -424,6 +441,7 @@ export async function queueScrobble(
  * Get queued scrobbles (up to limit)
  */
 export async function getQueuedScrobbles(limit?: number): Promise<QueuedScrobble[]> {
+  if (skipIfRemote()) return [];
   return invoke<QueuedScrobble[]>('v2_get_queued_scrobbles', { limit });
 }
 
@@ -431,6 +449,7 @@ export async function getQueuedScrobbles(limit?: number): Promise<QueuedScrobble
  * Mark scrobbles as sent after successful Last.fm submission
  */
 export async function markScrobblesSent(ids: number[]): Promise<void> {
+  if (skipIfRemote()) return;
   await invoke('v2_mark_scrobbles_sent', { ids });
 }
 
@@ -438,6 +457,7 @@ export async function markScrobblesSent(ids: number[]): Promise<void> {
  * Get count of queued (unsent) scrobbles
  */
 export async function getQueuedScrobbleCount(): Promise<number> {
+  if (skipIfRemote()) return 0;
   return invoke<number>('v2_get_queued_scrobble_count');
 }
 
@@ -445,6 +465,7 @@ export async function getQueuedScrobbleCount(): Promise<number> {
  * Cleanup old sent scrobbles
  */
 export async function cleanupSentScrobbles(olderThanDays?: number): Promise<number> {
+  if (skipIfRemote()) return 0;
   return invoke<number>('v2_cleanup_sent_scrobbles', { olderThanDays });
 }
 
@@ -452,6 +473,7 @@ export async function cleanupSentScrobbles(olderThanDays?: number): Promise<numb
  * Sync all pending playlists to Qobuz when back online
  */
 export async function syncPendingPlaylists(): Promise<void> {
+  if (skipIfRemote()) return;
   try {
     console.log('[Offline] Syncing pending playlists...');
     const pending = await getPendingPlaylists();

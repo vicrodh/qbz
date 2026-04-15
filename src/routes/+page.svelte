@@ -104,6 +104,18 @@
     getShowWindowControls
   } from '$lib/stores/titleBarStore';
 
+  // Window chrome (match system decoration radius)
+  import {
+    initWindowChromeStore,
+    subscribe as subscribeWindowChrome,
+    getMatchSystemWindowChrome,
+    getCornerRadiusPx,
+    setCornerRadiusPx,
+    setWindowIsTransparent,
+    getWindowIsTransparent,
+  } from '$lib/stores/windowChromeStore';
+  import { detectDesktopThemeCached } from '$lib/stores/windowControlsStore';
+
   // Search bar location store
   import {
     subscribe as subscribeSearchBarLocation,
@@ -153,6 +165,9 @@
   import { loadFavorites } from '$lib/stores/favoritesStore';
   import { loadAlbumFavorites } from '$lib/stores/albumFavoritesStore';
   import { loadArtistFavorites } from '$lib/stores/artistFavoritesStore';
+  import { loadLabelFavorites } from '$lib/stores/labelFavoritesStore';
+  import { loadAwardFavorites } from '$lib/stores/awardFavoritesStore';
+  import { resolveAwardIdByName } from '$lib/stores/awardCatalogStore';
   import { getDefaultFavoritesTab } from '$lib/utils/favorites';
   import { platform } from '$lib/utils/platform';
   import type { FavoritesPreferences, ResolvedMusician } from '$lib/types';
@@ -414,6 +429,9 @@
   import BlacklistManagerView from '$lib/components/views/BlacklistManagerView.svelte';
   import DiscoverBrowseView from '$lib/components/views/DiscoverBrowseView.svelte';
   import DiscoverPlaylistsBrowseView from '$lib/components/views/DiscoverPlaylistsBrowseView.svelte';
+  import ReleaseWatchView from '$lib/components/views/ReleaseWatchView.svelte';
+  import AwardView from '$lib/components/views/AwardView.svelte';
+  import AwardAlbumsView from '$lib/components/views/AwardAlbumsView.svelte';
   import PurchasesView from '$lib/components/views/PurchasesView.svelte';
   import PurchaseAlbumDetailView from '$lib/components/views/PurchaseAlbumDetailView.svelte';
   import DynamicSuggestView from '$lib/components/views/DynamicSuggestView.svelte';
@@ -442,7 +460,7 @@
   import KeybindingsSettings from '$lib/components/KeybindingsSettings.svelte';
   import LinkResolverModal from '$lib/components/LinkResolverModal.svelte';
   import type { ReleaseInfo } from '$lib/stores/updatesStore';
-  import { refreshUpdatePreferences, resetUpdatesStore } from '$lib/stores/updatesStore';
+  import { isAutoUpdateEligible, refreshUpdatePreferences, resetUpdatesStore } from '$lib/stores/updatesStore';
   import { getShowPurchases, setShowPurchases, rehydratePurchasesStore } from '$lib/stores/purchasesStore';
   import {
     decideLaunchModals,
@@ -451,8 +469,11 @@
     markFlatpakWelcomeShown,
     markSnapWelcomeShown,
     openReleasePageAndAcknowledge,
+    performAutoUpdate,
     resetLaunchFlow,
   } from '$lib/services/updatesService';
+  import type { AutoUpdateProgress } from '$lib/services/updatesService';
+  import UpdateProgressModal from '$lib/components/updates/UpdateProgressModal.svelte';
 
   // Offline state
   import {
@@ -480,6 +501,9 @@
 
   // Title Bar State (from titleBarStore subscription)
   let showTitleBar = $state(shouldShowTitleBar());
+  let matchSystemChrome = $state(getMatchSystemWindowChrome());
+  let chromeRadiusPx = $state(getCornerRadiusPx());
+  let windowTransparent = $state(getWindowIsTransparent());
   let showWindowControls = $state(getShowWindowControls());
 
   // Search Bar Location State
@@ -518,6 +542,10 @@
   // Sequential modal queue: Flatpak → What's new → Update available
   let pendingWhatsNewRelease = $state<ReleaseInfo | null>(null);
   let pendingUpdateRelease = $state<ReleaseInfo | null>(null);
+
+  // Auto-update state
+  let isAutoUpdating = $state(false);
+  let autoUpdateProgress = $state<AutoUpdateProgress>({ state: 'checking' });
 
   // Global back-to-top button
   let mainContentEl: HTMLElement | null = $state(null);
@@ -564,6 +592,7 @@
   let artistTopTracks = $state<PageArtistTrack[]>([]);
   let artistSimilarArtists = $state<PageArtistSimilarItem[]>([]);
   let selectedLabel = $state<{ id: number; name: string } | null>(null);
+  let selectedAward = $state<{ id: string; name: string } | null>(null);
   let selectedMusician = $state<ResolvedMusician | null>(null);
   let musicianModalData = $state<ResolvedMusician | null>(null);
   let isArtistAlbumsLoading = $state(false);
@@ -615,6 +644,7 @@
       case 'favorites-tracks':
       case 'favorites-albums':
       case 'favorites-artists':
+      case 'favorites-labels':
       case 'favorites-playlists':
       case 'discover-new-releases':
       case 'discover-ideal-discography':
@@ -623,6 +653,7 @@
       case 'discover-albums-of-the-week':
       case 'discover-press-accolades':
       case 'discover-playlists':
+      case 'discover-release-watch':
       case 'purchases':
       case 'dailyq':
       case 'weeklyq':
@@ -786,6 +817,33 @@
     isUpdateModalOpen = false;
     if (updateRelease) {
       isReminderModalOpen = true;
+    }
+  }
+
+  function handleAutoUpdate(): void {
+    isUpdateModalOpen = false;
+    isAutoUpdating = true;
+    autoUpdateProgress = { state: 'checking' };
+    void performAutoUpdate(
+      (progress) => {
+        if (isAutoUpdating) autoUpdateProgress = progress;
+      },
+      () => !isAutoUpdating,
+    );
+  }
+
+  function handleAutoUpdateCancel(): void {
+    isAutoUpdating = false;
+    if (updateRelease) {
+      isUpdateModalOpen = true;
+    }
+  }
+
+  function handleAutoUpdateFallbackManual(): void {
+    isAutoUpdating = false;
+    if (updateRelease) {
+      void openReleasePageAndAcknowledge(updateRelease);
+      updateRelease = null;
     }
   }
 
@@ -1286,6 +1344,10 @@
         case 'label-releases':
           selectedLabel = { id: Number(itemId), name: selectedLabel?.name || '' };
           break;
+        case 'award':
+        case 'award-albums':
+          selectedAward = { id: String(itemId), name: selectedAward?.name || '' };
+          break;
         case 'musician':
           // Musician data is already in selectedMusician from the original navigation
           break;
@@ -1482,6 +1544,31 @@
   function handleNavigateLabelReleases(labelId: number, labelName: string) {
     selectedLabel = { id: labelId, name: labelName };
     navigateTo('label-releases', labelId);
+  }
+
+  function handleNavigateAwardAlbums(awardId: string, awardName: string) {
+    if (!awardId) return;
+    selectedAward = { id: awardId, name: awardName };
+    navigateTo('award-albums', awardId);
+  }
+
+  async function handleAwardClick(awardId: string, awardName: string) {
+    // Happy path: /album/get included the id — navigate immediately.
+    if (awardId) {
+      selectedAward = { id: awardId, name: awardName };
+      navigateTo('award', awardId);
+      return;
+    }
+    // /album/get sometimes returns an award entry with only a name.
+    // Resolve via the cached /award/explore catalog. One HTTP round-trip
+    // the first time, instant afterwards.
+    const resolved = await resolveAwardIdByName(awardName);
+    if (!resolved) {
+      showToast($t('toast.awardUnavailable'), 'info');
+      return;
+    }
+    selectedAward = { id: resolved, name: awardName };
+    navigateTo('award', resolved);
   }
 
   /**
@@ -3630,6 +3717,8 @@
     loadFavorites();        // Track favorites
     loadAlbumFavorites();   // Album favorites
     loadArtistFavorites();  // Artist favorites
+    loadLabelFavorites();   // Label favorites
+    loadAwardFavorites();   // Award favorites
 
     // Refresh offline status now that we're logged in
     refreshOfflineStatus().catch(err => console.debug('[Offline] Status refresh deferred:', err));
@@ -4132,11 +4221,48 @@
       sidebarExpanded = getIsExpanded();
     });
 
+    // Declared upfront because subscribeTitleBar invokes the callback
+    // immediately on subscription, which references this helper.
+    const applyChromeClass = () => {
+      if (typeof document === 'undefined') return;
+      const active = matchSystemChrome && showTitleBar && windowTransparent;
+      document.documentElement.classList.toggle('match-chrome-transparent', active);
+    };
+
     // Initialize and subscribe to title bar state changes
     initTitleBarStore();
     const unsubscribeTitleBar = subscribeTitleBar(() => {
       showTitleBar = shouldShowTitleBar();
       showWindowControls = getShowWindowControls();
+      applyChromeClass();
+    });
+
+    // Window chrome: subscribe to the "match system" toggle and fetch the
+    // desktop corner radius once. The detection is already cached upstream
+    // so this is cheap to call multiple times.
+    initWindowChromeStore();
+    const unsubscribeWindowChrome = subscribeWindowChrome(() => {
+      matchSystemChrome = getMatchSystemWindowChrome();
+      chromeRadiusPx = getCornerRadiusPx();
+      windowTransparent = getWindowIsTransparent();
+      applyChromeClass();
+    });
+    // Ask the Rust side whether the main window was actually built
+    // transparent. If not, the radius CSS is a no-op (white corners
+    // otherwise). The backend captured the decision at setup time.
+    void (async () => {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        const transparent = (await invoke('v2_main_window_is_transparent')) as boolean;
+        setWindowIsTransparent(transparent);
+      } catch (e) {
+        console.warn('[windowChrome] could not query transparency:', e);
+      }
+    })();
+    void detectDesktopThemeCached().then((info) => {
+      if (info && typeof info.windowCornerRadiusPx === 'number') {
+        setCornerRadiusPx(info.windowCornerRadiusPx);
+      }
     });
 
     // Initialize and subscribe to search bar location
@@ -4472,8 +4598,13 @@
       try {
         const queueState = getQueueState();
         if (queueState.queue.length > 0) {
-          const firstId = Number(queueState.queue[0].id);
           const currentId = currentTrack?.id ?? null;
+
+          if (queueState.repeatMode == 'one') {
+            return currentId;
+          }
+          
+          const firstId = Number(queueState.queue[0].id);
           if (!Number.isNaN(firstId) && firstId > 0 && firstId !== currentId) {
             return firstId;
           }
@@ -4521,6 +4652,7 @@
     let unlistenQconnectAdmissionBlocked: UnlistenFn | null = null;
     let unlistenQconnectDiagnostic: UnlistenFn | null = null;
     let unlistenQconnectRendererReportDebug: UnlistenFn | null = null;
+    let unlistenAudioDeviceMissing: UnlistenFn | null = null;
 
     (async () => {
       const unlisten1 = await listen('tray:play_pause', () => {
@@ -4712,6 +4844,23 @@
       });
       if (disposed) { unlisten10(); return; }
       unlistenQconnectRendererReportDebug = unlisten10;
+
+      // Issue #307 — configured output device vanished mid-session
+      // (KVM switched away, USB unplugged, sink removed). Backend emits
+      // this right before play/resume when it detects the mismatch;
+      // init_device already falls back to default automatically, we
+      // just surface the fact to the user as a warning toast so they
+      // understand why audio is now coming out of a different sink.
+      const unlistenDeviceMissing = await listen<{ wanted: string; available: string[] }>('audio:device-missing', (event) => {
+        const wanted = event.payload?.wanted ?? '';
+        showToast(
+          $t('toast.audioDeviceMissing', { values: { device: wanted } }),
+          'warning',
+          6000
+        );
+      });
+      if (disposed) { unlistenDeviceMissing(); return; }
+      unlistenAudioDeviceMissing = unlistenDeviceMissing;
     })();
 
     return () => {
@@ -4728,6 +4877,7 @@
       unlistenQconnectAdmissionBlocked?.();
       unlistenQconnectDiagnostic?.();
       unlistenQconnectRendererReportDebug?.();
+      unlistenAudioDeviceMissing?.();
       // Save session before cleanup
       saveSessionBeforeClose();
       cleanupBootstrap();
@@ -4746,6 +4896,7 @@
       unsubscribeAuth();
       unsubscribeSidebar();
       unsubscribeTitleBar();
+      unsubscribeWindowChrome();
       unsubscribeSearchBarLocation();
       unsubscribeWindowControls();
       unsubscribeTitlebarNav();
@@ -4882,7 +5033,13 @@
 {#if !isLoggedIn}
   <LoginView onLoginSuccess={handleLoginSuccess} onStartOffline={handleStartOffline} />
 {:else}
-  <div class="app" class:no-titlebar={!showTitleBar} class:floating={isWindowFloating}>
+  <div
+    class="app"
+    class:no-titlebar={!showTitleBar}
+    class:floating={isWindowFloating}
+    class:match-chrome={matchSystemChrome && showTitleBar && windowTransparent}
+    style="--chrome-radius: {chromeRadiusPx}px;"
+  >
     <!-- macOS: drag region for window movement (overlay title bar has no native drag area) -->
     {#if !showTitleBar && platform === 'macos'}
       <div class="macos-drag-region" data-tauri-drag-region></div>
@@ -4992,6 +5149,7 @@
             onNavigateQobuzissimes={() => navigateTo('discover-qobuzissimes')}
             onNavigateAlbumsOfTheWeek={() => navigateTo('discover-albums-of-the-week')}
             onNavigatePressAccolades={() => navigateTo('discover-press-accolades')}
+            onNavigateReleaseWatch={() => navigateTo('discover-release-watch')}
             onNavigateQobuzPlaylists={() => navigateTo('discover-playlists')}
             onNavigateDailyQ={() => navigateTo('dailyq')}
             onNavigateWeeklyQ={() => navigateTo('weeklyq')}
@@ -5081,6 +5239,7 @@
           onBack={navGoBack}
           onArtistClick={() => selectedAlbum?.artistId && handleArtistClick(selectedAlbum.artistId)}
           onLabelClick={handleLabelClick}
+          onAwardClick={handleAwardClick}
           onTrackPlay={handleAlbumTrackPlay}
           onTrackPlayNext={handleAlbumTrackPlayNext}
           onTrackPlayLater={handleAlbumTrackPlayLater}
@@ -5227,6 +5386,45 @@
           {downloadStateVersion}
           onArtistClick={handleArtistClick}
         />
+      {:else if activeView === 'award' && selectedAward}
+        <AwardView
+          awardId={selectedAward.id}
+          awardName={selectedAward.name}
+          onBack={navGoBack}
+          onAlbumClick={handleAlbumClick}
+          onAlbumPlay={playAlbumById}
+          onAlbumPlayNext={queueAlbumNextById}
+          onAlbumPlayLater={queueAlbumLaterById}
+          onAlbumShareQobuz={shareAlbumQobuzLinkById}
+          onAlbumShareSonglink={shareAlbumSonglinkById}
+          onAlbumDownload={downloadAlbumById}
+          onOpenAlbumFolder={openAlbumFolderById}
+          onReDownloadAlbum={reDownloadAlbumById}
+          onAddAlbumToPlaylist={addAlbumToPlaylistById}
+          onNavigateAwardAlbums={handleNavigateAwardAlbums}
+          onAwardClick={handleAwardClick}
+          {downloadStateVersion}
+          onArtistClick={handleArtistClick}
+        />
+      {:else if activeView === 'award-albums' && selectedAward}
+        <AwardAlbumsView
+          awardId={selectedAward.id}
+          awardName={selectedAward.name}
+          onBack={navGoBack}
+          onAlbumClick={handleAlbumClick}
+          onAlbumPlay={playAlbumById}
+          onAlbumPlayNext={queueAlbumNextById}
+          onAlbumPlayLater={queueAlbumLaterById}
+          onAlbumShareQobuz={shareAlbumQobuzLinkById}
+          onAlbumShareSonglink={shareAlbumSonglinkById}
+          onAlbumDownload={downloadAlbumById}
+          onOpenAlbumFolder={openAlbumFolderById}
+          onReDownloadAlbum={reDownloadAlbumById}
+          onAddAlbumToPlaylist={addAlbumToPlaylistById}
+          checkAlbumFullyDownloaded={checkAlbumFullyDownloaded}
+          {downloadStateVersion}
+          onArtistClick={handleArtistClick}
+        />
       {:else if activeView === 'library' || activeView === 'library-album'}
         <LocalLibraryView
           onTrackPlay={handleLocalTrackPlay}
@@ -5331,6 +5529,7 @@
             onPlaylistRemoveFavorite={removePlaylistFavoriteById}
             onPlaylistShareQobuz={sharePlaylistQobuzLinkById}
             onRandomArtist={(artistId) => handleArtistClick(artistId)}
+            onLabelClick={handleLabelClick}
             selectedTab={getFavoritesTabFromView(activeView) ?? favoritesDefaultTab}
             onTabNavigate={(tab) => navigateToFavorites(tab)}
             activeTrackId={currentTrack?.id ?? null}
@@ -5476,6 +5675,23 @@
           onPlaylistPlayLater={queuePlaylistLaterById}
           onPlaylistCopyToLibrary={copyPlaylistToLibraryById}
           onPlaylistShareQobuz={sharePlaylistQobuzLinkById}
+        />
+      {:else if activeView === 'discover-release-watch'}
+        <ReleaseWatchView
+          onBack={navGoBack}
+          onAlbumClick={handleAlbumClick}
+          onAlbumPlay={playAlbumById}
+          onAlbumPlayNext={queueAlbumNextById}
+          onAlbumPlayLater={queueAlbumLaterById}
+          onAlbumShareQobuz={shareAlbumQobuzLinkById}
+          onAlbumShareSonglink={shareAlbumSonglinkById}
+          onAlbumDownload={downloadAlbumById}
+          onOpenAlbumFolder={openAlbumFolderById}
+          onReDownloadAlbum={reDownloadAlbumById}
+          onAddAlbumToPlaylist={addAlbumToPlaylistById}
+          checkAlbumFullyDownloaded={checkAlbumFullyDownloaded}
+          {downloadStateVersion}
+          onArtistClick={handleArtistClick}
         />
       {:else if activeView === 'dailyq'}
         <DynamicSuggestView
@@ -5762,6 +5978,7 @@
         {volume}
         onVolumeChange={handleVolumeChange}
         onToggleMute={handleToggleMute}
+        volumeLocked={isAlsaDirectHw && !qconnectPeerRendererActive}
         {isShuffle}
         onToggleShuffle={toggleShuffle}
         {repeatMode}
@@ -5878,8 +6095,10 @@
         isOpen={isUpdateModalOpen}
         currentVersion={updatesCurrentVersion}
         newVersion={updateRelease.version}
+        autoUpdateEligible={isAutoUpdateEligible()}
         onClose={handleUpdateClose}
         onVisitReleasePage={handleUpdateVisit}
+        onAutoUpdate={handleAutoUpdate}
       />
 
       <UpdateReminderModal
@@ -5888,6 +6107,13 @@
         onRemindLater={handleReminderLater}
         onIgnoreRelease={handleReminderIgnoreRelease}
         onDisableAllUpdates={handleReminderDisableUpdates}
+      />
+
+      <UpdateProgressModal
+        isOpen={isAutoUpdating}
+        progress={autoUpdateProgress}
+        onCancel={handleAutoUpdateCancel}
+        onFallbackManual={handleAutoUpdateFallbackManual}
       />
     {/if}
 
@@ -5992,6 +6218,34 @@
     overflow: hidden;
   }
 
+  /* Match system window chrome (Plasma / GNOME): apply the detected
+     decoration radius and a thin edge outline so the window reads as
+     its own surface against the desktop. Only takes effect in floating
+     state (not maximized) and when the custom title bar is active.
+     Requires the Tauri window to have been built transparent (Phase 2:
+     match_system_window_chrome persists to window_settings and gates the
+     transparency path at startup). */
+  :global(html.match-chrome-transparent),
+  :global(html.match-chrome-transparent body) {
+    background: transparent !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  /* Small win that works today: rounded corners matching the detected
+     desktop decoration radius. clip-path + border-radius + GPU layer
+     give clean anti-aliasing on WebKitGTK. A proper system shadow and
+     frame need compositor hints that wry doesn't expose yet — tracked
+     as a Phase 3 follow-up. */
+  .app.match-chrome.floating {
+    border-radius: var(--chrome-radius, 10px);
+    clip-path: inset(0 round var(--chrome-radius, 10px));
+    transform: translateZ(0);
+    backface-visibility: hidden;
+  }
+  .app.match-chrome:not(.floating) {
+    border-radius: 0;
+  }
+
   .app-body {
     display: flex;
     flex: 1;
@@ -6003,7 +6257,7 @@
     display: flex;
     flex: 1;
     min-width: 0;
-    height: calc(100vh - 148px); /* 104px NowPlayingBar + 44px TitleBar */
+    height: calc(100vh - var(--player-bar-height, 104px) - 44px);
     overflow: hidden;
     position: relative;
   }
@@ -6011,7 +6265,7 @@
   .main-content {
     flex: 1;
     min-width: 0;
-    height: calc(100vh - 148px); /* 104px NowPlayingBar + 44px TitleBar */
+    height: calc(100vh - var(--player-bar-height, 104px) - 44px);
     overflow: hidden; /* Views handle their own scrolling */
     padding-right: 8px; /* Gap between scrollbar and window edge */
     background-color: var(--bg-primary, #0f0f0f);
@@ -6020,7 +6274,7 @@
   /* Adjust heights when title bar is hidden */
   .app.no-titlebar .content-area,
   .app.no-titlebar .main-content {
-    height: calc(100vh - 104px); /* Only 104px NowPlayingBar, no title bar */
+    height: calc(100vh - var(--player-bar-height, 104px));
   }
 
   /* macOS: pad main content to clear native overlay title bar */

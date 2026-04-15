@@ -6,6 +6,7 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
+import { skipIfRemote } from '$lib/services/commandRouter';
 import {
   getCurrentTrack,
   getIsPlaying,
@@ -120,6 +121,7 @@ export function getConnectedProtocol(): CastProtocol | null {
  * stop local playback, establish the cast connection, then resume on the cast device.
  */
 export async function connectToDevice(device: CastDevice, protocol: CastProtocol): Promise<void> {
+  if (skipIfRemote()) return;
   // Capture current playback state BEFORE stopping
   const wasPlaying = getIsPlaying();
   const currentTrack = getCurrentTrack();
@@ -211,6 +213,7 @@ export async function connectToDevice(device: CastDevice, protocol: CastProtocol
  * If a track was playing, asks user if they want to continue locally.
  */
 export async function disconnect(): Promise<void> {
+  if (skipIfRemote()) return;
   if (!state.isConnected || !state.protocol) return;
 
   // Capture current state BEFORE disconnecting
@@ -314,6 +317,7 @@ export async function castTrack(
     durationSecs?: number;
   }
 ): Promise<void> {
+  if (skipIfRemote()) return;
   if (!state.isConnected || !state.protocol) {
     throw new Error('Not connected to any cast device');
   }
@@ -381,6 +385,7 @@ export async function castTrack(
  * Play/resume on cast device
  */
 export async function castPlay(): Promise<void> {
+  if (skipIfRemote()) return;
   if (!state.isConnected || !state.protocol) return;
 
   try {
@@ -406,6 +411,7 @@ export async function castPlay(): Promise<void> {
  * Pause on cast device
  */
 export async function castPause(): Promise<void> {
+  if (skipIfRemote()) return;
   if (!state.isConnected || !state.protocol) return;
 
   try {
@@ -431,6 +437,7 @@ export async function castPause(): Promise<void> {
  * Stop on cast device
  */
 export async function castStop(): Promise<void> {
+  if (skipIfRemote()) return;
   if (!state.isConnected || !state.protocol) return;
 
   try {
@@ -456,6 +463,7 @@ export async function castStop(): Promise<void> {
  * Seek on cast device
  */
 export async function castSeek(positionSecs: number): Promise<void> {
+  if (skipIfRemote()) return;
   if (!state.isConnected || !state.protocol) return;
 
   try {
@@ -479,6 +487,7 @@ export async function castSeek(positionSecs: number): Promise<void> {
  * Set volume on cast device
  */
 export async function castSetVolume(volume: number): Promise<void> {
+  if (skipIfRemote()) return;
   if (!state.isConnected || !state.protocol) return;
 
   const normalizedVolume = Math.max(0, Math.min(1, volume / 100));
@@ -521,6 +530,7 @@ export function setOnCastTrackEnded(callback: (() => Promise<void>) | null): voi
  * Start polling for cast position updates (DLNA and Chromecast)
  */
 export function startPositionPolling(): void {
+  if (skipIfRemote()) return;
   if (positionPollInterval) return;
   if (state.protocol !== 'dlna' && state.protocol !== 'chromecast') return;
 

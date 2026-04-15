@@ -10,7 +10,7 @@ license = "MIT"
 tokio = { version = "1", features = ["sync", "time"] }
 
 # HTTP client
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 # Serialization
 serde = { version = "1", features = ["derive"] }

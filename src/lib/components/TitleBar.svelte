@@ -482,6 +482,24 @@
     height: 18px;
   }
 
+  /* --- Full-height Rounded (Klassy FullHeightRoundedRectangle) --- */
+  .shape-full-height-rounded .control-btn {
+    width: 46px;
+    height: calc(100% - 8px);
+    margin: 4px 2px;
+    border-radius: 7px;
+  }
+  .shape-full-height-rounded.size-small .control-btn {
+    width: 36px;
+    margin: 3px 1px;
+    border-radius: 6px;
+  }
+  .shape-full-height-rounded.size-large .control-btn {
+    width: 56px;
+    margin: 5px 3px;
+    border-radius: 8px;
+  }
+
   /* --- Square --- */
   .shape-square .control-btn {
     width: 24px;

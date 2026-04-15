@@ -1,0 +1,3 @@
+#!/bin/sh
+# QBZ Music Daemon - runit service
+exec chpst -u qbz:audio /usr/bin/qbzd --config /etc/qbz/qbzd.toml 2>&1

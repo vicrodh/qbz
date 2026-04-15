@@ -11,6 +11,7 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
+import { skipIfRemote } from '$lib/services/commandRouter';
 import { logRecoEvent } from '$lib/services/recoService';
 
 let favoriteAlbumIds = new Set<string>();
@@ -50,6 +51,7 @@ export function isFavoritesLoaded(): boolean {
  * Load album favorites from local cache first, then sync from API
  */
 export async function loadAlbumFavorites(): Promise<void> {
+  if (skipIfRemote()) return;
   if (isLoading) return;
 
   isLoading = true;
@@ -86,6 +88,7 @@ export async function loadAlbumFavorites(): Promise<void> {
  * Sync album favorites from Qobuz API to local cache
  */
 export async function syncFromApi(): Promise<void> {
+  if (skipIfRemote()) return;
   try {
     const allAlbumIds: string[] = [];
     let offset = 0;
@@ -128,6 +131,7 @@ export async function syncFromApi(): Promise<void> {
  * API call first → on success → update local cache → notify UI
  */
 export async function toggleAlbumFavorite(albumId: string): Promise<boolean> {
+  if (skipIfRemote()) return favoriteAlbumIds.has(albumId);
   if (togglingAlbumIds.has(albumId)) {
     return favoriteAlbumIds.has(albumId);
   }
@@ -169,6 +173,7 @@ export async function toggleAlbumFavorite(albumId: string): Promise<boolean> {
  * Used by FavoritesView after fetching from API
  */
 export async function syncCache(albumIds: string[]): Promise<void> {
+  if (skipIfRemote()) return;
   try {
     await invoke('v2_sync_cached_favorite_albums', { albumIds });
     favoriteAlbumIds = new Set(albumIds);
@@ -179,6 +184,7 @@ export async function syncCache(albumIds: string[]): Promise<void> {
 }
 
 export function markAsFavorite(albumId: string): void {
+  if (skipIfRemote()) return;
   if (!favoriteAlbumIds.has(albumId)) {
     favoriteAlbumIds.add(albumId);
     invoke('v2_cache_favorite_album', { albumId }).catch(() => {});
@@ -187,6 +193,7 @@ export function markAsFavorite(albumId: string): void {
 }
 
 export function unmarkAsFavorite(albumId: string): void {
+  if (skipIfRemote()) return;
   if (favoriteAlbumIds.has(albumId)) {
     favoriteAlbumIds.delete(albumId);
     invoke('v2_uncache_favorite_album', { albumId }).catch(() => {});

@@ -352,6 +352,7 @@
             isBlacklisted={trackBlacklisted}
             selectable={selectable}
             selected={selectedIds?.has(trackId) ?? false}
+            dragTrackIds={selectable && selectedIds?.has(trackId) && selectedIds.size > 1 ? [...selectedIds] : undefined}
             onToggleSelect={onToggleSelect ? () => onToggleSelect(trackId) : undefined}
             {isLocal}
             hideDownload={hideDownload || trackBlacklisted}

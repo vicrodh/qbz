@@ -75,7 +75,8 @@
     "mostStreamed": "Beliebte Alben",
     "favoriteAlbums": "Mehr von Favoriten",
     "recentAlbums": "Kürzlich gespielt",
-    "topArtists": "Ihre Top-Künstler"
+    "topArtists": "Ihre Top-Künstler",
+    "releaseWatch": "Release-Radar"
   },
   "discover": {
     "newReleases": "Neuerscheinungen",
@@ -91,7 +92,11 @@
     "pressAccolades": "Presseauszeichnungen",
     "qobuzPlaylists": "Qobuz-Playlists",
     "searchPlaylistsPlaceholder": "Playlists suchen...",
-    "noPlaylistResults": "Keine Playlists gefunden"
+    "noPlaylistResults": "Keine Playlists gefunden",
+    "releaseWatch": {
+      "title": "Release-Radar",
+      "subtitle": "Die neuesten Releases der Künstler, Labels und Auszeichnungen, denen Sie folgen."
+    }
   },
   "search": {
     "title": "Suchen",
@@ -133,7 +138,11 @@
     "readLess": "WENIGER",
     "seeAll": "Alle anzeigen",
     "showMore": "Mehr anzeigen",
-    "showLess": "Weniger anzeigen"
+    "showLess": "Weniger anzeigen",
+    "follow": "Label folgen",
+    "unfollow": "Nicht mehr folgen",
+    "followShort": "Folgen",
+    "followingShort": "Folge ich"
   },
   "labelReleases": {
     "albumCount": "{count} Alben",
@@ -311,7 +320,12 @@
     "seeFullDiscography": "Vollständige Diskografie ansehen",
     "loadError": "Albumtitel konnten nicht geladen werden. Bitte versuchen Sie es erneut.",
     "releasedOn": "am",
-    "releasedBy": "Erschienen bei"
+    "releasedBy": "Erschienen bei",
+    "sidebar": {
+      "label": "Label",
+      "awards": "Auszeichnungen"
+    },
+    "loading": "Wird geladen…"
   },
   "artist": {
     "albums": "Alben",
@@ -487,20 +501,24 @@
     "albums": "Alben",
     "tracks": "Titel",
     "artists": "Künstler",
+    "labels": "Labels",
     "playlists": "Playlists",
     "noFavorites": "Noch keine Favoriten",
     "noFavoriteTracks": "Noch keine Lieblingstitel",
     "noFavoriteAlbums": "Noch keine Lieblingsalben",
     "noFavoriteArtists": "Noch keine Lieblingskünstler",
+    "noFavoriteLabels": "Du folgst noch keinen Labels",
     "noFavoritePlaylists": "Noch keine Lieblingsplaylists",
     "noTracksMatch": "Keine Titel entsprechen \"{query}\"",
     "noAlbumsMatch": "Keine Alben entsprechen \"{query}\"",
     "noArtistsMatch": "Keine Künstler entsprechen \"{query}\"",
+    "noLabelsMatch": "Keine Labels entsprechen \"{query}\"",
     "noPlaylistsMatch": "Keine Playlists entsprechen \"{query}\"",
     "noAlbumsFound": "Keine Alben gefunden",
     "likeTracksHint": "Markiere Titel mit „Gefällt mir“, um sie hier zu sehen",
     "likeAlbumsHint": "Markiere Alben mit „Gefällt mir“, um sie hier zu sehen",
     "likeArtistsHint": "Markiere Künstler mit „Gefällt mir“, um sie hier zu sehen",
+    "likeLabelsHint": "Folge Labels, um sie hier zu sehen",
     "likePlaylistsHint": "Klicke auf das Herzsymbol bei Playlists, um sie hier hinzuzufügen",
     "noFollowingPlaylists": "Du folgst keinen Playlists",
     "followPlaylistsHint": "Folge Playlists auf Qobuz, um sie hier zu sehen",
@@ -529,6 +547,7 @@
       "tracks": "Titel",
       "albums": "Alben",
       "artists": "Künstler",
+      "labels": "Labels",
       "playlists": "Playlists"
     },
     "moveUp": "Nach oben verschieben",
@@ -562,6 +581,11 @@
   },
   "player": {
     "nowPlaying": "Aktuell abgespielt",
+    "controllingRemote": "Steuert: {name}",
+    "noQbzdFound": "Keine QBZ-Daemons in Ihrem Netzwerk gefunden",
+    "noQbzdFoundHint": "Stellen Sie sicher, dass qbzd auf dem Zielgerat lauft",
+    "recentDaemons": "Zuletzt verwendet",
+    "discoveredDaemons": "Im Netzwerk entdeckt",
     "queue": "Warteschlange",
     "upNext": "Als Nächstes",
     "ofTotal": "von",
@@ -616,6 +640,7 @@
     "castToDevice": "An Gerät übertragen",
     "castingManage": "Casting – klicken, um zu verwalten",
     "miniPlayer": "Mini-Player",
+    "moreControls": "Weitere Steuerelemente",
     "fullScreen": "Immersiv-Modus",
     "exitFullScreen": "Immersiv-Modus beenden",
     "maximize": "Maximieren",
@@ -682,6 +707,9 @@
       "output": "Ausgabe",
       "resampled": "Vom System resampled",
       "qualityAdjusted": "Qualität für Gerätekompatibilität angepasst — bit-perfekt, kein Resampling",
+      "plughwFallback": "Von ALSA resampelt (plughw)",
+      "plughwFix": "Der DAC unterstützt diese Abtastrate nicht nativ. Wählen Sie eine Quelle mit niedrigerer Rate oder einen DAC mit breiterer Unterstützung.",
+      "bitPerfect": "Bit-perfekt: direkte Hardware-Ausgabe",
       "fix": "Aktiviere DAC Passthrough oder Exklusivmodus in den Einstellungen"
     },
     "stereo": "Stereo",
@@ -766,6 +794,8 @@
     "clearSelection": "Klare Auswahl",
     "copyCommand": "Befehl kopieren",
     "downloadOnGitHub": "Auf GitHub herunterladen",
+    "downloadAndInstall": "Herunterladen & Installieren",
+    "downloadManually": "Manuell herunterladen",
     "findAvailableVersion": "Finden Sie die verfügbare Version",
     "gotIt": "Habe es",
     "okClose": "OK, schließen",
@@ -1446,6 +1476,8 @@
     "oauthLoading": "Browser wird geöffnet...",
     "systemBrowserButton": "Stattdessen Systembrowser verwenden",
     "systemBrowserLoading": "Warte auf Anmeldung...",
+    "captchaHint": "Probleme mit dem Captcha? Der eingebaute Browser unterstützt es möglicherweise nicht gut.",
+    "trySystemBrowser": "Abbrechen und Systembrowser verwenden",
     "activeSubscriptionRequired": "QBZ erfordert ein aktives Qobuz™-Abonnement. Ihre Anmeldedaten werden direkt an Qobuz™ gesendet.",
     "APIUse": "Diese Anwendung verwendet die Qobuz-API, ist jedoch nicht von Qobuz zertifiziert."
   },
@@ -1654,7 +1686,9 @@
       "newState": "Blacklist {status}"
     },
     "laodingDevices": "Geräte werden geladen...",
-    "findingSimilarArtists": "Suche nach ähnlichen Künstlern..."
+    "findingSimilarArtists": "Suche nach ähnlichen Künstlern...",
+    "awardUnavailable": "Detailansicht für diese Auszeichnung nicht verfügbar.",
+    "audioDeviceMissing": "Ausgabegerät '{device}' ist nicht mehr verfügbar. Standardgerät wird verwendet."
   },
   "offline": {
     "title": "Offline-Modus",
@@ -1678,6 +1712,7 @@
     "someLocal": "Teilweise offline verfügbar",
     "notAvailable": "Offline nicht verfügbar",
     "trackNotAvailable": "Dieser Titel ist offline nicht verfügbar",
+    "trackNotAvailableOffline": "\"{title}\" ist nicht für die Offline-Wiedergabe gespeichert",
     "featureDisabled": "Diese Funktion erfordert eine Internetverbindung",
     "startWithoutLogin": "Offline starten (kein Zugriff auf Qobuz™-Dienste)",
     "noPreviousSession": "Sie müssen sich mindestens einmal anmelden, bevor Sie den Offline-Modus verwenden können. Stellen Sie eine Internetverbindung her und melden Sie sich an.",
@@ -2268,7 +2303,16 @@
     },
     "runningInsideSandbox": "QBZ hat erkannt, dass es in einer <strong>{env}-Sandbox</strong> ausgeführt wird.",
     "newReleaseAvailable": "Neue Version verfügbar",
-    "newVersionReleased": "Eine neue Version von QBZ wurde veröffentlicht"
+    "newVersionReleased": "Eine neue Version von QBZ wurde veröffentlicht",
+    "autoUpdate": {
+      "title": "QBZ wird aktualisiert",
+      "checking": "Suche nach Updates...",
+      "downloading": "Update wird heruntergeladen...",
+      "downloadingProgress": "Update wird heruntergeladen... {percent}%",
+      "installing": "Update wird installiert...",
+      "restarting": "Wird neu gestartet...",
+      "failed": "Update fehlgeschlagen"
+    }
   },
   "common": {
     "name": "Name"
@@ -2572,5 +2616,33 @@
     "vocals&Guitar": "Gesang",
     "voice": "Stimme",
     "workArranger": "Arbeitsorganisator"
+  },
+  "ribbon": {
+    "albumOfTheWeek": "Album der Woche",
+    "qobuzissime": "Qobuzissime"
+  },
+  "releaseWatch": {
+    "tabs": {
+      "artists": "Künstler",
+      "labels": "Labels",
+      "awards": "Auszeichnungen"
+    },
+    "empty": {
+      "artists": "Keine Neuerscheinungen von den Künstlern, denen du folgst.",
+      "labels": "Keine Neuerscheinungen von den Labels, denen du folgst.",
+      "awards": "Keine Neuerscheinungen von den Auszeichnungen, denen du folgst."
+    }
+  },
+  "award": {
+    "kicker": "Auszeichnung",
+    "empty": "Noch keine ausgezeichneten Veröffentlichungen.",
+    "section": {
+      "releases": "Gefeierte Veröffentlichungen",
+      "new-releases": "Neuerscheinungen",
+      "classics": "Klassiker"
+    },
+    "follow": "Auszeichnung folgen",
+    "unfollow": "Nicht mehr folgen",
+    "otherAwards": "Weitere Auszeichnungen"
   }
 }

@@ -11,6 +11,7 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
+import { skipIfRemote } from '$lib/services/commandRouter';
 import { logRecoEvent } from '$lib/services/recoService';
 
 let favoriteArtistIds = new Set<number>();
@@ -50,6 +51,7 @@ export function isFavoritesLoaded(): boolean {
  * Load artist favorites from local cache first, then sync from API
  */
 export async function loadArtistFavorites(): Promise<void> {
+  if (skipIfRemote()) return;
   if (isLoading) return;
 
   isLoading = true;
@@ -86,6 +88,7 @@ export async function loadArtistFavorites(): Promise<void> {
  * Sync artist favorites from Qobuz API to local cache
  */
 export async function syncFromApi(): Promise<void> {
+  if (skipIfRemote()) return;
   try {
     const allArtistIds: number[] = [];
     let offset = 0;
@@ -128,6 +131,7 @@ export async function syncFromApi(): Promise<void> {
  * API call first → on success → update local cache → notify UI
  */
 export async function toggleArtistFavorite(artistId: number): Promise<boolean> {
+  if (skipIfRemote()) return favoriteArtistIds.has(artistId);
   if (togglingArtistIds.has(artistId)) {
     return favoriteArtistIds.has(artistId);
   }
@@ -169,6 +173,7 @@ export async function toggleArtistFavorite(artistId: number): Promise<boolean> {
  * Used by FavoritesView after fetching from API
  */
 export async function syncCache(artistIds: number[]): Promise<void> {
+  if (skipIfRemote()) return;
   try {
     await invoke('v2_sync_cached_favorite_artists', { artistIds });
     favoriteArtistIds = new Set(artistIds);
@@ -179,6 +184,7 @@ export async function syncCache(artistIds: number[]): Promise<void> {
 }
 
 export function markAsFavorite(artistId: number): void {
+  if (skipIfRemote()) return;
   if (!favoriteArtistIds.has(artistId)) {
     favoriteArtistIds.add(artistId);
     invoke('v2_cache_favorite_artist', { artistId }).catch(() => {});
@@ -187,6 +193,7 @@ export function markAsFavorite(artistId: number): void {
 }
 
 export function unmarkAsFavorite(artistId: number): void {
+  if (skipIfRemote()) return;
   if (favoriteArtistIds.has(artistId)) {
     favoriteArtistIds.delete(artistId);
     invoke('v2_uncache_favorite_artist', { artistId }).catch(() => {});

@@ -149,6 +149,11 @@ impl OfflineStore {
             "ALTER TABLE offline_settings ADD COLUMN allow_immediate_scrobbling INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE offline_settings ADD COLUMN allow_accumulated_scrobbling INTEGER NOT NULL DEFAULT 1",
             "ALTER TABLE offline_settings ADD COLUMN show_network_folders_in_manual_offline INTEGER NOT NULL DEFAULT 0",
+            // Snapshot of audio_settings.stream_first_track taken when manual
+            // offline mode is enabled; used to restore the user's preference
+            // when they exit offline mode. NULL means "no snapshot active".
+            // See issue #279.
+            "ALTER TABLE offline_settings ADD COLUMN pre_offline_stream_first_track INTEGER",
             "ALTER TABLE pending_playlist_sync ADD COLUMN local_track_ids TEXT",
             "ALTER TABLE pending_playlist_sync ADD COLUMN local_track_paths TEXT",
         ];
@@ -187,6 +192,35 @@ impl OfflineStore {
                 params![enabled as i64],
             )
             .map_err(|e| format!("Failed to set manual offline mode: {}", e))?;
+        Ok(())
+    }
+
+    /// Read the saved stream-first-track preference stashed when the user
+    /// entered offline mode. Returns None when no snapshot is active.
+    pub fn get_pre_offline_stream_first_track(&self) -> Result<Option<bool>, String> {
+        self.conn
+            .query_row(
+                "SELECT pre_offline_stream_first_track FROM offline_settings WHERE id = 1",
+                [],
+                |row| row.get::<_, Option<i64>>(0),
+            )
+            .map(|opt| opt.map(|v| v != 0))
+            .map_err(|e| format!("Failed to read pre_offline_stream_first_track: {}", e))
+    }
+
+    /// Store or clear the pre-offline snapshot. Pass `Some(value)` when
+    /// entering offline mode, `None` when exiting.
+    pub fn set_pre_offline_stream_first_track(
+        &self,
+        value: Option<bool>,
+    ) -> Result<(), String> {
+        let param: Option<i64> = value.map(|v| v as i64);
+        self.conn
+            .execute(
+                "UPDATE offline_settings SET pre_offline_stream_first_track = ?1 WHERE id = 1",
+                params![param],
+            )
+            .map_err(|e| format!("Failed to set pre_offline_stream_first_track: {}", e))?;
         Ok(())
     }
 
@@ -700,14 +734,22 @@ pub mod commands {
         store.get_settings()
     }
 
-    /// Enable or disable manual offline mode
+    /// Enable or disable manual offline mode.
+    ///
+    /// When entering offline mode, snapshots the user's current
+    /// `stream_first_track` audio setting and forces it to `false` so the
+    /// player won't attempt a network pre-buffer. When exiting, restores the
+    /// snapshot. This makes "offline mode" mean what it says — issue #279.
     #[tauri::command]
     pub async fn set_manual_offline(
         enabled: bool,
         state: State<'_, OfflineState>,
+        audio_state: State<'_, crate::config::audio_settings::AudioSettingsState>,
         app_handle: AppHandle,
     ) -> Result<OfflineStatus, String> {
-        {
+        // 1) Persist the manual offline flag first so any concurrent reads
+        //    see the new mode immediately.
+        let (was_offline, stream_first_before): (bool, Option<bool>) = {
             let guard__ = state
                 .store
                 .lock()
@@ -715,14 +757,92 @@ pub mod commands {
             let store = guard__
                 .as_ref()
                 .ok_or("No active session - please log in")?;
+            let prev = store
+                .get_settings()
+                .map(|s| s.manual_offline_mode)
+                .unwrap_or(false);
+            let snapshot = store
+                .get_pre_offline_stream_first_track()
+                .unwrap_or(None);
             store.set_manual_offline_mode(enabled)?;
+            (prev, snapshot)
+        };
+
+        // 2) Coordinate the stream_first_track snapshot/restore. This is best-
+        //    effort — if the audio store isn't initialized yet (pre-login), we
+        //    just skip; the offline flag itself has been persisted.
+        if enabled && !was_offline {
+            // Entering offline mode: stash current value and force to false.
+            let current = {
+                let guard = audio_state
+                    .store
+                    .lock()
+                    .map_err(|e| format!("Audio settings lock error: {}", e))?;
+                guard
+                    .as_ref()
+                    .and_then(|s| s.get_settings().ok())
+                    .map(|s| s.stream_first_track)
+            };
+            if let Some(current_value) = current {
+                {
+                    let guard = state
+                        .store
+                        .lock()
+                        .map_err(|e| format!("Lock error: {}", e))?;
+                    if let Some(store) = guard.as_ref() {
+                        let _ = store.set_pre_offline_stream_first_track(Some(current_value));
+                    }
+                }
+                if current_value {
+                    let guard = audio_state
+                        .store
+                        .lock()
+                        .map_err(|e| format!("Audio settings lock error: {}", e))?;
+                    if let Some(store) = guard.as_ref() {
+                        let _ = store.set_stream_first_track(false);
+                        log::info!(
+                            "[Offline] stream_first_track snapshot={}; forced to false while offline",
+                            current_value
+                        );
+                    }
+                }
+            }
+        } else if !enabled && was_offline {
+            // Exiting offline mode: restore snapshot if we have one.
+            if let Some(snapshot_value) = stream_first_before {
+                {
+                    let guard = audio_state
+                        .store
+                        .lock()
+                        .map_err(|e| format!("Audio settings lock error: {}", e))?;
+                    if let Some(store) = guard.as_ref() {
+                        let _ = store.set_stream_first_track(snapshot_value);
+                        log::info!(
+                            "[Offline] restored stream_first_track to {}",
+                            snapshot_value
+                        );
+                    }
+                }
+                {
+                    let guard = state
+                        .store
+                        .lock()
+                        .map_err(|e| format!("Lock error: {}", e))?;
+                    if let Some(store) = guard.as_ref() {
+                        let _ = store.set_pre_offline_stream_first_track(None);
+                    }
+                }
+            }
         }
 
-        // Get updated status
+        // 3) Get updated status
         let status = get_offline_status(state).await?;
 
-        // Emit event to frontend
+        // 4) Emit events. offline-status-changed for the offline store;
+        //    audio-settings-changed so the SettingsView reloads its local
+        //    state of stream_first_track (we may have just mutated it).
         let _ = app_handle.emit("offline-status-changed", &status);
+        let _ = app_handle.emit("audio-settings-changed", ());
 
         Ok(status)
     }

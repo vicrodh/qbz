@@ -9,7 +9,17 @@
 const STORAGE_KEY = 'qbz-window-controls';
 
 export type ButtonPosition = 'right' | 'left';
-export type ButtonShape = 'rectangular' | 'circular' | 'square';
+/**
+ * Button highlight shape. `rectangular` is already full-height with sharp
+ * corners (tab-like), so we only add one new variant: `full-height-rounded`
+ * (tab-like with rounded corners, matching Klassy's FullHeightRoundedRectangle
+ * which is the most common preset).
+ */
+export type ButtonShape =
+  | 'rectangular'           // full-height sharp rectangle (tab)
+  | 'circular'              // small circle
+  | 'square'                // small rounded square
+  | 'full-height-rounded';  // full-height rounded rectangle (Klassy default)
 export type ButtonSize = 'small' | 'normal' | 'large';
 
 export interface ButtonColorSet {
@@ -61,11 +71,24 @@ const PRESET_MONOCHROME: Omit<WindowControlsConfig, 'position' | 'shape' | 'size
   closeColors: { bg: 'transparent', bgHover: 'rgba(255,255,255,0.12)', bgActive: 'rgba(255,255,255,0.06)', fg: '#888888', fgHover: '#ffffff', fgActive: '#cccccc' },
 };
 
+/**
+ * Placeholder used when the user selects "Klassy (auto-detect)" but the
+ * runtime hasn't applied real colors yet. The dynamic applier overwrites
+ * these with colors read from Plasma's `kdeglobals` / `klassyrc`.
+ */
+const PRESET_KLASSY_FALLBACK: Omit<WindowControlsConfig, 'position' | 'shape' | 'size'> = {
+  preset: 'klassy',
+  minimizeColors: { bg: 'transparent', bgHover: 'rgba(255,255,255,0.10)', bgActive: 'rgba(255,255,255,0.06)', fg: '#cdd6f4', fgHover: '#ffffff', fgActive: '#cdd6f4' },
+  maximizeColors: { bg: 'transparent', bgHover: 'rgba(255,255,255,0.10)', bgActive: 'rgba(255,255,255,0.06)', fg: '#cdd6f4', fgHover: '#ffffff', fgActive: '#cdd6f4' },
+  closeColors: { bg: 'transparent', bgHover: '#e64553', bgActive: '#b82c38', fg: '#cdd6f4', fgHover: '#ffffff', fgActive: '#ffffff' },
+};
+
 export const PRESETS: Record<string, Omit<WindowControlsConfig, 'position' | 'shape' | 'size'>> = {
   default: PRESET_DEFAULT,
   macos: PRESET_MACOS,
   adwaita: PRESET_ADWAITA,
   monochrome: PRESET_MONOCHROME,
+  klassy: PRESET_KLASSY_FALLBACK,
 };
 
 // --- State ---
@@ -184,6 +207,137 @@ export function applyPreset(presetName: string): void {
     config = { ...config, ...preset };
     persist();
     notifyListeners();
+  }
+}
+
+/**
+ * Cached result of the last successful desktop theme detection. Populated
+ * lazily by `detectDesktopThemeCached()` and reused by both the
+ * preset picker (to decide whether to expose the option) and the title
+ * bar (to pick matching glyphs).
+ */
+let cachedTheme: DesktopThemeInfo | null = null;
+let detectInFlight: Promise<DesktopThemeInfo | null> | null = null;
+
+export function getCachedDesktopTheme(): DesktopThemeInfo | null {
+  return cachedTheme;
+}
+
+export async function detectDesktopThemeCached(force = false): Promise<DesktopThemeInfo | null> {
+  if (!force && cachedTheme) return cachedTheme;
+  if (detectInFlight) return detectInFlight;
+  detectInFlight = (async () => {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      const info = (await invoke('detect_desktop_theme')) as DesktopThemeInfo;
+      cachedTheme = info;
+      return info;
+    } catch (e) {
+      console.warn('[windowControls] desktop theme detection failed:', e);
+      return null;
+    } finally {
+      detectInFlight = null;
+    }
+  })();
+  return detectInFlight;
+}
+
+/**
+ * Shape returned by `detect_desktop_theme` in Rust. Mirrors
+ * `DesktopThemeInfo` with camelCase fields.
+ */
+export interface DesktopThemeInfo {
+  desktop: string;
+  isKlassy: boolean;
+  titlebarActiveBg?: string;
+  titlebarActiveFg?: string;
+  titlebarInactiveBg?: string;
+  titlebarInactiveFg?: string;
+  accent?: string;
+  decorationHover?: string;
+  klassyButtonIconStyle?: string;
+  klassyButtonShape?: string;
+  klassyMatchAppColor?: boolean;
+  /** Best-effort default corner radius for the detected desktop (px). */
+  windowCornerRadiusPx?: number;
+}
+
+/**
+ * Map a Klassy `ButtonShape` string to the equivalent QBZ `ButtonShape`.
+ * Klassy exposes many variants (IntegratedRoundedRectangle, FullHeightRectangle,
+ * Tab, Circle, Square, ...); QBZ only has three, so we pick the closest match.
+ */
+export function mapKlassyShapeToQbz(klassyShape: string | undefined): ButtonShape | null {
+  if (!klassyShape) return null;
+  const s = klassyShape.toLowerCase();
+  if (s.includes('circle')) return 'circular';
+  // Klassy naming: "FullHeightRoundedRectangle", "FullHeightRectangle", "Tab"
+  if (s.startsWith('fullheight')) {
+    // FullHeightRoundedRectangle → rounded; FullHeightRectangle → our 'rectangular' already is sharp full-height
+    return s.includes('rounded') ? 'full-height-rounded' : 'rectangular';
+  }
+  if (s === 'tab') return 'full-height-rounded';
+  if (s === 'square' || s === 'smallsquare') return 'square';
+  // IntegratedRoundedRectangle, Rectangle, SmallRoundedRectangle, etc.
+  return 'rectangular';
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const cleaned = hex.startsWith('#') ? hex.slice(1) : hex;
+  if (cleaned.length !== 6) return hex;
+  const r = parseInt(cleaned.slice(0, 2), 16);
+  const g = parseInt(cleaned.slice(2, 4), 16);
+  const b = parseInt(cleaned.slice(4, 6), 16);
+  if ([r, g, b].some((n) => Number.isNaN(n))) return hex;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+/**
+ * Apply the Klassy auto-detect preset. Reads KDE + Klassy config via the
+ * Tauri command and builds a color set that matches the user's system
+ * decoration accent. Keeps close red for UX convention. If detection
+ * fails or returns nothing useful, falls back to PRESET_KLASSY_FALLBACK.
+ *
+ * Returns the detected theme info so callers can surface it in the UI.
+ */
+export async function applyKlassyPreset(): Promise<DesktopThemeInfo | null> {
+  try {
+    const info = await detectDesktopThemeCached(true);
+    if (!info) {
+      applyPreset('klassy');
+      return null;
+    }
+    const accent = info.accent;
+    const hover = info.decorationHover;
+    const fg = info.titlebarActiveFg ?? '#cdd6f4';
+    if (!accent && !hover) {
+      applyPreset('klassy');
+      return info;
+    }
+    const standardHover = hover ? hexToRgba(hover, 0.85) : 'rgba(255,255,255,0.10)';
+    const standardActive = hover ? hexToRgba(hover, 0.55) : 'rgba(255,255,255,0.06)';
+    const accentHover = accent ? hexToRgba(accent, 0.9) : standardHover;
+    const klassyColors = {
+      preset: 'klassy',
+      minimizeColors: { bg: 'transparent', bgHover: standardHover, bgActive: standardActive, fg, fgHover: '#ffffff', fgActive: fg },
+      maximizeColors: { bg: 'transparent', bgHover: standardHover, bgActive: standardActive, fg, fgHover: '#ffffff', fgActive: fg },
+      closeColors: { bg: 'transparent', bgHover: '#e64553', bgActive: '#b82c38', fg, fgHover: '#ffffff', fgActive: '#ffffff' },
+    } as Omit<WindowControlsConfig, 'position' | 'shape' | 'size'>;
+    const mappedShape = mapKlassyShapeToQbz(info.klassyButtonShape);
+    const next: WindowControlsConfig = {
+      ...config,
+      ...klassyColors,
+      ...(mappedShape ? { shape: mappedShape } : {}),
+    };
+    void accentHover;
+    config = next;
+    persist();
+    notifyListeners();
+    return info;
+  } catch (e) {
+    console.warn('[windowControls] Klassy detection failed:', e);
+    applyPreset('klassy');
+    return null;
   }
 }
 

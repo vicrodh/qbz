@@ -15,7 +15,7 @@
         # VERSION BUMP: update version, rev, and hashes
         # when tagging a new release.
         # ──────────────────────────────────────────────
-        qbzVersion = "1.2.4";
+        qbzVersion = "1.2.5";
         qbzRev     = "v${qbzVersion}";
         srcHash    = ""; # nix build will report the correct hash on first run
         npmHash    = ""; # nix build will report the correct hash on first run
@@ -93,11 +93,33 @@
         # Dev shell with all build dependencies
         devShells.default = pkgs.mkShell {
           inputsFrom = [ self.packages.${system}.default ];
+
+          # `inputsFrom` pulls in buildInputs/nativeBuildInputs from the
+          # package but does NOT propagate `env.*` attributes, so we must
+          # re-export LIBCLANG_PATH here — otherwise `mupdf-sys`'s bindgen
+          # fails with "Unable to find libclang" when running
+          # `npm run tauri dev` inside `nix develop` (issue #312).
+          LIBCLANG_PATH = "${pkgs.lib.getLib pkgs.llvmPackages.libclang}/lib";
+
           packages = with pkgs; [
             rust-analyzer
             rustfmt
             clippy
           ];
+
+          # The package's `postInstall` wraps the installed binary with
+          # LD_LIBRARY_PATH so libappindicator is dlopen-able at runtime.
+          # Inside `nix develop` we run `target/debug/qbz` directly, with
+          # no wrapper, so we replicate that here — otherwise the tray
+          # init panics with "Failed to load ayatana-appindicator3 or
+          # appindicator3 dynamic library" (issue #312).
+          shellHook = ''
+            export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath [
+              pkgs.libappindicator
+              pkgs.libappindicator-gtk3
+              pkgs.libayatana-appindicator
+            ]}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          '';
         };
       });
 }

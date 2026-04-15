@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "QBZ",
-    "tagline": "Hi-Fi streaming client for Linux"
+    "tagline": "Qobuz\u2122 Player"
   },
   "nav": {
     "home": "Discover",
@@ -75,7 +75,8 @@
     "recentAlbums": "Recently Played",
     "continueTracks": "Continue Listening",
     "topArtists": "Your Top Artists",
-    "favoriteAlbums": "More From Favorites"
+    "favoriteAlbums": "More From Favorites",
+    "releaseWatch": "Release Watch"
   },
   "discover": {
     "newReleases": "New Releases",
@@ -91,7 +92,11 @@
     "pressAccolades": "Press Accolades",
     "qobuzPlaylists": "Qobuz Playlists",
     "searchPlaylistsPlaceholder": "Search playlists...",
-    "noPlaylistResults": "No playlists found"
+    "noPlaylistResults": "No playlists found",
+    "releaseWatch": {
+      "title": "Release Watch",
+      "subtitle": "Releases from artists, labels and awards you follow."
+    }
   },
   "search": {
     "title": "Search",
@@ -133,7 +138,11 @@
     "readLess": "READ LESS",
     "seeAll": "See all",
     "showMore": "Show more",
-    "showLess": "Show less"
+    "showLess": "Show less",
+    "follow": "Follow label",
+    "unfollow": "Unfollow label",
+    "followShort": "Follow",
+    "followingShort": "Following"
   },
   "labelReleases": {
     "albumCount": "{count} albums",
@@ -311,7 +320,12 @@
     "bookletRotate": "Rotate",
     "bookletDownload": "Save booklet",
     "sameArtist": "By the same artist",
-    "seeFullDiscography": "See full discography"
+    "seeFullDiscography": "See full discography",
+    "sidebar": {
+      "label": "Label",
+      "awards": "Awards"
+    },
+    "loading": "Loading…"
   },
   "artist": {
     "albums": "Albums",
@@ -487,20 +501,24 @@
     "albums": "Albums",
     "tracks": "Tracks",
     "artists": "Artists",
+    "labels": "Labels",
     "playlists": "Playlists",
     "noFavorites": "No favorites yet",
     "noFavoriteTracks": "No favorite tracks yet",
     "noFavoriteAlbums": "No favorite albums yet",
     "noFavoriteArtists": "No favorite artists yet",
+    "noFavoriteLabels": "No followed labels yet",
     "noFavoritePlaylists": "No favorite playlists yet",
     "noTracksMatch": "No tracks match \"{query}\"",
     "noAlbumsMatch": "No albums match \"{query}\"",
     "noArtistsMatch": "No artists match \"{query}\"",
+    "noLabelsMatch": "No labels match \"{query}\"",
     "noPlaylistsMatch": "No playlists match \"{query}\"",
     "noAlbumsFound": "No albums found",
     "likeTracksHint": "Like tracks to see them here",
     "likeAlbumsHint": "Like albums to see them here",
     "likeArtistsHint": "Like artists to see them here",
+    "likeLabelsHint": "Follow labels to see them here",
     "likePlaylistsHint": "Click the heart icon on playlists to add them here",
     "noFollowingPlaylists": "Not following any playlists",
     "followPlaylistsHint": "Follow playlists on Qobuz to see them here",
@@ -529,6 +547,7 @@
       "tracks": "Tracks",
       "albums": "Albums",
       "artists": "Artists",
+      "labels": "Labels",
       "playlists": "Playlists"
     },
     "moveUp": "Move up",
@@ -562,6 +581,11 @@
   },
   "player": {
     "nowPlaying": "Now Playing",
+    "controllingRemote": "Controlling: {name}",
+    "noQbzdFound": "No QBZ Daemons found on your network",
+    "noQbzdFoundHint": "Make sure qbzd is running on the target device",
+    "recentDaemons": "Recent",
+    "discoveredDaemons": "Discovered on network",
     "queue": "Queue",
     "upNext": "Up Next",
     "ofTotal": "of",
@@ -621,6 +645,7 @@
     "qobuzConnect": "Qobuz Connect",
     "qobuzConnectManage": "Qobuz Connect - Click to manage",
     "miniPlayer": "Mini Player",
+    "moreControls": "More controls",
     "fullScreen": "Immersive Mode",
     "exitFullScreen": "Exit Immersive Mode",
     "maximize": "Maximize",
@@ -682,7 +707,10 @@
       "output": "Output",
       "resampled": "Resampled by system",
       "qualityAdjusted": "Quality adjusted for device compatibility — bit-perfect, no resampling",
-      "fix": "Enable DAC Passthrough or Exclusive Mode in Settings"
+      "fix": "Enable DAC Passthrough or Exclusive Mode in Settings",
+      "plughwFallback": "Resampled by ALSA (plughw)",
+      "plughwFix": "DAC doesn't support this sample rate natively. Pick a lower-rate source or a DAC with broader rate support.",
+      "bitPerfect": "Bit-perfect: direct hardware output"
     },
     "stereo": "Stereo",
     "mono": "Mono"
@@ -765,6 +793,8 @@
     "copyCommand": "Copy command",
     "downloadOnGitHub": "Download on GitHub",
     "visitReleasePage": "Visit release page",
+    "downloadAndInstall": "Download & Install",
+    "downloadManually": "Download manually",
     "okClose": "OK, close",
     "tryAgain": "Try Again",
     "startOffline": "Start Offline",
@@ -962,6 +992,7 @@
       "windowControlsStyle": "Window controls style",
       "windowControlsStyleDesc": "Choose the shape of the window control buttons",
       "windowControlsStyleRectangular": "Rectangular",
+      "windowControlsStyleFullHeightRounded": "Full-height rounded",
       "windowControlsStyleCircular": "Circular",
       "windowControlsStyleSquare": "Square",
       "windowControlsSize": "Window controls size",
@@ -975,6 +1006,11 @@
       "windowControlsColorPresetMacOS": "macOS",
       "windowControlsColorPresetAdwaita": "Adwaita",
       "windowControlsColorPresetMonochrome": "Monochrome",
+      "windowControlsColorPresetKlassy": "Klassy (auto-detect)",
+      "windowControlsColorPresetPlasma": "Plasma (auto-detect)",
+      "matchSystemChrome": "Match system window chrome",
+      "matchSystemChromeDesc": "Round the window corners and add a subtle edge so QBZ blends with your desktop theme. Takes effect after restarting the app (the window is rebuilt transparent so the corners don't show white).",
+      "matchSystemChromeRestart": "Restart QBZ to apply the window chrome change.",
       "windowControlsColorPresetCustom": "Custom",
       "windowControlsCustomColors": "Custom colors",
       "windowControlsClose": "Close",
@@ -1469,6 +1505,8 @@
     "oauthLoading": "Opening browser...",
     "systemBrowserButton": "Use your system browser instead",
     "systemBrowserLoading": "Waiting for login...",
+    "captchaHint": "Having trouble with captcha? The built-in browser may not support it well.",
+    "trySystemBrowser": "Cancel and try your system browser instead",
     "activeSubscriptionRequired": "QBZ requires an active Qobuz™ subscription. Your credentials are sent directly to Qobuz™.",
     "APIUse": "This application uses the Qobuz API but is not certified by Qobuz."
   },
@@ -1677,7 +1715,9 @@
     "loadingDevices": "Loading devices...",
     "addedToPlaylist": "Added to playlist",
     "copied": "Copied!",
-    "findingSimilarArtists": "Finding similar artists..."
+    "findingSimilarArtists": "Finding similar artists...",
+    "awardUnavailable": "Award detail not available for this entry.",
+    "audioDeviceMissing": "Output device '{device}' is no longer available. Using system default."
   },
   "offline": {
     "title": "Offline Mode",
@@ -1701,6 +1741,7 @@
     "someLocal": "Partially Available Offline",
     "notAvailable": "Not Available Offline",
     "trackNotAvailable": "This track is not available offline",
+    "trackNotAvailableOffline": "\"{title}\" isn't saved for offline playback",
     "featureDisabled": "This feature requires internet connection",
     "startWithoutLogin": "Start offline (no access to Qobuz™ services)",
     "noPreviousSession": "You need to log in at least once before using offline mode. Connect to the internet and log in to create your profile.",
@@ -2398,7 +2439,16 @@
       "releaseNotesNotAvailableForVersion": "Release notes are not available for this version."
     },
     "newReleaseAvailable": "New release available",
-    "checkForUpdates": "Check for updates"
+    "checkForUpdates": "Check for updates",
+    "autoUpdate": {
+      "title": "Updating QBZ",
+      "checking": "Checking for updates...",
+      "downloading": "Downloading update...",
+      "downloadingProgress": "Downloading update... {percent}%",
+      "installing": "Installing update...",
+      "restarting": "Restarting...",
+      "failed": "Update failed"
+    }
   },
   "performerRoles": {
     "a&R": "Artists and Repertoire",
@@ -2572,5 +2622,33 @@
   "musician": {
     "knownFor": "Known for",
     "viewArtistPage": "View Artist Page"
+  },
+  "ribbon": {
+    "albumOfTheWeek": "Album of the Week",
+    "qobuzissime": "Qobuzissime"
+  },
+  "releaseWatch": {
+    "tabs": {
+      "artists": "Artists",
+      "labels": "Labels",
+      "awards": "Awards"
+    },
+    "empty": {
+      "artists": "No new releases from the artists you follow.",
+      "labels": "No new releases from the labels you follow.",
+      "awards": "No new releases from the awards you follow."
+    }
+  },
+  "award": {
+    "kicker": "Award",
+    "empty": "No award-winning releases yet.",
+    "section": {
+      "releases": "Acclaimed Releases",
+      "new-releases": "New Releases",
+      "classics": "Classics"
+    },
+    "follow": "Follow award",
+    "unfollow": "Unfollow award",
+    "otherAwards": "Other awards"
   }
 }

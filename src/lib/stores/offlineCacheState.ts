@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { skipIfRemote } from '$lib/services/commandRouter';
 
 export type OfflineCacheStatus = 'none' | 'queued' | 'downloading' | 'ready' | 'failed';
 
@@ -89,6 +90,7 @@ function notifyListeners(): void {
 
 // Initialize offline cache states from backend
 export async function initOfflineCacheStates(): Promise<void> {
+  if (skipIfRemote()) return;
   try {
     const tracks = await invoke<CachedTrackInfo[]>('v2_get_cached_tracks');
     for (const track of tracks) {
@@ -106,6 +108,7 @@ export async function initOfflineCacheStates(): Promise<void> {
 
 // Start listening for offline cache events
 export async function startOfflineCacheEventListeners(): Promise<void> {
+  if (skipIfRemote()) return;
   // Idempotency guard: prevent duplicate listeners on HMR/remount
   if (unlisteners.length > 0) {
     return;
@@ -178,6 +181,7 @@ export async function cacheTrackForOffline(track: {
   bitDepth?: number;
   sampleRate?: number;
 }): Promise<void> {
+  if (skipIfRemote()) return;
   try {
     setOfflineCacheState(track.id, { status: 'queued', progress: 0 });
     await invoke('v2_cache_track_for_offline', {
@@ -210,6 +214,7 @@ export async function cacheTracksForOfflineBatch(tracks: Array<{
   bitDepth?: number;
   sampleRate?: number;
 }>): Promise<void> {
+  if (skipIfRemote()) return;
   if (tracks.length === 0) return;
 
   // Mark all as queued immediately
@@ -242,6 +247,7 @@ export async function cacheTracksForOfflineBatch(tracks: Array<{
 
 // Remove a track from offline cache
 export async function removeCachedTrack(trackId: number): Promise<void> {
+  if (skipIfRemote()) return;
   try {
     await invoke('v2_remove_cached_track', { trackId });
     offlineCacheStates.delete(trackId);
@@ -254,11 +260,13 @@ export async function removeCachedTrack(trackId: number): Promise<void> {
 
 // Get offline cache stats
 export async function getOfflineCacheStats(): Promise<OfflineCacheStats> {
+  if (skipIfRemote()) return { totalTracks: 0, readyTracks: 0, downloadingTracks: 0, failedTracks: 0, totalSizeBytes: 0, cachePath: '' };
   return invoke<OfflineCacheStats>('v2_get_offline_cache_stats');
 }
 
 // Clear all offline cache
 export async function clearOfflineCache(): Promise<void> {
+  if (skipIfRemote()) return;
   await invoke('v2_clear_offline_cache');
   offlineCacheStates.clear();
   notifyListeners();
@@ -266,21 +274,25 @@ export async function clearOfflineCache(): Promise<void> {
 
 // Open offline cache folder
 export async function openOfflineCacheFolder(): Promise<void> {
+  if (skipIfRemote()) return;
   await invoke('v2_open_offline_cache_folder');
 }
 
 // Set offline cache limit
 export async function setOfflineCacheLimit(limitMb: number | null): Promise<void> {
+  if (skipIfRemote()) return;
   await invoke('v2_set_offline_cache_limit', { limitMb });
 }
 
 // Open containing folder for a specific album
 export async function openAlbumFolder(albumId: string): Promise<void> {
+  if (skipIfRemote()) return;
   await invoke('v2_open_album_folder', { albumId });
 }
 
 // Open containing folder for a specific track
 export async function openTrackFolder(trackId: number): Promise<void> {
+  if (skipIfRemote()) return;
   await invoke('v2_open_track_folder', { trackId });
 }
 

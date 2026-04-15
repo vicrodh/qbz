@@ -7,11 +7,25 @@
     isOpen: boolean;
     status: UpdateCheckStatus;
     newVersion: string;
+    autoUpdateEligible?: boolean;
     onClose: () => void;
     onVisitReleasePage: () => void;
+    onAutoUpdate?: () => void;
   }
 
-  let { isOpen, status, newVersion, onClose, onVisitReleasePage }: Props = $props();
+  let {
+    isOpen,
+    status,
+    newVersion,
+    autoUpdateEligible = false,
+    onClose,
+    onVisitReleasePage,
+    onAutoUpdate,
+  }: Props = $props();
+
+  function handleAutoUpdate(): void {
+    onAutoUpdate?.();
+  }
 </script>
 
 <Modal {isOpen} onClose={onClose} title={ $t('updates.checkForUpdates') } maxWidth="460px">
@@ -27,7 +41,12 @@
     <div class="footer-actions">
       <button class="btn btn-ghost" type="button" onclick={onClose}>{$t('actions.close')}</button>
       {#if status === 'update_available'}
-        <button class="btn btn-primary" type="button" onclick={onVisitReleasePage}>{$t('actions.visitReleasePage')}</button>
+        {#if autoUpdateEligible && onAutoUpdate}
+          <button class="btn btn-ghost" type="button" onclick={onVisitReleasePage}>{$t('actions.visitReleasePage')}</button>
+          <button class="btn btn-primary" type="button" onclick={handleAutoUpdate}>{$t('actions.downloadAndInstall')}</button>
+        {:else}
+          <button class="btn btn-primary" type="button" onclick={onVisitReleasePage}>{$t('actions.visitReleasePage')}</button>
+        {/if}
       {/if}
     </div>
   {/snippet}

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { invoke, convertFileSrc } from '@tauri-apps/api/core';
+  import { cmdAddTracksToQueue, cmdAddTracksToQueueNext } from '$lib/services/commandRouter';
   import { open, save } from '@tauri-apps/plugin-dialog';
   import { openUrl } from '@tauri-apps/plugin-opener';
   import { setCustomImage, removeCustomImage as removeCustomImageFromStore } from '$lib/stores/customArtistImageStore';
@@ -18,7 +19,7 @@
   import AlbumCard from '../AlbumCard.svelte';
   import TrackMenu from '../TrackMenu.svelte';
   import BulkActionBar from '../BulkActionBar.svelte';
-  import QualityBadge from '../QualityBadge.svelte';
+  import { formatQuality } from '$lib/adapters/qobuzAdapters';
   import { replacePlaybackQueue } from '$lib/services/queuePlaybackService';
   import { consumeContextTrackFocus, setPlaybackContext, getPlaybackContext } from '$lib/stores/playbackContextStore';
   import { saveScrollPosition, getSavedScrollPosition } from '$lib/stores/navigationStore';
@@ -407,6 +408,22 @@
     multiSelectedIds = next;
   }
 
+  function toggleSelectAll() {
+    const allIds = visibleTracks.map(track => track.id);
+    if (multiSelectedIds.size === allIds.length) {
+      multiSelectedIds = new Set();
+    } else {
+      multiSelectedIds = new Set(allIds);
+    }
+  }
+
+  const selectAllState = $derived(
+    !visibleTracks || visibleTracks.length === 0 ? 'none' as const
+    : multiSelectedIds.size === 0 ? 'none' as const
+    : multiSelectedIds.size === visibleTracks.length ? 'all' as const
+    : 'partial' as const
+  );
+
   function buildArtistQueueTracks(tracks: typeof topTracks) {
     return tracks
       .filter(trk => !trk.performer?.id || !isBlacklisted(trk.performer.id))
@@ -428,13 +445,13 @@
 
   async function handleBulkPlayNext() {
     const selected = visibleTracks.filter(trk => multiSelectedIds.has(trk.id));
-    await invoke('v2_add_tracks_to_queue_next', { tracks: buildArtistQueueTracks(selected) });
+    await cmdAddTracksToQueueNext(buildArtistQueueTracks(selected));
     multiSelectMode = false; multiSelectedIds = new Set();
   }
 
   async function handleBulkPlayLater() {
     const selected = visibleTracks.filter(trk => multiSelectedIds.has(trk.id));
-    await invoke('v2_add_tracks_to_queue', { tracks: buildArtistQueueTracks(selected) });
+    await cmdAddTracksToQueue(buildArtistQueueTracks(selected));
     multiSelectMode = false; multiSelectedIds = new Set();
   }
 
@@ -2041,6 +2058,19 @@
       {#if tracksLoading}
         <div class="tracks-loading">{$t('toast.loadingTracks')}</div>
       {:else}
+        {#if multiSelectMode}
+          <div class="track-list-header">
+            <div class="col-select-all">
+              <input
+                type="checkbox"
+                checked={selectAllState === 'all'}
+                indeterminate={selectAllState === 'partial'}
+                onchange={toggleSelectAll}
+                title={$t('actions.selectAll')}
+              />
+            </div>
+          </div>
+        {/if}
         <div class="tracks-list">
           {#each visibleTracks as track, index}
             {@const isActiveTrack = isPlaybackActive && activeTrackId === track.id}
@@ -2051,6 +2081,23 @@
               role="button"
               tabindex="0"
               data-track-id={track.id}
+              draggable={true}
+              ondragstart={(e) => {
+                if (!e.dataTransfer) return;
+                e.dataTransfer.effectAllowed = 'copy';
+                const ids = multiSelectMode && multiSelectedIds.has(track.id)
+                  ? [...multiSelectedIds]
+                  : [track.id];
+                e.dataTransfer.setData('application/x-qbz-tracks', JSON.stringify(ids));
+                const ghost = document.createElement('div');
+                Object.assign(ghost.style, { position: 'fixed', top: '-1000px', padding: '8px 14px', maxWidth: '260px', borderRadius: '8px', background: 'rgba(30,30,40,0.85)', color: '#fff', fontSize: '12px', lineHeight: '1.4', boxShadow: '0 4px 12px rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', opacity: '0.9' });
+                if (ids.length > 1) { ghost.textContent = `${ids.length} tracks`; ghost.style.fontWeight = '500'; }
+                else {
+                  const t1 = document.createElement('div'); t1.textContent = track.title; Object.assign(t1.style, { fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }); ghost.appendChild(t1);
+                  const sub = track.album?.title || ''; if (sub) { const t2 = document.createElement('div'); t2.textContent = sub; Object.assign(t2.style, { fontSize: '10px', color: 'rgba(255,255,255,0.55)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: '1px' }); ghost.appendChild(t2); }
+                }
+                document.body.appendChild(ghost); e.dataTransfer.setDragImage(ghost, 0, 20); requestAnimationFrame(() => ghost.remove());
+              }}
               onclick={() => multiSelectMode ? toggleMultiSelect(track.id) : handleTrackPlay(track, index)}
               onkeydown={(e) => e.key === 'Enter' && (multiSelectMode ? toggleMultiSelect(track.id) : handleTrackPlay(track, index))}
               oncontextmenu={(e) => {
@@ -2127,11 +2174,11 @@
                 {/if}
               </div>
               <div class="track-quality">
-                <QualityBadge
-                  bitDepth={track.maximum_bit_depth}
-                  samplingRate={track.maximum_sampling_rate}
-                  compact
-                />
+                {formatQuality(
+                  (track.maximum_bit_depth ?? 16) > 16,
+                  track.maximum_bit_depth,
+                  track.maximum_sampling_rate
+                )}
               </div>
               <div class="track-duration">{formatDuration(track.duration)}</div>
               <div class="track-actions">
@@ -4310,6 +4357,37 @@
     padding: 16px 0;
   }
 
+  .track-list-header {
+    width: 100%;
+    height: 40px;
+    padding: 0 16px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 16px;
+    font-size: 12px;
+    text-transform: uppercase;
+    color: #666666;
+    font-weight: 400;
+    box-sizing: border-box;
+    border-bottom: 1px solid var(--bg-tertiary);
+    margin-bottom: 8px;
+  }
+
+  .col-select-all {
+    width: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .col-select-all input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent-primary);
+    cursor: pointer;
+  }
+
   .tracks-list {
     display: flex;
     flex-direction: column;
@@ -4502,9 +4580,13 @@
     text-underline-offset: 2px;
   }
 
+  /* Matches AlbumDetailView TrackRow quality cell: plain text, no
+     coloured badge. */
   .track-quality {
-    display: flex;
-    align-items: center;
+    font-size: 12px;
+    color: #666666;
+    text-align: center;
+    min-width: 80px;
   }
 
   .track-duration {

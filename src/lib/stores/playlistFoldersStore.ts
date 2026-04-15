@@ -6,6 +6,7 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
+import { skipIfRemote } from '$lib/services/commandRouter';
 
 // Types matching the Rust backend
 export interface PlaylistFolder {
@@ -134,6 +135,7 @@ export function getLastError(): string | null {
  * Load folders from backend
  */
 export async function loadFolders(): Promise<void> {
+  if (skipIfRemote()) return;
   isLoading = true;
   lastError = null;
   notifyListeners();
@@ -160,6 +162,7 @@ export async function createFolder(
   iconPreset?: string,
   iconColor?: string
 ): Promise<PlaylistFolder | null> {
+  if (skipIfRemote()) return null;
   try {
     const folder = await invoke<PlaylistFolder>('v2_create_playlist_folder', {
       name,
@@ -192,6 +195,7 @@ export async function updateFolder(
     isHidden?: boolean;
   }
 ): Promise<PlaylistFolder | null> {
+  if (skipIfRemote()) return null;
   try {
     const folder = await invoke<PlaylistFolder>('v2_update_playlist_folder', {
       id,
@@ -222,6 +226,7 @@ export async function updateFolder(
  * Delete a folder (playlists return to root)
  */
 export async function deleteFolder(id: string): Promise<boolean> {
+  if (skipIfRemote()) return false;
   try {
     await invoke('v2_delete_playlist_folder', { id });
     folders = folders.filter(f => f.id !== id);
@@ -240,6 +245,7 @@ export async function deleteFolder(id: string): Promise<boolean> {
  * Reorder folders
  */
 export async function reorderFolders(folderIds: string[]): Promise<boolean> {
+  if (skipIfRemote()) return false;
   try {
     await invoke('v2_reorder_playlist_folders', { folderIds });
 
@@ -279,6 +285,7 @@ export async function movePlaylistToFolder(
   playlistId: number,
   folderId: string | null
 ): Promise<boolean> {
+  if (skipIfRemote()) return false;
   try {
     await invoke('v2_move_playlist_to_folder', {
       playlistId,
@@ -298,6 +305,7 @@ export async function movePlaylistToFolder(
  * Toggle folder hidden status
  */
 export async function toggleFolderHidden(id: string): Promise<boolean> {
+  if (skipIfRemote()) return false;
   const folder = folders.find(f => f.id === id);
   if (!folder) return false;
 
