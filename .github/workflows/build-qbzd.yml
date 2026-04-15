@@ -10,6 +10,12 @@ on:
   #     - 'qbzd-v*'
   workflow_dispatch:
 
+# Default to read-only; the `release` job below opts in to `contents: write`
+# explicitly. Without this top-level block the build jobs would inherit the
+# repository-wide write token. Closes CodeQL actions/missing-workflow-permissions.
+permissions:
+  contents: read
+
 jobs:
   build-x86_64:
     runs-on: ubuntu-22.04

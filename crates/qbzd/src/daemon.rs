@@ -87,7 +87,9 @@ pub async fn run(mut config: DaemonConfig) -> Result<(), String> {
     // Try auto-login from saved OAuth token
     match try_auto_login(&core).await {
         Some(user_id) => {
-            log::info!("[qbzd] Auto-login successful (user_id: {})", user_id);
+            // Demoted from info to debug to keep user_id out of default-level
+            // logs (CodeQL rust/cleartext-logging). Set RUST_LOG=debug to see.
+            log::debug!("[qbzd] Auto-login successful (user_id: {})", user_id);
             // Activate per-user session (initialize stores, sync settings)
             match crate::session::activate_session(user_id, &core, &event_tx).await {
                 Ok(session) => {
@@ -214,7 +216,9 @@ async fn try_auto_login(core: &QbzCore<DaemonAdapter>) -> Option<u64> {
 
     match core.login_with_token(&token).await {
         Ok(session) => {
-            log::info!(
+            // Demoted from info to debug to keep user_id out of default-level
+            // logs (CodeQL rust/cleartext-logging). Set RUST_LOG=debug to see.
+            log::debug!(
                 "[qbzd] Session restored for user {} ({})",
                 session.display_name,
                 session.user_id

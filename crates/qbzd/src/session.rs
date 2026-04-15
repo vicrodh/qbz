@@ -22,7 +22,9 @@ pub async fn activate_session(
     core: &qbz_core::QbzCore<crate::adapter::DaemonAdapter>,
     event_tx: &tokio::sync::broadcast::Sender<DaemonEvent>,
 ) -> Result<UserSession, String> {
-    log::info!("[qbzd/session] Activating session for user {}", user_id);
+    // Demoted from info to debug to keep user_id out of default-level logs
+    // (CodeQL rust/cleartext-logging). Set RUST_LOG=debug to see.
+    log::debug!("[qbzd/session] Activating session for user {}", user_id);
 
     // Resolve per-user directories (same layout as desktop app)
     let global_data = dirs::data_dir()

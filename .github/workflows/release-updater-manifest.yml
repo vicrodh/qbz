@@ -25,8 +25,19 @@ jobs:
     steps:
       - name: Resolve version from tag
         id: version
+        # `head_branch` on a `workflow_run` event is attacker-controllable
+        # (an outside contributor could push a branch with an injection
+        # payload as its name). Route it through an env var and validate
+        # the shape before letting it flow into shell or $GITHUB_OUTPUT.
+        env:
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
         run: |
-          TAG="${{ github.event.workflow_run.head_branch }}"
+          set -euo pipefail
+          if ! printf '%s' "$HEAD_BRANCH" | grep -Eq '^v[0-9][0-9A-Za-z._-]{0,63}$'; then
+            echo "::error::Rejected head_branch for manifest job: $HEAD_BRANCH"
+            exit 1
+          fi
+          TAG="$HEAD_BRANCH"
           VERSION="${TAG#v}"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
