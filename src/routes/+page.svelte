@@ -6229,30 +6229,25 @@
   :global(html.match-chrome-transparent body) {
     background: transparent !important;
     margin: 0 !important;
-  }
-  /* Give the body a small padding only when we want the external shadow.
-     This leaves pixels _outside_ the .app container for the box-shadow
-     to paint into — otherwise .app fills 100vw/100vh and the shadow has
-     nowhere to go. The padding is compensated by shrinking .app below. */
-  :global(html.match-chrome-transparent body) {
-    padding: 12px !important;
-    box-sizing: border-box !important;
+    padding: 0 !important;
   }
   .app.match-chrome.floating {
-    height: calc(100vh - 24px);
-    width: calc(100vw - 24px);
     border-radius: var(--chrome-radius, 10px);
-    /* GPU-accelerate the clipped container so WebKitGTK picks a smoother
-       anti-alias path on the rounded edge. */
+    /* clip-path gives the cleanest anti-alias on rounded corners in
+       WebKitGTK. Inset box-shadows below still render because they paint
+       _inside_ the clipped region. */
+    clip-path: inset(0 round var(--chrome-radius, 10px));
     transform: translateZ(0);
     backface-visibility: hidden;
-    /* External drop shadow — takes the 12px margin we reserved on body
-       to actually be visible. Two-layer: a broad soft shadow below + a
-       tight crisp shadow that gives edge definition without painting a
-       hard 1px stroke (which jaggies at the rounded corners). */
+    /* Visible edge on every side so the window stops mimetising with
+       the desktop. A crisp dark outer band (outer 1px inset) reads as
+       the frame; a softer light highlight (inner 1px) picks out the
+       edge against dark surfaces. Outer drop shadow is deprioritised —
+       kept low-weight so it complements but doesn't dominate. */
     box-shadow:
-      0 18px 40px rgba(0, 0, 0, 0.65),
-      0 4px 12px rgba(0, 0, 0, 0.45);
+      inset 0 0 0 1px rgba(0, 0, 0, 0.75),
+      inset 0 0 0 2px rgba(255, 255, 255, 0.06),
+      0 8px 20px rgba(0, 0, 0, 0.45);
   }
   .app.match-chrome:not(.floating) {
     border-radius: 0;
