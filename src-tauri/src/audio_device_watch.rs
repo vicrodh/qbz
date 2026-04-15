@@ -82,12 +82,10 @@ pub fn check_selected_device_presence(settings: &AudioSettingsState) -> DevicePr
     // DeviceTrait::description() (richer, stable identifier). The
     // legacy DeviceTrait::name() returns a different string on some
     // platforms (especially PipeWire-backed Linux) and would cause
-    // every configured device to look 'missing' here.
+    // every configured device to look 'missing' here, so we skip
+    // devices whose description() fails rather than falling back.
     fn preferred_name(d: &rodio::cpal::Device) -> Option<String> {
-        if let Ok(desc) = d.description() {
-            return Some(desc.name().to_string());
-        }
-        d.name().ok()
+        d.description().ok().map(|desc| desc.name().to_string())
     }
 
     let mut available: Vec<String> = Vec::new();
