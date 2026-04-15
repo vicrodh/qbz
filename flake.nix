@@ -106,6 +106,20 @@
             rustfmt
             clippy
           ];
+
+          # The package's `postInstall` wraps the installed binary with
+          # LD_LIBRARY_PATH so libappindicator is dlopen-able at runtime.
+          # Inside `nix develop` we run `target/debug/qbz` directly, with
+          # no wrapper, so we replicate that here — otherwise the tray
+          # init panics with "Failed to load ayatana-appindicator3 or
+          # appindicator3 dynamic library" (issue #312).
+          shellHook = ''
+            export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath [
+              pkgs.libappindicator
+              pkgs.libappindicator-gtk3
+              pkgs.libayatana-appindicator
+            ]}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          '';
         };
       });
 }
