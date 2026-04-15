@@ -30,6 +30,22 @@ pub fn v2_set_use_system_titlebar(
 }
 
 #[tauri::command]
+pub fn v2_set_match_system_window_chrome(
+    value: bool,
+    state: State<'_, WindowSettingsState>,
+) -> Result<(), String> {
+    state.set_match_system_window_chrome(value)
+}
+
+/// Report whether the main window was built transparent for this session.
+/// The frontend uses this to decide whether to apply the rounded-corner
+/// CSS (which only looks right on a transparent window).
+#[tauri::command]
+pub fn v2_main_window_is_transparent() -> bool {
+    crate::main_window_built_transparent()
+}
+
+#[tauri::command]
 pub fn v2_set_enable_tray(value: bool, state: State<'_, TraySettingsState>) -> Result<(), String> {
     state.set_enable_tray(value)?;
     // Mirror to global startup store so tray visibility on next launch

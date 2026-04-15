@@ -13,6 +13,16 @@ pub mod tauri_adapter;
 
 pub mod auto_theme;
 pub mod desktop_theme;
+
+/// Captures whether the main Tauri window was built transparent for this
+/// session. Written once during setup, read by a Tauri command so the
+/// frontend can decide whether to paint the matching border-radius CSS.
+static MAIN_WINDOW_TRANSPARENT: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+pub fn main_window_built_transparent() -> bool {
+    MAIN_WINDOW_TRANSPARENT.load(std::sync::atomic::Ordering::SeqCst)
+}
 #[cfg(target_os = "linux")]
 pub mod autoconfig_graphics;
 
@@ -420,6 +430,17 @@ fn should_use_main_window_transparency() -> bool {
         return false;
     }
 
+    // Opt-in via persisted settings: "match system window chrome" wants
+    // rounded corners, which need a transparent window so the webview
+    // background stops painting white outside the radius.
+    if let Ok(store) = config::window_settings::WindowSettingsStore::new() {
+        if let Ok(settings) = store.get_settings() {
+            if settings.match_system_window_chrome {
+                return true;
+            }
+        }
+    }
+
     // Stability-first default on Linux.
     false
 }
@@ -776,6 +797,7 @@ pub fn run() {
                 use_system_titlebar
             );
             let main_window_transparent = should_use_main_window_transparency();
+            MAIN_WINDOW_TRANSPARENT.store(main_window_transparent, std::sync::atomic::Ordering::SeqCst);
             log::info!(
                 "Main window transparency: {} (override with QBZ_FORCE_TRANSPARENT_WINDOWS=1 or QBZ_FORCE_OPAQUE_WINDOWS=1)",
                 main_window_transparent
@@ -1310,6 +1332,8 @@ pub fn run() {
             config::favorites_cache::is_track_favorite,
             commands_v2::v2_set_api_locale,
             commands_v2::v2_set_use_system_titlebar,
+            commands_v2::v2_set_match_system_window_chrome,
+            commands_v2::v2_main_window_is_transparent,
             commands_v2::v2_set_enable_tray,
             commands_v2::v2_set_minimize_to_tray,
             commands_v2::v2_set_close_to_tray,

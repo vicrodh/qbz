@@ -111,6 +111,8 @@
     getMatchSystemWindowChrome,
     getCornerRadiusPx,
     setCornerRadiusPx,
+    setWindowIsTransparent,
+    getWindowIsTransparent,
   } from '$lib/stores/windowChromeStore';
   import { detectDesktopThemeCached } from '$lib/stores/windowControlsStore';
 
@@ -501,6 +503,7 @@
   let showTitleBar = $state(shouldShowTitleBar());
   let matchSystemChrome = $state(getMatchSystemWindowChrome());
   let chromeRadiusPx = $state(getCornerRadiusPx());
+  let windowTransparent = $state(getWindowIsTransparent());
   let showWindowControls = $state(getShowWindowControls());
 
   // Search Bar Location State
@@ -4218,11 +4221,20 @@
       sidebarExpanded = getIsExpanded();
     });
 
+    // Declared upfront because subscribeTitleBar invokes the callback
+    // immediately on subscription, which references this helper.
+    const applyChromeClass = () => {
+      if (typeof document === 'undefined') return;
+      const active = matchSystemChrome && showTitleBar && windowTransparent;
+      document.documentElement.classList.toggle('match-chrome-transparent', active);
+    };
+
     // Initialize and subscribe to title bar state changes
     initTitleBarStore();
     const unsubscribeTitleBar = subscribeTitleBar(() => {
       showTitleBar = shouldShowTitleBar();
       showWindowControls = getShowWindowControls();
+      applyChromeClass();
     });
 
     // Window chrome: subscribe to the "match system" toggle and fetch the
@@ -4232,7 +4244,21 @@
     const unsubscribeWindowChrome = subscribeWindowChrome(() => {
       matchSystemChrome = getMatchSystemWindowChrome();
       chromeRadiusPx = getCornerRadiusPx();
+      windowTransparent = getWindowIsTransparent();
+      applyChromeClass();
     });
+    // Ask the Rust side whether the main window was actually built
+    // transparent. If not, the radius CSS is a no-op (white corners
+    // otherwise). The backend captured the decision at setup time.
+    void (async () => {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        const transparent = (await invoke('v2_main_window_is_transparent')) as boolean;
+        setWindowIsTransparent(transparent);
+      } catch (e) {
+        console.warn('[windowChrome] could not query transparency:', e);
+      }
+    })();
     void detectDesktopThemeCached().then((info) => {
       if (info && typeof info.windowCornerRadiusPx === 'number') {
         setCornerRadiusPx(info.windowCornerRadiusPx);
@@ -5011,7 +5037,7 @@
     class="app"
     class:no-titlebar={!showTitleBar}
     class:floating={isWindowFloating}
-    class:match-chrome={matchSystemChrome && showTitleBar}
+    class:match-chrome={matchSystemChrome && showTitleBar && windowTransparent}
     style="--chrome-radius: {chromeRadiusPx}px;"
   >
     <!-- macOS: drag region for window movement (overlay title bar has no native drag area) -->
@@ -6195,7 +6221,14 @@
   /* Match system window chrome (Plasma / GNOME): apply the detected
      decoration radius and a thin edge outline so the window reads as
      its own surface against the desktop. Only takes effect in floating
-     state (not maximized) and when the custom title bar is active. */
+     state (not maximized) and when the custom title bar is active.
+     Requires the Tauri window to have been built transparent (Phase 2:
+     match_system_window_chrome persists to window_settings and gates the
+     transparency path at startup). */
+  :global(html.match-chrome-transparent),
+  :global(html.match-chrome-transparent body) {
+    background: transparent !important;
+  }
   .app.match-chrome.floating {
     border-radius: var(--chrome-radius, 10px);
     box-shadow:

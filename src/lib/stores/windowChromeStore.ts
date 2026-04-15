@@ -46,7 +46,36 @@ export function setMatchSystemWindowChrome(value: boolean): void {
   try {
     localStorage.setItem(STORAGE_KEY, String(value));
   } catch {}
+  // Persist on the Rust side too so `should_use_main_window_transparency`
+  // can read it BEFORE window creation on next launch. Failure here is
+  // non-fatal — localStorage covers the in-session state.
+  void (async () => {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('v2_set_match_system_window_chrome', { value });
+    } catch (e) {
+      console.warn('[windowChrome] Failed to persist to Rust:', e);
+    }
+  })();
   notify();
+}
+
+/**
+ * Hint from the Rust side: whether the Tauri window was actually built
+ * transparent for this session. The frontend uses this to decide whether
+ * to apply the border-radius (otherwise the webview paints the area
+ * outside the radius white). Populated by the root layout at startup.
+ */
+let windowIsTransparent = false;
+
+export function setWindowIsTransparent(value: boolean): void {
+  if (windowIsTransparent === value) return;
+  windowIsTransparent = value;
+  notify();
+}
+
+export function getWindowIsTransparent(): boolean {
+  return windowIsTransparent;
 }
 
 export function getCornerRadiusPx(): number {

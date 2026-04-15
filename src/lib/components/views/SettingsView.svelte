@@ -4492,7 +4492,10 @@
       </div>
       <Toggle
         enabled={matchSystemWindowChromeState}
-        onchange={(v) => setMatchSystemWindowChrome(v)}
+        onchange={(v) => {
+          setMatchSystemWindowChrome(v);
+          showToast($t('settings.appearance.matchSystemChromeRestart'), 'info');
+        }}
         disabled={hideTitleBar || useSystemTitleBar}
       />
     </div>
