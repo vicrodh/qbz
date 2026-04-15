@@ -5,7 +5,6 @@ use tokio::sync::RwLock;
 use qbz_models::{Quality, QueueTrack as CoreQueueTrack, RepeatMode};
 
 use crate::audio::{AlsaPlugin, AudioBackendType};
-use crate::audio_device_watch::{emit_missing_if_needed, DeviceMissingThrottle};
 use crate::cache::AudioCache;
 use crate::config::audio_settings::AudioSettingsState;
 use crate::core_bridge::CoreBridgeState;
@@ -270,11 +269,8 @@ pub async fn v2_pause_playback(
 /// Resume playback (V2)
 #[tauri::command]
 pub async fn v2_resume_playback(
-    app: tauri::AppHandle,
     bridge: State<'_, CoreBridgeState>,
     app_state: State<'_, AppState>,
-    audio_settings: State<'_, AudioSettingsState>,
-    device_watch: State<'_, std::sync::Arc<DeviceMissingThrottle>>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), RuntimeError> {
     runtime
@@ -282,11 +278,6 @@ pub async fn v2_resume_playback(
         .check_requirements(CommandRequirement::RequiresUserSession)
         .await?;
     log::info!("[V2] Command: resume_playback");
-    // Pre-flight: if the user's selected output device has disappeared
-    // (KVM switched away, USB unplugged, sink removed…) surface a
-    // toast. Playback continues — init_device already has a safe
-    // fallback to the system default.
-    emit_missing_if_needed(&app, &audio_settings, &device_watch);
     app_state.media_controls.set_playback(true);
     let bridge = bridge.get().await;
     bridge.resume().map_err(RuntimeError::Internal)
@@ -674,7 +665,6 @@ pub struct V2PlayTrackResult {
 /// 5. Caches for future playback
 #[tauri::command]
 pub async fn v2_play_track(
-    app: tauri::AppHandle,
     track_id: u64,
     quality: Option<String>,
     force_lowest_quality: Option<bool>,
@@ -682,7 +672,6 @@ pub async fn v2_play_track(
     bridge: State<'_, CoreBridgeState>,
     offline_cache: State<'_, OfflineCacheState>,
     audio_settings: State<'_, AudioSettingsState>,
-    device_watch: State<'_, std::sync::Arc<DeviceMissingThrottle>>,
     offline_state: State<'_, crate::offline::OfflineState>,
     app_state: State<'_, AppState>,
     runtime: State<'_, RuntimeManagerState>,
@@ -692,9 +681,6 @@ pub async fn v2_play_track(
         .manager()
         .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
         .await?;
-
-    // Pre-flight device check — see v2_resume_playback for rationale.
-    emit_missing_if_needed(&app, &audio_settings, &device_watch);
 
     let preferred_quality = parse_quality(quality.as_deref());
 

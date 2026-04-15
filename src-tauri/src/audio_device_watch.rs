@@ -77,15 +77,38 @@ pub fn check_selected_device_presence(settings: &AudioSettingsState) -> DevicePr
         }
     };
 
+    // IMPORTANT: match against the same name shape the UI persisted.
+    // Settings stores what get_audio_devices() wrote, which comes from
+    // DeviceTrait::description() (richer, stable identifier). The
+    // legacy DeviceTrait::name() returns a different string on some
+    // platforms (especially PipeWire-backed Linux) and would cause
+    // every configured device to look 'missing' here.
+    fn preferred_name(d: &rodio::cpal::Device) -> Option<String> {
+        if let Ok(desc) = d.description() {
+            return Some(desc.name().to_string());
+        }
+        d.name().ok()
+    }
+
     let mut available: Vec<String> = Vec::new();
     let mut found = false;
     for device in devices {
-        if let Ok(name) = device.name() {
+        if let Some(name) = preferred_name(&device) {
             if name == wanted {
                 found = true;
             }
             available.push(name);
         }
+    }
+
+    // Empty enumeration is treated as inconclusive, not missing.
+    // cpal's device list can come back empty right after app launch
+    // or while PipeWire is still populating its sink graph — that's
+    // not the same as the user's device genuinely disappearing and
+    // firing a "device missing" toast under those conditions produces
+    // false positives (seen when pressing play on a restored session).
+    if available.is_empty() {
+        return DevicePresence::Inconclusive;
     }
 
     if found {
