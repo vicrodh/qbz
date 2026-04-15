@@ -29,8 +29,13 @@ use crate::AppState;
 
 use super::{
     download_audio, v2_cache_notification_artwork, v2_format_notification_quality,
-    v2_prepare_notification_icon_bytes, v2_teardown_type_alias_state,
+    v2_teardown_type_alias_state,
 };
+// Linux-only: turns an artwork PNG into the raw bytes Ayatana notifications
+// expect. Only called inside the `cfg(target_os = "linux")` arm below, so the
+// import must match.
+#[cfg(target_os = "linux")]
+use super::v2_prepare_notification_icon_bytes;
 
 #[tauri::command]
 pub async fn v2_show_track_notification(

@@ -11,6 +11,8 @@ use crate::tray_linux_ksni;
 #[cfg(not(target_os = "linux"))]
 use image::GenericImageView;
 #[cfg(not(target_os = "linux"))]
+use std::path::PathBuf;
+#[cfg(not(target_os = "linux"))]
 use tauri::{
     image::Image,
     menu::{Menu, MenuItem, PredefinedMenuItem},

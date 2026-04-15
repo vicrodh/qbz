@@ -14,10 +14,15 @@ use crate::runtime::{CommandRequirement, RuntimeError, RuntimeManagerState};
 use crate::AppState;
 
 use super::{
-    cached_audio_incompatible_with_hw, cached_quality_below_requested, download_with_backoff,
-    limit_quality_for_device, parse_quality, try_cmaf_full_download, try_cmaf_streaming_setup,
-    v2_cmaf_stream, v2_download_and_stream, v2_get_stream_info, v2_library_get_tracks_by_ids,
+    cached_quality_below_requested, download_with_backoff, limit_quality_for_device,
+    parse_quality, try_cmaf_full_download, try_cmaf_streaming_setup, v2_cmaf_stream,
+    v2_download_and_stream, v2_get_stream_info, v2_library_get_tracks_by_ids,
 };
+// Linux-only: ALSA hardware capability check. The callsites that use it are
+// already gated on `cfg(target_os = "linux")`, so the import has to match or
+// macOS fails with "unresolved import".
+#[cfg(target_os = "linux")]
+use super::cached_audio_incompatible_with_hw;
 
 // ==================== Prefetch (V2) ====================
 
