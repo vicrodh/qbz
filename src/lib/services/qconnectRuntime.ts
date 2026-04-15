@@ -226,21 +226,16 @@ export function resolveQconnectPlayNextAuthoritativeTrackId(params: {
 }
 
 export function evaluateQconnectSessionPersistence(
-  remoteModeActive: boolean,
-  skipLogged: boolean
+  _remoteModeActive: boolean,
+  _skipLogged: boolean
 ): QconnectSessionPersistenceDecision {
-  if (!remoteModeActive) {
-    return {
-      shouldPersist: true,
-      nextSkipLogged: false,
-      shouldLogSkip: false
-    };
-  }
-
+  // Local session state is persisted unconditionally so track-level
+  // restore keeps working when Qobuz Connect is enabled (issue #304).
+  // QConnect-vs-local priority is resolved at restore time, not here.
   return {
-    shouldPersist: false,
-    nextSkipLogged: true,
-    shouldLogSkip: !skipLogged
+    shouldPersist: true,
+    nextSkipLogged: false,
+    shouldLogSkip: false
   };
 }
 

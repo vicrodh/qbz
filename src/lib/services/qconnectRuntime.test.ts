@@ -139,24 +139,28 @@ describe('QConnect runtime state helpers', () => {
     expect(isQconnectRemoteModeActive(false, status)).toBe(true);
   });
 
-  it('resets the session persistence skip flag once remote mode ends', () => {
+  it('always persists the local session regardless of remote mode', () => {
+    // Issue #304: local session is saved even when Qobuz Connect is
+    // active so track-level restore keeps working. Priority between
+    // local vs QConnect state is resolved at restore time.
+    expect(evaluateQconnectSessionPersistence(false, false)).toEqual({
+      shouldPersist: true,
+      nextSkipLogged: false,
+      shouldLogSkip: false
+    });
     expect(evaluateQconnectSessionPersistence(false, true)).toEqual({
       shouldPersist: true,
       nextSkipLogged: false,
       shouldLogSkip: false
     });
-  });
-
-  it('logs the skip only once while remote mode stays active', () => {
     expect(evaluateQconnectSessionPersistence(true, false)).toEqual({
-      shouldPersist: false,
-      nextSkipLogged: true,
-      shouldLogSkip: true
+      shouldPersist: true,
+      nextSkipLogged: false,
+      shouldLogSkip: false
     });
-
     expect(evaluateQconnectSessionPersistence(true, true)).toEqual({
-      shouldPersist: false,
-      nextSkipLogged: true,
+      shouldPersist: true,
+      nextSkipLogged: false,
       shouldLogSkip: false
     });
   });
