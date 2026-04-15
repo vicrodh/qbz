@@ -64,6 +64,7 @@
           <li>Editor's Picks tab cleanup: removed redundant "Album of the Week" and "Qobuzissime" ribbons on cards inside their own eponymous sections</li>
           <li>Playlist context menu in the sidebar now flips above the cursor when it would otherwise fall below the window</li>
           <li>Sort submenu in the sidebar playlists menu no longer gets clipped by its parent dropdown</li>
+          <li>Genre filter popup uses its CSS max-height for collision detection so it flips above the trigger or clamps to the viewport instead of overflowing the bottom of the window</li>
           <li>DAC Setup Wizard icon contrast fixed for light accent themes</li>
           <li>Hardening to audio request signing (internal)</li>
         </ul>
