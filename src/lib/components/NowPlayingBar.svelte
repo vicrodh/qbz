@@ -1000,9 +1000,14 @@
     flex: 1;
     display: flex;
     justify-content: center;
-    align-items: center;
+    align-items: stretch;
     gap: 8px;
     min-width: 0;
+    /* Reserve the same height the song-card takes (artwork 56px + 2px padding
+       top/bottom) so the always-visible QConnect badge can stretch to match
+       the badges-group height inside the song-card, even when no track is
+       playing or the responsive breakpoint kicks in. */
+    min-height: 60px;
   }
 
   .song-card-slot {
@@ -1011,7 +1016,6 @@
     flex: 1;
     min-width: 354px;
     max-width: 718px;
-    min-height: 48px;
   }
 
   .song-card-slot > .song-card,
@@ -1023,6 +1027,15 @@
     display: flex;
     align-items: center;
     justify-content: center;
+  }
+
+  /* Always-visible QConnect badge: stretch to the center-section height so it
+     matches the badges-group sizing inside the song-card. The badge wrapper
+     is a flex container with align-items: stretch, so its inner button (which
+     uses height: 100%) inherits the reserved 60px height. */
+  .center-section > :global(.qconnect-badge-wrapper) {
+    align-self: stretch;
+    flex-shrink: 0;
   }
 
   /* ===== Control Buttons ===== */
