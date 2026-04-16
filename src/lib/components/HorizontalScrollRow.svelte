@@ -11,6 +11,10 @@
   let { title, header, children }: Props = $props();
 
   let scrollContainer: HTMLDivElement;
+  let isDragging = $state(false);
+  let dragStartX = 0;
+  let dragStartScroll = 0;
+  let dragDistance = 0;
 
   function scroll(direction: 'left' | 'right') {
     if (scrollContainer) {
@@ -25,6 +29,32 @@
         behavior: 'smooth'
       });
     }
+  }
+
+  function onPointerDown(e: PointerEvent) {
+    if (e.button !== 0) return;
+    isDragging = true;
+    dragStartX = e.clientX;
+    dragStartScroll = scrollContainer.scrollLeft;
+    dragDistance = 0;
+    scrollContainer.setPointerCapture(e.pointerId);
+  }
+
+  function onPointerMove(e: PointerEvent) {
+    if (!isDragging) return;
+    const dx = e.clientX - dragStartX;
+    dragDistance = Math.abs(dx);
+    scrollContainer.scrollLeft = dragStartScroll - dx;
+  }
+
+  function onPointerUp(e: PointerEvent) {
+    if (!isDragging) return;
+    isDragging = false;
+    scrollContainer.releasePointerCapture(e.pointerId);
+  }
+
+  function onClickCapture(e: MouseEvent) {
+    if (dragDistance > 5) e.preventDefault();
   }
 
   const hasHeader = $derived(!!title || !!header);
@@ -53,7 +83,17 @@
   {/if}
 
   <!-- Horizontal Scroll Container -->
-  <div class="scroll-container hide-scrollbar" bind:this={scrollContainer}>
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="scroll-container hide-scrollbar"
+    class:dragging={isDragging}
+    bind:this={scrollContainer}
+    onpointerdown={onPointerDown}
+    onpointermove={onPointerMove}
+    onpointerup={onPointerUp}
+    onpointercancel={onPointerUp}
+    onclickcapture={onClickCapture}
+  >
     <div class="content">
       {@render children()}
     </div>
@@ -113,6 +153,12 @@
   .scroll-container {
     overflow-x: auto;
     overflow-y: hidden;
+    cursor: grab;
+  }
+
+  .scroll-container.dragging {
+    cursor: grabbing;
+    user-select: none;
   }
 
   .content {
