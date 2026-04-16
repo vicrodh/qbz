@@ -1,16 +1,15 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onDestroy } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { writeText as copyToClipboard } from '@tauri-apps/plugin-clipboard-manager';
   import { t } from '$lib/i18n';
-  import { RefreshCw, Copy, Check, ChevronDown, ChevronRight, Radio } from 'lucide-svelte';
+  import { RefreshCw, Copy, Check, ChevronDown, ChevronRight, Radio, LoaderCircle } from 'lucide-svelte';
   import {
     getCurrentTrack,
     getIsPlaying,
     getCurrentTime,
     getDuration,
-    getVolume,
-    subscribe as subscribeToPlayer
+    getVolume
   } from '$lib/stores/playerStore';
   import type { QconnectConnectionStatus, QconnectSessionSnapshot } from '$lib/services/qconnectRuntime';
 
@@ -118,7 +117,6 @@
   let qconnectOpen = $state(true);
   let castOpen = $state(true);
 
-  let playerUnsubscribe: (() => void) | null = null;
   const CAST_SCAN_DURATION_MS = 10000;
 
   // Redact things that look like UUIDs / hex IDs / tokens (defensive: keep paste
@@ -135,7 +133,7 @@
     const track = getCurrentTrack();
     return {
       isPlaying: getIsPlaying(),
-      volumePercent: Math.round(getVolume() * 100),
+      volumePercent: Math.round(getVolume()),
       positionSecs: Math.round(getCurrentTime()),
       durationSecs: Math.round(getDuration()),
       hasTrack: !!track,
@@ -359,23 +357,17 @@
     panelOpen = !panelOpen;
     if (panelOpen) {
       if (!diagnostics) loadDiagnostics();
-      // Keep playback snapshot refreshed while the panel is open.
-      if (!playerUnsubscribe) {
-        playerUnsubscribe = subscribeToPlayer(() => {
-          playback = snapshotPlayback();
-        });
+      // Auto-run a cast scan the first time the panel is opened. Don't
+      // block the diagnostics load on it — scan runs concurrently and
+      // fills its own section when done.
+      if (!castScan && !castScanning) {
+        void runCastScan();
       }
-    } else if (playerUnsubscribe) {
-      playerUnsubscribe();
-      playerUnsubscribe = null;
     }
   }
 
   onDestroy(() => {
-    if (playerUnsubscribe) {
-      playerUnsubscribe();
-      playerUnsubscribe = null;
-    }
+    // (intentional) don't leave any subscriptions behind
   });
 
   function playbackRows(p: PlaybackSnapshot): DiagRow[] {
@@ -528,6 +520,12 @@
             : $t('settings.developer.diagnostics.castScan')}
         </button>
       </div>
+      {#if castScanning && !castScan}
+        <div class="cast-scan-placeholder">
+          <LoaderCircle size={20} class="spinning" />
+          <span>{$t('settings.developer.diagnostics.castScanning')}</span>
+        </div>
+      {/if}
       {#if castScan}
         <table class="diag-table">
           <thead>
@@ -771,6 +769,15 @@
 
   :global(.spinning) {
     animation: spin 1s linear infinite;
+  }
+
+  .cast-scan-placeholder {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    color: var(--text-muted);
+    font-size: 12px;
   }
 
   @keyframes spin {
