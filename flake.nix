@@ -17,8 +17,8 @@
         # ──────────────────────────────────────────────
         qbzVersion = "1.2.7";
         qbzRev     = "v${qbzVersion}";
-        srcHash    = ""; # nix build will report the correct hash on first run
-        npmHash    = ""; # nix build will report the correct hash on first run
+        srcHash    = "sha256-/7gYjCfMJ1TmjogGQWkRDgDaUZ8o03hVNxZ21w4xniU=";
+        npmHash    = "sha256-xBad4Ms5dlE0jHZ5iKLS2dEujgIZahfNfcknJH9qoXM=";
       in
       {
         packages.default = pkgs.rustPlatform.buildRustPackage rec {
