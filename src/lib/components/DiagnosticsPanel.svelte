@@ -1,9 +1,18 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { writeText as copyToClipboard } from '@tauri-apps/plugin-clipboard-manager';
   import { t } from '$lib/i18n';
-  import { RefreshCw, Copy, Check, ChevronDown, ChevronRight } from 'lucide-svelte';
+  import { RefreshCw, Copy, Check, ChevronDown, ChevronRight, Radio } from 'lucide-svelte';
+  import {
+    getCurrentTrack,
+    getIsPlaying,
+    getCurrentTime,
+    getDuration,
+    getVolume,
+    subscribe as subscribeToPlayer
+  } from '$lib/stores/playerStore';
+  import type { QconnectConnectionStatus, QconnectSessionSnapshot } from '$lib/services/qconnectRuntime';
 
   interface RuntimeDiagnostics {
     audioOutputDevice: string | null;
@@ -50,7 +59,53 @@
     status: 'match' | 'mismatch' | 'info';
   }
 
+  interface PlaybackSnapshot {
+    isPlaying: boolean;
+    volumePercent: number;
+    positionSecs: number;
+    durationSecs: number;
+    hasTrack: boolean;
+    trackTitle: string | null;
+    trackArtist: string | null;
+    trackAlbum: string | null;
+    trackQuality: string | null;
+    trackFormat: string | null;
+    trackBitDepth: number | null;
+    trackSamplingRate: number | null;
+    trackIsLocal: boolean | null;
+    trackSource: string | null;
+  }
+
+  interface QconnectDiag {
+    running: boolean;
+    transport_connected: boolean;
+    hasEndpoint: boolean;
+    lastError: string | null;
+    role: 'none' | 'controller' | 'local-renderer' | 'observer';
+    activeRendererName: string | null;
+    activeRendererBrand: string | null;
+    activeRendererModel: string | null;
+    rendererCount: number;
+  }
+
+  interface CastDeviceBrief {
+    name: string;
+    protocol: string;
+  }
+
+  interface CastScanResult {
+    chromecastCount: number;
+    dlnaCount: number;
+    devices: CastDeviceBrief[];
+    durationMs: number;
+    error: string | null;
+  }
+
   let diagnostics = $state<RuntimeDiagnostics | null>(null);
+  let playback = $state<PlaybackSnapshot | null>(null);
+  let qconnect = $state<QconnectDiag | null>(null);
+  let castScan = $state<CastScanResult | null>(null);
+  let castScanning = $state(false);
   let loading = $state(false);
   let copied = $state(false);
   let error = $state<string | null>(null);
@@ -59,6 +114,132 @@
   let audioOpen = $state(true);
   let graphicsOpen = $state(true);
   let envOpen = $state(false);
+  let playbackOpen = $state(true);
+  let qconnectOpen = $state(true);
+  let castOpen = $state(true);
+
+  let playerUnsubscribe: (() => void) | null = null;
+  const CAST_SCAN_DURATION_MS = 10000;
+
+  // Redact things that look like UUIDs / hex IDs / tokens (defensive: keep paste
+  // logs free of anything CodeQL or paste-site filters might flag as secrets).
+  function redactIdLike(value: string | null | undefined): string | null {
+    if (!value) return null;
+    // Strip 32+ char hex strings and UUID shapes.
+    return value
+      .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '<uuid>')
+      .replace(/\b[0-9a-f]{32,}\b/gi, '<hex>');
+  }
+
+  function snapshotPlayback(): PlaybackSnapshot {
+    const track = getCurrentTrack();
+    return {
+      isPlaying: getIsPlaying(),
+      volumePercent: Math.round(getVolume() * 100),
+      positionSecs: Math.round(getCurrentTime()),
+      durationSecs: Math.round(getDuration()),
+      hasTrack: !!track,
+      trackTitle: track?.title ?? null,
+      trackArtist: track?.artist ?? null,
+      trackAlbum: track?.album ?? null,
+      trackQuality: track?.quality ?? null,
+      trackFormat: track?.format ?? null,
+      trackBitDepth: track?.bitDepth ?? null,
+      trackSamplingRate: track?.samplingRate ?? null,
+      trackIsLocal: track?.isLocal ?? null,
+      trackSource: track?.source ?? null,
+    };
+  }
+
+  async function snapshotQconnect(): Promise<QconnectDiag> {
+    const empty: QconnectDiag = {
+      running: false,
+      transport_connected: false,
+      hasEndpoint: false,
+      lastError: null,
+      role: 'none',
+      activeRendererName: null,
+      activeRendererBrand: null,
+      activeRendererModel: null,
+      rendererCount: 0,
+    };
+    try {
+      const status = await invoke<QconnectConnectionStatus>('v2_qconnect_get_status');
+      const session = await invoke<QconnectSessionSnapshot>('v2_qconnect_session_snapshot');
+      const out: QconnectDiag = { ...empty };
+      out.running = !!status.running;
+      out.transport_connected = !!status.transport_connected;
+      out.hasEndpoint = !!status.endpoint_url;
+      out.lastError = status.last_error ? redactIdLike(String(status.last_error)) : null;
+      out.rendererCount = session?.renderers?.length ?? 0;
+      const activeId = session?.active_renderer_id ?? null;
+      const localId = session?.local_renderer_id ?? null;
+      if (activeId !== null && activeId !== undefined) {
+        const active = session?.renderers?.find((r) => r.renderer_id === activeId);
+        out.activeRendererName = active?.friendly_name ?? null;
+        out.activeRendererBrand = active?.brand ?? null;
+        out.activeRendererModel = active?.model ?? null;
+        if (activeId === localId) {
+          out.role = 'local-renderer';
+        } else {
+          out.role = 'controller';
+        }
+      } else if (out.running || out.transport_connected) {
+        out.role = 'observer';
+      }
+      return out;
+    } catch {
+      return empty;
+    }
+  }
+
+  async function runCastScan(): Promise<void> {
+    if (castScanning) return;
+    castScanning = true;
+    const started = Date.now();
+    let startError: string | null = null;
+    try {
+      await Promise.allSettled([
+        invoke('v2_cast_start_discovery'),
+        invoke('v2_dlna_start_discovery'),
+      ]);
+    } catch (err) {
+      startError = String(err);
+    }
+    await new Promise((resolve) => setTimeout(resolve, CAST_SCAN_DURATION_MS));
+    let chromecastDevices: { name?: string }[] = [];
+    let dlnaDevices: { name?: string }[] = [];
+    try {
+      const [cc, dlna] = await Promise.allSettled([
+        invoke<{ name?: string }[]>('v2_cast_get_devices'),
+        invoke<{ name?: string }[]>('v2_dlna_get_devices'),
+      ]);
+      if (cc.status === 'fulfilled') chromecastDevices = cc.value ?? [];
+      if (dlna.status === 'fulfilled') dlnaDevices = dlna.value ?? [];
+    } catch {
+      // ignore
+    }
+    try {
+      await Promise.allSettled([
+        invoke('v2_cast_stop_discovery'),
+        invoke('v2_dlna_stop_discovery'),
+      ]);
+    } catch {
+      // ignore
+    }
+    const devices: CastDeviceBrief[] = [
+      ...chromecastDevices.map((d) => ({ name: d.name ?? '<unnamed>', protocol: 'chromecast' })),
+      ...dlnaDevices.map((d) => ({ name: d.name ?? '<unnamed>', protocol: 'dlna' })),
+    ];
+    castScan = {
+      chromecastCount: chromecastDevices.length,
+      dlnaCount: dlnaDevices.length,
+      devices,
+      durationMs: Date.now() - started,
+      error: startError,
+    };
+    castScanning = false;
+  }
 
   function bool(val: boolean): string {
     return val ? 'ON' : 'OFF';
@@ -132,9 +313,19 @@
     loading = true;
     error = null;
     try {
-      diagnostics = await invoke<RuntimeDiagnostics>('v2_get_runtime_diagnostics');
-    } catch (err) {
-      error = String(err);
+      const [diagRes, qcRes] = await Promise.allSettled([
+        invoke<RuntimeDiagnostics>('v2_get_runtime_diagnostics'),
+        snapshotQconnect(),
+      ]);
+      if (diagRes.status === 'fulfilled') {
+        diagnostics = diagRes.value;
+      } else {
+        error = String(diagRes.reason);
+      }
+      if (qcRes.status === 'fulfilled') {
+        qconnect = qcRes.value;
+      }
+      playback = snapshotPlayback();
     } finally {
       loading = false;
     }
@@ -145,6 +336,9 @@
     try {
       const exportData = {
         ...diagnostics,
+        playback,
+        qconnect,
+        castScan,
         exportedAt: new Date().toISOString(),
       };
       await copyToClipboard(JSON.stringify(exportData, null, 2));
@@ -152,7 +346,9 @@
       setTimeout(() => { copied = false; }, 1500);
     } catch {
       try {
-        await navigator.clipboard.writeText(JSON.stringify(diagnostics, null, 2));
+        await navigator.clipboard.writeText(
+          JSON.stringify({ ...diagnostics, playback, qconnect, castScan }, null, 2)
+        );
         copied = true;
         setTimeout(() => { copied = false; }, 1500);
       } catch { /* ignore */ }
@@ -161,9 +357,72 @@
 
   function togglePanel() {
     panelOpen = !panelOpen;
-    if (panelOpen && !diagnostics) {
-      loadDiagnostics();
+    if (panelOpen) {
+      if (!diagnostics) loadDiagnostics();
+      // Keep playback snapshot refreshed while the panel is open.
+      if (!playerUnsubscribe) {
+        playerUnsubscribe = subscribeToPlayer(() => {
+          playback = snapshotPlayback();
+        });
+      }
+    } else if (playerUnsubscribe) {
+      playerUnsubscribe();
+      playerUnsubscribe = null;
     }
+  }
+
+  onDestroy(() => {
+    if (playerUnsubscribe) {
+      playerUnsubscribe();
+      playerUnsubscribe = null;
+    }
+  });
+
+  function playbackRows(p: PlaybackSnapshot): DiagRow[] {
+    return [
+      { label: 'Playing', saved: '—', runtime: bool(p.isPlaying), status: 'info' },
+      { label: 'Volume', saved: '—', runtime: `${p.volumePercent}%`, status: 'info' },
+      { label: 'Position / Duration', saved: '—', runtime: `${p.positionSecs}s / ${p.durationSecs}s`, status: 'info' },
+      { label: 'Has Track', saved: '—', runtime: bool(p.hasTrack), status: 'info' },
+      { label: 'Track Title', saved: '—', runtime: str(p.trackTitle), status: 'info' },
+      { label: 'Track Artist', saved: '—', runtime: str(p.trackArtist), status: 'info' },
+      { label: 'Track Album', saved: '—', runtime: str(p.trackAlbum), status: 'info' },
+      { label: 'Track Source', saved: '—', runtime: str(p.trackSource), status: 'info' },
+      { label: 'Track Is Local', saved: '—', runtime: p.trackIsLocal === null ? '—' : bool(p.trackIsLocal), status: 'info' },
+      { label: 'Track Quality', saved: '—', runtime: str(p.trackQuality), status: 'info' },
+      { label: 'Track Format', saved: '—', runtime: str(p.trackFormat), status: 'info' },
+      { label: 'Track Bit Depth', saved: '—', runtime: p.trackBitDepth ? `${p.trackBitDepth}-bit` : '—', status: 'info' },
+      { label: 'Track Sample Rate', saved: '—', runtime: p.trackSamplingRate ? `${p.trackSamplingRate} Hz` : '—', status: 'info' },
+    ];
+  }
+
+  function qconnectRows(q: QconnectDiag): DiagRow[] {
+    return [
+      { label: 'Running', saved: '—', runtime: bool(q.running), status: 'info' },
+      { label: 'Transport Connected', saved: '—', runtime: bool(q.transport_connected), status: 'info' },
+      { label: 'Has Endpoint', saved: '—', runtime: bool(q.hasEndpoint), status: 'info' },
+      { label: 'Role', saved: '—', runtime: q.role, status: 'info' },
+      { label: 'Active Renderer', saved: '—', runtime: str(q.activeRendererName), status: 'info' },
+      { label: 'Renderer Brand', saved: '—', runtime: str(q.activeRendererBrand), status: 'info' },
+      { label: 'Renderer Model', saved: '—', runtime: str(q.activeRendererModel), status: 'info' },
+      { label: 'Visible Renderers', saved: '—', runtime: String(q.rendererCount), status: 'info' },
+      { label: 'Last Error', saved: '—', runtime: str(q.lastError), status: 'info' },
+    ];
+  }
+
+  function castRows(c: CastScanResult): DiagRow[] {
+    const rows: DiagRow[] = [
+      { label: 'Chromecast devices', saved: '—', runtime: String(c.chromecastCount), status: 'info' },
+      { label: 'DLNA devices', saved: '—', runtime: String(c.dlnaCount), status: 'info' },
+      { label: 'Scan duration', saved: '—', runtime: `${Math.round(c.durationMs / 1000)}s`, status: 'info' },
+    ];
+    if (c.error) {
+      rows.push({ label: 'Scan error', saved: '—', runtime: c.error, status: 'mismatch' });
+    }
+    for (const d of c.devices) {
+      rows.push({ label: `• ${d.protocol}`, saved: '—', runtime: d.name, status: 'info' });
+    }
+    return rows;
   }
 </script>
 
@@ -198,6 +457,98 @@
 
   {#if diagnostics}
     <div class="diag-version">QBZ v{diagnostics.appVersion}</div>
+
+    <!-- Playback Section -->
+    {#if playback}
+      <button class="section-toggle" onclick={() => playbackOpen = !playbackOpen}>
+        {#if playbackOpen}<ChevronDown size={14} />{:else}<ChevronRight size={14} />{/if}
+        {$t('settings.developer.diagnostics.sectionPlayback')}
+      </button>
+      {#if playbackOpen}
+        <table class="diag-table">
+          <thead>
+            <tr>
+              <th>{$t('settings.developer.diagnostics.colSetting')}</th>
+              <th colspan="2">{$t('settings.developer.diagnostics.colRuntime')}</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each playbackRows(playback) as row (row.label)}
+              <tr>
+                <td class="label-cell">{row.label}</td>
+                <td class="value-cell" colspan="2">{row.runtime}</td>
+                <td class="status-cell info">·</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      {/if}
+    {/if}
+
+    <!-- Qobuz Connect Section -->
+    {#if qconnect}
+      <button class="section-toggle" onclick={() => qconnectOpen = !qconnectOpen}>
+        {#if qconnectOpen}<ChevronDown size={14} />{:else}<ChevronRight size={14} />{/if}
+        {$t('settings.developer.diagnostics.sectionQconnect')}
+      </button>
+      {#if qconnectOpen}
+        <table class="diag-table">
+          <thead>
+            <tr>
+              <th>{$t('settings.developer.diagnostics.colSetting')}</th>
+              <th colspan="2">{$t('settings.developer.diagnostics.colRuntime')}</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each qconnectRows(qconnect) as row (row.label)}
+              <tr>
+                <td class="label-cell">{row.label}</td>
+                <td class="value-cell" colspan="2">{row.runtime}</td>
+                <td class="status-cell info">·</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      {/if}
+    {/if}
+
+    <!-- Cast Discovery Section -->
+    <button class="section-toggle" onclick={() => castOpen = !castOpen}>
+      {#if castOpen}<ChevronDown size={14} />{:else}<ChevronRight size={14} />{/if}
+      {$t('settings.developer.diagnostics.sectionCast')}
+    </button>
+    {#if castOpen}
+      <div class="diag-actions" style="margin: 8px 0 12px;">
+        <button class="diag-btn" onclick={runCastScan} disabled={castScanning}>
+          <Radio size={14} class={castScanning ? 'spinning' : ''} />
+          {castScanning
+            ? $t('settings.developer.diagnostics.castScanning')
+            : $t('settings.developer.diagnostics.castScan')}
+        </button>
+      </div>
+      {#if castScan}
+        <table class="diag-table">
+          <thead>
+            <tr>
+              <th>{$t('settings.developer.diagnostics.colSetting')}</th>
+              <th colspan="2">{$t('settings.developer.diagnostics.colRuntime')}</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each castRows(castScan) as row (row.label + row.runtime)}
+              <tr>
+                <td class="label-cell">{row.label}</td>
+                <td class="value-cell" colspan="2">{row.runtime}</td>
+                <td class="status-cell {row.status}">{row.status === 'mismatch' ? '✗' : '·'}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      {/if}
+    {/if}
 
     <!-- Audio Section -->
     <button class="section-toggle" onclick={() => audioOpen = !audioOpen}>
