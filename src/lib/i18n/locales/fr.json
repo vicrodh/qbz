@@ -1640,6 +1640,7 @@
     "addedTracksToQueue": "{count} titres ajoutés à la file d'attente",
     "failedPreviousTrack": "Impossible de revenir au titre précédent",
     "failedNextTrack": "Impossible de passer au titre suivant",
+    "failedToSavePreference": "Échec de l'enregistrement de la préférence",
     "tracksAddedToPlaylist": "Titre(s) ajouté(s) à la playlist",
     "playlistCreated": "Playlist créée",
     "offlineModeStarted": "Démarré en mode hors ligne",

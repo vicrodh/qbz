@@ -1663,6 +1663,7 @@
     "addedTracksToQueue": "{count} faixas adicionadas à fila",
     "failedPreviousTrack": "Falha ao voltar à faixa anterior",
     "failedNextTrack": "Falha ao avançar para a próxima faixa",
+    "failedToSavePreference": "Falha ao salvar preferência",
     "tracksAddedToPlaylist": "Faixa(s) adicionada(s) à playlist",
     "playlistCreated": "Playlist criada",
     "playlistUpdated": "Playlist atualizada",

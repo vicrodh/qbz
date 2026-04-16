@@ -1670,6 +1670,7 @@
     "addedTracksToQueue": "Added {count} tracks to queue",
     "failedPreviousTrack": "Failed to go to previous track",
     "failedNextTrack": "Failed to go to next track",
+    "failedToSavePreference": "Failed to save preference",
     "tracksAddedToPlaylist": "Track(s) added to playlist",
     "playlistCreated": "Playlist created",
     "playlistUpdated": "Playlist updated",

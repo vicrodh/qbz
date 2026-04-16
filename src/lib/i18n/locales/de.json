@@ -1640,6 +1640,7 @@
     "addedTracksToQueue": "{count} Titel zur Warteschlange hinzugefügt",
     "failedPreviousTrack": "Zum vorherigen Titel wechseln fehlgeschlagen",
     "failedNextTrack": "Zum nächsten Titel wechseln fehlgeschlagen",
+    "failedToSavePreference": "Einstellung konnte nicht gespeichert werden",
     "tracksAddedToPlaylist": "Titel zur Playlist hinzugefügt",
     "playlistCreated": "Playlist erstellt",
     "offlineModeStarted": "Im Offline-Modus gestartet",

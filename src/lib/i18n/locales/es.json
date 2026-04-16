@@ -1669,6 +1669,7 @@
     "addedTracksToQueue": "{count} pistas agregadas a la cola",
     "failedPreviousTrack": "Error al ir a pista anterior",
     "failedNextTrack": "Error al ir a siguiente pista",
+    "failedToSavePreference": "Error al guardar preferencia",
     "tracksAddedToPlaylist": "Pista(s) agregada(s) a la playlist",
     "playlistCreated": "Playlist creada",
     "playlistUpdated": "Playlist actualizada",

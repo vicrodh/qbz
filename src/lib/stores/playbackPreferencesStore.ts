@@ -9,7 +9,7 @@ import { skipIfRemote } from '$lib/services/commandRouter';
 
 // ============ Types ============
 
-export type AutoplayMode = 'continue' | 'track_only';
+export type AutoplayMode = 'continue' | 'track_only' | 'infinite';
 
 export interface PlaybackPreferences {
   autoplay_mode: AutoplayMode;
@@ -97,6 +97,13 @@ export function getCachedPreferences(): PlaybackPreferences {
  */
 export function isAutoplayEnabled(): boolean {
   return preferences.autoplay_mode === 'continue';
+}
+
+/**
+ * Check if infinite play (radio) is enabled
+ */
+export function isInfinitePlayEnabled(): boolean {
+  return preferences.autoplay_mode === 'infinite';
 }
 
 /**

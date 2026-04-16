@@ -1462,6 +1462,7 @@ pub fn run() {
             commands_v2::v2_create_album_radio,
             commands_v2::v2_create_qobuz_artist_radio,
             commands_v2::v2_create_qobuz_track_radio,
+            commands_v2::v2_create_infinite_radio,
             commands_v2::v2_delete_playlist_folder,
             commands_v2::v2_reorder_playlist_folders,
             commands_v2::v2_move_playlist_to_folder,

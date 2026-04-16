@@ -1636,6 +1636,131 @@ pub async fn v2_create_qobuz_track_radio(
     Ok(context_id)
 }
 
+/// Create an infinite radio session based on recent tracks.
+///
+/// V2 reimplementation of the legacy `create_infinite_radio` command.
+/// Uses the most recent track's artist as the radio seed (via Qobuz `/radio/artist`
+/// through `RadioPoolBuilder`) and returns 50 generated tracks WITHOUT touching
+/// the queue or playback context. The frontend appends them to the existing
+/// queue so the user's current listening session is preserved.
+///
+/// Called when the queue is about to end and `AutoplayMode::InfiniteRadio` is on.
+#[tauri::command]
+pub async fn v2_create_infinite_radio(
+    recent_track_ids: Vec<u64>,
+    state: State<'_, AppState>,
+    blacklist_state: State<'_, BlacklistState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<Vec<super::queue::V2QueueTrack>, String> {
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if recent_track_ids.is_empty() {
+        return Err("No recent tracks provided for infinite radio".to_string());
+    }
+
+    log::info!(
+        "[V2 Radio] Creating infinite radio from {} recent tracks: {:?}",
+        recent_track_ids.len(),
+        recent_track_ids
+    );
+
+    let client = state.client.read().await.clone();
+
+    let primary_track = client
+        .get_track(recent_track_ids[0])
+        .await
+        .map_err(|e| format!("Failed to fetch primary track: {}", e))?;
+
+    let artist_id = primary_track
+        .performer
+        .as_ref()
+        .map(|p| p.id)
+        .ok_or("Primary track has no artist")?;
+
+    let session_id = tokio::task::spawn_blocking({
+        let client = client.clone();
+        move || -> Result<String, String> {
+            let radio_db = crate::radio_engine::db::RadioDb::open_default()?;
+            let builder = crate::radio_engine::RadioPoolBuilder::new(
+                &radio_db,
+                &client,
+                crate::radio_engine::BuildRadioOptions::default(),
+            );
+            let rt = tokio::runtime::Handle::current();
+            let session = rt.block_on(builder.create_artist_radio(artist_id))?;
+            Ok(session.id)
+        }
+    })
+    .await
+    .map_err(|e| format!("Infinite radio task failed: {}", e))??;
+
+    log::info!("[V2 Radio] Infinite radio session created: {}", session_id);
+
+    let track_ids = tokio::task::spawn_blocking({
+        let session_id = session_id.clone();
+        move || -> Result<Vec<u64>, String> {
+            let radio_db = crate::radio_engine::db::RadioDb::open_default()?;
+            let radio_engine = crate::radio_engine::RadioEngine::new(radio_db);
+            let mut ids = Vec::new();
+            for _ in 0..60 {
+                match radio_engine.next_track(&session_id) {
+                    Ok(radio_track) => ids.push(radio_track.track_id),
+                    Err(_) => break,
+                }
+            }
+            Ok(ids.into_iter().take(50).collect())
+        }
+    })
+    .await
+    .map_err(|e| format!("Track generation task failed: {}", e))??;
+
+    let client = state.client.read().await;
+    let mut tracks: Vec<super::queue::V2QueueTrack> = Vec::new();
+    let recent_ids_set: std::collections::HashSet<u64> =
+        recent_track_ids.iter().copied().collect();
+    for next_track_id in track_ids {
+        if recent_ids_set.contains(&next_track_id) {
+            continue;
+        }
+        if let Ok(track) = client.get_track(next_track_id).await {
+            if let Some(ref performer) = track.performer {
+                if blacklist_state.is_blacklisted(performer.id) {
+                    continue;
+                }
+            }
+            let core: CoreQueueTrack = track_to_queue_track_from_api(&track);
+            tracks.push(super::queue::V2QueueTrack {
+                id: core.id,
+                title: core.title,
+                artist: core.artist,
+                album: core.album,
+                duration_secs: core.duration_secs,
+                artwork_url: core.artwork_url,
+                hires: core.hires,
+                bit_depth: core.bit_depth,
+                sample_rate: core.sample_rate,
+                is_local: core.is_local,
+                album_id: core.album_id,
+                artist_id: core.artist_id,
+                streamable: core.streamable,
+                source: core.source,
+                parental_warning: core.parental_warning,
+            });
+        }
+    }
+
+    if tracks.is_empty() {
+        return Err("Failed to generate any infinite radio tracks".to_string());
+    }
+
+    log::info!("[V2 Radio] Returning {} infinite radio tracks", tracks.len());
+    Ok(tracks)
+}
+
 fn track_to_queue_track_from_api(track: &crate::api::Track) -> CoreQueueTrack {
     let artwork_url = track
         .album
