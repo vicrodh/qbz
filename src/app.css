@@ -1588,15 +1588,17 @@ select {
   height: 44px;
   background: var(--accent-primary);
   border: none;
-  color: var(--text-primary);
-  /* Resting ring is identical to the hover ring (same 2px, same
-     --text-primary colour) — only the fill colour differs on hover. */
+  /* Resting glyph uses the hover-state fill colour (--accent-hover);
+     ring is identical to hover (2px inset --text-primary). Only the
+     background fill flips on hover. */
+  color: var(--accent-hover);
   box-shadow: inset 0 0 0 2px var(--text-primary);
-  transition: background 150ms ease;
+  transition: background 150ms ease, color 150ms ease;
 }
 
 .action-btn-circle.primary:hover {
   background: var(--accent-hover);
+  color: var(--text-primary);
   box-shadow: inset 0 0 0 2px var(--text-primary);
 }
 
