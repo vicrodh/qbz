@@ -3952,18 +3952,20 @@
   // Depends on the store preference version + currentTrack so it reacts to
   // both setting changes and track changes immediately.
   $effect(() => {
-    // Track dependencies explicitly so the effect re-runs on preference change.
     void windowTitlePrefVersion;
     const enabled = getWindowTitleEnabled();
     const template = getWindowTitleTemplate();
     const track = currentTrack;
+    const trackTitle = track?.title;
+    const trackArtist = track?.artist;
+    const trackAlbum = track?.album;
 
     let nextTitle = 'QBZ';
     if (enabled && track) {
       const rendered = renderWindowTitle(template, {
-        artist: track.artist,
-        title: track.title,
-        album: track.album,
+        artist: trackArtist,
+        title: trackTitle,
+        album: trackAlbum,
       });
       if (rendered.length > 0) {
         nextTitle = rendered;

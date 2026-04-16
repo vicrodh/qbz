@@ -485,8 +485,8 @@
   }
 
   .logo-img {
-    width: 175px;
-    height: 175px;
+    width: 140px;
+    height: 140px;
     object-fit: contain;
   }
 
