@@ -943,7 +943,11 @@
         "langley": "Langley",
         "ayanami": "Ayanami",
         "iscariot": "Iscariot",
-        "system": "System"
+        "system": "System",
+        "wcagLight": "WCAG Hell",
+        "wcagDark": "WCAG Dunkel",
+        "highContrast": "Hoher Kontrast",
+        "colorblind": "Farbenblind"
       },
       "autoTheme": "Auto-Theme",
       "autoThemeDesc": "Erstellt ein Farbschema aus deinem System-Hintergrundbild oder einem eigenen Bild",

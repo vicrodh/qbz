@@ -943,7 +943,11 @@
         "langley": "Langley",
         "ayanami": "Ayanami",
         "iscariot": "Iscariot",
-        "system": "System"
+        "system": "System",
+        "wcagLight": "WCAG Light",
+        "wcagDark": "WCAG Dark",
+        "highContrast": "High Contrast",
+        "colorblind": "Colorblind"
       },
       "autoTheme": "Auto-Theme",
       "autoThemeDesc": "Generate a color theme from your system wallpaper or a custom image",

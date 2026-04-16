@@ -593,6 +593,11 @@
     'Frost':             { value: 'frost',            type: 'light' },
     'Langley':           { value: 'langley',          type: 'light' },
     'Kurosaki':          { value: 'kurosaki',         type: 'light' },
+    // Accessibility themes
+    'WCAG Light':        { value: 'wcag-light',       type: 'light' },
+    'WCAG Dark':         { value: 'wcag-dark',        type: 'dark' },
+    'High Contrast':     { value: 'high-contrast',    type: 'dark' },
+    'Colorblind':        { value: 'colorblind',       type: 'dark' },
   };
 
   // Generate maps from themes object for compatibility
