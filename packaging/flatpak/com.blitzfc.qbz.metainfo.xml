@@ -69,6 +69,17 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="1.2.7" date="2026-04-16">
+      <description>
+        <p>Follow-up to 1.2.5 and 1.2.6: a defensive fix and a diagnostics expansion.</p>
+        <ul>
+          <li>Defensive fix for the Discover carousel click-through regression in 1.2.6: mouse-drag scrolling no longer captures the pointer until a real drag is in progress, so clicks on album/artist/playlist cards reach the card's onClick across every WebKitGTK + compositor combo</li>
+          <li>System Diagnostics expansion: one-shot snapshot now reports OS / distro / install method / key library versions (WebKitGTK, GTK, glibc, ALSA, PipeWire, PulseAudio), live playback state, Qobuz Connect role (controller / local renderer / observer), and — opt-out toggle in View Logs — an optional 10s Chromecast + DLNA scan, all bundled into the same paste upload</li>
+          <li>Favorites sidebar backfill: users whose persisted tab order predated the Labels tab were missing the Labels entry; order is now diffed against the canonical default and repaired on load</li>
+          <li>Misc: dependency bumps (svelte 5.55.4, vitest 4.1.4, rand 0.10.1 for GHSA-cq8v-f236-94qc)</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.2.6" date="2026-04-15">
       <description>
         <p>Accessibility, polish, and a couple of regression fixes.</p>

@@ -162,6 +162,13 @@
     type UserInfo
   } from '$lib/stores/authStore';
   import { setStorageUserId, migrateLocalStorage, migrateLocalStorageV2, getUserItem, setUserItem } from '$lib/utils/userStorage';
+  import {
+    initWindowTitleStore,
+    getWindowTitleEnabled,
+    getWindowTitleTemplate,
+    renderWindowTitle,
+    subscribe as subscribeWindowTitle,
+  } from '$lib/stores/windowTitleStore';
 
   // Favorites state management
   import { loadFavorites } from '$lib/stores/favoritesStore';
@@ -962,6 +969,10 @@
 
   // TitleBar reference for focusing search
   let titlebarRef = $state<{ focusSearch: () => void } | undefined>(undefined);
+
+  // Window-title (OS title bar) preference — bumped on store changes so the
+  // effect below recomputes immediately when the user toggles the setting.
+  let windowTitlePrefVersion = $state(0);
 
   // Playback State (from playerStore subscription)
   let currentTrack = $state<PlayingTrack | null>(null);
@@ -3937,6 +3948,39 @@
     };
   });
 
+  // OS window title: opt-in to reflect currently playing track.
+  // Depends on the store preference version + currentTrack so it reacts to
+  // both setting changes and track changes immediately.
+  $effect(() => {
+    void windowTitlePrefVersion;
+    const enabled = getWindowTitleEnabled();
+    const template = getWindowTitleTemplate();
+    const track = currentTrack;
+    const trackTitle = track?.title;
+    const trackArtist = track?.artist;
+    const trackAlbum = track?.album;
+
+    let nextTitle = 'QBZ';
+    if (enabled && track) {
+      const rendered = renderWindowTitle(template, {
+        artist: trackArtist,
+        title: trackTitle,
+        album: trackAlbum,
+      });
+      if (rendered.length > 0) {
+        nextTitle = rendered;
+      }
+    }
+
+    try {
+      getCurrentWindow().setTitle(nextTitle).catch((err) => {
+        console.warn('[WindowTitle] setTitle failed:', err);
+      });
+    } catch (err) {
+      console.warn('[WindowTitle] setTitle threw:', err);
+    }
+  });
+
   // Debounced full session save (coalesces rapid state changes into a single save)
   let sessionSaveDebounce: ReturnType<typeof setTimeout> | null = null;
   function debouncedFullSessionSave() {
@@ -4049,6 +4093,13 @@
   onMount(() => {
     // Bootstrap app (theme, mouse nav, Last.fm restore)
     const { cleanup: cleanupBootstrap } = bootstrapApp();
+
+    // Window-title preference: load from localStorage and subscribe so that
+    // toggling the setting updates the OS title bar immediately.
+    initWindowTitleStore();
+    const unsubscribeWindowTitle = subscribeWindowTitle(() => {
+      windowTitlePrefVersion = windowTitlePrefVersion + 1;
+    });
 
     // Quality fallback modal listener
     function handleQualityFallbackPrompt(e: Event) {
@@ -4920,6 +4971,7 @@
       unlistenQconnectDiagnostic?.();
       unlistenQconnectRendererReportDebug?.();
       unlistenAudioDeviceMissing?.();
+      unsubscribeWindowTitle();
       // Save session before cleanup
       saveSessionBeforeClose();
       cleanupBootstrap();

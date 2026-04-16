@@ -2,6 +2,8 @@
   import { Settings, SlidersHorizontal, Keyboard, Bug, BookOpen, CircleHelp } from 'lucide-svelte';
   import { openUrl } from '@tauri-apps/plugin-opener';
   import { t } from '$lib/i18n';
+  import ReportIssueModal from './ReportIssueModal.svelte';
+  import { setSettingsIntent } from '$lib/stores/settingsIntentStore';
 
   interface Props {
     username: string;
@@ -16,6 +18,25 @@
 
   let isMenuOpen = $state(false);
   let menuRef: HTMLDivElement | null = $state(null);
+  let showReportModal = $state(false);
+
+  const GITHUB_ISSUES_URL = 'https://github.com/vicrodh/qbz/issues/new?template=bug_report.yml';
+  const HIDE_REPORT_MODAL_KEY = 'qbz-hide-report-issue-modal';
+
+  function openGithubIssue() {
+    openUrl(GITHUB_ISSUES_URL).catch((err) => console.error('Failed to open URL:', err));
+  }
+
+  function handleReportGoToLogs() {
+    showReportModal = false;
+    setSettingsIntent({ section: 'developer', openLogs: true });
+    onSettingsClick();
+  }
+
+  function handleReportCreateIssue() {
+    showReportModal = false;
+    openGithubIssue();
+  }
 
   function toggleMenu(e: MouseEvent) {
     e.stopPropagation();
@@ -43,8 +64,15 @@
 
   function handleReportBug() {
     closeMenu();
-    openUrl('https://github.com/vicrodh/qbz/issues/new?template=bug_report.yml')
-      .catch(err => console.error('Failed to open URL:', err));
+    let skipModal = false;
+    try {
+      skipModal = localStorage.getItem(HIDE_REPORT_MODAL_KEY) === 'true';
+    } catch { /* ignore */ }
+    if (skipModal) {
+      openGithubIssue();
+    } else {
+      showReportModal = true;
+    }
   }
 
   function handleDocumentation() {
@@ -131,6 +159,13 @@
     {/if}
   </div>
 </div>
+
+<ReportIssueModal
+  isOpen={showReportModal}
+  onClose={() => showReportModal = false}
+  onGoToLogs={handleReportGoToLogs}
+  onCreateIssue={handleReportCreateIssue}
+/>
 
 <style>
   .user-card {

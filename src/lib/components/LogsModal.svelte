@@ -3,9 +3,11 @@
   import { writeText as copyToClipboard } from '@tauri-apps/plugin-clipboard-manager';
   import { t } from '$lib/i18n';
   import Modal from './Modal.svelte';
+  import Toggle from './Toggle.svelte';
   import { getConsoleLogsAsText } from '$lib/stores/consoleLogStore';
   import { showToast } from '$lib/stores/toastStore';
   import { LoaderCircle, Copy, Check } from 'lucide-svelte';
+  import { collectDiagnosticsText } from '$lib/services/diagnosticsSnapshot';
 
   interface Props {
     isOpen: boolean;
@@ -13,6 +15,22 @@
   }
 
   let { isOpen, onClose }: Props = $props();
+
+  // Opt-out toggle: when ON (default) the Terminal paste upload bundles the
+  // System Diagnostics snapshot + a 10s Chromecast/DLNA scan into the same
+  // paste, so bug reporters share ONE link instead of two.
+  // Persisted in localStorage.
+  const BUNDLE_KEY = 'qbz-paste-bundle-diagnostics';
+  let bundleDiagnostics = $state(true);
+  try {
+    const saved = localStorage.getItem(BUNDLE_KEY);
+    if (saved !== null) bundleDiagnostics = saved === 'true';
+  } catch { /* ignore */ }
+
+  function setBundleDiagnostics(value: boolean) {
+    bundleDiagnostics = value;
+    try { localStorage.setItem(BUNDLE_KEY, String(value)); } catch { /* ignore */ }
+  }
 
   let activeTab = $state<'terminal' | 'console'>('terminal');
   let terminalLogs = $state('');
@@ -24,6 +42,7 @@
   let consoleUrl = $state('');
   let copiedTerminal = $state(false);
   let copiedConsole = $state(false);
+  let bundleStage = $state<'idle' | 'collecting' | 'uploading'>('idle');
 
   async function loadLogs() {
     isLoading = true;
@@ -44,11 +63,28 @@
   });
 
   async function uploadTab(tab: 'terminal' | 'console') {
-    const content = tab === 'terminal' ? terminalLogs : consoleLogs;
+    let content = tab === 'terminal' ? terminalLogs : consoleLogs;
     if (tab === 'terminal') isUploadingTerminal = true;
     else isUploadingConsole = true;
 
     try {
+      // Bundle the diagnostics snapshot + a 10s cast scan into the terminal
+      // paste when the toggle is on. Console pastes stay lean.
+      if (tab === 'terminal' && bundleDiagnostics) {
+        bundleStage = 'collecting';
+        try {
+          const diag = await collectDiagnosticsText({ includeCastScan: true, castScanMs: 10000 });
+          content = [
+            '===== QBZ DIAGNOSTICS =====',
+            diag,
+            '===== TERMINAL LOG =====',
+            content,
+          ].join('\n\n');
+        } catch (e) {
+          console.warn('[LogsModal] Failed to collect diagnostics for bundle:', e);
+        }
+      }
+      bundleStage = 'uploading';
       const url: string = await invoke('v2_upload_logs_to_paste', { content });
       if (tab === 'terminal') terminalUrl = url;
       else consoleUrl = url;
@@ -59,6 +95,7 @@
     } finally {
       if (tab === 'terminal') isUploadingTerminal = false;
       else isUploadingConsole = false;
+      bundleStage = 'idle';
     }
   }
 
@@ -106,6 +143,18 @@
   {#snippet footer()}
     <div class="footer-content">
       <div class="footer-left">
+        {#if activeTab === 'terminal'}
+          <div class="bundle-row">
+            <Toggle
+              enabled={bundleDiagnostics}
+              onchange={(v) => setBundleDiagnostics(v)}
+            />
+            <div class="bundle-text">
+              <span class="bundle-label">{$t('settings.developer.bundleDiagnostics')}</span>
+              <small class="bundle-note">{$t('settings.developer.bundleDiagnosticsDesc')}</small>
+            </div>
+          </div>
+        {/if}
         <button
           class="upload-btn"
           onclick={() => uploadTab(activeTab)}
@@ -113,7 +162,11 @@
         >
           {#if (activeTab === 'terminal' ? isUploadingTerminal : isUploadingConsole)}
             <LoaderCircle size={14} class="spin" />
-            {$t('settings.developer.uploading')}
+            {#if activeTab === 'terminal' && bundleStage === 'collecting'}
+              {$t('settings.developer.collectingDiagnostics')}
+            {:else}
+              {$t('settings.developer.uploading')}
+            {/if}
           {:else}
             {$t('settings.developer.uploadTab', { values: { tab: activeTab === 'terminal' ? $t('settings.developer.tabTerminal') : $t('settings.developer.tabConsole') } })}
           {/if}
@@ -221,6 +274,27 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
+  }
+
+  .bundle-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .bundle-text {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .bundle-label {
+    font-size: 13px;
+    color: var(--text-primary);
+  }
+
+  .bundle-note {
+    font-size: 11px;
+    color: var(--text-muted);
   }
 
   .upload-btn {

@@ -973,7 +973,21 @@
   async function loadFavoritesPreferences() {
     try {
       const prefs = await invoke<FavoritesPreferences>('v2_get_favorites_preferences');
-      favoritesTabOrder = prefs.tab_order || ['tracks', 'albums', 'artists', 'labels', 'playlists'];
+      const defaultOrder = ['tracks', 'albums', 'artists', 'labels', 'playlists'];
+      let order = prefs.tab_order || defaultOrder;
+      // Backfill any tab the user's persisted order is missing (e.g. sessions
+      // created before `labels` was added as a favorites tab). Preserve the
+      // user's existing order; append missing tabs in their default position.
+      const missing = defaultOrder.filter((tab) => !order.includes(tab));
+      if (missing.length > 0) {
+        const merged = [...order];
+        for (const tab of missing) {
+          const defaultIdx = defaultOrder.indexOf(tab);
+          merged.splice(defaultIdx, 0, tab);
+        }
+        order = merged;
+      }
+      favoritesTabOrder = order;
     } catch (err) {
       console.debug('[Sidebar] Failed to load favorites preferences:', err);
     }

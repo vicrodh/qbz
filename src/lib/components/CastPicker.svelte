@@ -78,6 +78,13 @@
   let error = $state<string | null>(null);
   let discoveryStarted = $state(false);
   let connecting = $state(false);
+  // Multicast discovery (DLNA / Chromecast) commonly needs 5-15s before
+  // devices announce themselves. `loading` only covers the first poll, so we
+  // keep a separate `scanning` flag that stays true long enough to show a
+  // spinner instead of a premature "No devices found" message.
+  let scanning = $state(false);
+  let scanTimeout: ReturnType<typeof setTimeout> | null = null;
+  const SCAN_DURATION_MS = 15000;
 
   // Cast state from store
   let castState = $state(getCastState());
@@ -122,6 +129,9 @@
     loading = true;
     error = null;
     discoveryStarted = true;
+    scanning = true;
+    if (scanTimeout) clearTimeout(scanTimeout);
+    scanTimeout = setTimeout(() => { scanning = false; }, SCAN_DURATION_MS);
 
     try {
       // Start discovery protocols in parallel
@@ -136,11 +146,15 @@
     } catch (err) {
       error = String(err);
       loading = false;
+      scanning = false;
+      if (scanTimeout) { clearTimeout(scanTimeout); scanTimeout = null; }
     }
   }
 
   async function stopDiscovery() {
     discoveryStarted = false;
+    scanning = false;
+    if (scanTimeout) { clearTimeout(scanTimeout); scanTimeout = null; }
     try {
       await Promise.allSettled([
         invoke('v2_cast_stop_discovery'),
@@ -468,7 +482,7 @@
                 </div>
               {/if}
             </div>
-          {:else if loading && devices().length === 0}
+          {:else if devices().length === 0 && (loading || scanning)}
             <div class="loading">
               <LoaderCircle size={32} class="spin" />
               <p>{$t('toast.loadingDevices')}</p>

@@ -166,3 +166,166 @@ pub fn v2_get_runtime_diagnostics(
         app_version: env!("CARGO_PKG_VERSION").to_string(),
     })
 }
+
+// ==================== System Info ====================
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SystemInfo {
+    pub os: String,
+    pub arch: String,
+    pub kernel_version: Option<String>,
+    pub distro_id: Option<String>,
+    pub distro_version_id: Option<String>,
+    pub distro_pretty_name: Option<String>,
+    pub install_method: String,
+    pub flatpak_runtime: Option<String>,
+    pub flatpak_runtime_version: Option<String>,
+    pub webkit2gtk_version: Option<String>,
+    pub gtk_version: Option<String>,
+    pub glibc_version: Option<String>,
+    pub alsa_version: Option<String>,
+    pub pipewire_version: Option<String>,
+    pub pulseaudio_version: Option<String>,
+}
+
+/// Parse /etc/os-release (or the Flatpak host equivalent) into key/value pairs.
+fn read_os_release() -> std::collections::HashMap<String, String> {
+    let mut map = std::collections::HashMap::new();
+    // Try Flatpak-exposed host file first, then the normal path.
+    let candidates = ["/run/host/os-release", "/etc/os-release"];
+    for path in candidates {
+        if let Ok(text) = std::fs::read_to_string(path) {
+            for line in text.lines() {
+                if let Some(idx) = line.find('=') {
+                    let key = line[..idx].trim().to_string();
+                    let mut value = line[idx + 1..].trim().to_string();
+                    if value.starts_with('"') && value.ends_with('"') && value.len() >= 2 {
+                        value = value[1..value.len() - 1].to_string();
+                    }
+                    map.insert(key, value);
+                }
+            }
+            if !map.is_empty() {
+                return map;
+            }
+        }
+    }
+    map
+}
+
+fn detect_kernel_version() -> Option<String> {
+    std::fs::read_to_string("/proc/sys/kernel/osrelease")
+        .ok()
+        .map(|s| s.trim().to_string())
+}
+
+fn detect_install_method() -> (String, Option<String>, Option<String>) {
+    // (method, flatpak_runtime, flatpak_runtime_version)
+    if std::env::var("FLATPAK_ID").is_ok() || std::path::Path::new("/.flatpak-info").exists() {
+        let mut runtime = None;
+        let mut runtime_version = None;
+        if let Ok(text) = std::fs::read_to_string("/.flatpak-info") {
+            for line in text.lines() {
+                if let Some(value) = line.strip_prefix("runtime=") {
+                    let v = value.trim();
+                    if let Some(slash) = v.rfind('/') {
+                        runtime = Some(v[..slash].to_string());
+                        runtime_version = Some(v[slash + 1..].to_string());
+                    } else {
+                        runtime = Some(v.to_string());
+                    }
+                }
+            }
+        }
+        return ("flatpak".to_string(), runtime, runtime_version);
+    }
+    if std::env::var("SNAP").is_ok() {
+        return ("snap".to_string(), None, None);
+    }
+    if std::env::var("APPIMAGE").is_ok() {
+        return ("appimage".to_string(), None, None);
+    }
+    if cfg!(debug_assertions) {
+        return ("dev".to_string(), None, None);
+    }
+    ("native".to_string(), None, None)
+}
+
+/// Extract the best-available version string from the filename of a shared
+/// library loaded by the current process. Looks for patterns like
+/// `libfoo.so.0.15.7` → `0.15.7`, or `libfoo.so.2` → `2`.
+/// Returns `None` if the library isn't mapped.
+fn detect_loaded_lib_version(lib_name_stem: &str) -> Option<String> {
+    let maps = std::fs::read_to_string("/proc/self/maps").ok()?;
+    let mut best: Option<String> = None;
+    for line in maps.lines() {
+        // Last column is the path (may contain spaces, very rare).
+        let path = line.splitn(6, ' ').nth(5).unwrap_or("").trim();
+        if path.is_empty() {
+            continue;
+        }
+        let filename = std::path::Path::new(path)
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("");
+        if !filename.starts_with(lib_name_stem) {
+            continue;
+        }
+        // filename example: "libwebkit2gtk-4.1.so.0.15.7"
+        // Strip the "lib_name_stem.so" prefix and leading dot.
+        let tail = match filename.split_once(".so") {
+            Some((_, rest)) => rest.trim_start_matches('.'),
+            None => continue,
+        };
+        if tail.is_empty() {
+            continue;
+        }
+        // Resolve symlink target if possible — often the real file carries
+        // a fuller version than the SONAME alias.
+        if let Ok(real) = std::fs::canonicalize(path) {
+            if let Some(real_name) = real.file_name().and_then(|s| s.to_str()) {
+                if let Some((_, rest)) = real_name.split_once(".so") {
+                    let real_tail = rest.trim_start_matches('.');
+                    if !real_tail.is_empty() {
+                        best = Some(real_tail.to_string());
+                        continue;
+                    }
+                }
+            }
+        }
+        best.get_or_insert_with(|| tail.to_string());
+    }
+    best
+}
+
+#[tauri::command]
+pub fn v2_get_system_info() -> Result<SystemInfo, RuntimeError> {
+    let os = std::env::consts::OS.to_string();
+    let arch = std::env::consts::ARCH.to_string();
+    let (install_method, flatpak_runtime, flatpak_runtime_version) = detect_install_method();
+    let osr = read_os_release();
+
+    Ok(SystemInfo {
+        os,
+        arch,
+        kernel_version: detect_kernel_version(),
+        distro_id: osr.get("ID").cloned(),
+        distro_version_id: osr.get("VERSION_ID").cloned(),
+        distro_pretty_name: osr
+            .get("PRETTY_NAME")
+            .cloned()
+            .or_else(|| osr.get("NAME").cloned()),
+        install_method,
+        flatpak_runtime,
+        flatpak_runtime_version,
+        // Runtime shared-library versions, parsed from /proc/self/maps.
+        webkit2gtk_version: detect_loaded_lib_version("libwebkit2gtk-4.1"),
+        gtk_version: detect_loaded_lib_version("libgtk-3")
+            .or_else(|| detect_loaded_lib_version("libgtk-4")),
+        glibc_version: detect_loaded_lib_version("libc"),
+        alsa_version: detect_loaded_lib_version("libasound"),
+        pipewire_version: detect_loaded_lib_version("libpipewire-0.3"),
+        pulseaudio_version: detect_loaded_lib_version("libpulse"),
+    })
+}
