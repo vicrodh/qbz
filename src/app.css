@@ -1586,19 +1586,19 @@ select {
 .action-btn-circle.primary {
   width: 44px;
   height: 44px;
-  background: var(--accent-primary);
   border: none;
-  /* Resting glyph uses the hover-state fill colour (--accent-hover);
-     ring is identical to hover (2px inset --text-primary). Only the
-     background fill flips on hover. */
-  color: var(--accent-hover);
+  /* Resting = the previous hover look: --accent-hover fill, white glyph,
+     white 2px ring. Hover flips to the --accent-primary fill with the
+     glyph now in --accent-hover (the previous resting style). */
+  background: var(--accent-hover);
+  color: var(--text-primary);
   box-shadow: inset 0 0 0 2px var(--text-primary);
   transition: background 150ms ease, color 150ms ease;
 }
 
 .action-btn-circle.primary:hover {
-  background: var(--accent-hover);
-  color: var(--text-primary);
+  background: var(--accent-primary);
+  color: var(--accent-hover);
   box-shadow: inset 0 0 0 2px var(--text-primary);
 }
 
