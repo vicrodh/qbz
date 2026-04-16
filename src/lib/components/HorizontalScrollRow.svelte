@@ -189,11 +189,16 @@
     overflow-x: auto;
     overflow-y: hidden;
     cursor: grab;
+    /* Never select text inside carousels: drag-to-scroll would otherwise
+       highlight titles/artists in the first few pixels before the drag
+       threshold kicks in. Text is still selectable in the dedicated
+       album/artist/playlist views. */
+    user-select: none;
+    -webkit-user-select: none;
   }
 
   .scroll-container.dragging {
     cursor: grabbing;
-    user-select: none;
   }
 
   .content {
