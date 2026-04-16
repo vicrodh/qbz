@@ -1588,11 +1588,12 @@ select {
   height: 44px;
   background: var(--accent-primary);
   border: none;
-  /* Resting: glyph and ring share --accent-hover. Hover flips to the
-     white glyph/ring over the --accent-hover fill. (trial — may revert) */
+  /* Resting glyph uses the hover-state fill colour (--accent-hover);
+     ring is identical to hover (2px inset --text-primary). Only the
+     background fill flips on hover. */
   color: var(--accent-hover);
-  box-shadow: inset 0 0 0 2px var(--accent-hover);
-  transition: background 150ms ease, color 150ms ease, box-shadow 200ms ease;
+  box-shadow: inset 0 0 0 2px var(--text-primary);
+  transition: background 150ms ease, color 150ms ease;
 }
 
 .action-btn-circle.primary:hover {
