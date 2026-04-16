@@ -64,13 +64,14 @@ const SNAP_STORE_URL = 'https://snapcraft.io/qbz-player'
 
 /* ── Tabs ─────────────────────────────────────────────────── */
 
-type TabId = 'arch' | 'gentoo' | 'debian' | 'fedora' | 'flatpak' | 'snap' | 'appimage' | 'tarball' | 'macos' | 'source'
+type TabId = 'arch' | 'nixos' | 'gentoo' | 'debian' | 'fedora' | 'flatpak' | 'snap' | 'appimage' | 'tarball' | 'macos' | 'source'
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'arch', label: 'Arch' },
   { id: 'gentoo', label: 'Gentoo' },
   { id: 'debian', label: 'Debian / Ubuntu' },
   { id: 'fedora', label: 'Fedora / RHEL' },
+  { id: 'nixos', label: 'NixOS' },
   { id: 'flatpak', label: 'Flatpak' },
   { id: 'snap', label: 'Snap' },
   { id: 'appimage', label: 'AppImage' },
@@ -81,6 +82,7 @@ const TABS: { id: TabId; label: string }[] = [
 
 const TAB_TYPES: Record<TabId, DownloadItem['type'][]> = {
   arch: ['aur'],
+  nixos: [],
   gentoo: [],
   debian: ['deb'],
   fedora: ['rpm'],
@@ -94,6 +96,7 @@ const TAB_TYPES: Record<TabId, DownloadItem['type'][]> = {
 
 const TAB_ICONS: Record<TabId, string | null> = {
   arch: '/icons/arch.svg',
+  nixos: '/icons/nixos.svg',
   gentoo: '/icons/gentoo.svg',
   debian: '/icons/debian.svg',
   fedora: '/icons/redhat.svg',
@@ -413,6 +416,57 @@ function AptRepoSection() {
   )
 }
 
+const NIXOS_FLAKE_INPUT = 'inputs.qbz.url = "github:vicrodh/qbz";'
+const NIXOS_SYSTEM_PKG = `{pkgs, inputs, ...}:
+{
+  environment.systemPackages = [
+    inputs.qbz.packages.\${pkgs.system}.default
+  ];
+}`
+const NIXOS_HOME_PKG = `{pkgs, inputs, ...}:
+{
+  home.packages = [
+    inputs.qbz.packages.\${pkgs.system}.default
+  ];
+}`
+
+function NixOSContent() {
+  return (
+    <div className="download-item" style={{ position: 'relative', overflow: 'hidden' }}>
+      <div className="download-item__header">
+        <div className="download-item__info">
+          <span className="download-item__label">Nix Flake</span>
+        </div>
+      </div>
+      <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 12 }}>
+        Add the flake input to your <code style={{ fontSize: 12 }}>flake.nix</code>:
+      </p>
+      <div className="terminal" style={{ marginBottom: 16 }}>
+        <code>
+          <span className="terminal__cmd">{NIXOS_FLAKE_INPUT}</span>
+        </code>
+        <CopyButton text={NIXOS_FLAKE_INPUT} />
+      </div>
+
+      <div className="download-meta__name" style={{ fontSize: 14, marginBottom: 8 }}>NixOS (system-wide)</div>
+      <div className="terminal" style={{ marginBottom: 16 }}>
+        <code><pre style={{ margin: 0, whiteSpace: 'pre', fontSize: 12 }}>{NIXOS_SYSTEM_PKG}</pre></code>
+        <CopyButton text={NIXOS_SYSTEM_PKG} />
+      </div>
+
+      <div className="download-meta__name" style={{ fontSize: 14, marginBottom: 8 }}>Home Manager</div>
+      <div className="terminal" style={{ marginBottom: 12 }}>
+        <code><pre style={{ margin: 0, whiteSpace: 'pre', fontSize: 12 }}>{NIXOS_HOME_PKG}</pre></code>
+        <CopyButton text={NIXOS_HOME_PKG} />
+      </div>
+
+      <p style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 8 }}>
+        Also available in <a href="https://github.com/NixOS/nixpkgs" target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}>nixpkgs</a> as <code style={{ fontSize: 11 }}>qbz</code>.
+      </p>
+    </div>
+  )
+}
+
 const GENTOO_OVERLAY_CMDS = [
   'eselect repository add qbz-overlay git https://github.com/vicrodh/qbz-overlay.git',
   'emerge --sync qbz-overlay',
@@ -725,6 +779,10 @@ export function DownloadSection() {
               ) : activeTab === 'gentoo' ? (
                 <div className="download-list">
                   <GentooContent />
+                </div>
+              ) : activeTab === 'nixos' ? (
+                <div className="download-list">
+                  <NixOSContent />
                 </div>
               ) : activeTab === 'macos' ? (
                 <MacOSContent downloads={allDownloads} />
