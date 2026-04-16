@@ -10,8 +10,12 @@
 
   let { title, header, children }: Props = $props();
 
+  const DRAG_THRESHOLD_PX = 5;
+
   let scrollContainer: HTMLDivElement;
   let isDragging = $state(false);
+  let pointerIsDown = false;
+  let activePointerId = -1;
   let dragStartX = 0;
   let dragStartScroll = 0;
   let dragDistance = 0;
@@ -33,28 +37,59 @@
 
   function onPointerDown(e: PointerEvent) {
     if (e.button !== 0) return;
-    isDragging = true;
+    // Arm drag detection but do NOT setPointerCapture yet. Capturing here
+    // redirects the subsequent click away from the card under the pointer,
+    // which breaks card/play-button clicks inside carousels (issue #323).
+    pointerIsDown = true;
+    activePointerId = e.pointerId;
     dragStartX = e.clientX;
     dragStartScroll = scrollContainer.scrollLeft;
     dragDistance = 0;
-    scrollContainer.setPointerCapture(e.pointerId);
+    isDragging = false;
   }
 
   function onPointerMove(e: PointerEvent) {
-    if (!isDragging) return;
+    if (!pointerIsDown || e.pointerId !== activePointerId) return;
     const dx = e.clientX - dragStartX;
     dragDistance = Math.abs(dx);
-    scrollContainer.scrollLeft = dragStartScroll - dx;
+    if (!isDragging && dragDistance > DRAG_THRESHOLD_PX) {
+      // Cross the threshold → now it's a real drag. Capture the pointer so
+      // we keep getting move events even if the cursor leaves the container.
+      isDragging = true;
+      try {
+        scrollContainer.setPointerCapture(e.pointerId);
+      } catch {
+        // Some pointer types (e.g. synthesised mouse on old WebKit) may
+        // reject capture — continue tracking via bubble events.
+      }
+    }
+    if (isDragging) {
+      scrollContainer.scrollLeft = dragStartScroll - dx;
+    }
   }
 
   function onPointerUp(e: PointerEvent) {
-    if (!isDragging) return;
-    isDragging = false;
-    scrollContainer.releasePointerCapture(e.pointerId);
+    if (!pointerIsDown) return;
+    pointerIsDown = false;
+    if (isDragging) {
+      isDragging = false;
+      try {
+        scrollContainer.releasePointerCapture(e.pointerId);
+      } catch {
+        // ignore
+      }
+    }
+    activePointerId = -1;
   }
 
   function onClickCapture(e: MouseEvent) {
-    if (dragDistance > 5) e.preventDefault();
+    // Only swallow the click that would otherwise follow a real drag.
+    if (dragDistance > DRAG_THRESHOLD_PX) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    // Reset so the next unrelated click passes through cleanly.
+    dragDistance = 0;
   }
 
   const hasHeader = $derived(!!title || !!header);
