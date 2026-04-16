@@ -41,6 +41,14 @@
   import MigrationModal from '../MigrationModal.svelte';
   import { getDevicePrettyName } from '$lib/utils/audioDeviceNames';
   import { getUserItem, setUserItem, removeUserItem } from '$lib/utils/userStorage';
+  import {
+    initWindowTitleStore,
+    getWindowTitleEnabled,
+    getWindowTitleTemplate,
+    setWindowTitleEnabled,
+    setWindowTitleTemplate,
+    DEFAULT_WINDOW_TITLE_TEMPLATE,
+  } from '$lib/stores/windowTitleStore';
   import { getConfig as getImmersiveConfig, setConfig as setImmersiveConfig } from '$lib/immersive';
   import { ZOOM_OPTIONS, findZoomOption, getZoomLevelFromOption } from '$lib/utils/zoom';
   import { getZoom, setZoom, subscribeZoom } from '$lib/stores/zoomStore';
@@ -987,6 +995,10 @@
   let systemNotificationsEnabled = $state(true);
   let language = $state('Auto');
 
+  // Window title (OS title bar) preference — opt-in track metadata
+  let windowTitleEnabled = $state(false);
+  let windowTitleTemplate = $state(DEFAULT_WINDOW_TITLE_TEMPLATE);
+
   // Title bar settings
   let hideTitleBar = $state(getHideTitleBar());
   let useSystemTitleBar = $state(getUseSystemTitleBar());
@@ -1549,6 +1561,11 @@
     toastsEnabled = getToastsEnabled();
     loadSystemNotificationsPreference();
     systemNotificationsEnabled = getSystemNotificationsEnabled();
+
+    // Load window title preference
+    initWindowTitleStore();
+    windowTitleEnabled = getWindowTitleEnabled();
+    windowTitleTemplate = getWindowTitleTemplate();
 
     // Load playback preferences
     loadPlaybackPreferences();
@@ -4474,6 +4491,32 @@
       <span class="setting-label">{$t('settings.appearance.systemNotifications')}</span>
       <Toggle enabled={systemNotificationsEnabled} onchange={(v) => { systemNotificationsEnabled = v; setSystemNotificationsEnabled(v); }} />
     </div>
+    <div class="setting-row">
+      <span class="setting-label">{$t('settings.appearance.windowTitleShow')}</span>
+      <Toggle
+        enabled={windowTitleEnabled}
+        onchange={(v) => { windowTitleEnabled = v; setWindowTitleEnabled(v); }}
+      />
+    </div>
+    {#if windowTitleEnabled}
+      <div class="setting-row">
+        <div class="setting-info">
+          <span class="setting-label">{$t('settings.appearance.windowTitleTemplate')}</span>
+          <small class="setting-note">{$t('settings.appearance.windowTitleTemplateHelp')}</small>
+        </div>
+        <input
+          type="text"
+          class="text-input"
+          value={windowTitleTemplate}
+          placeholder={DEFAULT_WINDOW_TITLE_TEMPLATE}
+          onchange={(e) => {
+            const next = e.currentTarget.value;
+            windowTitleTemplate = next;
+            setWindowTitleTemplate(next);
+          }}
+        />
+      </div>
+    {/if}
     <!-- Title bar toggles: hidden on macOS (always uses native overlay title bar) -->
     {#if platform !== 'macos'}
     <div class="setting-row">
