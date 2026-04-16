@@ -3,6 +3,8 @@
 
 EAPI=8
 
+inherit xdg-utils
+
 DESCRIPTION="Native hi-fi Qobuz desktop player for Linux (prebuilt binary)"
 HOMEPAGE="https://qbz.lol https://github.com/vicrodh/qbz"
 
