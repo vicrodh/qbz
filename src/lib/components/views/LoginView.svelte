@@ -488,7 +488,6 @@
     width: 175px;
     height: 175px;
     object-fit: contain;
-    filter: drop-shadow(0 3px 14px color-mix(in srgb, var(--text-muted) 22%, transparent));
   }
 
   .brand-name {
