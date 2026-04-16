@@ -4507,14 +4507,38 @@
         console.log('[Player] Auto-advance suppressed: QConnect is controlling playback');
         return;
       }
-      if (!isAutoplayEnabled()) {
+      // Only `track_only` mode stops auto-advance. Both `continue` and `infinite`
+      // advance through the queue; `infinite` additionally refills it on end.
+      if (!isAutoplayEnabled() && !isInfinitePlayEnabled()) {
         setQueueEnded(true);
         await stopPlayback();
         setIsPlaying(false);
         return;
       }
       const previousTrackId = currentTrack?.id ?? null;
-      const nextTrackResult = await nextTrackGuarded();
+      let nextTrackResult = await nextTrackGuarded();
+      if (!nextTrackResult && isInfinitePlayEnabled()) {
+        // Queue ended with infinite play on — extend with radio and retry.
+        const recentIds: number[] = [];
+        if (currentTrack) recentIds.push(currentTrack.id);
+        for (const item of historyTracks.slice(0, 5)) {
+          const numericId = (item as any).trackId;
+          if (typeof numericId === 'number') recentIds.push(numericId);
+        }
+        if (recentIds.length > 0) {
+          try {
+            const radioTracks = await invoke<BackendQueueTrack[]>('v2_create_infinite_radio', {
+              recentTrackIds: recentIds.slice(0, 5)
+            });
+            if (radioTracks && radioTracks.length > 0) {
+              await invoke('v2_bulk_add_to_queue', { tracks: radioTracks });
+              nextTrackResult = await nextTrackGuarded();
+            }
+          } catch (err) {
+            console.error('[Player] Auto-advance: infinite radio extend failed:', err);
+          }
+        }
+      }
       if (nextTrackResult) {
         // Defensive fallback for issue #80:
         // if backend returns same track on auto-advance while repeat-one is off,
