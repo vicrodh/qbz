@@ -10,7 +10,7 @@
   import HorizontalScrollRow from '../HorizontalScrollRow.svelte';
   import QobuzPlaylistCard from '../QobuzPlaylistCard.svelte';
   import TrackMenu from '../TrackMenu.svelte';
-  import QualityBadge from '../QualityBadge.svelte';
+  import { formatQuality } from '$lib/adapters/qobuzAdapters';
   import { replacePlaybackQueue } from '$lib/services/queuePlaybackService';
   import { setPlaybackContext } from '$lib/stores/playbackContextStore';
   import { togglePlay } from '$lib/stores/playerStore';
@@ -1035,11 +1035,11 @@
                 {/if}
               </div>
               <div class="track-quality">
-                <QualityBadge
-                  bitDepth={track.maximum_bit_depth}
-                  samplingRate={track.maximum_sampling_rate}
-                  compact
-                />
+                {formatQuality(
+                  (track.maximum_bit_depth ?? 16) > 16,
+                  track.maximum_bit_depth,
+                  track.maximum_sampling_rate
+                )}
               </div>
               <div class="track-duration">{formatDuration(track.duration)}</div>
               <div class="track-actions">
@@ -1586,7 +1586,12 @@
     display: block; max-width: 100%;
   }
   .track-link:hover { color: var(--text-primary); text-decoration: underline; text-underline-offset: 2px; }
-  .track-quality { display: flex; align-items: center; }
+  .track-quality {
+    font-size: 12px;
+    color: #666666;
+    text-align: center;
+    min-width: 80px;
+  }
   .track-duration { font-size: 13px; color: var(--text-muted); font-family: var(--font-sans); }
   .track-actions { display: flex; align-items: center; gap: 4px; margin-left: 8px; }
   .track-favorite-btn {
