@@ -1583,23 +1583,12 @@ select {
   cursor: not-allowed;
 }
 
+/* Primary action button: same visual language as the secondaries, only
+   larger. The size alone signals "main action" and — unlike an accent
+   fill — stays legible across all themes (default, OLED, light, etc.). */
 .action-btn-circle.primary {
   width: 44px;
   height: 44px;
-  border: none;
-  /* Resting = the previous hover look: --accent-hover fill, white glyph,
-     white 1px ring. Hover flips to the --accent-primary fill with the
-     glyph now in --accent-hover (the previous resting style). */
-  background: var(--accent-hover);
-  color: var(--text-primary);
-  box-shadow: inset 0 0 0 1px var(--text-primary);
-  transition: background 150ms ease, color 150ms ease;
-}
-
-.action-btn-circle.primary:hover {
-  background: var(--accent-primary);
-  color: var(--accent-hover);
-  box-shadow: inset 0 0 0 1px var(--text-primary);
 }
 
 .action-btn-circle.is-active {

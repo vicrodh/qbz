@@ -1452,17 +1452,9 @@
   .section-header-left { display: flex; align-items: center; gap: 12px; }
   .section-title { font-size: 20px; font-weight: 600; color: var(--text-primary); margin: 0; }
   .section-header-actions { display: flex; align-items: center; gap: 12px; }
-  .action-btn-circle {
-    display: flex; align-items: center; justify-content: center;
-    width: 36px; height: 36px; border-radius: 50%;
-    background-color: var(--bg-tertiary); border: none;
-    color: var(--text-secondary); cursor: pointer;
-    transition: background-color 150ms ease, color 150ms ease;
-  }
-  .action-btn-circle:hover { background-color: var(--bg-hover); color: var(--text-primary); }
-  .action-btn-circle.primary { background-color: var(--accent-primary); color: white; }
-  .action-btn-circle.primary:hover { opacity: 0.9; }
-  .action-btn-circle.is-active { background-color: var(--accent-primary); color: white; }
+  /* .action-btn-circle (+ .primary / .is-active / hover) is defined globally
+     in app.css. Kept homologated with every other header/toolbar across
+     the app — transparent fill + muted ring, larger size = primary. */
   .see-all-btn {
     background: none; border: none; color: var(--text-muted);
     font-size: 13px; font-weight: 500; cursor: pointer;
