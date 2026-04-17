@@ -480,6 +480,7 @@ pub async fn v2_library_play_track(
     library_state: State<'_, LibraryState>,
     bridge: State<'_, CoreBridgeState>,
     offline_cache: State<'_, crate::offline_cache::OfflineCacheState>,
+    app_state: State<'_, AppState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), String> {
     runtime
@@ -551,6 +552,8 @@ pub async fn v2_library_play_track(
                         qobuz_track_id
                     )
                 })?;
+                // Warm L1 so subsequent access (replay, gapless) is instant.
+                app_state.audio_cache.insert(qobuz_track_id as u64, audio_data.clone());
                 let bridge = bridge.get().await;
                 bridge
                     .player()

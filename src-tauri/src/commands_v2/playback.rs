@@ -473,6 +473,12 @@ pub async fn v2_play_next_gapless(
                             "[V2/GAPLESS] Track {} from OFFLINE cache (CMAF v2)",
                             track_id
                         );
+                        // Warm L1 with the decrypted bytes so subsequent
+                        // accesses (re-gapless, replay, scrub) skip the
+                        // disk-read + decrypt and hit memory directly.
+                        // Without this, every offline-cache gapless attempt
+                        // re-does 5-7s of I/O + AES work.
+                        app_state.audio_cache.insert(track_id, audio_data.clone());
                         player
                             .play_next(audio_data, track_id)
                             .map_err(RuntimeError::Internal)?;
@@ -925,6 +931,13 @@ pub async fn v2_play_track(
                     // Keep as fallback — don't discard, network might fail
                     low_quality_fallback = Some(audio_data);
                 } else {
+                    // Warm L1 with the decrypted bytes so the next
+                    // access (replay, gapless re-queue, scrub) skips
+                    // the 5-7s disk + AES decrypt round-trip. Without
+                    // this, every offline-cache play_next_gapless fails
+                    // to land in time and the player's gapless engine
+                    // has already been dropped.
+                    app_state.audio_cache.insert(track_id, audio_data.clone());
                     player
                         .play_data(audio_data, track_id)
                         .map_err(RuntimeError::Internal)?;
