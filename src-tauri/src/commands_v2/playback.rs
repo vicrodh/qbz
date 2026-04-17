@@ -418,6 +418,7 @@ pub async fn v2_play_next_gapless(
     offline_cache: State<'_, OfflineCacheState>,
     app_state: State<'_, AppState>,
     library_state: State<'_, LibraryState>,
+    app_handle: tauri::AppHandle,
 ) -> Result<bool, RuntimeError> {
     log::info!("[V2] Command: play_next_gapless for track {}", track_id);
 
@@ -489,17 +490,15 @@ pub async fn v2_play_next_gapless(
             match row.cache_format {
                 2 => {
                     let cache_path = offline_cache.get_cache_path();
-                    let row_clone = row.clone();
-                    let decrypted = tokio::task::spawn_blocking(move || {
-                        crate::offline_cache::playback::load_cmaf_bundle(
+                    let decrypted =
+                        crate::offline_cache::playback::load_cmaf_bundle_with_ui_events(
+                            &app_handle,
                             track_id,
-                            &row_clone,
-                            std::path::Path::new(&cache_path),
+                            track_id,
+                            row.clone(),
+                            cache_path,
                         )
-                    })
-                    .await
-                    .ok()
-                    .flatten();
+                        .await;
                     if let Some(audio_data) = decrypted {
                         log::info!(
                             "[V2/GAPLESS] Track {} from OFFLINE cache (CMAF v2)",
@@ -574,17 +573,15 @@ pub async fn v2_play_next_gapless(
                         match row.cache_format {
                             2 => {
                                 let cache_path = offline_cache.get_cache_path();
-                                let row_clone = row.clone();
-                                let decrypted = tokio::task::spawn_blocking(move || {
-                                    crate::offline_cache::playback::load_cmaf_bundle(
-                                        qid as u64,
-                                        &row_clone,
-                                        std::path::Path::new(&cache_path),
+                                let decrypted =
+                                    crate::offline_cache::playback::load_cmaf_bundle_with_ui_events(
+                                        &app_handle,
+                                        track_id,  // display: library row id
+                                        qid as u64, // cmaf/bundle: qobuz id
+                                        row.clone(),
+                                        cache_path,
                                     )
-                                })
-                                .await
-                                .ok()
-                                .flatten();
+                                    .await;
                                 if let Some(audio_data) = decrypted {
                                     log::info!(
                                         "[V2/GAPLESS] Library track {} (qobuz {}) from OFFLINE cache (CMAF v2)",
@@ -809,6 +806,7 @@ pub async fn v2_play_track(
     audio_settings: State<'_, AudioSettingsState>,
     offline_state: State<'_, crate::offline::OfflineState>,
     app_state: State<'_, AppState>,
+    app_handle: tauri::AppHandle,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<V2PlayTrackResult, RuntimeError> {
     // Runtime contract: require CoreBridge auth for V2 playback
@@ -947,23 +945,18 @@ pub async fn v2_play_track(
             // v2 CMAF bundle: read init + encrypted segments, unwrap the
             // content key from the secret vault, decrypt to plain FLAC,
             // hand to the player just like any other cache hit.
-            // spawn_blocking so the sync disk read + AES decrypt don't
-            // starve the tokio executor (that starvation is what let the
-            // queue auto-advance fire play_track before gapless returned,
-            // killing the gapless engine — see earlier fix commits).
+            // spawn_blocking via the ui-events helper so the track row
+            // shows an "unlocking" animation while decrypt runs.
             let audio_data_opt: Option<Vec<u8>> = if row.cache_format == 2 {
-                let row_clone = row.clone();
                 let cache_path = offline_cache.get_cache_path();
-                tokio::task::spawn_blocking(move || {
-                    crate::offline_cache::playback::load_cmaf_bundle(
-                        track_id,
-                        &row_clone,
-                        std::path::Path::new(&cache_path),
-                    )
-                })
+                crate::offline_cache::playback::load_cmaf_bundle_with_ui_events(
+                    &app_handle,
+                    track_id,
+                    track_id,
+                    row.clone(),
+                    cache_path,
+                )
                 .await
-                .ok()
-                .flatten()
             } else {
                 // cache_format = 1 (legacy plain FLAC)
                 let path = std::path::Path::new(&row.segments_path);

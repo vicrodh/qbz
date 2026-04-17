@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { Play, Pause, Heart, HardDrive, CircleAlert, Ban, Music } from 'lucide-svelte';
+  import { onMount, onDestroy } from 'svelte';
+  import { Play, Pause, Heart, HardDrive, CircleAlert, Ban, Music, Lock } from 'lucide-svelte';
   import { t } from '$lib/i18n';
   import { cachedSrc } from '$lib/actions/cachedImage';
   import TrackMenu from './TrackMenu.svelte';
@@ -12,6 +12,10 @@
     toggleTrackFavorite
   } from '$lib/stores/favoritesStore';
   import { togglePlay } from '$lib/stores/playerStore';
+  import {
+    isUnlocking as isTrackUnlocking,
+    subscribe as subscribeUnlocking
+  } from '$lib/stores/unlockingStore';
 
   // Offline cache status for tracks
   type OfflineCacheStatus = 'none' | 'queued' | 'downloading' | 'ready' | 'failed';
@@ -114,6 +118,11 @@
   let contextMenuPos = $state<{ x: number; y: number } | null>(null);
   let favoriteFromStore = $state(false);
   let isToggling = $state(false);
+  // Reactive flag: is THIS track currently being decrypted from an
+  // offline CMAF bundle? Incremented on offline:unlock_start, cleared
+  // on offline:unlock_end. While true, the row's play glyph is
+  // replaced with an animated padlock (see the template below).
+  let isUnlocking = $state(false);
 
   // Use override if provided, otherwise use store
   const isFavorite = $derived(isFavoriteOverride ?? favoriteFromStore);
@@ -132,6 +141,25 @@
       }, trackId);
       return unsubscribe;
     }
+  });
+
+  // Subscribe to unlocking state. One global store, each row filters by
+  // its own trackId. The listener re-checks on every change and only
+  // updates local state if the boolean actually flipped — avoids
+  // needless re-renders across large tracklists.
+  let unsubscribeUnlocking: (() => void) | null = null;
+  onMount(() => {
+    const refresh = () => {
+      const next = isTrackUnlocking(trackId);
+      if (next !== isUnlocking) {
+        isUnlocking = next;
+      }
+    };
+    refresh();
+    unsubscribeUnlocking = subscribeUnlocking(refresh);
+  });
+  onDestroy(() => {
+    unsubscribeUnlocking?.();
   });
 
   // Handle favorite toggle internally
@@ -247,6 +275,13 @@
     {:else if isUnavailable}
       <span class="unavailable-icon" title={unavailableTooltip}>
         <CircleAlert size={16} />
+      </span>
+    {:else if isUnlocking}
+      <!-- Offline CMAF decrypt in progress: swap the play glyph for an
+           animated padlock so the user gets honest feedback that the
+           app is unwrapping encrypted content, not just stalling. -->
+      <span class="unlocking-icon" title="Preparing offline track…" aria-label="Preparing offline track">
+        <Lock size={16} class="lock-shake" />
       </span>
     {:else if isActiveTrack || isPlaying}
       {#if isHovered}
@@ -488,6 +523,36 @@
     justify-content: center;
     color: var(--error-color, #ef4444);
     cursor: help;
+  }
+
+  /* Offline-cache unlock-in-progress indicator.
+     The Lock icon itself is a static lucide-svelte glyph; :global() is
+     needed because the animation targets the SVG lucide injects inside
+     the span and Svelte's scoped styles don't reach into the child
+     component's DOM otherwise. */
+  .unlocking-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent-primary, #5c6bc0);
+    cursor: progress;
+  }
+
+  .unlocking-icon :global(.lock-shake) {
+    animation: qbz-unlocking 1.2s ease-in-out infinite;
+    transform-origin: 50% 70%;
+  }
+
+  @keyframes qbz-unlocking {
+    0%, 100% {
+      transform: rotate(0deg) scale(1);
+      opacity: 0.65;
+    }
+    15% { transform: rotate(-10deg) scale(1.05); }
+    30% { transform: rotate(10deg) scale(1.05); }
+    45% { transform: rotate(-6deg) scale(1.08); opacity: 1; }
+    60% { transform: rotate(6deg) scale(1.08); opacity: 1; }
+    75% { transform: rotate(-3deg) scale(1.04); }
   }
 
   /* Blacklisted track styles */

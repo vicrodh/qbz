@@ -481,6 +481,7 @@ pub async fn v2_library_play_track(
     bridge: State<'_, CoreBridgeState>,
     offline_cache: State<'_, crate::offline_cache::OfflineCacheState>,
     app_state: State<'_, AppState>,
+    app_handle: tauri::AppHandle,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), String> {
     runtime
@@ -528,30 +529,25 @@ pub async fn v2_library_play_track(
         match bundle_row {
             Some(row) if row.cache_format == 2 => {
                 let cache_path = offline_cache.get_cache_path();
-                // The decrypt + disk read is CPU/IO bound; if we run it on
-                // the async executor thread it stalls every other tokio
-                // task on that thread — including the queue auto-advance,
-                // which then fires play_track as a fallback after the old
-                // track ends, which drops the gapless engine. Push it to
-                // the blocking pool so the event loop keeps breathing.
-                let qid = qobuz_track_id as u64;
-                let row_clone = row.clone();
-                let cache_path_clone = cache_path.clone();
-                let audio_data = tokio::task::spawn_blocking(move || {
-                    crate::offline_cache::playback::load_cmaf_bundle(
-                        qid,
-                        &row_clone,
-                        std::path::Path::new(&cache_path_clone),
+                // spawn_blocking via the ui-events helper so the track row
+                // shows an "unlocking" animation while decrypt runs.
+                // Display id = library row id (what the UI renders by),
+                // CMAF id = qobuz track id (what the bundle is keyed by).
+                let audio_data =
+                    crate::offline_cache::playback::load_cmaf_bundle_with_ui_events(
+                        &app_handle,
+                        track_id as u64,
+                        qobuz_track_id as u64,
+                        row.clone(),
+                        cache_path,
                     )
-                })
-                .await
-                .map_err(|e| format!("CMAF load task panicked: {}", e))?
-                .ok_or_else(|| {
-                    format!(
-                        "Offline CMAF bundle for Qobuz track {} is present but failed to decrypt",
-                        qobuz_track_id
-                    )
-                })?;
+                    .await
+                    .ok_or_else(|| {
+                        format!(
+                            "Offline CMAF bundle for Qobuz track {} is present but failed to decrypt",
+                            qobuz_track_id
+                        )
+                    })?;
                 // Warm L1 so subsequent access (replay, gapless) is instant.
                 // Keyed by the library row id so Library replay hits; the
                 // offline cache DB itself is keyed by Qobuz id and is

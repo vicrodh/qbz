@@ -172,6 +172,10 @@
 
   // Favorites state management
   import { loadFavorites } from '$lib/stores/favoritesStore';
+  import {
+    startPolling as startUnlockingPolling,
+    stopPolling as stopUnlockingPolling
+  } from '$lib/stores/unlockingStore';
   import { loadAlbumFavorites } from '$lib/stores/albumFavoritesStore';
   import { loadArtistFavorites } from '$lib/stores/artistFavoritesStore';
   import { loadLabelFavorites } from '$lib/stores/labelFavoritesStore';
@@ -3920,10 +3924,15 @@
   $effect(() => {
     startPolling();
     startQueueEventListener();
+    // Also listen for offline-cache unlock start/end events so the
+    // track row can flip its play glyph to a padlock animation while
+    // a CMAF bundle is being decrypted.
+    void startUnlockingPolling();
 
     return () => {
       stopPolling();
       stopQueueEventListener();
+      stopUnlockingPolling();
     };
   });
 

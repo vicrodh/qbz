@@ -16,9 +16,50 @@
 
 use std::path::Path;
 
+use tauri::Emitter;
+
 use super::cmaf_store::{self, BundleLayout};
 use super::db::CmafBundleRow;
 use super::secret_vault;
+
+/// Run `load_cmaf_bundle` on the blocking pool and emit
+/// `offline:unlock_start` / `offline:unlock_end` around it so the
+/// frontend can show an "unlocking" animation on the track row.
+///
+/// `display_track_id` is what the frontend knows this track as — for
+/// Qobuz flow it's the Qobuz track id, for Local Library it's the
+/// library row id. The events carry THIS id so whatever UI is looking
+/// at the track can key off it.
+///
+/// `cmaf_track_id` is the key used inside load_cmaf_bundle for logs
+/// (always the Qobuz track id, since that's what the bundle is
+/// identified by on disk + in the offline cache DB).
+pub async fn load_cmaf_bundle_with_ui_events<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    display_track_id: u64,
+    cmaf_track_id: u64,
+    row: CmafBundleRow,
+    cache_path: String,
+) -> Option<Vec<u8>> {
+    let _ = app.emit(
+        "offline:unlock_start",
+        serde_json::json!({ "trackId": display_track_id }),
+    );
+    let result = tokio::task::spawn_blocking(move || {
+        load_cmaf_bundle(cmaf_track_id, &row, Path::new(&cache_path))
+    })
+    .await
+    .ok()
+    .flatten();
+    let _ = app.emit(
+        "offline:unlock_end",
+        serde_json::json!({
+            "trackId": display_track_id,
+            "success": result.is_some(),
+        }),
+    );
+    result
+}
 
 /// Decrypt a v2 CMAF bundle row into plain FLAC bytes ready for
 /// `player.play_data`. Returns `None` on any failure (missing init,
