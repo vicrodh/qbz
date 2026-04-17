@@ -849,7 +849,7 @@ pub fn run() {
             )
             .title("QBZ")
             .inner_size(saved_win_width, saved_win_height)
-            .min_inner_size(800.0, 600.0)
+            .min_inner_size(640.0, 360.0)
             .decorations(if cfg!(target_os = "macos") { true } else { use_system_titlebar })
             .transparent(main_window_transparent)
             .resizable(true)
