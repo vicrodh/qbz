@@ -50,7 +50,6 @@ pub mod paths {
     pub const FAVORITE_DELETE: &str = "/favorite/delete";
 
     // Label
-    pub const LABEL_GET: &str = "/label/get";
     pub const LABEL_PAGE: &str = "/label/page";
     pub const LABEL_EXPLORE: &str = "/label/explore";
 

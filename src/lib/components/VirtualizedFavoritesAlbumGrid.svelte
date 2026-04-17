@@ -3,7 +3,7 @@
   import { t } from '$lib/i18n';
   import { Disc3, LoaderCircle } from 'lucide-svelte';
   import AlbumCard from './AlbumCard.svelte';
-  import QualityBadge from './QualityBadge.svelte';
+  import { formatQuality } from '$lib/adapters/qobuzAdapters';
   import { restoreScrollOnBackForward } from '$lib/utils/scrollRestore';
 
   interface FavoriteAlbum {
@@ -361,11 +361,11 @@
               </div>
             </div>
             <div class="album-row-quality">
-              <QualityBadge
-                bitDepth={album.maximum_bit_depth}
-                samplingRate={album.maximum_sampling_rate}
-                compact
-              />
+              {formatQuality(
+                (album.maximum_bit_depth ?? 16) > 16,
+                album.maximum_bit_depth,
+                album.maximum_sampling_rate
+              )}
             </div>
           </div>
         {/if}
@@ -515,8 +515,10 @@
   }
 
   .album-row-quality {
-    display: flex;
-    justify-content: flex-end;
+    font-size: 12px;
+    color: #666666;
+    text-align: right;
+    min-width: 80px;
   }
 
   /* Ranking styles */

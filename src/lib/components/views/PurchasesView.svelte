@@ -5,7 +5,7 @@
     ChevronDown, LayoutGrid, List
   } from 'lucide-svelte';
   import AlbumCard from '../AlbumCard.svelte';
-  import QualityBadge from '../QualityBadge.svelte';
+  import { formatQuality } from '$lib/adapters/qobuzAdapters';
   import { getPurchasesByType, getPurchaseIds, searchPurchases, getDownloadedTrackIds, getFormats } from '$lib/services/purchases';
   import { allTrackStatuses, startTrackDownload, type TrackDownloadStatus } from '$lib/stores/purchaseDownloadStore';
   import { showToast } from '$lib/stores/toastStore';
@@ -888,11 +888,11 @@
                     <span class="album-list-artist">{album.artist.name}</span>
                   </div>
                   <div class="album-list-quality">
-                    <QualityBadge
-                      bitDepth={album.maximum_bit_depth}
-                      samplingRate={album.maximum_sampling_rate}
-                      compact={true}
-                    />
+                    {formatQuality(
+                      (album.maximum_bit_depth ?? 16) > 16,
+                      album.maximum_bit_depth,
+                      album.maximum_sampling_rate
+                    )}
                   </div>
                   <span class="album-list-date">{formatPurchaseDate(album.purchased_at)}</span>
                   {#if !album.downloadable}
@@ -1655,6 +1655,10 @@
 
   .album-list-quality {
     flex-shrink: 0;
+    font-size: 12px;
+    color: #666666;
+    text-align: center;
+    min-width: 80px;
   }
 
   .album-list-date {

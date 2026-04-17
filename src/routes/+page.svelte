@@ -279,7 +279,6 @@
     Track,
     AlbumDetail,
     ArtistDetail,
-    LabelDetail,
     PlaylistTrack,
     DisplayTrack,
     LocalLibraryTrack,

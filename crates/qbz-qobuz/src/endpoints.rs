@@ -52,10 +52,17 @@ pub mod paths {
     // (source: x20/b.java Retrofit interface).
     pub const FAVORITE_GET_NEW_RELEASES: &str = "/favorite/getNewReleases";
 
-    // Label
-    pub const LABEL_GET: &str = "/label/get";
+    // Label (v9.7.0.3 API — /label/get removed, use /label/getAlbums
+    // + /label/page for the same coverage).
     pub const LABEL_PAGE: &str = "/label/page";
     pub const LABEL_EXPLORE: &str = "/label/explore";
+    pub const LABEL_GET_ALBUMS: &str = "/label/getAlbums";
+    pub const LABEL_GET_NEXT_RELEASES: &str = "/label/getNextReleases";
+    pub const LABEL_GET_AWARDED_RELEASES: &str = "/label/getAwardedReleases";
+    pub const LABEL_GET_PLAYLISTS: &str = "/label/getPlaylists";
+    pub const LABEL_GET_TOP_ARTISTS: &str = "/label/getTopArtists";
+    pub const LABEL_STORY: &str = "/label/story";
+    pub const LABEL_GET_LIST: &str = "/label/getList";
 
     // Award
     pub const AWARD_PAGE: &str = "/award/page";

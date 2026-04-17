@@ -36,15 +36,44 @@ pub async fn get_similar_artists(
     Ok(Json(serde_json::to_value(result).unwrap_or_default()))
 }
 
+/// GET /api/labels/{id}
+///
+/// Backwards-compatible shape — composes /label/page + /label/getAlbums
+/// so existing HTTP clients still see `{ id, name, description, image,
+/// albums: { items, total, ... } }`. The legacy `/label/get` one-shot
+/// is being retired in the v9.7.0.3 Qobuz API.
 pub async fn get_label(
     daemon: Arc<DaemonCore>,
     Path(id): Path<u64>,
     Query(q): Query<PaginationQuery>,
 ) -> Result<Json<serde_json::Value>, String> {
-    let result = daemon.core.get_label(id, q.limit, q.offset)
-        .await
-        .map_err(|e| e.to_string())?;
-    Ok(Json(serde_json::to_value(result).unwrap_or_default()))
+    let (page, albums) = tokio::try_join!(
+        async {
+            daemon.core.get_label_page(id)
+                .await
+                .map_err(|e| e.to_string())
+        },
+        async {
+            daemon.core.get_label_albums(id, q.limit, q.offset, None, None, None, None, None)
+                .await
+                .map_err(|e| e.to_string())
+        }
+    )?;
+
+    let composed = serde_json::json!({
+        "id": page.id,
+        "name": page.name,
+        "description": page.description,
+        "image": page.image,
+        "albums": {
+            "items": albums.items,
+            "total": albums.total,
+            "offset": albums.offset,
+            "limit": albums.limit,
+            "has_more": albums.has_more,
+        },
+    });
+    Ok(Json(composed))
 }
 
 pub async fn get_label_page(

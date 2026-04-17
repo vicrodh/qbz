@@ -3,13 +3,12 @@
   import { t, locale } from '$lib/i18n';
   import { invoke } from '@tauri-apps/api/core';
   import { ArrowLeft, Download, Check, LoaderCircle, TriangleAlert, Library, Play, X } from 'lucide-svelte';
-  import QualityBadge from '../QualityBadge.svelte';
   import Dropdown from '../Dropdown.svelte';
   import ViewTransition from '../ViewTransition.svelte';
   import { getAlbumDetail, getFormats } from '$lib/services/purchases';
   import { purchaseDownloads, startAlbumDownload, startTrackDownload, cancelAlbumDownload, getAlbumDownloadFormatId, clearAlbumDownloadState } from '$lib/stores/purchaseDownloadStore';
   import type { TrackDownloadStatus } from '$lib/stores/purchaseDownloadStore';
-  import { formatDuration, getQobuzImage } from '$lib/adapters/qobuzAdapters';
+  import { formatDuration, formatQuality, getQobuzImage } from '$lib/adapters/qobuzAdapters';
   import { showToast } from '$lib/stores/toastStore';
   import type { PurchasedAlbum, PurchasedTrack, PurchaseFormatOption } from '$lib/types/purchases';
   import type { DisplayTrack } from '$lib/types';
@@ -266,11 +265,11 @@
           {/if}
         </div>
         <div class="album-quality">
-          <QualityBadge
-            bitDepth={album.maximum_bit_depth}
-            samplingRate={album.maximum_sampling_rate}
-            compact={true}
-          />
+          {formatQuality(
+            (album.maximum_bit_depth ?? 16) > 16,
+            album.maximum_bit_depth,
+            album.maximum_sampling_rate
+          )}
         </div>
         <div class="album-stats">
           {$t('purchases.tracksCount', { values: { count: totalTracks } })} &middot; {formatTotalDuration(totalDurationSeconds)}
@@ -629,6 +628,8 @@
   }
 
   .album-quality {
+    font-size: 13px;
+    color: var(--text-muted);
     margin-bottom: 4px;
   }
 

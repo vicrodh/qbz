@@ -9,6 +9,7 @@
   import ViewTransition from '../ViewTransition.svelte';
   import TrackMenu from '../TrackMenu.svelte';
   import QualityBadge from '../QualityBadge.svelte';
+  import { formatQuality } from '$lib/adapters/qobuzAdapters';
   import { replacePlaybackQueue } from '$lib/services/queuePlaybackService';
   import { getSearchState, setSearchState, subscribeSearchFocus, subscribeSearchQuery, setSearchQuery, type SearchResults, type SearchAllResults, type SearchTab, type SearchFilterType, type Playlist } from '$lib/stores/searchState';
   import { setPlaybackContext } from '$lib/stores/playbackContextStore';
@@ -1737,11 +1738,11 @@
                       {/if}
                     </div>
                     <div class="track-quality">
-                      <QualityBadge
-                        bitDepth={track.maximum_bit_depth}
-                        samplingRate={track.maximum_sampling_rate}
-                        compact
-                      />
+                      {formatQuality(
+                        (track.maximum_bit_depth ?? 16) > 16,
+                        track.maximum_bit_depth,
+                        track.maximum_sampling_rate
+                      )}
                     </div>
                     <div class="track-duration">{formatDuration(track.duration)}</div>
                     <div class="track-actions">
@@ -1937,11 +1938,11 @@
                       {/if}
                     </div>
                     <div class="track-quality">
-                      <QualityBadge
-                        bitDepth={track.maximum_bit_depth}
-                        samplingRate={track.maximum_sampling_rate}
-                        compact
-                      />
+                      {formatQuality(
+                        (track.maximum_bit_depth ?? 16) > 16,
+                        track.maximum_bit_depth,
+                        track.maximum_sampling_rate
+                      )}
                     </div>
                     <div class="track-duration">{formatDuration(track.duration)}</div>
                     <div class="track-actions">
@@ -2437,8 +2438,10 @@
   }
 
   .track-quality {
-    display: flex;
-    align-items: center;
+    font-size: 12px;
+    color: #666666;
+    text-align: center;
+    min-width: 80px;
   }
 
   .track-duration {
