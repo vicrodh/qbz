@@ -203,6 +203,29 @@ pub struct LoadedBundle {
     pub manifest: BundleManifest,
 }
 
+impl LoadedBundle {
+    /// Decrypt the bundle into a complete, playable FLAC byte stream.
+    ///
+    /// The layout is `flac_header || decrypted_frames` — identical to
+    /// what the streaming playback path produces, so the player can
+    /// consume it via `play_data` exactly like a cached plain FLAC.
+    pub fn decrypt_to_flac(&self, content_key: &[u8; 16]) -> Result<Vec<u8>, String> {
+        let init_info = qbz_cmaf::parse_init_segment(&self.init_bytes)
+            .map_err(|e| format!("Failed to parse init segment: {}", e))?;
+
+        let total = init_info.flac_header.len()
+            + init_info
+                .segment_table
+                .iter()
+                .map(|s| s.byte_len as usize)
+                .sum::<usize>();
+        let mut out = Vec::with_capacity(total);
+        out.extend_from_slice(&init_info.flac_header);
+        qbz_qobuz::cmaf::decrypt_segments_into(&self.segments, content_key, &mut out)?;
+        Ok(out)
+    }
+}
+
 fn write_atomic(path: &Path, data: &[u8]) -> std::io::Result<()> {
     let tmp = path.with_extension("tmp");
     {
