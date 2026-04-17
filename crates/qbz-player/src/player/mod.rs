@@ -2497,8 +2497,26 @@ impl Player {
                                     }
                                 }
 
-                                // Gapless readiness: signal frontend when ~5s remain
-                                // Only when: playing, not streaming, no gapless already pending, gapless enabled
+                                // Gapless readiness: signal frontend that it's
+                                // time to prepare the next track.
+                                //
+                                // Lead time used to be 5s but that's too tight
+                                // for offline-cache v2 bundles: the AES-CTR
+                                // decrypt of a HiRes track on CPUs WITHOUT
+                                // AES-NI runs at ~10 MB/s — a 58 MB track
+                                // needs ~6s just to decrypt, which blows past
+                                // a 5s window and misses the gapless handoff.
+                                //
+                                // 10s covers most HiRes tracks even on the
+                                // software-AES fallback path, and is
+                                // harmless when decrypt is fast (the bytes
+                                // just land in L1 a few seconds earlier and
+                                // sit there until the engine picks them up).
+                                //
+                                // If the frontend ever exposes a user setting
+                                // for this, just plumb it through
+                                // AudioSettings and read here.
+                                const GAPLESS_LEAD_SECS: u64 = 10;
                                 let gapless_enabled = thread_settings
                                     .lock()
                                     .ok()
@@ -2506,7 +2524,7 @@ impl Player {
                                     .unwrap_or(false);
                                 if gapless_enabled
                                     && dur > 0
-                                    && pos + 5 >= dur
+                                    && pos + GAPLESS_LEAD_SECS >= dur
                                     && gapless_pending.is_none()
                                     && !gapless_request_armed
                                     && !thread_state.is_gapless_ready()
