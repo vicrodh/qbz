@@ -615,207 +615,43 @@ pub async fn download_with_backoff(
     ))
 }
 
-/// Max concurrent segment downloads for CMAF prefetch.
-/// Conservative to avoid CDN rate limiting (Qobuz uses Akamai).
-const CMAF_PREFETCH_CONCURRENCY: usize = 3;
-
 /// Full CMAF download for prefetch/cache — downloads ALL segments, decrypts, returns FLAC bytes.
-/// Unlike streaming, this blocks until complete, but produces data suitable for cache insertion.
-/// Segments are downloaded concurrently (up to CMAF_PREFETCH_CONCURRENCY) for speed.
+///
+/// Thin wrapper over [`qbz_qobuz::cmaf::download_full`]; the real pipeline lives
+/// in the `qbz-qobuz` crate so it can be reused by offline cache and the
+/// daemon without pulling Tauri as a dependency.
 pub async fn try_cmaf_full_download(
     bridge: &crate::core_bridge::CoreBridge,
     track_id: u64,
     quality: Quality,
 ) -> Result<Vec<u8>, String> {
-    let setup = try_cmaf_streaming_setup(bridge, track_id, quality).await?;
-
-    let client = reqwest::Client::builder()
-        .connect_timeout(std::time::Duration::from_secs(10))
-        .use_native_tls()
-        .build()
-        .map_err(|e| format!("CMAF client error: {}", e))?;
-
-    let total_size: usize = setup.flac_header.len()
-        + setup.segment_table.iter().map(|s| s.byte_len as usize).sum::<usize>();
-
-    // Download all segments concurrently in batches
-    let semaphore = Arc::new(tokio::sync::Semaphore::new(CMAF_PREFETCH_CONCURRENCY));
-    let seg_indices: Vec<u8> = (1..=setup.n_segments).collect();
-    let mut handles = Vec::with_capacity(seg_indices.len());
-
-    for seg_idx in seg_indices {
-        let sem = semaphore.clone();
-        let client = client.clone();
-        let seg_url = setup.url_template.replace("$SEGMENT$", &seg_idx.to_string());
-
-        handles.push(tokio::spawn(async move {
-            let permit = sem.acquire_owned().await.map_err(|e| format!("semaphore: {}", e))?;
-            let seg_data = client
-                .get(&seg_url)
-                .header("User-Agent", "Mozilla/5.0")
-                .send().await
-                .map_err(|e| format!("CMAF prefetch seg {} fetch: {}", seg_idx, e))?
-                .bytes().await
-                .map_err(|e| format!("CMAF prefetch seg {} read: {}", seg_idx, e))?;
-            // Cooldown before releasing the slot — keeps requests spaced out
-            // to stay under CDN rate limits (most use 1s windows)
-            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-            drop(permit);
-            Ok::<(u8, Vec<u8>), String>((seg_idx, seg_data.to_vec()))
-        }));
-    }
-
-    // Collect results and sort by segment index to preserve order
-    let mut segments: Vec<(u8, Vec<u8>)> = Vec::with_capacity(handles.len());
-    for handle in handles {
-        let (idx, data) = handle.await
-            .map_err(|e| format!("CMAF prefetch task panic: {}", e))?
-            .map_err(|e| format!("CMAF prefetch download failed: {}", e))?;
-        segments.push((idx, data));
-    }
-    segments.sort_by_key(|(idx, _)| *idx);
-
-    // Decrypt and assemble in order
-    let mut output = Vec::with_capacity(total_size);
-    output.extend_from_slice(&setup.flac_header);
-
-    for (seg_idx, seg_data) in &segments {
-        let crypto = qbz_cmaf::parse_segment_crypto(seg_data)
-            .map_err(|e| format!("CMAF prefetch seg {} parse: {}", seg_idx, e))?;
-
-        let mut data_pos = crypto.data_offset;
-        for entry in &crypto.entries {
-            let frame_end = data_pos + entry.size as usize;
-            if frame_end > seg_data.len() {
-                return Err(format!("CMAF prefetch seg {} frame overflow", seg_idx));
-            }
-            let mut frame = seg_data[data_pos..frame_end].to_vec();
-            if entry.flags != 0 {
-                qbz_cmaf::decrypt_frame(&setup.content_key, &entry.iv, &mut frame);
-            }
-            output.extend_from_slice(&frame);
-            data_pos = frame_end;
-        }
-        if data_pos < crypto.mdat_end && crypto.mdat_end <= seg_data.len() {
-            output.extend_from_slice(&seg_data[data_pos..crypto.mdat_end]);
-        }
-    }
-
-    log::info!(
-        "[V2/CMAF-PREFETCH] Complete: track {} ({:.2} MB FLAC, expected {:.2} MB, segments 1..{}, table={} entries, n_segments={}, concurrency={})",
-        track_id,
-        output.len() as f64 / (1024.0 * 1024.0),
-        total_size as f64 / (1024.0 * 1024.0),
-        setup.n_segments - 1,
-        setup.segment_table.len(),
-        setup.n_segments,
-        CMAF_PREFETCH_CONCURRENCY,
-    );
-    Ok(output)
+    let client_arc = bridge.core().client();
+    let client_guard = client_arc.read().await;
+    let client = client_guard
+        .as_ref()
+        .ok_or_else(|| "QobuzClient not initialized".to_string())?;
+    qbz_qobuz::cmaf::download_full(client, track_id, quality).await
 }
 
-/// Info gathered from the CMAF init segment, enough to start streaming playback.
-pub struct CmafStreamingInfo {
-    pub url_template: String,
-    pub n_segments: u8,
-    pub content_key: [u8; 16],
-    pub flac_header: Vec<u8>,
-    pub segment_table: Vec<qbz_cmaf::SegmentTableEntry>,
-    pub format_id: u32,
-    pub sampling_rate: Option<u32>,
-    pub bit_depth: Option<u32>,
-    /// How long the init segment fetch took (ms), for speed estimation.
-    pub init_fetch_ms: u64,
-}
+/// Re-export `CmafStreamingInfo` so in-tree callers can keep using
+/// `crate::commands_v2::helpers::CmafStreamingInfo` unchanged.
+pub use qbz_qobuz::cmaf::CmafStreamingInfo;
 
 /// Prepare CMAF streaming: fetch init segment only, derive keys, return info.
 /// Does NOT download audio segments -- the caller streams those in background.
+///
+/// Thin wrapper over [`qbz_qobuz::cmaf::setup_streaming`].
 pub async fn try_cmaf_streaming_setup(
     bridge: &crate::core_bridge::CoreBridge,
     track_id: u64,
     quality: Quality,
 ) -> Result<CmafStreamingInfo, String> {
-    let file_url = bridge.get_file_url(track_id, quality).await?;
-
-    let url_template = file_url
-        .url_template
+    let client_arc = bridge.core().client();
+    let client_guard = client_arc.read().await;
+    let client = client_guard
         .as_ref()
-        .ok_or("No url_template in file/url response")?
-        .clone();
-    let key_str = file_url
-        .key
-        .as_ref()
-        .ok_or("No key in file/url response")?;
-
-    let (_session_id, infos) = bridge.ensure_cmaf_session().await?;
-
-    let session_key = qbz_cmaf::derive_session_key(qbz_qobuz::auth::CMAF_SEED, &infos)
-        .map_err(|e| format!("Session key derivation failed: {}", e))?;
-    let content_key = qbz_cmaf::unwrap_content_key(&session_key, key_str)
-        .map_err(|e| format!("Content key unwrap failed: {}", e))?;
-
-    // Fetch only the init segment (s=0) -- typically small, <500ms
-    let client = reqwest::Client::builder()
-        .connect_timeout(std::time::Duration::from_secs(10))
-        .use_native_tls()
-        .build()
-        .map_err(|e| format!("CMAF client error: {}", e))?;
-
-    let init_url = url_template.replace("$SEGMENT$", "0");
-    let init_start = std::time::Instant::now();
-
-    log::info!("[V2/CMAF] Fetching init segment for streaming setup");
-    let init_data = client
-        .get(&init_url)
-        .header("User-Agent", "Mozilla/5.0")
-        .send()
-        .await
-        .map_err(|e| format!("Failed to fetch init segment: {}", e))?
-        .bytes()
-        .await
-        .map_err(|e| format!("Failed to read init segment: {}", e))?;
-
-    let init_fetch_ms = init_start.elapsed().as_millis() as u64;
-
-    let init_info = qbz_cmaf::parse_init_segment(&init_data)
-        .map_err(|e| format!("Failed to parse init segment: {}", e))?;
-
-    // Detailed diagnostics: segment table vs API n_segments
-    let table_total_bytes: u64 = init_info.segment_table.iter().map(|s| s.byte_len as u64).sum();
-    let table_total_samples: u64 = init_info.segment_table.iter().map(|s| s.sample_count as u64).sum();
-    log::info!(
-        "[V2/CMAF] Init segment: FLAC header {}B, segment_table={} entries, API n_segments={}, \
-         table_total_bytes={}, table_total_samples={}, fetched in {}ms",
-        init_info.flac_header.len(),
-        init_info.segment_table.len(),
-        file_url.n_segments,
-        table_total_bytes,
-        table_total_samples,
-        init_fetch_ms
-    );
-    if init_info.segment_table.len() != file_url.n_segments as usize {
-        log::warn!(
-            "[V2/CMAF] MISMATCH: segment_table has {} entries but API says n_segments={}",
-            init_info.segment_table.len(),
-            file_url.n_segments
-        );
-    }
-
-    let format_id = file_url.format_id.unwrap_or(quality.id());
-    let sampling_rate = file_url.sampling_rate;
-    let bit_depth = file_url.bits_depth.or(file_url.bit_depth);
-
-    Ok(CmafStreamingInfo {
-        url_template,
-        n_segments: file_url.n_segments,
-        content_key,
-        flac_header: init_info.flac_header,
-        segment_table: init_info.segment_table,
-        format_id,
-        sampling_rate,
-        bit_depth,
-        init_fetch_ms,
-    })
+        .ok_or_else(|| "QobuzClient not initialized".to_string())?;
+    qbz_qobuz::cmaf::setup_streaming(client, track_id, quality).await
 }
 
 /// Stream info from probing a URL (HEAD + first 64KB)
