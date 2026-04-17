@@ -553,11 +553,24 @@ pub async fn v2_library_play_track(
                     )
                 })?;
                 // Warm L1 so subsequent access (replay, gapless) is instant.
-                app_state.audio_cache.insert(qobuz_track_id as u64, audio_data.clone());
+                // Keyed by the library row id so Library replay hits; the
+                // offline cache DB itself is keyed by Qobuz id and is
+                // consulted separately up above.
+                app_state.audio_cache.insert(track_id as u64, audio_data.clone());
                 let bridge = bridge.get().await;
+                // IMPORTANT: play_data gets the LIBRARY track_id (the row
+                // id the frontend already tracks), NOT the Qobuz track id.
+                // Every piece of UI state — currently-playing card,
+                // seekbar position updates, queue auto-advance detection —
+                // keys off the id the frontend sent in. Using the Qobuz
+                // id here silently desynced the player from the UI:
+                // backend reports "playing 95787326" while the frontend
+                // waits for updates on 542 → seekbar never ticks, track
+                // never auto-advances, queue panics and starts calling
+                // next_track every second.
                 bridge
                     .player()
-                    .play_data(audio_data, qobuz_track_id as u64)
+                    .play_data(audio_data, track_id as u64)
                     .map_err(|e| format!("Failed to play CMAF offline bundle: {}", e))?;
                 if let Some(start_secs) = track.cue_start_secs {
                     let start_pos = start_secs as u64;
@@ -589,7 +602,7 @@ pub async fn v2_library_play_track(
                 let bridge = bridge.get().await;
                 bridge
                     .player()
-                    .play_data(audio_data, qobuz_track_id as u64)
+                    .play_data(audio_data, track_id as u64)
                     .map_err(|e| format!("Failed to play: {}", e))?;
                 return Ok(());
             }
