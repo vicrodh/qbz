@@ -1,0 +1,38 @@
+[package]
+name = "qbz-secrets"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Device-bound secret wrapping for QBZ (offline cache keys, tokens)"
+
+[dependencies]
+# AES-256-GCM for the at-rest wrap/unwrap
+aes-gcm = "0.10"
+
+# KDF for the fallback path when OS keyring isn't available
+hkdf = "0.12"
+sha2 = "0.10"
+
+# RNG for nonces + install UUID generation
+rand = "0.9"
+
+# OS keyring backends: libsecret/secret-service (Linux), Keychain (macOS),
+# DPAPI (Windows). Default features on v3 already pick the right backend
+# per platform; if it fails at runtime we fall through to the KDF path.
+keyring = "3"
+
+# UUID for the persistent install identifier (salt component for fallback)
+uuid = { version = "1", features = ["v4", "serde"] }
+
+# Serde for the on-disk wrapper blob envelope
+serde = { workspace = true }
+
+# Base64 for keyring-roundtripped master key (secret-service expects a UTF-8 string)
+base64 = { workspace = true }
+
+# Errors
+thiserror = { workspace = true }
+log = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"

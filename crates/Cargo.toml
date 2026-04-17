@@ -12,6 +12,7 @@ members = [
     "qbz-library",
     "qbz-cast",
     "qbz-cmaf",
+    "qbz-secrets",
     "qconnect-core",
     "qconnect-protocol",
     "qconnect-transport-ws",
