@@ -503,32 +503,58 @@ pub async fn v2_library_play_track(
     // directly. So for source='qobuz_download' we always resolve through
     // the offline-cache DB — cache_format tells us whether to decrypt the
     // CMAF bundle or to read a plain-FLAC v1 file.
+    //
+    // NOTE: `track_id` here is the library row id (autoincrement), NOT the
+    // Qobuz track id. The offline-cache DB is keyed by Qobuz track id. The
+    // library row carries the Qobuz id in `qobuz_track_id`.
     let is_qobuz_cached = track.source.as_deref() == Some("qobuz_download");
     if is_qobuz_cached {
+        let qobuz_track_id = match track.qobuz_track_id {
+            Some(id) => id,
+            None => {
+                return Err(format!(
+                    "Library row {} is marked qobuz_download but has no qobuz_track_id",
+                    track_id
+                ));
+            }
+        };
         let bundle_row = {
             let guard = offline_cache.db.lock().await;
             guard
                 .as_ref()
-                .and_then(|db| db.get_cmaf_bundle(track_id as u64).ok().flatten())
+                .and_then(|db| db.get_cmaf_bundle(qobuz_track_id as u64).ok().flatten())
         };
         match bundle_row {
             Some(row) if row.cache_format == 2 => {
                 let cache_path = offline_cache.get_cache_path();
-                let audio_data = crate::offline_cache::playback::load_cmaf_bundle(
-                    track_id as u64,
-                    &row,
-                    std::path::Path::new(&cache_path),
-                )
+                // The decrypt + disk read is CPU/IO bound; if we run it on
+                // the async executor thread it stalls every other tokio
+                // task on that thread — including the queue auto-advance,
+                // which then fires play_track as a fallback after the old
+                // track ends, which drops the gapless engine. Push it to
+                // the blocking pool so the event loop keeps breathing.
+                let qid = qobuz_track_id as u64;
+                let row_clone = row.clone();
+                let cache_path_clone = cache_path.clone();
+                let audio_data = tokio::task::spawn_blocking(move || {
+                    crate::offline_cache::playback::load_cmaf_bundle(
+                        qid,
+                        &row_clone,
+                        std::path::Path::new(&cache_path_clone),
+                    )
+                })
+                .await
+                .map_err(|e| format!("CMAF load task panicked: {}", e))?
                 .ok_or_else(|| {
                     format!(
-                        "Offline CMAF bundle for track {} is present but failed to decrypt",
-                        track_id
+                        "Offline CMAF bundle for Qobuz track {} is present but failed to decrypt",
+                        qobuz_track_id
                     )
                 })?;
                 let bridge = bridge.get().await;
                 bridge
                     .player()
-                    .play_data(audio_data, track_id as u64)
+                    .play_data(audio_data, qobuz_track_id as u64)
                     .map_err(|e| format!("Failed to play CMAF offline bundle: {}", e))?;
                 if let Some(start_secs) = track.cue_start_secs {
                     let start_pos = start_secs as u64;
@@ -551,8 +577,8 @@ pub async fn v2_library_play_track(
                 let file_path = std::path::Path::new(&row.segments_path);
                 if !file_path.exists() {
                     return Err(format!(
-                        "Offline cache file missing for track {}: {}",
-                        track_id, row.segments_path
+                        "Offline cache file missing for Qobuz track {}: {}",
+                        qobuz_track_id, row.segments_path
                     ));
                 }
                 let audio_data = std::fs::read(file_path)
@@ -560,7 +586,7 @@ pub async fn v2_library_play_track(
                 let bridge = bridge.get().await;
                 bridge
                     .player()
-                    .play_data(audio_data, track_id as u64)
+                    .play_data(audio_data, qobuz_track_id as u64)
                     .map_err(|e| format!("Failed to play: {}", e))?;
                 return Ok(());
             }
@@ -571,8 +597,8 @@ pub async fn v2_library_play_track(
                 // trying to read whatever the library file_path says (which
                 // for v2 is a directory and blows up with os error 21).
                 return Err(format!(
-                    "Offline cache entry for track {} is missing (library index is stale)",
-                    track_id
+                    "Offline cache entry for Qobuz track {} is missing (library index is stale)",
+                    qobuz_track_id
                 ));
             }
         }

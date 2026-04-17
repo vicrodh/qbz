@@ -457,11 +457,18 @@ pub async fn v2_play_next_gapless(
             match row.cache_format {
                 2 => {
                     let cache_path = offline_cache.get_cache_path();
-                    if let Some(audio_data) = crate::offline_cache::playback::load_cmaf_bundle(
-                        track_id,
-                        &row,
-                        std::path::Path::new(&cache_path),
-                    ) {
+                    let row_clone = row.clone();
+                    let decrypted = tokio::task::spawn_blocking(move || {
+                        crate::offline_cache::playback::load_cmaf_bundle(
+                            track_id,
+                            &row_clone,
+                            std::path::Path::new(&cache_path),
+                        )
+                    })
+                    .await
+                    .ok()
+                    .flatten();
+                    if let Some(audio_data) = decrypted {
                         log::info!(
                             "[V2/GAPLESS] Track {} from OFFLINE cache (CMAF v2)",
                             track_id
@@ -848,12 +855,23 @@ pub async fn v2_play_track(
             // v2 CMAF bundle: read init + encrypted segments, unwrap the
             // content key from the secret vault, decrypt to plain FLAC,
             // hand to the player just like any other cache hit.
+            // spawn_blocking so the sync disk read + AES decrypt don't
+            // starve the tokio executor (that starvation is what let the
+            // queue auto-advance fire play_track before gapless returned,
+            // killing the gapless engine — see earlier fix commits).
             let audio_data_opt: Option<Vec<u8>> = if row.cache_format == 2 {
-                crate::offline_cache::playback::load_cmaf_bundle(
-                    track_id,
-                    &row,
-                    std::path::Path::new(&offline_cache.get_cache_path()),
-                )
+                let row_clone = row.clone();
+                let cache_path = offline_cache.get_cache_path();
+                tokio::task::spawn_blocking(move || {
+                    crate::offline_cache::playback::load_cmaf_bundle(
+                        track_id,
+                        &row_clone,
+                        std::path::Path::new(&cache_path),
+                    )
+                })
+                .await
+                .ok()
+                .flatten()
             } else {
                 // cache_format = 1 (legacy plain FLAC)
                 let path = std::path::Path::new(&row.segments_path);
