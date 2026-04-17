@@ -6,12 +6,14 @@
 //! - LRU eviction with configurable limits
 //! - Progress events for UI updates
 
+pub mod cmaf_store;
 pub mod commands;
 pub mod db;
 pub mod downloader;
 pub mod metadata;
 pub mod migration;
 pub mod path_validator;
+pub mod secret_vault;
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
