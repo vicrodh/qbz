@@ -231,7 +231,7 @@ export async function updateLocalCopiesSet(): Promise<void> {
   }
 
   try {
-    const trackIds = queue.map(track => parseInt(track.id)).filter(id => !isNaN(id));
+    const trackIds = queue.map(track => Number.parseInt(track.id)).filter(id => !Number.isNaN(id));
     if (trackIds.length === 0) {
       tracksWithLocalCopies = new Set();
       return;
@@ -244,10 +244,10 @@ export async function updateLocalCopiesSet(): Promise<void> {
 
     // Update queue availability
     queue = queue.map(track => {
-      const numId = parseInt(track.id);
+      const numId = Number.parseInt(track.id);
       return {
         ...track,
-        available: isNaN(numId) || localTrackIds.has(numId) || tracksWithLocalCopies.has(numId)
+        available: Number.isNaN(numId) || localTrackIds.has(numId) || tracksWithLocalCopies.has(numId)
       };
     });
     notifyListeners();

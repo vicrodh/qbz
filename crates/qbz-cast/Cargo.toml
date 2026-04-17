@@ -2,7 +2,7 @@
 name = "qbz-cast"
 version = "0.1.0"
 edition = "2021"
-description = "Casting support for QBZ - Chromecast, AirPlay, DLNA"
+description = "Casting support for QBZ - Chromecast, DLNA"
 
 [dependencies]
 # Chromecast

@@ -58,7 +58,7 @@ export function getDevicePrettyName(alsaName: string): string {
   const hdmiMatch = alsaName.match(/^hdmi:CARD=([^,]+),DEV=(\d+)$/);
   if (hdmiMatch) {
     const cardName = CARD_NAMES[hdmiMatch[1]] || hdmiMatch[1];
-    const devNum = parseInt(hdmiMatch[2]) + 1;
+    const devNum = Number.parseInt(hdmiMatch[2]) + 1;
     return `HDMI ${devNum} (${cardName})`;
   }
 
@@ -85,7 +85,7 @@ export function getDevicePrettyName(alsaName: string): string {
     if (rest.includes('usb-')) {
       const usbMatch = rest.match(/usb-([^.]+)/);
       if (usbMatch) {
-        return `USB: ${usbMatch[1].replace(/_/g, ' ')}`;
+        return `USB: ${usbMatch[1].replaceAll('_', ' ')}`;
       }
     }
 
@@ -108,9 +108,9 @@ export function getDevicePrettyName(alsaName: string): string {
   // Fallback: clean up the name a bit
   return alsaName
     .replace(/^(default|sysdefault):/, '')
-    .replace(/CARD=/g, '')
+    .replaceAll('CARD=', '')
     .replace(/,DEV=(\d+)/, ' Output $1')
-    .replace(/_/g, ' ');
+    .replaceAll('_', ' ');
 }
 
 /**

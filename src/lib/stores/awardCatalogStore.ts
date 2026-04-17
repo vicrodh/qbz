@@ -40,10 +40,10 @@ let dirty = false;
 function normalize(name: string): string {
   return name
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .replaceAll(/[\u0300-\u036f]/g, '')
     .trim()
     .toLowerCase()
-    .replace(/\s+/g, ' ');
+    .replaceAll(/\s+/g, ' ');
 }
 
 function loadFromSession(): void {
@@ -105,7 +105,7 @@ export function rememberAwardsFromAlbums(
 
 async function loadCatalog(): Promise<void> {
   if (catalogLoaded) return;
-  if (inflight) return inflight;
+  if (inflight !== null) return inflight;
 
   inflight = (async () => {
     let offset = 0;

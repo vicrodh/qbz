@@ -10,18 +10,18 @@ function escapeHtml(input: string): string {
 function renderInline(text: string): string {
   const escaped = escapeHtml(text);
   // Minimal inline formatting: **bold** and `code`
-  const withBold = escaped.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-  return withBold.replace(/`([^`]+)`/g, '<code>$1</code>');
+  const withBold = escaped.replaceAll(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  return withBold.replaceAll(/`([^`]+)`/g, '<code>$1</code>');
 }
 
 function slugify(input: string): string {
   return input
     .toLowerCase()
     .trim()
-    .replace(/[`*_~]/g, '')
-    .replace(/[^a-z0-9\s-]/g, '')
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-');
+    .replaceAll(/[`*_~]/g, '')
+    .replaceAll(/[^a-z0-9\s-]/g, '')
+    .replaceAll(/\s+/g, '-')
+    .replaceAll(/-+/g, '-');
 }
 
 function countLeadingSpaces(line: string): number {

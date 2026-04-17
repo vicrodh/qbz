@@ -40,7 +40,7 @@ const mockTrack: PlayingTrack = {
   title: 'Test Song',
   artist: 'Test Artist',
   album: 'Test Album',
-  artwork: 'http://art.jpg',
+  artwork: 'https://art.jpg',
   duration: 180,
   quality: 'CD Quality',
   bitDepth: 16,

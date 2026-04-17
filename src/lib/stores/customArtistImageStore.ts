@@ -33,9 +33,9 @@ function notifyListeners(): void {
 function normalize(name: string): string {
   return name
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .replaceAll(/[\u0300-\u036f]/g, '')
     .toLowerCase()
-    .replace(/[^a-z0-9]/g, '');
+    .replaceAll(/[^a-z0-9]/g, '');
 }
 
 // ============ Public API ============

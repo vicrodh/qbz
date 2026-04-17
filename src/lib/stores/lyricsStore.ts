@@ -130,9 +130,9 @@ function parseLRC(lrc: string): LyricsLine[] {
 
   let match;
   while ((match = regex.exec(lrc)) !== null) {
-    const minutes = parseInt(match[1], 10);
-    const seconds = parseInt(match[2], 10);
-    const ms = match[3] ? parseInt(match[3].padEnd(3, '0'), 10) : 0;
+    const minutes = Number.parseInt(match[1], 10);
+    const seconds = Number.parseInt(match[2], 10);
+    const ms = match[3] ? Number.parseInt(match[3].padEnd(3, '0'), 10) : 0;
     const text = match[4].trim();
 
     if (text) {

@@ -33,7 +33,7 @@ export async function getCachedImageUrl(url: string): Promise<string> {
 
   // Check if there's already a pending request for this URL
   const pending = pendingRequests.get(url);
-  if (pending) return pending;
+  if (pending !== undefined) return pending;
 
   const promise = (async () => {
     try {

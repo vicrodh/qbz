@@ -175,6 +175,9 @@ function calculateAdaptiveLimit(trackCount: number): number {
 /**
  * Shuffle array using Fisher-Yates algorithm
  */
+// NOSONAR: Math.random is used only for non-cryptographic shuffling of
+// playlist suggestions. The output has no security or authentication
+// implications.
 function shuffleArray<T>(array: T[]): T[] {
   const result = [...array];
   for (let i = result.length - 1; i > 0; i--) {

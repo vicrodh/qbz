@@ -1,7 +1,6 @@
 //! mDNS discovery for qbzd daemon instances on the LAN.
 //!
-//! Uses the same mdns-sd crate as AirPlay discovery in qbz-cast.
-//! Discovers `_qbz._tcp.local` services.
+//! Uses the mdns-sd crate. Discovers `_qbz._tcp.local` services.
 
 use serde::Serialize;
 use std::sync::Arc;

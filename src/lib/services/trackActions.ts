@@ -547,6 +547,8 @@ export async function loadQconnectQueue(
 
   try {
     const normalizedStartIndex = Math.max(0, Math.min(startIndex, Math.max(trackIds.length - 1, 0)));
+    // NOSONAR: Math.random is used only as a shuffle-order seed for the
+    // playback queue. Non-cryptographic by design.
     const shuffleSeed = shuffleMode
       ? Math.floor(Math.random() * 0x1_0000_0000)
       : undefined;

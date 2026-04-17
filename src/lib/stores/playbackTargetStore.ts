@@ -25,9 +25,15 @@ export const isRemoteMode = derived(playbackTarget, ($t) => $t.type === 'qbzd');
 
 /** Connect to a remote qbzd daemon */
 export function connectToRemote(baseUrl: string, token: string, name?: string) {
+  // Strip trailing slashes without a regex (regex `\/+$` was flagged as a
+  // potential ReDoS risk; the linear loop below is trivially bounded).
+  let normalizedUrl = baseUrl;
+  while (normalizedUrl.endsWith('/')) {
+    normalizedUrl = normalizedUrl.slice(0, -1);
+  }
   playbackTarget.set({
     type: 'qbzd',
-    baseUrl: baseUrl.replace(/\/+$/, ''), // strip trailing slash
+    baseUrl: normalizedUrl,
     token,
     name: name || new URL(baseUrl).hostname,
   });

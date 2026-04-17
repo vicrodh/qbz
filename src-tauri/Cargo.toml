@@ -147,7 +147,7 @@ keyring = { version = "3", features = ["async-secret-service", "crypto-rust"] }
 tauri-plugin-clipboard-manager = "2"
 
 # Casting: qbz-cast crate provides all casting functionality
-# (Chromecast via rust_cast, AirPlay discovery, DLNA via rupnp)
+# (Chromecast via rust_cast, DLNA via rupnp)
 
 # Async utilities (used across codebase)
 futures-util = "0.3"

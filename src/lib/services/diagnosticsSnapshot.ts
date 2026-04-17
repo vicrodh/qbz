@@ -28,8 +28,8 @@ import type {
 function redactIdLike(value: string | null | undefined): string | null {
   if (!value) return null;
   return value
-    .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '<uuid>')
-    .replace(/\b[0-9a-f]{32,}\b/gi, '<hex>');
+    .replaceAll(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '<uuid>')
+    .replaceAll(/\b[0-9a-f]{32,}\b/gi, '<hex>');
 }
 
 function snapshotPlayback(): Record<string, unknown> {

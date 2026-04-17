@@ -249,8 +249,6 @@
           DLNA
         {:else if castProtocol === 'chromecast'}
           CAST
-        {:else if castProtocol === 'airplay'}
-          AIR
         {:else}
           CAST
         {/if}

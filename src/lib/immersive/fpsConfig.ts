@@ -37,8 +37,8 @@ export function getPanelFps(panelId: ImmersivePanelId): number {
   const defaultFps = PANEL_DEFAULTS[panelId] ?? DEFAULT_FPS;
   const stored = getUserItem(`${FPS_KEY_PREFIX}${panelId}`);
   if (stored === null) return defaultFps;
-  const parsed = parseInt(stored, 10);
-  return isNaN(parsed) ? defaultFps : parsed;
+  const parsed = Number.parseInt(stored, 10);
+  return Number.isNaN(parsed) ? defaultFps : parsed;
 }
 
 /**

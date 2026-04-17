@@ -30,7 +30,7 @@ const activeLoads = new Map<string, AbortController>();
 function seededRandom(seed: string): () => number {
   let hash = 0;
   for (let i = 0; i < seed.length; i++) {
-    const char = seed.charCodeAt(i);
+    const char = seed.codePointAt(i) ?? 0;
     hash = ((hash << 5) - hash) + char;
     hash = hash & hash;
   }

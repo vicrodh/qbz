@@ -225,7 +225,7 @@ export function getCachedDesktopTheme(): DesktopThemeInfo | null {
 
 export async function detectDesktopThemeCached(force = false): Promise<DesktopThemeInfo | null> {
   if (!force && cachedTheme) return cachedTheme;
-  if (detectInFlight) return detectInFlight;
+  if (detectInFlight !== null) return detectInFlight;
   detectInFlight = (async () => {
     try {
       const { invoke } = await import('@tauri-apps/api/core');
@@ -285,9 +285,9 @@ export function mapKlassyShapeToQbz(klassyShape: string | undefined): ButtonShap
 function hexToRgba(hex: string, alpha: number): string {
   const cleaned = hex.startsWith('#') ? hex.slice(1) : hex;
   if (cleaned.length !== 6) return hex;
-  const r = parseInt(cleaned.slice(0, 2), 16);
-  const g = parseInt(cleaned.slice(2, 4), 16);
-  const b = parseInt(cleaned.slice(4, 6), 16);
+  const r = Number.parseInt(cleaned.slice(0, 2), 16);
+  const g = Number.parseInt(cleaned.slice(2, 4), 16);
+  const b = Number.parseInt(cleaned.slice(4, 6), 16);
   if ([r, g, b].some((n) => Number.isNaN(n))) return hex;
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }

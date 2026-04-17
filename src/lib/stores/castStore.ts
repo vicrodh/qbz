@@ -15,7 +15,7 @@ import {
   type PlayingTrack
 } from './playerStore';
 
-export type CastProtocol = 'chromecast' | 'dlna' | 'airplay';
+export type CastProtocol = 'chromecast' | 'dlna';
 
 export interface CastDevice {
   id: string;
@@ -154,9 +154,6 @@ export async function connectToDevice(device: CastDevice, protocol: CastProtocol
       case 'dlna':
         await invoke('v2_dlna_connect', { deviceId: device.id });
         break;
-      case 'airplay':
-        await invoke('v2_airplay_connect', { deviceId: device.id });
-        break;
     }
 
     state = {
@@ -239,9 +236,6 @@ export async function disconnect(): Promise<void> {
         break;
       case 'dlna':
         await invoke('v2_dlna_disconnect');
-        break;
-      case 'airplay':
-        await invoke('v2_airplay_disconnect');
         break;
     }
   } catch (err) {
@@ -348,18 +342,6 @@ export async function castTrack(
           }
         });
         break;
-      case 'airplay':
-        await invoke('v2_airplay_load_media', {
-          metadata: {
-            title: metadata.title,
-            artist: metadata.artist,
-            album: metadata.album,
-            artwork_url: metadata.artworkUrl,
-            duration_secs: metadata.durationSecs
-          }
-        });
-        await invoke('v2_airplay_play');
-        break;
     }
 
     state = {
@@ -396,9 +378,6 @@ export async function castPlay(): Promise<void> {
       case 'dlna':
         await invoke('v2_dlna_play');
         break;
-      case 'airplay':
-        await invoke('v2_airplay_play');
-        break;
     }
     state = { ...state, isPlaying: true };
     notifyListeners();
@@ -421,9 +400,6 @@ export async function castPause(): Promise<void> {
         break;
       case 'dlna':
         await invoke('v2_dlna_pause');
-        break;
-      case 'airplay':
-        await invoke('v2_airplay_pause');
         break;
     }
     state = { ...state, isPlaying: false };
@@ -448,9 +424,6 @@ export async function castStop(): Promise<void> {
       case 'dlna':
         await invoke('v2_dlna_stop');
         break;
-      case 'airplay':
-        await invoke('v2_airplay_stop');
-        break;
     }
     state = { ...state, isPlaying: false, currentTrackId: null };
     notifyListeners();
@@ -474,9 +447,6 @@ export async function castSeek(positionSecs: number): Promise<void> {
       case 'dlna':
         await invoke('v2_dlna_seek', { positionSecs });
         break;
-      case 'airplay':
-        // AirPlay seek - not implemented
-        break;
     }
   } catch (err) {
     console.error('[CastStore] Failed to seek:', err);
@@ -499,9 +469,6 @@ export async function castSetVolume(volume: number): Promise<void> {
         break;
       case 'dlna':
         await invoke('v2_dlna_set_volume', { volume: normalizedVolume });
-        break;
-      case 'airplay':
-        await invoke('v2_airplay_set_volume', { volume: normalizedVolume });
         break;
     }
   } catch (err) {

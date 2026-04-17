@@ -123,8 +123,8 @@ function loadPersistedVolume(): number {
   if (typeof localStorage === 'undefined') return 75;
   const stored = getUserItem('qbz-volume');
   if (stored) {
-    const parsed = parseFloat(stored);
-    if (!isNaN(parsed) && parsed >= 0 && parsed <= 100) {
+    const parsed = Number.parseFloat(stored);
+    if (!Number.isNaN(parsed) && parsed >= 0 && parsed <= 100) {
       return parsed;
     }
   }
@@ -540,7 +540,7 @@ export async function toggleMute(): Promise<void> {
     let restoreVolume = preMuteVolume;
     if (restoreVolume === null && typeof localStorage !== 'undefined') {
       const stored = getUserItem('qbz-pre-mute-volume');
-      if (stored) restoreVolume = parseFloat(stored);
+      if (stored) restoreVolume = Number.parseFloat(stored);
     }
     preMuteVolume = null;
     if (typeof localStorage !== 'undefined') {

@@ -2,7 +2,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import { t } from 'svelte-i18n';
   import { onMount, onDestroy } from 'svelte';
-  import { X, Cast, LoaderCircle, Monitor, Wifi, Tv, Speaker, Power } from 'lucide-svelte';
+  import { X, Cast, LoaderCircle, Monitor, Wifi, Tv, Power } from 'lucide-svelte';
   import {
     subscribe as subscribeCast,
     getCastState,
@@ -72,7 +72,6 @@
   let savedDaemons = $state<SavedDaemon[]>(loadSavedDaemons());
   let chromecastDevices = $state<CastDevice[]>([]);
   let dlnaDevices = $state<CastDevice[]>([]);
-  let airplayDevices = $state<CastDevice[]>([]);
   let qbzdDevices = $state<QbzdDevice[]>([]);
   let loading = $state(false);
   let error = $state<string | null>(null);
@@ -93,7 +92,6 @@
     switch (activeProtocol) {
       case 'chromecast': return chromecastDevices;
       case 'dlna': return dlnaDevices;
-      case 'airplay': return airplayDevices;
       case 'qbzd': return [];  // qbzd uses its own list
     }
   });
@@ -135,7 +133,6 @@
 
     try {
       // Start discovery protocols in parallel
-      // Note: AirPlay discovery disabled until RAOP streaming is implemented
       await Promise.allSettled([
         invoke('v2_cast_start_discovery'),
         invoke('v2_dlna_start_discovery'),
@@ -171,7 +168,6 @@
 
     try {
       // Poll active protocols in parallel
-      // Note: AirPlay polling disabled until RAOP streaming is implemented
       const results = await Promise.allSettled([
         invoke<CastDevice[]>('v2_cast_get_devices'),
         invoke<CastDevice[]>('v2_dlna_get_devices'),
@@ -314,7 +310,6 @@
       case 'qbzd': return Monitor;
       case 'chromecast': return Cast;
       case 'dlna': return Tv;
-      case 'airplay': return Speaker;
     }
   }
 
@@ -323,7 +318,6 @@
       case 'qbzd': return 'QBZ Daemon';
       case 'chromecast': return 'Chromecast';
       case 'dlna': return 'DLNA';
-      case 'airplay': return 'AirPlay';
     }
   }
 </script>
@@ -406,8 +400,6 @@
               <span class="count">{dlnaDevices.length}</span>
             {/if}
           </button>
-          <!-- AirPlay hidden until RAOP streaming is implemented -->
-          <!-- See docs/AIRPLAY_IMPLEMENTATION_STATUS.md for details -->
         </div>
 
         <div class="content">

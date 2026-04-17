@@ -2,9 +2,7 @@ use tauri::State;
 
 use crate::api_cache::ApiCacheState;
 use crate::artist_blacklist::BlacklistState;
-use crate::cast::{
-    AirPlayMetadata, AirPlayState, CastState, DlnaMetadata, DlnaState, MediaMetadata,
-};
+use crate::cast::{CastState, DlnaMetadata, DlnaState, MediaMetadata};
 use crate::config::download_settings::DownloadSettingsState;
 use crate::core_bridge::CoreBridgeState;
 use crate::integrations_v2::MusicBrainzV2State;
@@ -320,94 +318,6 @@ pub async fn v2_dlna_set_volume(volume: f32, state: State<'_, DlnaState>) -> Res
     let mut connection = state.connection.lock().await;
     let conn = connection.as_mut().ok_or("Not connected")?;
     conn.set_volume(volume).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub async fn v2_airplay_start_discovery(state: State<'_, AirPlayState>) -> Result<(), String> {
-    let mut discovery = state.discovery.lock().await;
-    discovery.start_discovery().map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub async fn v2_airplay_stop_discovery(state: State<'_, AirPlayState>) -> Result<(), String> {
-    let mut discovery = state.discovery.lock().await;
-    discovery.stop_discovery().map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub async fn v2_airplay_get_devices(
-    state: State<'_, AirPlayState>,
-) -> Result<Vec<crate::cast::DiscoveredAirPlayDevice>, String> {
-    let discovery = state.discovery.lock().await;
-    Ok(discovery.get_discovered_devices())
-}
-
-#[tauri::command]
-pub async fn v2_airplay_connect(
-    device_id: String,
-    state: State<'_, AirPlayState>,
-) -> Result<(), String> {
-    let device = {
-        let discovery = state.discovery.lock().await;
-        discovery
-            .get_device(&device_id)
-            .ok_or_else(|| format!("Device not found: {}", device_id))?
-    };
-    let connection = crate::cast::AirPlayConnection::connect(device).map_err(|e| e.to_string())?;
-    let mut state_connection = state.connection.lock().await;
-    *state_connection = Some(connection);
-    Ok(())
-}
-
-#[tauri::command]
-pub async fn v2_airplay_disconnect(state: State<'_, AirPlayState>) -> Result<(), String> {
-    let mut connection = state.connection.lock().await;
-    if let Some(conn) = connection.as_mut() {
-        conn.disconnect().map_err(|e| e.to_string())?;
-    }
-    *connection = None;
-    Ok(())
-}
-
-#[tauri::command]
-pub async fn v2_airplay_load_media(
-    metadata: AirPlayMetadata,
-    state: State<'_, AirPlayState>,
-) -> Result<(), String> {
-    let mut connection = state.connection.lock().await;
-    let conn = connection.as_mut().ok_or("Not connected")?;
-    conn.load_media(metadata).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub async fn v2_airplay_play(state: State<'_, AirPlayState>) -> Result<(), String> {
-    let mut connection = state.connection.lock().await;
-    let conn = connection.as_mut().ok_or("Not connected")?;
-    conn.play().map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub async fn v2_airplay_pause(state: State<'_, AirPlayState>) -> Result<(), String> {
-    let mut connection = state.connection.lock().await;
-    let conn = connection.as_mut().ok_or("Not connected")?;
-    conn.pause().map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub async fn v2_airplay_stop(state: State<'_, AirPlayState>) -> Result<(), String> {
-    let mut connection = state.connection.lock().await;
-    let conn = connection.as_mut().ok_or("Not connected")?;
-    conn.stop().map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub async fn v2_airplay_set_volume(
-    volume: f32,
-    state: State<'_, AirPlayState>,
-) -> Result<(), String> {
-    let mut connection = state.connection.lock().await;
-    let conn = connection.as_mut().ok_or("Not connected")?;
-    conn.set_volume(volume).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

@@ -164,7 +164,7 @@ Multi-device playback control using Qobuz's real-time streaming protocol.
 
 ### Casting
 
-- **Chromecast**, **DLNA/UPnP**, and **AirPlay** discovery and streaming
+- **Chromecast** and **DLNA/UPnP** discovery and streaming
 - Seamless playback handoff to network devices
 
 ### Integrations
@@ -212,7 +212,7 @@ Multi-device playback control using Qobuz's real-time streaming protocol.
 | **Database** | rusqlite (bundled SQLite, WAL mode) |
 | **PDF** | MuPDF 0.6 (native rendering) |
 | **Desktop** | souvlaki (MPRIS), ashpd (XDG notifications), keyring |
-| **Casting** | rust_cast (Chromecast), rupnp (DLNA/UPnP), mdns-sd (AirPlay) |
+| **Casting** | rust_cast (Chromecast), rupnp (DLNA/UPnP), mdns-sd |
 | **i18n** | svelte-i18n (5 locales) |
 
 ### Multi-Crate Architecture
@@ -227,7 +227,7 @@ crates/
   qbz-library/           Local library scanning and metadata
   qbz-integrations/      Last.fm, ListenBrainz, MusicBrainz, Discogs
   qbz-cache/             L1 memory + L2 disk audio caching
-  qbz-cast/              Chromecast, DLNA/UPnP, AirPlay
+  qbz-cast/              Chromecast, DLNA/UPnP
   qconnect-protocol/     Qobuz Connect protobuf wire format
   qconnect-core/         Queue and renderer domain models
   qconnect-app/          Application logic and concurrency

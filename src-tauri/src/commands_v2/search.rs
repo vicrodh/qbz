@@ -140,6 +140,95 @@ pub async fn v2_search_artists(
     Ok(results)
 }
 
+/// Parse a `SearchResultsPage<T>` from a JSON search response, falling back to
+/// an empty page (with the given `limit`) on missing or malformed data.
+fn parse_results_page<T>(
+    response: &serde_json::Value,
+    key: &str,
+    limit: u32,
+) -> SearchResultsPage<T>
+where
+    T: serde::de::DeserializeOwned,
+{
+    response
+        .get(key)
+        .and_then(|v| serde_json::from_value(v.clone()).ok())
+        .unwrap_or_else(|| SearchResultsPage {
+            items: vec![],
+            total: 0,
+            offset: 0,
+            limit,
+        })
+}
+
+/// Remove entries from `page.items` that fail `keep`, adjusting `page.total`
+/// by the number actually removed.
+fn filter_page<T, F>(page: &mut SearchResultsPage<T>, keep: F)
+where
+    F: FnMut(&T) -> bool,
+{
+    let before = page.items.len();
+    page.items.retain(keep);
+    let removed = before - page.items.len();
+    if removed > 0 {
+        page.total = page.total.saturating_sub(removed as u32);
+    }
+}
+
+/// Try to convert a single `most_popular` items-array entry into a typed
+/// `V2MostPopularItem`, honoring the blacklist. Returns `None` when the
+/// entry is malformed, of an unknown type, or filtered out.
+fn most_popular_from_item(
+    item: &serde_json::Value,
+    blacklist: &BlacklistState,
+) -> Option<V2MostPopularItem> {
+    let item_type = item.get("type")?.as_str()?;
+    let content = item.get("content")?;
+
+    match item_type {
+        "tracks" => {
+            let track: Track = serde_json::from_value(content.clone()).ok()?;
+            let skip = track
+                .performer
+                .as_ref()
+                .is_some_and(|p| blacklist.is_blacklisted(p.id));
+            if skip {
+                return None;
+            }
+            Some(V2MostPopularItem::Tracks(track))
+        }
+        "albums" => {
+            let album: Album = serde_json::from_value(content.clone()).ok()?;
+            if blacklist.is_blacklisted(album.artist.id) {
+                return None;
+            }
+            Some(V2MostPopularItem::Albums(album))
+        }
+        "artists" => {
+            let artist: Artist = serde_json::from_value(content.clone()).ok()?;
+            if blacklist.is_blacklisted(artist.id) {
+                return None;
+            }
+            Some(V2MostPopularItem::Artists(artist))
+        }
+        _ => None,
+    }
+}
+
+/// Walk the `most_popular.items` array and return the first entry that
+/// passes the blacklist (or `None` if every entry was skipped / absent).
+fn pick_most_popular(
+    response: &serde_json::Value,
+    blacklist: &BlacklistState,
+) -> Option<V2MostPopularItem> {
+    response
+        .get("most_popular")?
+        .get("items")?
+        .as_array()?
+        .iter()
+        .find_map(|item| most_popular_from_item(item, blacklist))
+}
+
 /// Search all categories in one call (albums/tracks/artists/playlists + most_popular)
 #[tauri::command]
 pub async fn v2_search_all(
@@ -159,115 +248,22 @@ pub async fn v2_search_all(
         .await
         .map_err(RuntimeError::Internal)?;
 
-    let mut albums: SearchResultsPage<Album> = response
-        .get("albums")
-        .and_then(|v| serde_json::from_value(v.clone()).ok())
-        .unwrap_or_else(|| SearchResultsPage {
-            items: vec![],
-            total: 0,
-            offset: 0,
-            limit: 30,
-        });
-    let mut tracks: SearchResultsPage<Track> = response
-        .get("tracks")
-        .and_then(|v| serde_json::from_value(v.clone()).ok())
-        .unwrap_or_else(|| SearchResultsPage {
-            items: vec![],
-            total: 0,
-            offset: 0,
-            limit: 30,
-        });
-    let mut artists: SearchResultsPage<Artist> = response
-        .get("artists")
-        .and_then(|v| serde_json::from_value(v.clone()).ok())
-        .unwrap_or_else(|| SearchResultsPage {
-            items: vec![],
-            total: 0,
-            offset: 0,
-            limit: 30,
-        });
-    let playlists: SearchResultsPage<Playlist> = response
-        .get("playlists")
-        .and_then(|v| serde_json::from_value(v.clone()).ok())
-        .unwrap_or_else(|| SearchResultsPage {
-            items: vec![],
-            total: 0,
-            offset: 0,
-            limit: 30,
-        });
+    let mut albums: SearchResultsPage<Album> = parse_results_page(&response, "albums", 30);
+    let mut tracks: SearchResultsPage<Track> = parse_results_page(&response, "tracks", 30);
+    let mut artists: SearchResultsPage<Artist> = parse_results_page(&response, "artists", 30);
+    let playlists: SearchResultsPage<Playlist> = parse_results_page(&response, "playlists", 30);
 
-    let most_popular: Option<V2MostPopularItem> = response
-        .get("most_popular")
-        .and_then(|mp| mp.get("items"))
-        .and_then(|items| items.as_array())
-        .and_then(|arr| {
-            for item in arr {
-                let item_type = item.get("type").and_then(|t| t.as_str())?;
-                let content = item.get("content")?;
+    let most_popular = pick_most_popular(&response, &blacklist_state);
 
-                match item_type {
-                    "tracks" => {
-                        if let Ok(track) = serde_json::from_value::<Track>(content.clone()) {
-                            if let Some(ref performer) = track.performer {
-                                if blacklist_state.is_blacklisted(performer.id) {
-                                    continue;
-                                }
-                            }
-                            return Some(V2MostPopularItem::Tracks(track));
-                        }
-                    }
-                    "albums" => {
-                        if let Ok(album) = serde_json::from_value::<Album>(content.clone()) {
-                            if blacklist_state.is_blacklisted(album.artist.id) {
-                                continue;
-                            }
-                            return Some(V2MostPopularItem::Albums(album));
-                        }
-                    }
-                    "artists" => {
-                        if let Ok(artist) = serde_json::from_value::<Artist>(content.clone()) {
-                            if blacklist_state.is_blacklisted(artist.id) {
-                                continue;
-                            }
-                            return Some(V2MostPopularItem::Artists(artist));
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            None
-        });
-
-    let original_album_count = albums.items.len();
-    albums
-        .items
-        .retain(|album| !blacklist_state.is_blacklisted(album.artist.id));
-    let filtered_albums = original_album_count - albums.items.len();
-    if filtered_albums > 0 {
-        albums.total = albums.total.saturating_sub(filtered_albums as u32);
-    }
-
-    let original_track_count = tracks.items.len();
-    tracks.items.retain(|track| {
-        if let Some(ref performer) = track.performer {
-            !blacklist_state.is_blacklisted(performer.id)
-        } else {
-            true
-        }
+    filter_page(&mut albums, |a| {
+        !blacklist_state.is_blacklisted(a.artist.id)
     });
-    let filtered_tracks = original_track_count - tracks.items.len();
-    if filtered_tracks > 0 {
-        tracks.total = tracks.total.saturating_sub(filtered_tracks as u32);
-    }
-
-    let original_artist_count = artists.items.len();
-    artists
-        .items
-        .retain(|artist| !blacklist_state.is_blacklisted(artist.id));
-    let filtered_artists = original_artist_count - artists.items.len();
-    if filtered_artists > 0 {
-        artists.total = artists.total.saturating_sub(filtered_artists as u32);
-    }
+    filter_page(&mut tracks, |t| {
+        t.performer
+            .as_ref()
+            .is_none_or(|p| !blacklist_state.is_blacklisted(p.id))
+    });
+    filter_page(&mut artists, |a| !blacklist_state.is_blacklisted(a.id));
 
     Ok(V2SearchAllResults {
         albums,

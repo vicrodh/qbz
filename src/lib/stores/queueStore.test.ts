@@ -125,7 +125,7 @@ describe('queueStore', () => {
         current_track: null,
         current_index: null,
         upcoming: [
-          { id: 1, title: 'Song 1', artist: 'Artist', album: 'Album', duration_secs: 180, artwork_url: 'http://art.jpg' },
+          { id: 1, title: 'Song 1', artist: 'Artist', album: 'Album', duration_secs: 180, artwork_url: 'https://art.jpg' },
           { id: 2, title: 'Song 2', artist: 'Artist', album: 'Album', duration_secs: 240, artwork_url: null }
         ],
         history: [],
@@ -139,7 +139,7 @@ describe('queueStore', () => {
       expect(getQueue()).toHaveLength(2);
       expect(getQueue()[0]).toEqual({
         id: '1',
-        artwork: 'http://art.jpg',
+        artwork: 'https://art.jpg',
         title: 'Song 1',
         artist: 'Artist',
         duration: '3:00',

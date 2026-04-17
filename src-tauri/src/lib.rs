@@ -1216,7 +1216,6 @@ pub fn run() {
         .manage(library_state)
         .manage(cast_state)
         .manage(dlna_state)
-        // .manage(airplay_state)  // AirPlay DISABLED
         .manage(offline_cache_state)
         .manage(lyrics_state)
         .manage(reco_state)
@@ -1415,16 +1414,6 @@ pub fn run() {
             commands_v2::v2_dlna_seek,
             commands_v2::v2_dlna_get_position,
             commands_v2::v2_dlna_set_volume,
-            commands_v2::v2_airplay_start_discovery,
-            commands_v2::v2_airplay_stop_discovery,
-            commands_v2::v2_airplay_get_devices,
-            commands_v2::v2_airplay_connect,
-            commands_v2::v2_airplay_disconnect,
-            commands_v2::v2_airplay_load_media,
-            commands_v2::v2_airplay_play,
-            commands_v2::v2_airplay_pause,
-            commands_v2::v2_airplay_stop,
-            commands_v2::v2_airplay_set_volume,
             commands_v2::v2_clear_offline_cache,
             commands_v2::v2_library_remove_folder,
             commands_v2::v2_library_check_folder_accessible,
