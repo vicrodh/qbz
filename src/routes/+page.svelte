@@ -5505,6 +5505,7 @@
           onTrackPlayNext={queueLocalTrackNext}
           onTrackPlayLater={queueLocalTrackLater}
           onTrackAddToPlaylist={(trackId) => openAddToPlaylist([trackId], true)}
+          onBulkAddToPlaylist={(trackIds) => openAddToPlaylist(trackIds, true)}
           onSetLocalQueue={handleSetLocalQueue}
           onQobuzArtistClick={handleArtistClick}
           activeTrackId={currentTrack?.id ?? null}

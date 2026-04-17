@@ -3,12 +3,15 @@
   import { setCustomImage } from '$lib/stores/customArtistImageStore';
   import { getThumbnailUrl, getCachedThumbnailUrl } from '$lib/services/thumbnailService';
   import { open, ask } from '@tauri-apps/plugin-dialog';
-  import { onMount, onDestroy, tick } from 'svelte';
+  import { onMount, onDestroy, tick, untrack } from 'svelte';
   import {
     HardDrive, Music, Disc3, MicVocal, FolderPlus, Trash2, RefreshCw,
     Settings, ArrowLeft, X, Play, CircleAlert, ImageDown, Upload, Search, LayoutGrid, List, PenLine,
-    Network, Power, PowerOff, ChevronLeft, ChevronRight, Shuffle, SlidersHorizontal, ArrowUpDown, ChevronDown, Check
+    Network, Power, PowerOff, ChevronLeft, ChevronRight, Shuffle, SlidersHorizontal, ArrowUpDown, ChevronDown, Check, SquareCheckBig
   } from 'lucide-svelte';
+  import BulkActionBar from '../BulkActionBar.svelte';
+  import { buildQueueTrackFromLocalTrack } from '$lib/services/trackActions';
+  import { cmdAddTracksToQueue, cmdAddTracksToQueueNext } from '$lib/services/commandRouter';
   import FolderSettingsModal from '../FolderSettingsModal.svelte';
   import LocalLibraryTagEditorModal from '../LocalLibraryTagEditorModal.svelte';
   import ViewTransition from '../ViewTransition.svelte';
@@ -226,6 +229,7 @@
     onTrackPlayNext?: (track: LocalTrack) => void;
     onTrackPlayLater?: (track: LocalTrack) => void;
     onTrackAddToPlaylist?: (trackId: number) => void;
+    onBulkAddToPlaylist?: (trackIds: number[]) => void;
     onSetLocalQueue?: (trackIds: number[]) => void;
     activeTrackId?: number | null;
     isPlaybackActive?: boolean;
@@ -240,6 +244,7 @@
     onTrackPlayNext,
     onTrackPlayLater,
     onTrackAddToPlaylist,
+    onBulkAddToPlaylist,
     onSetLocalQueue,
     activeTrackId = null,
     isPlaybackActive = false
@@ -520,6 +525,68 @@
   let stats = $state<LibraryStats | null>(null);
   let folders = $state<LibraryFolder[]>([]);
   let scanProgress = $state<ScanProgress | null>(null);
+
+  // Multi-select (tracks tab) — mirrors FavoritesView pattern
+  let trackSelectMode = $state(false);
+  let selectedTrackIds = $state(new Set<number>());
+
+  function toggleTrackSelectMode() {
+    trackSelectMode = !trackSelectMode;
+    if (!trackSelectMode) selectedTrackIds = new Set();
+  }
+
+  function toggleTrackSelect(id: number) {
+    const next = new Set(selectedTrackIds);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    selectedTrackIds = next;
+  }
+
+  function selectedLocalTracks(): LocalTrack[] {
+    // Union of library-wide tracks and current album tracks so selection works
+    // from both the tracks tab and the album detail view.
+    const byId = new Map<number, LocalTrack>();
+    for (const trk of tracks) {
+      if (selectedTrackIds.has(trk.id)) byId.set(trk.id, trk);
+    }
+    for (const trk of albumTracks) {
+      if (selectedTrackIds.has(trk.id) && !byId.has(trk.id)) byId.set(trk.id, trk);
+    }
+    return [...byId.values()];
+  }
+
+  async function handleBulkPlayNext() {
+    const queueTracks = selectedLocalTracks().map(buildQueueTrackFromLocalTrack);
+    if (queueTracks.length === 0) return;
+    await cmdAddTracksToQueueNext(queueTracks);
+    trackSelectMode = false;
+    selectedTrackIds = new Set();
+  }
+
+  async function handleBulkPlayLater() {
+    const queueTracks = selectedLocalTracks().map(buildQueueTrackFromLocalTrack);
+    if (queueTracks.length === 0) return;
+    await cmdAddTracksToQueue(queueTracks);
+    trackSelectMode = false;
+    selectedTrackIds = new Set();
+  }
+
+  function handleBulkAddToPlaylist() {
+    // Plex tracks can't be added to playlists (matches per-row guard at line ~3306)
+    const ids = selectedLocalTracks()
+      .filter(trk => trk.source !== 'plex')
+      .map(trk => trk.id);
+    if (ids.length === 0) return;
+    onBulkAddToPlaylist?.(ids);
+    trackSelectMode = false;
+    selectedTrackIds = new Set();
+  }
+
+  function resetMultiSelect() {
+    if (trackSelectMode || selectedTrackIds.size > 0) {
+      trackSelectMode = false;
+      selectedTrackIds = new Set();
+    }
+  }
 
   // Reactive counters based on filtered data
   // Note: filteredArtistCount is defined after mergedArtists below
@@ -926,6 +993,16 @@
   let albumTracks = $state<LocalTrack[]>([]);
   let albumTrackSearch = $state('');
   let showAlbumTrackSearch = $state(false);
+
+  // Clear multi-select when switching tabs or entering/leaving album detail.
+  // `untrack` prevents the reset from reading trackSelectMode/selectedTrackIds
+  // reactively — otherwise enabling select mode would trigger a re-run that
+  // immediately clears it (button would appear to do nothing).
+  $effect(() => {
+    void activeTab;
+    void selectedAlbum?.id;
+    untrack(() => resetMultiSelect());
+  });
 
   // Qobuz artist images cache (artist name -> image URL)
   let artistImages = $state<Map<string, string>>(new Map());
@@ -3264,6 +3341,14 @@
             <button class="action-btn-circle" onclick={handleShuffleAllAlbum} title={$t('actions.shuffle')}>
               <Shuffle size={18} />
             </button>
+            <button
+              class="action-btn-circle"
+              class:is-active={trackSelectMode}
+              onclick={toggleTrackSelectMode}
+              title={trackSelectMode ? $t('actions.cancelSelection') : $t('actions.select')}
+            >
+              <SquareCheckBig size={18} />
+            </button>
           </div>
         </div>
       </div>
@@ -3295,6 +3380,9 @@
               localSource={track.source === 'plex' ? 'plex' : 'local'}
               hideDownload={true}
               hideFavorite={true}
+              selectable={trackSelectMode}
+              selected={selectedTrackIds.has(track.id)}
+              onToggleSelect={() => toggleTrackSelect(track.id)}
               onArtistClick={track.artist && track.artist !== selectedAlbum?.artist
                 ? () => handleLocalArtistClick(track.artist)
                 : undefined}
@@ -3309,6 +3397,13 @@
           {/each}
         {/each}
       </div>
+      <BulkActionBar
+        count={selectedTrackIds.size}
+        onPlayNext={handleBulkPlayNext}
+        onPlayLater={handleBulkPlayLater}
+        onAddToPlaylist={handleBulkAddToPlaylist}
+        onClearSelection={() => { selectedTrackIds = new Set(); }}
+      />
     </div>
   {:else}
     <!-- Main Library View -->
@@ -4042,6 +4137,14 @@
         {:else}
           {@const { grouped: groupedTracks, alphaGroups: trackAlphaGroups, indexTargets: trackIndexTargets } = groupedTracksMemo}
           <div class="track-controls">
+            <button
+              class="control-btn icon-only"
+              class:active={trackSelectMode}
+              onclick={toggleTrackSelectMode}
+              title={trackSelectMode ? $t('actions.cancelSelection') : $t('actions.select')}
+            >
+              <SquareCheckBig size={16} />
+            </button>
             <div class="dropdown-container">
               <button
                 class="control-btn"
@@ -4134,9 +4237,19 @@
                 onTrackPlayNext={onTrackPlayNext}
                 onTrackPlayLater={onTrackPlayLater}
                 onTrackAddToPlaylist={onTrackAddToPlaylist}
+                selectable={trackSelectMode}
+                selectedIds={selectedTrackIds}
+                onToggleSelect={toggleTrackSelect}
               />
             </div>
           </div>
+          <BulkActionBar
+            count={selectedTrackIds.size}
+            onPlayNext={handleBulkPlayNext}
+            onPlayLater={handleBulkPlayLater}
+            onAddToPlaylist={handleBulkAddToPlaylist}
+            onClearSelection={() => { selectedTrackIds = new Set(); }}
+          />
         {/if}
         </ViewTransition>
         {/key}
