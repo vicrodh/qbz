@@ -14,8 +14,8 @@ use qbz_audio::{settings::AudioSettingsStore, AudioDiagnostic, AudioSettings, Vi
 use qbz_core::QbzCore;
 use qbz_models::{
     Album, Artist, DiscoverAlbum, DiscoverData, DiscoverPlaylistsResponse, DiscoverResponse,
-    GenreInfo, LabelDetail, LabelExploreResponse, LabelGetListResponse, LabelListPage,
-    LabelPageData, LabelStoryResponse, PageArtistResponse, Playlist, PlaylistTag, Quality,
+    GenreInfo, LabelExploreResponse, LabelGetListResponse, LabelListPage, LabelPageData,
+    LabelStoryResponse, PageArtistResponse, Playlist, PlaylistTag, Quality,
     QueueState, QueueTrack, RepeatMode, SearchResultsPage, StreamUrl, Track, UserSession,
 };
 use qbz_player::{PlaybackState, Player};
@@ -550,19 +550,6 @@ impl CoreBridge {
     ) -> Result<Artist, String> {
         self.core
             .get_artist_with_albums(artist_id, limit, offset)
-            .await
-            .map_err(|e| e.to_string())
-    }
-
-    /// Get label details
-    pub async fn get_label(
-        &self,
-        label_id: u64,
-        limit: u32,
-        offset: u32,
-    ) -> Result<LabelDetail, String> {
-        self.core
-            .get_label(label_id, limit, offset)
             .await
             .map_err(|e| e.to_string())
     }

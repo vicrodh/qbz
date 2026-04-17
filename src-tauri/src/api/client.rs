@@ -1481,34 +1481,6 @@ impl QobuzClient {
         Ok(serde_json::from_value(response)?)
     }
 
-    /// Get label by ID with albums
-    pub async fn get_label(&self, label_id: u64, limit: u32, offset: u32) -> Result<LabelDetail> {
-        let url = endpoints::build_url(paths::LABEL_GET);
-        let locale = self.locale().await;
-
-        let http_response = self
-            .http
-            .get(&url)
-            .headers(self.api_headers().await?)
-            .query(&[
-                ("label_id", label_id.to_string()),
-                ("extra", "albums".to_string()),
-                ("limit", limit.to_string()),
-                ("offset", offset.to_string()),
-                ("lang", locale),
-            ])
-            .send()
-            .await?;
-        log::debug!(
-            "[API] get_label({}) status={}",
-            label_id,
-            http_response.status()
-        );
-        let response: Value = http_response.json().await?;
-
-        Ok(serde_json::from_value(response)?)
-    }
-
     /// Get one purchases page from Qobuz.
     pub async fn get_user_purchases_page(
         &self,

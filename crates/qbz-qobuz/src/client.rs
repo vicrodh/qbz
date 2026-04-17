@@ -1635,34 +1635,6 @@ impl QobuzClient {
         Ok(serde_json::from_value(response)?)
     }
 
-    /// Get label by ID with albums
-    ///
-    /// DEPRECATED: `/label/get` is not documented in the v9.7.0.3 spec.
-    /// Use `get_label_albums` (catalog) + `get_label_page` (metadata).
-    /// Kept temporarily for backward-compat during frontend migration.
-    pub async fn get_label(&self, label_id: u64, limit: u32, offset: u32) -> Result<LabelDetail> {
-        let url = endpoints::build_url(paths::LABEL_GET);
-        let locale = self.locale().await;
-
-        let http_response = self
-            .signed_get(&url, "labelget", &[
-                ("label_id", label_id.to_string()),
-                ("extra", "albums".to_string()),
-                ("limit", limit.to_string()),
-                ("offset", offset.to_string()),
-                ("lang", locale),
-            ])
-            .await?;
-        log::debug!(
-            "[API] get_label({}) status={}",
-            label_id,
-            http_response.status()
-        );
-        let response: Value = http_response.json().await?;
-
-        Ok(serde_json::from_value(response)?)
-    }
-
     /// Get a label's album catalog (paginated, filterable).
     ///
     /// Replaces the legacy `/label/get?extra=albums` path.

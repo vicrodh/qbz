@@ -52,11 +52,8 @@ pub mod paths {
     // (source: x20/b.java Retrofit interface).
     pub const FAVORITE_GET_NEW_RELEASES: &str = "/favorite/getNewReleases";
 
-    // Label
-    // NOTE: /label/get is retained only for backward-compat until the
-    // frontend is fully migrated; the v9.7.0.3 spec drops it in favor of
-    // /label/getAlbums.
-    pub const LABEL_GET: &str = "/label/get";
+    // Label (v9.7.0.3 API — /label/get removed, use /label/getAlbums
+    // + /label/page for the same coverage).
     pub const LABEL_PAGE: &str = "/label/page";
     pub const LABEL_EXPLORE: &str = "/label/explore";
     pub const LABEL_GET_ALBUMS: &str = "/label/getAlbums";

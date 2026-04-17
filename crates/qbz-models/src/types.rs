@@ -422,17 +422,6 @@ pub struct Label {
     pub name: String,
 }
 
-/// Label detail with albums
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LabelDetail {
-    pub id: u64,
-    pub name: String,
-    pub description: Option<String>,
-    pub image: Option<ImageSet>,
-    pub albums: Option<SearchResultsPage<Album>>,
-    pub albums_count: Option<u32>,
-}
-
 // ============ Label Page Types (/label/page) ============
 
 /// Top-level response from /label/page

@@ -8,8 +8,8 @@ use tokio::sync::RwLock;
 
 use qbz_models::{
     Album, Artist, CoreEvent, DiscoverAlbum, DiscoverData, DiscoverPlaylistsResponse,
-    DiscoverResponse, FrontendAdapter, GenreInfo, LabelDetail, LabelExploreResponse,
-    LabelGetListResponse, LabelListPage, LabelPageData, LabelStoryResponse, PageArtistResponse,
+    DiscoverResponse, FrontendAdapter, GenreInfo, LabelExploreResponse, LabelGetListResponse,
+    LabelListPage, LabelPageData, LabelStoryResponse, PageArtistResponse,
     Playlist, PlaylistTag, Quality, QueueState, QueueTrack, RepeatMode, SearchResultsPage,
     StreamUrl, Track, UserSession,
 };
@@ -834,22 +834,6 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
 
         client
             .get_artist_with_pagination(artist_id, true, limit, offset)
-            .await
-            .map_err(CoreError::Api)
-    }
-
-    /// Get label details
-    pub async fn get_label(
-        &self,
-        label_id: u64,
-        limit: u32,
-        offset: u32,
-    ) -> Result<LabelDetail, CoreError> {
-        let client = self.client.read().await;
-        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
-
-        client
-            .get_label(label_id, limit, offset)
             .await
             .map_err(CoreError::Api)
     }

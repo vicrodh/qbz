@@ -66,7 +66,6 @@ pub use types::{
     GenreListResponse,
     ImageSet,
     Label,
-    LabelDetail,
     LabelExploreResponse,
     LabelGetListResponse,
     LabelListPage,

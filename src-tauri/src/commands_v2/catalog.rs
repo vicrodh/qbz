@@ -2,8 +2,8 @@ use tauri::State;
 
 use qbz_models::{
     Album, Artist, AwardPageData, DiscoverAlbum, DiscoverData, DiscoverPlaylistsResponse,
-    DiscoverResponse, GenreInfo, LabelDetail, LabelExploreResponse, LabelGetListResponse,
-    LabelListPage, LabelPageData, LabelStoryResponse, PageArtistResponse, Playlist, PlaylistTag,
+    DiscoverResponse, GenreInfo, LabelExploreResponse, LabelGetListResponse, LabelListPage,
+    LabelPageData, LabelStoryResponse, PageArtistResponse, Playlist, PlaylistTag,
     SearchResultsPage, Track,
 };
 
@@ -395,29 +395,6 @@ pub async fn v2_get_artist_with_albums(
     let bridge = bridge.get().await;
     bridge
         .get_artist_with_albums(artistId, limit, offset)
-        .await
-        .map_err(RuntimeError::Internal)
-}
-
-/// Get label details (V2 - uses QbzCore)
-#[tauri::command]
-#[allow(non_snake_case)]
-pub async fn v2_get_label(
-    labelId: u64,
-    limit: u32,
-    offset: u32,
-    bridge: State<'_, CoreBridgeState>,
-    runtime: State<'_, RuntimeManagerState>,
-) -> Result<LabelDetail, RuntimeError> {
-    runtime
-        .manager()
-        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
-        .await?;
-
-    log::info!("[V2] get_label: {}", labelId);
-    let bridge = bridge.get().await;
-    bridge
-        .get_label(labelId, limit, offset)
         .await
         .map_err(RuntimeError::Internal)
 }
