@@ -548,23 +548,106 @@ pub async fn v2_play_next_gapless(
         }
     }
 
-    // Check local library
+    // Check local library. Library track ids are the row id (small
+    // autoincrement), not the Qobuz track id. For source='qobuz_download'
+    // tracks that happen to live in offline cache as v2 bundles, their
+    // file_path in the library index is a directory, not a FLAC — we
+    // need to translate row id → qobuz_track_id → offline cache lookup.
     if let Ok(track_id_i64) = i64::try_from(track_id) {
-        let local_path = v2_library_get_tracks_by_ids(vec![track_id_i64], library_state.clone())
+        let lib_track = v2_library_get_tracks_by_ids(vec![track_id_i64], library_state.clone())
             .await
             .ok()
-            .and_then(|mut tracks| tracks.pop())
-            .map(|track| std::path::PathBuf::from(track.file_path))
-            .filter(|p| p.exists());
+            .and_then(|mut tracks| tracks.pop());
 
-        if let Some(path) = local_path {
-            log::info!("[V2/GAPLESS] Track {} from LOCAL library", track_id);
-            let audio_data = std::fs::read(&path)
-                .map_err(|e| RuntimeError::Internal(format!("Failed to read local file: {}", e)))?;
-            bridge.get().await.player()
-                .play_next(audio_data, track_id)
-                .map_err(RuntimeError::Internal)?;
-            return Ok(true);
+        if let Some(track) = lib_track {
+            // Qobuz-cached library track: route through offline cache by
+            // its Qobuz id instead of reading the display file_path.
+            if track.source.as_deref() == Some("qobuz_download") {
+                if let Some(qid) = track.qobuz_track_id {
+                    let bundle_row = {
+                        let db_opt = offline_cache.db.lock().await;
+                        db_opt
+                            .as_ref()
+                            .and_then(|db| db.get_cmaf_bundle(qid as u64).ok().flatten())
+                    };
+                    if let Some(row) = bundle_row {
+                        match row.cache_format {
+                            2 => {
+                                let cache_path = offline_cache.get_cache_path();
+                                let row_clone = row.clone();
+                                let decrypted = tokio::task::spawn_blocking(move || {
+                                    crate::offline_cache::playback::load_cmaf_bundle(
+                                        qid as u64,
+                                        &row_clone,
+                                        std::path::Path::new(&cache_path),
+                                    )
+                                })
+                                .await
+                                .ok()
+                                .flatten();
+                                if let Some(audio_data) = decrypted {
+                                    log::info!(
+                                        "[V2/GAPLESS] Library track {} (qobuz {}) from OFFLINE cache (CMAF v2)",
+                                        track_id,
+                                        qid
+                                    );
+                                    // Warm L1 keyed by LIBRARY row id —
+                                    // the player is fed library ids, so
+                                    // future cache hits for this library
+                                    // row land here.
+                                    cache.insert(track_id, audio_data.clone());
+                                    bridge
+                                        .get()
+                                        .await
+                                        .player()
+                                        .play_next(audio_data, track_id)
+                                        .map_err(RuntimeError::Internal)?;
+                                    return Ok(true);
+                                }
+                            }
+                            _ => {
+                                let path = std::path::Path::new(&row.segments_path);
+                                if path.exists() {
+                                    let audio_data = std::fs::read(path).map_err(|e| {
+                                        RuntimeError::Internal(format!(
+                                            "Failed to read v1 cached FLAC: {}",
+                                            e
+                                        ))
+                                    })?;
+                                    log::info!(
+                                        "[V2/GAPLESS] Library track {} (qobuz {}) from OFFLINE cache (legacy)",
+                                        track_id,
+                                        qid
+                                    );
+                                    bridge
+                                        .get()
+                                        .await
+                                        .player()
+                                        .play_next(audio_data, track_id)
+                                        .map_err(RuntimeError::Internal)?;
+                                    return Ok(true);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Regular local library FLAC (user-owned file).
+            let path = std::path::PathBuf::from(&track.file_path);
+            if path.exists() {
+                log::info!("[V2/GAPLESS] Track {} from LOCAL library", track_id);
+                let audio_data = std::fs::read(&path).map_err(|e| {
+                    RuntimeError::Internal(format!("Failed to read local file: {}", e))
+                })?;
+                bridge
+                    .get()
+                    .await
+                    .player()
+                    .play_next(audio_data, track_id)
+                    .map_err(RuntimeError::Internal)?;
+                return Ok(true);
+            }
         }
     }
 
