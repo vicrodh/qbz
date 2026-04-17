@@ -3,7 +3,7 @@
   import { setCustomImage } from '$lib/stores/customArtistImageStore';
   import { getThumbnailUrl, getCachedThumbnailUrl } from '$lib/services/thumbnailService';
   import { open, ask } from '@tauri-apps/plugin-dialog';
-  import { onMount, onDestroy, tick } from 'svelte';
+  import { onMount, onDestroy, tick, untrack } from 'svelte';
   import {
     HardDrive, Music, Disc3, MicVocal, FolderPlus, Trash2, RefreshCw,
     Settings, ArrowLeft, X, Play, CircleAlert, ImageDown, Upload, Search, LayoutGrid, List, PenLine,
@@ -994,11 +994,14 @@
   let albumTrackSearch = $state('');
   let showAlbumTrackSearch = $state(false);
 
-  // Clear multi-select when switching tabs or entering/leaving album detail
+  // Clear multi-select when switching tabs or entering/leaving album detail.
+  // `untrack` prevents the reset from reading trackSelectMode/selectedTrackIds
+  // reactively — otherwise enabling select mode would trigger a re-run that
+  // immediately clears it (button would appear to do nothing).
   $effect(() => {
     void activeTab;
     void selectedAlbum?.id;
-    resetMultiSelect();
+    untrack(() => resetMultiSelect());
   });
 
   // Qobuz artist images cache (artist name -> image URL)
