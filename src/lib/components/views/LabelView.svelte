@@ -380,27 +380,23 @@
   }
 
   async function loadLabelAlbumsAndDescription() {
-    // Fetch albums + description from v2_get_label (same endpoint as old LabelView)
+    // Uses v9.7.0.3 endpoints: /label/getAlbums for the catalog + an
+    // already-in-flight /label/page call upstream (loadLabelPage) for
+    // the description/image. The legacy /label/get one-shot is being
+    // retired with the Qobuz beta rollout.
     try {
       const result = await invoke<{
-        description?: string;
-        albums?: { items?: QobuzAlbum[]; total?: number };
-        albums_count?: number;
-      }>('v2_get_label', { labelId, limit: 20, offset: 0 });
+        items: QobuzAlbum[];
+        total?: number;
+        has_more?: boolean;
+      }>('v2_get_label_albums', { labelId, limit: 20, offset: 0 });
 
-      // Set releases from the albums
-      if (result?.albums?.items && result.albums.items.length > 0) {
-        releases = result.albums.items;
-        console.log(`[LabelView] Loaded ${releases.length} releases from v2_get_label`);
-      }
-
-      // Set description if not already set from label/page
-      if (!labelDescription && result?.description) {
-        labelDescription = result.description;
-        console.log('[LabelView] Description loaded from v2_get_label');
+      if (result?.items && result.items.length > 0) {
+        releases = result.items;
+        console.log(`[LabelView] Loaded ${releases.length} releases from v2_get_label_albums`);
       }
     } catch (err) {
-      console.error('[LabelView] Failed to load label albums/description:', err);
+      console.error('[LabelView] Failed to load label albums:', err);
     }
   }
 

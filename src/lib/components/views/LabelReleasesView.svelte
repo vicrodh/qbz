@@ -144,27 +144,31 @@
     error = null;
 
     try {
-      // Fetch both label data (for albums) and label page (for image) in parallel
-      const [result, pageResult] = await Promise.all([
+      // /label/page owns label metadata (name, image, description).
+      // /label/getAlbums owns the paginated catalog.
+      // Fetch both in parallel.
+      const [pageResult, albumsResult] = await Promise.all([
+        invoke<LabelPageData>('v2_get_label_page', { labelId }),
         invoke<{
-          id: number;
-          name: string;
-          description?: string;
-          image?: { small?: string; thumbnail?: string; large?: string };
-          albums?: { items: QobuzAlbum[]; total: number; offset: number; limit: number };
-          albums_count?: number;
-        }>('v2_get_label', { labelId, limit: 500, offset: 0 }),
-        invoke<LabelPageData>('v2_get_label_page', { labelId }).catch(() => null)
+          items: QobuzAlbum[];
+          total?: number;
+          offset?: number;
+          limit?: number;
+          has_more?: boolean;
+        }>('v2_get_label_albums', { labelId, limit: 500, offset: 0 })
       ]);
 
+      const items = albumsResult.items ?? [];
+      const totalFromAlbums = albumsResult.total ?? items.length;
+
       label = {
-        id: result.id,
-        name: result.name,
-        description: result.description,
-        image: result.image,
-        albums: result.albums?.items ?? [],
-        totalAlbums: result.albums?.total ?? result.albums_count ?? 0,
-        albumsFetched: result.albums?.items?.length ?? 0
+        id: pageResult.id,
+        name: pageResult.name,
+        description: pageResult.description,
+        image: undefined, // /label/page image is a richer container, handled below
+        albums: items,
+        totalAlbums: totalFromAlbums,
+        albumsFetched: items.length
       };
 
       // Extract richer image from label page data
@@ -197,12 +201,12 @@
 
     try {
       const result = await invoke<{
-        id: number;
-        name: string;
-        albums?: { items: QobuzAlbum[]; total: number; offset: number; limit: number };
-      }>('v2_get_label', { labelId, limit: 500, offset: albumsFetched });
+        items: QobuzAlbum[];
+        total?: number;
+        has_more?: boolean;
+      }>('v2_get_label_albums', { labelId, limit: 500, offset: albumsFetched });
 
-      const newAlbums = result.albums?.items ?? [];
+      const newAlbums = result.items ?? [];
       albums = [...albums, ...newAlbums];
       albumsFetched += newAlbums.length;
 
