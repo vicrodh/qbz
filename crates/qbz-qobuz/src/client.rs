@@ -1636,6 +1636,10 @@ impl QobuzClient {
     }
 
     /// Get label by ID with albums
+    ///
+    /// DEPRECATED: `/label/get` is not documented in the v9.7.0.3 spec.
+    /// Use `get_label_albums` (catalog) + `get_label_page` (metadata).
+    /// Kept temporarily for backward-compat during frontend migration.
     pub async fn get_label(&self, label_id: u64, limit: u32, offset: u32) -> Result<LabelDetail> {
         let url = endpoints::build_url(paths::LABEL_GET);
         let locale = self.locale().await;
@@ -1656,6 +1660,192 @@ impl QobuzClient {
         );
         let response: Value = http_response.json().await?;
 
+        Ok(serde_json::from_value(response)?)
+    }
+
+    /// Get a label's album catalog (paginated, filterable).
+    ///
+    /// Replaces the legacy `/label/get?extra=albums` path.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn get_label_albums(
+        &self,
+        label_id: u64,
+        limit: u32,
+        offset: u32,
+        sort: Option<&str>,
+        order: Option<&str>,
+        genre_ids: Option<&str>,
+        from_date: Option<&str>,
+        to_date: Option<&str>,
+    ) -> Result<LabelListPage<Album>> {
+        let url = endpoints::build_url(paths::LABEL_GET_ALBUMS);
+        let mut params: Vec<(&str, String)> = vec![
+            ("label_id", label_id.to_string()),
+            ("limit", limit.to_string()),
+            ("offset", offset.to_string()),
+        ];
+        if let Some(v) = sort { params.push(("sort", v.to_string())); }
+        if let Some(v) = order { params.push(("order", v.to_string())); }
+        if let Some(v) = genre_ids { params.push(("genre_ids", v.to_string())); }
+        if let Some(v) = from_date { params.push(("from_date", v.to_string())); }
+        if let Some(v) = to_date { params.push(("to_date", v.to_string())); }
+
+        log::debug!("[API] get_label_albums({}, limit={}, offset={})", label_id, limit, offset);
+        let response: Value = self
+            .signed_get(&url, "labelgetalbums", &params)
+            .await?
+            .json()
+            .await?;
+        Ok(serde_json::from_value(response)?)
+    }
+
+    /// Get a label's upcoming releases.
+    pub async fn get_label_next_releases(
+        &self,
+        label_id: u64,
+        limit: u32,
+        offset: u32,
+        genre_ids: Option<&str>,
+    ) -> Result<LabelListPage<Album>> {
+        let url = endpoints::build_url(paths::LABEL_GET_NEXT_RELEASES);
+        let mut params: Vec<(&str, String)> = vec![
+            ("label_id", label_id.to_string()),
+            ("limit", limit.to_string()),
+            ("offset", offset.to_string()),
+        ];
+        if let Some(v) = genre_ids { params.push(("genre_ids", v.to_string())); }
+
+        log::debug!("[API] get_label_next_releases({})", label_id);
+        let response: Value = self
+            .signed_get(&url, "labelgetnextreleases", &params)
+            .await?
+            .json()
+            .await?;
+        Ok(serde_json::from_value(response)?)
+    }
+
+    /// Get a label's press-awarded releases.
+    pub async fn get_label_awarded_releases(
+        &self,
+        label_id: u64,
+        limit: u32,
+        offset: u32,
+        sort: Option<&str>,
+        order: Option<&str>,
+        genre_ids: Option<&str>,
+    ) -> Result<LabelListPage<Album>> {
+        let url = endpoints::build_url(paths::LABEL_GET_AWARDED_RELEASES);
+        let mut params: Vec<(&str, String)> = vec![
+            ("label_id", label_id.to_string()),
+            ("limit", limit.to_string()),
+            ("offset", offset.to_string()),
+        ];
+        if let Some(v) = sort { params.push(("sort", v.to_string())); }
+        if let Some(v) = order { params.push(("order", v.to_string())); }
+        if let Some(v) = genre_ids { params.push(("genre_ids", v.to_string())); }
+
+        log::debug!("[API] get_label_awarded_releases({})", label_id);
+        let response: Value = self
+            .signed_get(&url, "labelgetawardedreleases", &params)
+            .await?
+            .json()
+            .await?;
+        Ok(serde_json::from_value(response)?)
+    }
+
+    /// Get a label's curated playlists (paginated).
+    pub async fn get_label_playlists(
+        &self,
+        label_id: u64,
+        limit: u32,
+        offset: u32,
+    ) -> Result<LabelListPage<Playlist>> {
+        let url = endpoints::build_url(paths::LABEL_GET_PLAYLISTS);
+        log::debug!("[API] get_label_playlists({})", label_id);
+        let response: Value = self
+            .signed_get(&url, "labelgetplaylists", &[
+                ("label_id", label_id.to_string()),
+                ("limit", limit.to_string()),
+                ("offset", offset.to_string()),
+            ])
+            .await?
+            .json()
+            .await?;
+        Ok(serde_json::from_value(response)?)
+    }
+
+    /// Get a label's top artists (paginated).
+    pub async fn get_label_top_artists(
+        &self,
+        label_id: u64,
+        limit: u32,
+        offset: u32,
+    ) -> Result<LabelListPage<Artist>> {
+        let url = endpoints::build_url(paths::LABEL_GET_TOP_ARTISTS);
+        log::debug!("[API] get_label_top_artists({})", label_id);
+        let response: Value = self
+            .signed_get(&url, "labelgettopartists", &[
+                ("label_id", label_id.to_string()),
+                ("limit", limit.to_string()),
+                ("offset", offset.to_string()),
+            ])
+            .await?
+            .json()
+            .await?;
+        Ok(serde_json::from_value(response)?)
+    }
+
+    /// Get a label's editorial / story content.
+    pub async fn get_label_story(
+        &self,
+        label_id: u64,
+        limit: u32,
+        offset: u32,
+    ) -> Result<LabelStoryResponse> {
+        let url = endpoints::build_url(paths::LABEL_STORY);
+        log::debug!("[API] get_label_story({})", label_id);
+        let response: Value = self
+            .signed_get(&url, "labelstory", &[
+                ("label_id", label_id.to_string()),
+                ("limit", limit.to_string()),
+                ("offset", offset.to_string()),
+            ])
+            .await?
+            .json()
+            .await?;
+        Ok(serde_json::from_value(response)?)
+    }
+
+    /// Bulk lookup a set of labels by ID (POST).
+    ///
+    /// Follows the same signing convention as `get_tracks_batch` (see
+    /// `track/getList`): the sig covers the joined ID list as a query
+    /// string key, and the JSON body carries the list itself.
+    pub async fn get_label_list(&self, label_ids: &[u64]) -> Result<LabelGetListResponse> {
+        let url = endpoints::build_url(paths::LABEL_GET_LIST);
+        let headers = self.api_headers().await?;
+        let timestamp = get_timestamp();
+        let secret = self.secret().await?;
+        let ids_str: String = label_ids
+            .iter()
+            .map(|id| id.to_string())
+            .collect::<Vec<_>>()
+            .join(",");
+        let sig = sign_request("labelgetList", &[("label_ids", &ids_str)], timestamp, &secret);
+
+        let body = serde_json::json!({ "label_ids": label_ids });
+        log::debug!("[API] get_label_list POST ({} ids)", label_ids.len());
+
+        let response: Value = self
+            .http
+            .post(&url)
+            .headers(headers)
+            .query(&[("request_ts", timestamp.to_string()), ("request_sig", sig)])
+            .json(&body)
+            .send()
+            .await?
+            .json()
+            .await?;
         Ok(serde_json::from_value(response)?)
     }
 

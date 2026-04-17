@@ -14,9 +14,9 @@ use qbz_audio::{settings::AudioSettingsStore, AudioDiagnostic, AudioSettings, Vi
 use qbz_core::QbzCore;
 use qbz_models::{
     Album, Artist, DiscoverAlbum, DiscoverData, DiscoverPlaylistsResponse, DiscoverResponse,
-    GenreInfo, LabelDetail, LabelExploreResponse, LabelPageData, PageArtistResponse, Playlist,
-    PlaylistTag, Quality, QueueState, QueueTrack, RepeatMode, SearchResultsPage, StreamUrl, Track,
-    UserSession,
+    GenreInfo, LabelDetail, LabelExploreResponse, LabelGetListResponse, LabelListPage,
+    LabelPageData, LabelStoryResponse, PageArtistResponse, Playlist, PlaylistTag, Quality,
+    QueueState, QueueTrack, RepeatMode, SearchResultsPage, StreamUrl, Track, UserSession,
 };
 use qbz_player::{PlaybackState, Player};
 
@@ -616,6 +616,99 @@ impl CoreBridge {
     ) -> Result<LabelExploreResponse, String> {
         self.core
             .get_label_explore(limit, offset)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Label catalog (replaces legacy `/label/get`)
+    #[allow(clippy::too_many_arguments)]
+    pub async fn get_label_albums(
+        &self,
+        label_id: u64,
+        limit: u32,
+        offset: u32,
+        sort: Option<String>,
+        order: Option<String>,
+        genre_ids: Option<String>,
+        from_date: Option<String>,
+        to_date: Option<String>,
+    ) -> Result<LabelListPage<Album>, String> {
+        self.core
+            .get_label_albums(label_id, limit, offset, sort, order, genre_ids, from_date, to_date)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    pub async fn get_label_next_releases(
+        &self,
+        label_id: u64,
+        limit: u32,
+        offset: u32,
+        genre_ids: Option<String>,
+    ) -> Result<LabelListPage<Album>, String> {
+        self.core
+            .get_label_next_releases(label_id, limit, offset, genre_ids)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    pub async fn get_label_awarded_releases(
+        &self,
+        label_id: u64,
+        limit: u32,
+        offset: u32,
+        sort: Option<String>,
+        order: Option<String>,
+        genre_ids: Option<String>,
+    ) -> Result<LabelListPage<Album>, String> {
+        self.core
+            .get_label_awarded_releases(label_id, limit, offset, sort, order, genre_ids)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    pub async fn get_label_playlists(
+        &self,
+        label_id: u64,
+        limit: u32,
+        offset: u32,
+    ) -> Result<LabelListPage<Playlist>, String> {
+        self.core
+            .get_label_playlists(label_id, limit, offset)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    pub async fn get_label_top_artists(
+        &self,
+        label_id: u64,
+        limit: u32,
+        offset: u32,
+    ) -> Result<LabelListPage<Artist>, String> {
+        self.core
+            .get_label_top_artists(label_id, limit, offset)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    pub async fn get_label_story(
+        &self,
+        label_id: u64,
+        limit: u32,
+        offset: u32,
+    ) -> Result<LabelStoryResponse, String> {
+        self.core
+            .get_label_story(label_id, limit, offset)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    pub async fn get_label_list(
+        &self,
+        label_ids: Vec<u64>,
+    ) -> Result<LabelGetListResponse, String> {
+        self.core
+            .get_label_list(label_ids)
             .await
             .map_err(|e| e.to_string())
     }

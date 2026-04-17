@@ -2,8 +2,9 @@ use tauri::State;
 
 use qbz_models::{
     Album, Artist, AwardPageData, DiscoverAlbum, DiscoverData, DiscoverPlaylistsResponse,
-    DiscoverResponse, GenreInfo, LabelDetail, LabelExploreResponse, LabelPageData,
-    PageArtistResponse, PlaylistTag, SearchResultsPage, Track,
+    DiscoverResponse, GenreInfo, LabelDetail, LabelExploreResponse, LabelGetListResponse,
+    LabelListPage, LabelPageData, LabelStoryResponse, PageArtistResponse, Playlist, PlaylistTag,
+    SearchResultsPage, Track,
 };
 
 use crate::artist_blacklist::BlacklistState;
@@ -438,6 +439,187 @@ pub async fn v2_get_label_page(
     let bridge = bridge.get().await;
     bridge
         .get_label_page(labelId)
+        .await
+        .map_err(RuntimeError::Internal)
+}
+
+/// Get a label's album catalog (paginated, sortable, filterable).
+/// Replaces the legacy `v2_get_label` which called `/label/get`.
+#[tauri::command]
+#[allow(non_snake_case, clippy::too_many_arguments)]
+pub async fn v2_get_label_albums(
+    labelId: u64,
+    limit: Option<u32>,
+    offset: Option<u32>,
+    sort: Option<String>,
+    order: Option<String>,
+    genreIds: Option<String>,
+    fromDate: Option<String>,
+    toDate: Option<String>,
+    bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<LabelListPage<Album>, RuntimeError> {
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
+
+    let limit = limit.unwrap_or(50);
+    let offset = offset.unwrap_or(0);
+    log::info!("[V2] get_label_albums: {} limit={} offset={}", labelId, limit, offset);
+    let bridge = bridge.get().await;
+    bridge
+        .get_label_albums(labelId, limit, offset, sort, order, genreIds, fromDate, toDate)
+        .await
+        .map_err(RuntimeError::Internal)
+}
+
+/// Get a label's upcoming releases.
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_get_label_next_releases(
+    labelId: u64,
+    limit: Option<u32>,
+    offset: Option<u32>,
+    genreIds: Option<String>,
+    bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<LabelListPage<Album>, RuntimeError> {
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
+
+    let limit = limit.unwrap_or(50);
+    let offset = offset.unwrap_or(0);
+    log::info!("[V2] get_label_next_releases: {}", labelId);
+    let bridge = bridge.get().await;
+    bridge
+        .get_label_next_releases(labelId, limit, offset, genreIds)
+        .await
+        .map_err(RuntimeError::Internal)
+}
+
+/// Get a label's press-awarded releases.
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_get_label_awarded_releases(
+    labelId: u64,
+    limit: Option<u32>,
+    offset: Option<u32>,
+    sort: Option<String>,
+    order: Option<String>,
+    genreIds: Option<String>,
+    bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<LabelListPage<Album>, RuntimeError> {
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
+
+    let limit = limit.unwrap_or(50);
+    let offset = offset.unwrap_or(0);
+    log::info!("[V2] get_label_awarded_releases: {}", labelId);
+    let bridge = bridge.get().await;
+    bridge
+        .get_label_awarded_releases(labelId, limit, offset, sort, order, genreIds)
+        .await
+        .map_err(RuntimeError::Internal)
+}
+
+/// Get a label's curated playlists.
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_get_label_playlists(
+    labelId: u64,
+    limit: Option<u32>,
+    offset: Option<u32>,
+    bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<LabelListPage<Playlist>, RuntimeError> {
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
+
+    let limit = limit.unwrap_or(50);
+    let offset = offset.unwrap_or(0);
+    log::info!("[V2] get_label_playlists: {}", labelId);
+    let bridge = bridge.get().await;
+    bridge
+        .get_label_playlists(labelId, limit, offset)
+        .await
+        .map_err(RuntimeError::Internal)
+}
+
+/// Get a label's top artists.
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_get_label_top_artists(
+    labelId: u64,
+    limit: Option<u32>,
+    offset: Option<u32>,
+    bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<LabelListPage<Artist>, RuntimeError> {
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
+
+    let limit = limit.unwrap_or(50);
+    let offset = offset.unwrap_or(0);
+    log::info!("[V2] get_label_top_artists: {}", labelId);
+    let bridge = bridge.get().await;
+    bridge
+        .get_label_top_artists(labelId, limit, offset)
+        .await
+        .map_err(RuntimeError::Internal)
+}
+
+/// Get a label's editorial story.
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_get_label_story(
+    labelId: u64,
+    limit: Option<u32>,
+    offset: Option<u32>,
+    bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<LabelStoryResponse, RuntimeError> {
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
+
+    let limit = limit.unwrap_or(50);
+    let offset = offset.unwrap_or(0);
+    log::info!("[V2] get_label_story: {}", labelId);
+    let bridge = bridge.get().await;
+    bridge
+        .get_label_story(labelId, limit, offset)
+        .await
+        .map_err(RuntimeError::Internal)
+}
+
+/// Bulk hydrate labels by a list of IDs (POST /label/getList).
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_get_label_list(
+    labelIds: Vec<u64>,
+    bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<LabelGetListResponse, RuntimeError> {
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
+
+    log::info!("[V2] get_label_list: {} ids", labelIds.len());
+    let bridge = bridge.get().await;
+    bridge
+        .get_label_list(labelIds)
         .await
         .map_err(RuntimeError::Internal)
 }

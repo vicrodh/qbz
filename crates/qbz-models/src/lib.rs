@@ -68,9 +68,12 @@ pub use types::{
     Label,
     LabelDetail,
     LabelExploreResponse,
+    LabelGetListResponse,
+    LabelListPage,
     LabelPageContainer,
     LabelPageData,
     LabelPageGenericList,
+    LabelStoryResponse,
     // Award types
     AlbumAward,
     AwardMagazine,
