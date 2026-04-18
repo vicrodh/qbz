@@ -600,6 +600,32 @@
     "infinitePlayTooltip": "Lecture infinie : ajoute automatiquement des titres similaires lorsque votre file d'attente est sur le point de se terminer, créant une expérience d'écoute sans fin basée sur votre musique actuelle.",
     "infiniteBannerText": "Lecture infinie activée. Des titres similaires seront ajoutés automatiquement.",
     "lyrics": "Paroles",
+    "lyricsControls": {
+      "openControls": "Options d'affichage",
+      "title": "Affichage",
+      "autoFollow": "Défilement auto",
+      "font": "Police",
+      "fonts": {
+        "system": "Système",
+        "lineSeedJp": "LINE Seed JP",
+        "montserrat": "Montserrat",
+        "notoSans": "Noto Sans",
+        "sourceSans3": "Source Sans 3"
+      },
+      "size": "Taille",
+      "sizes": {
+        "small": "S",
+        "medium": "M",
+        "large": "L"
+      },
+      "dimming": "Atténuation",
+      "dimmingLevels": {
+        "off": "Aucune",
+        "soft": "Légère",
+        "strong": "Forte"
+      },
+      "reset": "Réinitialiser"
+    },
     "noLyrics": "Aucune parole disponible",
     "fetchingLyrics": "Récupération des paroles...",
     "trackUnavailable": "Titre non disponible dans la bibliothèque Qobuz",

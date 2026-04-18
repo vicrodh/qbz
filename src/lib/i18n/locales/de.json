@@ -600,6 +600,32 @@
     "infinitePlayTooltip": "Unendliches Abspielen: Fügt automatisch ähnliche Titel hinzu, wenn deine Warteschlange sich dem Ende nähert, und schafft so ein endloses Hörerlebnis basierend auf deiner aktuellen Musik.",
     "infiniteBannerText": "Unendliches Abspielen ist aktiv. Ähnliche Titel werden automatisch hinzugefügt.",
     "lyrics": "Songtexte",
+    "lyricsControls": {
+      "openControls": "Anzeigeeinstellungen",
+      "title": "Anzeige",
+      "autoFollow": "Auto-Scroll",
+      "font": "Schrift",
+      "fonts": {
+        "system": "System",
+        "lineSeedJp": "LINE Seed JP",
+        "montserrat": "Montserrat",
+        "notoSans": "Noto Sans",
+        "sourceSans3": "Source Sans 3"
+      },
+      "size": "Größe",
+      "sizes": {
+        "small": "S",
+        "medium": "M",
+        "large": "L"
+      },
+      "dimming": "Abblenden",
+      "dimmingLevels": {
+        "off": "Aus",
+        "soft": "Leicht",
+        "strong": "Stark"
+      },
+      "reset": "Zurücksetzen"
+    },
     "noLyrics": "Keine Songtexte verfügbar",
     "fetchingLyrics": "Songtexte werden abgerufen...",
     "trackUnavailable": "Titel in der Qobuz-Bibliothek nicht mehr verfügbar",

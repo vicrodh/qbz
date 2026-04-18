@@ -602,6 +602,32 @@
     "infinitePlayTooltip": "Infinite Play: Automatically adds similar tracks when your queue is about to end, creating an endless listening experience based on your current music.",
     "infiniteBannerText": "Infinite Play is active. Similar tracks will be added automatically.",
     "lyrics": "Lyrics",
+    "lyricsControls": {
+      "openControls": "Display settings",
+      "title": "Display",
+      "autoFollow": "Auto-follow",
+      "font": "Font",
+      "fonts": {
+        "system": "System",
+        "lineSeedJp": "LINE Seed JP",
+        "montserrat": "Montserrat",
+        "notoSans": "Noto Sans",
+        "sourceSans3": "Source Sans 3"
+      },
+      "size": "Size",
+      "sizes": {
+        "small": "S",
+        "medium": "M",
+        "large": "L"
+      },
+      "dimming": "Dimming",
+      "dimmingLevels": {
+        "off": "Off",
+        "soft": "Soft",
+        "strong": "Strong"
+      },
+      "reset": "Reset"
+    },
     "noLyrics": "No lyrics available",
     "fetchingLyrics": "Fetching lyrics...",
     "trackUnavailable": "Track no longer available in Qobuz library",

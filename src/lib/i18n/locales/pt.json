@@ -600,6 +600,32 @@
     "infinitePlayTooltip": "Reprodução Infinita: Adiciona automaticamente faixas semelhantes quando sua fila está prestes a acabar, criando uma experiência de audição contínua baseada na sua música atual.",
     "infiniteBannerText": "Reprodução Infinita está ativa. Faixas semelhantes serão adicionadas automaticamente.",
     "lyrics": "Letras",
+    "lyricsControls": {
+      "openControls": "Opções de exibição",
+      "title": "Exibição",
+      "autoFollow": "Rolagem automática",
+      "font": "Fonte",
+      "fonts": {
+        "system": "Sistema",
+        "lineSeedJp": "LINE Seed JP",
+        "montserrat": "Montserrat",
+        "notoSans": "Noto Sans",
+        "sourceSans3": "Source Sans 3"
+      },
+      "size": "Tamanho",
+      "sizes": {
+        "small": "S",
+        "medium": "M",
+        "large": "L"
+      },
+      "dimming": "Atenuação",
+      "dimmingLevels": {
+        "off": "Nenhuma",
+        "soft": "Suave",
+        "strong": "Forte"
+      },
+      "reset": "Redefinir"
+    },
     "noLyrics": "Letras não disponíveis",
     "fetchingLyrics": "Buscando letras...",
     "trackUnavailable": "Faixa não está mais disponível na biblioteca do Qobuz",
