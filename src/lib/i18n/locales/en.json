@@ -604,6 +604,9 @@
     "lyrics": "Lyrics",
     "lyricsControls": {
       "openControls": "Display settings",
+      "copyLyrics": "Copy lyrics",
+      "copySuccess": "Lyrics copied",
+      "copyError": "Failed to copy lyrics",
       "title": "Display",
       "autoFollow": "Auto-follow",
       "font": "Font",

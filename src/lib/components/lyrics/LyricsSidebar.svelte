@@ -1,9 +1,11 @@
 <script lang="ts">
-  import { MicVocal, SlidersHorizontal } from 'lucide-svelte';
+  import { Check, Copy, MicVocal, SlidersHorizontal } from 'lucide-svelte';
   import { t } from 'svelte-i18n';
+  import { writeText } from '@tauri-apps/plugin-clipboard-manager';
   import LyricsLines from './LyricsLines.svelte';
   import LyricsControlsPopover from './LyricsControlsPopover.svelte';
   import { lyricsDisplayStore } from '$lib/stores/lyricsDisplayStore';
+  import { showToast } from '$lib/stores/toastStore';
 
   interface LyricsLine {
     text: string;
@@ -33,8 +35,29 @@
 
   let popoverOpen = $state(false);
   let anchorEl: HTMLButtonElement | null = $state(null);
+  let copied = $state(false);
+  let copyResetTimer: ReturnType<typeof setTimeout> | null = null;
 
   const prefs = $derived($lyricsDisplayStore);
+  const canCopy = $derived(!isLoading && !error && lines.length > 0);
+
+  async function copyLyrics(): Promise<void> {
+    if (!canCopy) return;
+    const text = lines.map((l) => l.text).join('\n');
+    try {
+      await writeText(text);
+      showToast($t('player.lyricsControls.copySuccess'), 'success');
+      copied = true;
+      if (copyResetTimer) clearTimeout(copyResetTimer);
+      copyResetTimer = setTimeout(() => {
+        copied = false;
+        copyResetTimer = null;
+      }, 1500);
+    } catch (err) {
+      console.error('[LyricsSidebar] Copy to clipboard failed:', err);
+      showToast($t('player.lyricsControls.copyError'), 'error');
+    }
+  }
 </script>
 
 <aside class="lyrics-sidebar">
@@ -48,6 +71,20 @@
         <div class="header-meta">{title}{title && artist ? ' - ' : ''}{artist}</div>
       {/if}
     </div>
+    <button
+      type="button"
+      class="controls-trigger"
+      class:copied
+      aria-label={$t('player.lyricsControls.copyLyrics')}
+      disabled={!canCopy}
+      onclick={copyLyrics}
+    >
+      {#if copied}
+        <Check size={18} />
+      {:else}
+        <Copy size={18} />
+      {/if}
+    </button>
     <button
       type="button"
       class="controls-trigger"
@@ -205,5 +242,20 @@
     color: var(--accent-primary);
     background: var(--bg-secondary);
     border-color: var(--bg-tertiary);
+  }
+
+  .controls-trigger:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+
+  .controls-trigger:disabled:hover {
+    color: var(--text-muted);
+    background: transparent;
+    border-color: transparent;
+  }
+
+  .controls-trigger.copied {
+    color: var(--accent-primary);
   }
 </style>

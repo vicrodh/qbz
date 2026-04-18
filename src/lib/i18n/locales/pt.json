@@ -602,6 +602,9 @@
     "lyrics": "Letras",
     "lyricsControls": {
       "openControls": "Opções de exibição",
+      "copyLyrics": "Copiar letra",
+      "copySuccess": "Letra copiada",
+      "copyError": "Falha ao copiar a letra",
       "title": "Exibição",
       "autoFollow": "Rolagem automática",
       "font": "Fonte",

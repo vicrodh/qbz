@@ -602,6 +602,9 @@
     "lyrics": "Songtexte",
     "lyricsControls": {
       "openControls": "Anzeigeeinstellungen",
+      "copyLyrics": "Liedtext kopieren",
+      "copySuccess": "Liedtext kopiert",
+      "copyError": "Liedtext konnte nicht kopiert werden",
       "title": "Anzeige",
       "autoFollow": "Auto-Scroll",
       "font": "Schrift",

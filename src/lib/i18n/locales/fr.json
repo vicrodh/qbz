@@ -602,6 +602,9 @@
     "lyrics": "Paroles",
     "lyricsControls": {
       "openControls": "Options d'affichage",
+      "copyLyrics": "Copier les paroles",
+      "copySuccess": "Paroles copiées",
+      "copyError": "Impossible de copier les paroles",
       "title": "Affichage",
       "autoFollow": "Défilement auto",
       "font": "Police",
