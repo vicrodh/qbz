@@ -1,10 +1,20 @@
 //! Secure credential storage with fallback
 //!
-//! Tries system keyring first, falls back to encrypted file storage:
-//! - Linux: Secret Service (GNOME Keyring, KWallet via D-Bus)
-//! - macOS: Keychain
-//! - Windows: Credential Manager
-//! - Fallback: AES-256-GCM encrypted file in config directory
+//! The encrypted AES-256-GCM file in the app config directory is the source
+//! of truth for every credential. The OS keyring is used as an optional
+//! best-effort cache:
+//!
+//! - Writes always go to the file first; the keyring is written opportunistically.
+//! - Reads try the keyring first (cheaper when it works) and fall back to the file.
+//! - Any keyring operation that fails or times out marks the keyring as broken
+//!   for the rest of the process, so later reads/writes skip it entirely.
+//!
+//! This matters on Linux systems where GNOME Keyring / KWallet may be locked
+//! with a password that no longer matches the current session (see issue #329).
+//! Without the timeout + session memoization, every login triggers a blocking
+//! "unlock keyring" dialog and the user has to dismiss 3-4 prompts per session.
+//! With them, the dialog appears at most once per session and the app continues
+//! through the encrypted file path regardless of what the user does with it.
 
 use aes_gcm::{
     aead::{Aead, KeyInit},
@@ -17,6 +27,10 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
 
 const SERVICE_NAME: &str = "qbz";
 const QOBUZ_CREDENTIALS_KEY: &str = "qobuz-credentials";
@@ -430,108 +444,229 @@ fn has_fallback_credentials() -> bool {
     get_fallback_path().map(|p| p.exists()).unwrap_or(false)
 }
 
-/// Save Qobuz credentials - saves to both file (primary) and keyring (secondary)
+// ─── Keyring session state ────────────────────────────────────────────────────
+//
+// Linux Secret Service (the backing store for the `keyring` crate on Linux)
+// is allowed to prompt the user for a passphrase when its collection is
+// locked. That prompt blocks the calling thread indefinitely. A user whose
+// GNOME Keyring got out of sync with their login password sees the dialog
+// appear, dismisses it (because they can't remember the old password), and
+// we then re-try another keyring operation which produces the dialog again
+// — and again, and again, for every keyring touch in the login flow.
+//
+// The defense here has two parts:
+//
+// 1. Each keyring call is executed on a worker thread with a hard wall-clock
+//    timeout. If the call hasn't returned within the timeout, we assume the
+//    user is staring at a dialog they can't satisfy and we give up — the
+//    worker thread stays blocked in the background, but our control flow
+//    moves on. (The worker eventually resolves when the user dismisses the
+//    dialog; it's a small thread leak once per broken-keyring session.)
+//
+// 2. The first failure or timeout latches a process-wide flag
+//    (`KEYRING_STATE`) that short-circuits every subsequent keyring touch.
+//    One prompt max per session; everything after that goes straight to the
+//    encrypted file. A restart is required to retry the keyring, which is
+//    also the point where the user's keyring might have been repaired.
+//
+// Errors that mean "the entry doesn't exist" (`keyring::Error::NoEntry`)
+// don't count as a failure — they're just data the caller has to handle.
+
+const KEYRING_UNTESTED: u8 = 0;
+const KEYRING_WORKING: u8 = 1;
+const KEYRING_BROKEN: u8 = 2;
+
+static KEYRING_STATE: AtomicU8 = AtomicU8::new(KEYRING_UNTESTED);
+
+/// Per-operation wall-clock limit for any Secret Service / keyring call.
+const KEYRING_OP_TIMEOUT: Duration = Duration::from_millis(2500);
+
+fn keyring_is_broken() -> bool {
+    KEYRING_STATE.load(Ordering::Relaxed) == KEYRING_BROKEN
+}
+
+fn mark_keyring_broken(reason: &str) {
+    let previous = KEYRING_STATE.swap(KEYRING_BROKEN, Ordering::Relaxed);
+    if previous != KEYRING_BROKEN {
+        log::warn!(
+            "[Credentials] Disabling system keyring for the rest of this session \
+             (falling back to encrypted file only): {}",
+            reason
+        );
+    }
+}
+
+fn mark_keyring_working() {
+    // Only promote from UNTESTED to WORKING. Never climb back out of BROKEN —
+    // once we've given up on the keyring for this session, stay given up.
+    let _ = KEYRING_STATE.compare_exchange(
+        KEYRING_UNTESTED,
+        KEYRING_WORKING,
+        Ordering::Relaxed,
+        Ordering::Relaxed,
+    );
+}
+
+/// Run a blocking keyring closure on a worker thread and return its result
+/// within `KEYRING_OP_TIMEOUT`. Times out cleanly if the closure is still
+/// stuck (typically because the user is looking at an unlock dialog).
+fn run_with_keyring_timeout<T, F>(op_name: &'static str, f: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> T + Send + 'static,
+{
+    let (tx, rx) = mpsc::channel();
+    thread::spawn(move || {
+        let _ = tx.send(f());
+    });
+    rx.recv_timeout(KEYRING_OP_TIMEOUT).map_err(|_| {
+        format!(
+            "keyring {} did not complete within {}ms (likely blocked on a user dialog)",
+            op_name,
+            KEYRING_OP_TIMEOUT.as_millis()
+        )
+    })
+}
+
+/// Read a value from the keyring. Returns `None` if the entry does not exist
+/// OR if the keyring is unavailable / broken for this session. The caller
+/// must always have a file-based fallback ready.
+fn keyring_get(key: &str) -> Option<String> {
+    if keyring_is_broken() {
+        return None;
+    }
+    let service = SERVICE_NAME.to_string();
+    let key_owned = key.to_string();
+    match run_with_keyring_timeout("get", move || {
+        Entry::new(&service, &key_owned).and_then(|e| e.get_password())
+    }) {
+        Ok(Ok(value)) => {
+            mark_keyring_working();
+            Some(value)
+        }
+        Ok(Err(keyring::Error::NoEntry)) => {
+            mark_keyring_working();
+            None
+        }
+        Ok(Err(e)) => {
+            mark_keyring_broken(&format!("get failed: {}", e));
+            None
+        }
+        Err(reason) => {
+            mark_keyring_broken(&reason);
+            None
+        }
+    }
+}
+
+/// Write a value to the keyring. Returns `true` on success, `false` on any
+/// failure (timeout, locked collection, no backend, etc.). The caller must
+/// have already persisted the value through its authoritative path (file).
+fn keyring_set(key: &str, value: &str) -> bool {
+    if keyring_is_broken() {
+        return false;
+    }
+    let service = SERVICE_NAME.to_string();
+    let key_owned = key.to_string();
+    let value_owned = value.to_string();
+    match run_with_keyring_timeout("set", move || {
+        Entry::new(&service, &key_owned).and_then(|e| e.set_password(&value_owned))
+    }) {
+        Ok(Ok(())) => {
+            mark_keyring_working();
+            true
+        }
+        Ok(Err(e)) => {
+            mark_keyring_broken(&format!("set failed: {}", e));
+            false
+        }
+        Err(reason) => {
+            mark_keyring_broken(&reason);
+            false
+        }
+    }
+}
+
+/// Delete a keyring entry. Silent no-op if the keyring is broken or the
+/// entry already doesn't exist.
+fn keyring_delete(key: &str) {
+    if keyring_is_broken() {
+        return;
+    }
+    let service = SERVICE_NAME.to_string();
+    let key_owned = key.to_string();
+    match run_with_keyring_timeout("delete", move || {
+        Entry::new(&service, &key_owned).and_then(|e| e.delete_credential())
+    }) {
+        Ok(Ok(())) | Ok(Err(keyring::Error::NoEntry)) => {
+            mark_keyring_working();
+        }
+        Ok(Err(e)) => {
+            log::debug!("[Credentials] Keyring delete failed (not critical): {}", e);
+        }
+        Err(reason) => {
+            mark_keyring_broken(&reason);
+        }
+    }
+}
+
+/// Save Qobuz email+password credentials.
+///
+/// File is authoritative: we write it first and fail the operation if that
+/// fails. The keyring is a best-effort write-through cache.
 pub fn save_qobuz_credentials(email: &str, password: &str) -> Result<(), String> {
-    log::info!("Attempting to save credentials");
+    log::info!("[Credentials] Saving Qobuz credentials");
 
     let credentials = QobuzCredentials {
         email: email.to_string(),
         password: password.to_string(),
     };
 
-    // Always save to encrypted file first (more reliable, especially in dev)
     save_to_fallback(&credentials)?;
 
-    // Also try keyring as secondary (nice to have for desktop integration)
-    if let Ok(entry) = Entry::new(SERVICE_NAME, QOBUZ_CREDENTIALS_KEY) {
-        let json = serde_json::to_string(&credentials).unwrap_or_default();
-        if let Err(e) = entry.set_password(&json) {
-            log::debug!("Keyring save failed (not critical): {}", e);
-        } else {
-            log::debug!("Also saved to keyring");
-        }
+    let json = serde_json::to_string(&credentials).unwrap_or_default();
+    if !json.is_empty() && keyring_set(QOBUZ_CREDENTIALS_KEY, &json) {
+        log::debug!("[Credentials] Qobuz credentials also saved to keyring");
     }
 
     Ok(())
 }
 
-/// Load Qobuz credentials - tries keyring first, then fallback
+/// Load Qobuz email+password credentials. Prefers the keyring when it
+/// responds quickly, otherwise reads the encrypted fallback file.
 pub fn load_qobuz_credentials() -> Result<Option<QobuzCredentials>, String> {
-    log::info!("Attempting to load credentials");
+    log::debug!("[Credentials] Loading Qobuz credentials");
 
-    // Try keyring first
-    if let Ok(entry) = Entry::new(SERVICE_NAME, QOBUZ_CREDENTIALS_KEY) {
-        match entry.get_password() {
-            Ok(json) => {
-                if let Ok(credentials) = serde_json::from_str::<QobuzCredentials>(&json) {
-                    log::info!("Successfully loaded credentials from keyring");
-                    return Ok(Some(credentials));
-                }
-            }
-            Err(keyring::Error::NoEntry) => {
-                log::debug!("No credentials in keyring, checking fallback...");
+    if let Some(json) = keyring_get(QOBUZ_CREDENTIALS_KEY) {
+        match serde_json::from_str::<QobuzCredentials>(&json) {
+            Ok(credentials) => {
+                log::debug!("[Credentials] Loaded Qobuz credentials from keyring");
+                return Ok(Some(credentials));
             }
             Err(e) => {
-                log::warn!("Keyring load failed ({}), checking fallback...", e);
+                log::warn!(
+                    "[Credentials] Keyring entry could not be parsed ({}), falling back to file",
+                    e
+                );
             }
         }
-    } else {
-        log::warn!("Keyring not available, checking fallback...");
     }
 
-    // Try fallback file
     load_from_fallback()
 }
 
-/// Check if credentials are saved (keyring or fallback)
+/// Report whether any saved Qobuz credentials exist (keyring or file).
 pub fn has_saved_credentials() -> bool {
-    log::info!("Checking for saved credentials...");
-
-    // Check keyring
-    match Entry::new(SERVICE_NAME, QOBUZ_CREDENTIALS_KEY) {
-        Ok(entry) => match entry.get_password() {
-            Ok(_) => {
-                log::info!("Found credentials in system keyring");
-                return true;
-            }
-            Err(keyring::Error::NoEntry) => {
-                log::info!("No credentials in keyring (NoEntry)");
-            }
-            Err(e) => {
-                log::warn!("Keyring check failed: {}", e);
-            }
-        },
-        Err(e) => {
-            log::warn!("Keyring not available: {}", e);
-        }
+    if keyring_get(QOBUZ_CREDENTIALS_KEY).is_some() {
+        return true;
     }
-
-    // Check fallback
-    let has_fallback = has_fallback_credentials();
-    log::info!("Fallback credentials exist: {}", has_fallback);
-    has_fallback
+    has_fallback_credentials()
 }
 
-/// Clear saved Qobuz credentials (both keyring and fallback)
+/// Clear saved Qobuz credentials from both the keyring and the fallback file.
 pub fn clear_qobuz_credentials() -> Result<(), String> {
-    // Try to clear keyring
-    if let Ok(entry) = Entry::new(SERVICE_NAME, QOBUZ_CREDENTIALS_KEY) {
-        match entry.delete_credential() {
-            Ok(()) => {
-                log::info!("Qobuz credentials cleared from keyring");
-            }
-            Err(keyring::Error::NoEntry) => {
-                // Already cleared, that's fine
-            }
-            Err(e) => {
-                log::warn!("Failed to clear keyring: {}", e);
-            }
-        }
-    }
-
-    // Also clear fallback
+    keyring_delete(QOBUZ_CREDENTIALS_KEY);
     clear_fallback()?;
-
     Ok(())
 }
 
@@ -551,36 +686,19 @@ fn get_oauth_token_path() -> Option<PathBuf> {
 const OAUTH_TOKEN_KEY: &str = "qobuz-oauth-token";
 
 /// Persist the OAuth `user_auth_token`.
-/// Tries system keyring first (encrypted). Only falls back to encrypted file if keyring is unavailable.
-/// The token is AES-256-GCM encrypted before storing in keyring — `secret-tool` shows ciphertext, not the raw token.
+///
+/// File is authoritative: the encrypted token is written to the config
+/// directory unconditionally. The keyring is a best-effort write-through
+/// cache — if it fails (or times out behind an unlock dialog), the login
+/// flow still completes because the file is already on disk. Inverts the
+/// previous keyring-first ordering, which forced a prompt on every login
+/// for users with a broken Secret Service collection (issue #329).
 pub fn save_oauth_token(token: &str) -> Result<(), String> {
-    // Encrypt token before storing anywhere
     let placeholder = QobuzCredentials {
         email: token.to_string(),
         password: String::new(),
     };
     let encrypted = encrypt_credentials(&placeholder)?;
-
-    // Try keyring (Secret Service D-Bus: GNOME Keyring, KWallet with bridge)
-    if let Ok(entry) = Entry::new(SERVICE_NAME, OAUTH_TOKEN_KEY) {
-        if entry.set_password(&encrypted).is_ok() {
-            log::info!("[Credentials] OAuth token saved to system keyring (encrypted)");
-            // Keyring succeeded — remove any leftover file from previous versions
-            if let Some(path) = get_oauth_token_path() {
-                if path.exists() {
-                    let _ = fs::remove_file(&path);
-                    log::info!("[Credentials] Removed legacy OAuth token file (migrated to keyring)");
-                }
-            }
-            return Ok(());
-        }
-    }
-
-    // Keyring unavailable — fall back to encrypted file
-    log::warn!(
-        "[Credentials] System keyring unavailable. Storing OAuth token in encrypted file. \
-         KDE users: enable 'Use KWallet for the Secret Service interface' in KWallet settings."
-    );
 
     let path = get_oauth_token_path().ok_or("Could not determine config directory")?;
     if let Some(parent) = path.parent() {
@@ -588,91 +706,63 @@ pub fn save_oauth_token(token: &str) -> Result<(), String> {
             .map_err(|e| format!("Failed to create config directory: {}", e))?;
     }
     fs::write(&path, &encrypted).map_err(|e| format!("Failed to write OAuth token file: {}", e))?;
+    log::info!("[Credentials] OAuth token saved to encrypted file");
 
-    log::info!("[Credentials] OAuth token saved to encrypted file (keyring fallback)");
+    if keyring_set(OAUTH_TOKEN_KEY, &encrypted) {
+        log::debug!("[Credentials] OAuth token also saved to keyring");
+    }
+
     Ok(())
 }
 
 /// Load a previously saved OAuth `user_auth_token`, or `None` if absent.
-/// Tries system keyring first (encrypted), falls back to encrypted file.
+/// Prefers the keyring when it responds quickly, otherwise reads the file.
 pub fn load_oauth_token() -> Result<Option<String>, String> {
-    // Try keyring first — value is AES-256-GCM encrypted JSON
-    if let Ok(entry) = Entry::new(SERVICE_NAME, OAUTH_TOKEN_KEY) {
-        match entry.get_password() {
-            Ok(encrypted) if !encrypted.is_empty() => {
-                // Try decrypting (new format: encrypted JSON in keyring)
-                if let Ok(placeholder) = decrypt_credentials(&encrypted) {
-                    log::info!("[Credentials] OAuth token loaded from system keyring (encrypted)");
-                    return Ok(Some(placeholder.email));
-                }
-                // Might be old format (plaintext token in keyring) — migrate
-                log::info!("[Credentials] Migrating plaintext keyring entry to encrypted format");
-                let token = encrypted;
-                if let Ok(()) = save_oauth_token(&token) {
-                    log::info!("[Credentials] Keyring entry re-encrypted");
-                }
-                return Ok(Some(token));
+    if let Some(encrypted) = keyring_get(OAUTH_TOKEN_KEY) {
+        if !encrypted.is_empty() {
+            if let Ok(placeholder) = decrypt_credentials(&encrypted) {
+                log::debug!("[Credentials] OAuth token loaded from keyring");
+                return Ok(Some(placeholder.email));
             }
-            Ok(_) => {}
-            Err(keyring::Error::NoEntry) => {
-                log::info!("[Credentials] No OAuth token in keyring, checking file...");
-            }
-            Err(e) => {
-                log::warn!("[Credentials] Keyring load failed ({}), checking file...", e);
-            }
+            // Legacy format: pre-encryption builds stored the raw token in
+            // the keyring. Accept it for this one read; the next successful
+            // `save_oauth_token` call will rewrite it encrypted to both the
+            // keyring and the file.
+            log::debug!("[Credentials] Keyring held legacy plaintext token; will re-encrypt on next save");
+            return Ok(Some(encrypted));
         }
     }
 
-    // Fallback to encrypted file
     let path = match get_oauth_token_path() {
         Some(p) => p,
         None => return Ok(None),
     };
-
     if !path.exists() {
         return Ok(None);
     }
 
     let content =
         fs::read_to_string(&path).map_err(|e| format!("Failed to read OAuth token file: {}", e))?;
+    if content.trim().is_empty() {
+        return Ok(None);
+    }
 
     match decrypt_credentials(&content) {
         Ok(placeholder) => {
-            log::info!("[Credentials] OAuth token loaded from encrypted file");
-            // Migrate: save to keyring (encrypted) and remove file
-            if let Ok(entry) = Entry::new(SERVICE_NAME, OAUTH_TOKEN_KEY) {
-                let re_encrypted = encrypt_credentials(&QobuzCredentials {
-                    email: placeholder.email.clone(),
-                    password: String::new(),
-                });
-                if let Ok(encrypted_str) = re_encrypted {
-                    if entry.set_password(&encrypted_str).is_ok() {
-                        let _ = fs::remove_file(&path);
-                        log::info!("[Credentials] OAuth token migrated to keyring (encrypted), file removed");
-                    }
-                }
-            }
+            log::debug!("[Credentials] OAuth token loaded from encrypted file");
             Ok(Some(placeholder.email))
         }
         Err(e) => {
-            log::warn!("[Credentials] Failed to decrypt OAuth token: {}", e);
+            log::warn!("[Credentials] Failed to decrypt OAuth token file: {}", e);
             Ok(None)
         }
     }
 }
 
-/// Delete the stored OAuth token (called on logout or token expiry).
+/// Delete the stored OAuth token (logout or token expiry).
 pub fn clear_oauth_token() -> Result<(), String> {
-    // Clear from keyring
-    if let Ok(entry) = Entry::new(SERVICE_NAME, OAUTH_TOKEN_KEY) {
-        match entry.delete_credential() {
-            Ok(()) => log::info!("[Credentials] OAuth token cleared from keyring"),
-            Err(keyring::Error::NoEntry) => {}
-            Err(e) => log::debug!("[Credentials] Keyring clear failed: {}", e),
-        }
-    }
+    keyring_delete(OAUTH_TOKEN_KEY);
 
-    // Clear encrypted file
     if let Some(path) = get_oauth_token_path() {
         if path.exists() {
             fs::remove_file(&path)
