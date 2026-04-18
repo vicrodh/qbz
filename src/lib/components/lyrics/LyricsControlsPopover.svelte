@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { RotateCcw } from 'lucide-svelte';
+  import { Check, Copy, RotateCcw } from 'lucide-svelte';
   import { t } from 'svelte-i18n';
   import { fade } from 'svelte/transition';
+  import { writeText } from '@tauri-apps/plugin-clipboard-manager';
   import Dropdown from '../Dropdown.svelte';
   import {
     lyricsDisplayStore,
@@ -14,14 +15,42 @@
     type LyricsFontSize,
     type LyricsDimming
   } from '$lib/stores/lyricsDisplayStore';
+  import { showToast } from '$lib/stores/toastStore';
+
+  interface LyricsLine {
+    text: string;
+  }
 
   interface Props {
     open: boolean;
     anchorEl: HTMLElement | null;
     onClose: () => void;
+    lines?: LyricsLine[];
+    canCopy?: boolean;
   }
 
-  let { open, anchorEl, onClose }: Props = $props();
+  let { open, anchorEl, onClose, lines = [], canCopy = false }: Props = $props();
+
+  let copied = $state(false);
+  let copyResetTimer: ReturnType<typeof setTimeout> | null = null;
+
+  async function copyLyrics(): Promise<void> {
+    if (!canCopy) return;
+    const text = lines.map((l) => l.text).join('\n');
+    try {
+      await writeText(text);
+      showToast($t('player.lyricsControls.copySuccess'), 'success');
+      copied = true;
+      if (copyResetTimer) clearTimeout(copyResetTimer);
+      copyResetTimer = setTimeout(() => {
+        copied = false;
+        copyResetTimer = null;
+      }, 1500);
+    } catch (err) {
+      console.error('[LyricsControlsPopover] Copy to clipboard failed:', err);
+      showToast($t('player.lyricsControls.copyError'), 'error');
+    }
+  }
 
   let popoverEl: HTMLDivElement | null = $state(null);
 
@@ -151,7 +180,22 @@
     </div>
 
     <div class="footer">
-      <button type="button" class="reset" onclick={resetLyricsDisplay}>
+      <button
+        type="button"
+        class="footer-btn"
+        class:copied
+        disabled={!canCopy}
+        aria-label={$t('player.lyricsControls.copyLyrics')}
+        onclick={copyLyrics}
+      >
+        {#if copied}
+          <Check size={14} />
+        {:else}
+          <Copy size={14} />
+        {/if}
+        <span>{$t('player.lyricsControls.copyLyrics')}</span>
+      </button>
+      <button type="button" class="footer-btn" onclick={resetLyricsDisplay}>
         <RotateCcw size={14} />
         <span>{$t('player.lyricsControls.reset')}</span>
       </button>
@@ -266,12 +310,14 @@
 
   .footer {
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between;
+    align-items: center;
     padding-top: 8px;
     border-top: 1px solid var(--bg-tertiary);
+    gap: 8px;
   }
 
-  .reset {
+  .footer-btn {
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -286,9 +332,18 @@
     transition: color 150ms ease, background 150ms ease, border-color 150ms ease;
   }
 
-  .reset:hover {
+  .footer-btn:hover:not(:disabled) {
     color: var(--text-primary);
     background: var(--bg-secondary);
     border-color: var(--bg-tertiary);
+  }
+
+  .footer-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+
+  .footer-btn.copied {
+    color: var(--accent-primary);
   }
 </style>

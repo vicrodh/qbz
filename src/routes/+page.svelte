@@ -463,6 +463,7 @@
   import MusicianModal from '$lib/components/MusicianModal.svelte';
   import CastPicker from '$lib/components/CastPicker.svelte';
   import LyricsSidebar from '$lib/components/lyrics/LyricsSidebar.svelte';
+  import { reloadLyricsDisplay } from '$lib/stores/lyricsDisplayStore';
   import OfflinePlaceholder from '$lib/components/OfflinePlaceholder.svelte';
   import UpdateAvailableModal from '$lib/components/updates/UpdateAvailableModal.svelte';
   import UpdateReminderModal from '$lib/components/updates/UpdateReminderModal.svelte';
@@ -3583,6 +3584,7 @@
 
     // Re-sync volume from the now-correct user-scoped localStorage key
     await resyncPersistedVolume();
+    reloadLyricsDisplay();
 
     // Signal that per-user backend stores are ready — the launch update
     // flow $effect gates on this to avoid reading default preferences

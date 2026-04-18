@@ -111,3 +111,15 @@ export function resetLyricsDisplay(): void {
   persist(next);
   lyricsDisplayStore.set(next);
 }
+
+/**
+ * Re-read preferences from user-scoped storage.
+ *
+ * The store is created at module-load time (before login), so the initial
+ * read happens against the unscoped fallback key. After login, call this to
+ * pick up the logged-in user's saved preferences. Matches the pattern used
+ * by playerStore.resyncPersistedVolume.
+ */
+export function reloadLyricsDisplay(): void {
+  lyricsDisplayStore.set(loadInitial());
+}
