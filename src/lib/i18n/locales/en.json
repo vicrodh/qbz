@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "QBZ",
-    "tagline": "Qobuz\u2122 Player"
+    "tagline": "Qobuz™ Player"
   },
   "nav": {
     "home": "Discover",
@@ -49,7 +49,6 @@
     "moreFromFavorites": "More From Favorites",
     "startListening": "Start Listening",
     "startListeningDescription": "Play music or add favorites to activate recommendations.",
-    "yourMixes": "Your mixes",
     "tabEditorPicks": "Editor's Picks",
     "tabForYou": "For You",
     "radioStations": "Radio Stations",
@@ -76,7 +75,8 @@
     "continueTracks": "Continue Listening",
     "topArtists": "Your Top Artists",
     "favoriteAlbums": "More From Favorites",
-    "releaseWatch": "Release Watch"
+    "releaseWatch": "Release Watch",
+    "qobuzMixes": "Qobuz Mixes"
   },
   "discover": {
     "newReleases": "New Releases",
@@ -2286,41 +2286,6 @@
     },
     "loadFailed": "No purchases available."
   },
-  "yourMixes": {
-    "title": "DailyQ",
-    "subtitle": "Based on your recent listening.",
-    "cardDesc": "Elevate your day with a customized selection of music.",
-    "actions": {
-      "saveAsPlaylist": "Save as playlist"
-    },
-    "form": {
-      "limit": "Limit",
-      "listenedTrackIds": "Listened track IDs (comma-separated)",
-      "listenedTrackIdsPlaceholder": "123,456,789",
-      "tracksToAnalyse": "Tracks to analyse (one row: trackId,artistId,genreId,labelId)",
-      "tracksToAnalysePlaceholder": "123,45,78,90",
-      "prefillFromRecents": "Use QBZ recent log",
-      "run": "Fetch Suggestions",
-      "probeRaw": "Probe Raw Response",
-      "rawResponse": "Raw response"
-    },
-    "algorithmInfo": "Powered by the Qobuz™ suggestion algorithm, curated from your local listening history.",
-    "result": {
-      "algorithm": "Algorithm",
-      "count": "{count} tracks",
-      "empty": "No suggested tracks returned.",
-      "emptyHint": "Tried fallback payload strategies. This account/seed set may currently return no mix candidates.",
-      "unknownArtist": "Unknown artist"
-    },
-    "errors": {
-      "fetchFailed": "Failed to fetch dynamic suggestions.",
-      "insufficientHistory": "Not enough listening history to generate suggestions. Play some music and check back later.",
-      "prefillFailed": "Failed to load recent data from QBZ logs.",
-      "rawProbeFailed": "Failed to fetch raw endpoint response.",
-      "playlistsLoadFailed": "Failed to load your playlists.",
-      "emptyPlaylist": "No tracks available to save as playlist."
-    }
-  },
   "weeklyMixes": {
     "title": "WeeklyQ",
     "subtitle": "Based on your weekly listening.",
@@ -2707,5 +2672,40 @@
     "follow": "Follow award",
     "unfollow": "Unfollow award",
     "otherAwards": "Other awards"
+  },
+  "qobuzMixes": {
+    "title": "DailyQ",
+    "subtitle": "Based on your recent listening.",
+    "cardDesc": "Elevate your day with a customized selection of music.",
+    "actions": {
+      "saveAsPlaylist": "Save as playlist"
+    },
+    "form": {
+      "limit": "Limit",
+      "listenedTrackIds": "Listened track IDs (comma-separated)",
+      "listenedTrackIdsPlaceholder": "123,456,789",
+      "tracksToAnalyse": "Tracks to analyse (one row: trackId,artistId,genreId,labelId)",
+      "tracksToAnalysePlaceholder": "123,45,78,90",
+      "prefillFromRecents": "Use QBZ recent log",
+      "run": "Fetch Suggestions",
+      "probeRaw": "Probe Raw Response",
+      "rawResponse": "Raw response"
+    },
+    "algorithmInfo": "Powered by the Qobuz™ suggestion algorithm, curated from your local listening history.",
+    "result": {
+      "algorithm": "Algorithm",
+      "count": "{count} tracks",
+      "empty": "No suggested tracks returned.",
+      "emptyHint": "Tried fallback payload strategies. This account/seed set may currently return no mix candidates.",
+      "unknownArtist": "Unknown artist"
+    },
+    "errors": {
+      "fetchFailed": "Failed to fetch dynamic suggestions.",
+      "insufficientHistory": "Not enough listening history to generate suggestions. Play some music and check back later.",
+      "prefillFailed": "Failed to load recent data from QBZ logs.",
+      "rawProbeFailed": "Failed to fetch raw endpoint response.",
+      "playlistsLoadFailed": "Failed to load your playlists.",
+      "emptyPlaylist": "No tracks available to save as playlist."
+    }
   }
 }

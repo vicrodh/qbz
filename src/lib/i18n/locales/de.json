@@ -46,7 +46,6 @@
     "moreFromFavorites": "Mehr aus Favoriten",
     "startListening": "Beginne mit dem Hören",
     "startListeningDescription": "Spiele Musik oder füge Favoriten hinzu, um Empfehlungen zu aktivieren.",
-    "yourMixes": "Deine Mixe",
     "tabEditorPicks": "Redaktionsauswahl",
     "tabForYou": "Für dich",
     "radioStations": "Radiosender",
@@ -76,7 +75,8 @@
     "favoriteAlbums": "Mehr von Favoriten",
     "recentAlbums": "Kürzlich gespielt",
     "topArtists": "Ihre Top-Künstler",
-    "releaseWatch": "Release-Radar"
+    "releaseWatch": "Release-Radar",
+    "qobuzMixes": "Qobuz Mixes"
   },
   "discover": {
     "newReleases": "Neuerscheinungen",
@@ -2181,41 +2181,6 @@
     "playlistDetected": "Dies ist eine Playlist. Verwende den Playlist-Importer fuer Playlists.",
     "openPlaylistImporter": "Playlist-Importer oeffnen"
   },
-  "yourMixes": {
-    "title": "DailyQ",
-    "subtitle": "Basierend auf deinem letzten Hoerverlauf.",
-    "cardDesc": "Bereichere deinen Tag mit einer personalisierten Musikauswahl.",
-    "algorithmInfo": "Basierend auf dem Qobuz™-Vorschlagsalgorithmus, kuratiert aus deinem lokalen Hoerverlauf.",
-    "errors": {
-      "fetchFailed": "Dynamische Vorschlaege konnten nicht geladen werden.",
-      "insufficientHistory": "Nicht genuegend Hoerverlauf fuer Vorschlaege. Hoere etwas Musik und versuche es spaeter erneut.",
-      "emptyPlaylist": "Keine Titel zum Speichern als Playlist verfügbar.",
-      "playlistsLoadFailed": "Deine Playlists konnten nicht geladen werden.",
-      "prefillFailed": "Aktuelle Daten aus QBZ-Protokollen konnten nicht geladen werden.",
-      "rawProbeFailed": "Die rohe Endpunktantwort konnte nicht abgerufen werden."
-    },
-    "form": {
-      "limit": "Limit",
-      "run": "Vorschläge abrufen",
-      "listenedTrackIdsPlaceholder": "123,456,789",
-      "listenedTrackIds": "IDs der gehörten Titel (durch Kommas getrennt)",
-      "prefillFromRecents": "Verwenden Sie das aktuelle QBZ-Protokoll",
-      "rawResponse": "Rohe Antwort",
-      "probeRaw": "Rohantwort prüfen",
-      "tracksToAnalyse": "Zu analysierende Titel (eine Zeile: Titel-ID, Künstler-ID, Genre-ID, Label-ID)",
-      "tracksToAnalysePlaceholder": "123,45,78,90"
-    },
-    "result": {
-      "emptyHint": "Versuchte Fallback-Payload-Strategien. \nDieses Konto/Seed-Set gibt derzeit möglicherweise keine Mix-Kandidaten zurück.",
-      "algorithm": "Algorithmus",
-      "count": "{count} Titel",
-      "empty": "Es wurden keine vorgeschlagenen Titel zurückgegeben.",
-      "unknownArtist": "Unbekannter Künstler"
-    },
-    "actions": {
-      "saveAsPlaylist": "Als Playlist speichern"
-    }
-  },
   "weeklyMixes": {
     "title": "WeeklyQ",
     "subtitle": "Basierend auf deinem woechentlichen Hoerverlauf.",
@@ -2701,5 +2666,40 @@
     "follow": "Auszeichnung folgen",
     "unfollow": "Nicht mehr folgen",
     "otherAwards": "Weitere Auszeichnungen"
+  },
+  "qobuzMixes": {
+    "title": "DailyQ",
+    "subtitle": "Basierend auf deinem letzten Hoerverlauf.",
+    "cardDesc": "Bereichere deinen Tag mit einer personalisierten Musikauswahl.",
+    "algorithmInfo": "Basierend auf dem Qobuz™-Vorschlagsalgorithmus, kuratiert aus deinem lokalen Hoerverlauf.",
+    "errors": {
+      "fetchFailed": "Dynamische Vorschlaege konnten nicht geladen werden.",
+      "insufficientHistory": "Nicht genuegend Hoerverlauf fuer Vorschlaege. Hoere etwas Musik und versuche es spaeter erneut.",
+      "emptyPlaylist": "Keine Titel zum Speichern als Playlist verfügbar.",
+      "playlistsLoadFailed": "Deine Playlists konnten nicht geladen werden.",
+      "prefillFailed": "Aktuelle Daten aus QBZ-Protokollen konnten nicht geladen werden.",
+      "rawProbeFailed": "Die rohe Endpunktantwort konnte nicht abgerufen werden."
+    },
+    "form": {
+      "limit": "Limit",
+      "run": "Vorschläge abrufen",
+      "listenedTrackIdsPlaceholder": "123,456,789",
+      "listenedTrackIds": "IDs der gehörten Titel (durch Kommas getrennt)",
+      "prefillFromRecents": "Verwenden Sie das aktuelle QBZ-Protokoll",
+      "rawResponse": "Rohe Antwort",
+      "probeRaw": "Rohantwort prüfen",
+      "tracksToAnalyse": "Zu analysierende Titel (eine Zeile: Titel-ID, Künstler-ID, Genre-ID, Label-ID)",
+      "tracksToAnalysePlaceholder": "123,45,78,90"
+    },
+    "result": {
+      "emptyHint": "Versuchte Fallback-Payload-Strategien. \nDieses Konto/Seed-Set gibt derzeit möglicherweise keine Mix-Kandidaten zurück.",
+      "algorithm": "Algorithmus",
+      "count": "{count} Titel",
+      "empty": "Es wurden keine vorgeschlagenen Titel zurückgegeben.",
+      "unknownArtist": "Unbekannter Künstler"
+    },
+    "actions": {
+      "saveAsPlaylist": "Als Playlist speichern"
+    }
   }
 }

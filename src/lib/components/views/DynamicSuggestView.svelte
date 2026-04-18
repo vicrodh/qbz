@@ -140,7 +140,7 @@
       playlistModalTrackIds = trackIds;
       showPlaylistModal = true;
     } catch (err) {
-      error = err instanceof Error ? err.message : $t('yourMixes.errors.playlistsLoadFailed');
+      error = err instanceof Error ? err.message : $t('qobuzMixes.errors.playlistsLoadFailed');
     }
     multiSelectMode = false; multiSelectedIds = new Set();
   }
@@ -262,7 +262,7 @@
       const seedPayload = await buildSeeds();
 
       if (seedPayload.listenedTrackIds.length === 0) {
-        error = $t('yourMixes.errors.insufficientHistory');
+        error = $t('qobuzMixes.errors.insufficientHistory');
         result = null;
         return;
       }
@@ -287,7 +287,7 @@
         });
       }
     } catch (err) {
-      error = err instanceof Error ? err.message : $t('yourMixes.errors.fetchFailed');
+      error = err instanceof Error ? err.message : $t('qobuzMixes.errors.fetchFailed');
       result = null;
     } finally {
       loading = false;
@@ -304,7 +304,7 @@
   async function openSaveAsPlaylist(): Promise<void> {
     const trackIds = getResultTrackIds();
     if (trackIds.length === 0) {
-      showToast($t('yourMixes.errors.emptyPlaylist'), 'info');
+      showToast($t('qobuzMixes.errors.emptyPlaylist'), 'info');
       return;
     }
 
@@ -313,7 +313,7 @@
       playlistModalTrackIds = trackIds;
       showPlaylistModal = true;
     } catch (err) {
-      error = err instanceof Error ? err.message : $t('yourMixes.errors.playlistsLoadFailed');
+      error = err instanceof Error ? err.message : $t('qobuzMixes.errors.playlistsLoadFailed');
     }
   }
 
@@ -473,21 +473,21 @@
     </div>
 
     <div class="metadata">
-      <span class="playlist-label">{$t('home.yourMixes')}</span>
+      <span class="playlist-label">{$t('home.qobuzMixes')}</span>
       <h1 class="playlist-title">
-        {$t('yourMixes.title')}
+        {$t('qobuzMixes.title')}
         <span class="info-wrapper">
           <button class="info-btn" onclick={toggleAlgoTooltip}>
             <Info size={16} />
           </button>
           {#if showAlgoTooltip}
-            <span class="info-tooltip">{$t('yourMixes.algorithmInfo')}</span>
+            <span class="info-tooltip">{$t('qobuzMixes.algorithmInfo')}</span>
           {/if}
         </span>
       </h1>
-      <p class="playlist-description">{@html $t('yourMixes.cardDesc')}</p>
+      <p class="playlist-description">{@html $t('qobuzMixes.cardDesc')}</p>
       <div class="playlist-info">
-        <span>{$t('yourMixes.result.count', { values: { count: filteredTracks.length } })}</span>
+        <span>{$t('qobuzMixes.result.count', { values: { count: filteredTracks.length } })}</span>
         {#if filteredTracks.length > 0}
           <span class="separator">•</span>
           <span>{totalDurationFormatted}</span>
@@ -501,7 +501,7 @@
         <button class="action-btn-circle" onclick={handleShuffle} disabled={loading || filteredTracks.length === 0} title={$t('actions.shuffle')}>
           <Shuffle size={18} />
         </button>
-        <button class="action-btn-circle" onclick={openSaveAsPlaylist} disabled={loading || !result || result.tracks.items.length === 0} title={$t('yourMixes.actions.saveAsPlaylist')}>
+        <button class="action-btn-circle" onclick={openSaveAsPlaylist} disabled={loading || !result || result.tracks.items.length === 0} title={$t('qobuzMixes.actions.saveAsPlaylist')}>
           <ListPlus size={18} />
         </button>
         <button class="action-btn-circle" onclick={() => generateDailyQ('none')} disabled={loading} title={$t('actions.refresh')}>
@@ -544,7 +544,7 @@
   {#if !result && loading}
     <div class="empty">{$t('actions.loading')}</div>
   {:else if result && filteredTracks.length === 0}
-    <div class="empty">{$t('yourMixes.result.empty')}</div>
+    <div class="empty">{$t('qobuzMixes.result.empty')}</div>
   {:else if result}
     <div class="track-list">
       <div class="track-list-header">

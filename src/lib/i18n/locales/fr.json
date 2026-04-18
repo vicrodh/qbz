@@ -49,7 +49,6 @@
     "moreFromFavorites": "Plus de favoris",
     "startListening": "Commencer l'écoute",
     "startListeningDescription": "Lisez de la musique ou ajoutez des favoris pour activer les recommandations.",
-    "yourMixes": "Vos mix sur mesure",
     "tabEditorPicks": "Sélection éditoriale",
     "tabForYou": "Pour vous",
     "radioStations": "Radios à découvrir",
@@ -76,7 +75,8 @@
     "favoriteAlbums": "Plus de favoris",
     "recentAlbums": "Récemment écouté",
     "topArtists": "Vos artistes favoris",
-    "releaseWatch": "Radar des sorties"
+    "releaseWatch": "Radar des sorties",
+    "qobuzMixes": "Qobuz Mixes"
   },
   "discover": {
     "newReleases": "Nouveautés",
@@ -2186,41 +2186,6 @@
     "playlistDetected": "C'est une playlist. Utilisez l'importateur de playlists.",
     "openPlaylistImporter": "Ouvrir l'importateur de playlists"
   },
-  "yourMixes": {
-    "title": "DailyQ",
-    "subtitle": "Basé sur vos écoutes récentes.",
-    "cardDesc": "Sublimez votre journée avec une sélection musicale sur mesure.",
-    "actions": {
-      "saveAsPlaylist": "Enregistrer en tant que playlist"
-    },
-    "algorithmInfo": "Propulsé par l'algorithme de suggestion Qobuz™, composé à partir de votre historique d'écoute local.",
-    "result": {
-      "algorithm": "Algorithme",
-      "count": "{count} titres",
-      "empty": "Aucun titre suggéré",
-      "unknownArtist": "Artiste inconnu",
-      "emptyHint": "Les stratégies de payload de secours ont échoué. Ce compte/seed ne peut actuellement renvoyer aucun candidat mixte."
-    },
-    "errors": {
-      "fetchFailed": "Impossible de charger les suggestions dynamiques.",
-      "insufficientHistory": "Pas assez d'historique d'écoute pour génerer des suggestions. Ecoutez de la musique et réessayez plus tard.",
-      "emptyPlaylist": "Aucune piste disponible pour enregistrer en tant que playlist.",
-      "playlistsLoadFailed": "Échec du chargement de vos playlists.",
-      "prefillFailed": "Échec du chargement des données récentes à partir des journaux QBZ.",
-      "rawProbeFailed": "Échec de la récupération de la réponse brute du point de terminaison."
-    },
-    "form": {
-      "limit": "Limite",
-      "listenedTrackIds": "ID des pistes écoutées (séparés par des virgules)",
-      "listenedTrackIdsPlaceholder": "123,456,789",
-      "prefillFromRecents": "Utiliser le journal récent QBZ",
-      "probeRaw": "Sonder la réponse brute",
-      "run": "Obtenir des suggestions",
-      "rawResponse": "Réponse brute",
-      "tracksToAnalyse": "Pistes à analyser (une ligne : trackId,artistId,genreId,labelId)",
-      "tracksToAnalysePlaceholder": "123,45,78,90"
-    }
-  },
   "weeklyMixes": {
     "title": "WeeklyQ",
     "subtitle": "Basé sur vos écoutes hebdomadaires.",
@@ -2701,5 +2666,40 @@
     "follow": "Suivre la récompense",
     "unfollow": "Ne plus suivre",
     "otherAwards": "Autres récompenses"
+  },
+  "qobuzMixes": {
+    "title": "DailyQ",
+    "subtitle": "Basé sur vos écoutes récentes.",
+    "cardDesc": "Sublimez votre journée avec une sélection musicale sur mesure.",
+    "actions": {
+      "saveAsPlaylist": "Enregistrer en tant que playlist"
+    },
+    "algorithmInfo": "Propulsé par l'algorithme de suggestion Qobuz™, composé à partir de votre historique d'écoute local.",
+    "result": {
+      "algorithm": "Algorithme",
+      "count": "{count} titres",
+      "empty": "Aucun titre suggéré",
+      "unknownArtist": "Artiste inconnu",
+      "emptyHint": "Les stratégies de payload de secours ont échoué. Ce compte/seed ne peut actuellement renvoyer aucun candidat mixte."
+    },
+    "errors": {
+      "fetchFailed": "Impossible de charger les suggestions dynamiques.",
+      "insufficientHistory": "Pas assez d'historique d'écoute pour génerer des suggestions. Ecoutez de la musique et réessayez plus tard.",
+      "emptyPlaylist": "Aucune piste disponible pour enregistrer en tant que playlist.",
+      "playlistsLoadFailed": "Échec du chargement de vos playlists.",
+      "prefillFailed": "Échec du chargement des données récentes à partir des journaux QBZ.",
+      "rawProbeFailed": "Échec de la récupération de la réponse brute du point de terminaison."
+    },
+    "form": {
+      "limit": "Limite",
+      "listenedTrackIds": "ID des pistes écoutées (séparés par des virgules)",
+      "listenedTrackIdsPlaceholder": "123,456,789",
+      "prefillFromRecents": "Utiliser le journal récent QBZ",
+      "probeRaw": "Sonder la réponse brute",
+      "run": "Obtenir des suggestions",
+      "rawResponse": "Réponse brute",
+      "tracksToAnalyse": "Pistes à analyser (une ligne : trackId,artistId,genreId,labelId)",
+      "tracksToAnalysePlaceholder": "123,45,78,90"
+    }
   }
 }

@@ -49,7 +49,6 @@
     "moreFromFavorites": "Mais dos Favoritos",
     "startListening": "Comece a Ouvir",
     "startListeningDescription": "Reproduza músicas ou adicione favoritos para ativar as recomendações.",
-    "yourMixes": "Suas mixtapes",
     "tabEditorPicks": "Escolhas do Editor",
     "tabForYou": "Para Você",
     "radioStations": "Estações de Rádio",
@@ -76,7 +75,8 @@
     "favoriteAlbums": "Mais dos favoritos",
     "recentAlbums": "Jogado recentemente",
     "topArtists": "Seus principais artistas",
-    "releaseWatch": "Radar de Novidades"
+    "releaseWatch": "Radar de Novidades",
+    "qobuzMixes": "Mixes do Qobuz"
   },
   "discover": {
     "newReleases": "Novos Lançamentos",
@@ -2275,41 +2275,6 @@
     },
     "loadFailed": "Nenhuma compra disponível."
   },
-  "yourMixes": {
-    "title": "DailyQ",
-    "subtitle": "Baseado nas suas audições recentes.",
-    "cardDesc": "Eleve seu dia com uma seleção personalizada de músicas.",
-    "actions": {
-      "saveAsPlaylist": "Salvar como playlist"
-    },
-    "form": {
-      "limit": "Limite",
-      "listenedTrackIds": "IDs das faixas ouvidas (separados por vírgula)",
-      "listenedTrackIdsPlaceholder": "123,456,789",
-      "tracksToAnalyse": "Faixas para analisar (uma linha: trackId,artistId,genreId,labelId)",
-      "tracksToAnalysePlaceholder": "123,45,78,90",
-      "prefillFromRecents": "Usar histórico recente do QBZ",
-      "run": "Buscar Sugestões",
-      "probeRaw": "Consultar Resposta Bruta",
-      "rawResponse": "Resposta bruta"
-    },
-    "algorithmInfo": "Alimentado pelo algoritmo de sugestões do Qobuz™, curado a partir do seu histórico de audição local.",
-    "result": {
-      "algorithm": "Algoritmo",
-      "count": "{count} faixas",
-      "empty": "Nenhuma faixa sugerida retornada.",
-      "emptyHint": "Estratégias de payload alternativas foram tentadas. Esta conta/conjunto de sementes pode não retornar candidatos para mix no momento.",
-      "unknownArtist": "Artista desconhecido"
-    },
-    "errors": {
-      "fetchFailed": "Falha ao buscar sugestões dinâmicas.",
-      "insufficientHistory": "Histórico de audição insuficiente para gerar sugestões. Ouça algumas músicas e volte mais tarde.",
-      "prefillFailed": "Falha ao carregar dados recentes dos logs do QBZ.",
-      "rawProbeFailed": "Falha ao buscar resposta bruta do endpoint.",
-      "playlistsLoadFailed": "Falha ao carregar suas playlists.",
-      "emptyPlaylist": "Nenhuma faixa disponível para salvar como playlist."
-    }
-  },
   "weeklyMixes": {
     "title": "WeeklyQ",
     "subtitle": "Baseado nas suas audições semanais.",
@@ -2701,5 +2666,40 @@
     "follow": "Seguir prêmio",
     "unfollow": "Deixar de seguir",
     "otherAwards": "Mais prêmios"
+  },
+  "qobuzMixes": {
+    "title": "DailyQ",
+    "subtitle": "Baseado nas suas audições recentes.",
+    "cardDesc": "Eleve seu dia com uma seleção personalizada de músicas.",
+    "actions": {
+      "saveAsPlaylist": "Salvar como playlist"
+    },
+    "form": {
+      "limit": "Limite",
+      "listenedTrackIds": "IDs das faixas ouvidas (separados por vírgula)",
+      "listenedTrackIdsPlaceholder": "123,456,789",
+      "tracksToAnalyse": "Faixas para analisar (uma linha: trackId,artistId,genreId,labelId)",
+      "tracksToAnalysePlaceholder": "123,45,78,90",
+      "prefillFromRecents": "Usar histórico recente do QBZ",
+      "run": "Buscar Sugestões",
+      "probeRaw": "Consultar Resposta Bruta",
+      "rawResponse": "Resposta bruta"
+    },
+    "algorithmInfo": "Alimentado pelo algoritmo de sugestões do Qobuz™, curado a partir do seu histórico de audição local.",
+    "result": {
+      "algorithm": "Algoritmo",
+      "count": "{count} faixas",
+      "empty": "Nenhuma faixa sugerida retornada.",
+      "emptyHint": "Estratégias de payload alternativas foram tentadas. Esta conta/conjunto de sementes pode não retornar candidatos para mix no momento.",
+      "unknownArtist": "Artista desconhecido"
+    },
+    "errors": {
+      "fetchFailed": "Falha ao buscar sugestões dinâmicas.",
+      "insufficientHistory": "Histórico de audição insuficiente para gerar sugestões. Ouça algumas músicas e volte mais tarde.",
+      "prefillFailed": "Falha ao carregar dados recentes dos logs do QBZ.",
+      "rawProbeFailed": "Falha ao buscar resposta bruta do endpoint.",
+      "playlistsLoadFailed": "Falha ao carregar suas playlists.",
+      "emptyPlaylist": "Nenhuma faixa disponível para salvar como playlist."
+    }
   }
 }

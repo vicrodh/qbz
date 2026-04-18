@@ -1673,16 +1673,16 @@
       {/if}
     {/if}
 
-    {#if sectionId === 'yourMixes'}
+    {#if sectionId === 'qobuzMixes'}
       <div class="your-mixes-section">
-        <h2 class="section-title">{$t('home.yourMixes')}</h2>
+        <h2 class="section-title">{$t('home.qobuzMixes')}</h2>
         <div class="mix-cards-row">
           <button class="mix-card" onclick={() => onNavigateDailyQ?.()}>
             <div class="mix-card-artwork mix-gradient-daily">
               <span class="mix-card-badge">qobuz</span>
               <span class="mix-card-name">DailyQ</span>
             </div>
-            <p class="mix-card-desc">{$t('yourMixes.cardDesc')}</p>
+            <p class="mix-card-desc">{$t('qobuzMixes.cardDesc')}</p>
           </button>
           <button class="mix-card" onclick={() => onNavigateWeeklyQ?.()}>
             <div class="mix-card-artwork mix-gradient-weekly">

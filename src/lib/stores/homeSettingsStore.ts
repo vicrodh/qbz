@@ -18,7 +18,7 @@ export type HomeSectionId =
   | 'continueTracks'
   | 'topArtists'
   | 'favoriteAlbums'
-  | 'yourMixes'
+  | 'qobuzMixes'
   | 'releaseWatch';
 
 export interface HomeSection {
@@ -56,7 +56,7 @@ const DEFAULT_SECTIONS: HomeSection[] = [
   { id: 'qobuzissimes', label: 'Qobuzissimes', visible: false, source: 'qobuz' },
   { id: 'editorPicks', label: "Editor's Picks", visible: false, source: 'qobuz' },
   { id: 'qobuzPlaylists', label: 'Qobuz Playlists', visible: true, source: 'qobuz' },
-  { id: 'yourMixes', label: 'Your Mixes', visible: true, source: 'qobuz' },
+  { id: 'qobuzMixes', label: 'Your Mixes', visible: true, source: 'qobuz' },
   { id: 'essentialDiscography', label: 'Essential Discography', visible: true, source: 'qobuz' },
   { id: 'recentAlbums', label: 'Recently Played', visible: true, source: 'ml' },
   { id: 'continueTracks', label: 'Continue Listening', visible: true, source: 'ml' },

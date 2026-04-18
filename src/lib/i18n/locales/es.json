@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "QBZ",
-    "tagline": "Qobuz\u2122 Player"
+    "tagline": "Qobuz™ Player"
   },
   "nav": {
     "home": "Descubrir",
@@ -49,7 +49,6 @@
     "moreFromFavorites": "Más de Favoritos",
     "startListening": "Empieza a Escuchar",
     "startListeningDescription": "Reproduce música o agrega favoritos para activar recomendaciones.",
-    "yourMixes": "Tus mixes",
     "tabEditorPicks": "Selección editorial",
     "tabForYou": "Para ti",
     "radioStations": "Estaciones de Radio",
@@ -76,7 +75,8 @@
     "favoriteAlbums": "Más de Favoritos",
     "recentAlbums": "Jugado recientemente",
     "topArtists": "Tus mejores artistas",
-    "releaseWatch": "Radar de Novedades"
+    "releaseWatch": "Radar de Novedades",
+    "qobuzMixes": "Mixes de Qobuz"
   },
   "discover": {
     "newReleases": "Novedades",
@@ -2286,41 +2286,6 @@
     },
     "loadFailed": "No hay compras disponibles."
   },
-  "yourMixes": {
-    "title": "DailyQ",
-    "subtitle": "Basado en tus escuchas recientes.",
-    "cardDesc": "Eleva tu dia con una seleccion personalizada de musica.",
-    "actions": {
-      "saveAsPlaylist": "Guardar como playlist"
-    },
-    "form": {
-      "limit": "Limite",
-      "listenedTrackIds": "IDs de pistas escuchadas (separadas por coma)",
-      "listenedTrackIdsPlaceholder": "123,456,789",
-      "tracksToAnalyse": "Pistas a analizar (una linea: trackId,artistId,genreId,labelId)",
-      "tracksToAnalysePlaceholder": "123,45,78,90",
-      "prefillFromRecents": "Usar log reciente de QBZ",
-      "run": "Obtener sugerencias",
-      "probeRaw": "Probar respuesta raw",
-      "rawResponse": "Respuesta raw"
-    },
-    "algorithmInfo": "Impulsado por el algoritmo de sugerencias de Qobuz™, curado a partir de tu historial de reproducciones local.",
-    "result": {
-      "algorithm": "Algoritmo",
-      "count": "{count} pistas",
-      "empty": "No se devolvieron pistas sugeridas.",
-      "emptyHint": "Se probaron estrategias de fallback del payload. Esta cuenta/semillas puede no estar devolviendo candidatos ahora.",
-      "unknownArtist": "Artista desconocido"
-    },
-    "errors": {
-      "fetchFailed": "No se pudieron obtener sugerencias dinamicas.",
-      "insufficientHistory": "No hay suficiente historial de escucha para generar sugerencias. Escucha algo de musica y vuelve mas tarde.",
-      "prefillFailed": "No se pudieron cargar datos recientes del log de QBZ.",
-      "rawProbeFailed": "No se pudo obtener la respuesta raw del endpoint.",
-      "playlistsLoadFailed": "No se pudieron cargar tus playlists.",
-      "emptyPlaylist": "No hay pistas para guardar como playlist."
-    }
-  },
   "weeklyMixes": {
     "title": "WeeklyQ",
     "subtitle": "Basado en tus escuchas semanales.",
@@ -2707,5 +2672,40 @@
     "follow": "Seguir premio",
     "unfollow": "Dejar de seguir",
     "otherAwards": "Más premios"
+  },
+  "qobuzMixes": {
+    "title": "DailyQ",
+    "subtitle": "Basado en tus escuchas recientes.",
+    "cardDesc": "Eleva tu dia con una seleccion personalizada de musica.",
+    "actions": {
+      "saveAsPlaylist": "Guardar como playlist"
+    },
+    "form": {
+      "limit": "Limite",
+      "listenedTrackIds": "IDs de pistas escuchadas (separadas por coma)",
+      "listenedTrackIdsPlaceholder": "123,456,789",
+      "tracksToAnalyse": "Pistas a analizar (una linea: trackId,artistId,genreId,labelId)",
+      "tracksToAnalysePlaceholder": "123,45,78,90",
+      "prefillFromRecents": "Usar log reciente de QBZ",
+      "run": "Obtener sugerencias",
+      "probeRaw": "Probar respuesta raw",
+      "rawResponse": "Respuesta raw"
+    },
+    "algorithmInfo": "Impulsado por el algoritmo de sugerencias de Qobuz™, curado a partir de tu historial de reproducciones local.",
+    "result": {
+      "algorithm": "Algoritmo",
+      "count": "{count} pistas",
+      "empty": "No se devolvieron pistas sugeridas.",
+      "emptyHint": "Se probaron estrategias de fallback del payload. Esta cuenta/semillas puede no estar devolviendo candidatos ahora.",
+      "unknownArtist": "Artista desconocido"
+    },
+    "errors": {
+      "fetchFailed": "No se pudieron obtener sugerencias dinamicas.",
+      "insufficientHistory": "No hay suficiente historial de escucha para generar sugerencias. Escucha algo de musica y vuelve mas tarde.",
+      "prefillFailed": "No se pudieron cargar datos recientes del log de QBZ.",
+      "rawProbeFailed": "No se pudo obtener la respuesta raw del endpoint.",
+      "playlistsLoadFailed": "No se pudieron cargar tus playlists.",
+      "emptyPlaylist": "No hay pistas para guardar como playlist."
+    }
   }
 }
