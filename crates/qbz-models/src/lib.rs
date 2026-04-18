@@ -31,6 +31,7 @@
 
 pub mod error;
 pub mod events;
+pub mod mixtape;
 pub mod playback;
 pub mod traits;
 pub mod types;
