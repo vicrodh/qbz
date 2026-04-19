@@ -1821,11 +1821,7 @@
           disabled={isFavoriteLoading}
           title={isFavorite ? $t('actions.removeFromFavorites') : $t('actions.addToFavorites')}
         >
-          {#if isFavorite}
-            <Heart size={24} fill="var(--accent-primary)" color="var(--accent-primary)" />
-          {:else}
-            <Heart size={24} />
-          {/if}
+          <img src="/user-add.svg" alt="" class="artist-fav-icon" />
         </button>
         <div class="radio-btn-wrapper">
           <button
@@ -2194,7 +2190,7 @@
                       await toggleTrackFavorite(track.id);
                     }}
                     disabled={trackIsToggling}
-                    title={trackIsFav ? 'Remove from favorites' : 'Add to favorites'}
+                    title={trackIsFav ? $t('actions.removeFromFavorites') : $t('actions.addToFavorites')}
                   >
                     {#if trackIsFav}
                       <Heart size={16} fill="var(--accent-primary)" color="var(--accent-primary)" />
@@ -3402,6 +3398,25 @@
   .favorite-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  .artist-fav-icon {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+    opacity: 0.7;
+    filter: var(--icon-filter, none);
+    transition: opacity 150ms ease, filter 150ms ease;
+  }
+
+  .favorite-btn:hover:not(:disabled) .artist-fav-icon {
+    opacity: 1;
+    filter: brightness(0) saturate(100%) invert(38%) sepia(99%) saturate(600%) hue-rotate(240deg) brightness(110%);
+  }
+
+  .favorite-btn.is-favorite .artist-fav-icon {
+    opacity: 1;
+    filter: brightness(0) saturate(100%) invert(38%) sepia(99%) saturate(600%) hue-rotate(240deg) brightness(110%);
   }
 
   .radio-btn {

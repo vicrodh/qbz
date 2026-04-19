@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Heart, HardDrive, ChevronDown, User, Disc, Disc3, Music, ListMusic, ShoppingBag } from 'lucide-svelte';
+  import { HardDrive, ChevronDown, User, Disc, Disc3, Music, ListMusic, ShoppingBag } from 'lucide-svelte';
   import { t } from '$lib/i18n';
 
   interface Props {
@@ -185,7 +185,7 @@
       onclick={() => onNavigate('favorites-tracks')}
       data-tauri-drag-region="false"
     >
-      <Heart size={12} />
+      <img src="/music-library.svg" alt="" class="titlebar-nav-icon" />
       <span class="nav-label">{$t('nav.favorites')}</span>
       <ChevronDown size={10} />
     </button>
@@ -340,6 +340,20 @@
   .nav-btn :global(svg) {
     flex-shrink: 0;
     opacity: 0.8;
+  }
+
+  .titlebar-nav-icon {
+    width: 12px;
+    height: 12px;
+    object-fit: contain;
+    flex-shrink: 0;
+    opacity: 0.8;
+    filter: var(--icon-filter, none);
+  }
+
+  .nav-btn.active .titlebar-nav-icon,
+  .nav-btn:hover .titlebar-nav-icon {
+    opacity: 1;
   }
 
   .nav-label {

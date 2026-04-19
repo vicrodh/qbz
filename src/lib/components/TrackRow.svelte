@@ -395,7 +395,7 @@
       class:is-favorite={isFavorite}
       class:is-toggling={isToggling}
       onclick={handleToggleFavorite}
-      title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+      title={isFavorite ? $t('actions.removeFromFavorites') : $t('actions.addToFavorites')}
       disabled={isToggling}
     >
       {#if isFavorite}

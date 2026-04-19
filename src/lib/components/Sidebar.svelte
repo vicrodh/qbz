@@ -1573,7 +1573,7 @@
             onclick={() => handleViewChange('favorites')}
           >
             <div class="icon-container">
-              <Heart size={14} />
+              <img src="/music-library.svg" alt="" class="favorites-nav-icon" />
             </div>
             <span class="label">{$t('nav.favorites')}</span>
           </button>
@@ -1616,7 +1616,7 @@
           </div>
         {/if}
       {:else}
-        <!-- Collapsed sidebar: show heart with menu on click -->
+        <!-- Collapsed sidebar: show library icon with menu on click -->
         <button
           class="nav-item"
           class:active={activeView.startsWith('favorites-')}
@@ -1628,7 +1628,7 @@
           title={$t('nav.favorites')}
         >
           <div class="icon-container">
-            <Heart size={14} />
+            <img src="/music-library.svg" alt="" class="favorites-nav-icon" />
           </div>
         </button>
       {/if}
@@ -3038,6 +3038,19 @@
     white-space: nowrap;
     flex: 1;
     min-width: 0;
+  }
+
+  .favorites-nav-icon {
+    width: 14px;
+    height: 14px;
+    object-fit: contain;
+    opacity: 0.75;
+    filter: var(--icon-filter, none);
+  }
+
+  .nav-item.active .favorites-nav-icon,
+  .nav-item:hover .favorites-nav-icon {
+    opacity: 1;
   }
 
   .favorites-expand-btn {

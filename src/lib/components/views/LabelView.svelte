@@ -849,7 +849,7 @@
           </button>
         {/if}
 
-        <!-- Follow Label — same heart/circle treatment as ArtistDetailView -->
+        <!-- Follow Label — user-add icon, active state via CSS class -->
         <div class="label-actions">
           <button
             class="favorite-btn"
@@ -859,11 +859,7 @@
             title={labelIsFavorite ? $t('label.unfollow') : $t('label.follow')}
             aria-label={labelIsFavorite ? $t('label.unfollow') : $t('label.follow')}
           >
-            {#if labelIsFavorite}
-              <Heart size={24} fill="var(--accent-primary)" color="var(--accent-primary)" />
-            {:else}
-              <Heart size={24} />
-            {/if}
+            <img src="/user-add.svg" alt="" class="label-fav-icon" />
           </button>
         </div>
       </div>
@@ -1055,7 +1051,7 @@
                       await toggleTrackFavorite(track.id);
                     }}
                     disabled={trackIsToggling}
-                    title={trackIsFav ? 'Remove from favorites' : 'Add to favorites'}
+                    title={trackIsFav ? $t('actions.removeFromFavorites') : $t('actions.addToFavorites')}
                   >
                     {#if trackIsFav}
                       <Heart size={16} fill="var(--accent-primary)" color="var(--accent-primary)" />
@@ -1406,6 +1402,26 @@
     opacity: 0.5;
     cursor: not-allowed;
   }
+
+  .label-fav-icon {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+    opacity: 0.7;
+    filter: var(--icon-filter, none);
+    transition: opacity 150ms ease, filter 150ms ease;
+  }
+
+  .favorite-btn:hover:not(:disabled) .label-fav-icon {
+    opacity: 1;
+    filter: brightness(0) saturate(100%) invert(38%) sepia(99%) saturate(600%) hue-rotate(240deg) brightness(110%);
+  }
+
+  .favorite-btn.is-favorite .label-fav-icon {
+    opacity: 1;
+    filter: brightness(0) saturate(100%) invert(38%) sepia(99%) saturate(600%) hue-rotate(240deg) brightness(110%);
+  }
+
   .label-image-wrapper {
     width: 180px; height: 180px; border-radius: 50%;
     overflow: hidden; flex-shrink: 0; background: var(--bg-tertiary);
