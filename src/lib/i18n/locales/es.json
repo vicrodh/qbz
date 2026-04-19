@@ -311,6 +311,7 @@
     "name": "Nombre",
     "addToMixtapeOrCollection": "Agregar a Mixtape/Collection",
     "alreadyInToast": "Ya está en {name}",
+    "addedToMixtapeOrCollection": "Agregado a {name}",
     "playAllInOrder": "Reproducir",
     "shuffleAlbums": "Aleatorio entre álbumes",
     "playModeInOrder": "En orden",
