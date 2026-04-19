@@ -43,7 +43,8 @@ export type ViewType =
   | 'topq'
   | 'artists-by-location'
   | 'mixtapes'
-  | 'collections';
+  | 'collections'
+  | 'mixtape-detail';
 export type FavoritesTab = 'tracks' | 'albums' | 'artists' | 'labels' | 'playlists';
 
 // History entry: view + optional item identifier for granular back/forward

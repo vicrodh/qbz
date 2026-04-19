@@ -185,6 +185,15 @@
   import { platform } from '$lib/utils/platform';
   import type { FavoritesPreferences, ResolvedMusician } from '$lib/types';
 
+  // Mixtapes / Collections views and store
+  import MixtapesView from '$lib/components/views/MixtapesView.svelte';
+  import CollectionsView from '$lib/components/views/CollectionsView.svelte';
+  import {
+    getCollection,
+    createCollection,
+    type CollectionKind,
+  } from '$lib/stores/mixtapeCollectionsStore';
+
   // Navigation state management
   import {
     subscribe as subscribeNav,
@@ -557,6 +566,13 @@
   // Sequential modal queue: Flatpak → What's new → Update available
   let pendingWhatsNewRelease = $state<ReleaseInfo | null>(null);
   let pendingUpdateRelease = $state<ReleaseInfo | null>(null);
+
+  // Mixtape / Collection routing state
+  let mixtapeDetailId = $state<string | null>(null);
+  let showCreateModal = $state(false);
+  let createModalKind = $state<CollectionKind>('mixtape');
+  let createModalName = $state('');
+  let createModalBusy = $state(false);
 
   // Auto-update state
   let isAutoUpdating = $state(false);
@@ -1335,6 +1351,34 @@
       homeTab = itemId;
     }
     navTo(view as ViewType, itemId);
+  }
+
+  // ── Mixtapes / Collections routing helpers ──────────────────────────────
+
+  function openMixtapeDetail(id: string) {
+    mixtapeDetailId = id;
+    navTo('mixtape-detail', id);
+  }
+
+  function openCreateModal(kind: CollectionKind) {
+    createModalKind = kind;
+    createModalName = '';
+    showCreateModal = true;
+  }
+
+  async function submitCreateModal() {
+    const name = createModalName.trim();
+    if (!name) return;
+    createModalBusy = true;
+    try {
+      const created = await createCollection(createModalKind, name);
+      showCreateModal = false;
+      openMixtapeDetail(created.id);
+    } catch (err) {
+      console.error('[+page] createCollection failed:', err);
+    } finally {
+      createModalBusy = false;
+    }
   }
 
   /**
@@ -5885,15 +5929,34 @@
           onAlbumPlay={playAlbumById}
         />
       {:else if activeView === 'mixtapes'}
-        <div class="coming-soon">
-          <h1>{$t('mixtapes.nav')}</h1>
-          <p>Coming soon</p>
-        </div>
+        <MixtapesView
+          onOpen={(id) => openMixtapeDetail(id)}
+          onCreate={() => openCreateModal('mixtape')}
+        />
       {:else if activeView === 'collections'}
-        <div class="coming-soon">
-          <h1>{$t('collections.nav')}</h1>
-          <p>Coming soon</p>
-        </div>
+        <CollectionsView
+          onOpen={(id) => openMixtapeDetail(id)}
+          onCreate={() => openCreateModal('collection')}
+          onBuildArtistCollection={() => {
+            // TODO: Phase 8 — open DiscographyBuilderView
+            console.log('[+page] Build Artist Collection clicked — Phase 8 feature');
+          }}
+        />
+      {:else if activeView === 'mixtape-detail'}
+        {#await getCollection(mixtapeDetailId ?? '') then collection}
+          {#if collection}
+            <div class="detail-placeholder">
+              <h1>{collection.name}</h1>
+              <p>{collection.kind}</p>
+              <p>{collection.items.length} items</p>
+              <p class="hint">Full detail view is built in Phase 6.</p>
+            </div>
+          {:else}
+            <div class="detail-placeholder">
+              <h1>{$t('errors.notFound')}</h1>
+            </div>
+          {/if}
+        {/await}
       {:else}
         <!-- Catch-all fallback: view has no matching data, show loading/error -->
         <div class="view-error">
@@ -6296,6 +6359,74 @@
       onClearDiagnostics={clearQobuzConnectDiagnostics}
     />
 
+    <!-- Create Mixtape / Collection Modal (Phase 5.3 inline — replaced in Phase 6) -->
+    {#if showCreateModal}
+      <div
+        class="create-modal-backdrop"
+        role="presentation"
+        onclick={() => (showCreateModal = false)}
+      ></div>
+      <div class="create-modal" role="dialog" aria-label={createModalKind === 'mixtape' ? $t('mixtapes.create.title') : $t('collections.create.title')}>
+        <h2>
+          {createModalKind === 'mixtape' ? $t('mixtapes.create.title') : $t('collections.create.title')}
+        </h2>
+
+        <label class="field">
+          <span class="field-label">Name</span>
+          <input
+            type="text"
+            bind:value={createModalName}
+            maxlength="80"
+            disabled={createModalBusy}
+          />
+        </label>
+
+        <div class="field">
+          <span class="field-label">Kind</span>
+          <div class="kind-toggle">
+            <label>
+              <input
+                type="radio"
+                name="create-modal-kind"
+                value="mixtape"
+                bind:group={createModalKind}
+                disabled={createModalBusy}
+              />
+              <span>{$t('mixtapes.nav')}</span>
+            </label>
+            <label>
+              <input
+                type="radio"
+                name="create-modal-kind"
+                value="collection"
+                bind:group={createModalKind}
+                disabled={createModalBusy}
+              />
+              <span>{$t('collections.nav')}</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button
+            class="secondary-btn"
+            onclick={() => (showCreateModal = false)}
+            disabled={createModalBusy}
+          >
+            {$t('actions.cancel')}
+          </button>
+          <button
+            class="primary-btn"
+            onclick={submitCreateModal}
+            disabled={createModalBusy || !createModalName.trim()}
+          >
+            {createModalKind === 'mixtape'
+              ? $t('mixtapes.empty.cta')
+              : $t('collections.empty.cta')}
+          </button>
+        </div>
+      </div>
+    {/if}
 
   </div>
 {/if}
@@ -6421,31 +6552,6 @@
     background: var(--bg-hover);
   }
 
-  /* Coming soon placeholder for Mixtapes/Collections */
-  .coming-soon {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    height: 100%;
-    color: var(--text-muted);
-    padding: 40px;
-    text-align: center;
-  }
-
-  .coming-soon h1 {
-    font-size: 22px;
-    font-weight: 700;
-    color: var(--text-primary);
-    margin: 0;
-  }
-
-  .coming-soon p {
-    font-size: 14px;
-    margin: 0;
-  }
-
   /* Global back-to-top button */
   .back-to-top-global {
     position: fixed;
@@ -6469,6 +6575,113 @@
   .back-to-top-global:hover {
     background: var(--bg-tertiary);
     color: var(--text-primary);
+  }
+
+  /* Mixtape / Collection detail placeholder (replaced in Phase 6) */
+  .detail-placeholder {
+    padding: 40px;
+    color: var(--text-primary);
+  }
+  .detail-placeholder .hint {
+    color: var(--text-muted);
+    font-style: italic;
+    margin-top: 16px;
+  }
+
+  /* Inline create modal (replaced / enhanced in Phase 6) */
+  .create-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 9998;
+  }
+  .create-modal {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 420px;
+    max-width: 90vw;
+    padding: 24px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    border: 1px solid var(--bg-tertiary);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .create-modal h2 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+  }
+  .create-modal .field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .create-modal .field-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .create-modal input[type="text"] {
+    padding: 10px 12px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--bg-tertiary);
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: inherit;
+  }
+  .create-modal .kind-toggle {
+    display: flex;
+    gap: 12px;
+  }
+  .create-modal .kind-toggle label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-primary);
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .create-modal .modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .create-modal .primary-btn {
+    padding: 10px 20px;
+    background: var(--accent-primary);
+    color: #ffffff;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .create-modal .primary-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .create-modal .secondary-btn {
+    padding: 10px 16px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--bg-tertiary);
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
   }
 
 </style>
