@@ -322,3 +322,114 @@ pub async fn v2_reorder_mixtape_items(
             .map_err(|e| RuntimeError::Internal(e.to_string()))
     })
 }
+
+// ──────────────────────────── Enqueue command ────────────────────────────
+
+/// Resolve and enqueue all tracks in a MixtapeCollection.
+///
+/// `mode`: `"replace"` | `"append"` | `"play_next"` (default: `"append"`)
+///
+/// On `"replace"` the queue is cleared and the first track starts playing
+/// immediately. On `"append"` the tracks are appended to the end of the queue.
+/// On `"play_next"` they are inserted after the current track (in order).
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub async fn v2_enqueue_collection(
+    collection_id: String,
+    mode: String,
+    library: State<'_, LibraryState>,
+    state: State<'_, crate::AppState>,
+    bridge: State<'_, crate::core_bridge::CoreBridgeState>,
+    runtime: State<'_, crate::runtime::RuntimeManagerState>,
+) -> Result<(), RuntimeError> {
+    use crate::mixtape::enqueue::{ProdItemResolver, resolve_collection_tracks};
+    use crate::runtime::CommandRequirement;
+
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresUserSession)
+        .await?;
+
+    log::info!(
+        "[V2] enqueue_collection id={} mode={}",
+        collection_id,
+        mode
+    );
+
+    // 1. Load the collection from the repo.
+    let collection = {
+        let guard = acquire_db!(library);
+        let db = guard.as_ref().ok_or(RuntimeError::UserSessionNotActivated)?;
+        db.with_connection(|conn| {
+            crate::mixtape::repo::get_collection(conn, &collection_id)
+                .map_err(|e| RuntimeError::Internal(e.to_string()))
+        })?
+        .ok_or_else(|| RuntimeError::Internal("collection not found".into()))?
+    };
+
+    // 2. Build the resolver from the shared Qobuz client + library state.
+    let client_guard = state.client.read().await;
+    let client = client_guard.clone();
+    drop(client_guard);
+
+    let resolver = ProdItemResolver {
+        client: &client,
+        library: &library,
+    };
+
+    // 3. Resolve items → Vec<CoreQueueTrack>.
+    let tracks = resolve_collection_tracks(
+        collection.items.clone(),
+        collection.play_mode,
+        &resolver,
+    )
+    .await;
+
+    if tracks.is_empty() {
+        return Err(RuntimeError::Internal(
+            "collection resolved to 0 playable tracks".into(),
+        ));
+    }
+
+    log::info!(
+        "[V2] enqueue_collection id={}: {} tracks resolved, applying mode={}",
+        collection_id,
+        tracks.len(),
+        mode
+    );
+
+    // 4. Apply to the queue via CoreBridge.
+    let bridge = bridge.get().await;
+    match mode.as_str() {
+        "replace" => {
+            bridge.set_queue(tracks, Some(0)).await;
+            bridge.play_index(0).await;
+        }
+        "play_next" => {
+            // Insert in reverse so the first track ends up immediately after current.
+            for track in tracks.into_iter().rev() {
+                bridge.add_track_next(track).await;
+            }
+        }
+        _ => {
+            // Default: append to end.
+            bridge.add_tracks(tracks).await;
+        }
+    }
+
+    // 5. TODO(Task 3.3): stamp queue_source_collection_id on RuntimeManager once
+    // that field is added so session persistence can record which collection
+    // is playing. Skipped here — no-op until Task 3.3.
+
+    // 6. Bump play stats (best-effort).
+    {
+        let guard = acquire_db!(library);
+        if let Some(db) = guard.as_ref() {
+            let _ = db.with_connection(|conn| {
+                crate::mixtape::repo::touch_play(conn, &collection_id)
+            });
+        }
+    }
+
+    Ok(())
+}

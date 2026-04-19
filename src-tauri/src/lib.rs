@@ -1800,6 +1800,7 @@ pub fn run() {
             commands_v2::v2_add_mixtape_item,
             commands_v2::v2_remove_mixtape_item,
             commands_v2::v2_reorder_mixtape_items,
+            commands_v2::v2_enqueue_collection,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
