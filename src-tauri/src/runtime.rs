@@ -155,6 +155,13 @@ pub enum CommandRequirement {
 pub struct RuntimeManager {
     state: Arc<RwLock<RuntimeStatus>>,
     bootstrap_in_progress: Arc<RwLock<bool>>,
+    /// Tracks which Mixtape/Collection the current queue was built from.
+    /// Set by v2_enqueue_collection (replace mode), cleared by any
+    /// non-Mixtape queue replacement (set_queue / clear_queue).
+    /// Append-style ops (add/add_next/bulk) preserve this value.
+    /// Persistence is in-memory only; session_queue_state table will
+    /// add the source_collection_id column when it lands.
+    queue_source_collection_id: RwLock<Option<String>>,
 }
 
 impl RuntimeManager {
@@ -162,7 +169,18 @@ impl RuntimeManager {
         Self {
             state: Arc::new(RwLock::new(RuntimeStatus::default())),
             bootstrap_in_progress: Arc::new(RwLock::new(false)),
+            queue_source_collection_id: RwLock::new(None),
         }
+    }
+
+    /// Set (or clear) which collection the current queue was built from.
+    pub async fn set_queue_source_collection(&self, id: Option<String>) {
+        *self.queue_source_collection_id.write().await = id;
+    }
+
+    /// Return the collection ID that seeded the current queue, if any.
+    pub async fn get_queue_source_collection(&self) -> Option<String> {
+        self.queue_source_collection_id.read().await.clone()
     }
 
     /// Get current runtime status
@@ -380,4 +398,28 @@ pub enum RuntimeEvent {
     RuntimeDegraded { reason: DegradedReason },
     /// Runtime fully ready
     RuntimeReady { user_id: u64 },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_mixtape_context_set_clear() {
+        let mgr = RuntimeManager::new();
+
+        // Initially None
+        assert_eq!(mgr.get_queue_source_collection().await, None);
+
+        // Set Some
+        mgr.set_queue_source_collection(Some("col-abc".to_string())).await;
+        assert_eq!(
+            mgr.get_queue_source_collection().await,
+            Some("col-abc".to_string())
+        );
+
+        // Clear to None
+        mgr.set_queue_source_collection(None).await;
+        assert_eq!(mgr.get_queue_source_collection().await, None);
+    }
 }

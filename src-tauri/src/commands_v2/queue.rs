@@ -156,6 +156,8 @@ pub async fn v2_clear_queue(
 
     let bridge = bridge.get().await;
     bridge.clear_queue().await;
+    // Queue replaced — Mixtape context is no longer valid.
+    runtime.manager().set_queue_source_collection(None).await;
     Ok(())
 }
 
@@ -582,6 +584,8 @@ pub async fn v2_set_queue(
     let queue_tracks: Vec<CoreQueueTrack> = tracks.into_iter().map(Into::into).collect();
     let bridge = bridge.get().await;
     bridge.set_queue(queue_tracks, Some(start_index)).await;
+    // Queue replaced — Mixtape context is no longer valid.
+    runtime.manager().set_queue_source_collection(None).await;
     Ok(())
 }
 

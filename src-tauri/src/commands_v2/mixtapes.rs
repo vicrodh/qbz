@@ -418,9 +418,15 @@ pub async fn v2_enqueue_collection(
         }
     }
 
-    // 5. TODO(Task 3.3): stamp queue_source_collection_id on RuntimeManager once
-    // that field is added so session persistence can record which collection
-    // is playing. Skipped here — no-op until Task 3.3.
+    // 5. Stamp queue_source_collection_id on RuntimeManager.
+    // Only set when the queue is replaced (replace mode). Append/play_next ops
+    // preserve whatever context was already set.
+    if mode.as_str() == "replace" {
+        runtime
+            .manager()
+            .set_queue_source_collection(Some(collection_id.clone()))
+            .await;
+    }
 
     // 6. Bump play stats (best-effort).
     {
