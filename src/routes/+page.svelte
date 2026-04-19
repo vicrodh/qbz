@@ -6613,15 +6613,11 @@
     color: var(--text-primary);
   }
 
-  /* Mixtape / Collection detail placeholder (replaced in Phase 6) */
+  /* Fallback shell for "no collection selected" / "no artist selected" — the
+     real detail view lives in MixtapeCollectionDetailView.svelte. */
   .detail-placeholder {
     padding: 40px;
     color: var(--text-primary);
-  }
-  .detail-placeholder .hint {
-    color: var(--text-muted);
-    font-style: italic;
-    margin-top: 16px;
   }
 
   /* Inline create modal (replaced / enhanced in Phase 6) */
