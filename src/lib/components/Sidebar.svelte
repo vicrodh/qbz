@@ -1587,7 +1587,7 @@
             onclick={() => handleViewChange('favorites')}
           >
             <div class="icon-container">
-              <img src="/music-library.svg" alt="" class="favorites-nav-icon" />
+              <span class="favorites-nav-icon favorites-nav-icon-mask" aria-hidden="true"></span>
             </div>
             <span class="label">{$t('nav.favorites')}</span>
           </button>
@@ -1642,7 +1642,7 @@
           title={$t('nav.favorites')}
         >
           <div class="icon-container">
-            <img src="/music-library.svg" alt="" class="favorites-nav-icon" />
+            <span class="favorites-nav-icon favorites-nav-icon-mask" aria-hidden="true"></span>
           </div>
         </button>
       {/if}
@@ -3147,8 +3147,15 @@
     width: 14px;
     height: 14px;
     object-fit: contain;
-    opacity: 0.75;
-    filter: var(--icon-filter, none);
+    opacity: 0.85;
+  }
+
+  /* Monochrome SVG tinting via CSS mask — silhouette inherits currentColor. */
+  .favorites-nav-icon-mask {
+    display: inline-block;
+    background-color: currentColor;
+    -webkit-mask: url('/music-library-2.svg') center / contain no-repeat;
+    mask: url('/music-library-2.svg') center / contain no-repeat;
   }
 
   .nav-item.active .favorites-nav-icon,

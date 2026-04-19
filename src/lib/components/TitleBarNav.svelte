@@ -185,7 +185,7 @@
       onclick={() => onNavigate('favorites-tracks')}
       data-tauri-drag-region="false"
     >
-      <img src="/music-library.svg" alt="" class="titlebar-nav-icon" />
+      <span class="titlebar-nav-icon titlebar-nav-icon-mask" aria-hidden="true"></span>
       <span class="nav-label">{$t('nav.favorites')}</span>
       <ChevronDown size={10} />
     </button>
@@ -347,8 +347,15 @@
     height: 12px;
     object-fit: contain;
     flex-shrink: 0;
-    opacity: 0.8;
-    filter: var(--icon-filter, none);
+    opacity: 0.85;
+  }
+
+  /* Monochrome SVG tinting via CSS mask — silhouette inherits currentColor. */
+  .titlebar-nav-icon-mask {
+    display: inline-block;
+    background-color: currentColor;
+    -webkit-mask: url('/music-library-2.svg') center / contain no-repeat;
+    mask: url('/music-library-2.svg') center / contain no-repeat;
   }
 
   .nav-btn.active .titlebar-nav-icon,
