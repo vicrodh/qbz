@@ -188,8 +188,9 @@
   // Mixtapes / Collections views and store
   import MixtapesView from '$lib/components/views/MixtapesView.svelte';
   import CollectionsView from '$lib/components/views/CollectionsView.svelte';
+  import MixtapeCollectionDetailView from '$lib/components/views/MixtapeCollectionDetailView.svelte';
   import {
-    getCollection,
+    collectionsStore,
     createCollection,
     type CollectionKind,
   } from '$lib/stores/mixtapeCollectionsStore';
@@ -5943,20 +5944,24 @@
           }}
         />
       {:else if activeView === 'mixtape-detail'}
-        {#await getCollection(mixtapeDetailId ?? '') then collection}
-          {#if collection}
-            <div class="detail-placeholder">
-              <h1>{collection.name}</h1>
-              <p>{collection.kind}</p>
-              <p>{collection.items.length} items</p>
-              <p class="hint">Full detail view is built in Phase 6.</p>
-            </div>
-          {:else}
-            <div class="detail-placeholder">
-              <h1>{$t('errors.notFound')}</h1>
-            </div>
-          {/if}
-        {/await}
+        {#if mixtapeDetailId}
+          <MixtapeCollectionDetailView
+            collectionId={mixtapeDetailId}
+            onBack={() => {
+              const col = $collectionsStore.find((x) => x.id === mixtapeDetailId);
+              if (col?.kind === 'collection' || col?.kind === 'artist_collection') {
+                navigateTo('collections');
+              } else {
+                navigateTo('mixtapes');
+              }
+              mixtapeDetailId = null;
+            }}
+          />
+        {:else}
+          <div class="detail-placeholder">
+            <p>No collection selected.</p>
+          </div>
+        {/if}
       {:else}
         <!-- Catch-all fallback: view has no matching data, show loading/error -->
         <div class="view-error">
