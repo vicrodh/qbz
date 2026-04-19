@@ -1,6 +1,6 @@
 <script lang="ts">
   import {
-    Play, Shuffle, MoreHorizontal, ChevronLeft, Disc, Music2, ListMusic, Trash2
+    Play, Shuffle, MoreHorizontal, ArrowLeft, Disc, Music2, ListMusic, Trash2
   } from 'lucide-svelte';
   import { t } from '$lib/i18n';
   import {
@@ -225,7 +225,8 @@
   {:else if !collection}
     <div class="not-found">
       <button class="back-btn" onclick={() => onBack?.()}>
-        <ChevronLeft size={14} /> Back
+        <ArrowLeft size={16} />
+        <span>{$t('actions.back')}</span>
       </button>
       <p>{$t('errors.notFound')}</p>
     </div>
@@ -234,7 +235,8 @@
     <header class="detail-header">
       {#if onBack}
         <button class="back-btn" onclick={() => onBack()}>
-          <ChevronLeft size={14} /> Back
+          <ArrowLeft size={16} />
+          <span>{$t('actions.back')}</span>
         </button>
       {/if}
 
@@ -480,23 +482,24 @@
     color: var(--text-primary);
   }
 
+  /* Mirror of ArtistDetailView's .back-btn — borderless, text + icon, muted. */
   .back-btn {
-    display: inline-flex;
+    display: flex;
     align-items: center;
-    gap: 4px;
-    padding: 6px 10px;
-    border: 1px solid var(--bg-tertiary);
-    border-radius: 6px;
-    background: var(--bg-secondary);
-    color: var(--text-secondary);
-    font-size: 12px;
-    font-family: inherit;
+    gap: 8px;
+    font-size: 14px;
+    color: var(--text-muted);
+    background: none;
+    border: none;
     cursor: pointer;
-    margin-bottom: 16px;
+    font-family: inherit;
+    padding: 0;
+    margin-top: 24px;
+    margin-bottom: 24px;
+    transition: color 150ms ease;
   }
   .back-btn:hover {
-    background: var(--bg-hover);
-    color: var(--text-primary);
+    color: var(--text-secondary);
   }
 
   .loading,

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
-  import { ChevronLeft, LibraryBig } from 'lucide-svelte';
+  import { ArrowLeft, LibraryBig } from 'lucide-svelte';
   import { t } from 'svelte-i18n';
   import {
     createCollection,
@@ -197,8 +197,21 @@
   }
 
   function buildGroups(candidates: Candidate[]): Group[] {
+    // Dedupe incoming candidates by (source, source_item_id) — the Qobuz
+    // artist-page endpoint can return the same album under multiple release
+    // groups ("albums" + "compilations"), and duplicates cause
+    // each_key_duplicate when those entries land in the same group's
+    // alternates list.
+    const seen = new Set<string>();
+    const unique = candidates.filter((c) => {
+      const key = `${c.source}|${c.source_item_id}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
     const byKey = new Map<string, Candidate[]>();
-    for (const candidate of candidates) {
+    for (const candidate of unique) {
       const existing = byKey.get(candidate.group_key) ?? [];
       existing.push(candidate);
       byKey.set(candidate.group_key, existing);
@@ -350,8 +363,8 @@
 <div class="builder-view">
   {#if onBack}
     <button class="back-btn" onclick={() => onBack?.()}>
-      <ChevronLeft size={14} />
-      {$t('actions.back')}
+      <ArrowLeft size={16} />
+      <span>{$t('actions.back')}</span>
     </button>
   {/if}
 
@@ -506,24 +519,24 @@
     color: var(--text-primary);
   }
 
-  /* ── Back button ── */
+  /* Mirror of ArtistDetailView's .back-btn — borderless, icon + text, muted. */
   .back-btn {
-    display: inline-flex;
+    display: flex;
     align-items: center;
-    gap: 4px;
-    padding: 6px 10px;
-    border: 1px solid var(--bg-tertiary);
-    border-radius: 6px;
-    background: var(--bg-secondary);
-    color: var(--text-secondary);
-    font-size: 12px;
-    font-family: inherit;
+    gap: 8px;
+    font-size: 14px;
+    color: var(--text-muted);
+    background: none;
+    border: none;
     cursor: pointer;
-    margin-bottom: 20px;
+    font-family: inherit;
+    padding: 0;
+    margin-top: 24px;
+    margin-bottom: 24px;
+    transition: color 150ms ease;
   }
   .back-btn:hover {
-    background: var(--bg-hover);
-    color: var(--text-primary);
+    color: var(--text-secondary);
   }
 
   /* ── Header ── */
