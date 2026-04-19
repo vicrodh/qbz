@@ -2,10 +2,16 @@
   import { tick } from 'svelte';
   import { Search, HardDrive, Plus, RefreshCw, ChevronDown, ChevronUp, Heart, ListMusic, Import, Settings, Ellipsis, ArrowUpDown, ChevronRight, ChevronLeft, Folder, FolderPlus, X, User, Disc, Disc3, Music, ShoppingBag, Eye, EyeOff, Pencil } from 'lucide-svelte';
   import type { FavoritesPreferences } from '$lib/types';
-  import { invoke } from '@tauri-apps/api/core';
+  import { invoke, convertFileSrc } from '@tauri-apps/api/core';
   import { onMount } from 'svelte';
   import NavigationItem from './NavigationItem.svelte';
   import UserCard from './UserCard.svelte';
+  import MyQbzNavEditModal from './MyQbzNavEditModal.svelte';
+  import {
+    myQbzNavStore,
+    setMyQbzExpanded,
+    DEFAULT_ICON,
+  } from '$lib/stores/myQbzNavStore';
   import { t } from '$lib/i18n';
   import {
     getSearchQuery,
@@ -138,6 +144,14 @@
   let favoritesTabOrder = $state<string[]>(['tracks', 'albums', 'artists', 'labels', 'playlists']);
   let showFavoritesMenu = $state(false);
   let favoritesMenuPos = $state({ x: 0, y: 0 });
+
+  // My QBZ nav state
+  let editMyQbzOpen = $state(false);
+  let myQbzContextMenu = $state<{ x: number; y: number } | null>(null);
+
+  function closeMyQbzContextMenu() {
+    myQbzContextMenu = null;
+  }
 
   // Sidebar search state - synced with SearchView
   let sidebarSearchQuery = $state(getSearchQuery());
@@ -1649,6 +1663,89 @@
       </nav>
     {/if}
 
+    <!-- My QBZ collapsible section -->
+    {#if isExpanded}
+    <nav class="nav-section my-qbz-section">
+      <!-- Parent row: click toggles expand, right-click opens context menu -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <div
+        class="my-qbz-parent"
+        class:active={activeView === 'mixtapes' || activeView === 'collections'}
+        onclick={() => setMyQbzExpanded(!$myQbzNavStore.expanded)}
+        oncontextmenu={(e) => {
+          e.preventDefault();
+          myQbzContextMenu = { x: e.clientX, y: e.clientY };
+        }}
+      >
+        <div class="icon-container">
+          <img
+            class="my-qbz-icon"
+            src={$myQbzNavStore.iconPath === DEFAULT_ICON
+              ? DEFAULT_ICON
+              : convertFileSrc($myQbzNavStore.iconPath)}
+            alt=""
+          />
+        </div>
+        <span class="label">{$myQbzNavStore.label}</span>
+        <span class="my-qbz-chevron" class:expanded={$myQbzNavStore.expanded}>
+          <ChevronRight size={12} />
+        </span>
+      </div>
+
+      {#if $myQbzNavStore.expanded}
+        <div class="my-qbz-children">
+          <NavigationItem
+            label={$t('mixtapes.nav')}
+            active={activeView === 'mixtapes'}
+            onclick={() => handleViewChange('mixtapes')}
+            showLabel={true}
+            indented={true}
+          >
+            {#snippet icon()}<img class="my-qbz-child-icon" src="/cassette.svg" alt="" />{/snippet}
+          </NavigationItem>
+          <NavigationItem
+            label={$t('collections.nav')}
+            active={activeView === 'collections'}
+            onclick={() => handleViewChange('collections')}
+            showLabel={true}
+            indented={true}
+          >
+            {#snippet icon()}<img class="my-qbz-child-icon" src="/collection.svg" alt="" />{/snippet}
+          </NavigationItem>
+        </div>
+      {/if}
+    </nav>
+
+    {#if myQbzContextMenu}
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+      <div
+        class="my-qbz-context-backdrop"
+        role="presentation"
+        onclick={closeMyQbzContextMenu}
+      ></div>
+      <div
+        class="my-qbz-context-menu"
+        style:left="{myQbzContextMenu.x}px"
+        style:top="{myQbzContextMenu.y}px"
+      >
+        <button
+          class="my-qbz-context-item"
+          onclick={() => { editMyQbzOpen = true; closeMyQbzContextMenu(); }}
+        >
+          <Pencil size={14} />
+          <span>Rename / Change icon…</span>
+        </button>
+      </div>
+    {/if}
+
+    <MyQbzNavEditModal
+      open={editMyQbzOpen}
+      onClose={() => (editMyQbzOpen = false)}
+    />
+    {/if}
+
     <!-- Playlists Section (hidden in offline mode) -->
     {#if !isOffline}
     <div class="section playlists-section">
@@ -3134,5 +3231,129 @@
     height: 1px;
     background: var(--border-subtle);
     margin: 6px 0;
+  }
+
+  /* My QBZ collapsible nav section */
+  .my-qbz-section {
+    margin-top: 2px;
+  }
+
+  .my-qbz-parent {
+    position: relative;
+    width: 100%;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 8px;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color 150ms ease, background-color 150ms ease;
+    user-select: none;
+  }
+
+  .my-qbz-parent:hover {
+    background-color: var(--bg-hover);
+  }
+
+  .my-qbz-parent.active {
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+  }
+
+  .my-qbz-parent .icon-container {
+    width: 14px;
+    height: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .my-qbz-parent .label {
+    font-size: 13px;
+    font-weight: 400;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .my-qbz-icon {
+    width: 14px;
+    height: 14px;
+    object-fit: contain;
+    opacity: 0.75;
+    filter: var(--icon-filter, none);
+  }
+
+  .my-qbz-parent:hover .my-qbz-icon,
+  .my-qbz-parent.active .my-qbz-icon {
+    opacity: 1;
+  }
+
+  .my-qbz-child-icon {
+    width: 14px;
+    height: 14px;
+    object-fit: contain;
+    opacity: 0.75;
+    filter: var(--icon-filter, none);
+  }
+
+  .my-qbz-chevron {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 150ms ease;
+    flex-shrink: 0;
+  }
+
+  .my-qbz-chevron.expanded {
+    transform: rotate(90deg);
+  }
+
+  .my-qbz-children {
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Context menu */
+  .my-qbz-context-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 9998;
+  }
+
+  .my-qbz-context-menu {
+    position: fixed;
+    background: var(--bg-primary);
+    border: 1px solid var(--bg-tertiary);
+    border-radius: 8px;
+    padding: 4px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    z-index: 9999;
+  }
+
+  .my-qbz-context-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-family: inherit;
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+    border-radius: 6px;
+  }
+
+  .my-qbz-context-item:hover {
+    background: var(--bg-hover);
   }
 </style>

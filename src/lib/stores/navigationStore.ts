@@ -41,7 +41,9 @@ export type ViewType =
   | 'weeklyq'
   | 'favq'
   | 'topq'
-  | 'artists-by-location';
+  | 'artists-by-location'
+  | 'mixtapes'
+  | 'collections';
 export type FavoritesTab = 'tracks' | 'albums' | 'artists' | 'labels' | 'playlists';
 
 // History entry: view + optional item identifier for granular back/forward

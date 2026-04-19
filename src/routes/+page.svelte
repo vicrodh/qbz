@@ -464,6 +464,7 @@
   import CastPicker from '$lib/components/CastPicker.svelte';
   import LyricsSidebar from '$lib/components/lyrics/LyricsSidebar.svelte';
   import { reloadLyricsDisplay } from '$lib/stores/lyricsDisplayStore';
+  import { reloadMyQbzNav } from '$lib/stores/myQbzNavStore';
   import OfflinePlaceholder from '$lib/components/OfflinePlaceholder.svelte';
   import UpdateAvailableModal from '$lib/components/updates/UpdateAvailableModal.svelte';
   import UpdateReminderModal from '$lib/components/updates/UpdateReminderModal.svelte';
@@ -3585,6 +3586,7 @@
     // Re-sync volume from the now-correct user-scoped localStorage key
     await resyncPersistedVolume();
     reloadLyricsDisplay();
+    reloadMyQbzNav();
 
     // Signal that per-user backend stores are ready — the launch update
     // flow $effect gates on this to avoid reading default preferences
@@ -5882,6 +5884,16 @@
           onAlbumClick={handleAlbumClick}
           onAlbumPlay={playAlbumById}
         />
+      {:else if activeView === 'mixtapes'}
+        <div class="coming-soon">
+          <h1>{$t('mixtapes.nav')}</h1>
+          <p>Coming soon</p>
+        </div>
+      {:else if activeView === 'collections'}
+        <div class="coming-soon">
+          <h1>{$t('collections.nav')}</h1>
+          <p>Coming soon</p>
+        </div>
       {:else}
         <!-- Catch-all fallback: view has no matching data, show loading/error -->
         <div class="view-error">
@@ -6407,6 +6419,31 @@
 
   .view-error-back:hover {
     background: var(--bg-hover);
+  }
+
+  /* Coming soon placeholder for Mixtapes/Collections */
+  .coming-soon {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    height: 100%;
+    color: var(--text-muted);
+    padding: 40px;
+    text-align: center;
+  }
+
+  .coming-soon h1 {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+  }
+
+  .coming-soon p {
+    font-size: 14px;
+    margin: 0;
   }
 
   /* Global back-to-top button */
