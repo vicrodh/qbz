@@ -5,8 +5,9 @@
 
 use tauri::State;
 
+use crate::core_bridge::CoreBridgeState;
 use crate::library::LibraryState;
-use crate::runtime::RuntimeError;
+use crate::runtime::{CommandRequirement, RuntimeError, RuntimeManagerState};
 
 // ──────────────────────────── String → enum helpers ────────────────────────────
 // These mirror the private helpers in mixtape::repo. Duplicated here to avoid
@@ -429,6 +430,102 @@ pub async fn v2_enqueue_collection(
                 crate::mixtape::repo::touch_play(conn, &collection_id)
             });
         }
+    }
+
+    Ok(())
+}
+
+// ──────────────────────────── Item-level skip commands ────────────────────────────
+
+/// Skip to the first track of the next collection item.
+///
+/// Uses `next_item_index` to locate the item boundary after the current track.
+/// If already at the last item, no action is taken (same no-op as reaching the
+/// end of the queue via the standard next-track button).
+#[tauri::command]
+pub async fn v2_skip_to_next_item(
+    bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<(), RuntimeError> {
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresUserSession)
+        .await?;
+
+    log::info!("[V2] skip_to_next_item");
+
+    let bridge = bridge.get().await;
+
+    // Snapshot queue + current index in one atomic call.
+    let (queue, current_opt) = bridge.get_all_queue_tracks().await;
+    let current = current_opt.unwrap_or(0);
+
+    match crate::mixtape::enqueue::next_item_index(&queue, current) {
+        Some(target) => {
+            log::info!(
+                "[V2] skip_to_next_item: current={} → target={}",
+                current,
+                target
+            );
+            bridge
+                .play_index(target)
+                .await
+                .ok_or_else(|| RuntimeError::Internal("play_index returned None".into()))?;
+        }
+        None => {
+            // End of queue — match the behavior of v2_next_track when there is
+            // no next track: do nothing (the player stays on the last track).
+            log::info!("[V2] skip_to_next_item: already at last item, no-op");
+        }
+    }
+
+    Ok(())
+}
+
+/// Go back to the start of the current collection item, or — if playback is
+/// near the beginning of the item — jump to the start of the previous item.
+///
+/// Uses the same 3-second threshold as `previous_item_index`:
+/// - elapsed ≤ 3 s AND we are at item-start → jump to previous item
+/// - elapsed > 3 s OR we are mid-item → restart current item
+/// - If already at the very first item and eligible for "previous", stay put.
+#[tauri::command]
+pub async fn v2_skip_to_previous_item(
+    bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<(), RuntimeError> {
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresUserSession)
+        .await?;
+
+    log::info!("[V2] skip_to_previous_item");
+
+    let bridge = bridge.get().await;
+
+    // Snapshot queue + current index.
+    let (queue, current_opt) = bridge.get_all_queue_tracks().await;
+    let current = current_opt.unwrap_or(0);
+
+    // Current position from the player (seconds); convert to ms for the helper.
+    let elapsed_ms = bridge.player().state.current_position() * 1_000;
+
+    if let Some(target) =
+        crate::mixtape::enqueue::previous_item_index(&queue, current, elapsed_ms)
+    {
+        log::info!(
+            "[V2] skip_to_previous_item: current={} elapsed_ms={} → target={}",
+            current,
+            elapsed_ms,
+            target
+        );
+        bridge
+            .play_index(target)
+            .await
+            .ok_or_else(|| RuntimeError::Internal("play_index returned None".into()))?;
+    } else {
+        // Queue is empty or index is out of bounds — stay put.
+        log::info!("[V2] skip_to_previous_item: queue empty or no target, no-op");
     }
 
     Ok(())
