@@ -7,9 +7,10 @@
   import {
     HardDrive, Music, Disc3, MicVocal, FolderPlus, Trash2, RefreshCw,
     Settings, ArrowLeft, X, Play, CircleAlert, ImageDown, Upload, Search, LayoutGrid, List, PenLine,
-    Network, Power, PowerOff, ChevronLeft, ChevronRight, Shuffle, SlidersHorizontal, ArrowUpDown, ChevronDown, Check, SquareCheckBig
+    Network, Power, PowerOff, ChevronLeft, ChevronRight, Shuffle, SlidersHorizontal, ArrowUpDown, ChevronDown, Check, SquareCheckBig, CassetteTape
   } from 'lucide-svelte';
   import BulkActionBar from '../BulkActionBar.svelte';
+  import { openAddToMixtape } from '$lib/stores/addToMixtapeModalStore';
   import { buildQueueTrackFromLocalTrack } from '$lib/services/trackActions';
   import { cmdAddTracksToQueue, cmdAddTracksToQueueNext } from '$lib/services/commandRouter';
   import FolderSettingsModal from '../FolderSettingsModal.svelte';
@@ -86,6 +87,7 @@
     artist: string;
     all_artists?: string; // Comma-separated list of all contributing artists
     year?: number;
+    genre?: string;
     catalog_number?: string;
     artwork_path?: string;
     track_count: number;
@@ -110,6 +112,8 @@
     sampleRate: number;
     source: string;
     likelySingleFileAlbum?: boolean;
+    year?: number;
+    genre?: string;
   }
 
   interface PlexCachedTrack {
@@ -1367,7 +1371,9 @@
       sample_rate: plexAlbum.sampleRate,
       directory_path: '',
       source: 'plex',
-      likely_single_file_album: plexAlbum.likelySingleFileAlbum
+      likely_single_file_album: plexAlbum.likelySingleFileAlbum,
+      year: plexAlbum.year,
+      genre: plexAlbum.genre
     };
   }
 
@@ -3349,6 +3355,25 @@
             >
               <SquareCheckBig size={18} />
             </button>
+            <button
+              class="action-btn-circle"
+              onclick={() => {
+                if (!selectedAlbum) return;
+                openAddToMixtape({
+                  item_type: 'album',
+                  source: 'local',
+                  source_item_id: selectedAlbum.id,
+                  title: selectedAlbum.title,
+                  subtitle: selectedAlbum.artist,
+                  year: selectedAlbum.year,
+                  track_count: selectedAlbum.track_count,
+                });
+              }}
+              title={$t('common.addToMixtapeOrCollection')}
+              aria-label={$t('common.addToMixtapeOrCollection')}
+            >
+              <CassetteTape size={18} />
+            </button>
           </div>
         </div>
       </div>
@@ -4098,6 +4123,9 @@
                   <div class="artist-albums-grid">
                     {#each selectedArtistAlbums as album}
                       <AlbumCard
+                        albumId={album.id}
+                        year={album.year}
+                        trackCount={album.track_count}
                         artwork={getArtworkUrl(album.artwork_path)}
                         title={album.title}
                         artist={album.artist}

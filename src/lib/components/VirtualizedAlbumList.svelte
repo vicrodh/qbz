@@ -316,6 +316,9 @@
           <div class="album-grid-row">
             {#each item.albums as album (album.id)}
               <AlbumCard
+                albumId={album.id}
+                year={album.year}
+                trackCount={album.track_count}
                 artwork={getArtworkUrl(album.artwork_path)}
                 title={album.title}
                 artist={album.artist}
