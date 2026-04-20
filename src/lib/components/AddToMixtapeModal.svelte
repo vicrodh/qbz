@@ -24,10 +24,22 @@
 
   interface Props {
     open: boolean;
-    item: AddToMixtapeItem | null;
+    /** One or more items to add. Single-item use cases pass a 1-element array. */
+    items: AddToMixtapeItem[];
     onClose: () => void;
   }
-  let { open, item, onClose }: Props = $props();
+  let { open, items, onClose }: Props = $props();
+
+  const firstItem = $derived(items[0] ?? null);
+  const bulkMode = $derived(items.length > 1);
+
+  // Kind restriction: Collections hold whole albums only. If any incoming
+  // item is a track or playlist, restrict the target list to Mixtapes and
+  // ArtistCollections are also excluded (they're auto-generated from an
+  // artist's discography — not a user target).
+  const restrictToMixtape = $derived(
+    items.some((it) => it.item_type !== 'album'),
+  );
 
   let searchQuery = $state('');
   let busyCollectionId = $state<string | null>(null);
@@ -68,11 +80,16 @@
     }),
   );
 
-  // Filter by search query (case-insensitive substring on name)
+  // Filter by kind restriction + search query (case-insensitive).
+  const kindFilteredCollections = $derived(
+    restrictToMixtape
+      ? sortedCollections.filter((col) => col.kind === 'mixtape')
+      : sortedCollections,
+  );
   const filteredCollections = $derived(
     searchQuery.trim() === ''
-      ? sortedCollections
-      : sortedCollections.filter((col) =>
+      ? kindFilteredCollections
+      : kindFilteredCollections.filter((col) =>
           col.name.toLowerCase().includes(searchQuery.toLowerCase()),
         ),
   );
@@ -83,27 +100,50 @@
     return $t('mixtapes.label');
   }
 
+  async function addMany(collectionId: string): Promise<{ added: number; dup: number }> {
+    let added = 0;
+    let dup = 0;
+    for (const it of items) {
+      try {
+        const ok = await addItem(collectionId, {
+          item_type: it.item_type,
+          source: it.source,
+          source_item_id: it.source_item_id,
+          title: it.title,
+          subtitle: it.subtitle,
+          artwork_url: it.artwork_url,
+          year: it.year,
+          track_count: it.track_count,
+        });
+        if (ok) added += 1;
+        else dup += 1;
+      } catch (err) {
+        console.warn('[AddToMixtapeModal] addItem failed for one item:', err);
+      }
+    }
+    return { added, dup };
+  }
+
   async function handlePick(collection: MixtapeCollection) {
-    if (!item || busyCollectionId) return;
+    if (items.length === 0 || busyCollectionId) return;
     busyCollectionId = collection.id;
     try {
-      const added = await addItem(collection.id, {
-        item_type: item.item_type,
-        source: item.source,
-        source_item_id: item.source_item_id,
-        title: item.title,
-        subtitle: item.subtitle,
-        artwork_url: item.artwork_url,
-        year: item.year,
-        track_count: item.track_count,
-      });
-      if (added) {
-        showToast(
-          $t('common.addedToMixtapeOrCollection', { values: { name: collection.name } }),
-          'success',
-        );
+      const { added, dup } = await addMany(collection.id);
+      if (added > 0) {
+        if (bulkMode) {
+          showToast(
+            $t('mixtapes.bulkAdded', { values: { count: added, name: collection.name } }) ||
+              `Added ${added} to ${collection.name}`,
+            'success',
+          );
+        } else {
+          showToast(
+            $t('common.addedToMixtapeOrCollection', { values: { name: collection.name } }),
+            'success',
+          );
+        }
         await loadCollections();
-      } else {
+      } else if (dup > 0) {
         showToast(
           $t('common.alreadyInToast', { values: { name: collection.name } }),
           'info',
@@ -119,25 +159,24 @@
   }
 
   async function handleCreateAndAdd() {
-    if (!item || !createName.trim() || createBusy) return;
+    if (items.length === 0 || !createName.trim() || createBusy) return;
     createBusy = true;
     try {
       const created = await createCollection(createKind, createName.trim());
-      const added = await addItem(created.id, {
-        item_type: item.item_type,
-        source: item.source,
-        source_item_id: item.source_item_id,
-        title: item.title,
-        subtitle: item.subtitle,
-        artwork_url: item.artwork_url,
-        year: item.year,
-        track_count: item.track_count,
-      });
-      if (added) {
-        showToast(
-          $t('common.addedToMixtapeOrCollection', { values: { name: created.name } }),
-          'success',
-        );
+      const { added } = await addMany(created.id);
+      if (added > 0) {
+        if (bulkMode) {
+          showToast(
+            $t('mixtapes.bulkAdded', { values: { count: added, name: created.name } }) ||
+              `Added ${added} to ${created.name}`,
+            'success',
+          );
+        } else {
+          showToast(
+            $t('common.addedToMixtapeOrCollection', { values: { name: created.name } }),
+            'success',
+          );
+        }
       }
       await loadCollections();
       onClose();
@@ -162,7 +201,7 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-{#if open && item}
+{#if open && firstItem}
   <div
     class="backdrop"
     role="presentation"
@@ -173,9 +212,17 @@
     <header class="modal-header">
       <div class="header-text">
         <span class="eyebrow">{$t('common.addToMixtapeOrCollection')}</span>
-        <h2 class="title">{item.title}</h2>
-        {#if item.subtitle}
-          <span class="subtitle">{item.subtitle}</span>
+        {#if bulkMode}
+          <h2 class="title">
+            {$t('mixtapes.bulkAddTitle', { values: { count: items.length } }) ||
+              `${items.length} items`}
+          </h2>
+          <span class="subtitle">{firstItem.title}{items.length > 1 ? ` + ${items.length - 1} more` : ''}</span>
+        {:else}
+          <h2 class="title">{firstItem.title}</h2>
+          {#if firstItem.subtitle}
+            <span class="subtitle">{firstItem.subtitle}</span>
+          {/if}
         {/if}
       </div>
       <button type="button" class="close-btn" onclick={onClose} aria-label="Close">
@@ -241,13 +288,17 @@
         >
           <Plus size={14} /> {$t('mixtapes.nav')}
         </button>
-        <button
-          type="button"
-          class="create-btn"
-          onclick={() => { createKind = 'collection'; creating = true; }}
-        >
-          <Plus size={14} /> {$t('collections.nav')}
-        </button>
+        {#if !restrictToMixtape}
+          <!-- Collections hold whole albums only. Hide this entry point when
+               the picker is restricted (track / playlist targets). -->
+          <button
+            type="button"
+            class="create-btn"
+            onclick={() => { createKind = 'collection'; creating = true; }}
+          >
+            <Plus size={14} /> {$t('collections.nav')}
+          </button>
+        {/if}
       </footer>
     {:else}
       <!-- Create-new sub-panel -->

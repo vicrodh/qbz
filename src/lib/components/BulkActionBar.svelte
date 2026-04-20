@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ListPlus, ListEnd, ListMusic, Heart, HeartOff, Trash2, X, ChevronDown, CloudDownload } from 'lucide-svelte';
+  import { ListPlus, ListEnd, ListMusic, Heart, HeartOff, Trash2, X, ChevronDown, CloudDownload, CassetteTape } from 'lucide-svelte';
   import { t } from 'svelte-i18n';
 
   interface Props {
@@ -10,6 +10,8 @@
     onAddFavorites?: () => void;
     onRemoveFavorites?: () => void;
     onRemoveFromPlaylist?: () => void;
+    onAddToMixtape?: () => void;
+    onRemoveFromCollection?: () => void;
     onMakeOffline?: () => void;
     onClearSelection: () => void;
     placement?: 'top' | 'bottom';
@@ -23,6 +25,8 @@
     onAddFavorites,
     onRemoveFavorites,
     onRemoveFromPlaylist,
+    onAddToMixtape,
+    onRemoveFromCollection,
     onMakeOffline,
     onClearSelection,
     placement = 'bottom',
@@ -94,6 +98,13 @@
         <span>{$t('actions.addToPlaylist')}</span>
       </button>
 
+      {#if onAddToMixtape}
+        <button class="action-btn" onclick={onAddToMixtape} title={$t('common.addToMixtapeOrCollection')}>
+          <CassetteTape size={15} />
+          <span>{$t('common.addToMixtapeOrCollection')}</span>
+        </button>
+      {/if}
+
       {#if onMakeOffline}
         <button class="action-btn" onclick={onMakeOffline} title={$t('actions.makeAvailableOffline')}>
           <CloudDownload size={15} />
@@ -119,6 +130,13 @@
         <button class="action-btn danger" onclick={onRemoveFromPlaylist} title={$t('actions.removeFromPlaylist')}>
           <Trash2 size={15} />
           <span>{$t('actions.removeFromPlaylist')}</span>
+        </button>
+      {/if}
+
+      {#if onRemoveFromCollection}
+        <button class="action-btn danger" onclick={onRemoveFromCollection} title={$t('collectionDetail.removeItem')}>
+          <Trash2 size={15} />
+          <span>{$t('collectionDetail.removeItem')}</span>
         </button>
       {/if}
 
