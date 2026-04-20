@@ -7,9 +7,11 @@
     size: number;
     kind: CollectionKind;
     artistAvatarUrl?: string;
+    /** User-uploaded cover (already a browser-usable URL, i.e. convertFileSrc'd). */
+    customCoverUrl?: string | null;
   }
 
-  let { items, size, kind, artistAvatarUrl }: Props = $props();
+  let { items, size, kind, artistAvatarUrl, customCoverUrl = null }: Props = $props();
 
   /** 3×3 is reserved for large Collection shelves; everything else uses 2×2. */
   const cols = $derived(
@@ -35,8 +37,12 @@
   style:width="{size}px"
   style:height="{size}px"
   style:--cols={cols}
+  class:custom-cover={!!customCoverUrl}
 >
-  {#if items.length === 0}
+  {#if customCoverUrl}
+    <!-- User-uploaded custom cover takes precedence over the collage. -->
+    <img class="full-cover" src={customCoverUrl} alt="" loading="lazy" />
+  {:else if items.length === 0}
     <div class="empty-mosaic">
       {#if kind === 'mixtape'}
         <CassetteTape size={iconSize} />
@@ -81,6 +87,17 @@
     border-radius: 8px;
     overflow: hidden;
     background: var(--bg-tertiary);
+  }
+  .mosaic.custom-cover {
+    display: block;
+    gap: 0;
+  }
+
+  .full-cover {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
   }
 
   .cell {

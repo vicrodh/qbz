@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { convertFileSrc } from '@tauri-apps/api/core';
   import { Plus } from 'lucide-svelte';
   import { t } from '$lib/i18n';
   import {
@@ -8,6 +9,10 @@
     type MixtapeCollection,
   } from '$lib/stores/mixtapeCollectionsStore';
   import CollectionMosaic from '../CollectionMosaic.svelte';
+
+  function coverUrlFor(col: MixtapeCollection): string | null {
+    return col.custom_artwork_path ? convertFileSrc(col.custom_artwork_path) : null;
+  }
 
   interface Props {
     onOpen?: (id: string) => void;
@@ -78,7 +83,12 @@
           class="card"
           onclick={() => onOpen?.(col.id)}
         >
-          <CollectionMosaic items={col.items} size={184} kind={col.kind} />
+          <CollectionMosaic
+            items={col.items}
+            size={184}
+            kind={col.kind}
+            customCoverUrl={coverUrlFor(col)}
+          />
           <div class="card-label">{labelFor(col)}</div>
           <div class="card-name">{col.name}</div>
           <div class="card-meta">
