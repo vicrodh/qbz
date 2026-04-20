@@ -1,31 +1,43 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
-  import { ArrowLeft, LibraryBig } from 'lucide-svelte';
+  import { ArrowLeft, Check, LibraryBig, RotateCcw } from 'lucide-svelte';
   import { t } from 'svelte-i18n';
   import {
     createCollection,
     addItem,
     type MixtapeCollection,
   } from '$lib/stores/mixtapeCollectionsStore';
-  import SourceBadge from '../SourceBadge.svelte';
   import QualityBadge from '../QualityBadge.svelte';
   import { showToast } from '$lib/stores/toastStore';
+  import { getUserItem } from '$lib/utils/userStorage';
+  import {
+    releaseTypeOverrides,
+    loadReleaseTypeOverrides,
+    setReleaseTypeOverride,
+    clearReleaseTypeOverride,
+    overrideKey as overrideKeyFn,
+    RELEASE_TYPE_CHOICES,
+    type ReleaseType as StoreReleaseType,
+  } from '$lib/stores/releaseTypeOverridesStore';
   import type { PageArtistResponse, PageArtistRelease } from '$lib/types';
 
   interface Props {
     artistId: string;
     onBack?: () => void;
     onCreated?: (collection: MixtapeCollection) => void;
+    onOpenAlbum?: (source: 'qobuz' | 'local' | 'plex', sourceItemId: string) => void;
   }
-  let { artistId, onBack, onCreated }: Props = $props();
+  let { artistId, onBack, onCreated, onOpenAlbum }: Props = $props();
 
   // ── Types ──────────────────────────────────────────────────────────────────
+
+  type ReleaseType = 'album' | 'ep' | 'single' | 'live' | 'compilation';
 
   /** One candidate per album from a single source. */
   interface Candidate {
     group_key: string;
-    source: 'qobuz' | 'local';
+    source: 'qobuz' | 'local' | 'plex';
     source_item_id: string;
     title: string;
     artist: string;
@@ -36,6 +48,7 @@
     max_sample_rate: number | null; // kHz
     format: string | null;
     is_compilation: boolean;
+    release_type: ReleaseType;
     quality_score: number;
   }
 
@@ -61,6 +74,21 @@
     bit_depth?: number;
     sample_rate: number;
     source?: string;
+  }
+
+  interface PlexCachedAlbum {
+    id: string;
+    title: string;
+    artist: string;
+    artworkPath?: string;
+    trackCount: number;
+    totalDurationSecs: number;
+    format: string;
+    bitDepth?: number;
+    sampleRate: number;
+    source: string;
+    year?: number;
+    genre?: string;
   }
 
   // ── State ──────────────────────────────────────────────────────────────────
@@ -98,6 +126,68 @@
     return /\b(best of|greatest hits|anthology|the very best|essential|collection)\b/i.test(title);
   }
 
+  /**
+   * Classify a release as Album / EP / Single / Live / Compilation.
+   * Uses the Qobuz release_type + group_type when available (authoritative)
+   * and falls back to a title + track-count heuristic for local / Plex
+   * albums where metadata rarely carries this distinction.
+   */
+  function classifyRelease(
+    title: string,
+    trackCount: number | null,
+    qobuzReleaseType: string | null,
+    qobuzGroupType: string | null,
+    titleIsCompilation: boolean,
+  ): ReleaseType {
+    const normalizedQobuz = (qobuzReleaseType || qobuzGroupType || '').toLowerCase();
+    if (normalizedQobuz.includes('compilation') || titleIsCompilation) return 'compilation';
+    if (normalizedQobuz === 'live' || /\blive\b|\bconcert\b|\bunplugged\b/i.test(title)) return 'live';
+    if (normalizedQobuz === 'ep' || /\bep\b/i.test(title)) return 'ep';
+    if (normalizedQobuz === 'single') return 'single';
+    if (normalizedQobuz === 'album') return 'album';
+    // Heuristic fallback for local / Plex where track_count is our only signal.
+    if (trackCount != null) {
+      if (trackCount <= 3) return 'single';
+      if (trackCount <= 6) return 'ep';
+    }
+    return 'album';
+  }
+
+  // ── Release-type user overrides (shared sidecar store) ────────────────────
+  // The classifier gets the vast majority right, but some releases come out
+  // mislabeled. The user can click the type cell to override — stored
+  // locally per-user in $releaseTypeOverrides, shared with other views so an
+  // override set here shows up in Collection detail and vice-versa.
+
+  function overrideKey(source: Candidate['source'], sourceItemId: string): string {
+    return overrideKeyFn(source, sourceItemId);
+  }
+
+  function applyOverride(candidate: Candidate): ReleaseType {
+    const override = $releaseTypeOverrides[overrideKey(candidate.source, candidate.source_item_id)];
+    return (override as ReleaseType | undefined) ?? candidate.release_type;
+  }
+
+  function hasOverride(candidate: Candidate): boolean {
+    return overrideKey(candidate.source, candidate.source_item_id) in $releaseTypeOverrides;
+  }
+
+  function applyTypeChoice(candidate: Candidate, choice: StoreReleaseType) {
+    setReleaseTypeOverride(candidate.source, candidate.source_item_id, choice);
+  }
+
+  function resetTypeOverride(candidate: Candidate) {
+    clearReleaseTypeOverride(candidate.source, candidate.source_item_id);
+  }
+
+  // Type-cell popover state — tracks which row's menu is open by (source|id).
+  let openTypeMenuKey = $state<string | null>(null);
+  const TYPE_CHOICES: ReleaseType[] = RELEASE_TYPE_CHOICES as ReleaseType[];
+
+  function closeTypeMenu() {
+    openTypeMenuKey = null;
+  }
+
   // ── Data fetching ──────────────────────────────────────────────────────────
 
   async function fetchQobuzAlbums(): Promise<Candidate[]> {
@@ -122,6 +212,7 @@
         const year = rel.dates?.original
           ? new Date(rel.dates.original).getFullYear()
           : null;
+        const titleIsCompilation = isCompilation(title) || group.type === 'compilation';
         const candidate: Candidate = {
           group_key: `${normalizeTitle(title)}|${year ?? ''}`,
           source: 'qobuz',
@@ -134,7 +225,14 @@
           max_bit_depth: rel.audio_info?.maximum_bit_depth ?? null,
           max_sample_rate: rel.audio_info?.maximum_sampling_rate ?? null,
           format: 'FLAC',
-          is_compilation: isCompilation(title) || group.type === 'compilation',
+          is_compilation: titleIsCompilation,
+          release_type: classifyRelease(
+            title,
+            rel.tracks_count ?? null,
+            rel.release_type ?? null,
+            group.type ?? null,
+            titleIsCompilation,
+          ),
           quality_score: 0,
         };
         candidate.quality_score = qualityScore(candidate);
@@ -145,55 +243,121 @@
     return candidates;
   }
 
-  async function fetchLocalAlbums(): Promise<Candidate[]> {
+  function isPlexLibraryEnabled(): boolean {
+    return getUserItem('qbz-plex-enabled') === 'true';
+  }
+
+  async function fetchPlexAlbumsFromCache(): Promise<PlexCachedAlbum[]> {
     try {
-      const albums = await invoke<LocalAlbum[]>('v2_library_get_albums', {
-        include_hidden: false,
-        exclude_network_folders: false,
-      });
-
-      if (!albums || albums.length === 0) return [];
-
-      const normalizedArtistName = artistName.toLowerCase().trim();
-
-      // Filter albums that belong to this artist by name match
-      const filtered = albums.filter((album) => {
-        const normalizedAlbumArtist = (album.artist ?? '').toLowerCase().trim();
-        if (normalizedAlbumArtist === normalizedArtistName) return true;
-        // Check all_artists comma-separated list
-        if (album.all_artists) {
-          const parts = album.all_artists.split(',').map((s) => s.toLowerCase().trim());
-          if (parts.includes(normalizedArtistName)) return true;
-        }
-        return false;
-      });
-
-      return filtered.map((album): Candidate => {
-        const title = String(album.title ?? '');
-        const year = album.year ?? null;
-        const sampleRateKhz = album.sample_rate ? album.sample_rate / 1000 : 44.1;
-        const candidate: Candidate = {
-          group_key: `${normalizeTitle(title)}|${year ?? ''}`,
-          source: 'local',
-          source_item_id: String(album.id),
-          title,
-          artist: album.artist ?? artistName,
-          year,
-          artwork_url: null, // local album paths not usable as URLs directly
-          track_count: album.track_count ?? null,
-          max_bit_depth: album.bit_depth ?? null,
-          max_sample_rate: sampleRateKhz,
-          format: album.format ?? 'FLAC',
-          is_compilation: isCompilation(title),
-          quality_score: 0,
-        };
-        candidate.quality_score = qualityScore(candidate);
-        return candidate;
-      });
-    } catch (err) {
-      console.warn('[DiscographyBuilder] local fetch failed (non-fatal):', err);
+      return await invoke<PlexCachedAlbum[]>('v2_plex_cache_get_albums');
+    } catch {
       return [];
     }
+  }
+
+  function matchesArtist(albumArtist: string, allArtists: string | undefined, target: string): boolean {
+    const normalizedTarget = target.toLowerCase().trim();
+    if (!normalizedTarget) return false;
+    if ((albumArtist ?? '').toLowerCase().trim() === normalizedTarget) return true;
+    if (allArtists) {
+      const parts = allArtists.split(',').map((s) => s.toLowerCase().trim());
+      if (parts.includes(normalizedTarget)) return true;
+    }
+    return false;
+  }
+
+  function localAlbumToCandidate(album: LocalAlbum): Candidate {
+    const title = String(album.title ?? '');
+    const year = album.year ?? null;
+    const trackCount = album.track_count ?? null;
+    const sampleRateKhz = album.sample_rate ? album.sample_rate / 1000 : 44.1;
+    const candidateSource: 'local' | 'plex' = album.source === 'plex' ? 'plex' : 'local';
+    const titleIsCompilation = isCompilation(title);
+    const candidate: Candidate = {
+      group_key: `${normalizeTitle(title)}|${year ?? ''}`,
+      source: candidateSource,
+      source_item_id: String(album.id),
+      title,
+      artist: album.artist ?? artistName,
+      year,
+      artwork_url: null,
+      track_count: trackCount,
+      max_bit_depth: album.bit_depth ?? null,
+      max_sample_rate: sampleRateKhz,
+      format: album.format ?? 'FLAC',
+      is_compilation: titleIsCompilation,
+      release_type: classifyRelease(title, trackCount, null, null, titleIsCompilation),
+      quality_score: 0,
+    };
+    candidate.quality_score = qualityScore(candidate);
+    return candidate;
+  }
+
+  function plexAlbumToCandidate(album: PlexCachedAlbum): Candidate {
+    const title = String(album.title ?? '');
+    const year = album.year ?? null;
+    const trackCount = album.trackCount ?? null;
+    const sampleRateKhz = album.sampleRate ? album.sampleRate / 1000 : 44.1;
+    const titleIsCompilation = isCompilation(title);
+    const candidate: Candidate = {
+      group_key: `${normalizeTitle(title)}|${year ?? ''}`,
+      source: 'plex',
+      source_item_id: String(album.id),
+      title,
+      artist: album.artist ?? artistName,
+      year,
+      artwork_url: null,
+      track_count: trackCount,
+      max_bit_depth: album.bitDepth ?? null,
+      max_sample_rate: sampleRateKhz,
+      format: album.format ?? 'FLAC',
+      is_compilation: titleIsCompilation,
+      release_type: classifyRelease(title, trackCount, null, null, titleIsCompilation),
+      quality_score: 0,
+    };
+    candidate.quality_score = qualityScore(candidate);
+    return candidate;
+  }
+
+  async function fetchLocalAlbums(): Promise<Candidate[]> {
+    const plexEnabled = isPlexLibraryEnabled();
+
+    async function fetchOnce(): Promise<{ local: LocalAlbum[]; plex: PlexCachedAlbum[] }> {
+      const [local, plex] = await Promise.all([
+        invoke<LocalAlbum[]>('v2_library_get_albums', {
+          includeHidden: false,
+          excludeNetworkFolders: false,
+        }).catch((err) => {
+          console.warn('[DiscographyBuilder] local fetch failed (non-fatal):', err);
+          return [] as LocalAlbum[];
+        }),
+        plexEnabled ? fetchPlexAlbumsFromCache() : Promise.resolve([] as PlexCachedAlbum[]),
+      ]);
+      return { local, plex };
+    }
+
+    let { local, plex } = await fetchOnce();
+
+    // Plex cache may still be warming up on first app launch. If the user
+    // has Plex enabled but we got zero Plex albums, give it a moment and
+    // try once more before giving up — matches LocalLibraryView's expectation
+    // that Plex data eventually appears after a cold start.
+    if (plexEnabled && plex.length === 0) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      ({ local, plex } = await fetchOnce());
+    }
+
+    const filteredLocal = local.filter((album) =>
+      matchesArtist(album.artist ?? '', album.all_artists, artistName),
+    );
+    const filteredPlex = plex.filter((album) =>
+      matchesArtist(album.artist ?? '', undefined, artistName),
+    );
+
+    return [
+      ...filteredLocal.map(localAlbumToCandidate),
+      ...filteredPlex.map(plexAlbumToCandidate),
+    ];
   }
 
   function buildGroups(candidates: Candidate[]): Group[] {
@@ -277,16 +441,50 @@
     return !!checked[grp.key]?.has(candidateKey(candidate));
   }
 
+  // ── Select-all helpers ─────────────────────────────────────────────────────
+  // "Select all" only toggles the primary candidate of each non-compilation
+  // group — mirrors the default selection applied on load. Alternates and
+  // compilations stay unchecked so users don't accidentally add duplicates.
+
+  const allPrimariesChecked = $derived(
+    groups.length > 0 &&
+      groups.every((grp) =>
+        grp.is_compilation ? true : isChecked(grp, grp.primary),
+      ),
+  );
+
+  const somePrimariesChecked = $derived(
+    !allPrimariesChecked &&
+      groups.some((grp) => !grp.is_compilation && isChecked(grp, grp.primary)),
+  );
+
+  function toggleAllPrimaries() {
+    const target = !allPrimariesChecked;
+    const next: Record<string, Set<string>> = {};
+    for (const grp of groups) {
+      const existing = checked[grp.key] ?? new Set<string>();
+      const copy = new Set(existing);
+      if (!grp.is_compilation) {
+        const key = candidateKey(grp.primary);
+        if (target) copy.add(key);
+        else copy.delete(key);
+      }
+      next[grp.key] = copy;
+    }
+    checked = next;
+  }
+
   // ── Load ───────────────────────────────────────────────────────────────────
 
   async function loadData() {
     loading = true;
     loadError = null;
     try {
-      const [qobuzAlbums, localAlbums] = await Promise.all([
-        fetchQobuzAlbums(),
-        fetchLocalAlbums(),
-      ]);
+      // Sequential: fetchQobuzAlbums sets `artistName`, which fetchLocalAlbums
+      // needs for its artist-name filter. Running them in parallel caused the
+      // local filter to run against an empty name and drop every match.
+      const qobuzAlbums = await fetchQobuzAlbums();
+      const localAlbums = await fetchLocalAlbums();
 
       const builtGroups = buildGroups([...qobuzAlbums, ...localAlbums]);
       groups = builtGroups;
@@ -333,9 +531,14 @@
         const orderedCandidates = [grp.primary, ...grp.alternates];
         for (const candidate of orderedCandidates) {
           if (checkedSet.has(candidateKey(candidate))) {
+            // Collapse 'plex' → 'local' when persisting: the mixtape model
+            // stores albums under the LocalLibrary umbrella; the actual
+            // source resolver re-detects plex-vs-file at enqueue time from
+            // source_item_id.
+            const storedSource = candidate.source === 'plex' ? 'local' : candidate.source;
             await addItem(collection.id, {
               item_type: 'album',
-              source: candidate.source,
+              source: storedSource,
               source_item_id: candidate.source_item_id,
               title: candidate.title,
               subtitle: candidate.artist,
@@ -357,10 +560,14 @@
     }
   }
 
-  onMount(loadData);
+  onMount(() => {
+    loadReleaseTypeOverrides();
+    loadData();
+  });
 </script>
 
 <div class="builder-view">
+  <div class="builder-scroll">
   {#if onBack}
     <button class="back-btn" onclick={() => onBack?.()}>
       <ArrowLeft size={16} />
@@ -425,7 +632,30 @@
     <div class="state-msg">{$t('search.noResults')}</div>
   {:else}
     <div class="groups">
+      <div class="row header-row">
+        <input
+          type="checkbox"
+          class="row-check header-check"
+          checked={allPrimariesChecked}
+          indeterminate={somePrimariesChecked}
+          onchange={toggleAllPrimaries}
+          title={allPrimariesChecked
+            ? $t('discographyBuilder.uncheckAll')
+            : $t('discographyBuilder.checkAll')}
+          aria-label={allPrimariesChecked
+            ? $t('discographyBuilder.uncheckAll')
+            : $t('discographyBuilder.checkAll')}
+        />
+        <span class="col-label start">{$t('discographyBuilder.colYear')}</span>
+        <span class="col-label start">{$t('discographyBuilder.colType')}</span>
+        <span class="col-label start">{$t('discographyBuilder.colAlbum')}</span>
+        <span class="col-label center">{$t('discographyBuilder.colTracks')}</span>
+        <span class="col-label center">{$t('discographyBuilder.colSource')}</span>
+        <span class="col-label center">{$t('discographyBuilder.colQuality')}</span>
+      </div>
       {#each orderedGroups as grp (grp.key)}
+        {@const primType = applyOverride(grp.primary)}
+        {@const primKey = overrideKey(grp.primary.source, grp.primary.source_item_id)}
         <div class="group" class:is-compilation={grp.is_compilation}>
           <!-- Primary row -->
           <div class="row primary-row">
@@ -436,18 +666,97 @@
               onchange={() => toggleChecked(grp, grp.primary)}
             />
             <div class="year-col">{grp.year ?? '—'}</div>
+            <div class="type-col type-col-wrap">
+              <button
+                type="button"
+                class="type-btn"
+                class:compilation={primType === 'compilation'}
+                class:live={primType === 'live'}
+                class:ep={primType === 'ep'}
+                class:single={primType === 'single'}
+                class:is-overridden={hasOverride(grp.primary)}
+                title={$t('discographyBuilder.typeOverrideHint')}
+                onclick={(e) => {
+                  e.stopPropagation();
+                  openTypeMenuKey = openTypeMenuKey === primKey ? null : primKey;
+                }}
+              >
+                {$t(`discographyBuilder.releaseType.${primType}`)}
+              </button>
+              {#if openTypeMenuKey === primKey}
+                <div class="type-menu-backdrop" onclick={closeTypeMenu} role="presentation"></div>
+                <div class="type-menu" role="menu">
+                  {#each TYPE_CHOICES as choice}
+                    <button
+                      type="button"
+                      class="type-menu-item"
+                      class:selected={primType === choice}
+                      onclick={() => {
+                        applyTypeChoice(grp.primary, choice);
+                        closeTypeMenu();
+                      }}
+                    >
+                      {#if primType === choice}
+                        <Check size={12} />
+                      {:else}
+                        <span class="check-placeholder"></span>
+                      {/if}
+                      <span>{$t(`discographyBuilder.releaseType.${choice}`)}</span>
+                    </button>
+                  {/each}
+                  {#if hasOverride(grp.primary)}
+                    <div class="type-menu-divider"></div>
+                    <button
+                      type="button"
+                      class="type-menu-item reset"
+                      onclick={() => {
+                        resetTypeOverride(grp.primary);
+                        closeTypeMenu();
+                      }}
+                    >
+                      <RotateCcw size={12} />
+                      <span>{$t('discographyBuilder.typeOverrideReset')}</span>
+                    </button>
+                  {/if}
+                </div>
+              {/if}
+            </div>
             <div class="title-col">
-              <span class="album-title">{grp.title}</span>
+              <button
+                type="button"
+                class="album-title-btn"
+                onclick={() => onOpenAlbum?.(grp.primary.source, grp.primary.source_item_id)}
+                title={grp.title}
+              >
+                <span class="album-title">{grp.title}</span>
+              </button>
               {#if grp.is_compilation}
                 <span class="tag">{$t('discographyBuilder.compilationLabel')}</span>
               {/if}
             </div>
-            <div class="badge-col">
-              <SourceBadge value={grp.primary.source === 'qobuz' ? 'qobuz_streaming' : 'user'} />
+            <div class="tracks-col" title={$t('common.trackCount', { values: { count: grp.primary.track_count ?? 0 } })}>
+              {grp.primary.track_count ?? '—'}
+            </div>
+            <div
+              class="source-indicator"
+              class:plex-source={grp.primary.source === 'plex'}
+              class:qobuz-source={grp.primary.source === 'qobuz'}
+              title={grp.primary.source === 'plex'
+                ? $t('library.plexTrackIndicator')
+                : grp.primary.source === 'qobuz'
+                  ? $t('library.qobuzTrackIndicator')
+                  : $t('library.localTrackIndicator')}
+            >
+              {#if grp.primary.source === 'plex'}
+                <span class="plex-indicator-icon" aria-hidden="true"></span>
+              {:else if grp.primary.source === 'qobuz'}
+                <span class="qobuz-indicator-icon" aria-hidden="true"></span>
+              {:else}
+                <span class="local-indicator-icon" aria-hidden="true"></span>
+              {/if}
             </div>
             <div class="quality-col">
               <QualityBadge
-                compact
                 bitDepth={grp.primary.max_bit_depth ?? undefined}
                 samplingRate={grp.primary.max_sample_rate ?? undefined}
                 format={grp.primary.format ?? undefined}
@@ -457,25 +766,108 @@
 
           <!-- Alternate rows -->
           {#each grp.alternates as alt (alt.source + alt.source_item_id)}
+            {@const altType = applyOverride(alt)}
+            {@const altKey = overrideKey(alt.source, alt.source_item_id)}
             <div class="row alternate-row">
-              <div class="connector" aria-hidden="true">└</div>
-              <input
-                type="checkbox"
-                class="row-check"
-                checked={isChecked(grp, alt)}
-                onchange={() => toggleChecked(grp, alt)}
-              />
+              <div class="check-cell alt-check-cell">
+                <span class="connector" aria-hidden="true">↳</span>
+                <input
+                  type="checkbox"
+                  class="row-check"
+                  checked={isChecked(grp, alt)}
+                  onchange={() => toggleChecked(grp, alt)}
+                />
+              </div>
               <div class="year-col alt">{alt.year ?? '—'}</div>
+              <div class="type-col alt type-col-wrap">
+                <button
+                  type="button"
+                  class="type-btn alt"
+                  class:compilation={altType === 'compilation'}
+                  class:live={altType === 'live'}
+                  class:ep={altType === 'ep'}
+                  class:single={altType === 'single'}
+                  class:is-overridden={hasOverride(alt)}
+                  title={$t('discographyBuilder.typeOverrideHint')}
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    openTypeMenuKey = openTypeMenuKey === altKey ? null : altKey;
+                  }}
+                >
+                  {$t(`discographyBuilder.releaseType.${altType}`)}
+                </button>
+                {#if openTypeMenuKey === altKey}
+                  <div class="type-menu-backdrop" onclick={closeTypeMenu} role="presentation"></div>
+                  <div class="type-menu" role="menu">
+                    {#each TYPE_CHOICES as choice}
+                      <button
+                        type="button"
+                        class="type-menu-item"
+                        class:selected={altType === choice}
+                        onclick={() => {
+                          applyTypeChoice(alt, choice);
+                          closeTypeMenu();
+                        }}
+                      >
+                        {#if altType === choice}
+                          <Check size={12} />
+                        {:else}
+                          <span class="check-placeholder"></span>
+                        {/if}
+                        <span>{$t(`discographyBuilder.releaseType.${choice}`)}</span>
+                      </button>
+                    {/each}
+                    {#if hasOverride(alt)}
+                      <div class="type-menu-divider"></div>
+                      <button
+                        type="button"
+                        class="type-menu-item reset"
+                        onclick={() => {
+                          resetTypeOverride(alt);
+                          closeTypeMenu();
+                        }}
+                      >
+                        <RotateCcw size={12} />
+                        <span>{$t('discographyBuilder.typeOverrideReset')}</span>
+                      </button>
+                    {/if}
+                  </div>
+                {/if}
+              </div>
               <div class="title-col alt">
-                <span class="album-title">{alt.title}</span>
+                <button
+                  type="button"
+                  class="album-title-btn"
+                  onclick={() => onOpenAlbum?.(alt.source, alt.source_item_id)}
+                  title={alt.title}
+                >
+                  <span class="album-title">{alt.title}</span>
+                </button>
                 <span class="tag">{$t('discographyBuilder.alternateLabel')}</span>
               </div>
-              <div class="badge-col">
-                <SourceBadge value={alt.source === 'qobuz' ? 'qobuz_streaming' : 'user'} />
+              <div class="tracks-col alt" title={$t('common.trackCount', { values: { count: alt.track_count ?? 0 } })}>
+                {alt.track_count ?? '—'}
+              </div>
+              <div
+                class="source-indicator"
+                class:plex-source={alt.source === 'plex'}
+                class:qobuz-source={alt.source === 'qobuz'}
+                title={alt.source === 'plex'
+                  ? $t('library.plexTrackIndicator')
+                  : alt.source === 'qobuz'
+                    ? $t('library.qobuzTrackIndicator')
+                    : $t('library.localTrackIndicator')}
+              >
+                {#if alt.source === 'plex'}
+                  <span class="plex-indicator-icon" aria-hidden="true"></span>
+                {:else if alt.source === 'qobuz'}
+                  <span class="qobuz-indicator-icon" aria-hidden="true"></span>
+                {:else}
+                  <span class="local-indicator-icon" aria-hidden="true"></span>
+                {/if}
               </div>
               <div class="quality-col">
                 <QualityBadge
-                  compact
                   bitDepth={alt.max_bit_depth ?? undefined}
                   samplingRate={alt.max_sample_rate ?? undefined}
                   format={alt.format ?? undefined}
@@ -487,6 +879,7 @@
       {/each}
     </div>
   {/if}
+  </div>
 
   <footer class="builder-footer">
     <div class="footer-count">
@@ -514,9 +907,27 @@
 </div>
 
 <style>
+  /* Two-part layout: .builder-scroll holds everything that scrolls; the
+     footer is a fixed-height sibling pinned at the bottom of the view so
+     its background never overlaps content. This replaces the earlier
+     sticky-inside-scroll approach, which let last rows peek past the
+     footer on some content lengths. */
   .builder-view {
-    padding: 24px 32px 120px;
+    width: 100%;
+    height: 100%;
     color: var(--text-primary);
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
+
+  .builder-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 24px 32px 24px;
+    box-sizing: border-box;
   }
 
   /* Mirror of ArtistDetailView's .back-btn — borderless, icon + text, muted. */
@@ -676,9 +1087,12 @@
   }
 
   /* ── Rows ── */
+  /* Unified grid for primary and alternate rows so everything aligns
+     vertically: checkbox · year · title · source · quality. Alternates
+     are indented via padding-left on the row itself. */
   .row {
     display: grid;
-    grid-template-columns: 28px 56px 1fr 76px 96px;
+    grid-template-columns: 28px 56px 72px minmax(0, 1fr) 72px 60px 156px;
     align-items: center;
     gap: 10px;
     padding: 7px 8px;
@@ -688,20 +1102,38 @@
     background: var(--bg-hover);
   }
 
+  /* Header row — labels the columns so the bare track-count number has
+     context ("TRACKS" above it). Follows MixtapeCollectionDetailView's
+     .item-list-header convention. */
+  .header-row {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--bg-tertiary);
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+  .header-row:hover {
+    background: transparent;
+  }
+  .col-label {
+    white-space: nowrap;
+  }
+  .col-label.start {
+    text-align: left;
+  }
+  .col-label.center {
+    text-align: center;
+  }
+
   .alternate-row {
-    grid-template-columns: 22px 28px 56px 1fr 76px 96px;
     opacity: 0.72;
   }
   .alternate-row:hover {
     opacity: 1;
     background: var(--bg-hover);
-  }
-
-  .connector {
-    color: var(--text-muted);
-    font-size: 13px;
-    text-align: center;
-    user-select: none;
   }
 
   .row-check {
@@ -710,6 +1142,23 @@
     cursor: pointer;
     flex-shrink: 0;
     accent-color: var(--accent-primary);
+  }
+
+  /* Alternate rows: tiny connector glyph packed next to the checkbox inside
+     the first column (no indent, same column as primary rows). Signals
+     parent/child without shifting the alternate's horizontal alignment. */
+  .check-cell.alt-check-cell {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    min-width: 0;
+  }
+  .check-cell.alt-check-cell .connector {
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1;
+    user-select: none;
+    flex-shrink: 0;
   }
 
   .year-col {
@@ -722,6 +1171,128 @@
     color: var(--text-muted);
   }
 
+  /* Release type label: Album / EP / Single / Live / Compilation. Non-default
+     types (everything except plain Album) get a subtle color tint so the
+     user can spot EPs / Live records at a glance without reading every row. */
+  .type-col {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+  .type-col-wrap {
+    position: relative;
+  }
+
+  /* Clickable type label — sidecar override editor. No border by default,
+     subtle hover, dashed underline when a user override is active. */
+  .type-btn {
+    background: none;
+    border: none;
+    padding: 2px 4px;
+    margin: 0 -4px;
+    font-family: inherit;
+    font-size: inherit;
+    font-weight: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background 120ms ease;
+  }
+  .type-btn:hover {
+    background: var(--alpha-6);
+    color: var(--text-primary);
+  }
+  .type-btn.alt {
+    font-size: 10px;
+  }
+  .type-btn.compilation {
+    color: #f59e0b;
+  }
+  .type-btn.live {
+    color: #e91e63;
+  }
+  .type-btn.ep {
+    color: #60a5fa;
+  }
+  .type-btn.single {
+    color: #a78bfa;
+  }
+  .type-btn.is-overridden {
+    text-decoration: underline dotted;
+    text-underline-offset: 3px;
+  }
+
+  .type-menu-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+  }
+  .type-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    z-index: 101;
+    min-width: 160px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--bg-tertiary);
+    border-radius: 6px;
+    padding: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+    display: flex;
+    flex-direction: column;
+  }
+  .type-menu-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    background: none;
+    border: none;
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+    border-radius: 4px;
+  }
+  .type-menu-item:hover {
+    background: var(--bg-hover);
+  }
+  .type-menu-item.selected {
+    color: var(--accent-primary);
+  }
+  .type-menu-item.reset {
+    color: var(--text-muted);
+  }
+  .type-menu-item .check-placeholder {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+  }
+  .type-menu-divider {
+    height: 1px;
+    background: var(--bg-tertiary);
+    margin: 4px 0;
+  }
+
+  .tracks-col {
+    font-size: 13px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+  .tracks-col.alt {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
   .title-col {
     display: flex;
     align-items: center;
@@ -730,6 +1301,24 @@
   }
   .title-col.alt {
     color: var(--text-muted);
+  }
+  .album-title-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+    min-width: 0;
+    max-width: 100%;
+    display: inline-flex;
+    align-items: center;
+    color: inherit;
+  }
+  .album-title-btn:hover .album-title {
+    color: var(--accent-primary);
+    text-decoration: underline;
   }
   .album-title {
     white-space: nowrap;
@@ -753,23 +1342,62 @@
     flex-shrink: 0;
   }
 
-  .badge-col {
-    display: flex;
-    justify-content: flex-end;
-  }
   .quality-col {
-    display: flex;
-    justify-content: flex-end;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
   }
 
-  /* ── Sticky footer ── */
+  /* Mirror of TrackRow's .local-indicator / .plex-indicator-icon pattern,
+     so the album-row source indicator matches the track-row pattern used
+     inside Local Library's album detail view. */
+  .source-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    opacity: 0.9;
+    justify-self: center;
+  }
+  .plex-indicator-icon {
+    width: 14px;
+    height: 14px;
+    background-color: var(--accent-primary);
+    -webkit-mask: url('/plex-mono.svg') center / contain no-repeat;
+    mask: url('/plex-mono.svg') center / contain no-repeat;
+  }
+  /* Use /qobuz-logo.svg (monochrome wordmark-shape) rather than the filled
+     coloured logo — the filled version has solid coloured fill boxes that
+     collapse into a single blob when tinted through a CSS mask. */
+  .qobuz-indicator-icon {
+    width: 16px;
+    height: 16px;
+    background-color: var(--accent-primary);
+    -webkit-mask: url('/qobuz-logo.svg') center / contain no-repeat;
+    mask: url('/qobuz-logo.svg') center / contain no-repeat;
+  }
+  /* /hdd.svg is a filled hard-drive glyph — reads at the same visual weight
+     as the Plex / Qobuz marks instead of the thin line-art HardDrive icon. */
+  .local-indicator-icon {
+    width: 14px;
+    height: 14px;
+    background-color: var(--accent-primary);
+    -webkit-mask: url('/hdd.svg') center / contain no-repeat;
+    mask: url('/hdd.svg') center / contain no-repeat;
+  }
+
+  /* ── Fixed footer ── */
+  /* Flex child of .builder-view (not sticky). Sits flush against
+     NowPlayingBar. Extends the full width of the view — the global
+     back-to-top button (z-index 200) floats on top of the footer's right
+     edge. No right margin avoids a visual gap in the footer border. */
   .builder-footer {
-    position: sticky;
-    bottom: 0;
+    flex-shrink: 0;
     background: var(--bg-primary);
     border-top: 1px solid var(--bg-tertiary);
-    padding: 12px 32px;
-    margin: 0 -32px;
+    padding: 12px 88px 12px 32px;
     display: flex;
     align-items: center;
     justify-content: space-between;
