@@ -5,6 +5,7 @@
     collectionsStore,
     loadCollections,
     addItem,
+    itemExists,
     createCollection,
     type MixtapeCollection,
     type CollectionKind,
@@ -100,10 +101,40 @@
     return $t('mixtapes.label');
   }
 
-  async function addMany(collectionId: string): Promise<{ added: number; dup: number }> {
+  // Duplicate-confirmation state. When handlePick detects existing items in
+  // the target, the modal pauses on this screen instead of silently skipping.
+  let pendingCollection = $state<MixtapeCollection | null>(null);
+  let pendingDuplicates = $state<AddToMixtapeItem[]>([]);
+  let pendingFresh = $state<AddToMixtapeItem[]>([]);
+
+  async function findDuplicates(
+    collectionId: string,
+    list: AddToMixtapeItem[],
+  ): Promise<{ fresh: AddToMixtapeItem[]; dups: AddToMixtapeItem[] }> {
+    const fresh: AddToMixtapeItem[] = [];
+    const dups: AddToMixtapeItem[] = [];
+    for (const it of list) {
+      try {
+        const exists = await itemExists(collectionId, it.source, it.source_item_id);
+        if (exists) dups.push(it);
+        else fresh.push(it);
+      } catch (err) {
+        // Fail-open: treat as fresh; the backend's own dedup will catch it if
+        // we're wrong. Logged for visibility.
+        console.warn('[AddToMixtapeModal] itemExists check failed:', err);
+        fresh.push(it);
+      }
+    }
+    return { fresh, dups };
+  }
+
+  async function insertBatch(
+    collectionId: string,
+    list: AddToMixtapeItem[],
+    allowDuplicate: boolean,
+  ): Promise<number> {
     let added = 0;
-    let dup = 0;
-    for (const it of items) {
+    for (const it of list) {
       try {
         const ok = await addItem(collectionId, {
           item_type: it.item_type,
@@ -114,41 +145,51 @@
           artwork_url: it.artwork_url,
           year: it.year,
           track_count: it.track_count,
-        });
+        }, { allowDuplicate });
         if (ok) added += 1;
-        else dup += 1;
       } catch (err) {
         console.warn('[AddToMixtapeModal] addItem failed for one item:', err);
       }
     }
-    return { added, dup };
+    return added;
+  }
+
+  function toastBatchResult(collectionName: string, added: number) {
+    if (added === 0) return;
+    if (bulkMode) {
+      showToast(
+        $t('mixtapes.bulkAdded', { values: { count: added, name: collectionName } }) ||
+          `Added ${added} to ${collectionName}`,
+        'success',
+      );
+    } else {
+      showToast(
+        $t('common.addedToMixtapeOrCollection', { values: { name: collectionName } }),
+        'success',
+      );
+    }
   }
 
   async function handlePick(collection: MixtapeCollection) {
     if (items.length === 0 || busyCollectionId) return;
     busyCollectionId = collection.id;
     try {
-      const { added, dup } = await addMany(collection.id);
-      if (added > 0) {
-        if (bulkMode) {
-          showToast(
-            $t('mixtapes.bulkAdded', { values: { count: added, name: collection.name } }) ||
-              `Added ${added} to ${collection.name}`,
-            'success',
-          );
-        } else {
-          showToast(
-            $t('common.addedToMixtapeOrCollection', { values: { name: collection.name } }),
-            'success',
-          );
-        }
-        await loadCollections();
-      } else if (dup > 0) {
-        showToast(
-          $t('common.alreadyInToast', { values: { name: collection.name } }),
-          'info',
-        );
+      const { fresh, dups } = await findDuplicates(collection.id, items);
+
+      if (dups.length > 0) {
+        // Pause here; show the confirmation sub-panel. Fresh items are
+        // held aside so they can be added immediately regardless of what
+        // the user chooses on the duplicates.
+        pendingCollection = collection;
+        pendingDuplicates = dups;
+        pendingFresh = fresh;
+        busyCollectionId = null;
+        return;
       }
+
+      const added = await insertBatch(collection.id, fresh, false);
+      toastBatchResult(collection.name, added);
+      if (added > 0) await loadCollections();
       onClose();
     } catch (err) {
       console.error('[AddToMixtapeModal] addItem failed:', err);
@@ -158,26 +199,69 @@
     }
   }
 
+  /** User confirmed the duplicates dialog: insert duplicates with force + fresh. */
+  async function handleConfirmDuplicates() {
+    if (!pendingCollection) return;
+    const collection = pendingCollection;
+    busyCollectionId = collection.id;
+    try {
+      const freshAdded = await insertBatch(collection.id, pendingFresh, false);
+      const dupAdded = await insertBatch(collection.id, pendingDuplicates, true);
+      const total = freshAdded + dupAdded;
+      toastBatchResult(collection.name, total);
+      if (total > 0) await loadCollections();
+      onClose();
+    } catch (err) {
+      console.error('[AddToMixtapeModal] confirmDuplicates failed:', err);
+      showToast('Failed to add items', 'error');
+    } finally {
+      pendingCollection = null;
+      pendingDuplicates = [];
+      pendingFresh = [];
+      busyCollectionId = null;
+    }
+  }
+
+  /** User chose "Skip duplicates": only insert the fresh items, drop duplicates. */
+  async function handleSkipDuplicates() {
+    if (!pendingCollection) return;
+    const collection = pendingCollection;
+    busyCollectionId = collection.id;
+    try {
+      const added = await insertBatch(collection.id, pendingFresh, false);
+      if (added > 0) {
+        toastBatchResult(collection.name, added);
+        await loadCollections();
+      } else {
+        showToast(
+          $t('common.alreadyInToast', { values: { name: collection.name } }),
+          'info',
+        );
+      }
+      onClose();
+    } finally {
+      pendingCollection = null;
+      pendingDuplicates = [];
+      pendingFresh = [];
+      busyCollectionId = null;
+    }
+  }
+
+  function handleCancelDuplicates() {
+    pendingCollection = null;
+    pendingDuplicates = [];
+    pendingFresh = [];
+    busyCollectionId = null;
+  }
+
   async function handleCreateAndAdd() {
     if (items.length === 0 || !createName.trim() || createBusy) return;
     createBusy = true;
     try {
       const created = await createCollection(createKind, createName.trim());
-      const { added } = await addMany(created.id);
-      if (added > 0) {
-        if (bulkMode) {
-          showToast(
-            $t('mixtapes.bulkAdded', { values: { count: added, name: created.name } }) ||
-              `Added ${added} to ${created.name}`,
-            'success',
-          );
-        } else {
-          showToast(
-            $t('common.addedToMixtapeOrCollection', { values: { name: created.name } }),
-            'success',
-          );
-        }
-      }
+      // Fresh collection — no duplicates possible.
+      const added = await insertBatch(created.id, items, false);
+      toastBatchResult(created.name, added);
       await loadCollections();
       onClose();
     } catch (err) {
@@ -230,7 +314,65 @@
       </button>
     </header>
 
-    {#if !creating}
+    {#if pendingCollection}
+      <!-- Duplicate-confirmation sub-panel: one or more items already live in
+           the target collection. User can add anyway (force), skip the
+           duplicates, or cancel back to the picker. -->
+      <div class="dup-panel">
+        <p class="dup-summary">
+          {$t('mixtapes.dupSummary', {
+            values: {
+              count: pendingDuplicates.length,
+              name: pendingCollection.name,
+            },
+          }) || `${pendingDuplicates.length} already in ${pendingCollection.name}`}
+        </p>
+        <ul class="dup-list">
+          {#each pendingDuplicates as dupItem (dupItem.source_item_id)}
+            <li class="dup-list-item">
+              <span class="dup-title">{dupItem.title}</span>
+              {#if dupItem.subtitle}
+                <span class="dup-subtitle">{dupItem.subtitle}</span>
+              {/if}
+            </li>
+          {/each}
+        </ul>
+        {#if pendingFresh.length > 0}
+          <p class="dup-hint">
+            {$t('mixtapes.dupFreshHint', { values: { count: pendingFresh.length } }) ||
+              `${pendingFresh.length} other item(s) will be added regardless.`}
+          </p>
+        {/if}
+        <footer class="modal-footer">
+          <button
+            type="button"
+            class="secondary-btn"
+            onclick={handleCancelDuplicates}
+            disabled={busyCollectionId !== null}
+          >
+            {$t('actions.cancel') || 'Cancel'}
+          </button>
+          {#if pendingFresh.length > 0}
+            <button
+              type="button"
+              class="secondary-btn"
+              onclick={handleSkipDuplicates}
+              disabled={busyCollectionId !== null}
+            >
+              {$t('mixtapes.dupSkip') || 'Skip duplicates'}
+            </button>
+          {/if}
+          <button
+            type="button"
+            class="primary-btn"
+            onclick={handleConfirmDuplicates}
+            disabled={busyCollectionId !== null}
+          >
+            {$t('mixtapes.dupAddAnyway') || 'Add anyway'}
+          </button>
+        </footer>
+      </div>
+    {:else if !creating}
       <div class="search-row">
         <Search size={14} />
         <input
@@ -524,6 +666,51 @@
   .create-btn:hover { background: var(--bg-hover); }
 
   .create-panel { padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+
+  /* Duplicate-confirmation sub-panel. Keeps the modal chrome (backdrop,
+     header, footer) so the user's mental model stays intact. */
+  .dup-panel {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .dup-summary {
+    margin: 0;
+    font-size: 14px;
+    color: var(--text-primary);
+  }
+  .dup-list {
+    margin: 0;
+    padding: 8px 12px;
+    max-height: 160px;
+    overflow-y: auto;
+    background: var(--alpha-6);
+    border: 1px solid var(--bg-tertiary);
+    border-radius: 6px;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .dup-list-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 12px;
+  }
+  .dup-title {
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+  .dup-subtitle {
+    color: var(--text-muted);
+  }
+  .dup-hint {
+    margin: 0;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
   .field { display: flex; flex-direction: column; gap: 8px; }
   .field-label {
     font-size: 10px;

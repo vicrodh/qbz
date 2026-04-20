@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
-  import { Play, Disc3, Heart } from 'lucide-svelte';
+  import { Play, Disc3, Heart, Check } from 'lucide-svelte';
   import { t, locale } from 'svelte-i18n';
   import AlbumMenu from './AlbumMenu.svelte';
   import { openAddToMixtape } from '$lib/stores/addToMixtapeModalStore';
@@ -55,6 +55,11 @@
     year?: number;
     /** Track count for AddToMixtapeItem */
     trackCount?: number;
+    /** Multi-select mode: shows a persistent corner checkbox and routes
+     *  clicks through onToggleSelect instead of onclick. */
+    selectable?: boolean;
+    selected?: boolean;
+    onToggleSelect?: () => void;
   }
 
   let {
@@ -88,7 +93,10 @@
     ribbon,
     isLocal,
     year,
-    trackCount
+    trackCount,
+    selectable = false,
+    selected = false,
+    onToggleSelect
   }: Props = $props();
   
   const isDownloaded = $derived.by(() => {
@@ -181,6 +189,11 @@
 
   function handleCardClick(event: MouseEvent) {
     if (isOverlayAction(event.target)) return;
+    // Multi-select mode: click toggles selection instead of opening the card.
+    if (selectable) {
+      onToggleSelect?.();
+      return;
+    }
     onclick?.();
   }
 
@@ -233,6 +246,8 @@
 
 <div
   class="album-card"
+  class:is-selectable={selectable}
+  class:is-selected={selectable && selected}
   style="width: {cardSize}px"
   data-search-id={searchId}
   onclick={handleCardClick}
@@ -241,7 +256,13 @@
   onfocus={measureOverflowOnce}
   role="button"
   tabindex="0"
-  onkeydown={(e) => e.key === 'Enter' && onclick?.()}
+  onkeydown={(e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      if (selectable) onToggleSelect?.();
+      else onclick?.();
+    }
+  }}
 >
   <!-- Artwork Container -->
   <div
@@ -256,6 +277,12 @@
     <!-- Image overlays placeholder when loaded -->
     {#if !imageError && artwork}
       <img class="artwork-image" use:cachedSrc={albumId ? resolveAlbumCover(albumId, artwork) : artwork} alt={title} loading="lazy" decoding="async" onerror={handleImageError} />
+    {/if}
+
+    {#if selectable}
+      <div class="select-checkbox" aria-hidden="true">
+        {#if selected}<Check size={14} />{/if}
+      </div>
     {/if}
 
     <!-- Action Overlay -->
@@ -386,6 +413,40 @@
     margin-bottom: 8px;
     border-radius: 8px;
     overflow: hidden;
+  }
+
+  /* Multi-select corner checkbox (top-left of the artwork). Always rendered
+     when selectable=true; filled accent when selected, outlined-only when not. */
+  .select-checkbox {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.85);
+    background: rgba(0, 0, 0, 0.45);
+    color: #fff;
+    pointer-events: none;
+    backdrop-filter: blur(2px);
+    transition: background 120ms ease, border-color 120ms ease;
+  }
+  .album-card.is-selected .select-checkbox {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+  }
+  .album-card.is-selected {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+    border-radius: 10px;
+  }
+  /* Disable the drag-cursor feel when in select-mode — tap = toggle. */
+  .album-card.is-selectable {
+    cursor: pointer;
   }
 
   .artwork-container .artwork-image {

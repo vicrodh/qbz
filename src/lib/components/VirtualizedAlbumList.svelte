@@ -47,6 +47,11 @@
     scrollToGroupId?: string;
     /** Show source badge on albums (for Local Library) */
     showSourceBadge?: boolean;
+    /** Multi-select mode — cards render a checkbox overlay and clicks
+     *  toggle selection via onAlbumToggleSelect instead of onAlbumClick. */
+    selectable?: boolean;
+    selectedAlbumIds?: Set<string>;
+    onAlbumToggleSelect?: (album: LocalAlbum) => void;
   }
 
   let {
@@ -63,6 +68,9 @@
     onAlbumQueueLater,
     scrollToGroupId,
     showSourceBadge = false,
+    selectable = false,
+    selectedAlbumIds = new Set(),
+    onAlbumToggleSelect,
   }: Props = $props();
 
   // Constants
@@ -331,6 +339,9 @@
                 onPlayLater={() => onAlbumQueueLater(album)}
                 onclick={() => onAlbumClick(album)}
                 sourceBadge={showSourceBadge ? (album.source === 'plex' ? 'plex' : album.source === 'qobuz_purchase' ? 'qobuz_purchase' : album.source === 'qobuz_download' ? 'qobuz_download' : 'user') : undefined}
+                selectable={selectable}
+                selected={selectedAlbumIds.has(album.id)}
+                onToggleSelect={() => onAlbumToggleSelect?.(album)}
               />
             {/each}
           </div>
