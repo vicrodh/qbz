@@ -94,7 +94,12 @@
     samplingRate?: number;
     isrc?: string;
     isLocal?: boolean;
+    /** True when the underlying source is a remote Plex server. */
+    isPlex?: boolean;
     localTrackId?: number;
+    /** Raw audio file path — used by the offline heuristic to detect
+     *  network-mounted local paths. */
+    filePath?: string;
     artworkPath?: string;
     playlistTrackId?: number; // Qobuz playlist-specific ID for removal
     label?: string;           // Record label name from Qobuz
@@ -476,16 +481,57 @@
     return isTrackUnavailable(track.id);
   }
 
-  // Check if a track is available (has local copy when offline, always available when online, unless removed from Qobuz)
+  // Check if a track is available.
+  // Rules:
+  //   * Tracks removed from Qobuz → never available.
+  //   * Online → always available.
+  //   * Forced offline (no_network / not_logged_in) → only on-disk
+  //     local tracks are available. Plex and network-mounted local
+  //     paths need the network just as much as Qobuz does.
+  //   * Manual offline (user toggle) → the network is actually up,
+  //     so Plex and network drives still work; Qobuz is blocked only
+  //     because the user asked to be offline.
   function isTrackAvailable(track: DisplayTrack): boolean {
-    // Tracks removed from Qobuz are never available
     if (isTrackRemovedFromQobuz(track)) return false;
-    // When online, Qobuz tracks are available
     if (!offlineStatus.isOffline) return true;
-    // Local tracks are always available
-    if (track.isLocal) return true;
-    // When offline, check if we have a local copy
+
+    const isForced = offlineStatus.reason === 'no_network'
+      || offlineStatus.reason === 'not_logged_in';
+
+    if (track.isPlex) {
+      // Plex always goes through the Plex server — need real network.
+      return !isForced;
+    }
+    if (track.isLocal) {
+      // Network-mounted local paths behave like Plex when the wire is
+      // cut. If the file_path looks like a network mount (Linux
+      // /mnt/.., /media/.., /run/media/…/…, or Windows UNC \\host),
+      // treat it as unreachable under forced offline.
+      if (isForced && track.filePath && isNetworkPath(track.filePath)) {
+        return false;
+      }
+      return true;
+    }
+    // Qobuz track: need an offline copy.
     return tracksWithLocalCopies.has(track.id);
+  }
+
+  /**
+   * Heuristic for "this file lives on a network mount". Covers the
+   * common paths exposed by Linux automount and Windows UNC. Best-
+   * effort — a path that looks local (/home/user/music) but is
+   * actually a SMB mount will miss this check, but that's the
+   * tradeoff of doing detection in userspace without querying
+   * /proc/mounts.
+   */
+  function isNetworkPath(filePath: string): boolean {
+    const p = filePath.replace(/^file:\/\//, '');
+    if (p.startsWith('//') || p.startsWith('\\\\')) return true; // UNC
+    if (p.startsWith('/mnt/')) return true;
+    if (p.startsWith('/media/')) return true;
+    if (p.startsWith('/run/media/')) return true;
+    if (p.startsWith('/net/')) return true; // Solaris / macOS autofs
+    return false;
   }
 
   // Check which tracks have local copies (for offline mode)
@@ -1458,6 +1504,7 @@
       samplingRate: track.sample_rate / 1000, // Convert Hz to kHz for display
       isLocal: true,
       localTrackId: track.id,
+      filePath: track.file_path,
       artworkPath: track.artwork_path
     };
   }
@@ -1509,6 +1556,7 @@
       bitDepth: track.bit_depth,
       samplingRate: track.sample_rate / 1000,
       isLocal: true,
+      isPlex: true,
       artworkPath: track.artwork_path,
     };
   }
