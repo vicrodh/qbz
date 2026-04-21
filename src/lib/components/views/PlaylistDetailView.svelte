@@ -1803,17 +1803,15 @@
   }
 
   function buildQueueTracks(tracks: DisplayTrack[]) {
-    // Filter out blacklisted artists AND plex tracks from the queue.
-    // Plex exclusion is a short-term safety: the local-track queue path
-    // in the backend looks every id up in local_tracks, and Plex rating
-    // keys don't live there — they'd crash auto-advance with
-    // "Track not found". Plex tracks in a playlist still play when
-    // clicked directly (handleTrackClick dispatches via isPlex below);
-    // gapless auto-advance to/from plex is deferred until the backend
-    // queue learns to cross-reference plex_cache_tracks.
+    // Filter out blacklisted artists before building queue. Plex
+    // tracks now ride in the queue alongside local / Qobuz rows with
+    // `source: 'plex'` set — resolvePlaybackSource reads that on
+    // auto-advance and routes through playTrack's plex branch, which
+    // hits v2_plex_play_track. No backend queue changes needed because
+    // the backend queue is a dumb data structure — the frontend's
+    // onTrackEnded callback is what actually dispatches playback.
     const filteredTracks = tracks.filter(trk => {
-      if (trk.isPlex) return false;
-      if (trk.isLocal) return true; // Local tracks are never blacklisted
+      if (trk.isLocal) return true; // Local / plex tracks are never blacklisted
       if (!trk.artistId) return true; // No artist ID, can't check blacklist
       return !isArtistBlacklisted(trk.artistId);
     });
@@ -1829,12 +1827,20 @@
       bit_depth: trk.bitDepth ?? null,
       sample_rate: trk.samplingRate != null ? (trk.isLocal ? trk.samplingRate * 1000 : trk.samplingRate) : null,
       is_local: trk.isLocal ?? false,
+      // Explicit source marker drives auto-advance routing. Without
+      // this, plex tracks would fall into the "local" branch and
+      // crash with "Track not found" when the backend's local-track
+      // playback path can't find the ratingKey in local_tracks.
+      source: trk.isPlex ? 'plex' : (trk.isLocal ? 'local' : 'qobuz'),
       album_id: trk.isLocal ? null : (trk.albumId || null),
       artist_id: trk.isLocal ? null : (trk.artistId ?? null),
     }));
 
+    // Only filesystem-local tracks (NOT plex) populate localTrackIds —
+    // that Set is used by the offline-mode availability check and
+    // assumes ids exist in local_tracks. Plex playback bypasses it.
     const localIds = filteredTracks
-      .filter(trk => trk.isLocal)
+      .filter(trk => trk.isLocal && !trk.isPlex)
       .map(trk => Math.abs(trk.id));
 
     return { queueTracks, localIds };
