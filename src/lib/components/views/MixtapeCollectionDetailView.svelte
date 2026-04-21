@@ -522,7 +522,14 @@
   const LIST_ROW_HEIGHT = 56;
   const GRID_CARD_MIN_W = 170; // px — matches grid-template-columns minmax
   const GRID_GAP = 20; // px — matches .item-grid gap
-  const GRID_ROW_HEIGHT = 240; // px — card (170 art + title + subtitle + padding) + gap
+  // Chrome beyond the square artwork per grid card: the 8px gap between
+  // artwork and title, title line (~16px), optional subtitle line
+  // (~14px), plus 8px top+bottom padding on .grid-card. Tuned by
+  // inspection so the dynamic row height lines up with real cards; the
+  // old fixed 240 constant drifted on wide containers where cards grow
+  // past 170 and the unaccounted height piled up per row until the
+  // scrollbar couldn't reach the last row.
+  const GRID_CARD_CHROME_H = 62;
   const WINDOW_BUFFER = 4; // extra rows above/below viewport
 
   let scrollEl = $state<HTMLDivElement | null>(null);
@@ -585,6 +592,21 @@
     );
   });
 
+  // Actual card width given current column count, accounting for gaps.
+  // Cards are 1:1 aspect-ratio for artwork, so card_width also drives
+  // artwork height. Row height = artwork (= card_width) + chrome + gap.
+  // Tracked as a single $derived so the virtualWindow math picks up
+  // container-resize changes automatically.
+  const gridRowHeight = $derived.by(() => {
+    if (viewMode !== 'grid' || listContainerWidth <= 0 || gridColumns <= 0) {
+      return GRID_CARD_MIN_W + GRID_CARD_CHROME_H + GRID_GAP;
+    }
+    const cardWidth = Math.floor(
+      (listContainerWidth - GRID_GAP * (gridColumns - 1)) / gridColumns,
+    );
+    return cardWidth + GRID_CARD_CHROME_H + GRID_GAP;
+  });
+
   // Compute [firstIdx, lastIdx) of items to render + top/bottom spacer heights.
   const virtualWindow = $derived.by(() => {
     const total = visibleItems.length;
@@ -595,17 +617,18 @@
 
     if (viewMode === 'grid') {
       const cols = Math.max(1, gridColumns);
+      const rowH = gridRowHeight;
       const totalRows = Math.ceil(total / cols);
-      const firstRow = Math.max(0, Math.floor(localScroll / GRID_ROW_HEIGHT) - WINDOW_BUFFER);
+      const firstRow = Math.max(0, Math.floor(localScroll / rowH) - WINDOW_BUFFER);
       const lastRow = Math.min(
         totalRows,
-        Math.ceil((localScroll + viewportHeight) / GRID_ROW_HEIGHT) + WINDOW_BUFFER,
+        Math.ceil((localScroll + viewportHeight) / rowH) + WINDOW_BUFFER,
       );
       return {
         firstIdx: firstRow * cols,
         lastIdx: Math.min(total, lastRow * cols),
-        topSpacer: firstRow * GRID_ROW_HEIGHT,
-        bottomSpacer: Math.max(0, (totalRows - lastRow) * GRID_ROW_HEIGHT),
+        topSpacer: firstRow * rowH,
+        bottomSpacer: Math.max(0, (totalRows - lastRow) * rowH),
       };
     }
 
