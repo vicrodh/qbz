@@ -2,18 +2,22 @@
  * Immersive FPS Configuration
  *
  * Reads per-panel frame rate settings from userStorage.
- * Default is 15fps for all panels (low power consumption).
+ * Default is 30fps for all panels — perceptually smooth for the kind
+ * of slow-evolving audio-reactive visuals the immersive panels render,
+ * without burning CPU/GPU on machines that didn't ask for 60. Users
+ * who tuned specific panels higher keep their stored value — only
+ * panels with no stored preference pick up the new default.
  */
 
 import { getUserItem } from '$lib/utils/userStorage';
 
 const FPS_KEY_PREFIX = 'qbz-immersive-fps-';
-const DEFAULT_FPS = 15;
+const DEFAULT_FPS = 30;
 
-// Per-panel default overrides (panels not listed here use DEFAULT_FPS)
-const PANEL_DEFAULTS: Partial<Record<ImmersivePanelId, number>> = {
-  linebed: 60, // Linebed needs high FPS for dense terrain 3D effect
-};
+// Per-panel default overrides (panels not listed here use DEFAULT_FPS).
+// linebed used to run at 60 — 30 looks fine for the terrain effect and
+// aligns with the rest of the panels.
+const PANEL_DEFAULTS: Partial<Record<ImmersivePanelId, number>> = {};
 
 export type ImmersivePanelId =
   | 'ambient'
