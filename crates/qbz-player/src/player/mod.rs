@@ -2128,14 +2128,16 @@ impl Player {
                             //   * full-file playback (current_audio_data set)
                             //   * CMAF streaming, download complete (buffered
                             //     source holds the full file)
-                            //   * CMAF streaming, download IN PROGRESS — the
-                            //     decoder can only read already-buffered bytes
-                            //     and skip_duration would block the audio
-                            //     thread waiting for the rest. Reject cleanly
-                            //     here instead. Cached, offline-cached, and
-                            //     local-library playback don't reach this
-                            //     branch (current_audio_data is Some), so they
-                            //     keep seeking as before (issue #335).
+                            //   * CMAF streaming, download IN PROGRESS — only
+                            //     allowed if the target position falls inside
+                            //     the already-buffered region. skip_duration
+                            //     reads samples sequentially, so seeking past
+                            //     the watermark would block the audio thread
+                            //     waiting for the rest of the download.
+                            //     Cache, offline-cache, and local-library
+                            //     playback reach this handler with
+                            //     current_audio_data Some and skip the
+                            //     streaming branch entirely (issue #335).
                             if current_audio_data.is_none()
                                 && current_streaming_source.is_none()
                             {
@@ -2146,11 +2148,37 @@ impl Player {
                             }
                             if let Some(ref stream_src) = *current_streaming_source {
                                 if !stream_src.is_complete() {
-                                    log::warn!(
-                                        "Audio thread: seek to {}s ignored — track still streaming (not seekable until download completes)",
-                                        position_secs
+                                    // Approximate bytes-to-seconds mapping via
+                                    // download fraction × total duration. Exact
+                                    // for CBR, close-enough for FLAC/VBR; the
+                                    // 0.90 margin covers the error band so the
+                                    // decoder never reads past the watermark.
+                                    let duration_secs = thread_state.duration();
+                                    let progress = stream_src.progress().unwrap_or(0.0);
+                                    if duration_secs == 0 || progress <= 0.0 {
+                                        log::warn!(
+                                            "Audio thread: seek to {}s ignored — streaming progress unknown",
+                                            position_secs
+                                        );
+                                        return;
+                                    }
+                                    let max_seekable_secs =
+                                        (progress * 0.90 * duration_secs as f32) as u64;
+                                    if position_secs > max_seekable_secs {
+                                        log::warn!(
+                                            "Audio thread: seek to {}s ignored — past buffered watermark ({}s, progress {:.1}%)",
+                                            position_secs,
+                                            max_seekable_secs,
+                                            progress * 100.0
+                                        );
+                                        return;
+                                    }
+                                    log::info!(
+                                        "Audio thread: seek to {}s within buffered zone (watermark {}s, progress {:.1}%)",
+                                        position_secs,
+                                        max_seekable_secs,
+                                        progress * 100.0
                                     );
-                                    return;
                                 }
                             }
 
