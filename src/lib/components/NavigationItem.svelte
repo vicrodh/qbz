@@ -16,7 +16,7 @@
     iconSize?: number;
   }
 
-  let { icon, label, badge, tooltip, active = false, onclick, onHover, oncontextmenu, class: className = '', showLabel = true, indented = false, iconSize = 22 }: Props = $props();
+  let { icon, label, badge, tooltip, active = false, onclick, onHover, oncontextmenu, class: className = '', showLabel = true, indented = false, iconSize = 20 }: Props = $props();
 
   // Show custom tooltip in both expanded and collapsed sidebar.
   // Collapsed mode falls back to label when explicit tooltip is missing.

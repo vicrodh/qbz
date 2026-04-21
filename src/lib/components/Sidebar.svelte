@@ -1977,7 +1977,7 @@
                         {#snippet icon()}
                           {@const collage = item.playlist.images150 ?? item.playlist.images300 ?? item.playlist.images ?? []}
                           {#if showPlaylistCollage && collage.length > 0}
-                            <PlaylistCoverCollage images={collage} size={22} />
+                            <PlaylistCoverCollage images={collage} size={20} />
                           {:else}
                             <ListMusic size={14} />
                           {/if}
@@ -2009,7 +2009,7 @@
                         {#snippet icon()}
                           {@const collage = item.playlist.images150 ?? item.playlist.images300 ?? item.playlist.images ?? []}
                           {#if showPlaylistCollage && collage.length > 0}
-                            <PlaylistCoverCollage images={collage} size={22} />
+                            <PlaylistCoverCollage images={collage} size={20} />
                           {:else}
                             <ListMusic size={14} />
                           {/if}
@@ -2653,8 +2653,8 @@
   }
 
   .folder-header .icon-container {
-    width: 22px;
-    height: 22px;
+    width: 20px;
+    height: 20px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -2755,8 +2755,8 @@
   }
 
   .folder-popover-header .icon-container {
-    width: 22px;
-    height: 22px;
+    width: 20px;
+    height: 20px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -3121,8 +3121,8 @@
   }
 
   .context-menu-item .icon-container {
-    width: 22px;
-    height: 22px;
+    width: 20px;
+    height: 20px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -3187,8 +3187,8 @@
   }
 
   .favorites-nav-item .icon-container {
-    width: 22px;
-    height: 22px;
+    width: 20px;
+    height: 20px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -3339,8 +3339,8 @@
   }
 
   .my-qbz-parent .icon-container {
-    width: 22px;
-    height: 22px;
+    width: 20px;
+    height: 20px;
     display: flex;
     align-items: center;
     justify-content: center;
