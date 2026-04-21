@@ -7,8 +7,8 @@ use crate::config::download_settings::DownloadSettingsState;
 use crate::core_bridge::CoreBridgeState;
 use crate::integrations_v2::MusicBrainzV2State;
 use crate::library::{
-    get_artwork_cache_dir, thumbnails, LibraryState, LocalAlbum, LocalTrack, MetadataExtractor,
-    PlaylistLocalTrack, PlaylistSettings, PlaylistStats, ScanProgress,
+    get_artwork_cache_dir, thumbnails, AudioFormat, LibraryState, LocalAlbum, LocalTrack,
+    MetadataExtractor, PlaylistLocalTrack, PlaylistSettings, PlaylistStats, ScanProgress,
 };
 use crate::lyrics::LyricsState;
 use crate::offline::OfflineState;
@@ -272,6 +272,115 @@ pub async fn v2_dlna_play_track(
         conn.play().await.map_err(|e| e.to_string())?;
     }
     Ok(())
+}
+
+/// Play a LOCAL library track on a DLNA renderer. Reads the file from disk,
+/// infers content_type from the track's format, registers bytes with the
+/// media server, and sends AVTransport URI + Play to the renderer.
+///
+/// Mirrors `v2_dlna_play_track` but for local-source tracks — that command
+/// resolves a Qobuz stream URL and would fail for a library row id. Without
+/// this command, casting any local-library track silently falls back to the
+/// app's local audio backend (issue #332).
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_dlna_play_local_track(
+    trackId: i64,
+    metadata: DlnaMetadata,
+    dlna_state: State<'_, DlnaState>,
+    library_state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    log::info!("DLNA: dlna_play_local_track called for track_id={}", trackId);
+
+    let track = {
+        let guard = library_state.db.lock().await;
+        let db = guard.as_ref().ok_or("No active session")?;
+        db.get_track(trackId)
+            .map_err(|e| format!("Library lookup failed: {}", e))?
+            .ok_or_else(|| format!("Track {} not found in library", trackId))?
+    };
+
+    let audio_data = std::fs::read(&track.file_path)
+        .map_err(|e| format!("Failed to read {}: {}", track.file_path, e))?;
+    let content_type = local_track_content_type(&track);
+
+    let target_ip = {
+        let connection = dlna_state.connection.lock().await;
+        connection.as_ref().map(|conn| conn.device_ip().to_string())
+    };
+
+    dlna_state
+        .ensure_media_server()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Library row ids are small positive autoincrement integers; using them
+    // directly as MediaServer keys won't collide with Qobuz track ids within
+    // a single cast session (the server is ephemeral per cast connection).
+    let media_key = trackId as u64;
+    let url = {
+        let mut server_guard = dlna_state.media_server.lock().await;
+        let server = server_guard
+            .as_mut()
+            .ok_or("Media server not initialized")?;
+        server.register_audio(media_key, audio_data, &content_type);
+        match target_ip.as_deref() {
+            Some(ip) => server.get_audio_url_for_target(media_key, ip),
+            None => server.get_audio_url(media_key),
+        }
+        .ok_or_else(|| "Failed to build media URL".to_string())?
+    };
+
+    log::info!(
+        "DLNA: Playing local track {} ({}) via MediaServer URL: {}",
+        trackId,
+        content_type,
+        url
+    );
+
+    {
+        let mut connection = dlna_state.connection.lock().await;
+        let conn = connection.as_mut().ok_or("Not connected")?;
+        conn.load_media(&url, &metadata, &content_type)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    {
+        let mut connection = dlna_state.connection.lock().await;
+        let conn = connection.as_mut().ok_or("Not connected")?;
+        conn.play().await.map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
+}
+
+fn local_track_content_type(track: &LocalTrack) -> String {
+    match track.format {
+        AudioFormat::Flac => "audio/flac".to_string(),
+        AudioFormat::Alac => "audio/mp4".to_string(),
+        AudioFormat::Wav => "audio/wav".to_string(),
+        AudioFormat::Aiff => "audio/aiff".to_string(),
+        AudioFormat::Ape => "audio/x-ape".to_string(),
+        AudioFormat::Mp3 => "audio/mpeg".to_string(),
+        AudioFormat::Unknown => {
+            let ext = std::path::Path::new(&track.file_path)
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("")
+                .to_lowercase();
+            match ext.as_str() {
+                "flac" => "audio/flac",
+                "mp3" => "audio/mpeg",
+                "wav" => "audio/wav",
+                "m4a" | "mp4" | "aac" => "audio/mp4",
+                "aiff" | "aif" => "audio/aiff",
+                "ogg" | "oga" => "audio/ogg",
+                "opus" => "audio/opus",
+                _ => "audio/octet-stream",
+            }
+            .to_string()
+        }
+    }
 }
 
 #[tauri::command]

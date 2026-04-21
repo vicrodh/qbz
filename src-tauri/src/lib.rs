@@ -1409,6 +1409,7 @@ pub fn run() {
             commands_v2::v2_dlna_connect,
             commands_v2::v2_dlna_disconnect,
             commands_v2::v2_dlna_play_track,
+            commands_v2::v2_dlna_play_local_track,
             commands_v2::v2_dlna_play,
             commands_v2::v2_dlna_pause,
             commands_v2::v2_dlna_stop,
