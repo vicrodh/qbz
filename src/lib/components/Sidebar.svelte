@@ -1247,19 +1247,23 @@
     playlistsLoading = true;
     try {
       if (isOffline) {
-        // In offline mode, show only pending playlists (created offline)
+        // In offline mode, keep whatever regular (id >= 0) playlists the
+        // SWR cache restored from the previous online session so they
+        // stay browsable — playback falls back to cached/offline/local
+        // content per track. Add pending playlists (created offline) on
+        // top.
         console.log('[Sidebar] Loading pending playlists in offline mode');
         const pendingPlaylists = await invoke<import('$lib/stores/offlineStore').PendingPlaylist[]>('v2_get_pending_playlists');
 
-        // Store pending playlists metadata and populate localTrackCounts
         const newPendingMap = new Map<number, import('$lib/stores/offlineStore').PendingPlaylist>();
-        const newLocalTrackCounts = new Map<number, number>();
+        // Preserve local track counts already loaded for cached playlists;
+        // we'll layer pending counts on top.
+        const newLocalTrackCounts = new Map<number, number>(localTrackCounts);
 
-        // Convert pending playlists to Playlist format for UI compatibility
-        userPlaylists = pendingPlaylists.map(p => {
+        const pendingAsPlaylists = pendingPlaylists.map(p => {
           const negativeId = -p.id;
           newPendingMap.set(negativeId, p);
-          newLocalTrackCounts.set(negativeId, p.localTrackIds.length); // Populate local track count
+          newLocalTrackCounts.set(negativeId, p.localTrackIds.length);
 
           return {
             id: negativeId, // Negative ID to distinguish from real playlists
@@ -1279,6 +1283,12 @@
             }
           };
         });
+
+        // Keep cached regular playlists (positive ids) visible alongside
+        // the pending ones. Pending appear first — they're the user's most
+        // recent intent.
+        const cachedRegular = userPlaylists.filter(p => p.id >= 0);
+        userPlaylists = [...pendingAsPlaylists, ...cachedRegular];
 
         pendingPlaylistsMap = newPendingMap;
         localTrackCounts = newLocalTrackCounts;
@@ -1806,8 +1816,12 @@
     />
     {/if}
 
-    <!-- Playlists Section (hidden in offline mode) -->
-    {#if !isOffline}
+    <!-- Playlists Section.
+         Always rendered, including in offline mode — the SWR cache holds
+         the regular playlists from the last online session, and playback
+         of each track falls back to offline cache / local library / Plex
+         per track. Controls that require network (import, create, drag)
+         are individually gated on isOffline inside this block. -->
     <div class="section playlists-section">
       {#if isExpanded}
         <div class="playlists-header">
@@ -2095,7 +2109,6 @@
         </div>
       {/if}
     </div>
-    {/if}
 
     <!-- Local Library (hidden when Library is in titlebar) -->
     {#if !libraryInTitlebar}
