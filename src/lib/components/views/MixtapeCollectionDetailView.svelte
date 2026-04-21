@@ -679,7 +679,7 @@
   // (local file:// / tauri asset URLs / Plex) are returned as-is.
   function smallQobuzArtwork(
     url: string | null | undefined,
-    target: 50 | 150 = 50,
+    target: 50 | 150 | 230 = 50,
   ): string | null {
     if (!url) return null;
     return url.replace(/_(50|100|150|230|300|600|max|org)\.jpg/i, `_${target}.jpg`);
@@ -1629,7 +1629,7 @@
                 {#if artworkSrc}
                   <img
                     class="grid-artwork"
-                    use:cachedSrc={smallQobuzArtwork(artworkSrc, 150) ?? artworkSrc}
+                    use:cachedSrc={smallQobuzArtwork(artworkSrc, 230) ?? artworkSrc}
                     alt=""
                     loading="lazy"
                     decoding="async"
@@ -1694,6 +1694,13 @@
           {@const key = itemKey(item)}
           {@const isExpandLoading = expandLoading.has(key)}
           {@const showTracks = viewMode === 'expanded' && canExpand(item)}
+          <!-- .item-block wraps the row and its (optional) expanded track
+               list so `content-visibility: auto` can skip rendering the
+               whole unit when it's scrolled off-screen. With virtualization
+               disabled in expanded mode the item-row count is the full
+               visibleItems count, so this is how we keep layout cost
+               bounded to the viewport. -->
+          <div class="item-block">
           <div class="item-row" class:is-selected={isSelected} class:is-expanded={showTracks}>
             <div class="col-idx">
               {#if selectMode}
@@ -1947,6 +1954,7 @@
               {/if}
             </div>
           {/if}
+          </div>
         {/each}
         <div class="virtual-spacer" style:height="{activeBottomSpacer}px"></div>
       </div>
@@ -2406,6 +2414,13 @@
     cursor: pointer;
     transition: background 120ms ease;
     background: transparent;
+    /* Let the engine skip layout/paint/compositing for cards scrolled
+       off-screen. Paired with contain-intrinsic-size so the scrollbar
+       stays stable when cards pop in and out. 170+chrome matches the
+       minmax floor of the grid; actual cards bigger than this still
+       measure correctly once they enter the viewport. */
+    content-visibility: auto;
+    contain-intrinsic-size: 170px 240px;
   }
   .grid-card:hover {
     background: var(--bg-hover);
@@ -2629,6 +2644,20 @@
   /* ── Item list — matches existing track-list vocabulary ── */
   .item-list {
     border-top: 1px solid var(--bg-tertiary);
+  }
+
+  /* Wrapper around each item-row + expanded-tracks block.
+     content-visibility: auto tells the engine to skip rendering the
+     whole unit when it's off-screen. For expanded mode (where we
+     render every item so the scrollbar reaches the real end) this
+     substitutes manual virtualization with native skipping, so even
+     a 50-item collection fully expanded stays fluid.
+     The intrinsic hint is the collapsed row height (56px) — when
+     a row becomes visible and gets expanded, the browser measures
+     the real height and the scrollbar adjusts. */
+  .item-block {
+    content-visibility: auto;
+    contain-intrinsic-size: 100% 56px;
   }
 
   .item-list-header,
