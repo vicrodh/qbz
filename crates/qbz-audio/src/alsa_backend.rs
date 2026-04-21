@@ -271,6 +271,33 @@ fn find_card_number_by_name(short_name: &str) -> Option<String> {
         .map(|c| c.number.clone())
 }
 
+/// Build a `hw:CARD=<name>,DEV=<n>` fallback id from an aliased device id.
+/// Returns None for ids that don't carry a `CARD=<name>,DEV=<n>` shape
+/// (e.g. `default`, `hw:0,0`, unknown formats).
+///
+/// The raw `hw:` PCM is defined by the kernel driver for every card the
+/// system lists in /proc/asound, which makes it a safe last-resort when
+/// higher-level aliases like `iec958:` or `front:` aren't declared in the
+/// user's asound.conf (issue #331 — minimal Raspberry Pi OS installs don't
+/// ship a config entry for `iec958:CARD=<name>`, so the HifiBerry Digi2
+/// Pro's only selectable id failed to open even though the card was
+/// present and usable via `hw:`).
+fn build_hw_fallback_id(device_id: &str) -> Option<String> {
+    if !(device_id.starts_with("front:CARD=")
+        || device_id.starts_with("sysdefault:CARD=")
+        || device_id.starts_with("iec958:CARD=")
+        || device_id.starts_with("hdmi:CARD="))
+    {
+        return None;
+    }
+    let after_card = device_id.split("CARD=").nth(1)?;
+    let mut parts = after_card.splitn(2, ',');
+    let card_name = parts.next()?.to_string();
+    let dev_part = parts.next().unwrap_or("DEV=0");
+    let dev_num = dev_part.strip_prefix("DEV=").unwrap_or("0");
+    Some(format!("hw:CARD={},DEV={}", card_name, dev_num))
+}
+
 /// Extract card name from an ALSA device ID.
 /// `front:CARD=C20,DEV=0` -> `"C20"`, `hw:0,0` -> card 0 short name, etc.
 ///
@@ -919,7 +946,8 @@ impl AudioBackend for AlsaBackend {
         // don't chase ghosts wondering why their DAC "disappeared".
         let device = if let Some(device_id) = &config.device_id {
             log::info!("[ALSA Backend] Looking for device: {}", device_id);
-            self.host
+            let primary = self
+                .host
                 .output_devices()
                 .map_err(|e| format!("Failed to enumerate devices: {}", e))?
                 .find(|d| {
@@ -927,23 +955,62 @@ impl AudioBackend for AlsaBackend {
                         .ok()
                         .map(|desc| desc.name() == device_id.as_str())
                         .unwrap_or(false)
-                })
-                .ok_or_else(|| {
-                    let proc_found = extract_card_name_from_device(device_id)
-                        .and_then(|card| get_hw_supported_rates(&card))
-                        .is_some();
-                    if proc_found {
-                        format!(
-                            "Device '{}' is present in /proc/asound but CPAL cannot open it (usually a sample-rate/format mismatch — track rate {}Hz, or an ALSA name format mismatch). Try the plughw plugin in audio settings.",
-                            device_id, config.sample_rate
-                        )
-                    } else {
-                        format!(
-                            "Device '{}' not found by the ALSA backend (disconnected, renamed, or handled by another app)",
-                            device_id
-                        )
+                });
+
+            // Fallback: if the primary alias didn't resolve but /proc/asound
+            // shows the card is present, retry with the raw hw:CARD=<name>,
+            // DEV=<n> PCM. The kernel driver always exposes that for any
+            // registered card, which covers minimal distro configs where
+            // iec958:/hdmi:/front: aliases aren't declared in asound.conf
+            // (issue #331 — HifiBerry Digi2 Pro on Raspberry Pi OS).
+            let resolved = match primary {
+                Some(d) => Some(d),
+                None => match build_hw_fallback_id(device_id) {
+                    Some(hw_id)
+                        if extract_card_name_from_device(device_id)
+                            .and_then(|card| get_hw_supported_rates(&card))
+                            .is_some() =>
+                    {
+                        log::warn!(
+                            "[ALSA Backend] '{}' not resolvable by ALSA (alias likely missing in asound.conf); trying fallback '{}'",
+                            device_id,
+                            hw_id
+                        );
+                        let found = self
+                            .host
+                            .output_devices()
+                            .map_err(|e| format!("Failed to enumerate devices: {}", e))?
+                            .find(|d| {
+                                d.description()
+                                    .ok()
+                                    .map(|desc| desc.name() == hw_id.as_str())
+                                    .unwrap_or(false)
+                            });
+                        if found.is_some() {
+                            log::info!("[ALSA Backend] Using fallback device: {}", hw_id);
+                        }
+                        found
                     }
-                })?
+                    _ => None,
+                },
+            };
+
+            resolved.ok_or_else(|| {
+                let proc_found = extract_card_name_from_device(device_id)
+                    .and_then(|card| get_hw_supported_rates(&card))
+                    .is_some();
+                if proc_found {
+                    format!(
+                        "Device '{}' is present in /proc/asound but CPAL cannot open it (usually a sample-rate/format mismatch — track rate {}Hz, or an ALSA name format mismatch). Try the plughw plugin in audio settings.",
+                        device_id, config.sample_rate
+                    )
+                } else {
+                    format!(
+                        "Device '{}' not found by the ALSA backend (disconnected, renamed, or handled by another app)",
+                        device_id
+                    )
+                }
+            })?
         } else {
             log::info!("[ALSA Backend] Using default device");
             self.host
