@@ -284,7 +284,15 @@
   function updateProgress(e: MouseEvent) {
     if (progressRef) {
       const rect = progressRef.getBoundingClientRect();
-      const percentage = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+      let percentage = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+      // While a CMAF stream is still downloading, the backend rejects
+      // seeks past the buffered watermark (with a 10% safety margin —
+      // see qbz-player Seek handler). Clamp the drag visually so the
+      // user can't aim past that ceiling. The same 0.90 factor keeps
+      // frontend and backend in sync.
+      if (bufferProgress != null && bufferProgress < 1) {
+        percentage = Math.min(percentage, bufferProgress * 0.9 * 100);
+      }
       const newTime = Math.round((percentage / 100) * duration);
       dragPreviewTime = newTime;
     }
