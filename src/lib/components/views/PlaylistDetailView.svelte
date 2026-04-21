@@ -2628,8 +2628,10 @@
               isPlaying={isTrackPlaying}
               isActiveTrack={isActiveTrack}
               isLocal={track.isLocal}
-              isUnavailable={removedFromQobuz && isOwnPlaylist}
-              unavailableTooltip={removedFromQobuz ? $t('player.trackUnavailable') : undefined}
+              isUnavailable={(removedFromQobuz && isOwnPlaylist) || !available}
+              unavailableTooltip={removedFromQobuz
+                ? $t('player.trackUnavailable')
+                : (!available ? $t('offline.trackNotAvailable') : undefined)}
               isBlacklisted={trackBlacklisted}
               dragTrackIds={multiSelectMode && multiSelectedKeys.has(getTrackKey(track))
                 ? displayTracks.filter(trk => multiSelectedKeys.has(getTrackKey(trk)) && !trk.isLocal).map(trk => trk.id)
@@ -2644,7 +2646,16 @@
               menuActions={removedFromQobuz ? (isOwnPlaylist ? {
                 onRemoveFromPlaylist: () => removeTrackFromPlaylist(track),
                 onFindReplacement: () => openReplacementModal(track)
-              } : {}) : trackBlacklisted ? {
+              } : {}) : !available ? {
+                // Offline-unavailable: navigation + remove only.
+                // Playback / download / add-to-playlist all require
+                // network. "Find Replacement" is intentionally absent
+                // — going offline isn't a reason to replace a track.
+                onGoToAlbum: !track.isLocal && track.albumId && onTrackGoToAlbum ? () => onTrackGoToAlbum(track.albumId!) : undefined,
+                onGoToArtist: !track.isLocal && track.artistId && onTrackGoToArtist ? () => onTrackGoToArtist(track.artistId!) : undefined,
+                onShowInfo: !track.isLocal && onTrackShowInfo ? () => onTrackShowInfo(track.id) : undefined,
+                onRemoveFromPlaylist: isOwnPlaylist ? () => removeTrackFromPlaylist(track) : undefined
+              } : trackBlacklisted ? {
                 onGoToAlbum: !track.isLocal && track.albumId && onTrackGoToAlbum ? () => onTrackGoToAlbum(track.albumId!) : undefined,
                 onGoToArtist: !track.isLocal && track.artistId && onTrackGoToArtist ? () => onTrackGoToArtist(track.artistId!) : undefined,
                 onShowInfo: !track.isLocal && onTrackShowInfo ? () => onTrackShowInfo(track.id) : undefined
@@ -3331,10 +3342,14 @@
     flex: 1;
   }
 
-  /* Unavailable track styles (offline mode) */
+  /* Unavailable track styles (offline mode). Keep wrapper
+     interactive so the user can still right-click for navigation
+     context (go to album / artist / show info). The .track-row
+     itself drops grayscale and its onPlay is already gated on
+     `available` in the template, so clicking does nothing. */
   .track-row-wrapper.unavailable {
-    opacity: 0.4;
-    pointer-events: none;
+    opacity: 0.5;
+    pointer-events: auto;
     user-select: none;
   }
 
