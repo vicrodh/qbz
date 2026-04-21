@@ -217,6 +217,14 @@
     onLocalTrackPlay?: (track: LocalLibraryTrack) => void;
     onLocalTrackPlayNext?: (track: LocalLibraryTrack) => void;
     onLocalTrackPlayLater?: (track: LocalLibraryTrack) => void;
+    /**
+     * Play a Plex track from the playlist. Fired when the user clicks
+     * a row whose isPlex flag is set. The track argument carries the
+     * DisplayTrack shape (including title/artist/album/artwork) plus
+     * id = Number(ratingKey) — the +page.svelte handler routes to
+     * v2_plex_play_track via playTrack with source='plex'.
+     */
+    onPlexTrackPlay?: (track: DisplayTrack) => void;
     onSetLocalQueue?: (trackIds: number[]) => void;
     onPlaylistCountUpdate?: (playlistId: number, qobuzCount: number, localCount: number) => void;
     onPlaylistUpdated?: () => void;
@@ -249,6 +257,7 @@
     onLocalTrackPlay,
     onLocalTrackPlayNext,
     onLocalTrackPlayLater,
+    onPlexTrackPlay,
     onSetLocalQueue,
     onPlaylistCountUpdate,
     onPlaylistUpdated,
@@ -1549,10 +1558,21 @@
     return `${base}${path}${separator}X-Plex-Token=${encodeURIComponent(token)}`;
   }
 
-  // Convert plex tracks to DisplayTrack format
+  // Convert plex tracks to DisplayTrack format.
+  // id: parse the ratingKey to a Number when possible — this matches
+  // the LocalLibraryView.PlexCachedTrack.id shape (playback_track_id
+  // on the backend) and is what v2_plex_play_track expects as its
+  // ratingKey arg (via String(track.id)). The negative-offset fallback
+  // is only used for non-numeric rating keys, which are rare and only
+  // need frontend uniqueness.
   function plexTrackToDisplay(track: PlaylistPlexTrack, index: number): DisplayTrack {
+    const numericId = Number(track.ratingKey);
+    const idForUi =
+      Number.isFinite(numericId) && numericId > 0
+        ? numericId
+        : plexDisplayId(track.ratingKey);
     return {
-      id: plexDisplayId(track.ratingKey),
+      id: idForUi,
       number: index + 1,
       title: track.title,
       artist: track.artist,
@@ -1563,8 +1583,8 @@
       hires: (track.bit_depth && track.bit_depth >= 24) || track.sample_rate > 48000,
       bitDepth: track.bit_depth,
       samplingRate: track.sample_rate / 1000,
-      isLocal: true,
-      isPlex: true,
+      isLocal: true, // kept for context-builder / blacklist filters
+      isPlex: true,  // drives plex-specific playback routing
       artworkPath: track.artwork_path,
     };
   }
@@ -1783,8 +1803,16 @@
   }
 
   function buildQueueTracks(tracks: DisplayTrack[]) {
-    // Filter out blacklisted artists before building queue
+    // Filter out blacklisted artists AND plex tracks from the queue.
+    // Plex exclusion is a short-term safety: the local-track queue path
+    // in the backend looks every id up in local_tracks, and Plex rating
+    // keys don't live there — they'd crash auto-advance with
+    // "Track not found". Plex tracks in a playlist still play when
+    // clicked directly (handleTrackClick dispatches via isPlex below);
+    // gapless auto-advance to/from plex is deferred until the backend
+    // queue learns to cross-reference plex_cache_tracks.
     const filteredTracks = tracks.filter(trk => {
+      if (trk.isPlex) return false;
       if (trk.isLocal) return true; // Local tracks are never blacklisted
       if (!trk.artistId) return true; // No artist ID, can't check blacklist
       return !isArtistBlacklisted(trk.artistId);
@@ -1830,7 +1858,7 @@
         .map(trk => trk.id);
 
       const contextIndex = trackIds.indexOf(track.id);
-      
+
       if (contextIndex >= 0 && trackIds.length > 0) {
         await setPlaybackContext(
           'playlist',
@@ -1851,7 +1879,12 @@
       console.error('Failed to set queue:', err);
     }
 
-    if (track.isLocal && track.localTrackId) {
+    if (track.isPlex) {
+      // Plex tracks go through the dedicated plex handler — parent
+      // routes to playTrack with source='plex', which hits
+      // v2_plex_play_track(ratingKey=String(track.id)).
+      onPlexTrackPlay?.(track);
+    } else if (track.isLocal && track.localTrackId) {
       // Handle local track play
       const localTrack = localTracksMap.get(track.localTrackId);
       if (localTrack && onLocalTrackPlay) {
@@ -1863,6 +1896,11 @@
   }
 
   function handleTrackPlayNext(track: DisplayTrack) {
+    // Plex Play Next / Later aren't wired on the backend queue yet —
+    // the queue's local-track path looks ids up in local_tracks, which
+    // doesn't cover plex rating keys. Drop silently so the menu item
+    // is effectively a no-op for plex until queue support lands.
+    if (track.isPlex) return;
     if (track.isLocal && track.localTrackId) {
       const localTrack = localTracksMap.get(track.localTrackId);
       if (localTrack && onLocalTrackPlayNext) {
@@ -1874,6 +1912,7 @@
   }
 
   function handleTrackPlayLater(track: DisplayTrack) {
+    if (track.isPlex) return;
     if (track.isLocal && track.localTrackId) {
       const localTrack = localTracksMap.get(track.localTrackId);
       if (localTrack && onLocalTrackPlayLater) {
@@ -1886,7 +1925,16 @@
 
   async function removeTrackFromPlaylist(track: DisplayTrack) {
     try {
-      if (track.isLocal && track.localTrackId) {
+      if (track.isPlex) {
+        // Plex tracks live in playlist_plex_tracks, keyed by ratingKey
+        // (string). track.id is Number(ratingKey) — stringify it back.
+        await invoke('v2_playlist_remove_plex_track', {
+          playlistId,
+          ratingKey: String(track.id),
+        });
+        await Promise.all([loadLocalTracks(), loadPlexTracks()]);
+        notifyParentOfCounts();
+      } else if (track.isLocal && track.localTrackId) {
         // Remove local track
         await invoke('v2_playlist_remove_local_track', { playlistId, localTrackId: track.localTrackId });
         await Promise.all([loadLocalTracks(), loadPlexTracks()]);

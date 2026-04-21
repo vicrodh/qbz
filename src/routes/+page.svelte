@@ -3684,6 +3684,38 @@
   }
 
   /**
+   * Play a Plex-sourced DisplayTrack. Mirrors handleLocalTrackPlay's
+   * Plex branch: routes through playTrack with source='plex', which
+   * hits v2_plex_play_track(ratingKey=String(track.id)). track.id is
+   * already Number(ratingKey) by the time this callback fires — set
+   * in PlaylistDetailView.plexTrackToDisplay.
+   */
+  function handleDisplayPlexTrackPlay(track: DisplayTrack): void {
+    console.log('Playing plex display track:', track.id, track.title);
+    const quality = track.bitDepth && track.samplingRate
+      ? `${track.bitDepth}bit/${track.samplingRate}kHz`
+      : track.hires
+        ? 'Hi-Res'
+        : '-';
+    playTrack(
+      {
+        id: track.id,
+        title: track.title,
+        artist: track.artist || 'Unknown Artist',
+        album: track.album || 'Playlist',
+        artwork: track.albumArt || '',
+        duration: track.durationSeconds,
+        quality,
+        bitDepth: track.bitDepth,
+        samplingRate: track.samplingRate,
+        isLocal: false,
+        source: 'plex',
+      },
+      { isLocal: false, source: 'plex' },
+    );
+  }
+
+  /**
    * Helper: Create context and play display track
    */
   async function createContextAndPlayDisplayTrack(
@@ -5926,6 +5958,7 @@
           onLocalTrackPlay={handleLocalTrackPlay}
           onLocalTrackPlayNext={queueLocalTrackNext}
           onLocalTrackPlayLater={queueLocalTrackLater}
+          onPlexTrackPlay={handleDisplayPlexTrackPlay}
           onSetLocalQueue={handleSetLocalQueue}
           onPlaylistCountUpdate={(playlistId, qobuzCount, localCount) =>
             sidebarRef?.updatePlaylistCounts(playlistId, qobuzCount, localCount)
