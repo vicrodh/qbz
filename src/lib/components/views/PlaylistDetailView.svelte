@@ -1858,7 +1858,14 @@
     onTrackPlay(displayTrack);
   }
 
-  async function handlePlayAll() {
+  /** Default `startIndex = 0` preserves Play-All semantics (first track of the
+   *  canonical playlist order). The shuffle-all entry point passes a random
+   *  index to make the first track actually random — matching the pattern
+   *  ArtistDetailView / LabelView / LocalLibraryView / +page.handleShuffleAlbum
+   *  already use. Backend (qbz-player/queue.rs::set_queue) moves the passed
+   *  start_index to shuffle_order[0] when shuffle is on, so the remaining
+   *  tracks still cover the full playlist in shuffled order. Fixes #333. */
+  async function handlePlayAll(startIndex: number = 0) {
     // Get all display tracks (Qobuz + local, respecting search/sort)
     const allTracks = displayTracks;
     if (allTracks.length === 0) return;
@@ -1872,6 +1879,8 @@
 
     if (playableTracks.length === 0) return;
 
+    const safeStart = Math.max(0, Math.min(startIndex, playableTracks.length - 1));
+
     // Set playback context for playlist
     if (playlist) {
       const trackIds = playableTracks
@@ -1879,23 +1888,26 @@
         .map(trk => trk.id);
 
       if (trackIds.length > 0) {
+        // Context position: clamp against the Qobuz-only subset so we don't
+        // point past its end if the random pick landed on a local track.
+        const ctxPosition = Math.min(safeStart, trackIds.length - 1);
         await setPlaybackContext(
           'playlist',
           playlist.id.toString(),
           playlist.name,
           'qobuz',
           trackIds,
-          0
+          ctxPosition
         );
-        console.log(`[Playlist] Context created via Play All: "${playlist.name}", ${trackIds.length} tracks`);
+        console.log(`[Playlist] Context created via Play All: "${playlist.name}", ${trackIds.length} tracks, starting at ${ctxPosition}`);
       }
     }
 
     try {
-      await setPlaylistQueue(0);
+      await setPlaylistQueue(safeStart);
 
-      // Play first playable track (handle local vs Qobuz)
-      const firstTrack = playableTracks[0];
+      // Play the chosen starting track (handle local vs Qobuz)
+      const firstTrack = playableTracks[safeStart];
       if (firstTrack.isLocal && onLocalTrackPlay) {
         const localTrack = localTracks.find(trk => trk.id === Math.abs(firstTrack.id));
         if (localTrack) onLocalTrackPlay(localTrack);
@@ -1929,7 +1941,19 @@
     if (tracks.length > 0 && onTrackPlay) {
       try {
         await invoke('v2_set_shuffle', { enabled: true });
-        await handlePlayAll();
+        // Pick a random starting index so the first track played is actually
+        // random instead of the canonical tracks[0]. Without this, clicking
+        // Shuffle always landed on the first playlist track because
+        // handlePlayAll defaults startIndex to 0 (issue #333).
+        const pool = displayTracks.filter(trk => {
+          if (trk.isLocal) return true;
+          if (!trk.artistId) return true;
+          return !isArtistBlacklisted(trk.artistId);
+        });
+        const randomIndex = pool.length > 0
+          ? Math.floor(Math.random() * pool.length)
+          : 0;
+        await handlePlayAll(randomIndex);
       } catch (err) {
         console.error('Failed to shuffle:', err);
       }
@@ -2168,7 +2192,7 @@
         <div class="actions">
           <button
             class="action-btn-circle primary"
-            onclick={handlePlayAll}
+            onclick={() => handlePlayAll()}
             title={$t('actions.play')}
           >
             <Play size={20} fill="currentColor" color="currentColor" />
