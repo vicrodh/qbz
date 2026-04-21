@@ -231,16 +231,23 @@ export async function playTrack(
         showToast(track.title, 'buffering');
       }
 
-      // Check if we're casting to an external device
-      if (isCasting() && !isLocal) {
-        // Cast to connected device
-        await castTrack(track.id, {
-          title: track.title,
-          artist: track.artist,
-          album: track.album,
-          artworkUrl: track.artwork,
-          durationSecs: track.duration
-        });
+      // Check if we're casting to an external device. Route ALL sources
+      // (qobuz / local / plex) through castTrack — it dispatches on
+      // source × protocol internally. Previously this branch was gated on
+      // `!isLocal`, which silently fell back to the app's local backend
+      // when the user was casting a local or Plex track (issue #332).
+      if (isCasting()) {
+        await castTrack(
+          track.id,
+          {
+            title: track.title,
+            artist: track.artist,
+            album: track.album,
+            artworkUrl: track.artwork,
+            durationSecs: track.duration,
+          },
+          source,
+        );
       } else {
         // Use appropriate local playback command
         if (source === 'plex') {
