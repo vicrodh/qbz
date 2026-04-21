@@ -687,7 +687,7 @@
   "home": {
     "title": "Home",
     "featuredForYou": "Featured for you",
-    "recentlyPlayed": "Recently Played",
+    "recentlyPlayed": "Recently Played Albums",
     "newReleases": "New Releases",
     "pressAwards": "Press Accolades",
     "madeForYou": "Made for You",
@@ -704,7 +704,7 @@
     "qobuzPlaylists": "Qobuz Playlists",
     "essentialDiscography": "Essential Discography",
     "allTags": "All",
-    "continueListening": "Continue Listening",
+    "continueListening": "Recently Played Tracks",
     "yourTopArtists": "Your Top Artists",
     "artistPlays": "{count} plays",
     "moreFromFavorites": "More From Your Library",

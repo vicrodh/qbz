@@ -687,7 +687,7 @@
   "home": {
     "title": "Start",
     "featuredForYou": "Für dich empfohlen",
-    "recentlyPlayed": "Kürzlich gespielt",
+    "recentlyPlayed": "Zuletzt gespielte Alben",
     "newReleases": "Neuerscheinungen",
     "pressAwards": "Presseauszeichnungen",
     "madeForYou": "Für dich erstellt",
@@ -701,7 +701,7 @@
     "popularAlbums": "Beliebte Alben",
     "qobuzissimes": "Qobuzissimes",
     "editorPicks": "Alben der Woche",
-    "continueListening": "Weiterhören",
+    "continueListening": "Zuletzt gespielte Titel",
     "yourTopArtists": "Deine Top-Künstler",
     "artistPlays": "{count} Wiedergaben",
     "moreFromFavorites": "Mehr aus Favoriten",

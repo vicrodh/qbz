@@ -687,7 +687,7 @@
   "home": {
     "title": "Accueil",
     "featuredForYou": "Recommandé pour vous",
-    "recentlyPlayed": "Récemment écouté",
+    "recentlyPlayed": "Albums écoutés récemment",
     "newReleases": "Nouveautés",
     "pressAwards": "Récompensés par la presse",
     "madeForYou": "Fait pour vous",
@@ -704,7 +704,7 @@
     "qobuzPlaylists": "Playlists Qobuz",
     "essentialDiscography": "Discographie essentielle",
     "allTags": "Tout",
-    "continueListening": "Continuer l'écoute",
+    "continueListening": "Titres écoutés récemment",
     "yourTopArtists": "Vos artistes favoris",
     "artistPlays": "{count} écoutes",
     "moreFromFavorites": "Plus de votre bibliothèque",
