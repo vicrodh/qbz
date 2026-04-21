@@ -273,9 +273,21 @@ fn find_card_number_by_name(short_name: &str) -> Option<String> {
 
 /// Extract card name from an ALSA device ID.
 /// `front:CARD=C20,DEV=0` -> `"C20"`, `hw:0,0` -> card 0 short name, etc.
+///
+/// Handles every alias shape `enumerate_with_proc_descriptions` produces:
+/// `front:CARD=`, `sysdefault:CARD=`, `iec958:CARD=`, `hdmi:CARD=`, and the
+/// raw `hw:N,M` / `plughw:N,M` forms. Missing any of these meant the
+/// device-not-found error message downgraded to the generic "disconnected,
+/// renamed, or handled by another app" wording for S/PDIF / HDMI devices
+/// (issue #331 — HifiBerry Digi2 Pro is S/PDIF-only, so its selected id is
+/// `iec958:CARD=sndrpihifiberry,DEV=0`).
 fn extract_card_name_from_device(device_id: &str) -> Option<String> {
-    if device_id.starts_with("front:CARD=") || device_id.starts_with("sysdefault:CARD=") {
-        // front:CARD=C20,DEV=0 -> C20
+    if device_id.starts_with("front:CARD=")
+        || device_id.starts_with("sysdefault:CARD=")
+        || device_id.starts_with("iec958:CARD=")
+        || device_id.starts_with("hdmi:CARD=")
+    {
+        // <prefix>:CARD=<name>,DEV=<n> -> <name>
         let after_card = device_id.split("CARD=").nth(1)?;
         Some(after_card.split(',').next()?.to_string())
     } else if device_id.starts_with("hw:") || device_id.starts_with("plughw:") {
