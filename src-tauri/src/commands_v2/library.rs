@@ -1855,6 +1855,52 @@ pub async fn v2_playlist_get_local_tracks_with_position(
         .map_err(|e| e.to_string())
 }
 
+/// Add a Plex track (identified by its Plex ratingKey string) to a
+/// Qobuz playlist. Plex tracks live in a parallel playlist_plex_tracks
+/// table and never hit the Qobuz playlist API, so there's no risk of
+/// the remote playlist getting polluted with unreachable ids.
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_playlist_add_plex_track(
+    playlistId: u64,
+    ratingKey: String,
+    position: i32,
+    state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    let guard = state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    db.add_plex_track_to_playlist(playlistId, &ratingKey, position)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_playlist_remove_plex_track(
+    playlistId: u64,
+    ratingKey: String,
+    state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    let guard = state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    db.remove_plex_track_from_playlist(playlistId, &ratingKey)
+        .map_err(|e| e.to_string())
+}
+
+/// Return the (ratingKey, position) pairs for every Plex track in a
+/// playlist. Caller hydrates metadata (title, artist, cover) from the
+/// Plex cache.
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_playlist_get_plex_tracks_with_position(
+    playlistId: u64,
+    state: State<'_, LibraryState>,
+) -> Result<Vec<(String, i32)>, String> {
+    let guard = state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    db.get_playlist_plex_tracks_with_position(playlistId)
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 #[allow(non_snake_case)]
 pub async fn v2_playlist_get_settings(
