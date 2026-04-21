@@ -115,9 +115,28 @@
   let isDraggingVolume = $state(false);
   let hardwareSampleRate = $state<number | null>(null);
   let dacPassthrough = $state(false);
+  // Defer the seek until mouseup and keep the thumb pinned to the target
+  // position while the backend reinitializes the decoder (1–2s on long
+  // jumps for FLAC Hi-Res). Mirrors NowPlayingBar behavior.
+  let dragPreviewTime = $state<number | null>(null);
+  let pendingSeekTime = $state<number | null>(null);
+  let pendingSeekTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
-  const progress = $derived((currentTime / duration) * 100 || 0);
+  const effectiveTime = $derived(dragPreviewTime ?? pendingSeekTime ?? currentTime);
+  const progress = $derived((effectiveTime / duration) * 100 || 0);
+  const isSeekingPending = $derived(pendingSeekTime !== null && !isDraggingProgress);
   const hasLyrics = $derived(lyricsLines.length > 0);
+
+  $effect(() => {
+    if (pendingSeekTime === null) return;
+    if (Math.abs(currentTime - pendingSeekTime) < 2) {
+      pendingSeekTime = null;
+      if (pendingSeekTimeoutId !== null) {
+        clearTimeout(pendingSeekTimeoutId);
+        pendingSeekTimeoutId = null;
+      }
+    }
+  });
 
   // Use hardware sample rate when DAC passthrough is active, otherwise use track sample rate
   const displaySamplingRate = $derived(
@@ -177,7 +196,7 @@
     if (progressRef) {
       const rect = progressRef.getBoundingClientRect();
       const percentage = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
-      onSeek(Math.round((percentage / 100) * duration));
+      dragPreviewTime = Math.round((percentage / 100) * duration);
     }
   }
 
@@ -200,8 +219,18 @@
   }
 
   function handleMouseUp() {
+    if (isDraggingProgress && dragPreviewTime !== null) {
+      pendingSeekTime = dragPreviewTime;
+      onSeek(dragPreviewTime);
+      if (pendingSeekTimeoutId !== null) clearTimeout(pendingSeekTimeoutId);
+      pendingSeekTimeoutId = setTimeout(() => {
+        pendingSeekTime = null;
+        pendingSeekTimeoutId = null;
+      }, 8000);
+    }
     isDraggingProgress = false;
     isDraggingVolume = false;
+    dragPreviewTime = null;
   }
 
   function handleKeydown(e: KeyboardEvent) {
@@ -268,7 +297,7 @@
         <!-- Progress Bar -->
         <div class="progress-container">
           <div class="time-display">
-            <span>{formatTime(currentTime)}</span>
+            <span>{formatTime(effectiveTime)}</span>
             <span>{formatTime(duration)}</span>
           </div>
           <div
@@ -282,7 +311,7 @@
             aria-valuemax={duration}
           >
             <div class="progress-fill" style="width: {progress}%"></div>
-            <div class="progress-thumb" style="left: {progress}%"></div>
+            <div class="progress-thumb" class:seeking={isSeekingPending} style="left: {progress}%"></div>
           </div>
         </div>
 
@@ -616,6 +645,26 @@
 
   .progress-bar:hover .progress-thumb {
     opacity: 1;
+  }
+
+  .progress-thumb.seeking {
+    opacity: 1;
+    width: 14px;
+    height: 14px;
+    background-color: transparent;
+    border: 2px solid var(--accent-primary, #6366f1);
+    border-top-color: transparent;
+    box-shadow: none;
+    animation: progress-thumb-spin 0.7s linear infinite;
+  }
+
+  @keyframes progress-thumb-spin {
+    from {
+      transform: translate(-50%, -50%) rotate(0deg);
+    }
+    to {
+      transform: translate(-50%, -50%) rotate(360deg);
+    }
   }
 
   /* Controls */
