@@ -7,6 +7,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { skipIfRemote } from '$lib/services/commandRouter';
+import { getUserItem } from '$lib/utils/userStorage';
 import {
   getCurrentTrack,
   getIsPlaying,
@@ -299,7 +300,14 @@ export function setOnAskContinueLocally(callback: (track: PlayingTrack, position
 }
 
 /**
- * Cast a track to the connected device
+ * Cast a track to the connected device. Routes on protocol × source:
+ * - qobuz  → v2_{cast,dlna}_play_track (existing Qobuz URL resolution)
+ * - local  → v2_{cast,dlna}_play_local_track (library row, file on disk)
+ * - plex   → v2_{cast,dlna}_play_plex_track (proxy Plex bytes via media server)
+ *
+ * Previously only the Qobuz variants existed, so a local or Plex track
+ * reached here would fail: Qobuz API rejects library row ids (offline) or
+ * returns a wrong-song match (online, id collision). Issue #332.
  */
 export async function castTrack(
   trackId: number,
@@ -309,39 +317,56 @@ export async function castTrack(
     album: string;
     artworkUrl?: string;
     durationSecs?: number;
-  }
+  },
+  source: 'qobuz' | 'local' | 'plex' = 'qobuz'
 ): Promise<void> {
   if (skipIfRemote()) return;
   if (!state.isConnected || !state.protocol) {
     throw new Error('Not connected to any cast device');
   }
 
+  const backendMetadata = {
+    title: metadata.title,
+    artist: metadata.artist,
+    album: metadata.album,
+    artwork_url: metadata.artworkUrl,
+    duration_secs: metadata.durationSecs,
+  };
+
   try {
-    switch (state.protocol) {
-      case 'chromecast':
-        await invoke('v2_cast_play_track', {
-          trackId,
-          metadata: {
-            title: metadata.title,
-            artist: metadata.artist,
-            album: metadata.album,
-            artwork_url: metadata.artworkUrl,
-            duration_secs: metadata.durationSecs
-          }
-        });
-        break;
-      case 'dlna':
-        await invoke('v2_dlna_play_track', {
-          trackId: trackId,
-          metadata: {
-            title: metadata.title,
-            artist: metadata.artist,
-            album: metadata.album,
-            artwork_url: metadata.artworkUrl,
-            duration_secs: metadata.durationSecs
-          }
-        });
-        break;
+    if (source === 'plex') {
+      const baseUrl = (getUserItem('qbz-plex-poc-base-url') || '').trim();
+      const token = (getUserItem('qbz-plex-poc-token') || '').trim();
+      if (!baseUrl || !token) {
+        throw new Error('Missing Plex base URL or token');
+      }
+      const command =
+        state.protocol === 'chromecast'
+          ? 'v2_cast_play_plex_track'
+          : 'v2_dlna_play_plex_track';
+      await invoke(command, {
+        baseUrl,
+        token,
+        ratingKey: String(trackId),
+        metadata: backendMetadata,
+      });
+    } else if (source === 'local') {
+      const command =
+        state.protocol === 'chromecast'
+          ? 'v2_cast_play_local_track'
+          : 'v2_dlna_play_local_track';
+      await invoke(command, {
+        trackId,
+        metadata: backendMetadata,
+      });
+    } else {
+      // qobuz — existing path
+      const command =
+        state.protocol === 'chromecast' ? 'v2_cast_play_track' : 'v2_dlna_play_track';
+      await invoke(command, {
+        trackId,
+        metadata: backendMetadata,
+      });
     }
 
     state = {
@@ -352,7 +377,7 @@ export async function castTrack(
       durationSecs: metadata.durationSecs || 0
     };
     notifyListeners();
-    
+
     // Start position polling for DLNA and Chromecast
     if (state.protocol === 'dlna' || state.protocol === 'chromecast') {
       startPositionPolling();
