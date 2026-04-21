@@ -2,7 +2,6 @@
   import { tick } from 'svelte';
   import { Search, Plus, RefreshCw, ChevronDown, ChevronUp, Heart, ListMusic, LibraryBig, Import, Settings, Ellipsis, ArrowUpDown, ChevronRight, ChevronLeft, X, User, Disc, Disc3, Music, ShoppingBag, Eye, EyeOff, Pencil } from 'lucide-svelte';
   import FolderGlyph from './icons/FolderGlyph.svelte';
-  import PlaylistsGlyph from './icons/PlaylistsGlyph.svelte';
   import type { FavoritesPreferences } from '$lib/types';
   import { invoke, convertFileSrc } from '@tauri-apps/api/core';
   import { onMount } from 'svelte';
@@ -1790,10 +1789,7 @@
               </button>
             </div>
           {:else}
-            <div class="section-header section-header-with-icon">
-              <PlaylistsGlyph size={12} />
-              <span>{$t('nav.playlists')}</span>
-            </div>
+            <div class="section-header">{$t('nav.playlists')}</div>
           {/if}
           <div class="header-actions" bind:this={menuRef}>
             <button
@@ -2444,17 +2440,6 @@
     letter-spacing: 0.05em;
     margin-bottom: 6px;
     padding: 0 8px;
-  }
-
-  .section-header-with-icon {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    color: var(--accent-primary);
-  }
-
-  .section-header-with-icon > span {
-    color: var(--text-secondary);
   }
 
   .section-header-btn {
