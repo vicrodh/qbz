@@ -5,6 +5,8 @@
   import { cachedSrc } from '$lib/actions/cachedImage';
   import { t } from '$lib/i18n';
   import HorizontalScrollRow from '../HorizontalScrollRow.svelte';
+  import TrackGridCarousel from '../TrackGridCarousel.svelte';
+  import TrackGridCard from '../TrackGridCard.svelte';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackRow from '../TrackRow.svelte';
   import { getQobuzImageForSize } from '$lib/adapters/qobuzAdapters';
@@ -1032,37 +1034,23 @@
     </div>
   </div>
 {:else if continueTracks.length > 0}
-  <div class="section">
-    <div class="section-header">
-      <h2>{$t('home.continueListening')}</h2>
-    </div>
-    <div class="track-list compact">
-      {#each continueTracks as track, index (track.id)}
+  <TrackGridCarousel title={$t('home.continueListening')}>
+    {#snippet children()}
+      {#each continueTracks.slice(0, 24) as track, index (track.id)}
         {@const isThisActiveTrack = activeTrackId === track.id}
         {@const cacheStatus = getTrackOfflineCacheStatus?.(track.id) ?? { status: 'none' as const, progress: 0 }}
         {@const isTrackDownloaded = cacheStatus.status === 'ready'}
         {@const trackBlacklisted = track.artistId ? isArtistBlacklisted(track.artistId) : false}
-        <TrackRow
+        <TrackGridCard
           trackId={track.id}
-          number={index + 1}
           title={track.title}
-          artist={track.artist}
-          album={track.album}
-          duration={track.duration}
-          quality={getTrackQuality(track)}
+          album={track.album ?? ''}
+          artwork={track.albumArt ?? null}
           isPlaying={isPlaybackActive && isThisActiveTrack}
           isActiveTrack={isThisActiveTrack}
           isBlacklisted={trackBlacklisted}
-          compact={true}
-          hideDownload={trackBlacklisted}
-          hideFavorite={trackBlacklisted}
-          downloadStatus={cacheStatus.status}
-          downloadProgress={cacheStatus.progress}
-          onDownload={!trackBlacklisted && onTrackDownload ? () => onTrackDownload(track) : undefined}
-          onRemoveDownload={isTrackDownloaded && onTrackRemoveDownload ? () => onTrackRemoveDownload(track.id) : undefined}
-          onArtistClick={track.artistId && onArtistClick ? () => onArtistClick(track.artistId!) : undefined}
-          onAlbumClick={track.albumId && onAlbumClick ? () => onAlbumClick(track.albumId!) : undefined}
           onPlay={trackBlacklisted ? undefined : () => handleContinueTrackPlay(track, index)}
+          onAlbumClick={track.albumId && onAlbumClick ? () => onAlbumClick(track.albumId!) : undefined}
           menuActions={trackBlacklisted ? {
             onGoToAlbum: track.albumId && onTrackGoToAlbum ? () => onTrackGoToAlbum(track.albumId!) : undefined,
             onGoToArtist: track.artistId && onTrackGoToArtist ? () => onTrackGoToArtist(track.artistId!) : undefined,
@@ -1084,8 +1072,8 @@
           }}
         />
       {/each}
-    </div>
-  </div>
+    {/snippet}
+  </TrackGridCarousel>
 {/if}
 
 <!-- Recently Played -->
