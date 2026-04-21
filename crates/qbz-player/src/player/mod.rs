@@ -2124,15 +2124,18 @@ impl Player {
                             thread_state.set_gapless_ready(false);
                             thread_state.set_gapless_next_track_id(0);
 
-                            // Two source kinds reach this handler: full-file
-                            // playback (current_audio_data holds the complete
-                            // bytes) and CMAF streaming (bytes live inside
-                            // Arc<BufferedMediaSource> so current_audio_data
-                            // is None). Previously the handler early-returned
-                            // on None, so every seek during active streaming
-                            // silently dropped and the UI snapped back
-                            // (issue #335). Now it branches on whichever
-                            // source is live.
+                            // Three cases reach this handler:
+                            //   * full-file playback (current_audio_data set)
+                            //   * CMAF streaming, download complete (buffered
+                            //     source holds the full file)
+                            //   * CMAF streaming, download IN PROGRESS — the
+                            //     decoder can only read already-buffered bytes
+                            //     and skip_duration would block the audio
+                            //     thread waiting for the rest. Reject cleanly
+                            //     here instead. Cached, offline-cached, and
+                            //     local-library playback don't reach this
+                            //     branch (current_audio_data is Some), so they
+                            //     keep seeking as before (issue #335).
                             if current_audio_data.is_none()
                                 && current_streaming_source.is_none()
                             {
@@ -2140,6 +2143,15 @@ impl Player {
                                     "Audio thread: cannot seek - no audio data available"
                                 );
                                 return;
+                            }
+                            if let Some(ref stream_src) = *current_streaming_source {
+                                if !stream_src.is_complete() {
+                                    log::warn!(
+                                        "Audio thread: seek to {}s ignored — track still streaming (not seekable until download completes)",
+                                        position_secs
+                                    );
+                                    return;
+                                }
                             }
 
                             let Some(ref stream) = *stream_opt else {
