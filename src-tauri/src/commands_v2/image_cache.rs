@@ -41,12 +41,40 @@ async fn download_image_to_temp(url: &str) -> Result<String, String> {
     Ok(format!("file://{}", tmp_path.display()))
 }
 
+/// Strip query params that rotate across sessions but don't change the
+/// underlying resource. The canonical case is Plex's X-Plex-Token: it's
+/// regenerated per token refresh, so the same /library/metadata/…/thumb
+/// asset keeps hashing to a different key across restarts — meaning
+/// every re-open of the same collection re-downloads and re-caches the
+/// same image bytes. Normalizing the cache key (not the download URL)
+/// keeps the fetch authenticated while letting repeat lookups hit disk.
+fn cache_key_for(url: &str) -> String {
+    let Some(q_idx) = url.find('?') else {
+        return url.to_string();
+    };
+    let (base, query_with_qmark) = url.split_at(q_idx);
+    let query = &query_with_qmark[1..]; // skip '?'
+    let kept: Vec<&str> = query
+        .split('&')
+        .filter(|p| {
+            !p.starts_with("X-Plex-Token=")
+                && !p.starts_with("X-Plex-Client-Identifier=")
+        })
+        .collect();
+    if kept.is_empty() {
+        base.to_string()
+    } else {
+        format!("{}?{}", base, kept.join("&"))
+    }
+}
+
 #[tauri::command]
 pub async fn v2_get_cached_image(
     url: String,
     cache_state: State<'_, crate::image_cache::ImageCacheState>,
     settings_state: State<'_, crate::config::ImageCacheSettingsState>,
 ) -> Result<String, String> {
+    let cache_key = cache_key_for(&url);
     // Check if caching is enabled
     let settings = {
         let lock = settings_state
@@ -65,14 +93,15 @@ pub async fn v2_get_cached_image(
         return download_image_to_temp(&url).await;
     }
 
-    // Check cache first
+    // Check cache first (keyed by normalized URL so Plex token rotation
+    // doesn't force a miss on re-opens).
     {
         let lock = cache_state
             .service
             .lock()
             .map_err(|e| format!("Cache lock error: {}", e))?;
         if let Some(service) = lock.as_ref() {
-            if let Some(path) = service.get(&url) {
+            if let Some(path) = service.get(&cache_key) {
                 return Ok(format!("file://{}", path.display()));
             }
         }
@@ -107,7 +136,7 @@ pub async fn v2_get_cached_image(
             .lock()
             .map_err(|e| format!("Cache lock error: {}", e))?;
         if let Some(service) = lock.as_ref() {
-            let path = service.store(&url, &bytes)?;
+            let path = service.store(&cache_key, &bytes)?;
             let _ = service.evict(max_bytes);
             Some(format!("file://{}", path.display()))
         } else {
