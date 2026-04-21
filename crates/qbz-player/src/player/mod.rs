@@ -14,7 +14,7 @@ mod playback_engine;
 mod streaming_source;
 
 pub use streaming_source::{
-    BufferWriter, BufferedMediaSource, IncrementalStreamingSource, StreamingConfig,
+    BufferWriter, BufferedMediaSource, InMemorySource, IncrementalStreamingSource, StreamingConfig,
 };
 
 use rodio::buffer::SamplesBuffer;
@@ -2225,16 +2225,17 @@ impl Player {
                             let volume = thread_state.volume.load(Ordering::SeqCst) as f32 / 100.0;
                             engine.set_volume(volume);
 
-                            // Build the decoded source for the seek. Streaming:
-                            // create a fresh IncrementalStreamingSource and use
-                            // Symphonia's native seek — jumps via FLAC seek
-                            // table / MP3 TOC to the target byte, then decodes
-                            // forward to the exact sample. Far cheaper than
-                            // skip_duration's decode-every-sample-from-zero
-                            // loop, which stuttered under the buffered-source
-                            // mutex. Non-streaming: decode the in-RAM full file
-                            // and skip_duration as before (no lock contention,
-                            // fast).
+                            // Build the decoded source for the seek. Both
+                            // streaming and cached paths use Symphonia's native
+                            // seek — FLAC seek table / MP3 TOC jumps straight
+                            // to the target byte, then decodes forward to the
+                            // exact sample. Avoids skip_duration's
+                            // decode-every-sample-from-zero loop, which stalls
+                            // the audio thread on long seeks (especially FLAC
+                            // Hi-Res). Cached path falls back to decode_with_
+                            // fallback + skip_duration if Symphonia can't
+                            // probe the format (e.g., rodio-only MP4/AAC),
+                            // preserving existing behavior for those cases.
                             let skip_duration = Duration::from_secs(position_secs);
                             let skipped_source: Box<dyn Source<Item = f32> + Send> =
                                 if let Some(ref stream_src) = *current_streaming_source {
@@ -2261,14 +2262,41 @@ impl Player {
                                     let audio_data = current_audio_data
                                         .as_ref()
                                         .expect("current_audio_data was checked Some above");
-                                    match decode_with_fallback(audio_data) {
-                                        Ok(s) => Box::new(s.skip_duration(skip_duration)),
+                                    match InMemorySource::new(audio_data.clone()) {
+                                        Ok(mut s) => match s.seek_to(skip_duration) {
+                                            Ok(()) => Box::new(s),
+                                            Err(e) => {
+                                                log::warn!(
+                                                    "Native seek on cached source failed ({}); falling back to skip_duration",
+                                                    e
+                                                );
+                                                match decode_with_fallback(audio_data) {
+                                                    Ok(fb) => Box::new(fb.skip_duration(skip_duration)),
+                                                    Err(e) => {
+                                                        log::error!(
+                                                            "Failed to decode audio for seek: {}",
+                                                            e
+                                                        );
+                                                        return;
+                                                    }
+                                                }
+                                            }
+                                        },
                                         Err(e) => {
-                                            log::error!(
-                                                "Failed to decode audio for seek: {}",
+                                            log::warn!(
+                                                "InMemorySource probe failed ({}); falling back to skip_duration",
                                                 e
                                             );
-                                            return;
+                                            match decode_with_fallback(audio_data) {
+                                                Ok(fb) => Box::new(fb.skip_duration(skip_duration)),
+                                                Err(e) => {
+                                                    log::error!(
+                                                        "Failed to decode audio for seek: {}",
+                                                        e
+                                                    );
+                                                    return;
+                                                }
+                                            }
                                         }
                                     }
                                 };

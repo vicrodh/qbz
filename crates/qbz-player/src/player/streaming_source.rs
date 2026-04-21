@@ -24,7 +24,7 @@
 //! Communication uses `Mutex` + `Condvar` for blocking synchronization.
 
 use std::collections::VecDeque;
-use std::io::{Error as IoError, ErrorKind, Read, Result as IoResult, Seek, SeekFrom};
+use std::io::{Cursor, Error as IoError, ErrorKind, Read, Result as IoResult, Seek, SeekFrom};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
@@ -717,6 +717,208 @@ impl Iterator for IncrementalStreamingSource {
             self.decode_more(min_buffer);
         }
 
+        self.sample_queue.pop_front()
+    }
+}
+
+/// Cursor-backed MediaSource for in-memory audio data.
+struct InMemoryMediaSource {
+    inner: Cursor<Vec<u8>>,
+    len: u64,
+}
+
+impl InMemoryMediaSource {
+    fn new(data: Vec<u8>) -> Self {
+        let len = data.len() as u64;
+        Self {
+            inner: Cursor::new(data),
+            len,
+        }
+    }
+}
+
+impl Read for InMemoryMediaSource {
+    fn read(&mut self, buf: &mut [u8]) -> IoResult<usize> {
+        self.inner.read(buf)
+    }
+}
+
+impl Seek for InMemoryMediaSource {
+    fn seek(&mut self, pos: SeekFrom) -> IoResult<u64> {
+        self.inner.seek(pos)
+    }
+}
+
+impl MediaSource for InMemoryMediaSource {
+    fn is_seekable(&self) -> bool {
+        true
+    }
+
+    fn byte_len(&self) -> Option<u64> {
+        Some(self.len)
+    }
+}
+
+/// Symphonia-backed decoder for fully-in-memory audio bytes, with native
+/// seek support.
+///
+/// Exists because rodio's `skip_duration` decodes every sample from the
+/// start of the track when seeking, which on FLAC Hi-Res costs several
+/// seconds of CPU for long jumps and stalls the audio thread. This
+/// source uses `FormatReader::seek(Accurate, SeekTo::Time)` — FLAC seek
+/// table, MP3 Xing/VBRI TOC — to jump straight to the target sample, so
+/// the post-seek decode window is ~O(seek point density) instead of
+/// O(position).
+///
+/// Non-Symphonia formats (notably rodio's native MP4/AAC path) aren't
+/// supported here; callers must fall back to `decode_with_fallback` +
+/// `skip_duration` when `new` returns `Err`.
+pub struct InMemorySource {
+    sample_rate: u32,
+    channels: u16,
+    sample_queue: VecDeque<f32>,
+    format: Box<dyn FormatReader>,
+    decoder: Box<dyn Decoder>,
+    track_id: u32,
+    finished: bool,
+}
+
+impl InMemorySource {
+    pub fn new(data: Vec<u8>) -> Result<Self, String> {
+        let source = Box::new(InMemoryMediaSource::new(data)) as Box<dyn MediaSource>;
+        let mss = MediaSourceStream::new(source, Default::default());
+
+        let hint = Hint::new();
+
+        let format_opts = FormatOptions {
+            enable_gapless: true,
+            ..Default::default()
+        };
+        let metadata_opts: MetadataOptions = Default::default();
+
+        let probed = get_probe()
+            .format(&hint, mss, &format_opts, &metadata_opts)
+            .map_err(|err| format!("Symphonia probe failed for in-memory source: {}", err))?;
+
+        let track = probed
+            .format
+            .default_track()
+            .ok_or_else(|| "Symphonia: no supported audio tracks".to_string())?;
+
+        let track_id = track.id;
+        let codec_params = track.codec_params.clone();
+
+        let sample_rate = codec_params
+            .sample_rate
+            .ok_or_else(|| "No sample rate in codec params".to_string())?;
+        let channels = codec_params.channels.map(|c| c.count() as u16).unwrap_or(2);
+
+        let decoder = get_codecs()
+            .make(&codec_params, &DecoderOptions::default())
+            .map_err(|err| format!("Symphonia decoder init failed: {}", err))?;
+
+        Ok(Self {
+            sample_rate,
+            channels,
+            sample_queue: VecDeque::with_capacity(sample_rate as usize * channels as usize),
+            format: probed.format,
+            decoder,
+            track_id,
+            finished: false,
+        })
+    }
+
+    pub fn seek_to(&mut self, time: Duration) -> Result<(), String> {
+        self.format
+            .seek(
+                SeekMode::Accurate,
+                SeekTo::Time {
+                    time: time.into(),
+                    track_id: Some(self.track_id),
+                },
+            )
+            .map_err(|e| format!("Symphonia in-memory seek failed: {}", e))?;
+        self.decoder.reset();
+        self.sample_queue.clear();
+        self.finished = false;
+        Ok(())
+    }
+
+    fn decode_more(&mut self, min_samples: usize) {
+        if self.finished {
+            return;
+        }
+
+        while self.sample_queue.len() < min_samples {
+            let packet = match self.format.next_packet() {
+                Ok(packet) => packet,
+                Err(SymphoniaError::IoError(_)) => {
+                    self.finished = true;
+                    return;
+                }
+                Err(err) => {
+                    log::error!("Symphonia read error in in-memory source: {}", err);
+                    self.finished = true;
+                    return;
+                }
+            };
+
+            if packet.track_id() != self.track_id {
+                continue;
+            }
+
+            match self.decoder.decode(&packet) {
+                Ok(audio_buf) => {
+                    let spec = *audio_buf.spec();
+                    let mut sample_buf = SampleBuffer::<f32>::new(audio_buf.frames() as u64, spec);
+                    sample_buf.copy_interleaved_ref(audio_buf);
+                    self.sample_queue
+                        .extend(sample_buf.samples().iter().copied());
+                }
+                Err(SymphoniaError::DecodeError(e)) => {
+                    log::warn!("Decode error (skipping packet): {}", e);
+                    continue;
+                }
+                Err(SymphoniaError::ResetRequired) => {
+                    self.decoder.reset();
+                    continue;
+                }
+                Err(err) => {
+                    log::error!("Symphonia decode error: {}", err);
+                    self.finished = true;
+                    return;
+                }
+            }
+        }
+    }
+}
+
+impl Source for InMemorySource {
+    fn current_span_len(&self) -> Option<usize> {
+        None
+    }
+
+    fn channels(&self) -> std::num::NonZero<u16> {
+        std::num::NonZero::new(self.channels).unwrap()
+    }
+
+    fn sample_rate(&self) -> std::num::NonZero<u32> {
+        std::num::NonZero::new(self.sample_rate).unwrap()
+    }
+
+    fn total_duration(&self) -> Option<Duration> {
+        None
+    }
+}
+
+impl Iterator for InMemorySource {
+    type Item = f32;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let min_buffer = (self.sample_rate as usize * self.channels as usize) / 2;
+        if self.sample_queue.len() < min_buffer {
+            self.decode_more(min_buffer);
+        }
         self.sample_queue.pop_front()
     }
 }
