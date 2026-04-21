@@ -132,6 +132,35 @@
     playlist_position: number;
   }
 
+  // Plex track metadata from plex_cache_tracks (serialized camelCase)
+  interface PlexTrackMeta {
+    ratingKey: string;
+    title: string;
+    artist?: string;
+    album?: string;
+    durationMs?: number;
+    artworkPath?: string;
+    bitDepth?: number;
+    samplingRateHz?: number;
+    container?: string;
+    trackNumber?: number;
+    discNumber?: number;
+  }
+
+  // Plex track with resolved playlist position
+  interface PlaylistPlexTrack {
+    ratingKey: string;
+    title: string;
+    artist: string;
+    album: string;
+    duration_secs: number;
+    artwork_path?: string;
+    bit_depth?: number;
+    sample_rate: number;
+    format: string;
+    playlist_position: number;
+  }
+
   interface PlaylistSettings {
     qobuz_playlist_id: number;
     custom_artwork_path?: string;
@@ -222,12 +251,24 @@
   let tracks = $state.raw<DisplayTrack[]>([]);
   let localTracks = $state<PlaylistLocalTrack[]>([]);
   let localTracksMap = $state<Map<number, PlaylistLocalTrack>>(new Map());
-  let hasLocalTracks = $derived(localTracks.length > 0);
+  let plexTracks = $state<PlaylistPlexTrack[]>([]);
+  let hasLocalTracks = $derived(localTracks.length > 0 || plexTracks.length > 0);
 
-  // Total counts including local tracks
-  let totalTrackCount = $derived((playlist?.tracks_count ?? 0) + localTracks.length);
-  let localTracksDuration = $derived(localTracks.reduce((sum, track) => sum + track.duration_secs, 0));
-  let totalDuration = $derived((playlist?.duration ?? 0) + localTracksDuration);
+  // Total counts including local + plex tracks. Both live outside the
+  // Qobuz playlist on the server side, so we sum them with the Qobuz
+  // count to get the real track total the user sees.
+  let totalTrackCount = $derived(
+    (playlist?.tracks_count ?? 0) + localTracks.length + plexTracks.length,
+  );
+  let localTracksDuration = $derived(
+    localTracks.reduce((sum, track) => sum + track.duration_secs, 0),
+  );
+  let plexTracksDuration = $derived(
+    plexTracks.reduce((sum, track) => sum + track.duration_secs, 0),
+  );
+  let totalDuration = $derived(
+    (playlist?.duration ?? 0) + localTracksDuration + plexTracksDuration,
+  );
 
   // Suggestions computation gating: ALL playlists require manual activation.
   // >=2000 tracks: never compute (Qobuz limit, can't add more)
@@ -503,7 +544,7 @@
     // Load all data and notify parent when done
     const loadStart = performance.now();
     (async () => {
-      await Promise.all([loadPlaylist(), loadLocalTracks()]);
+      await Promise.all([loadPlaylist(), loadLocalTracks(), loadPlexTracks()]);
       console.log(`[Perf] all loads resolved: ${(performance.now() - t0).toFixed(1)}ms (network: ${(performance.now() - loadStart).toFixed(1)}ms)`);
       notifyParentOfCounts();
     })();
@@ -558,6 +599,55 @@
       localTracksMap = new Map();
     } finally {
       console.log(`[Perf] loadLocalTracks() done: ${(performance.now() - _lt0).toFixed(1)}ms`);
+    }
+  }
+
+  /**
+   * Load Plex tracks for this playlist. Two-step hydrate:
+   *   1. v2_playlist_get_plex_tracks_with_position → [(ratingKey, position)]
+   *   2. v2_plex_cache_get_tracks_by_keys → metadata for each ratingKey
+   * Missing tracks (cache purged, never hydrated) are silently dropped.
+   */
+  async function loadPlexTracks() {
+    if (playlistId < 0) {
+      plexTracks = [];
+      return;
+    }
+    try {
+      const pairs = await invoke<Array<[string, number]>>(
+        'v2_playlist_get_plex_tracks_with_position',
+        { playlistId },
+      );
+      if (pairs.length === 0) {
+        plexTracks = [];
+        return;
+      }
+      const ratingKeys = pairs.map(([rk]) => rk);
+      const metas = await invoke<PlexTrackMeta[]>('v2_plex_cache_get_tracks_by_keys', {
+        ratingKeys,
+      });
+      const metaByKey = new Map(metas.map((m) => [m.ratingKey, m]));
+      const hydrated: PlaylistPlexTrack[] = [];
+      for (const [ratingKey, position] of pairs) {
+        const m = metaByKey.get(ratingKey);
+        if (!m) continue;
+        hydrated.push({
+          ratingKey,
+          title: m.title,
+          artist: m.artist ?? 'Unknown Artist',
+          album: m.album ?? 'Unknown Album',
+          duration_secs: Math.floor((m.durationMs ?? 0) / 1000),
+          artwork_path: m.artworkPath,
+          bit_depth: m.bitDepth,
+          sample_rate: m.samplingRateHz ?? 44100,
+          format: m.container ?? 'flac',
+          playlist_position: position,
+        });
+      }
+      plexTracks = hydrated;
+    } catch (err) {
+      console.error('Failed to load plex tracks:', err);
+      plexTracks = [];
     }
   }
 
@@ -1237,7 +1327,7 @@
     multiSelectedKeys = new Set();
     multiSelectMode = false;
     await loadPlaylist();
-    if (localTrackIds.length > 0) await loadLocalTracks();
+    if (localTrackIds.length > 0) await Promise.all([loadLocalTracks(), loadPlexTracks()]);
     notifyParentOfCounts();
     onPlaylistUpdated?.();
   }
@@ -1372,35 +1462,93 @@
     };
   }
 
-  // Filtered and sorted tracks (merged Qobuz + local by position)
+  // Stable numeric id for a Plex track in the DisplayTrack shape.
+  // Offset into a negative range far from local track ids (which use
+  // -track.id, bounded by the local_tracks table size) so UI equality
+  // checks can't collide. For non-numeric rating keys we fall back to
+  // a djb2 hash.
+  const PLEX_DISPLAY_ID_OFFSET = -1_000_000_000;
+  function plexDisplayId(ratingKey: string): number {
+    const asNum = Number(ratingKey);
+    if (Number.isFinite(asNum) && asNum > 0) {
+      return PLEX_DISPLAY_ID_OFFSET - asNum;
+    }
+    let hash = 5381;
+    for (let i = 0; i < ratingKey.length; i++) {
+      hash = ((hash << 5) + hash + ratingKey.charCodeAt(i)) | 0;
+    }
+    return PLEX_DISPLAY_ID_OFFSET - Math.abs(hash);
+  }
+
+  // Convert plex tracks to DisplayTrack format
+  function plexTrackToDisplay(track: PlaylistPlexTrack, index: number): DisplayTrack {
+    return {
+      id: plexDisplayId(track.ratingKey),
+      number: index + 1,
+      title: track.title,
+      artist: track.artist,
+      album: track.album,
+      albumArt: track.artwork_path
+        ? (track.artwork_path.startsWith('http') ? track.artwork_path : `asset://localhost/${encodeURIComponent(track.artwork_path)}`)
+        : undefined,
+      duration: formatDuration(track.duration_secs),
+      durationSeconds: track.duration_secs,
+      hires: (track.bit_depth && track.bit_depth >= 24) || track.sample_rate > 48000,
+      bitDepth: track.bit_depth,
+      samplingRate: track.sample_rate / 1000,
+      isLocal: true,
+      artworkPath: track.artwork_path,
+    };
+  }
+
+  // Filtered and sorted tracks (merged Qobuz + local + plex by position)
   let displayTracks = $derived.by(() => {
-    // Fast path: no local tracks, no search, default sort → skip copy entirely
-    if (localTracks.length === 0 && !searchQuery.trim() && sortBy === 'default') {
+    // Fast path: no local/plex tracks, no search, default sort → skip copy entirely
+    if (
+      localTracks.length === 0
+      && plexTracks.length === 0
+      && !searchQuery.trim()
+      && sortBy === 'default'
+    ) {
       return tracks;
     }
 
-    // Full path: interleave with local tracks, filter, sort
+    // Full path: interleave with local + plex tracks, filter, sort
     const result: DisplayTrack[] = [];
 
-    // Create a map of local track positions
+    // Create maps of local / plex track positions. Local and plex use
+    // separate namespaces so there's no collision risk even at the same
+    // numeric position.
     const localByPosition = new Map<number, PlaylistLocalTrack>();
     for (const lt of localTracks) {
       localByPosition.set(lt.playlist_position, lt);
     }
+    const plexByPosition = new Map<number, PlaylistPlexTrack>();
+    for (const pt of plexTracks) {
+      plexByPosition.set(pt.playlist_position, pt);
+    }
 
-    // Calculate total count: must reach the highest local position
+    // Calculate total count: must reach the highest non-qobuz position
     const maxLocalPosition = localTracks.length > 0
       ? Math.max(...localTracks.map(lt => lt.playlist_position))
       : -1;
-    const minTotalCount = tracks.length + localTracks.length;
-    const totalCount = Math.max(minTotalCount, maxLocalPosition + 1);
+    const maxPlexPosition = plexTracks.length > 0
+      ? Math.max(...plexTracks.map(pt => pt.playlist_position))
+      : -1;
+    const maxExternalPosition = Math.max(maxLocalPosition, maxPlexPosition);
+    const minTotalCount = tracks.length + localTracks.length + plexTracks.length;
+    const totalCount = Math.max(minTotalCount, maxExternalPosition + 1);
 
-    // Interleave: iterate through positions, use local if exists, else use next Qobuz track
+    // Interleave: iterate through positions, use local/plex if exists,
+    // else use next Qobuz track
     let qobuzIdx = 0;
     for (let pos = 0; pos < totalCount; pos++) {
       const localTrack = localByPosition.get(pos);
+      const plexTrack = plexByPosition.get(pos);
       if (localTrack) {
         result.push(localTrackToDisplay(localTrack, result.length));
+      } else if (plexTrack) {
+        result.push(plexTrackToDisplay(plexTrack, result.length));
       } else if (qobuzIdx < tracks.length) {
         // Use Qobuz track
         result.push({ ...tracks[qobuzIdx], number: result.length + 1 });
@@ -1673,7 +1821,7 @@
       if (track.isLocal && track.localTrackId) {
         // Remove local track
         await invoke('v2_playlist_remove_local_track', { playlistId, localTrackId: track.localTrackId });
-        await loadLocalTracks();
+        await Promise.all([loadLocalTracks(), loadPlexTracks()]);
         notifyParentOfCounts();
       } else if (track.playlistTrackId) {
         // Remove Qobuz track using playlist_track_id (available from full playlist load)

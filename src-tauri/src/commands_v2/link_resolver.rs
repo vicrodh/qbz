@@ -1074,6 +1074,14 @@ pub fn v2_plex_cache_get_tracks(
 }
 
 #[tauri::command]
+#[allow(non_snake_case)]
+pub fn v2_plex_cache_get_tracks_by_keys(
+    ratingKeys: Vec<String>,
+) -> Result<Vec<crate::plex::PlexTrack>, String> {
+    crate::plex::plex_cache_get_tracks_by_keys(&ratingKeys)
+}
+
+#[tauri::command]
 pub fn v2_plex_cache_get_albums() -> Result<Vec<crate::plex::PlexCachedAlbum>, String> {
     crate::plex::plex_cache_get_albums()
 }

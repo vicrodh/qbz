@@ -1028,6 +1028,68 @@ pub fn plex_cache_get_tracks(
     Ok(tracks)
 }
 
+/// Hydrate metadata for a specific set of Plex tracks identified by
+/// their ratingKey. Used by the playlist detail view to render Plex
+/// rows that were added to a Qobuz-owned playlist (each row carries a
+/// rating key and a position; this call fills in title / artist /
+/// album / cover). Missing tracks (purged cache, never hydrated) are
+/// silently omitted — the caller is responsible for graying out
+/// positions that didn't come back.
+pub fn plex_cache_get_tracks_by_keys(rating_keys: &[String]) -> Result<Vec<PlexTrack>, String> {
+    if rating_keys.is_empty() {
+        return Ok(Vec::new());
+    }
+    let conn = open_plex_cache_db()?;
+    let placeholders = std::iter::repeat("?")
+        .take(rating_keys.len())
+        .collect::<Vec<_>>()
+        .join(",");
+    let sql = format!(
+        "SELECT rating_key, title, artist, album, duration_ms, artwork_path, part_key, container,
+                codec, channels, bitrate_kbps, sampling_rate_hz, bit_depth, track_number, disc_number,
+                year, genre
+         FROM plex_cache_tracks
+         WHERE rating_key IN ({})",
+        placeholders
+    );
+    let mut stmt = conn
+        .prepare(&sql)
+        .map_err(|e| format!("Failed to prepare Plex cache tracks query: {}", e))?;
+    let params_iter = rusqlite::params_from_iter(rating_keys.iter());
+    let rows = stmt
+        .query_map(params_iter, |row| {
+            Ok(PlexTrack {
+                rating_key: row.get(0)?,
+                title: decode_xml_entities(row.get::<_, String>(1)?.trim()),
+                artist: row
+                    .get::<_, Option<String>>(2)?
+                    .map(|v| decode_xml_entities(v.trim())),
+                album: row
+                    .get::<_, Option<String>>(3)?
+                    .map(|v| decode_xml_entities(v.trim())),
+                duration_ms: row.get(4)?,
+                artwork_path: row.get(5)?,
+                part_key: row.get(6)?,
+                container: row.get(7)?,
+                codec: row.get(8)?,
+                channels: row.get(9)?,
+                bitrate_kbps: row.get(10)?,
+                sampling_rate_hz: row.get(11)?,
+                bit_depth: row.get(12)?,
+                track_number: row.get(13)?,
+                disc_number: row.get(14)?,
+                year: row.get::<_, Option<i64>>(15)?.map(|v| v as u32),
+                genre: row.get(16)?,
+            })
+        })
+        .map_err(|e| format!("Failed to query Plex cache tracks by keys: {}", e))?;
+    let mut tracks = Vec::new();
+    for row in rows {
+        tracks.push(row.map_err(|e| format!("Failed to read Plex cache track row: {}", e))?);
+    }
+    Ok(tracks)
+}
+
 #[tauri::command]
 pub fn plex_cache_get_albums() -> Result<Vec<PlexCachedAlbum>, String> {
     let conn = open_plex_cache_db()?;

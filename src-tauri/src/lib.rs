@@ -1385,6 +1385,7 @@ pub fn run() {
             commands_v2::v2_plex_cache_save_sections,
             commands_v2::v2_plex_cache_save_tracks,
             commands_v2::v2_plex_cache_get_tracks,
+            commands_v2::v2_plex_cache_get_tracks_by_keys,
             commands_v2::v2_plex_cache_get_albums,
             commands_v2::v2_plex_cache_get_album_tracks,
             commands_v2::v2_plex_cache_search_tracks,
