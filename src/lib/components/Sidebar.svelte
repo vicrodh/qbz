@@ -5,6 +5,7 @@
   import { invoke, convertFileSrc } from '@tauri-apps/api/core';
   import { onMount } from 'svelte';
   import NavigationItem from './NavigationItem.svelte';
+  import PlaylistCoverCollage from './PlaylistCoverCollage.svelte';
   import UserCard from './UserCard.svelte';
   import MyQbzNavEditModal from './MyQbzNavEditModal.svelte';
   import {
@@ -57,6 +58,8 @@
     name: string;
     tracks_count: number;
     images?: string[];
+    images150?: string[];
+    images300?: string[];
     duration?: number;
   }
 
@@ -1960,8 +1963,16 @@
                         oncontextmenu={(e) => handlePlaylistContextMenu(e, item.playlist, item.folderId)}
                         showLabel={true}
                         indented={true}
+                        iconSize={22}
                       >
-                        {#snippet icon()}<ListMusic size={14} />{/snippet}
+                        {#snippet icon()}
+                          {@const collage = item.playlist.images150 ?? item.playlist.images300 ?? item.playlist.images ?? []}
+                          {#if collage.length > 0}
+                            <PlaylistCoverCollage images={collage} size={22} />
+                          {:else}
+                            <ListMusic size={14} />
+                          {/if}
+                        {/snippet}
                       </NavigationItem>
                     </div>
                   {:else if item.type === 'root-playlist'}
@@ -1985,8 +1996,16 @@
                         onHover={() => loadPlaylistTooltip(item.playlist)}
                         oncontextmenu={(e) => handlePlaylistContextMenu(e, item.playlist, null)}
                         showLabel={isExpanded}
+                        iconSize={22}
                       >
-                        {#snippet icon()}<ListMusic size={14} />{/snippet}
+                        {#snippet icon()}
+                          {@const collage = item.playlist.images150 ?? item.playlist.images300 ?? item.playlist.images ?? []}
+                          {#if collage.length > 0}
+                            <PlaylistCoverCollage images={collage} size={22} />
+                          {:else}
+                            <ListMusic size={14} />
+                          {/if}
+                        {/snippet}
                       </NavigationItem>
                     </div>
                   {:else if item.type === 'collapsed-folder'}

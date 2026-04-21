@@ -13,9 +13,10 @@
     class?: string;
     showLabel?: boolean;
     indented?: boolean;
+    iconSize?: number;
   }
 
-  let { icon, label, badge, tooltip, active = false, onclick, onHover, oncontextmenu, class: className = '', showLabel = true, indented = false }: Props = $props();
+  let { icon, label, badge, tooltip, active = false, onclick, onHover, oncontextmenu, class: className = '', showLabel = true, indented = false, iconSize = 14 }: Props = $props();
 
   // Show custom tooltip in both expanded and collapsed sidebar.
   // Collapsed mode falls back to label when explicit tooltip is missing.
@@ -83,7 +84,7 @@
   onmouseenter={handleMouseEnter}
   onmouseleave={handleMouseLeave}
 >
-  <div class="icon-container">
+  <div class="icon-container" style="width: {iconSize}px; height: {iconSize}px;">
     {@render icon()}
   </div>
   {#if showLabel}
