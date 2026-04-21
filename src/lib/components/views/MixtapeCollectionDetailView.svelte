@@ -2438,13 +2438,10 @@
     cursor: pointer;
     transition: background 120ms ease;
     background: transparent;
-    /* Let the engine skip layout/paint/compositing for cards scrolled
-       off-screen. Paired with contain-intrinsic-size so the scrollbar
-       stays stable when cards pop in and out. 150+chrome matches the
-       minmax floor of the grid; actual cards bigger than this still
-       measure correctly once they enter the viewport. */
-    content-visibility: auto;
-    contain-intrinsic-size: 150px 220px;
+    /* Virtualization already clips the rendered slice to viewport +
+       buffer; doubling up with content-visibility:auto caused cards
+       to re-eject and re-paint on scroll-back, which read as a black
+       flash over already-seen content. */
   }
   .grid-card:hover {
     background: var(--bg-hover);
