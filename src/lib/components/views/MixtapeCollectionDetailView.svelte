@@ -2458,6 +2458,31 @@
     overflow: hidden;
     background: var(--bg-tertiary);
   }
+  /* Loading spinner behind the <img>. The wrap has overflow:hidden +
+     dark background; while the img is still fetching (src set, no
+     bytes yet) the img is transparent and the spinner shows through.
+     As soon as the image paints, its opaque pixels cover the pseudo-
+     element — no JS state, no onload handler, no per-card re-render. */
+  .grid-artwork-wrap::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 24px;
+    height: 24px;
+    margin: -12px 0 0 -12px;
+    border: 2px solid var(--border-subtle);
+    border-top-color: var(--accent-primary);
+    border-radius: 50%;
+    animation: grid-artwork-spin 0.8s linear infinite;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .grid-artwork,
+  .grid-artwork-placeholder {
+    position: relative;
+    z-index: 1;
+  }
   .grid-artwork {
     width: 100%;
     height: 100%;
@@ -2465,10 +2490,22 @@
     display: block;
   }
   .grid-artwork-placeholder {
+    width: 100%;
+    height: 100%;
     display: flex;
     align-items: center;
     justify-content: center;
     color: var(--text-muted);
+    background: var(--bg-tertiary);
+  }
+
+  @keyframes grid-artwork-spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
   }
   .grid-play-overlay {
     position: absolute;
