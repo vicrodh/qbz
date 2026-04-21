@@ -30,6 +30,7 @@
   import BulkActionBar from '../BulkActionBar.svelte';
   import TrackRow from '../TrackRow.svelte';
   import { cachedSrc } from '$lib/actions/cachedImage';
+  import { preloadImages } from '$lib/services/imageCacheService';
   import { showToast } from '$lib/stores/toastStore';
   import { getUserItem, setUserItem, removeUserItem } from '$lib/utils/userStorage';
   import { openAddToMixtape } from '$lib/stores/addToMixtapeModalStore';
@@ -520,7 +521,7 @@
   // the scrollbar can't reach the true bottom. Fixing CSS + constant together
   // is the cheapest path to smooth scroll without variable-height windowing.
   const LIST_ROW_HEIGHT = 56;
-  const GRID_CARD_MIN_W = 170; // px — matches grid-template-columns minmax
+  const GRID_CARD_MIN_W = 150; // px — matches grid-template-columns minmax
   const GRID_GAP = 20; // px — matches .item-grid gap
   // Chrome beyond the square artwork per grid card: the 8px gap between
   // artwork and title, title line (~16px), optional subtitle line
@@ -534,7 +535,13 @@
 
   let scrollEl = $state<HTMLDivElement | null>(null);
   let listAnchorEl = $state<HTMLDivElement | null>(null);
-  let viewportHeight = $state(0);
+  // Seed viewportHeight with something reasonable so the very first
+  // virtualWindow computation returns a small slice instead of the
+  // `viewportHeight <= 0` fallback (which returned all items and
+  // caused every card's cachedSrc action to fire a backend invoke on
+  // mount — the main cause of "slow to open" on large collections).
+  // bind:clientHeight replaces this with the real value a tick later.
+  let viewportHeight = $state(typeof window !== 'undefined' ? window.innerHeight : 800);
   let listScrollTop = $state(0); // scrollTop of scrollEl, 0 when hero in view
   let listAnchorOffsetTop = $state(0); // distance from scroller top to list start
   let listContainerWidth = $state(0);
@@ -770,6 +777,23 @@
       collection = await getCollection(collectionId);
       if (collection) {
         void resolveItems(collection.items);
+        // Prime the image cache for every item up front. preloadImages
+        // fires getCachedImageUrl in the background for each URL so by
+        // the time the user scrolls to a card, its resolved asset://
+        // URL is already in the in-memory map and cachedSrc can set
+        // src without awaiting a backend round trip — that round trip
+        // was the visible "dark placeholder flash" per card during
+        // scroll on large collections.
+        // Request the 150px variant (matches the grid card display
+        // size) so the backend caches the right asset.
+        const urls = collection.items
+          .map((it) => {
+            const raw = it.artwork_url;
+            if (!raw) return null;
+            return smallQobuzArtwork(raw, 150) ?? raw;
+          })
+          .filter((u): u is string => !!u);
+        preloadImages(urls);
       }
     } catch (err) {
       console.error('[MixtapeCollectionDetailView] load failed:', err);
@@ -1629,7 +1653,7 @@
                 {#if artworkSrc}
                   <img
                     class="grid-artwork"
-                    use:cachedSrc={smallQobuzArtwork(artworkSrc, 230) ?? artworkSrc}
+                    use:cachedSrc={smallQobuzArtwork(artworkSrc, 150) ?? artworkSrc}
                     alt=""
                     loading="lazy"
                     decoding="async"
@@ -2401,7 +2425,7 @@
   /* Grid view — auto-fill tiles mirroring AlbumCard proportions. */
   .item-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
     gap: 20px;
     padding: 0 12px;
   }
@@ -2416,11 +2440,11 @@
     background: transparent;
     /* Let the engine skip layout/paint/compositing for cards scrolled
        off-screen. Paired with contain-intrinsic-size so the scrollbar
-       stays stable when cards pop in and out. 170+chrome matches the
+       stays stable when cards pop in and out. 150+chrome matches the
        minmax floor of the grid; actual cards bigger than this still
        measure correctly once they enter the viewport. */
     content-visibility: auto;
-    contain-intrinsic-size: 170px 240px;
+    contain-intrinsic-size: 150px 220px;
   }
   .grid-card:hover {
     background: var(--bg-hover);

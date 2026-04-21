@@ -64,6 +64,24 @@ export async function getCachedImageUrl(url: string): Promise<string> {
 }
 
 /**
+ * Synchronous peek into the in-memory URL map. Returns the resolved
+ * (disk-cached) URL if this image has already been fetched this
+ * session; returns undefined otherwise.
+ *
+ * Used by the cachedSrc action to avoid an `await` microtask — when
+ * the map is warm (preloaded at page load or previously resolved)
+ * the <img>'s src is set synchronously on mount instead of flashing
+ * a placeholder while a Promise resolves. asset:// and file:// URLs
+ * short-circuit the pre-check and return themselves, since they
+ * never need backend proxying.
+ */
+export function getResolvedIfCached(url: string): string | undefined {
+  if (!url) return undefined;
+  if (url.startsWith('file://') || url.startsWith('asset://')) return url;
+  return resolvedUrls.get(url);
+}
+
+/**
  * Clear the in-memory URL map (e.g., when cache is cleared from settings).
  */
 export function clearResolvedUrls(): void {
