@@ -1942,7 +1942,9 @@
                       ondragleave={() => handleFolderDragLeave(item.folder.id)}
                       ondrop={(e) => handleFolderDrop(e, item.folder.id)}
                     >
-                      <FolderGlyph variant={isFolderExp ? 'open' : 'closed'} size={14} />
+                      <div class="icon-container">
+                        <FolderGlyph variant={isFolderExp ? 'open' : 'closed'} size={14} />
+                      </div>
                       <span class="folder-name">{item.folder.name}</span>
                       <span class="folder-count">{folderPlaylists.length}</span>
                       <span class="folder-chevron" class:expanded={isFolderExp}>
@@ -1971,7 +1973,6 @@
                         oncontextmenu={(e) => handlePlaylistContextMenu(e, item.playlist, item.folderId)}
                         showLabel={true}
                         indented={true}
-                        iconSize={showPlaylistCollage ? 22 : 14}
                       >
                         {#snippet icon()}
                           {@const collage = item.playlist.images150 ?? item.playlist.images300 ?? item.playlist.images ?? []}
@@ -2004,7 +2005,6 @@
                         onHover={() => loadPlaylistTooltip(item.playlist)}
                         oncontextmenu={(e) => handlePlaylistContextMenu(e, item.playlist, null)}
                         showLabel={isExpanded}
-                        iconSize={showPlaylistCollage ? 22 : 14}
                       >
                         {#snippet icon()}
                           {@const collage = item.playlist.images150 ?? item.playlist.images300 ?? item.playlist.images ?? []}
@@ -2192,7 +2192,9 @@
                 class="context-menu-item"
                 onclick={() => handleMoveToFolder(folder.id)}
               >
-                <FolderGlyph variant="closed" size={14} />
+                <div class="icon-container">
+                  <FolderGlyph variant="closed" size={14} />
+                </div>
                 {folder.name}
               </button>
             {/each}
@@ -2235,7 +2237,9 @@
     tabindex="-1"
   >
     <div class="folder-popover-header">
-      <FolderGlyph variant="open" size={14} />
+      <div class="icon-container">
+        <FolderGlyph variant="open" size={14} />
+      </div>
       <span>{folderPopover.folderName}</span>
     </div>
     {#if folderPopoverPlaylists.length > 0}
@@ -2636,15 +2640,25 @@
   .folder-header {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     width: 100%;
-    padding: 6px 8px;
+    padding: 0 8px;
+    height: 32px;
     background: transparent;
     border: none;
     border-radius: 6px;
     cursor: pointer;
     color: var(--accent-primary);
     transition: background-color 150ms ease;
+  }
+
+  .folder-header .icon-container {
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
   }
 
   .folder-header:hover {
@@ -2738,6 +2752,15 @@
     letter-spacing: 0.03em;
     border-bottom: 1px solid var(--border-subtle);
     margin-bottom: 4px;
+  }
+
+  .folder-popover-header .icon-container {
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
   }
 
   .folder-popover-header > span {
@@ -3084,7 +3107,7 @@
   .context-menu-item {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     width: 100%;
     padding: 8px 10px;
     background: none;
@@ -3095,6 +3118,16 @@
     cursor: pointer;
     text-align: left;
     transition: background-color 150ms ease;
+  }
+
+  .context-menu-item .icon-container {
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--accent-primary);
   }
 
   .context-menu-item:hover {
@@ -3154,8 +3187,8 @@
   }
 
   .favorites-nav-item .icon-container {
-    width: 14px;
-    height: 14px;
+    width: 22px;
+    height: 22px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -3306,8 +3339,8 @@
   }
 
   .my-qbz-parent .icon-container {
-    width: 14px;
-    height: 14px;
+    width: 22px;
+    height: 22px;
     display: flex;
     align-items: center;
     justify-content: center;
