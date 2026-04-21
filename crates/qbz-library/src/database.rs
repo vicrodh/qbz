@@ -88,6 +88,7 @@ impl LibraryDatabase {
                 indexed_at INTEGER NOT NULL,
                 album_group_key TEXT,
                 album_group_title TEXT,
+                is_network_mount INTEGER NOT NULL DEFAULT 0,
                 UNIQUE(file_path, cue_start_secs)
             );
 
@@ -656,6 +657,27 @@ impl LibraryDatabase {
             log::info!("Migration completed: sample_rate is now REAL");
         }
 
+        // Migration: Add is_network_mount flag to local_tracks. Default
+        // 0; callers can re-scan folders to populate real values for
+        // existing rows.
+        let has_network_mount: bool = self.conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('local_tracks') WHERE name = 'is_network_mount'",
+                [],
+                |row| row.get::<_, i32>(0),
+            )
+            .map(|count| count > 0)
+            .unwrap_or(false);
+
+        if !has_network_mount {
+            log::info!("Running migration: adding is_network_mount to local_tracks");
+            self.conn
+                .execute_batch(
+                    "ALTER TABLE local_tracks ADD COLUMN is_network_mount INTEGER NOT NULL DEFAULT 0;",
+                )
+                .map_err(|e| LibraryError::Database(format!("Migration failed: {}", e)))?;
+        }
+
         // Migration: Add canonical_name column to artist_images for artist name normalization
         let has_canonical_name: bool = self.conn
             .query_row(
@@ -1049,6 +1071,15 @@ impl LibraryDatabase {
             "user"
         };
 
+        // Detect whether the audio file sits on a network-backed
+        // filesystem. Done per-insert instead of per-scan-start because
+        // mount topology can change between folder scans; the cost is
+        // negligible (one /proc/mounts read, cached by the kernel
+        // page cache).
+        let is_network_mount = crate::mount_info::is_network_path(
+            std::path::Path::new(&track.file_path),
+        );
+
         self.conn
             .execute(
                 r#"INSERT OR REPLACE INTO local_tracks
@@ -1056,8 +1087,8 @@ impl LibraryDatabase {
                 disc_number, year, genre, catalog_number, duration_secs, format, bit_depth,
                 sample_rate, channels, file_size_bytes, cue_file_path,
                 cue_start_secs, cue_end_secs, artwork_path, last_modified, indexed_at,
-                album_group_key, album_group_title, source)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+                album_group_key, album_group_title, source, is_network_mount)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
                 params![
                     track.file_path,
                     track.title,
@@ -1083,7 +1114,8 @@ impl LibraryDatabase {
                     track.indexed_at,
                     track.album_group_key,
                     track.album_group_title,
-                    source
+                    source,
+                    is_network_mount as i64,
                 ],
             )
             .map_err(|e| LibraryError::Database(e.to_string()))?;
@@ -1816,7 +1848,7 @@ impl LibraryDatabase {
          bit_depth, sample_rate, channels, file_size_bytes, \
          cue_file_path, cue_start_secs, cue_end_secs, artwork_path, \
          last_modified, indexed_at, album_group_key, album_group_title, \
-         source, qobuz_track_id, catalog_number";
+         source, qobuz_track_id, catalog_number, is_network_mount";
 
     fn row_to_track(row: &rusqlite::Row) -> rusqlite::Result<LocalTrack> {
         Ok(LocalTrack {
@@ -1847,6 +1879,12 @@ impl LibraryDatabase {
             source: row.get(24).ok().flatten(),                                       // source
             qobuz_track_id: row.get(25).ok().flatten(), // qobuz_track_id
             catalog_number: row.get(26).ok().flatten(), // catalog_number
+            is_network_mount: row
+                .get::<_, Option<i64>>(27)
+                .ok()
+                .flatten()
+                .map(|v| v != 0)
+                .unwrap_or(false),
         })
     }
 
@@ -2914,7 +2952,7 @@ impl LibraryDatabase {
                     t.year, t.genre, t.duration_secs, t.format, t.bit_depth, t.sample_rate,
                     t.channels, t.file_size_bytes, t.cue_file_path, t.cue_start_secs,
                     t.cue_end_secs, t.artwork_path, t.last_modified, t.indexed_at, t.source,
-                    t.qobuz_track_id, plt.position
+                    t.qobuz_track_id, t.is_network_mount, plt.position
              FROM playlist_local_tracks plt
              JOIN local_tracks t ON plt.local_track_id = t.id
              WHERE plt.qobuz_playlist_id = ?1
@@ -2952,6 +2990,7 @@ impl LibraryDatabase {
                     indexed_at: row.get(23)?,
                     source: row.get(24)?,
                     qobuz_track_id: row.get(25)?,
+                    is_network_mount: row.get::<_, i64>(26)? != 0,
                 })
             })
             .map_err(|e| {
@@ -2976,7 +3015,7 @@ impl LibraryDatabase {
                     t.year, t.genre, t.duration_secs, t.format, t.bit_depth, t.sample_rate,
                     t.channels, t.file_size_bytes, t.cue_file_path, t.cue_start_secs,
                     t.cue_end_secs, t.artwork_path, t.last_modified, t.indexed_at, t.source,
-                    t.qobuz_track_id, plt.position
+                    t.qobuz_track_id, t.is_network_mount, plt.position
              FROM playlist_local_tracks plt
              JOIN local_tracks t ON plt.local_track_id = t.id
              WHERE plt.qobuz_playlist_id = ?1
@@ -3015,8 +3054,9 @@ impl LibraryDatabase {
                         indexed_at: row.get(23)?,
                         source: row.get(24)?,
                         qobuz_track_id: row.get(25)?,
+                        is_network_mount: row.get::<_, i64>(26)? != 0,
                     },
-                    playlist_position: row.get(26)?,
+                    playlist_position: row.get(27)?,
                 })
             })
             .map_err(|e| {

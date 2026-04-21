@@ -487,6 +487,7 @@ impl MetadataExtractor {
                     .unwrap_or(0),
                 source: None,
                 qobuz_track_id: None,
+                is_network_mount: false,
             }
         } else {
             // No tag found, use defaults
@@ -527,6 +528,7 @@ impl MetadataExtractor {
                     .unwrap_or(0),
                 source: None,
                 qobuz_track_id: None,
+                is_network_mount: false,
             }
         };
 

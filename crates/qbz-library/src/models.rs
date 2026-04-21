@@ -76,6 +76,15 @@ pub struct LocalTrack {
     // Download tracking
     pub source: Option<String>,
     pub qobuz_track_id: Option<i64>,
+
+    /// True when the file lives on a network-backed filesystem (NFS,
+    /// CIFS/SMB, SSHFS, etc.). Detected at index time by inspecting
+    /// /proc/mounts. Consumed by the UI to mark the track as
+    /// unreachable under forced offline mode — cable unplugged means
+    /// the mount is gone even if the path string still says /home/…,
+    /// which is common under Flatpak / Snap sandboxes.
+    #[serde(default)]
+    pub is_network_mount: bool,
 }
 
 impl Default for LocalTrack {
@@ -108,6 +117,7 @@ impl Default for LocalTrack {
             indexed_at: 0,
             source: None,
             qobuz_track_id: None,
+            is_network_mount: false,
         }
     }
 }

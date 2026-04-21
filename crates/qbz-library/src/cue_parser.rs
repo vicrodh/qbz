@@ -272,6 +272,7 @@ pub fn cue_to_tracks(
             indexed_at: now,
             source: None,
             qobuz_track_id: None,
+            is_network_mount: false,
         });
     }
 

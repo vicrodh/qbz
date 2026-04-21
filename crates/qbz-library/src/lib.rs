@@ -33,6 +33,7 @@ mod database;
 mod errors;
 mod metadata;
 mod models;
+mod mount_info;
 mod scanner;
 mod tag_sidecar;
 mod thumbnails;
@@ -46,6 +47,7 @@ pub use database::{
 pub use errors::LibraryError;
 pub use metadata::MetadataExtractor;
 pub use models::*;
+pub use mount_info::is_network_path;
 pub use scanner::{LibraryScanner, ScanResult};
 pub use thumbnails::{
     clear_thumbnails, generate_thumbnail, generate_thumbnail_from_bytes, get_cache_size,
