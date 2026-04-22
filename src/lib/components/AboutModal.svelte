@@ -99,7 +99,7 @@
             <span class="label">{$t('about.buildInfo.version')}</span>
             <span class="value">{appVersion}</span>
             <span class="label">{$t('about.buildInfo.codename')}</span>
-            <span class="value codename">Accolade Watch</span>
+            <span class="value codename">My QBZ</span>
             <span class="label">{$t('about.buildInfo.license')}</span>
             <span class="value">MIT</span>
             <span class="label">{$t('about.buildInfo.platform')}</span>

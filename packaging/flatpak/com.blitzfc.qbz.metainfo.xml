@@ -69,6 +69,20 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="1.2.8" date="2026-04-21">
+      <description>
+        <p>Mixtapes &amp; Collections: two new first-class container types for curating your listening, independent from Qobuz's own playlists.</p>
+        <ul>
+          <li>Mixtape: private, ordered, cross-source listening session. Add whole albums, single tracks, or nested Qobuz playlists in any order — a Qobuz album next to a local FLAC next to a Plex album. Never leaves the machine, never syncs</li>
+          <li>Collection: private themed album shelf. Album-only, grows as large as you want, supports album-shuffle (random album from the shelf, tracks still play in order)</li>
+          <li>Discography Builder on every artist page: fans out across Qobuz + local library + Plex cache, groups identical titles, lets you override release type, stamps the result as an Artist Collection in one click</li>
+          <li>Add to Mixtape/Collection wired into every context menu (Local Library, Artist, Search, Label, Playlist detail, Album detail, queue rows) with explicit duplicate handling (Add anyway / Skip / Cancel)</li>
+          <li>Plex queue resolver routes plex: album keys to the Plex cache so a Collection starting with a Plex album plays end-to-end, including auto-advance</li>
+          <li>Defaults polish: immersive panels default to 30 FPS; titlebar navs (Discover, Library, Local Library, My QBZ, Search) default ON; offline-cache tracks visible in local library by default — all respecting persisted user preferences</li>
+          <li>Security: rustls-webpki bumped to 0.103.13 for GHSA-965h-392x-2mh5 / GHSA-xgp8-3hg3-c2mh</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.2.7" date="2026-04-16">
       <description>
         <p>Follow-up to 1.2.5 and 1.2.6: a defensive fix and a diagnostics expansion.</p>
