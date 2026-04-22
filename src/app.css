@@ -1224,11 +1224,20 @@
   --text-muted: #8a857a;
   --text-disabled: #4a4842;
 
-  /* Accent — imperial crimson, AAA contrast with bone-white button text */
-  --accent-primary: #a0161d;
-  --accent-hover: #c41e2a;
-  --accent-active: #7a101a;
-  --btn-primary-text: #fcfaf2;
+  /*
+   * Accent — bright imperial crimson, matches the face-stripes and mandala glow.
+   * Bright enough to work as foreground text on every bg tier (accent labels,
+   * volume fill, subscription chip, tab underlines…): AA on bg-primary 4.75:1,
+   * on bg-secondary 4.47:1, on bg-tertiary 4.25:1. Button fills pair with a
+   * near-black btn-primary-text so button surfaces stay AA 4.75:1. Trade-off:
+   * the previous bone-on-deep-crimson look (AAA on buttons but invisible as fg)
+   * is swapped for a consistent brightness that works across the ~300 places
+   * the app uses the accent as a foreground color.
+   */
+  --accent-primary: #ed2f3d;
+  --accent-hover: #f74a58;
+  --accent-active: #c41e2a;
+  --btn-primary-text: #0a0a0a;
 
   /* Status — bright alert red (distinct from accent) + antique gold (dragon crest horns) */
   --danger: #e63946;
