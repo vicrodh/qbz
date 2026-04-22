@@ -592,6 +592,7 @@
     'Ikari':             { value: 'ikari',            type: 'dark' },
     'Ayanami':           { value: 'ayanami',          type: 'dark' },
     'Iscariot':          { value: 'iscariot',         type: 'dark' },
+    'Stratego':          { value: 'stratego',         type: 'dark' },
     'Rumi':              { value: 'rumi',             type: 'dark' },
     'Zoey':              { value: 'zoey',             type: 'dark' },
     'Mira':              { value: 'mira',             type: 'dark' },
