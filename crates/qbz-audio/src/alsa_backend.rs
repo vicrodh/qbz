@@ -62,6 +62,19 @@ fn find_best_fallback_rate(requested: u32, supported: &[u32]) -> u32 {
     supported.iter().copied().max().unwrap_or(48000)
 }
 
+/// Return `true` when the given CPAL/ALSA PCM name matches one of the ID
+/// shapes our `/proc/asound`-driven enumeration ever looks up.
+///
+/// Used by `build_cpal_device_map` to drop virtual PCMs (dmix, route,
+/// surround*, pulse, null, …) whose probing only produces noise.
+fn is_known_pcm_id(name: &str) -> bool {
+    name == "default"
+        || name.starts_with("sysdefault:CARD=")
+        || name.starts_with("front:CARD=")
+        || name.starts_with("hdmi:CARD=")
+        || name.starts_with("iec958:CARD=")
+}
+
 /// Extract supported sample rates from a CPAL device
 fn get_supported_sample_rates(device: &rodio::cpal::Device) -> Option<Vec<u32>> {
     use rodio::cpal::traits::DeviceTrait;
@@ -546,15 +559,26 @@ impl AlsaBackend {
         Ok(devices)
     }
 
-    /// Build a map of device_id -> CPAL Device for sample rate queries
-    /// This is OPTIONAL enrichment - devices may be missing if in exclusive use
+    /// Build a map of device_id -> CPAL Device for sample rate queries.
+    /// This is OPTIONAL enrichment — devices may be missing if in exclusive use.
+    ///
+    /// Only the PCM name patterns we actually look up downstream are kept:
+    /// `default`, `sysdefault:CARD=…`, and `{front,hdmi,iec958}:CARD=…,DEV=…`.
+    /// Virtual PCMs (`dmix:`, `route:`, `surround51:` and the like) are
+    /// dropped — we never query them, and letting them reach a later
+    /// `supported_output_configs()` call just invites spurious libasound
+    /// errors ("unable to open slave", "no matching channel map") on systems
+    /// where PipeWire or another client holds the underlying hardware.
     fn build_cpal_device_map(&self) -> HashMap<String, rodio::cpal::Device> {
         let mut map = HashMap::new();
 
         if let Ok(output_devices) = self.host.output_devices() {
             for device in output_devices {
                 if let Ok(description) = device.description() {
-                    map.insert(description.name().to_string(), device);
+                    let name = description.name().to_string();
+                    if is_known_pcm_id(&name) {
+                        map.insert(name, device);
+                    }
                 }
             }
         }
