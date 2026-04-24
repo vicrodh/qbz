@@ -59,7 +59,7 @@
      *  clicks through onToggleSelect instead of onclick. */
     selectable?: boolean;
     selected?: boolean;
-    onToggleSelect?: () => void;
+    onToggleSelect?: (e: MouseEvent | KeyboardEvent) => void;
   }
 
   let {
@@ -191,7 +191,7 @@
     if (isOverlayAction(event.target)) return;
     // Multi-select mode: click toggles selection instead of opening the card.
     if (selectable) {
-      onToggleSelect?.();
+      onToggleSelect?.(event);
       return;
     }
     onclick?.();
@@ -259,7 +259,7 @@
   onkeydown={(e) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      if (selectable) onToggleSelect?.();
+      if (selectable) onToggleSelect?.(e);
       else onclick?.();
     }
   }}
