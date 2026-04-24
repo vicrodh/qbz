@@ -160,8 +160,10 @@
   }
 
   .bulk-bar {
-    position: sticky;
-    bottom: 0;
+    position: fixed;
+    bottom: calc(var(--player-bar-height, 104px) + 8px);
+    left: 0;
+    right: 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -169,16 +171,16 @@
     padding: 10px 16px;
     background: var(--bg-secondary);
     border-top: 1px solid var(--bg-tertiary);
-    border-radius: 0 0 8px 8px;
+    border-radius: 8px;
     box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.25);
-    z-index: 10;
+    z-index: 40;
     animation: slideUp 180ms ease;
   }
 
   .bulk-bar.placement-top {
     bottom: unset;
-    top: 0;
-    border-radius: 8px 8px 0 0;
+    top: 16px;
+    border-radius: 8px;
     border-top: none;
     border-bottom: 1px solid var(--bg-tertiary);
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
