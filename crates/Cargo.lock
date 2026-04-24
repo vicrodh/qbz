@@ -2906,6 +2906,7 @@ name = "qbz-audio"
 version = "0.1.0"
 dependencies = [
  "alsa",
+ "alsa-sys",
  "async-trait",
  "coreaudio-rs 0.14.1",
  "dirs",
