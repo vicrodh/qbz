@@ -3078,6 +3078,7 @@
     padding: 8px 8px 0 18px;
     overflow-y: auto;
     position: relative;
+    background: var(--bg-primary, #0b0b0b);
   }
 
   .artist-body {
@@ -3910,9 +3911,18 @@
     padding: 10px 24px;
     background: var(--bg-primary);
     border-bottom: 1px solid var(--alpha-6);
-    box-shadow: 0 4px 8px -4px rgba(0, 0, 0, 0.5);
+    /* Original drop shadow downward + solid bg-primary extension upward
+       to cover the few-px gap that opens between the titlebar and this
+       bar once it pins. Combined with the compositing-layer hints below,
+       this is the same fix imageCacheService uses for WebKitGTK 2.50+
+       repaint bugs. */
+    box-shadow:
+      0 4px 8px -4px rgba(0, 0, 0, 0.5),
+      0 -32px 0 0 var(--bg-primary);
     margin: 0 -8px 24px -24px;
     width: calc(100% + 32px);
+    will-change: transform;
+    transform: translateZ(0);
   }
 
   .jump-nav-left {

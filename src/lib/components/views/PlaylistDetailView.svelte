@@ -2928,6 +2928,7 @@
     padding: 8px 8px 100px 18px;
     overflow-y: auto;
     height: 100%;
+    background: var(--bg-primary, #0b0b0b);
   }
 
   /* Custom scrollbar */
@@ -3242,6 +3243,15 @@
     top: 0;
     z-index: 10;
     background: var(--bg-primary, #0b0b0b);
+    /* Force own compositing layer so WebKitGTK 2.50+ renders the solid
+       background cleanly when the sticky pins — without this, scrolled
+       content bleeds through a few px above the bar during repaints. */
+    will-change: transform;
+    transform: translateZ(0);
+    /* Paint the bg-primary fill upward as a box-shadow so any gap between
+       the sticky's top edge and the titlebar (caused by compositing-layer
+       rounding or subpixel offset) stays covered. */
+    box-shadow: 0 -32px 0 0 var(--bg-primary, #0b0b0b);
   }
 
   .track-list-header {
@@ -3328,7 +3338,7 @@
     display: flex;
     align-items: center;
     gap: 16px;
-    padding-top: 8px;
+    padding-top: -2px;
     padding-bottom: 0;
     margin-bottom: 0;
   }
