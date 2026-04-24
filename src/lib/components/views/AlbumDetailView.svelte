@@ -32,6 +32,7 @@
   import ImageLightbox from '../ImageLightbox.svelte';
   import BookletViewer from '../BookletViewer.svelte';
   import type { QobuzGoody } from '$lib/types';
+  import { applyShiftRange, isSelectAllShortcut } from '$lib/utils/multiSelect';
 
   interface Track {
     id: number;
@@ -201,16 +202,32 @@
   // Multi-select
   let multiSelectMode = $state(false);
   let multiSelectedIds = $state(new Set<number>());
+  let lastSelectedIndex = $state<number | null>(null);
 
   function toggleMultiSelectMode() {
     multiSelectMode = !multiSelectMode;
-    if (!multiSelectMode) multiSelectedIds = new Set();
+    if (!multiSelectMode) {
+      multiSelectedIds = new Set();
+      lastSelectedIndex = null;
+    }
   }
 
-  function toggleMultiSelect(id: number) {
+  function toggleMultiSelect(id: number, index: number, event?: MouseEvent | KeyboardEvent) {
+    if (event?.shiftKey && lastSelectedIndex !== null && album?.tracks) {
+      const ids = album.tracks.map(track => track.id);
+      multiSelectedIds = applyShiftRange({
+        current: multiSelectedIds,
+        ids,
+        lastIndex: lastSelectedIndex,
+        currentIndex: index,
+      });
+      lastSelectedIndex = index;
+      return;
+    }
     const next = new Set(multiSelectedIds);
     if (next.has(id)) next.delete(id); else next.add(id);
     multiSelectedIds = next;
+    lastSelectedIndex = index;
   }
 
   function toggleSelectAll() {
@@ -222,6 +239,17 @@
       multiSelectedIds = new Set(allIds);
     }
   }
+
+  $effect(() => {
+    if (!multiSelectMode) return;
+    const handler = (e: KeyboardEvent) => {
+      if (!isSelectAllShortcut(e)) return;
+      e.preventDefault();
+      if (album?.tracks) multiSelectedIds = new Set(album.tracks.map(track => track.id));
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  });
 
   const selectAllState = $derived(
     !album?.tracks || album.tracks.length === 0 ? 'none' as const
@@ -714,7 +742,7 @@
           selectable={multiSelectMode}
           selected={multiSelectedIds.has(track.id)}
           dragTrackIds={multiSelectMode && multiSelectedIds.has(track.id) ? [...multiSelectedIds] : undefined}
-          onToggleSelect={() => toggleMultiSelect(track.id)}
+          onToggleSelect={(e) => toggleMultiSelect(track.id, trackIndex, e)}
           downloadStatus={downloadInfo.status}
           downloadProgress={downloadInfo.progress}
           hideFavorite={trackBlacklisted}
