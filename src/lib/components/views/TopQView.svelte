@@ -14,6 +14,7 @@
   import { setPlaybackContext } from '$lib/stores/playbackContextStore';
   import { isBlacklisted as isArtistBlacklisted } from '$lib/stores/artistBlacklistStore';
   import { getUserItem, setUserItem } from '$lib/utils/userStorage';
+  import { applyShiftRange, isSelectAllShortcut } from '$lib/utils/multiSelect';
   import type { OfflineCacheStatus } from '$lib/stores/offlineCacheState';
   import type { DisplayTrack } from '$lib/types';
   import type {
@@ -115,16 +116,32 @@
   // Multi-select
   let multiSelectMode = $state(false);
   let multiSelectedIds = $state(new Set<number>());
+  let lastSelectedIndex = $state<number | null>(null);
 
   function toggleMultiSelectMode() {
     multiSelectMode = !multiSelectMode;
-    if (!multiSelectMode) multiSelectedIds = new Set();
+    if (!multiSelectMode) {
+      multiSelectedIds = new Set();
+      lastSelectedIndex = null;
+    }
   }
 
-  function toggleMultiSelect(id: number) {
+  function toggleMultiSelect(id: number, index: number, event?: MouseEvent | KeyboardEvent) {
+    if (event?.shiftKey && lastSelectedIndex !== null) {
+      const ids = filteredTracks.map(track => track.id);
+      multiSelectedIds = applyShiftRange({
+        current: multiSelectedIds,
+        ids,
+        lastIndex: lastSelectedIndex,
+        currentIndex: index,
+      });
+      lastSelectedIndex = index;
+      return;
+    }
     const next = new Set(multiSelectedIds);
     if (next.has(id)) next.delete(id); else next.add(id);
     multiSelectedIds = next;
+    lastSelectedIndex = index;
   }
 
   function toggleSelectAll() {
@@ -135,6 +152,17 @@
       multiSelectedIds = new Set(allIds);
     }
   }
+
+  $effect(() => {
+    if (!multiSelectMode) return;
+    const handler = (e: KeyboardEvent) => {
+      if (!isSelectAllShortcut(e)) return;
+      e.preventDefault();
+      multiSelectedIds = new Set(filteredTracks.map(track => track.id));
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  });
 
   async function handleBulkPlayNext() {
     const selected = filteredTracks.filter(trk => multiSelectedIds.has(trk.id));
@@ -647,7 +675,7 @@
             selectable={multiSelectMode}
             selected={multiSelectedIds.has(track.id)}
             dragTrackIds={multiSelectMode && multiSelectedIds.has(track.id) ? [...multiSelectedIds] : undefined}
-            onToggleSelect={() => toggleMultiSelect(track.id)}
+            onToggleSelect={(e) => toggleMultiSelect(track.id, index, e)}
             hideDownload={trackBlacklisted}
             hideFavorite={trackBlacklisted}
             downloadStatus={cacheStatus.status}

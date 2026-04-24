@@ -28,6 +28,7 @@
     toggleLabelFavorite
   } from '$lib/stores/labelFavoritesStore';
   import type { QobuzAlbum, LabelPageData, LabelExploreItem, DisplayTrack } from '$lib/types';
+  import { applyShiftRange, isSelectAllShortcut } from '$lib/utils/multiSelect';
 
   interface Track {
     id: number;
@@ -199,16 +200,32 @@
   // Multi-select (popular tracks)
   let multiSelectMode = $state(false);
   let multiSelectedIds = $state(new Set<number>());
+  let lastSelectedIndex = $state<number | null>(null);
 
   function toggleMultiSelectMode() {
     multiSelectMode = !multiSelectMode;
-    if (!multiSelectMode) multiSelectedIds = new Set();
+    if (!multiSelectMode) {
+      multiSelectedIds = new Set();
+      lastSelectedIndex = null;
+    }
   }
 
-  function toggleMultiSelect(id: number) {
+  function toggleMultiSelect(id: number, index: number, event?: MouseEvent | KeyboardEvent) {
+    if (event?.shiftKey && lastSelectedIndex !== null) {
+      const ids = visibleTracks.map(track => track.id);
+      multiSelectedIds = applyShiftRange({
+        current: multiSelectedIds,
+        ids,
+        lastIndex: lastSelectedIndex,
+        currentIndex: index,
+      });
+      lastSelectedIndex = index;
+      return;
+    }
     const next = new Set(multiSelectedIds);
     if (next.has(id)) next.delete(id); else next.add(id);
     multiSelectedIds = next;
+    lastSelectedIndex = index;
   }
 
   function toggleSelectAll() {
@@ -219,6 +236,17 @@
       multiSelectedIds = new Set(allIds);
     }
   }
+
+  $effect(() => {
+    if (!multiSelectMode) return;
+    const handler = (e: KeyboardEvent) => {
+      if (!isSelectAllShortcut(e)) return;
+      e.preventDefault();
+      multiSelectedIds = new Set(visibleTracks.map(track => track.id));
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  });
 
   const selectAllState = $derived(
     !visibleTracks || visibleTracks.length === 0 ? 'none' as const
@@ -958,8 +986,8 @@
               role="button"
               tabindex="0"
               data-track-id={track.id}
-              onclick={() => multiSelectMode ? toggleMultiSelect(track.id) : handleTrackPlay(track, index)}
-              onkeydown={(e) => e.key === 'Enter' && (multiSelectMode ? toggleMultiSelect(track.id) : handleTrackPlay(track, index))}
+              onclick={(e) => multiSelectMode ? toggleMultiSelect(track.id, index, e) : handleTrackPlay(track, index)}
+              onkeydown={(e) => e.key === 'Enter' && (multiSelectMode ? toggleMultiSelect(track.id, index, e) : handleTrackPlay(track, index))}
               oncontextmenu={(e) => {
                 if (multiSelectMode) return;
                 e.preventDefault();
@@ -968,11 +996,18 @@
             >
               {#if multiSelectMode}
                 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
-                <label class="track-checkbox-wrap" onclick={(e) => e.stopPropagation()}>
+                <label
+                  class="track-checkbox-wrap"
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    toggleMultiSelect(track.id, index, e);
+                  }}
+                >
                   <input
                     type="checkbox"
                     checked={multiSelectedIds.has(track.id)}
-                    onchange={() => toggleMultiSelect(track.id)}
+                    tabindex={-1}
+                    onclick={(e) => e.preventDefault()}
                     aria-label={$t('actions.select')}
                     style="width:15px;height:15px;cursor:pointer;accent-color:var(--accent-primary);"
                   />
