@@ -2702,6 +2702,7 @@
     "refreshingTrackOffline": "\"{title}\" wird für offline aktualisiert",
     "refreshingAlbumOffline": "Alle Titel von \"{album}\" werden für offline aktualisiert",
     "failedLoadAlbumRefresh": "Album konnte nicht für Offline-Aktualisierung geladen werden",
+    "playingAlbum": "{count, plural, =1 {Album wird abgespielt} other {{count} Titel werden abgespielt}}",
     "playingTracksNext": "{count} Titel werden als Nächstes abgespielt",
     "addedTracksToQueue": "{count} Titel zur Warteschlange hinzugefügt",
     "failedPreviousTrack": "Zum vorherigen Titel wechseln fehlgeschlagen",

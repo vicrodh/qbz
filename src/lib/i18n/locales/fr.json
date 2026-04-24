@@ -2702,6 +2702,7 @@
     "refreshingTrackOffline": "Actualisation de « {title} » pour une écoute hors ligne",
     "refreshingAlbumOffline": "Actualisation de tous les titres de « {album} » pour une écoute hors ligne",
     "failedLoadAlbumRefresh": "Échec du chargement de l'album pour la mise à jour hors ligne",
+    "playingAlbum": "{count, plural, =1 {Lecture de l''album} other {Lecture de {count} titres}}",
     "playingTracksNext": "Lecture de {count} titres ensuite",
     "addedTracksToQueue": "{count} titres ajoutés à la file d'attente",
     "failedPreviousTrack": "Impossible de revenir au titre précédent",

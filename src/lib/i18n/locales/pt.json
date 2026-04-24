@@ -2702,6 +2702,7 @@
     "refreshingTrackOffline": "Atualizando \"{title}\" para offline",
     "refreshingAlbumOffline": "Atualizando todas as faixas de \"{album}\" para offline",
     "failedLoadAlbumRefresh": "Falha ao carregar álbum para atualização offline",
+    "playingAlbum": "{count, plural, =1 {Reproduzindo álbum} other {Reproduzindo {count} faixas}}",
     "playingTracksNext": "Reproduzindo {count} faixas em seguida",
     "addedTracksToQueue": "{count} faixas adicionadas à fila",
     "failedPreviousTrack": "Falha ao voltar à faixa anterior",

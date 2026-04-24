@@ -2709,6 +2709,7 @@
     "refreshingTrackOffline": "Refreshing \"{title}\" for offline",
     "refreshingAlbumOffline": "Refreshing all tracks from \"{album}\" for offline",
     "failedLoadAlbumRefresh": "Failed to load album for offline refresh",
+    "playingAlbum": "{count, plural, =1 {Playing album} other {Playing {count} tracks}}",
     "playingTracksNext": "Playing {count} tracks next",
     "addedTracksToQueue": "Added {count} tracks to queue",
     "failedPreviousTrack": "Failed to go to previous track",

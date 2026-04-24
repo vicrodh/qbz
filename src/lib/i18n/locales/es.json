@@ -2708,6 +2708,7 @@
     "refreshingTrackOffline": "Actualizando \"{title}\" para offline",
     "refreshingAlbumOffline": "Actualizando todas las pistas de \"{album}\" para offline",
     "failedLoadAlbumRefresh": "Error al cargar álbum para actualizar offline",
+    "playingAlbum": "{count, plural, =1 {Reproduciendo álbum} other {Reproduciendo {count} pistas}}",
     "playingTracksNext": "Reproduciendo {count} pistas a continuación",
     "addedTracksToQueue": "{count} pistas agregadas a la cola",
     "failedPreviousTrack": "Error al ir a pista anterior",
