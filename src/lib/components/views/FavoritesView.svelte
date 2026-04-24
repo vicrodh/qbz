@@ -27,6 +27,7 @@
   import { categorizeAlbum, getQobuzImage, formatQuality } from '$lib/adapters/qobuzAdapters';
   import { replacePlaybackQueue } from '$lib/services/queuePlaybackService';
   import { getUserItem, setUserItem } from '$lib/utils/userStorage';
+  import { isSelectAllShortcut } from '$lib/utils/multiSelect';
   import GenreFilterButton from '../GenreFilterButton.svelte';
   import {
     hasActiveFilter as hasGenreFilter,
@@ -280,6 +281,23 @@
     if (next.has(id)) next.delete(id); else next.add(id);
     selectedTrackIds = next;
   }
+
+  function addTracksToSelection(ids: number[]) {
+    const next = new Set(selectedTrackIds);
+    for (const id of ids) next.add(id);
+    selectedTrackIds = next;
+  }
+
+  $effect(() => {
+    if (!trackSelectMode) return;
+    const handler = (e: KeyboardEvent) => {
+      if (!isSelectAllShortcut(e)) return;
+      e.preventDefault();
+      selectedTrackIds = new Set(filteredTracks.map((track) => track.id));
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  });
 
   async function handleBulkPlayNext() {
     const selected = filteredTracks.filter(trk => selectedTrackIds.has(trk.id));
@@ -1778,6 +1796,7 @@
               selectable={trackSelectMode}
               selectedIds={selectedTrackIds}
               onToggleSelect={toggleTrackSelect}
+              onToggleSelectRange={addTracksToSelection}
             />
           </div>
         </div>

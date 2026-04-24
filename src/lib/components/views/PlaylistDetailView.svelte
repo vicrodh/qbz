@@ -30,6 +30,7 @@
   import { t } from '$lib/i18n';
   import { onMount, tick } from 'svelte';
   import { getUserItem, setUserItem } from '$lib/utils/userStorage';
+  import { applyShiftRange, isSelectAllShortcut } from '$lib/utils/multiSelect';
   import { replacePlaybackQueue } from '$lib/services/queuePlaybackService';
 
   interface PlaylistTrack {
@@ -365,6 +366,7 @@
   // Multi-select state (bulk actions, works in all sort modes)
   let multiSelectMode = $state(false);
   let multiSelectedKeys = $state(new Set<string>());
+  let lastSelectedIndex = $state<number | null>(null);
 
   // User ownership state (to show "Copy to Library" button for non-owned playlists)
   let currentUserId = $state<number | null>(null);
@@ -1316,14 +1318,29 @@
 
   function toggleMultiSelectMode() {
     multiSelectMode = !multiSelectMode;
-    if (!multiSelectMode) multiSelectedKeys = new Set();
+    if (!multiSelectMode) {
+      multiSelectedKeys = new Set();
+      lastSelectedIndex = null;
+    }
   }
 
-  function toggleMultiSelect(track: DisplayTrack) {
+  function toggleMultiSelect(track: DisplayTrack, index: number, event?: MouseEvent | KeyboardEvent) {
     const key = getTrackKey(track);
+    if (event?.shiftKey && lastSelectedIndex !== null) {
+      const keys = displayTracks.map(trk => getTrackKey(trk));
+      multiSelectedKeys = applyShiftRange({
+        current: multiSelectedKeys,
+        ids: keys,
+        lastIndex: lastSelectedIndex,
+        currentIndex: index,
+      });
+      lastSelectedIndex = index;
+      return;
+    }
     const next = new Set(multiSelectedKeys);
     if (next.has(key)) next.delete(key); else next.add(key);
     multiSelectedKeys = next;
+    lastSelectedIndex = index;
   }
 
   function toggleSelectAll() {
@@ -1334,6 +1351,17 @@
       multiSelectedKeys = new Set(allKeys);
     }
   }
+
+  $effect(() => {
+    if (!multiSelectMode) return;
+    const handler = (e: KeyboardEvent) => {
+      if (!isSelectAllShortcut(e)) return;
+      e.preventDefault();
+      multiSelectedKeys = new Set(displayTracks.map(track => getTrackKey(track)));
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  });
 
   async function handleBulkPlayNext() {
     const selected = displayTracks.filter(trk => multiSelectedKeys.has(getTrackKey(trk)));
@@ -2697,11 +2725,18 @@
             {#if multiSelectMode && !isCustomOrderMode}
               {@const trackKey = getTrackKey(track)}
               <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
-              <label class="track-checkbox" onclick={(e: MouseEvent) => e.stopPropagation()}>
+              <label
+                class="track-checkbox"
+                onclick={(e: MouseEvent) => {
+                  e.stopPropagation();
+                  toggleMultiSelect(track, idx, e);
+                }}
+              >
                 <input
                   type="checkbox"
                   checked={multiSelectedKeys.has(trackKey)}
-                  onchange={() => toggleMultiSelect(track)}
+                  tabindex={-1}
+                  onclick={(e) => e.preventDefault()}
                   aria-label={$t('actions.select')}
                 />
               </label>

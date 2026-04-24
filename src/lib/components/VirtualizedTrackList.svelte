@@ -71,6 +71,13 @@
     selectable?: boolean;
     selectedIds?: Set<number>;
     onToggleSelect?: (trackId: number) => void;
+    /**
+     * Called when the user shift-clicks to extend the selection.
+     * Receives the full list of track IDs between the previous
+     * anchor and the clicked row, inclusive. The caller should
+     * add every id to its selection set.
+     */
+    onToggleSelectRange?: (trackIds: number[]) => void;
   }
 
   let {
@@ -120,7 +127,48 @@
     selectable = false,
     selectedIds,
     onToggleSelect,
+    onToggleSelectRange,
   }: Props = $props();
+
+  // Flat ordered list of track IDs in the exact order virtualItems
+  // emits them — used to resolve shift-click ranges against a single
+  // linear index space, so grouping/disc headers don't break range
+  // selection when the list is virtualized.
+  let orderedTrackIds = $derived.by(() => {
+    const ids: number[] = [];
+    for (const group of groups) {
+      if (groupingEnabled && groupMode === 'album') {
+        const sections = buildAlbumSections(group.tracks);
+        for (const section of sections) {
+          for (const track of section.tracks) ids.push(getTrackId(track));
+        }
+      } else {
+        for (const track of group.tracks) ids.push(getTrackId(track));
+      }
+    }
+    return ids;
+  });
+
+  let lastSelectedIndex = $state<number | null>(null);
+
+  $effect(() => {
+    if (!selectable) lastSelectedIndex = null;
+  });
+
+  function handleToggleSelect(trackId: number, event: MouseEvent | KeyboardEvent | Event) {
+    const idx = orderedTrackIds.indexOf(trackId);
+    const shift = (event as MouseEvent | KeyboardEvent).shiftKey;
+    if (shift && lastSelectedIndex !== null && idx !== -1 && onToggleSelectRange) {
+      const [lo, hi] = lastSelectedIndex <= idx ? [lastSelectedIndex, idx] : [idx, lastSelectedIndex];
+      const rangeIds: number[] = [];
+      for (let i = lo; i <= hi; i++) rangeIds.push(orderedTrackIds[i]);
+      lastSelectedIndex = idx;
+      onToggleSelectRange(rangeIds);
+      return;
+    }
+    if (idx !== -1) lastSelectedIndex = idx;
+    onToggleSelect?.(trackId);
+  }
 
   // Constants
   const GROUP_HEADER_HEIGHT = 56; // px
@@ -353,7 +401,7 @@
             selectable={selectable}
             selected={selectedIds?.has(trackId) ?? false}
             dragTrackIds={selectable && selectedIds?.has(trackId) && selectedIds.size > 1 ? [...selectedIds] : undefined}
-            onToggleSelect={onToggleSelect ? () => onToggleSelect(trackId) : undefined}
+            onToggleSelect={onToggleSelect ? (e) => handleToggleSelect(trackId, e) : undefined}
             {isLocal}
             hideDownload={hideDownload || trackBlacklisted}
             hideFavorite={hideFavorite || trackBlacklisted}
