@@ -34,6 +34,46 @@
 
   let queueMenuOpen = $state(false);
 
+  // Dock/float mechanism: a zero-height sentinel sits in the DOM where the
+  // bar would naturally live (end of the selectable list). When the sentinel
+  // is inside the viewport we "dock" the bar in the flow; otherwise the bar
+  // floats as position:fixed just above the player bar, sized to the
+  // sentinel's width so it never overlaps adjacent layout columns.
+  let sentinelEl: HTMLDivElement | undefined = $state();
+  let isDocked = $state(true);
+  let sentinelLeft = $state(0);
+  let sentinelWidth = $state(0);
+
+  $effect(() => {
+    if (!sentinelEl) return;
+
+    const updateRect = () => {
+      if (!sentinelEl) return;
+      const rect = sentinelEl.getBoundingClientRect();
+      sentinelLeft = rect.left;
+      sentinelWidth = rect.width;
+    };
+    updateRect();
+
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        isDocked = entry.isIntersecting;
+      },
+      { threshold: 0 }
+    );
+    io.observe(sentinelEl);
+
+    const ro = new ResizeObserver(updateRect);
+    ro.observe(sentinelEl);
+    window.addEventListener('resize', updateRect);
+
+    return () => {
+      io.disconnect();
+      ro.disconnect();
+      window.removeEventListener('resize', updateRect);
+    };
+  });
+
   function handleQueueMenuToggle(e: MouseEvent) {
     e.stopPropagation();
     queueMenuOpen = !queueMenuOpen;
@@ -58,7 +98,14 @@
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
   <div class="bulk-bar-backdrop" class:queue-open={queueMenuOpen} onclick={handleClickOutside} role="presentation">
   </div>
-  <div class="bulk-bar" class:placement-top={placement === 'top'}>
+  <div class="bulk-bar-sentinel" bind:this={sentinelEl} aria-hidden="true"></div>
+  <div
+    class="bulk-bar"
+    class:placement-top={placement === 'top'}
+    class:floating={!isDocked}
+    style:left={!isDocked ? `${sentinelLeft}px` : undefined}
+    style:width={!isDocked ? `${sentinelWidth}px` : undefined}
+  >
     <span class="count-label">
       {$t('actions.selectedTracks', { values: { count } })}
     </span>
@@ -159,11 +206,14 @@
     z-index: 99;
   }
 
+  .bulk-bar-sentinel {
+    display: block;
+    width: 100%;
+    height: 0;
+    pointer-events: none;
+  }
+
   .bulk-bar {
-    position: fixed;
-    bottom: calc(var(--player-bar-height, 104px) + 8px);
-    left: 0;
-    right: 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -171,20 +221,28 @@
     padding: 10px 16px;
     background: var(--bg-secondary);
     border-top: 1px solid var(--bg-tertiary);
-    border-radius: 8px;
+    border-radius: 8px 8px 0 0;
     box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.25);
     z-index: 40;
     animation: slideUp 180ms ease;
   }
 
+  .bulk-bar.floating {
+    position: fixed;
+    bottom: var(--player-bar-height, 104px);
+  }
+
   .bulk-bar.placement-top {
-    bottom: unset;
-    top: 16px;
-    border-radius: 8px;
+    border-radius: 0 0 8px 8px;
     border-top: none;
     border-bottom: 1px solid var(--bg-tertiary);
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
     animation: slideDown 180ms ease;
+  }
+
+  .bulk-bar.placement-top.floating {
+    top: 0;
+    bottom: unset;
   }
 
   @keyframes slideUp {
