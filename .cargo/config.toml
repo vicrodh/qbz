@@ -20,9 +20,16 @@
 # emit those instructions anywhere in the binary — including the
 # startup path, long before CMAF runs. On pre-Haswell CPUs (Sandy
 # Bridge 2011, Ivy Bridge 2012, AMD Bulldozer/Piledriver) the process
-# dies with SIGILL at launch. See issue #353. Raising the baseline
-# gave no CMAF speedup — the perf win came entirely from `+aes` — so
-# we keep the AES-NI path and drop the incompatible baseline.
+# dies with SIGILL at launch. See issue #353 (Linux, Sandy Bridge) and
+# discussion #343 (macOS, 2012 MacBookPro9,1 / Ivy Bridge). Raising
+# the baseline gave no CMAF speedup — the perf win came entirely from
+# `+aes` — so we keep the AES-NI path and drop the incompatible
+# baseline.
+#
+# If a future hot loop ever warrants AVX2/BMI2, the correct pattern is
+# per-function `#[target_feature]` with runtime dispatch (as the `aes`
+# crate already does via `cpufeatures`), NOT a global microarch bump
+# that silently breaks older hardware.
 #
 # IMPORTANT: these flags MUST be scoped to x86_64 targets. Using
 # `[build] rustflags = ...` applies them to every target, which on
