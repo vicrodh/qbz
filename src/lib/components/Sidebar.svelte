@@ -8,6 +8,7 @@
   import NavigationItem from './NavigationItem.svelte';
   import PlaylistCoverCollage from './PlaylistCoverCollage.svelte';
   import { getShowPlaylistCollage, subscribePlaylistCollage } from '$lib/stores/sidebarStore';
+  import { preloadImages } from '$lib/services/imageCacheService';
   import UserCard from './UserCard.svelte';
   import MyQbzNavEditModal from './MyQbzNavEditModal.svelte';
   import {
@@ -903,6 +904,25 @@
     if (item.type === 'folder-header' || item.type === 'collapsed-folder') return `f-${item.folder.id}`;
     return `p-${item.playlist.id}`;
   }
+
+  // Warm the shared image cache with every playlist's collage tiles as
+  // soon as userPlaylists is populated. preloadImages is fire-and-forget
+  // and dedupes against the in-memory resolvedUrls map in
+  // imageCacheService, so this effect re-running on every playlist
+  // update is cheap. Same downscale regex as PlaylistCoverCollage — the
+  // sidebar renders tiles at the _50 variant, so that is what we want on
+  // disk. Skipped when the user opted out of the collage in Settings.
+  $effect(() => {
+    if (!showPlaylistCollage || userPlaylists.length === 0) return;
+    const tiles: string[] = [];
+    for (const p of userPlaylists) {
+      const imgs = p.images150 ?? p.images300 ?? p.images ?? [];
+      for (const url of imgs.slice(0, 4)) {
+        if (url) tiles.push(url.replace(/_(150|300|600)\.jpg(\?.*)?$/i, '_50.jpg$2'));
+      }
+    }
+    if (tiles.length > 0) preloadImages(tiles);
+  });
 
   // Subscribe to global floating menu store
   $effect(() => {
