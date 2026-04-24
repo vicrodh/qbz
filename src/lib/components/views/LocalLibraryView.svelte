@@ -659,6 +659,38 @@
     selectedAlbumIds = next;
   }
 
+  function addAlbumsToSelection(ids: string[]) {
+    const next = new Set(selectedAlbumIds);
+    for (const id of ids) next.add(id);
+    selectedAlbumIds = next;
+  }
+
+  const albumSelectAllState = $derived(
+    albums.length === 0 ? 'none' as const
+    : selectedAlbumIds.size === 0 ? 'none' as const
+    : selectedAlbumIds.size >= albums.length ? 'all' as const
+    : 'partial' as const
+  );
+
+  function toggleAlbumSelectAll() {
+    if (albumSelectAllState === 'all') {
+      selectedAlbumIds = new Set();
+    } else {
+      selectedAlbumIds = new Set(albums.map((a) => a.id));
+    }
+  }
+
+  $effect(() => {
+    if (!albumSelectMode) return;
+    const handler = (e: KeyboardEvent) => {
+      if (!isSelectAllShortcut(e)) return;
+      e.preventDefault();
+      selectedAlbumIds = new Set(albums.map((a) => a.id));
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  });
+
   function selectedAlbums(): LocalAlbum[] {
     return albums.filter((a) => selectedAlbumIds.has(a.id));
   }
@@ -4133,6 +4165,18 @@
               <SquareCheckBig size={16} />
             </button>
 
+            {#if albumSelectMode}
+              <label class="select-all-checkbox" title={$t('actions.selectAll')}>
+                <input
+                  type="checkbox"
+                  checked={albumSelectAllState === 'all'}
+                  indeterminate={albumSelectAllState === 'partial'}
+                  onchange={toggleAlbumSelectAll}
+                />
+                <span>{$t('actions.selectAll')}</span>
+              </label>
+            {/if}
+
             {#if albumGroupingEnabled && albumGroupMode === 'alpha'}
               <div class="alpha-index-inline">
                 {#each alphaIndexLetters as letter}
@@ -4178,6 +4222,7 @@
                   selectable={albumSelectMode}
                   selectedAlbumIds={selectedAlbumIds}
                   onAlbumToggleSelect={toggleAlbumSelect}
+                  onAlbumToggleSelectRange={addAlbumsToSelection}
                 />
               </div>
             </div>

@@ -51,7 +51,10 @@
      *  toggle selection via onAlbumToggleSelect instead of onAlbumClick. */
     selectable?: boolean;
     selectedAlbumIds?: Set<string>;
-    onAlbumToggleSelect?: (album: LocalAlbum) => void;
+    onAlbumToggleSelect?: (album: LocalAlbum, event?: MouseEvent | KeyboardEvent) => void;
+    /** Called when shift-click extends the selection. Receives every
+     *  album id between the previous anchor and the clicked card. */
+    onAlbumToggleSelectRange?: (ids: string[]) => void;
   }
 
   let {
@@ -71,7 +74,41 @@
     selectable = false,
     selectedAlbumIds = new Set(),
     onAlbumToggleSelect,
+    onAlbumToggleSelectRange,
   }: Props = $props();
+
+  // Shift-click range support. We keep a flat id list in the exact
+  // order the album cards are rendered, plus the anchor of the last
+  // explicit click. Reset the anchor whenever we leave select mode so
+  // a later session doesn't start in the middle of a stale range.
+  let orderedAlbumIds = $derived.by(() => {
+    const ids: string[] = [];
+    for (const group of groups) {
+      for (const album of group.albums) ids.push(album.id);
+    }
+    return ids;
+  });
+
+  let lastSelectedIndex = $state<number | null>(null);
+
+  $effect(() => {
+    if (!selectable) lastSelectedIndex = null;
+  });
+
+  function handleAlbumToggleSelect(album: LocalAlbum, event: MouseEvent | KeyboardEvent | Event) {
+    const idx = orderedAlbumIds.indexOf(album.id);
+    const shift = (event as MouseEvent | KeyboardEvent).shiftKey;
+    if (shift && lastSelectedIndex !== null && idx !== -1 && onAlbumToggleSelectRange) {
+      const [lo, hi] = lastSelectedIndex <= idx ? [lastSelectedIndex, idx] : [idx, lastSelectedIndex];
+      const rangeIds: string[] = [];
+      for (let i = lo; i <= hi; i++) rangeIds.push(orderedAlbumIds[i]);
+      lastSelectedIndex = idx;
+      onAlbumToggleSelectRange(rangeIds);
+      return;
+    }
+    if (idx !== -1) lastSelectedIndex = idx;
+    onAlbumToggleSelect?.(album, event as MouseEvent | KeyboardEvent);
+  }
 
   // Constants
   const HEADER_HEIGHT = 44; // px
@@ -341,7 +378,7 @@
                 sourceBadge={showSourceBadge ? (album.source === 'plex' ? 'plex' : album.source === 'qobuz_purchase' ? 'qobuz_purchase' : album.source === 'qobuz_download' ? 'qobuz_download' : 'user') : undefined}
                 selectable={selectable}
                 selected={selectedAlbumIds.has(album.id)}
-                onToggleSelect={() => onAlbumToggleSelect?.(album)}
+                onToggleSelect={(e) => handleAlbumToggleSelect(album, e)}
               />
             {/each}
           </div>
