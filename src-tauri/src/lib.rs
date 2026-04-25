@@ -134,9 +134,13 @@ impl AppState {
             }
         };
 
-        // Create audio cache (L1 - memory, 400MB) with optional disk spillover
+        // Create audio cache (L1 - memory) with optional disk spillover.
+        // The L1 cap is sized per host: Normal hosts get the historical
+        // 400 MB; LowMemory hosts (issue #331) drop to 50 MB so the cache
+        // alone can never claim 40 % of a 1 GB Pi.
+        let l1_cap = qbz_core::system_capabilities::memory_profile().audio_cache_l1_max_bytes;
         let audio_cache = if let Some(pc) = playback_cache {
-            Arc::new(AudioCache::with_playback_cache(400 * 1024 * 1024, pc))
+            Arc::new(AudioCache::with_playback_cache(l1_cap, pc))
         } else {
             Arc::new(AudioCache::default())
         };
@@ -512,6 +516,20 @@ pub fn run() {
     .init();
 
     log::info!("QBZ starting...");
+
+    // Resolve and log the system memory profile up front so the chosen
+    // prefetch / buffer caps are visible at boot rather than the first
+    // playback action. The profile is cached in qbz-core's OnceLock,
+    // so subsequent callers (commands_v2/playback.rs, etc.) hit the
+    // cache.
+    let mem_profile = qbz_core::system_capabilities::memory_profile();
+
+    // Wire the streaming-buffer cap into qbz-player's process-wide state
+    // so StreamingConfig::from_speed_mbps clamps to the host's memory
+    // profile. Without this, slow connections inflate the initial
+    // buffer to 2 MB — counterproductive on a memory-pressured host
+    // where the slowness is itself the symptom (issue #331).
+    qbz_player::player::set_max_initial_buffer_bytes(mem_profile.max_initial_buffer_bytes);
 
     #[cfg(target_os = "linux")]
     apply_linux_webkit_workarounds();
@@ -931,6 +949,61 @@ pub fn run() {
             app.state::<AppState>()
                 .media_controls
                 .init(app.handle().clone());
+
+            // Memory watchdog (issue #331). Only spawn on memory-constrained
+            // hosts — on Normal-class machines the audio cache fits comfortably
+            // in RAM and the polling cost is wasted. On a Pi 3B with 1 GB total
+            // and ~150 MB locked by the WebView, the L1 cache (default cap
+            // 400 MB) plus a few prefetched HiRes tracks routinely pushes the
+            // kernel into swap. The watchdog flushes the cache when
+            // MemAvailable falls below 5 % of total, breaking the swap-thrash
+            // loop reported by codehd7.
+            {
+                use qbz_core::system_capabilities;
+                let resolved_profile = system_capabilities::memory_profile();
+                if resolved_profile.class == system_capabilities::MemoryClass::LowMemory {
+                    let watchdog_cache = app.state::<AppState>().audio_cache.clone();
+                    tauri::async_runtime::spawn(async move {
+                        let mut interval =
+                            tokio::time::interval(std::time::Duration::from_secs(10));
+                        let mut was_critical = false;
+                        loop {
+                            interval.tick().await;
+                            let Some(pressure) = system_capabilities::read_memory_pressure()
+                            else {
+                                continue;
+                            };
+                            if pressure.is_critical && !was_critical {
+                                log::warn!(
+                                    "[memory-watchdog] Critical pressure: {:.1}% available ({} MB of {} MB) - evicting audio caches",
+                                    pressure.available_pct,
+                                    pressure.mem_available_kb / 1024,
+                                    pressure.mem_total_kb / 1024,
+                                );
+                                watchdog_cache.clear();
+                                was_critical = true;
+                            } else if pressure.is_low && !was_critical {
+                                log::info!(
+                                    "[memory-watchdog] Low pressure: {:.1}% available ({} MB)",
+                                    pressure.available_pct,
+                                    pressure.mem_available_kb / 1024,
+                                );
+                            } else if !pressure.is_low {
+                                if was_critical {
+                                    log::info!(
+                                        "[memory-watchdog] Recovered: {:.1}% available",
+                                        pressure.available_pct,
+                                    );
+                                }
+                                was_critical = false;
+                            }
+                        }
+                    });
+                    log::info!(
+                        "[memory-watchdog] Started for LowMemory host (poll every 10s)"
+                    );
+                }
+            }
 
             // Initialize CoreBridge (new multi-crate architecture)
             // Store V2 player state for event loop access

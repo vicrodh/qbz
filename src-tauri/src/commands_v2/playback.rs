@@ -26,25 +26,30 @@ use super::cached_audio_incompatible_with_hw;
 
 // ==================== Prefetch (V2) ====================
 
-/// Number of Qobuz tracks to prefetch (not total tracks, just Qobuz).
-/// Higher values keep more upcoming tracks in cache for instant playback.
-/// CMAF segment downloads are ~24s per Hi-Res track, so 5 tracks means
-/// the cache stays ~2 minutes ahead of playback.
-const V2_PREFETCH_COUNT: usize = 5;
+/// Number of Qobuz tracks to prefetch — resolved per-host from the
+/// detected memory profile. Normal hosts get 5 tracks (~2 minutes
+/// of HiRes cache ahead); LowMemory hosts (issue #331) get 1 to keep
+/// the in-memory footprint manageable on devices like the Pi 3B.
+fn v2_prefetch_count() -> usize {
+    qbz_core::system_capabilities::memory_profile().prefetch_count
+}
 
 /// How far ahead to look for tracks to prefetch (to handle mixed playlists
 /// with local/offline tracks interspersed with Qobuz tracks)
 const V2_PREFETCH_LOOKAHEAD: usize = 15;
 
 /// Maximum concurrent prefetch downloads (track-level, not segment-level).
-/// 2 tracks downloading simultaneously keeps the cache filling while
-/// one download is in its cooldown/decryption phase.
-const V2_MAX_CONCURRENT_PREFETCH: usize = 2;
+/// Normal hosts run 2 in parallel; LowMemory hosts serialize to a single
+/// download to avoid stacking ~60 MB HiRes payloads in RAM.
+fn v2_max_concurrent_prefetch() -> usize {
+    qbz_core::system_capabilities::memory_profile().max_concurrent_prefetch
+}
 
 lazy_static::lazy_static! {
-    /// Semaphore to limit concurrent prefetch operations
+    /// Semaphore to limit concurrent prefetch operations. Initialized once
+    /// from the resolved memory profile — startup cost only.
     static ref V2_PREFETCH_SEMAPHORE: tokio::sync::Semaphore =
-        tokio::sync::Semaphore::new(V2_MAX_CONCURRENT_PREFETCH);
+        tokio::sync::Semaphore::new(v2_max_concurrent_prefetch());
 }
 
 /// Spawn background tasks to prefetch upcoming Qobuz tracks (V2)
@@ -93,9 +98,10 @@ fn spawn_v2_prefetch_with_hw_check(
 
     let mut qobuz_prefetched = 0;
 
+    let prefetch_cap = v2_prefetch_count();
     for track in upcoming_tracks {
         // Stop once we've prefetched enough Qobuz tracks
-        if qobuz_prefetched >= V2_PREFETCH_COUNT {
+        if qobuz_prefetched >= prefetch_cap {
             break;
         }
 
@@ -161,6 +167,22 @@ fn spawn_v2_prefetch_with_hw_check(
             // DACs that top out at 48 kHz — we continue to Lossless (44.1 kHz) if needed.
             let effective_quality = {
                 let mut eq = quality;
+
+                // Low-memory hosts cap prefetch quality at Lossless before the
+                // hardware-rate ladder runs. A cached HiRes track is ~60 MB held
+                // in RAM; Lossless is ~10–15 MB. On a 1 GB Pi 3B (issue #331)
+                // the difference is the gap between "plays" and "swap thrash
+                // kills the network stack".
+                let mem_profile = qbz_core::system_capabilities::memory_profile();
+                if !mem_profile.allow_hires_prefetch && eq > Quality::Lossless {
+                    log::debug!(
+                        "[V2/PREFETCH] Low-memory cap: track {} {:?} -> Lossless",
+                        track_id,
+                        eq
+                    );
+                    eq = Quality::Lossless;
+                }
+
                 #[cfg(target_os = "linux")]
                 if let Some(ref device_id) = hw_device_clone {
                     let bridge_guard = bridge_clone.read().await;
