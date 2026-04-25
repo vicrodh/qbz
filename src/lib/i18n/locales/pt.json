@@ -342,7 +342,8 @@
     "shuffleAlbums": "Aleatório entre álbuns",
     "playModeInOrder": "Em ordem",
     "playModeAlbumShuffle": "Aleatório por álbum",
-    "trackCount": "{count} faixas"
+    "trackCount": "{count} faixas",
+    "shuffleTracksMix": "Fila aleatória desta coleção"
   },
   "confirm": {
     "deletePlaylist": "Tem certeza de que deseja excluir esta playlist?",
@@ -2760,7 +2761,8 @@
     "laodingDevices": "Carregando dispositivos...",
     "findingSimilarArtists": "Encontrando artistas semelhantes...",
     "awardUnavailable": "Detalhe não disponível para este prêmio.",
-    "audioDeviceMissing": "Dispositivo '{device}' não está mais disponível. Usando o padrão do sistema."
+    "audioDeviceMissing": "Dispositivo '{device}' não está mais disponível. Usando o padrão do sistema.",
+    "mixTrimmed": "{actual} músicas adicionadas à fila (pediste {requested}; algumas foram fundidas ou limitadas por álbum)."
   },
   "topMixes": {
     "title": "TopQ",
@@ -2826,5 +2828,15 @@
     "title": "WeeklyQ",
     "subtitle": "Baseado nas suas audições semanais.",
     "cardDesc": "Faça uma jornada semanal com um mix novo <strong>toda sexta-feira</strong>."
+  },
+  "mixModal": {
+    "title": "Fila aleatória",
+    "computing": "A carregar…",
+    "confirm": "Adicionar à fila",
+    "loadFailed": "Não foi possível carregar a contagem",
+    "body": "Cria uma fila aleatória com músicas desta coleção. Quantas músicas queres?",
+    "numberOfSongs": "Número de músicas",
+    "songsAvailable": "{n} músicas disponíveis",
+    "allOption": "Todas ({n})"
   }
 }

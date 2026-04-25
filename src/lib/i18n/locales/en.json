@@ -342,7 +342,8 @@
     "shuffleAlbums": "Shuffle albums",
     "playModeInOrder": "In order",
     "playModeAlbumShuffle": "Album shuffle",
-    "trackCount": "{count} tracks"
+    "trackCount": "{count} tracks",
+    "shuffleTracksMix": "Random queue from this collection"
   },
   "confirm": {
     "deletePlaylist": "Are you sure you want to delete this playlist?",
@@ -2766,7 +2767,8 @@
     "copied": "Copied!",
     "findingSimilarArtists": "Finding similar artists...",
     "awardUnavailable": "Award detail not available for this entry.",
-    "audioDeviceMissing": "Output device '{device}' is no longer available. Using system default."
+    "audioDeviceMissing": "Output device '{device}' is no longer available. Using system default.",
+    "mixTrimmed": "Added {actual} songs to your queue (you asked for {requested}; some merged or capped per album)."
   },
   "topMixes": {
     "title": "TopQ",
@@ -2832,5 +2834,15 @@
     "title": "WeeklyQ",
     "subtitle": "Based on your weekly listening.",
     "cardDesc": "Take a weekly journey with a fresh mix <strong>every Friday</strong>."
+  },
+  "mixModal": {
+    "title": "Random queue",
+    "computing": "Loading…",
+    "confirm": "Add to queue",
+    "loadFailed": "Couldn't load song count",
+    "body": "Create a random queue with songs from this collection. How many songs do you want?",
+    "numberOfSongs": "Number of songs",
+    "songsAvailable": "{n} songs available",
+    "allOption": "All ({n})"
   }
 }

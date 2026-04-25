@@ -94,6 +94,9 @@ env_logger = "0.11"
 # Random number generation (for shuffle)
 rand = "0.10"
 
+# Fuzzy string similarity (for track-mix dedup)
+strsim = "0.11"
+
 # Audio playback
 rodio = { version = "0.22", features = ["symphonia-all"] }
 symphonia = { version = "0.5", features = ["all"] }
