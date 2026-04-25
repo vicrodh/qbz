@@ -790,3 +790,63 @@ pub async fn v2_skip_to_previous_item(
 
     Ok(())
 }
+
+// ──────────────────────────── Track-mix shuffle ────────────────────────────
+
+/// Returns the number of distinct songs in the collection after similarity-
+/// based deduplication. Used by the DJ-mix modal to size the slider of pickable
+/// queue sizes. Deterministic — same collection state yields the same count.
+#[tauri::command]
+pub async fn v2_collection_unique_track_count(
+    collection_id: String,
+    library: State<'_, LibraryState>,
+    state: State<'_, crate::AppState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<usize, RuntimeError> {
+    use crate::mixtape::enqueue::{ProdItemResolver, resolve_collection_tracks};
+    use crate::mixtape::shuffle;
+
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresUserSession)
+        .await?;
+
+    log::info!("[V2] collection_unique_track_count id={}", collection_id);
+
+    // 1. Load the collection.
+    let collection = {
+        let guard = acquire_db!(library);
+        let db = guard.as_ref().ok_or(RuntimeError::UserSessionNotActivated)?;
+        db.with_connection(|conn| {
+            crate::mixtape::repo::get_collection(conn, &collection_id)
+                .map_err(|e| RuntimeError::Internal(e.to_string()))
+        })?
+        .ok_or_else(|| RuntimeError::Internal("collection not found".into()))?
+    };
+
+    // 2. Resolve the natural in-order track list (we count, not play).
+    let client_guard = state.client.read().await;
+    let client = client_guard.clone();
+    drop(client_guard);
+
+    let resolver = ProdItemResolver {
+        client: &client,
+        library: &library,
+    };
+
+    let tracks = resolve_collection_tracks(
+        collection.items.clone(),
+        qbz_models::mixtape::CollectionPlayMode::InOrder,
+        &resolver,
+    )
+    .await;
+
+    let count = shuffle::unique_track_count(&tracks);
+    log::info!(
+        "[V2] collection_unique_track_count id={}: total={} unique={}",
+        collection_id,
+        tracks.len(),
+        count
+    );
+    Ok(count)
+}

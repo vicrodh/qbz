@@ -1886,6 +1886,7 @@ pub fn run() {
             commands_v2::v2_reorder_mixtape_items,
             commands_v2::v2_enqueue_collection,
             commands_v2::v2_enqueue_collection_item,
+            commands_v2::v2_collection_unique_track_count,
             commands_v2::v2_skip_to_next_item,
             commands_v2::v2_skip_to_previous_item,
         ])
