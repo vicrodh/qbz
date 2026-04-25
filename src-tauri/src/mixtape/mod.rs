@@ -5,3 +5,4 @@
 pub mod schema;
 pub mod repo;
 pub mod enqueue;
+pub mod shuffle;
