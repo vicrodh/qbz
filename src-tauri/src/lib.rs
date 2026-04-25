@@ -513,6 +513,13 @@ pub fn run() {
 
     log::info!("QBZ starting...");
 
+    // Resolve and log the system memory profile up front so the chosen
+    // prefetch / buffer caps are visible at boot rather than the first
+    // playback action. The profile is cached in qbz-core's OnceLock,
+    // so subsequent callers (commands_v2/playback.rs, etc.) hit the
+    // cache.
+    let _ = qbz_core::system_capabilities::memory_profile();
+
     #[cfg(target_os = "linux")]
     apply_linux_webkit_workarounds();
 
