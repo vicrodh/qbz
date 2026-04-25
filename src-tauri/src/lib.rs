@@ -518,7 +518,14 @@ pub fn run() {
     // playback action. The profile is cached in qbz-core's OnceLock,
     // so subsequent callers (commands_v2/playback.rs, etc.) hit the
     // cache.
-    let _ = qbz_core::system_capabilities::memory_profile();
+    let mem_profile = qbz_core::system_capabilities::memory_profile();
+
+    // Wire the streaming-buffer cap into qbz-player's process-wide state
+    // so StreamingConfig::from_speed_mbps clamps to the host's memory
+    // profile. Without this, slow connections inflate the initial
+    // buffer to 2 MB — counterproductive on a memory-pressured host
+    // where the slowness is itself the symptom (issue #331).
+    qbz_player::player::set_max_initial_buffer_bytes(mem_profile.max_initial_buffer_bytes);
 
     #[cfg(target_os = "linux")]
     apply_linux_webkit_workarounds();
