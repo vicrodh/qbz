@@ -946,6 +946,61 @@ pub fn run() {
                 .media_controls
                 .init(app.handle().clone());
 
+            // Memory watchdog (issue #331). Only spawn on memory-constrained
+            // hosts — on Normal-class machines the audio cache fits comfortably
+            // in RAM and the polling cost is wasted. On a Pi 3B with 1 GB total
+            // and ~150 MB locked by the WebView, the L1 cache (default cap
+            // 400 MB) plus a few prefetched HiRes tracks routinely pushes the
+            // kernel into swap. The watchdog flushes the cache when
+            // MemAvailable falls below 5 % of total, breaking the swap-thrash
+            // loop reported by codehd7.
+            {
+                use qbz_core::system_capabilities;
+                let resolved_profile = system_capabilities::memory_profile();
+                if resolved_profile.class == system_capabilities::MemoryClass::LowMemory {
+                    let watchdog_cache = app.state::<AppState>().audio_cache.clone();
+                    tauri::async_runtime::spawn(async move {
+                        let mut interval =
+                            tokio::time::interval(std::time::Duration::from_secs(10));
+                        let mut was_critical = false;
+                        loop {
+                            interval.tick().await;
+                            let Some(pressure) = system_capabilities::read_memory_pressure()
+                            else {
+                                continue;
+                            };
+                            if pressure.is_critical && !was_critical {
+                                log::warn!(
+                                    "[memory-watchdog] Critical pressure: {:.1}% available ({} MB of {} MB) - evicting audio caches",
+                                    pressure.available_pct,
+                                    pressure.mem_available_kb / 1024,
+                                    pressure.mem_total_kb / 1024,
+                                );
+                                watchdog_cache.clear();
+                                was_critical = true;
+                            } else if pressure.is_low && !was_critical {
+                                log::info!(
+                                    "[memory-watchdog] Low pressure: {:.1}% available ({} MB)",
+                                    pressure.available_pct,
+                                    pressure.mem_available_kb / 1024,
+                                );
+                            } else if !pressure.is_low {
+                                if was_critical {
+                                    log::info!(
+                                        "[memory-watchdog] Recovered: {:.1}% available",
+                                        pressure.available_pct,
+                                    );
+                                }
+                                was_critical = false;
+                            }
+                        }
+                    });
+                    log::info!(
+                        "[memory-watchdog] Started for LowMemory host (poll every 10s)"
+                    );
+                }
+            }
+
             // Initialize CoreBridge (new multi-crate architecture)
             // Store V2 player state for event loop access
             let v2_player_state: Arc<tokio::sync::RwLock<Option<qbz_player::SharedState>>> =
