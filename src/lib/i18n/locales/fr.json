@@ -342,7 +342,8 @@
     "shuffleAlbums": "Mode album aléatoire",
     "playModeInOrder": "Dans l'ordre",
     "playModeAlbumShuffle": "Aléatoire par album",
-    "trackCount": "{count} pistes"
+    "trackCount": "{count} pistes",
+    "shuffleTracksMix": "Mix de pistes aléatoire"
   },
   "confirm": {
     "deletePlaylist": "Êtes-vous sûr de vouloir supprimer cette playlist ?",
@@ -2760,7 +2761,8 @@
     "playlistUpdated": "Playlist mise à jour",
     "findingSimilarArtists": "Trouver des artistes similaires...",
     "awardUnavailable": "Détail non disponible pour cette récompense.",
-    "audioDeviceMissing": "Le périphérique '{device}' n'est plus disponible. Utilisation du périphérique par défaut."
+    "audioDeviceMissing": "Le périphérique '{device}' n'est plus disponible. Utilisation du périphérique par défaut.",
+    "mixTrimmed": "Mix de {actual} pistes (vous avez demandé {requested} ; réduit par déduplication ou équilibrage par album)"
   },
   "topMixes": {
     "title": "TopQ",
@@ -2826,5 +2828,13 @@
     "title": "WeeklyQ",
     "subtitle": "Basé sur vos écoutes hebdomadaires.",
     "cardDesc": "Profitez chaque vendredi d'un nouveau mix personnalisé."
+  },
+  "mixModal": {
+    "title": "Mix aléatoire de pistes",
+    "computing": "Calcul en cours…",
+    "subtitle": "{unique} pistes uniques (sur {total})",
+    "allOption": "Toutes ({n})",
+    "confirm": "Mixer",
+    "loadFailed": "Impossible de charger le nombre de pistes"
   }
 }

@@ -342,7 +342,8 @@
     "shuffleAlbums": "Alben-Zufallsmodus",
     "playModeInOrder": "Der Reihe nach",
     "playModeAlbumShuffle": "Alben-Zufallsmodus",
-    "trackCount": "{count} Titel"
+    "trackCount": "{count} Titel",
+    "shuffleTracksMix": "Zufallsmix"
   },
   "confirm": {
     "deletePlaylist": "Sind Sie sicher, dass Sie diese Playlist löschen möchten?",
@@ -2760,7 +2761,8 @@
     "laodingDevices": "Geräte werden geladen...",
     "findingSimilarArtists": "Suche nach ähnlichen Künstlern...",
     "awardUnavailable": "Detailansicht für diese Auszeichnung nicht verfügbar.",
-    "audioDeviceMissing": "Ausgabegerät '{device}' ist nicht mehr verfügbar. Standardgerät wird verwendet."
+    "audioDeviceMissing": "Ausgabegerät '{device}' ist nicht mehr verfügbar. Standardgerät wird verwendet.",
+    "mixTrimmed": "{actual} Tracks gemixt (du wolltest {requested}; einige wurden durch Dedup oder Album-Balance entfernt)"
   },
   "topMixes": {
     "title": "TopQ",
@@ -2826,5 +2828,13 @@
     "title": "WeeklyQ",
     "subtitle": "Basierend auf deinem woechentlichen Hoerverlauf.",
     "cardDesc": "Eine woechentliche Reise mit einem frischen Mix <strong>jeden Freitag</strong>."
+  },
+  "mixModal": {
+    "title": "Zufälliger Track-Mix",
+    "computing": "Berechne…",
+    "subtitle": "{unique} eindeutige Tracks (von {total})",
+    "allOption": "Alle ({n})",
+    "confirm": "Mixen",
+    "loadFailed": "Track-Anzahl konnte nicht geladen werden"
   }
 }
