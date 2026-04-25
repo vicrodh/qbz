@@ -29,6 +29,8 @@
   import QualityBadgeStatic from '../QualityBadgeStatic.svelte';
   import BulkActionBar from '../BulkActionBar.svelte';
   import TrackRow from '../TrackRow.svelte';
+  import TrackMixModal from '../TrackMixModal.svelte';
+  import DjIcon from '$lib/icons/DjIcon.svelte';
   import { cachedSrc } from '$lib/actions/cachedImage';
   import { preloadImages } from '$lib/services/imageCacheService';
   import { showToast } from '$lib/stores/toastStore';
@@ -785,6 +787,7 @@
   let renameModalOpen = $state(false);
   let descriptionModalOpen = $state(false);
   let confirmDeleteOpen = $state(false);
+  let mixModalOpen = $state(false);
 
   // Edit drafts
   let draftName = $state('');
@@ -1318,8 +1321,35 @@
       if (confirmDeleteOpen) confirmDeleteOpen = false;
       else if (renameModalOpen) renameModalOpen = false;
       else if (descriptionModalOpen) descriptionModalOpen = false;
+      else if (mixModalOpen) mixModalOpen = false;
       else if (overflowOpen) overflowOpen = false;
       else if (openItemMenu !== null) openItemMenu = null;
+    }
+  }
+
+  async function handleConfirmMix(sampleSize: number) {
+    if (!collection || playLoading) return;
+    mixModalOpen = false;
+    playLoading = true;
+    try {
+      const result = await invoke<{ requestedCount: number; actualCount: number }>(
+        'v2_collection_shuffle_tracks',
+        { collectionId, sampleSize },
+      );
+      await startPlaybackFromQueue();
+      if (result.actualCount < result.requestedCount) {
+        showToast(
+          $t('toast.mixTrimmed', {
+            values: { actual: result.actualCount, requested: result.requestedCount },
+          }),
+          'info',
+        );
+      }
+    } catch (err) {
+      console.error('[MixtapeCollectionDetailView] shuffle tracks failed:', err);
+      showToast($t('toast.failedStartPlayback') || 'Failed to start playback', 'error');
+    } finally {
+      playLoading = false;
     }
   }
 </script>
@@ -1401,6 +1431,19 @@
                 <LoaderCircle size={18} class="spin" />
               {:else}
                 <Shuffle size={18} />
+              {/if}
+            </button>
+            <button
+              class="action-btn-circle"
+              onclick={() => (mixModalOpen = true)}
+              disabled={collection.items.length === 0 || playLoading}
+              title={$t('common.shuffleTracksMix')}
+              aria-label={$t('common.shuffleTracksMix')}
+            >
+              {#if playLoading}
+                <LoaderCircle size={18} class="spin" />
+              {:else}
+                <DjIcon size={18} />
               {/if}
             </button>
             <div class="overflow-wrap">
@@ -2098,6 +2141,15 @@
         </div>
       </div>
     {/if}
+
+    <!-- DJ-Mix random-track sampler modal -->
+    <TrackMixModal
+      open={mixModalOpen}
+      collectionId={collectionId}
+      totalRawTracks={collection.items.length}
+      onClose={() => (mixModalOpen = false)}
+      onConfirm={handleConfirmMix}
+    />
   {/if}
 </div>
 
