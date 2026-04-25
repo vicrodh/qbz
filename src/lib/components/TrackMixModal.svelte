@@ -1,20 +1,23 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
-  import { t } from 'svelte-i18n';
+  import { t } from '$lib/i18n';
   import { LoaderCircle } from 'lucide-svelte';
   import { showToast } from '$lib/stores/toastStore';
+  import Modal from './Modal.svelte';
+  import Dropdown from './Dropdown.svelte';
   import { buildSizeOptions } from './trackMixModal.helpers';
 
   type Props = {
     open: boolean;
     collectionId: string;
-    /** Raw item count from the collection, shown as the "of {total}" hint. */
+    /** Raw item count from the collection. Currently informational only;
+     * kept on the API surface in case callers want to surface it later. */
     totalRawTracks: number;
     onClose: () => void;
     onConfirm: (sampleSize: number) => void;
   };
 
-  let { open, collectionId, totalRawTracks, onClose, onConfirm }: Props = $props();
+  let { open, collectionId, totalRawTracks: _totalRawTracks, onClose, onConfirm }: Props = $props();
 
   let loading = $state(false);
   let uniqueCount = $state<number | null>(null);
@@ -23,6 +26,24 @@
   let aborter: AbortController | null = null;
 
   const sizeOptions = $derived(buildSizeOptions(uniqueCount));
+
+  function handleDropdownChange(label: string) {
+    const n = Number.parseInt(label, 10);
+    if (!Number.isNaN(n)) {
+      const match = sizeOptions.find((o) => o.size === n && !o.isAll);
+      if (match) {
+        selectedSize = n;
+        return;
+      }
+    }
+    const allOpt = sizeOptions.find((o) => o.isAll);
+    if (allOpt) selectedSize = allOpt.size;
+  }
+
+  function isSelectedAll(): boolean {
+    if (selectedSize === null) return false;
+    return sizeOptions.find((o) => o.size === selectedSize)?.isAll ?? false;
+  }
 
   async function fetchUniqueCount() {
     if (aborter) aborter.abort();
@@ -51,7 +72,6 @@
 
   $effect(() => {
     if (open && cachedFor !== collectionId) {
-      // Either first open for this collection OR collectionId changed.
       uniqueCount = null;
       selectedSize = null;
       void fetchUniqueCount();
@@ -69,92 +89,77 @@
   }
 </script>
 
-{#if open}
-  <div
-    class="tm-backdrop"
-    onclick={onClose}
-    role="presentation"
-  ></div>
-  <div class="tm-modal" role="dialog" aria-modal="true">
-    <h2 class="tm-title">{$t('mixModal.title')}</h2>
+<Modal
+  isOpen={open}
+  onClose={onClose}
+  title={$t('mixModal.title')}
+  maxWidth="440px"
+>
+  <div class="tm-content">
+    <p class="tm-body">{$t('mixModal.body')}</p>
 
     {#if loading}
       <div class="tm-loading">
-        <LoaderCircle size={20} class="spin" />
+        <LoaderCircle size={18} class="spin" />
         <span>{$t('mixModal.computing')}</span>
       </div>
     {:else if uniqueCount !== null && uniqueCount > 0}
-      <p class="tm-subtitle">
-        {$t('mixModal.subtitle', {
-          values: { unique: uniqueCount, total: totalRawTracks },
-        })}
-      </p>
-      <ul class="tm-options" role="radiogroup" aria-label={$t('mixModal.title')}>
-        {#each sizeOptions as opt}
-          <li>
-            <button
-              type="button"
-              class="tm-option"
-              class:selected={selectedSize === opt.size}
-              role="radio"
-              aria-checked={selectedSize === opt.size}
-              onclick={() => (selectedSize = opt.size)}
-            >
-              {opt.isAll
-                ? $t('mixModal.allOption', { values: { n: opt.size } })
-                : opt.size}
-            </button>
-          </li>
-        {/each}
-      </ul>
+      <div class="tm-field">
+        <label class="tm-field-label" for="tm-size-dropdown">
+          {$t('mixModal.numberOfSongs')}
+        </label>
+        <div id="tm-size-dropdown" class="tm-dropdown-wrap">
+          <Dropdown
+            value={selectedSize === null
+              ? ''
+              : isSelectedAll()
+                ? $t('mixModal.allOption', { values: { n: selectedSize } })
+                : String(selectedSize)}
+            options={sizeOptions.map((o) =>
+              o.isAll
+                ? $t('mixModal.allOption', { values: { n: o.size } })
+                : String(o.size),
+            )}
+            onchange={handleDropdownChange}
+            wide
+          />
+        </div>
+        <p class="tm-helper">
+          {$t('mixModal.songsAvailable', { values: { n: uniqueCount } })}
+        </p>
+      </div>
     {/if}
+  </div>
 
-    <div class="tm-footer">
-      <button type="button" class="tm-btn-secondary" onclick={onClose}>
+  {#snippet footer()}
+    <div class="tm-actions">
+      <button type="button" class="btn btn-secondary" onclick={onClose}>
         {$t('actions.cancel')}
       </button>
       <button
         type="button"
-        class="tm-btn-primary"
+        class="btn btn-primary"
         onclick={handleConfirm}
         disabled={selectedSize === null || loading}
       >
         {$t('mixModal.confirm')}
       </button>
     </div>
-  </div>
-{/if}
+  {/snippet}
+</Modal>
 
 <style>
-  .tm-backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.55);
-    z-index: 3000;
-  }
-
-  .tm-modal {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    z-index: 3001;
-    background: var(--surface-elevated, #1f1f23);
-    color: var(--text-primary, #fff);
-    border-radius: 12px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
-    padding: 24px;
-    width: min(440px, calc(100vw - 32px));
-    max-height: calc(100vh - 64px);
+  .tm-content {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 18px;
   }
 
-  .tm-title {
+  .tm-body {
     margin: 0;
-    font-size: 18px;
-    font-weight: 600;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--text-secondary, #c9c9d0);
   }
 
   .tm-loading {
@@ -165,85 +170,33 @@
     font-size: 14px;
   }
 
-  .tm-subtitle {
-    margin: 0;
+  .tm-field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .tm-field-label {
     font-size: 13px;
-    color: var(--text-secondary, #aaa);
+    font-weight: 500;
+    color: var(--text-primary, #fff);
   }
 
-  .tm-options {
-    list-style: none;
+  .tm-dropdown-wrap {
+    width: 100%;
+  }
+
+  .tm-helper {
     margin: 0;
-    padding: 0;
+    font-size: 12px;
+    color: var(--text-tertiary, #888);
+  }
+
+  .tm-actions {
     display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    overflow-y: auto;
-  }
-
-  .tm-option {
-    appearance: none;
-    background: var(--surface, #2a2a30);
-    color: var(--text-primary, #fff);
-    border: 1px solid var(--border, #3a3a40);
-    border-radius: 999px;
-    padding: 10px 18px;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: border-color 0.15s, background 0.15s;
-    min-height: 40px;
-  }
-
-  .tm-option:hover {
-    border-color: var(--text-secondary, #aaa);
-  }
-
-  .tm-option.selected {
-    border-color: var(--primary, #2cb05a);
-    background: color-mix(in oklab, var(--primary, #2cb05a) 18%, transparent);
-  }
-
-  .tm-footer {
-    display: flex;
+    align-items: center;
     justify-content: flex-end;
-    gap: 8px;
-    margin-top: 8px;
-  }
-
-  .tm-btn-secondary,
-  .tm-btn-primary {
-    appearance: none;
-    border: none;
-    border-radius: 8px;
-    padding: 10px 18px;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background 0.15s, opacity 0.15s;
-  }
-
-  .tm-btn-secondary {
-    background: transparent;
-    color: var(--text-primary, #fff);
-    border: 1px solid var(--border, #3a3a40);
-  }
-
-  .tm-btn-secondary:hover {
-    background: var(--surface, #2a2a30);
-  }
-
-  .tm-btn-primary {
-    background: var(--primary, #2cb05a);
-    color: #fff;
-  }
-
-  .tm-btn-primary:hover:not(:disabled) {
-    filter: brightness(1.08);
-  }
-
-  .tm-btn-primary:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+    gap: 12px;
+    width: 100%;
   }
 </style>

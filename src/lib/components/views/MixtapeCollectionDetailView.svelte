@@ -1321,7 +1321,6 @@
       if (confirmDeleteOpen) confirmDeleteOpen = false;
       else if (renameModalOpen) renameModalOpen = false;
       else if (descriptionModalOpen) descriptionModalOpen = false;
-      else if (mixModalOpen) mixModalOpen = false;
       else if (overflowOpen) overflowOpen = false;
       else if (openItemMenu !== null) openItemMenu = null;
     }

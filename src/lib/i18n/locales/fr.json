@@ -343,7 +343,7 @@
     "playModeInOrder": "Dans l'ordre",
     "playModeAlbumShuffle": "Aléatoire par album",
     "trackCount": "{count} pistes",
-    "shuffleTracksMix": "Mix de pistes aléatoire"
+    "shuffleTracksMix": "File aléatoire depuis cette collection"
   },
   "confirm": {
     "deletePlaylist": "Êtes-vous sûr de vouloir supprimer cette playlist ?",
@@ -2762,7 +2762,7 @@
     "findingSimilarArtists": "Trouver des artistes similaires...",
     "awardUnavailable": "Détail non disponible pour cette récompense.",
     "audioDeviceMissing": "Le périphérique '{device}' n'est plus disponible. Utilisation du périphérique par défaut.",
-    "mixTrimmed": "Mix de {actual} pistes (vous avez demandé {requested} ; réduit par déduplication ou équilibrage par album)"
+    "mixTrimmed": "{actual} chansons ajoutées à la file (tu en as demandé {requested} ; certaines fusionnées ou limitées par album)."
   },
   "topMixes": {
     "title": "TopQ",
@@ -2830,11 +2830,13 @@
     "cardDesc": "Profitez chaque vendredi d'un nouveau mix personnalisé."
   },
   "mixModal": {
-    "title": "Mix aléatoire de pistes",
-    "computing": "Calcul en cours…",
-    "subtitle": "{unique} pistes uniques (sur {total})",
-    "allOption": "Toutes ({n})",
-    "confirm": "Mixer",
-    "loadFailed": "Impossible de charger le nombre de pistes"
+    "title": "File aléatoire",
+    "computing": "Chargement…",
+    "confirm": "Ajouter à la file",
+    "loadFailed": "Impossible de charger le nombre de chansons",
+    "body": "Crée une file aléatoire avec des chansons de cette collection. Combien de chansons veux-tu ?",
+    "numberOfSongs": "Nombre de chansons",
+    "songsAvailable": "{n} chansons disponibles",
+    "allOption": "Toutes ({n})"
   }
 }

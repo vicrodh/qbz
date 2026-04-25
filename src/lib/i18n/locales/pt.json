@@ -343,7 +343,7 @@
     "playModeInOrder": "Em ordem",
     "playModeAlbumShuffle": "Aleatório por álbum",
     "trackCount": "{count} faixas",
-    "shuffleTracksMix": "Mix de faixas aleatório"
+    "shuffleTracksMix": "Fila aleatória desta coleção"
   },
   "confirm": {
     "deletePlaylist": "Tem certeza de que deseja excluir esta playlist?",
@@ -2762,7 +2762,7 @@
     "findingSimilarArtists": "Encontrando artistas semelhantes...",
     "awardUnavailable": "Detalhe não disponível para este prêmio.",
     "audioDeviceMissing": "Dispositivo '{device}' não está mais disponível. Usando o padrão do sistema.",
-    "mixTrimmed": "Mix de {actual} faixas (pediu {requested}; reduzido por duplicados ou equilíbrio por álbum)"
+    "mixTrimmed": "{actual} músicas adicionadas à fila (pediste {requested}; algumas foram fundidas ou limitadas por álbum)."
   },
   "topMixes": {
     "title": "TopQ",
@@ -2830,11 +2830,13 @@
     "cardDesc": "Faça uma jornada semanal com um mix novo <strong>toda sexta-feira</strong>."
   },
   "mixModal": {
-    "title": "Mix aleatório de faixas",
-    "computing": "A calcular…",
-    "subtitle": "{unique} faixas únicas (de {total})",
-    "allOption": "Todas ({n})",
-    "confirm": "Misturar",
-    "loadFailed": "Não foi possível carregar a contagem de faixas"
+    "title": "Fila aleatória",
+    "computing": "A carregar…",
+    "confirm": "Adicionar à fila",
+    "loadFailed": "Não foi possível carregar a contagem",
+    "body": "Cria uma fila aleatória com músicas desta coleção. Quantas músicas queres?",
+    "numberOfSongs": "Número de músicas",
+    "songsAvailable": "{n} músicas disponíveis",
+    "allOption": "Todas ({n})"
   }
 }

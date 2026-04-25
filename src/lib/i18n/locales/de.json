@@ -343,7 +343,7 @@
     "playModeInOrder": "Der Reihe nach",
     "playModeAlbumShuffle": "Alben-Zufallsmodus",
     "trackCount": "{count} Titel",
-    "shuffleTracksMix": "Zufallsmix"
+    "shuffleTracksMix": "Zufällige Warteschlange aus dieser Sammlung"
   },
   "confirm": {
     "deletePlaylist": "Sind Sie sicher, dass Sie diese Playlist löschen möchten?",
@@ -2762,7 +2762,7 @@
     "findingSimilarArtists": "Suche nach ähnlichen Künstlern...",
     "awardUnavailable": "Detailansicht für diese Auszeichnung nicht verfügbar.",
     "audioDeviceMissing": "Ausgabegerät '{device}' ist nicht mehr verfügbar. Standardgerät wird verwendet.",
-    "mixTrimmed": "{actual} Tracks gemixt (du wolltest {requested}; einige wurden durch Dedup oder Album-Balance entfernt)"
+    "mixTrimmed": "{actual} Songs zur Warteschlange hinzugefügt (du wolltest {requested}; einige wurden zusammengeführt oder pro Album begrenzt)."
   },
   "topMixes": {
     "title": "TopQ",
@@ -2830,11 +2830,13 @@
     "cardDesc": "Eine woechentliche Reise mit einem frischen Mix <strong>jeden Freitag</strong>."
   },
   "mixModal": {
-    "title": "Zufälliger Track-Mix",
-    "computing": "Berechne…",
-    "subtitle": "{unique} eindeutige Tracks (von {total})",
-    "allOption": "Alle ({n})",
-    "confirm": "Mixen",
-    "loadFailed": "Track-Anzahl konnte nicht geladen werden"
+    "title": "Zufällige Warteschlange",
+    "computing": "Lade…",
+    "confirm": "Zur Warteschlange",
+    "loadFailed": "Song-Anzahl konnte nicht geladen werden",
+    "body": "Erstelle eine zufällige Warteschlange mit Songs aus dieser Sammlung. Wie viele Songs möchtest du?",
+    "numberOfSongs": "Anzahl der Songs",
+    "songsAvailable": "{n} Songs verfügbar",
+    "allOption": "Alle ({n})"
   }
 }
