@@ -134,9 +134,13 @@ impl AppState {
             }
         };
 
-        // Create audio cache (L1 - memory, 400MB) with optional disk spillover
+        // Create audio cache (L1 - memory) with optional disk spillover.
+        // The L1 cap is sized per host: Normal hosts get the historical
+        // 400 MB; LowMemory hosts (issue #331) drop to 50 MB so the cache
+        // alone can never claim 40 % of a 1 GB Pi.
+        let l1_cap = qbz_core::system_capabilities::memory_profile().audio_cache_l1_max_bytes;
         let audio_cache = if let Some(pc) = playback_cache {
-            Arc::new(AudioCache::with_playback_cache(400 * 1024 * 1024, pc))
+            Arc::new(AudioCache::with_playback_cache(l1_cap, pc))
         } else {
             Arc::new(AudioCache::default())
         };
