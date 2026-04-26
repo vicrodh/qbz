@@ -3038,10 +3038,31 @@ async fn apply_renderer_command_to_corebridge(
                 };
 
                 if !projection_applied {
-                    if let Err(err) =
-                        align_corebridge_queue_cursor(bridge, current_track.track_id).await
-                    {
-                        log::warn!("[QConnect] Failed to align CoreBridge queue cursor: {err}");
+                    // Guard: skip realigning the CoreBridge cursor when local
+                    // IS the active renderer. In that case this command is
+                    // just our own state echoed back by the Qobuz cloud, so
+                    // aligning here races with the user's already-advanced
+                    // local cursor and pushes a duplicate index into history.
+                    // Mirrors the gating used in sync_active_renderer_projection
+                    // (line ~1223): align when local is NOT the active renderer.
+                    // Bug #316.
+                    let should_align = {
+                        let state = sync_state.lock().await;
+                        !is_local_renderer_active(&state.session)
+                    };
+                    if should_align {
+                        if let Err(err) =
+                            align_corebridge_queue_cursor(bridge, current_track.track_id).await
+                        {
+                            log::warn!(
+                                "[QConnect] Failed to align CoreBridge queue cursor: {err}"
+                            );
+                        }
+                    } else {
+                        log::debug!(
+                            "[QConnect] Skipping align_corebridge_queue_cursor: local renderer is active (echo from cloud); track_id={}",
+                            current_track.track_id
+                        );
                     }
                 }
 
