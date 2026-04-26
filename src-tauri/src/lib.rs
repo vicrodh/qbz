@@ -1706,6 +1706,7 @@ pub fn run() {
             commands_v2::v2_get_artist_albums,
             commands_v2::v2_get_artist_detail,
             commands_v2::v2_get_artist_tracks,
+            commands_v2::v2_get_releases_grid,
             commands_v2::v2_get_label_page,
             commands_v2::v2_get_label_explore,
             commands_v2::v2_get_label_albums,

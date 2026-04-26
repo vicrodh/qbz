@@ -10,8 +10,8 @@ use qbz_models::{
     Album, Artist, ArtistAlbums, CoreEvent, DiscoverAlbum, DiscoverData, DiscoverPlaylistsResponse,
     DiscoverResponse, FrontendAdapter, GenreInfo, LabelExploreResponse, LabelGetListResponse,
     LabelListPage, LabelPageData, LabelStoryResponse, PageArtistResponse,
-    Playlist, PlaylistTag, Quality, QueueState, QueueTrack, RepeatMode, SearchResultsPage,
-    StreamUrl, Track, TracksContainer, UserSession,
+    Playlist, PlaylistTag, Quality, QueueState, QueueTrack, ReleasesGridResponse, RepeatMode,
+    SearchResultsPage, StreamUrl, Track, TracksContainer, UserSession,
 };
 use qbz_player::{PlaybackState, Player, QueueManager};
 use qbz_qobuz::QobuzClient;
@@ -898,6 +898,24 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
 
         client
             .get_artist_tracks(artist_id, limit, offset)
+            .await
+            .map_err(CoreError::Api)
+    }
+
+    /// Get an artist's releases grid (paginated by `release_type`).
+    pub async fn get_releases_grid(
+        &self,
+        artist_id: u64,
+        release_type: &str,
+        limit: u32,
+        offset: u32,
+        sort: Option<&str>,
+    ) -> Result<ReleasesGridResponse, CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+
+        client
+            .get_releases_grid(artist_id, release_type, limit, offset, sort)
             .await
             .map_err(CoreError::Api)
     }

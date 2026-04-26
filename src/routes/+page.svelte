@@ -1857,7 +1857,7 @@
         g => g.type === 'ep' || g.type === 'single' || g.type === 'epSingle'
       );
       if (!hasEpGroup && selectedArtist.epsSingles.length === 0) {
-        invoke<ReleasesGridResponse>('get_releases_grid', {
+        invoke<ReleasesGridResponse>('v2_get_releases_grid', {
           artistId, releaseType: 'epSingle', limit: 25, offset: 0
         }).then(result => {
           if (result.items.length > 0 && selectedArtist?.id === artistId) {
@@ -2128,7 +2128,7 @@
 
     isArtistAlbumsLoading = true;
     try {
-      const result = await invoke<ReleasesGridResponse>('get_releases_grid', {
+      const result = await invoke<ReleasesGridResponse>('v2_get_releases_grid', {
         artistId: selectedArtist.id,
         releaseType: apiReleaseType,
         limit: 25,

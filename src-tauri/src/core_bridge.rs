@@ -16,8 +16,8 @@ use qbz_models::{
     Album, Artist, ArtistAlbums, DiscoverAlbum, DiscoverData, DiscoverPlaylistsResponse,
     DiscoverResponse, GenreInfo, LabelExploreResponse, LabelGetListResponse, LabelListPage,
     LabelPageData, LabelStoryResponse, PageArtistResponse, Playlist, PlaylistTag, Quality,
-    QueueState, QueueTrack, RepeatMode, SearchResultsPage, StreamUrl, Track, TracksContainer,
-    UserSession,
+    QueueState, QueueTrack, ReleasesGridResponse, RepeatMode, SearchResultsPage, StreamUrl, Track,
+    TracksContainer, UserSession,
 };
 use qbz_player::{PlaybackState, Player};
 
@@ -591,6 +591,21 @@ impl CoreBridge {
     ) -> Result<TracksContainer, String> {
         self.core
             .get_artist_tracks(artist_id, limit, offset)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Get an artist's releases grid (paginated by `release_type`).
+    pub async fn get_releases_grid(
+        &self,
+        artist_id: u64,
+        release_type: &str,
+        limit: u32,
+        offset: u32,
+        sort: Option<&str>,
+    ) -> Result<ReleasesGridResponse, String> {
+        self.core
+            .get_releases_grid(artist_id, release_type, limit, offset, sort)
             .await
             .map_err(|e| e.to_string())
     }
