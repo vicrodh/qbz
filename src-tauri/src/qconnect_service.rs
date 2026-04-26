@@ -1371,6 +1371,30 @@ impl QconnectServiceState {
                                     "[QConnect/Transport] <-- InboundReceived (JSON envelope)"
                                 );
                             }
+                            qconnect_transport_ws::TransportEvent::SessionEstablished => {
+                                log::info!(
+                                    "[QConnect/Transport] Session established — backoff counters reset"
+                                );
+                            }
+                            qconnect_transport_ws::TransportEvent::MaxReconnectAttemptsExceeded {
+                                attempts,
+                                last_reason,
+                            } => {
+                                log::error!(
+                                    "[QConnect/Transport] Max reconnect attempts exceeded: attempts={} last_reason={}",
+                                    attempts,
+                                    last_reason
+                                );
+                                emit_qconnect_diagnostic(
+                                    &app_for_errors,
+                                    "qconnect:max_reconnect_attempts_exceeded",
+                                    "error",
+                                    json!({
+                                        "attempts": attempts,
+                                        "last_reason": last_reason,
+                                    }),
+                                );
+                            }
                         }
                         if let Err(err) = app_for_loop.handle_transport_event(event).await {
                             let message = format!("qconnect app transport handling error: {err}");

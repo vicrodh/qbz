@@ -11,8 +11,8 @@ use prost::{
 };
 use qconnect_protocol::{
     decode_inbound_json, decode_queue_server_events, decode_renderer_server_commands,
-    encode_outbound_payload_bytes, InboundEnvelope, OutboundEnvelope, QueueServerEvent,
-    RendererServerCommand,
+    encode_outbound_payload_bytes, InboundEnvelope, OutboundEnvelope, QueueEventType,
+    QueueServerEvent, RendererServerCommand,
 };
 use serde::{Deserialize, Serialize};
 use tokio::{
@@ -38,6 +38,20 @@ pub enum TransportEvent {
     Disconnected,
     Authenticated,
     Subscribed,
+    /// Emitted the first time we observe a `MESSAGE_TYPE_SRVR_CTRL_SESSION_STATE`
+    /// frame on the active WS connection. This is the only proof the
+    /// session-level handshake actually went through (Qobuz cloud accepts the
+    /// WS upgrade well before the JOIN_SESSION negotiation, so `Connected` is
+    /// not a reliable signal — see issue #358).
+    SessionEstablished,
+    /// Emitted when the reconnect loop has exhausted
+    /// `reconnect_max_attempts` consecutive attempts without ever reaching
+    /// `SessionEstablished`. The transport gives up after this event so the
+    /// upper layer can decide whether to surface it to the user.
+    MaxReconnectAttemptsExceeded {
+        attempts: u32,
+        last_reason: String,
+    },
     ReconnectScheduled {
         attempt: u32,
         backoff_ms: u64,
@@ -296,6 +310,7 @@ async fn run_native_transport_loop(
 ) {
     let base_backoff = config.reconnect_backoff_ms.max(200);
     let max_backoff = config.reconnect_backoff_max_ms.max(base_backoff);
+    let max_attempts = config.reconnect_max_attempts;
     let mut backoff = base_backoff;
     let mut reconnect_attempt: u32 = 0;
     let mut msg_id: u32 = 0;
@@ -318,39 +333,45 @@ async fn run_native_transport_loop(
         let (mut ws, _) = match connect_result {
             Ok(Ok((ws, response))) => (ws, response),
             Ok(Err(err)) => {
-                if handle_reconnect_delay(
+                match handle_reconnect_delay(
                     &events_tx,
                     &mut shutdown_rx,
                     &mut reconnect_attempt,
                     &mut backoff,
                     max_backoff,
+                    max_attempts,
                     format!("connect_error:{err}"),
                 )
                 .await
                 {
-                    break;
+                    ReconnectOutcome::Continue => continue,
+                    ReconnectOutcome::Shutdown | ReconnectOutcome::Exhausted => break,
                 }
-                continue;
             }
             Err(_) => {
-                if handle_reconnect_delay(
+                match handle_reconnect_delay(
                     &events_tx,
                     &mut shutdown_rx,
                     &mut reconnect_attempt,
                     &mut backoff,
                     max_backoff,
+                    max_attempts,
                     "connect_timeout".to_string(),
                 )
                 .await
                 {
-                    break;
+                    ReconnectOutcome::Continue => continue,
+                    ReconnectOutcome::Shutdown | ReconnectOutcome::Exhausted => break,
                 }
-                continue;
             }
         };
 
-        reconnect_attempt = 0;
-        backoff = base_backoff;
+        // NOTE: The reconnect counter is intentionally NOT reset here. Reaching
+        // a connected WS is not proof that the session-level join succeeded —
+        // Qobuz cloud will accept the WS upgrade and then immediately emit
+        // MSG_TYPE_ERROR after the JOIN_SESSION exchange (issue #358). The
+        // counter resets only when we observe a `SessionEstablished` event
+        // (see the inbound branch below).
 
         {
             let mut guard = state.lock().await;
@@ -373,19 +394,20 @@ async fn run_native_transport_loop(
                     guard.connected = false;
                 }
                 emit(&events_tx, TransportEvent::Disconnected);
-                if handle_reconnect_delay(
+                match handle_reconnect_delay(
                     &events_tx,
                     &mut shutdown_rx,
                     &mut reconnect_attempt,
                     &mut backoff,
                     max_backoff,
+                    max_attempts,
                     "authenticate_failed".to_string(),
                 )
                 .await
                 {
-                    break;
+                    ReconnectOutcome::Continue => continue,
+                    ReconnectOutcome::Shutdown | ReconnectOutcome::Exhausted => break,
                 }
-                continue;
             }
             emit(&events_tx, TransportEvent::Authenticated);
         }
@@ -412,19 +434,20 @@ async fn run_native_transport_loop(
                     guard.connected = false;
                 }
                 emit(&events_tx, TransportEvent::Disconnected);
-                if handle_reconnect_delay(
+                match handle_reconnect_delay(
                     &events_tx,
                     &mut shutdown_rx,
                     &mut reconnect_attempt,
                     &mut backoff,
                     max_backoff,
+                    max_attempts,
                     "subscribe_failed".to_string(),
                 )
                 .await
                 {
-                    break;
+                    ReconnectOutcome::Continue => continue,
+                    ReconnectOutcome::Shutdown | ReconnectOutcome::Exhausted => break,
                 }
-                continue;
             }
             emit(&events_tx, TransportEvent::Subscribed);
         }
@@ -433,6 +456,11 @@ async fn run_native_transport_loop(
             config.keepalive_interval_ms.max(1_000),
         ));
         keepalive.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+        // Per-connection latch. Only the first SESSION_STATE on this WS resets
+        // the reconnect counters — subsequent ones are no-ops, so we don't
+        // keep paying the lock cost.
+        let mut session_established = false;
 
         let disconnect_reason = loop {
             tokio::select! {
@@ -473,14 +501,24 @@ async fn run_native_transport_loop(
                 incoming = ws.next() => {
                     match incoming {
                         Some(Ok(WsMessage::Binary(data))) => {
-                            if let Err(err) = handle_incoming_binary(&events_tx, &data) {
-                                emit(
-                                    &events_tx,
-                                    TransportEvent::TransportError {
-                                        stage: "decode_inbound_binary".to_string(),
-                                        message: err.to_string(),
-                                    },
-                                );
+                            match handle_incoming_binary(&events_tx, &data) {
+                                Ok(InboundFrameOutcome { session_state_seen }) => {
+                                    if session_state_seen && !session_established {
+                                        session_established = true;
+                                        reconnect_attempt = 0;
+                                        backoff = base_backoff;
+                                        emit(&events_tx, TransportEvent::SessionEstablished);
+                                    }
+                                }
+                                Err(err) => {
+                                    emit(
+                                        &events_tx,
+                                        TransportEvent::TransportError {
+                                            stage: "decode_inbound_binary".to_string(),
+                                            message: err.to_string(),
+                                        },
+                                    );
+                                }
                             }
                         }
                         Some(Ok(WsMessage::Pong(_))) => {
@@ -514,17 +552,19 @@ async fn run_native_transport_loop(
             break;
         }
 
-        if handle_reconnect_delay(
+        match handle_reconnect_delay(
             &events_tx,
             &mut shutdown_rx,
             &mut reconnect_attempt,
             &mut backoff,
             max_backoff,
+            max_attempts,
             disconnect_reason,
         )
         .await
         {
-            break;
+            ReconnectOutcome::Continue => continue,
+            ReconnectOutcome::Shutdown | ReconnectOutcome::Exhausted => break,
         }
     }
 
@@ -533,15 +573,40 @@ async fn run_native_transport_loop(
     guard.running = false;
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ReconnectOutcome {
+    /// Backoff completed; the loop should attempt to reconnect.
+    Continue,
+    /// Shutdown was requested while waiting; the loop must terminate.
+    Shutdown,
+    /// `reconnect_max_attempts` was exceeded without ever reaching session
+    /// establishment; the loop must terminate and surface the failure.
+    Exhausted,
+}
+
 async fn handle_reconnect_delay(
     events_tx: &broadcast::Sender<TransportEvent>,
     shutdown_rx: &mut watch::Receiver<bool>,
     reconnect_attempt: &mut u32,
     backoff_ms: &mut u64,
     max_backoff: u64,
+    max_attempts: Option<u32>,
     reason: String,
-) -> bool {
+) -> ReconnectOutcome {
     *reconnect_attempt = reconnect_attempt.saturating_add(1);
+
+    if let Some(cap) = max_attempts {
+        if cap > 0 && *reconnect_attempt > cap {
+            emit(
+                events_tx,
+                TransportEvent::MaxReconnectAttemptsExceeded {
+                    attempts: *reconnect_attempt,
+                    last_reason: reason,
+                },
+            );
+            return ReconnectOutcome::Exhausted;
+        }
+    }
 
     emit(
         events_tx,
@@ -556,20 +621,30 @@ async fn handle_reconnect_delay(
         _ = tokio::time::sleep(Duration::from_millis(*backoff_ms)) => {}
         _ = shutdown_rx.changed() => {
             if *shutdown_rx.borrow() {
-                return true;
+                return ReconnectOutcome::Shutdown;
             }
         }
     }
 
     *backoff_ms = (*backoff_ms).saturating_mul(2).min(max_backoff);
-    false
+    ReconnectOutcome::Continue
+}
+
+/// Side-channel result from `handle_incoming_binary`: we need to know whether
+/// any decoded frame contained a `MESSAGE_TYPE_SRVR_CTRL_SESSION_STATE` event,
+/// because that is the signal the reconnect loop uses to reset its backoff
+/// counters (see issue #358).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct InboundFrameOutcome {
+    session_state_seen: bool,
 }
 
 fn handle_incoming_binary(
     events_tx: &broadcast::Sender<TransportEvent>,
     data: &[u8],
-) -> Result<(), WsTransportError> {
+) -> Result<InboundFrameOutcome, WsTransportError> {
     let (cloud_message_type, payload) = decode_qcloud_frame(data)?;
+    let mut outcome = InboundFrameOutcome::default();
 
     emit(
         events_tx,
@@ -608,6 +683,9 @@ fn handle_incoming_binary(
                 Ok(events) => {
                     log::info!("[QConnect/Decode] Queue events decoded: {}", events.len());
                     for event in events {
+                        if event.event_type == QueueEventType::SrvrCtrlSessionState {
+                            outcome.session_state_seen = true;
+                        }
                         emit(events_tx, TransportEvent::InboundQueueServerEvent(event));
                     }
                 }
@@ -661,7 +739,7 @@ fn handle_incoming_binary(
         _ => {}
     }
 
-    Ok(())
+    Ok(outcome)
 }
 
 async fn send_authenticate<S>(
@@ -856,5 +934,107 @@ mod tests {
         assert_eq!(decoded.msg_id, Some(12));
         assert_eq!(decoded.proto, Some(1));
         assert_eq!(decoded.payload, Some(vec![9, 8, 7]));
+    }
+
+    /// Issue #358 regression: with `reconnect_max_attempts = Some(N)`, the
+    /// reconnect helper must:
+    ///   1. NOT decrement / reset the counter on successive attempts (it
+    ///      can only be reset externally — by `SessionEstablished`),
+    ///   2. emit `MaxReconnectAttemptsExceeded` and return
+    ///      `ReconnectOutcome::Exhausted` once the counter goes past N.
+    /// If the counter were reset elsewhere (e.g. on `Connected`), the loop
+    /// could spin forever at base backoff against a host that always rejects
+    /// the session-level join.
+    #[tokio::test]
+    async fn handle_reconnect_delay_caps_attempts_at_max() {
+        let (events_tx, mut events_rx) = broadcast::channel::<TransportEvent>(64);
+        let (_shutdown_tx, mut shutdown_rx) = watch::channel(false);
+
+        // Sub-millisecond backoffs keep this test fast despite the real sleeps.
+        let mut attempt: u32 = 0;
+        let mut backoff: u64 = 1;
+        let max_backoff: u64 = 4;
+        let max_attempts = Some(3u32);
+
+        // First three attempts schedule a reconnect, ramping the backoff and
+        // never resetting the counter.
+        for expected_attempt in 1..=3u32 {
+            let outcome = handle_reconnect_delay(
+                &events_tx,
+                &mut shutdown_rx,
+                &mut attempt,
+                &mut backoff,
+                max_backoff,
+                max_attempts,
+                "test_reason".to_string(),
+            )
+            .await;
+            assert_eq!(outcome, ReconnectOutcome::Continue);
+            assert_eq!(attempt, expected_attempt);
+        }
+
+        // Drain the three ReconnectScheduled events, asserting the attempt
+        // counter monotonically increases (i.e. is NOT reset between calls).
+        for expected_attempt in 1..=3u32 {
+            match events_rx.recv().await.expect("event") {
+                TransportEvent::ReconnectScheduled { attempt, .. } => {
+                    assert_eq!(attempt, expected_attempt);
+                }
+                other => panic!("expected ReconnectScheduled, got {other:?}"),
+            }
+        }
+
+        // Fourth call exceeds the cap: counter goes to 4, helper emits
+        // MaxReconnectAttemptsExceeded and returns Exhausted (no sleep, no
+        // ReconnectScheduled).
+        let outcome = handle_reconnect_delay(
+            &events_tx,
+            &mut shutdown_rx,
+            &mut attempt,
+            &mut backoff,
+            max_backoff,
+            max_attempts,
+            "test_reason".to_string(),
+        )
+        .await;
+        assert_eq!(outcome, ReconnectOutcome::Exhausted);
+        assert_eq!(attempt, 4);
+
+        match events_rx.recv().await.expect("event") {
+            TransportEvent::MaxReconnectAttemptsExceeded {
+                attempts,
+                last_reason,
+            } => {
+                assert_eq!(attempts, 4);
+                assert_eq!(last_reason, "test_reason");
+            }
+            other => panic!("expected MaxReconnectAttemptsExceeded, got {other:?}"),
+        }
+    }
+
+    /// `reconnect_max_attempts = None` preserves the legacy unbounded
+    /// behavior used by tests / non-Qobuz endpoints.
+    #[tokio::test]
+    async fn handle_reconnect_delay_unbounded_when_max_attempts_is_none() {
+        let (events_tx, _events_rx) = broadcast::channel::<TransportEvent>(16);
+        let (_shutdown_tx, mut shutdown_rx) = watch::channel(false);
+
+        let mut attempt: u32 = 0;
+        let mut backoff: u64 = 1;
+
+        for _ in 0..5 {
+            let outcome = handle_reconnect_delay(
+                &events_tx,
+                &mut shutdown_rx,
+                &mut attempt,
+                &mut backoff,
+                4,
+                None,
+                "noop".to_string(),
+            )
+            .await;
+            assert_eq!(outcome, ReconnectOutcome::Continue);
+        }
+        assert_eq!(attempt, 5);
     }
 }

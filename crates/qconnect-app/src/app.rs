@@ -215,6 +215,8 @@ where
             }
             TransportEvent::Authenticated
             | TransportEvent::Subscribed
+            | TransportEvent::SessionEstablished
+            | TransportEvent::MaxReconnectAttemptsExceeded { .. }
             | TransportEvent::ReconnectScheduled { .. }
             | TransportEvent::KeepalivePingSent
             | TransportEvent::KeepalivePongReceived
