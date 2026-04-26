@@ -1579,6 +1579,7 @@ pub fn run() {
             commands_v2::v2_is_running_in_flatpak,
             commands_v2::v2_is_running_in_snap,
             commands_v2::v2_mark_snap_welcome_shown,
+            commands_v2::v2_has_snap_welcome_been_shown,
             commands_v2::v2_detect_legacy_cached_files,
             commands_v2::v2_reco_log_event,
             commands_v2::v2_reco_train_scores,

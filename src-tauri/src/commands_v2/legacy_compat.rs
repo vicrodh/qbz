@@ -1494,6 +1494,13 @@ pub fn v2_mark_snap_welcome_shown(
 }
 
 #[tauri::command]
+pub fn v2_has_snap_welcome_been_shown(
+    state: State<'_, crate::updates::UpdatesState>,
+) -> Result<bool, String> {
+    crate::updates::has_snap_welcome_been_shown(state)
+}
+
+#[tauri::command]
 pub async fn v2_detect_legacy_cached_files(
     cache_state: State<'_, OfflineCacheState>,
 ) -> Result<crate::offline_cache::MigrationStatus, String> {
