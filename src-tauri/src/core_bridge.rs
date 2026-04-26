@@ -568,6 +568,19 @@ impl CoreBridge {
             .map_err(|e| e.to_string())
     }
 
+    /// Get artist detail (albums, playlists, appears-on tracks).
+    pub async fn get_artist_detail(
+        &self,
+        artist_id: u64,
+        limit: Option<u32>,
+        offset: Option<u32>,
+    ) -> Result<Artist, String> {
+        self.core
+            .get_artist_detail(artist_id, limit, offset)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
     /// Get label page (aggregated: top tracks, releases, playlists, artists)
     pub async fn get_label_page(&self, label_id: u64) -> Result<LabelPageData, String> {
         self.core

@@ -866,6 +866,26 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
             )))
     }
 
+    /// Get artist detail with albums, playlists and appears-on tracks.
+    ///
+    /// Backs the suggestions panel: requests `extra=albums,tracks_appears_on,playlists`
+    /// from `/artist/get` so callers can read `playlists` and `tracks_appears_on`
+    /// without a second round-trip.
+    pub async fn get_artist_detail(
+        &self,
+        artist_id: u64,
+        limit: Option<u32>,
+        offset: Option<u32>,
+    ) -> Result<Artist, CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+
+        client
+            .get_artist_detail(artist_id, limit, offset)
+            .await
+            .map_err(CoreError::Api)
+    }
+
     /// Get label page (aggregated: top tracks, releases, playlists, artists)
     pub async fn get_label_page(&self, label_id: u64) -> Result<LabelPageData, CoreError> {
         let client = self.client.read().await;

@@ -110,7 +110,7 @@
 
     try {
       // Get artist detail which includes playlists and tracks
-      const artist = await invoke<ArtistDetail>('get_artist_detail', { artistId: id });
+      const artist = await invoke<ArtistDetail>('v2_get_artist_detail', { artistId: id });
       loadedArtistId = id;
 
       // Extract curated playlists (max 2)

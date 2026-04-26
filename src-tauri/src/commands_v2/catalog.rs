@@ -427,6 +427,36 @@ pub async fn v2_get_artist_albums(
         .map_err(RuntimeError::Internal)
 }
 
+/// Get artist detail with albums, playlists and appears-on tracks (V2 - uses QbzCore).
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_get_artist_detail(
+    artistId: u64,
+    limit: Option<u32>,
+    offset: Option<u32>,
+    bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<Artist, RuntimeError> {
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
+
+    let limit = limit.or(Some(1000));
+    let offset = offset.or(Some(0));
+    log::info!(
+        "[V2] get_artist_detail: {} limit={:?} offset={:?}",
+        artistId,
+        limit,
+        offset
+    );
+    let bridge = bridge.get().await;
+    bridge
+        .get_artist_detail(artistId, limit, offset)
+        .await
+        .map_err(RuntimeError::Internal)
+}
+
 /// Get label page (aggregated: top tracks, releases, playlists, artists)
 #[tauri::command]
 #[allow(non_snake_case)]
