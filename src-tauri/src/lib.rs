@@ -1731,6 +1731,7 @@ pub fn run() {
             commands_v2::v2_prefetch_track,
             commands_v2::v2_reinit_audio_device,
             commands_v2::v2_check_audio_device_presence,
+            commands_v2::v2_get_audio_output_status,
             commands_v2::v2_get_audio_settings,
             commands_v2::v2_set_audio_output_device,
             commands_v2::v2_set_audio_exclusive_mode,
