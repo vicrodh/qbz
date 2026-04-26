@@ -599,7 +599,7 @@
     for (let i = 0; i < uncachedSeeds.length; i += BATCH_SIZE) {
       const batch = uncachedSeeds.slice(i, i + BATCH_SIZE);
       const results = await Promise.allSettled(
-        batch.map(seed => invoke<QobuzArtist>('get_artist_basic', { artistId: seed.artistId }))
+        batch.map(seed => invoke<QobuzArtist>('v2_get_artist', { artistId: seed.artistId }))
       );
       
       results.forEach((result, index) => {
