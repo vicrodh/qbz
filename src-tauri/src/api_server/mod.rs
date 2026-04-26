@@ -29,9 +29,9 @@ use tokio_stream::StreamExt;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
 use crate::{
-    api::{Album, Artist, SearchResultsPage, Track},
+    api::{Album, Artist, Playlist, SearchResultsPage, Track},
     artist_blacklist::BlacklistState,
-    commands::{self, search::SearchAllResults},
+    commands,
     config::{
         audio_settings::AudioSettingsState,
         playback_preferences::{AutoplayMode, PlaybackPreferences, PlaybackPreferencesState},
@@ -42,6 +42,29 @@ use crate::{
     queue::{QueueState as QueueStateData, QueueTrack},
     AppState,
 };
+
+/// Most popular item from catalog search - can be a track, album, or artist.
+///
+/// Used by the `/search/all` REST endpoint exposed to the PWA remote.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", content = "content", rename_all = "lowercase")]
+pub enum MostPopularItem {
+    Tracks(Track),
+    Albums(Album),
+    Artists(Artist),
+}
+
+/// Aggregated search response across albums, tracks, artists and playlists.
+///
+/// Used by the `/search/all` REST endpoint exposed to the PWA remote.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchAllResults {
+    pub albums: SearchResultsPage<Album>,
+    pub tracks: SearchResultsPage<Track>,
+    pub artists: SearchResultsPage<Artist>,
+    pub playlists: SearchResultsPage<Playlist>,
+    pub most_popular: Option<MostPopularItem>,
+}
 
 #[derive(Clone)]
 struct ApiContext {
