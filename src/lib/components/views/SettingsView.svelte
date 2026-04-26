@@ -2716,7 +2716,7 @@
   async function loadAudioDevices() {
     try {
       // Load PipeWire sinks - these have friendly descriptions already
-      const sinks = await invoke<PipewireSink[]>('get_pipewire_sinks').catch(() => [] as PipewireSink[]);
+      const sinks = await invoke<PipewireSink[]>('v2_get_pipewire_sinks').catch(() => [] as PipewireSink[]);
       pipewireSinks = sinks;
 
       // Load hardware audio status

@@ -43,6 +43,18 @@ pub async fn v2_get_audio_output_status(
     })
 }
 
+/// List the available CPAL output sinks (V2).
+///
+/// Delegates enumeration to `qbz_audio::output_sinks::list_output_sinks`,
+/// which returns the same `{name, description, volume, is_default}` shape
+/// the legacy `get_pipewire_sinks` command returned. Used by the audio
+/// settings UI and AudioOutputBadges to populate the device picker and
+/// label the currently-routed sink.
+#[tauri::command]
+pub fn v2_get_pipewire_sinks() -> Result<Vec<qbz_audio::OutputSinkInfo>, RuntimeError> {
+    qbz_audio::list_output_sinks().map_err(RuntimeError::Internal)
+}
+
 /// Snapshot the presence of the user's currently-selected output
 /// device. Frontend calls this on demand (e.g. when a
 /// `audio:device-missing` toast button fires Retry).
