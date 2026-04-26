@@ -246,10 +246,10 @@ export async function cmdUpdateAudioSettings(patch: Record<string, unknown>): Pr
     return remotePost('/api/audio/settings', patch);
   } else {
     // Local: individual invoke calls per field
-    if ('backend_type' in patch) await invoke('v2_set_audio_backend', { backendType: patch.backend_type });
-    if ('output_device' in patch) await invoke('v2_set_audio_device', { deviceName: patch.output_device });
-    if ('exclusive_mode' in patch) await invoke('v2_set_exclusive_mode', { enabled: patch.exclusive_mode });
-    if ('dac_passthrough' in patch) await invoke('v2_set_dac_passthrough', { enabled: patch.dac_passthrough });
+    if ('backend_type' in patch) await invoke('v2_set_audio_backend_type', { backendType: patch.backend_type });
+    if ('output_device' in patch) await invoke('v2_set_audio_output_device', { device: patch.output_device });
+    if ('exclusive_mode' in patch) await invoke('v2_set_audio_exclusive_mode', { enabled: patch.exclusive_mode });
+    if ('dac_passthrough' in patch) await invoke('v2_set_audio_dac_passthrough', { enabled: patch.dac_passthrough });
     return invoke('v2_get_audio_settings');
   }
 }
