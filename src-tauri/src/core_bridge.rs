@@ -13,9 +13,9 @@ use tokio::sync::RwLock;
 use qbz_audio::{settings::AudioSettingsStore, AudioDiagnostic, AudioSettings, VisualizerTap};
 use qbz_core::QbzCore;
 use qbz_models::{
-    Album, Artist, DiscoverAlbum, DiscoverData, DiscoverPlaylistsResponse, DiscoverResponse,
-    GenreInfo, LabelExploreResponse, LabelGetListResponse, LabelListPage, LabelPageData,
-    LabelStoryResponse, PageArtistResponse, Playlist, PlaylistTag, Quality,
+    Album, Artist, ArtistAlbums, DiscoverAlbum, DiscoverData, DiscoverPlaylistsResponse,
+    DiscoverResponse, GenreInfo, LabelExploreResponse, LabelGetListResponse, LabelListPage,
+    LabelPageData, LabelStoryResponse, PageArtistResponse, Playlist, PlaylistTag, Quality,
     QueueState, QueueTrack, RepeatMode, SearchResultsPage, StreamUrl, Track, UserSession,
 };
 use qbz_player::{PlaybackState, Player};
@@ -551,6 +551,19 @@ impl CoreBridge {
     ) -> Result<Artist, String> {
         self.core
             .get_artist_with_albums(artist_id, limit, offset)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Get an artist's albums collection (paginated `ArtistAlbums` only).
+    pub async fn get_artist_albums(
+        &self,
+        artist_id: u64,
+        limit: Option<u32>,
+        offset: Option<u32>,
+    ) -> Result<ArtistAlbums, String> {
+        self.core
+            .get_artist_albums(artist_id, limit, offset)
             .await
             .map_err(|e| e.to_string())
     }

@@ -7,7 +7,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use qbz_models::{
-    Album, Artist, CoreEvent, DiscoverAlbum, DiscoverData, DiscoverPlaylistsResponse,
+    Album, Artist, ArtistAlbums, CoreEvent, DiscoverAlbum, DiscoverData, DiscoverPlaylistsResponse,
     DiscoverResponse, FrontendAdapter, GenreInfo, LabelExploreResponse, LabelGetListResponse,
     LabelListPage, LabelPageData, LabelStoryResponse, PageArtistResponse,
     Playlist, PlaylistTag, Quality, QueueState, QueueTrack, RepeatMode, SearchResultsPage,
@@ -839,6 +839,31 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
             .get_artist_with_pagination(artist_id, true, limit, offset)
             .await
             .map_err(CoreError::Api)
+    }
+
+    /// Get an artist's albums collection (paginated `ArtistAlbums` only).
+    ///
+    /// Equivalent to `get_artist_with_albums` but projects only the `albums`
+    /// field for callers that don't need the full artist envelope.
+    pub async fn get_artist_albums(
+        &self,
+        artist_id: u64,
+        limit: Option<u32>,
+        offset: Option<u32>,
+    ) -> Result<ArtistAlbums, CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+
+        let artist = client
+            .get_artist_with_pagination(artist_id, true, limit, offset)
+            .await
+            .map_err(CoreError::Api)?;
+
+        artist
+            .albums
+            .ok_or_else(|| CoreError::Api(qbz_qobuz::ApiError::ApiResponse(
+                "No albums in artist response".to_string(),
+            )))
     }
 
     /// Get label page (aggregated: top tracks, releases, playlists, artists)

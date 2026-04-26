@@ -938,7 +938,7 @@
     artistAlbumsError = null;
 
     try {
-      const result = await invoke<{ items: QobuzAlbum[]; total: number }>('get_artist_albums', {
+      const result = await invoke<{ items: QobuzAlbum[]; total: number }>('v2_get_artist_albums', {
         artistId: artist.id,
         limit: 500, // Fetch more to ensure we have enough Discography albums after filtering
         offset: 0
