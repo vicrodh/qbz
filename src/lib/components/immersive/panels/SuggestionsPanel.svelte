@@ -133,7 +133,7 @@
       if (tracks.length < 5) {
         console.log(`[Suggestions] Sparse tracks_appears_on (${tracks.length}), fetching artist tracks...`);
         try {
-          const artistTracks = await invoke<TracksContainer>('get_artist_tracks', {
+          const artistTracks = await invoke<TracksContainer>('v2_get_artist_tracks', {
             artistId: id,
             limit: 30,
             offset: 0

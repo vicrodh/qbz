@@ -4,7 +4,7 @@ use qbz_models::{
     Album, Artist, ArtistAlbums, AwardPageData, DiscoverAlbum, DiscoverData,
     DiscoverPlaylistsResponse, DiscoverResponse, GenreInfo, LabelExploreResponse,
     LabelGetListResponse, LabelListPage, LabelPageData, LabelStoryResponse, PageArtistResponse,
-    Playlist, PlaylistTag, SearchResultsPage, Track,
+    Playlist, PlaylistTag, SearchResultsPage, Track, TracksContainer,
 };
 
 use crate::artist_blacklist::BlacklistState;
@@ -453,6 +453,36 @@ pub async fn v2_get_artist_detail(
     let bridge = bridge.get().await;
     bridge
         .get_artist_detail(artistId, limit, offset)
+        .await
+        .map_err(RuntimeError::Internal)
+}
+
+/// Get an artist's popular/top tracks (V2 - uses QbzCore).
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_get_artist_tracks(
+    artistId: u64,
+    limit: Option<u32>,
+    offset: Option<u32>,
+    bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<TracksContainer, RuntimeError> {
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
+
+    let limit = limit.unwrap_or(50);
+    let offset = offset.unwrap_or(0);
+    log::info!(
+        "[V2] get_artist_tracks: {} limit={} offset={}",
+        artistId,
+        limit,
+        offset
+    );
+    let bridge = bridge.get().await;
+    bridge
+        .get_artist_tracks(artistId, limit, offset)
         .await
         .map_err(RuntimeError::Internal)
 }

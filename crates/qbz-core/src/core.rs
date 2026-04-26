@@ -11,7 +11,7 @@ use qbz_models::{
     DiscoverResponse, FrontendAdapter, GenreInfo, LabelExploreResponse, LabelGetListResponse,
     LabelListPage, LabelPageData, LabelStoryResponse, PageArtistResponse,
     Playlist, PlaylistTag, Quality, QueueState, QueueTrack, RepeatMode, SearchResultsPage,
-    StreamUrl, Track, UserSession,
+    StreamUrl, Track, TracksContainer, UserSession,
 };
 use qbz_player::{PlaybackState, Player, QueueManager};
 use qbz_qobuz::QobuzClient;
@@ -882,6 +882,22 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
 
         client
             .get_artist_detail(artist_id, limit, offset)
+            .await
+            .map_err(CoreError::Api)
+    }
+
+    /// Get an artist's popular/top tracks (`/artist/get?extra=tracks`).
+    pub async fn get_artist_tracks(
+        &self,
+        artist_id: u64,
+        limit: u32,
+        offset: u32,
+    ) -> Result<TracksContainer, CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+
+        client
+            .get_artist_tracks(artist_id, limit, offset)
             .await
             .map_err(CoreError::Api)
     }
