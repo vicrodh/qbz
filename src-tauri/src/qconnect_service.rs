@@ -1307,9 +1307,16 @@ impl QconnectServiceState {
         });
         let app = Arc::new(QconnectApp::new(transport, sink));
 
-        app.connect(config.clone())
-            .await
-            .map_err(|err| format!("qconnect transport connect failed: {err}"))?;
+        if let Err(err) = app.connect(config.clone()).await {
+            // Don't leak `lifecycle_state = Connecting` with `runtime = None`
+            // back to the frontend — `isQconnectToggleOn` treats `Connecting`
+            // as on, so the toggle would stick "on" with no live runtime to
+            // disconnect (issue #358).
+            let msg = format!("qconnect transport connect failed: {err}");
+            guard.lifecycle_state = QconnectLifecycleState::Off;
+            guard.last_error = Some(msg.clone());
+            return Err(msg);
+        }
 
         let mut transport_rx = app.subscribe_transport_events();
         let app_for_loop = Arc::clone(&app);
