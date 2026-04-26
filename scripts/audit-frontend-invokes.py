@@ -24,7 +24,11 @@ def main() -> int:
 
     # Match both invoke('cmd') and invoke<Type>('cmd')
     invoke_pat = re.compile(r"invoke(?:<[^>]*>)?\(\s*['\"]([^'\"]+)['\"]")
-    registrations_pat = re.compile(r"commands_v2::(v2_[A-Za-z0-9_]+|runtime_[A-Za-z0-9_]+)")
+    # Match v2_* / runtime_* commands registered under any module namespace
+    # (e.g. commands_v2::, qconnect_service::, future_module::). The inner
+    # alternation ensures we still ignore legacy commands which never use
+    # the v2_ or runtime_ prefix on the function name.
+    registrations_pat = re.compile(r"::(v2_[A-Za-z0-9_]+|runtime_[A-Za-z0-9_]+)")
 
     front_paths = []
     for g in front_globs:
