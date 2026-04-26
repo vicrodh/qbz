@@ -6517,7 +6517,7 @@
         onCast={openCastPicker}
         {isCastConnected}
         onQobuzConnect={openQobuzConnectPanelFromNowPlaying}
-        isQobuzConnectConnected={isQobuzConnectToggleOn}
+        {isQobuzConnectToggleOn}
         onToggleLyrics={toggleLyricsSidebar}
         lyricsActive={lyricsSidebarVisible}
         onArtistClick={() => {
@@ -6564,7 +6564,7 @@
         onCast={openCastPicker}
         {isCastConnected}
         onQobuzConnect={openQobuzConnectPanelFromNowPlaying}
-        isQobuzConnectConnected={isQobuzConnectToggleOn}
+        {isQobuzConnectToggleOn}
         queueOpen={isQueueOpen}
         {volume}
         onVolumeChange={handleVolumeChange}
