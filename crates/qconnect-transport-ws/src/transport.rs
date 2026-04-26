@@ -75,6 +75,17 @@ pub enum TransportEvent {
         message_type: String,
         action_uuid: String,
     },
+    /// Decoded `MSG_TYPE_ERROR` (cloud_type=9) frame from Qobuz cloud, per the
+    /// `qws.proto` `ErrorMessage` definition. Emitted whenever the qws frontend
+    /// rejects a session (e.g. zombie session, conflicting device, expired
+    /// JWT). Carries the cloud-side `code` and human-readable `descr` so
+    /// downstream consumers can reason about *why* the cloud is rejecting us
+    /// instead of only seeing a payload byte count (issue #358).
+    CloudError {
+        msg_id: u32,
+        code: u32,
+        descr: String,
+    },
     InboundQueueServerEvent(QueueServerEvent),
     InboundRendererServerCommand(RendererServerCommand),
     InboundReceived(InboundEnvelope),
@@ -719,13 +730,50 @@ fn handle_incoming_binary(
             }
         }
         MSG_TYPE_ERROR => {
-            emit(
-                events_tx,
-                TransportEvent::TransportError {
-                    stage: "qcloud_error_frame".to_string(),
-                    message: format!("bytes={}", payload.len()),
-                },
-            );
+            // Decode the qws-level ErrorMessage (qws.proto messageTypeId=9):
+            //   uint32 msg_id = 1;
+            //   uint64 msg_date = 2;
+            //   uint32 code = 3;
+            //   string descr = 4;
+            // This is the only signal we get for "the qws frontend rejected
+            // your session" (zombie session, conflicting device, expired JWT,
+            // ...). Without decoding it we cannot tell *why* the cloud is
+            // tearing us down — see issue #358.
+            match QwsErrorMessage::decode(payload) {
+                Ok(error) => {
+                    let msg_id = error.msg_id.unwrap_or(0);
+                    let code = error.code.unwrap_or(0);
+                    let descr = error.descr.unwrap_or_default();
+                    log::warn!(
+                        "[QConnect/Transport] Cloud error frame: msg_id={} code={} descr={:?}",
+                        msg_id,
+                        code,
+                        descr
+                    );
+                    emit(
+                        events_tx,
+                        TransportEvent::CloudError {
+                            msg_id,
+                            code,
+                            descr,
+                        },
+                    );
+                }
+                Err(err) => {
+                    log::warn!(
+                        "[QConnect/Transport] Cloud error frame failed to decode as qws.ErrorMessage: bytes={} err={}",
+                        payload.len(),
+                        err
+                    );
+                    emit(
+                        events_tx,
+                        TransportEvent::TransportError {
+                            stage: "qcloud_error_frame_decode".to_string(),
+                            message: format!("bytes={} err={}", payload.len(), err),
+                        },
+                    );
+                }
+            }
         }
         MSG_TYPE_DISCONNECT => {
             emit(
@@ -881,6 +929,21 @@ struct Subscribe {
     pub channels: Vec<Vec<u8>>,
 }
 
+/// Mirror of `qws.proto` `ErrorMessage` (messageTypeId=9). Carried as the
+/// payload of `MSG_TYPE_ERROR` qcloud frames. All fields are optional to
+/// match proto3 semantics (see issue #358).
+#[derive(Clone, PartialEq, ::prost::Message)]
+struct QwsErrorMessage {
+    #[prost(uint32, optional, tag = "1")]
+    pub msg_id: Option<u32>,
+    #[prost(uint64, optional, tag = "2")]
+    pub msg_date: Option<u64>,
+    #[prost(uint32, optional, tag = "3")]
+    pub code: Option<u32>,
+    #[prost(string, optional, tag = "4")]
+    pub descr: Option<String>,
+}
+
 #[derive(Clone, PartialEq, ::prost::Message)]
 struct CloudPayload {
     #[prost(uint32, optional, tag = "1")]
@@ -908,6 +971,47 @@ mod tests {
         let (msg_type, decoded_payload) = decode_qcloud_frame(&encoded).expect("decode frame");
         assert_eq!(msg_type, MSG_TYPE_PAYLOAD);
         assert_eq!(decoded_payload, payload.as_slice());
+    }
+
+    /// Issue #358: a qws-level `MSG_TYPE_ERROR` frame must surface as a
+    /// `CloudError` event carrying the decoded code + descr, NOT as an opaque
+    /// `bytes=N` `TransportError`. Without this, the upper layer can't
+    /// distinguish a zombie session from any other transport hiccup and the
+    /// reconnect loop spins blindly.
+    #[tokio::test]
+    async fn msg_type_error_frame_decodes_into_cloud_error_event() {
+        let (events_tx, mut events_rx) = broadcast::channel::<TransportEvent>(8);
+
+        let error_payload = QwsErrorMessage {
+            msg_id: Some(42),
+            msg_date: Some(1_700_000_000_000),
+            code: Some(403),
+            descr: Some("zombie_session".to_string()),
+        }
+        .encode_to_vec();
+        let frame = encode_qcloud_frame(MSG_TYPE_ERROR, &error_payload);
+
+        let outcome = handle_incoming_binary(&events_tx, &frame).expect("decode frame");
+        assert!(!outcome.session_state_seen);
+
+        // First event is always InboundFrameDecoded; skip it and assert the
+        // semantic event afterwards is CloudError, not the legacy
+        // TransportError.
+        let first = events_rx.recv().await.expect("first event");
+        assert!(matches!(first, TransportEvent::InboundFrameDecoded { .. }));
+
+        match events_rx.recv().await.expect("second event") {
+            TransportEvent::CloudError {
+                msg_id,
+                code,
+                descr,
+            } => {
+                assert_eq!(msg_id, 42);
+                assert_eq!(code, 403);
+                assert_eq!(descr, "zombie_session");
+            }
+            other => panic!("expected CloudError, got {other:?}"),
+        }
     }
 
     #[test]

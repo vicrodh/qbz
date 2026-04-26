@@ -1366,6 +1366,28 @@ impl QconnectServiceState {
                                     message
                                 );
                             }
+                            qconnect_transport_ws::TransportEvent::CloudError {
+                                msg_id,
+                                code,
+                                descr,
+                            } => {
+                                log::warn!(
+                                    "[QConnect/Transport] Cloud rejected session: msg_id={} code={} descr={:?} (issue #358)",
+                                    msg_id,
+                                    code,
+                                    descr
+                                );
+                                emit_qconnect_diagnostic(
+                                    &app_for_errors,
+                                    "qconnect:cloud_error",
+                                    "warning",
+                                    json!({
+                                        "msg_id": msg_id,
+                                        "code": code,
+                                        "descr": descr,
+                                    }),
+                                );
+                            }
                             qconnect_transport_ws::TransportEvent::InboundReceived(_envelope) => {
                                 log::info!(
                                     "[QConnect/Transport] <-- InboundReceived (JSON envelope)"

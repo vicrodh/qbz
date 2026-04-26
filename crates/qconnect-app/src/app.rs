@@ -221,6 +221,7 @@ where
             | TransportEvent::KeepalivePingSent
             | TransportEvent::KeepalivePongReceived
             | TransportEvent::TransportError { .. }
+            | TransportEvent::CloudError { .. }
             | TransportEvent::InboundFrameDecoded { .. }
             | TransportEvent::InboundPayloadBytes { .. }
             | TransportEvent::OutboundSent { .. } => {}
