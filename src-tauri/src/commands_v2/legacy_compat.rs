@@ -1383,6 +1383,13 @@ pub fn v2_mark_flatpak_welcome_shown(
 }
 
 #[tauri::command]
+pub fn v2_has_flatpak_welcome_been_shown(
+    state: State<'_, crate::updates::UpdatesState>,
+) -> Result<bool, String> {
+    crate::updates::has_flatpak_welcome_been_shown(state)
+}
+
+#[tauri::command]
 pub fn v2_get_backend_logs() -> Vec<String> {
     crate::logging::get_backend_logs()
 }

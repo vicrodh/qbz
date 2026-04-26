@@ -1636,6 +1636,7 @@ pub fn run() {
             commands_v2::v2_has_whats_new_been_shown,
             commands_v2::v2_mark_whats_new_shown,
             commands_v2::v2_mark_flatpak_welcome_shown,
+            commands_v2::v2_has_flatpak_welcome_been_shown,
             commands_v2::v2_is_auto_update_eligible,
             commands_v2::v2_get_backend_logs,
             commands_v2::v2_upload_logs_to_paste,
