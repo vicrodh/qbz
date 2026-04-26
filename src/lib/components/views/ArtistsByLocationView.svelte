@@ -342,7 +342,7 @@
     albumsError = null;
 
     try {
-      const result = await invoke<{ items: QobuzAlbum[] }>('get_artist_albums', {
+      const result = await invoke<{ items: QobuzAlbum[] }>('v2_get_artist_albums', {
         artistId: artist.id,
         limit: 500,
         offset: 0,

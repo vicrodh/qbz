@@ -1300,6 +1300,13 @@ pub fn v2_set_qobuz_tos_accepted(
 }
 
 #[tauri::command]
+pub fn v2_get_qobuz_tos_accepted(
+    state: State<'_, crate::config::legal_settings::LegalSettingsState>,
+) -> Result<bool, String> {
+    crate::config::legal_settings::get_qobuz_tos_accepted(state)
+}
+
+#[tauri::command]
 pub fn v2_set_update_check_on_launch(
     enabled: bool,
     state: State<'_, crate::updates::UpdatesState>,
@@ -1380,6 +1387,13 @@ pub fn v2_mark_flatpak_welcome_shown(
     state: State<'_, crate::updates::UpdatesState>,
 ) -> Result<(), String> {
     crate::updates::mark_flatpak_welcome_shown(state)
+}
+
+#[tauri::command]
+pub fn v2_has_flatpak_welcome_been_shown(
+    state: State<'_, crate::updates::UpdatesState>,
+) -> Result<bool, String> {
+    crate::updates::has_flatpak_welcome_been_shown(state)
 }
 
 #[tauri::command]
@@ -1470,6 +1484,16 @@ pub fn v2_is_running_in_flatpak() -> bool {
 }
 
 #[tauri::command]
+pub fn v2_get_flatpak_help_text() -> String {
+    crate::flatpak::get_flatpak_guidance()
+}
+
+#[tauri::command]
+pub fn v2_detect_desktop_theme() -> crate::desktop_theme::DesktopThemeInfo {
+    crate::desktop_theme::detect_desktop_theme()
+}
+
+#[tauri::command]
 pub fn v2_is_auto_update_eligible() -> bool {
     crate::updates::is_auto_update_eligible()
 }
@@ -1484,6 +1508,13 @@ pub fn v2_mark_snap_welcome_shown(
     state: State<'_, crate::updates::UpdatesState>,
 ) -> Result<(), String> {
     crate::updates::mark_snap_welcome_shown(state)
+}
+
+#[tauri::command]
+pub fn v2_has_snap_welcome_been_shown(
+    state: State<'_, crate::updates::UpdatesState>,
+) -> Result<bool, String> {
+    crate::updates::has_snap_welcome_been_shown(state)
 }
 
 #[tauri::command]

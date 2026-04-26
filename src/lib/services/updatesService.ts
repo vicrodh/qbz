@@ -158,7 +158,7 @@ async function shouldShowFlatpakWelcome(): Promise<boolean> {
   try {
     const isFlatpak = await invoke<boolean>('v2_is_running_in_flatpak');
     if (!isFlatpak) return false;
-    const alreadyShown = await invoke<boolean>('has_flatpak_welcome_been_shown');
+    const alreadyShown = await invoke<boolean>('v2_has_flatpak_welcome_been_shown');
     return !alreadyShown;
   } catch {
     return false;
@@ -183,7 +183,7 @@ async function shouldShowSnapWelcome(): Promise<boolean> {
   try {
     const isSnap = await invoke<boolean>('v2_is_running_in_snap');
     if (!isSnap) return false;
-    const alreadyShown = await invoke<boolean>('has_snap_welcome_been_shown');
+    const alreadyShown = await invoke<boolean>('v2_has_snap_welcome_been_shown');
     return !alreadyShown;
   } catch {
     return false;

@@ -1,10 +1,10 @@
 use tauri::State;
 
 use qbz_models::{
-    Album, Artist, AwardPageData, DiscoverAlbum, DiscoverData, DiscoverPlaylistsResponse,
-    DiscoverResponse, GenreInfo, LabelExploreResponse, LabelGetListResponse, LabelListPage,
-    LabelPageData, LabelStoryResponse, PageArtistResponse, Playlist, PlaylistTag,
-    SearchResultsPage, Track,
+    Album, Artist, ArtistAlbums, AwardPageData, DiscoverAlbum, DiscoverData,
+    DiscoverPlaylistsResponse, DiscoverResponse, GenreInfo, LabelExploreResponse,
+    LabelGetListResponse, LabelListPage, LabelPageData, LabelStoryResponse, PageArtistResponse,
+    Playlist, PlaylistTag, ReleasesGridResponse, SearchResultsPage, Track, TracksContainer,
 };
 
 use crate::artist_blacklist::BlacklistState;
@@ -395,6 +395,127 @@ pub async fn v2_get_artist_with_albums(
     let bridge = bridge.get().await;
     bridge
         .get_artist_with_albums(artistId, limit, offset)
+        .await
+        .map_err(RuntimeError::Internal)
+}
+
+/// Get an artist's albums collection (V2 - returns only the `ArtistAlbums` envelope).
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_get_artist_albums(
+    artistId: u64,
+    limit: Option<u32>,
+    offset: Option<u32>,
+    bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<ArtistAlbums, RuntimeError> {
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
+
+    log::info!(
+        "[V2] get_artist_albums: {} limit={:?} offset={:?}",
+        artistId,
+        limit,
+        offset
+    );
+    let bridge = bridge.get().await;
+    bridge
+        .get_artist_albums(artistId, limit, offset)
+        .await
+        .map_err(RuntimeError::Internal)
+}
+
+/// Get artist detail with albums, playlists and appears-on tracks (V2 - uses QbzCore).
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_get_artist_detail(
+    artistId: u64,
+    limit: Option<u32>,
+    offset: Option<u32>,
+    bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<Artist, RuntimeError> {
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
+
+    let limit = limit.or(Some(1000));
+    let offset = offset.or(Some(0));
+    log::info!(
+        "[V2] get_artist_detail: {} limit={:?} offset={:?}",
+        artistId,
+        limit,
+        offset
+    );
+    let bridge = bridge.get().await;
+    bridge
+        .get_artist_detail(artistId, limit, offset)
+        .await
+        .map_err(RuntimeError::Internal)
+}
+
+/// Get an artist's popular/top tracks (V2 - uses QbzCore).
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_get_artist_tracks(
+    artistId: u64,
+    limit: Option<u32>,
+    offset: Option<u32>,
+    bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<TracksContainer, RuntimeError> {
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
+
+    let limit = limit.unwrap_or(50);
+    let offset = offset.unwrap_or(0);
+    log::info!(
+        "[V2] get_artist_tracks: {} limit={} offset={}",
+        artistId,
+        limit,
+        offset
+    );
+    let bridge = bridge.get().await;
+    bridge
+        .get_artist_tracks(artistId, limit, offset)
+        .await
+        .map_err(RuntimeError::Internal)
+}
+
+/// Get an artist's releases grid paginated by release_type (V2 - uses QbzCore).
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_get_releases_grid(
+    artistId: u64,
+    releaseType: String,
+    limit: Option<u32>,
+    offset: Option<u32>,
+    sort: Option<String>,
+    bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<ReleasesGridResponse, RuntimeError> {
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
+
+    let limit = limit.unwrap_or(25);
+    let offset = offset.unwrap_or(0);
+    log::info!(
+        "[V2] get_releases_grid: {} type={} limit={} offset={}",
+        artistId,
+        releaseType,
+        limit,
+        offset
+    );
+    let bridge = bridge.get().await;
+    bridge
+        .get_releases_grid(artistId, &releaseType, limit, offset, sort.as_deref())
         .await
         .map_err(RuntimeError::Internal)
 }

@@ -150,8 +150,8 @@
     try {
       const [settingsResult, statusResult, sinksResult, alsaResult, hwStatus] = await Promise.all([
         invoke<AudioSettings>('v2_get_audio_settings'),
-        invoke<AudioOutputStatus>('get_audio_output_status'),
-        invoke<PipewireSink[]>('get_pipewire_sinks').catch(() => [] as PipewireSink[]),
+        invoke<AudioOutputStatus>('v2_get_audio_output_status'),
+        invoke<PipewireSink[]>('v2_get_pipewire_sinks').catch(() => [] as PipewireSink[]),
         invoke<BackendAudioDevice[]>('v2_get_devices_for_backend', { backendType: 'Alsa' }).catch(() => [] as BackendAudioDevice[]),
         invoke<HardwareAudioStatus>('v2_get_hardware_audio_status').catch(() => null)
       ]);
@@ -215,7 +215,7 @@
         try {
           const [hwStatus, status] = await Promise.all([
             invoke<HardwareAudioStatus>('v2_get_hardware_audio_status').catch(() => null),
-            invoke<AudioOutputStatus>('get_audio_output_status').catch(() => null),
+            invoke<AudioOutputStatus>('v2_get_audio_output_status').catch(() => null),
           ]);
           hardwareStatus = hwStatus;
           if (status) outputStatus = status;

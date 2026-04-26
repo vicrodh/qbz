@@ -13,10 +13,11 @@ use tokio::sync::RwLock;
 use qbz_audio::{settings::AudioSettingsStore, AudioDiagnostic, AudioSettings, VisualizerTap};
 use qbz_core::QbzCore;
 use qbz_models::{
-    Album, Artist, DiscoverAlbum, DiscoverData, DiscoverPlaylistsResponse, DiscoverResponse,
-    GenreInfo, LabelExploreResponse, LabelGetListResponse, LabelListPage, LabelPageData,
-    LabelStoryResponse, PageArtistResponse, Playlist, PlaylistTag, Quality,
-    QueueState, QueueTrack, RepeatMode, SearchResultsPage, StreamUrl, Track, UserSession,
+    Album, Artist, ArtistAlbums, DiscoverAlbum, DiscoverData, DiscoverPlaylistsResponse,
+    DiscoverResponse, GenreInfo, LabelExploreResponse, LabelGetListResponse, LabelListPage,
+    LabelPageData, LabelStoryResponse, PageArtistResponse, Playlist, PlaylistTag, Quality,
+    QueueState, QueueTrack, ReleasesGridResponse, RepeatMode, SearchResultsPage, StreamUrl, Track,
+    TracksContainer, UserSession,
 };
 use qbz_player::{PlaybackState, Player};
 
@@ -551,6 +552,60 @@ impl CoreBridge {
     ) -> Result<Artist, String> {
         self.core
             .get_artist_with_albums(artist_id, limit, offset)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Get an artist's albums collection (paginated `ArtistAlbums` only).
+    pub async fn get_artist_albums(
+        &self,
+        artist_id: u64,
+        limit: Option<u32>,
+        offset: Option<u32>,
+    ) -> Result<ArtistAlbums, String> {
+        self.core
+            .get_artist_albums(artist_id, limit, offset)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Get artist detail (albums, playlists, appears-on tracks).
+    pub async fn get_artist_detail(
+        &self,
+        artist_id: u64,
+        limit: Option<u32>,
+        offset: Option<u32>,
+    ) -> Result<Artist, String> {
+        self.core
+            .get_artist_detail(artist_id, limit, offset)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Get an artist's popular/top tracks.
+    pub async fn get_artist_tracks(
+        &self,
+        artist_id: u64,
+        limit: u32,
+        offset: u32,
+    ) -> Result<TracksContainer, String> {
+        self.core
+            .get_artist_tracks(artist_id, limit, offset)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Get an artist's releases grid (paginated by `release_type`).
+    pub async fn get_releases_grid(
+        &self,
+        artist_id: u64,
+        release_type: &str,
+        limit: u32,
+        offset: u32,
+        sort: Option<&str>,
+    ) -> Result<ReleasesGridResponse, String> {
+        self.core
+            .get_releases_grid(artist_id, release_type, limit, offset, sort)
             .await
             .map_err(|e| e.to_string())
     }

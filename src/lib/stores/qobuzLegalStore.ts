@@ -18,7 +18,7 @@ export async function loadTosAcceptance(): Promise<boolean> {
   if (!browser) return false;
 
   try {
-    const accepted = await invoke<boolean>('get_qobuz_tos_accepted');
+    const accepted = await invoke<boolean>('v2_get_qobuz_tos_accepted');
     qobuzTosAccepted.set(accepted);
     initialized = true;
     return accepted;

@@ -18,6 +18,43 @@ pub enum AudioDevicePresence {
     Inconclusive,
 }
 
+/// Snapshot of which output device is currently in use and whether we're playing.
+/// Mirrors the legacy `AudioOutputStatus` shape so the frontend type is unchanged.
+#[derive(Debug, serde::Serialize)]
+pub struct V2AudioOutputStatus {
+    pub device_name: Option<String>,
+    pub is_playing: bool,
+}
+
+/// Get current audio output status (V2 — reads from CoreBridge.player state).
+///
+/// Returns the device name actually in use by the audio thread plus whether
+/// playback is currently active. Used by AudioOutputBadges to render the
+/// active sink + DAC indicators in the now-playing bar.
+#[tauri::command]
+pub async fn v2_get_audio_output_status(
+    bridge: State<'_, CoreBridgeState>,
+) -> Result<V2AudioOutputStatus, RuntimeError> {
+    let bridge_guard = bridge.get().await;
+    let player = bridge_guard.player();
+    Ok(V2AudioOutputStatus {
+        device_name: player.state.current_device(),
+        is_playing: player.state.is_playing(),
+    })
+}
+
+/// List the available CPAL output sinks (V2).
+///
+/// Delegates enumeration to `qbz_audio::output_sinks::list_output_sinks`,
+/// which returns the same `{name, description, volume, is_default}` shape
+/// the legacy `get_pipewire_sinks` command returned. Used by the audio
+/// settings UI and AudioOutputBadges to populate the device picker and
+/// label the currently-routed sink.
+#[tauri::command]
+pub fn v2_get_pipewire_sinks() -> Result<Vec<qbz_audio::OutputSinkInfo>, RuntimeError> {
+    qbz_audio::list_output_sinks().map_err(RuntimeError::Internal)
+}
+
 /// Snapshot the presence of the user's currently-selected output
 /// device. Frontend calls this on demand (e.g. when a
 /// `audio:device-missing` toast button fires Retry).
