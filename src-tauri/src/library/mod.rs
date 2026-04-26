@@ -6,6 +6,7 @@
 // Tauri-specific modules (stay here)
 pub mod commands;
 pub mod remote_metadata;
+pub mod state;
 
 // Re-export everything from qbz-library
 pub use qbz_library::{
@@ -79,8 +80,11 @@ pub mod thumbnails {
     };
 }
 
-// Re-export commands::LibraryState for compatibility
-pub use commands::LibraryState;
+// State and DTO types live in `state`; re-export for compatibility.
+pub use state::{
+    BackfillReport, CleanupResult, LibraryAlbumMetadataUpdateRequest,
+    LibraryAlbumTrackMetadataUpdate, LibraryState,
+};
 pub use commands::{
     library_add_folder, library_cleanup_missing_files, library_clear_impl,
     library_fetch_missing_artwork, library_get_album_tracks, library_get_artists,
@@ -90,7 +94,7 @@ pub use commands::{
     library_scan_folder_impl, library_scan_impl, library_search, library_stop_scan_impl,
     library_update_album_metadata_impl, library_write_album_metadata_to_files_impl,
     playlist_get_custom_order, playlist_get_tracks_with_local_copies, playlist_has_custom_order,
-    update_playlist_folder, CleanupResult, LibraryAlbumMetadataUpdateRequest,
+    update_playlist_folder,
 };
 
 use std::path::Path;

@@ -6,7 +6,6 @@
 //! by non-frontend subsystems while hard-delete migration is in progress.
 
 pub mod playback;
-pub mod search;
 pub mod user_session;
 pub use playback::*;
 pub use user_session::*;
