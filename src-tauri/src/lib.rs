@@ -1626,6 +1626,7 @@ pub fn run() {
             commands_v2::v2_library_refresh_album_metadata_from_files,
             commands_v2::v2_factory_reset,
             commands_v2::v2_set_qobuz_tos_accepted,
+            commands_v2::v2_get_qobuz_tos_accepted,
             commands_v2::v2_get_update_preferences,
             commands_v2::v2_get_current_version,
             commands_v2::v2_check_for_updates,

@@ -1300,6 +1300,13 @@ pub fn v2_set_qobuz_tos_accepted(
 }
 
 #[tauri::command]
+pub fn v2_get_qobuz_tos_accepted(
+    state: State<'_, crate::config::legal_settings::LegalSettingsState>,
+) -> Result<bool, String> {
+    crate::config::legal_settings::get_qobuz_tos_accepted(state)
+}
+
+#[tauri::command]
 pub fn v2_set_update_check_on_launch(
     enabled: bool,
     state: State<'_, crate::updates::UpdatesState>,
