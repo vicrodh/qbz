@@ -66,12 +66,42 @@ pub struct QconnectConnectOptions {
     pub subscribe_channels_hex: Option<Vec<String>>,
 }
 
+/// Lifecycle state surfaced to the UI so the toggle can reflect what the user
+/// asked for (`running`) separately from what the transport currently has
+/// (`Connecting`/`Connected`/`Reconnecting`). Without this distinction the UI
+/// reads the toggle as "off" while the backend reconnect loop is alive,
+/// leaving the user unable to disable QConnect (issue #358).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum QconnectLifecycleState {
+    /// User has not enabled QConnect (or it has been fully torn down).
+    #[default]
+    Off,
+    /// `connect()` has been called; transport is establishing the WS but no
+    /// `SessionEstablished` yet.
+    Connecting,
+    /// Transport saw at least one `SESSION_STATE` frame on the active WS — the
+    /// session-level handshake completed.
+    Connected,
+    /// Transport disconnected after at least one successful connect; the
+    /// reconnect loop is running.
+    Reconnecting,
+    /// `MaxReconnectAttemptsExceeded` fired — runtime auto-stopped, last error
+    /// surfaced. User can re-enable from UI.
+    Exhausted,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct QconnectConnectionStatus {
     pub running: bool,
     pub transport_connected: bool,
     pub endpoint_url: Option<String>,
     pub last_error: Option<String>,
+    /// Granular lifecycle state — the toggle should base its on/off reading on
+    /// this rather than on `transport_connected`, so a stuck reconnect loop is
+    /// still visible as "on" and the user can disable it (issue #358).
+    #[serde(default)]
+    pub state: QconnectLifecycleState,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -301,6 +331,9 @@ struct QconnectRuntime {
 struct QconnectServiceInner {
     runtime: Option<QconnectRuntime>,
     last_error: Option<String>,
+    /// Lifecycle state — driven by transport events from the spawned event
+    /// loop. See `QconnectLifecycleState` (issue #358).
+    lifecycle_state: QconnectLifecycleState,
 }
 
 #[derive(Clone)]
@@ -362,6 +395,35 @@ fn queue_payload_track_preview(payload: &Value, key: &str) -> Vec<i64> {
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default()
+}
+
+/// Update `QconnectServiceInner::lifecycle_state` from inside the spawned
+/// transport-event loop, but only while the runtime is still alive. If
+/// `disconnect()` already took the runtime, or `MaxReconnectAttemptsExceeded`
+/// already moved us to `Exhausted`, we must not stomp those terminal states
+/// with a late `Reconnecting`/`Connected` arriving from the broadcast queue
+/// (issue #358).
+async fn update_lifecycle_state_if_running(
+    inner: &Arc<Mutex<QconnectServiceInner>>,
+    app_handle: &AppHandle,
+    next: QconnectLifecycleState,
+) {
+    let mut guard = inner.lock().await;
+    if guard.runtime.is_none() {
+        return;
+    }
+    if guard.lifecycle_state == next {
+        return;
+    }
+    guard.lifecycle_state = next;
+    drop(guard);
+    let serialized = serde_json::to_value(next).unwrap_or_else(|_| json!("unknown"));
+    let _ = app_handle.emit(
+        "qconnect:status_changed",
+        json!({
+            "state": serialized,
+        }),
+    );
 }
 
 fn emit_qconnect_diagnostic(app_handle: &AppHandle, channel: &str, level: &str, payload: Value) {
@@ -1218,9 +1280,20 @@ impl QconnectServiceState {
         }
 
         let mut guard = self.inner.lock().await;
+        // Idempotent connect: if a runtime is already alive (including stuck in
+        // the reconnect loop), don't error — return the current status. The UI
+        // toggle reads `running` so the badge stays "on" and clicking it routes
+        // to disconnect, which DOES break the loop (issue #358).
         if guard.runtime.is_some() {
-            return Err("QConnect service is already running".to_string());
+            log::info!(
+                "[QConnect] connect() called while runtime is alive (state={:?}); returning current status",
+                guard.lifecycle_state
+            );
+            drop(guard);
+            return Ok(self.status().await);
         }
+        guard.lifecycle_state = QconnectLifecycleState::Connecting;
+        guard.last_error = None;
 
         let transport = Arc::new(NativeWsTransport::new());
         let sync_state = Arc::new(Mutex::new(QconnectRemoteSyncState::default()));
@@ -1231,13 +1304,22 @@ impl QconnectServiceState {
         });
         let app = Arc::new(QconnectApp::new(transport, sink));
 
-        app.connect(config.clone())
-            .await
-            .map_err(|err| format!("qconnect transport connect failed: {err}"))?;
+        if let Err(err) = app.connect(config.clone()).await {
+            // Don't leak `lifecycle_state = Connecting` with `runtime = None`
+            // back to the frontend — `isQconnectToggleOn` treats `Connecting`
+            // as on, so the toggle would stick "on" with no live runtime to
+            // disconnect (issue #358).
+            let msg = format!("qconnect transport connect failed: {err}");
+            guard.lifecycle_state = QconnectLifecycleState::Off;
+            guard.last_error = Some(msg.clone());
+            return Err(msg);
+        }
 
         let mut transport_rx = app.subscribe_transport_events();
         let app_for_loop = Arc::clone(&app);
         let app_for_errors = app_handle.clone();
+        let inner_for_loop = Arc::clone(&self.inner);
+        let app_handle_for_status = app_handle.clone();
 
         let event_loop = tauri::async_runtime::spawn(async move {
             log::info!("[QConnect/EventLoop] Started listening for transport events");
@@ -1272,6 +1354,16 @@ impl QconnectServiceState {
                                 log::warn!("[QConnect/Transport] WebSocket disconnected — resetting renderer_joined flag");
                                 renderer_joined = false;
                                 has_disconnected = true;
+                                // Surface "Reconnecting" to the UI, but only if
+                                // we're not in a teardown path (Off/Exhausted).
+                                // The reconnect loop will keep retrying until
+                                // SessionEstablished or MaxReconnectAttemptsExceeded.
+                                update_lifecycle_state_if_running(
+                                    &inner_for_loop,
+                                    &app_handle_for_status,
+                                    QconnectLifecycleState::Reconnecting,
+                                )
+                                .await;
                             }
                             qconnect_transport_ws::TransportEvent::Authenticated => {
                                 log::info!("[QConnect/Transport] Authenticated with JWT");
@@ -1366,10 +1458,89 @@ impl QconnectServiceState {
                                     message
                                 );
                             }
+                            qconnect_transport_ws::TransportEvent::CloudError {
+                                msg_id,
+                                code,
+                                descr,
+                            } => {
+                                log::warn!(
+                                    "[QConnect/Transport] Cloud rejected session: msg_id={} code={} descr={:?} (issue #358)",
+                                    msg_id,
+                                    code,
+                                    descr
+                                );
+                                emit_qconnect_diagnostic(
+                                    &app_for_errors,
+                                    "qconnect:cloud_error",
+                                    "warning",
+                                    json!({
+                                        "msg_id": msg_id,
+                                        "code": code,
+                                        "descr": descr,
+                                    }),
+                                );
+                            }
                             qconnect_transport_ws::TransportEvent::InboundReceived(_envelope) => {
                                 log::info!(
                                     "[QConnect/Transport] <-- InboundReceived (JSON envelope)"
                                 );
+                            }
+                            qconnect_transport_ws::TransportEvent::SessionEstablished => {
+                                log::info!(
+                                    "[QConnect/Transport] Session established — backoff counters reset"
+                                );
+                                update_lifecycle_state_if_running(
+                                    &inner_for_loop,
+                                    &app_handle_for_status,
+                                    QconnectLifecycleState::Connected,
+                                )
+                                .await;
+                            }
+                            qconnect_transport_ws::TransportEvent::MaxReconnectAttemptsExceeded {
+                                attempts,
+                                last_reason,
+                            } => {
+                                log::error!(
+                                    "[QConnect/Transport] Max reconnect attempts exceeded: attempts={} last_reason={}",
+                                    attempts,
+                                    last_reason
+                                );
+                                emit_qconnect_diagnostic(
+                                    &app_for_errors,
+                                    "qconnect:max_reconnect_attempts_exceeded",
+                                    "error",
+                                    json!({
+                                        "attempts": attempts,
+                                        "last_reason": last_reason,
+                                    }),
+                                );
+                                // Auto-stop the runtime: the transport loop
+                                // already broke (Exhausted), so no more events
+                                // will fire. Take the runtime out so a fresh
+                                // user-initiated `connect()` succeeds, mark the
+                                // lifecycle as Exhausted with the cloud-side
+                                // reason, and exit the event loop. The runtime
+                                // we just dropped owns this very task's
+                                // JoinHandle — that's fine, dropping a handle
+                                // detaches; we then `break` so the task ends
+                                // naturally (issue #358).
+                                let mut guard = inner_for_loop.lock().await;
+                                guard.lifecycle_state = QconnectLifecycleState::Exhausted;
+                                guard.last_error = Some(format!(
+                                    "Reconnect attempts exhausted ({attempts}): {last_reason}"
+                                ));
+                                guard.runtime = None;
+                                drop(guard);
+                                let _ = app_handle_for_status.emit(
+                                    "qconnect:status_changed",
+                                    json!({
+                                        "state": "exhausted",
+                                        "reason": "max_reconnect_attempts_exceeded",
+                                        "attempts": attempts,
+                                        "last_reason": last_reason,
+                                    }),
+                                );
+                                break;
                             }
                         }
                         if let Err(err) = app_for_loop.handle_transport_event(event).await {
@@ -1415,6 +1586,12 @@ impl QconnectServiceState {
     pub async fn disconnect(&self) -> Result<QconnectConnectionStatus, String> {
         let runtime = {
             let mut guard = self.inner.lock().await;
+            // Always force lifecycle to Off — the user-facing requirement is
+            // that "disable QConnect" must succeed regardless of whether the
+            // backend is Connecting / Reconnecting / Connected / Exhausted
+            // (issue #358). The transport's shutdown_tx watch + the runtime
+            // event_loop.abort below will tear down any in-flight reconnect.
+            guard.lifecycle_state = QconnectLifecycleState::Off;
             guard.runtime.take()
         };
 
@@ -1430,7 +1607,7 @@ impl QconnectServiceState {
     }
 
     pub async fn status(&self) -> QconnectConnectionStatus {
-        let (app, endpoint_url, last_error) = {
+        let (app, endpoint_url, last_error, lifecycle_state) = {
             let guard = self.inner.lock().await;
             (
                 guard
@@ -1442,6 +1619,7 @@ impl QconnectServiceState {
                     .as_ref()
                     .map(|runtime| runtime.config.endpoint_url.clone()),
                 guard.last_error.clone(),
+                guard.lifecycle_state,
             )
         };
 
@@ -1456,6 +1634,7 @@ impl QconnectServiceState {
             transport_connected,
             endpoint_url,
             last_error,
+            state: lifecycle_state,
         }
     }
 
@@ -2859,10 +3038,31 @@ async fn apply_renderer_command_to_corebridge(
                 };
 
                 if !projection_applied {
-                    if let Err(err) =
-                        align_corebridge_queue_cursor(bridge, current_track.track_id).await
-                    {
-                        log::warn!("[QConnect] Failed to align CoreBridge queue cursor: {err}");
+                    // Guard: skip realigning the CoreBridge cursor when local
+                    // IS the active renderer. In that case this command is
+                    // just our own state echoed back by the Qobuz cloud, so
+                    // aligning here races with the user's already-advanced
+                    // local cursor and pushes a duplicate index into history.
+                    // Mirrors the gating used in sync_active_renderer_projection
+                    // (line ~1223): align when local is NOT the active renderer.
+                    // Bug #316.
+                    let should_align = {
+                        let state = sync_state.lock().await;
+                        !is_local_renderer_active(&state.session)
+                    };
+                    if should_align {
+                        if let Err(err) =
+                            align_corebridge_queue_cursor(bridge, current_track.track_id).await
+                        {
+                            log::warn!(
+                                "[QConnect] Failed to align CoreBridge queue cursor: {err}"
+                            );
+                        }
+                    } else {
+                        log::debug!(
+                            "[QConnect] Skipping align_corebridge_queue_cursor: local renderer is active (echo from cloud); track_id={}",
+                            current_track.track_id
+                        );
                     }
                 }
 

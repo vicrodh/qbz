@@ -215,10 +215,13 @@ where
             }
             TransportEvent::Authenticated
             | TransportEvent::Subscribed
+            | TransportEvent::SessionEstablished
+            | TransportEvent::MaxReconnectAttemptsExceeded { .. }
             | TransportEvent::ReconnectScheduled { .. }
             | TransportEvent::KeepalivePingSent
             | TransportEvent::KeepalivePongReceived
             | TransportEvent::TransportError { .. }
+            | TransportEvent::CloudError { .. }
             | TransportEvent::InboundFrameDecoded { .. }
             | TransportEvent::InboundPayloadBytes { .. }
             | TransportEvent::OutboundSent { .. } => {}

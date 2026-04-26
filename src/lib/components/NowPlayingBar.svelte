@@ -85,7 +85,7 @@
     onToggleLyrics?: () => void;
     lyricsActive?: boolean;
     isCastConnected?: boolean;
-    isQobuzConnectConnected?: boolean;
+    isQobuzConnectToggleOn?: boolean;
     onArtistClick?: () => void;
     onAlbumClick?: () => void;
     onTrackClick?: () => void;
@@ -140,7 +140,7 @@
     onToggleLyrics,
     lyricsActive = false,
     isCastConnected = false,
-    isQobuzConnectConnected = false,
+    isQobuzConnectToggleOn = false,
     onArtistClick,
     onAlbumClick,
     onTrackClick,
@@ -588,7 +588,7 @@
       <!-- QConnect badge is rendered outside the songcard slot so it stays
            visible (and in a stable position) whether or not a track is playing. -->
       <QconnectBadge
-        connected={isQobuzConnectConnected}
+        connected={isQobuzConnectToggleOn}
         sessionSnapshot={qconnectSessionSnapshot}
         onToggleConnection={onToggleQconnectConnection ?? (() => {})}
         busy={qconnectBusy}
@@ -633,9 +633,9 @@
         {#if showQconnectDevButton}
         <button
           class="control-btn"
-          class:qconnect-active={isQobuzConnectConnected}
+          class:qconnect-active={isQobuzConnectToggleOn}
           onclick={onQobuzConnect}
-          title={isQobuzConnectConnected ? $translateStore('player.qobuzConnectManage') : $translateStore('player.qobuzConnect')}
+          title={isQobuzConnectToggleOn ? $translateStore('player.qobuzConnectManage') : $translateStore('player.qobuzConnect')}
         >
           <span class="qconnect-icon" aria-hidden="true"></span>
         </button>
@@ -711,11 +711,11 @@
               {#if showQconnectDevButton}
                 <button
                   class="overflow-item"
-                  class:active={isQobuzConnectConnected}
+                  class:active={isQobuzConnectToggleOn}
                   onclick={() => { closeOverflowMenu(); onQobuzConnect?.(); }}
                 >
                   <span class="qconnect-icon" aria-hidden="true"></span>
-                  <span>{isQobuzConnectConnected ? $translateStore('player.qobuzConnectManage') : $translateStore('player.qobuzConnect')}</span>
+                  <span>{isQobuzConnectToggleOn ? $translateStore('player.qobuzConnectManage') : $translateStore('player.qobuzConnect')}</span>
                 </button>
               {/if}
 

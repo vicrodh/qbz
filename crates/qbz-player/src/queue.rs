@@ -122,9 +122,12 @@ impl QueueManager {
     /// Set the entire queue (replaces existing)
     pub fn set_queue(&self, new_tracks: Vec<QueueTrack>, start_index: Option<usize>) {
         let mut state = self.state.lock().unwrap();
+        // Remap history by track id BEFORE replacing tracks so that legitimate
+        // plays survive queue version bumps / reorders. Entries whose track is
+        // no longer present are dropped. See bug #316.
+        Self::remap_history_by_track_id_internal(&mut state, &new_tracks);
         state.tracks = new_tracks;
         state.current_index = start_index;
-        state.history.clear();
 
         // Regenerate shuffle order
         Self::regenerate_shuffle_order_internal(&mut state);
@@ -160,9 +163,12 @@ impl QueueManager {
         shuffle_order: Option<Vec<usize>>,
     ) {
         let mut state = self.state.lock().unwrap();
+        // Remap history by track id BEFORE replacing tracks so that legitimate
+        // plays survive queue version bumps / reorders. Entries whose track is
+        // no longer present are dropped. See bug #316.
+        Self::remap_history_by_track_id_internal(&mut state, &new_tracks);
         state.tracks = new_tracks;
         state.current_index = start_index;
-        state.history.clear();
         state.shuffle = shuffle_enabled;
 
         if !shuffle_enabled {
@@ -809,6 +815,40 @@ impl QueueManager {
         }
     }
 
+    /// Remap history entries from `state.tracks` indices to indices into
+    /// `new_tracks`, looking up by track id. Entries whose track id is no
+    /// longer present in `new_tracks` are dropped. Must be called with the
+    /// lock held and BEFORE `state.tracks` is replaced.
+    ///
+    /// This preserves history across queue version bumps that don't change
+    /// track identity (e.g. pure reorder, shuffle toggle, or an authoritative
+    /// remote echo of the current local queue). Bug #316.
+    fn remap_history_by_track_id_internal(state: &mut InternalState, new_tracks: &[QueueTrack]) {
+        if state.history.is_empty() || new_tracks.is_empty() || state.tracks.is_empty() {
+            state.history.clear();
+            return;
+        }
+
+        // Build lookup: track_id -> new index. If duplicate ids exist (rare),
+        // last occurrence wins; history will still resolve to a valid track.
+        let mut new_id_to_idx: std::collections::HashMap<u64, usize> =
+            std::collections::HashMap::with_capacity(new_tracks.len());
+        for (idx, track) in new_tracks.iter().enumerate() {
+            new_id_to_idx.insert(track.id, idx);
+        }
+
+        let mut remapped: VecDeque<usize> = VecDeque::with_capacity(state.history.len());
+        for &old_idx in state.history.iter() {
+            let Some(old_track) = state.tracks.get(old_idx) else {
+                continue;
+            };
+            if let Some(&new_idx) = new_id_to_idx.get(&old_track.id) {
+                remapped.push_back(new_idx);
+            }
+        }
+        state.history = remapped;
+    }
+
     /// Remap an index after remove+insert move operation.
     fn remap_index_after_move(idx: usize, from_idx: usize, to_idx: usize) -> usize {
         if idx == from_idx {
@@ -1275,6 +1315,168 @@ mod tests {
                 .map(|track| track.id)
                 .collect::<Vec<_>>(),
             vec![3, 4, 5]
+        );
+    }
+
+    // --- Bug #316 history-preservation regression tests ---
+
+    /// Helper: build a queue with N tracks, play track 0, advance through
+    /// `advance_count` to populate history, returning the queue.
+    fn queue_with_played_history(track_count: u64, advance_count: usize) -> QueueManager {
+        let queue = QueueManager::new();
+        for i in 1..=track_count {
+            queue.add_track(create_test_track(i));
+        }
+        queue.play_index(0);
+        for _ in 0..advance_count {
+            queue.next();
+        }
+        queue
+    }
+
+    #[test]
+    fn test_set_queue_with_order_preserves_history_on_pure_reorder() {
+        // Played 3 tracks, current is on track 4 (id=4).
+        let queue = queue_with_played_history(5, 3);
+        let before = queue.get_state();
+        assert_eq!(
+            before.history.iter().map(|t| t.id).collect::<Vec<_>>(),
+            vec![3, 2, 1]
+        );
+
+        // Same tracks, completely reordered. Current track (id=4) at new index 0.
+        let reordered = vec![
+            create_test_track(4),
+            create_test_track(2),
+            create_test_track(5),
+            create_test_track(1),
+            create_test_track(3),
+        ];
+        queue.set_queue_with_order(reordered, Some(0), false, None);
+
+        let after = queue.get_state();
+        // History rendered newest-first; ids must survive the reorder identically.
+        assert_eq!(
+            after.history.iter().map(|t| t.id).collect::<Vec<_>>(),
+            vec![3, 2, 1]
+        );
+    }
+
+    #[test]
+    fn test_set_queue_with_order_preserves_history_when_tracks_added() {
+        // Played track 1, then 2; current is track 3.
+        let queue = queue_with_played_history(3, 2);
+
+        // Same tracks plus 2 new ones (4, 5). Current still on track 3 (new index 2).
+        let expanded = vec![
+            create_test_track(1),
+            create_test_track(2),
+            create_test_track(3),
+            create_test_track(4),
+            create_test_track(5),
+        ];
+        queue.set_queue_with_order(expanded, Some(2), false, None);
+
+        let after = queue.get_state();
+        assert_eq!(
+            after.history.iter().map(|t| t.id).collect::<Vec<_>>(),
+            vec![2, 1]
+        );
+    }
+
+    #[test]
+    fn test_set_queue_with_order_drops_only_removed_tracks_from_history() {
+        // Played tracks 1, 2, 3; current on track 4 (id=4).
+        let queue = queue_with_played_history(5, 3);
+        let before = queue.get_state();
+        assert_eq!(
+            before.history.iter().map(|t| t.id).collect::<Vec<_>>(),
+            vec![3, 2, 1]
+        );
+
+        // Remove track id=2 from queue; tracks 1 and 3 survive in history.
+        let trimmed = vec![
+            create_test_track(1),
+            create_test_track(3),
+            create_test_track(4),
+            create_test_track(5),
+        ];
+        queue.set_queue_with_order(trimmed, Some(2), false, None);
+
+        let after = queue.get_state();
+        assert_eq!(
+            after.history.iter().map(|t| t.id).collect::<Vec<_>>(),
+            vec![3, 1]
+        );
+    }
+
+    #[test]
+    fn test_set_queue_with_order_clears_history_when_tracks_completely_different() {
+        let queue = queue_with_played_history(5, 3);
+        assert_eq!(queue.get_state().history.len(), 3);
+
+        // No overlap with the previous queue; history must drop entirely.
+        let fresh = vec![
+            create_test_track(100),
+            create_test_track(101),
+            create_test_track(102),
+        ];
+        queue.set_queue_with_order(fresh, Some(0), false, None);
+
+        let after = queue.get_state();
+        assert!(after.history.is_empty());
+    }
+
+    #[test]
+    fn test_set_queue_preserves_history_on_pure_reorder() {
+        // Mirror test for set_queue (non-with-order variant).
+        let queue = queue_with_played_history(5, 3);
+        let before = queue.get_state();
+        assert_eq!(
+            before.history.iter().map(|t| t.id).collect::<Vec<_>>(),
+            vec![3, 2, 1]
+        );
+
+        let reordered = vec![
+            create_test_track(5),
+            create_test_track(4),
+            create_test_track(3),
+            create_test_track(2),
+            create_test_track(1),
+        ];
+        queue.set_queue(reordered, Some(1)); // current track 4 now at idx 1
+
+        let after = queue.get_state();
+        assert_eq!(
+            after.history.iter().map(|t| t.id).collect::<Vec<_>>(),
+            vec![3, 2, 1]
+        );
+    }
+
+    #[test]
+    fn test_set_queue_with_order_remaps_history_indices_after_reorder() {
+        // Verify that after a reorder, the internal indices stored in history
+        // actually point to the right new tracks (not just that ids match
+        // through the get_state() projection accidentally).
+        let queue = queue_with_played_history(4, 3);
+
+        // Reverse order. Old tracks 1,2,3,4 -> new tracks 4,3,2,1.
+        // Old history: indices [0, 1, 2] -> ids [1, 2, 3].
+        // New mapping: id=1->idx 3, id=2->idx 2, id=3->idx 1.
+        // Expected new history indices: [3, 2, 1] (front-to-back).
+        let reversed = vec![
+            create_test_track(4),
+            create_test_track(3),
+            create_test_track(2),
+            create_test_track(1),
+        ];
+        queue.set_queue_with_order(reversed, Some(0), false, None);
+
+        // Inspect internal state to verify the indices, not just rendered ids.
+        let state = queue.state.lock().unwrap();
+        assert_eq!(
+            state.history.iter().copied().collect::<Vec<_>>(),
+            vec![3, 2, 1]
         );
     }
 }
