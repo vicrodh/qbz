@@ -10,6 +10,7 @@ pub mod discovery;
 pub mod dlna;
 pub mod errors;
 pub mod media_server;
+pub mod state;
 
 // Re-export from qbz-cast for internal use
 pub use qbz_cast::{
@@ -20,5 +21,5 @@ pub use qbz_cast::{
 };
 
 // Re-export Tauri command states
-pub use commands::CastState;
-pub use dlna::commands::DlnaState;
+pub use state::CastState;
+pub use dlna::state::DlnaState;

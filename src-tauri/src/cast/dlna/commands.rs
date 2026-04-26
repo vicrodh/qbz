@@ -1,46 +1,17 @@
 //! Tauri commands for DLNA/UPnP casting
 
-use std::sync::Arc;
 use tauri::State;
-use tokio::sync::Mutex;
 
 use crate::api::models::Quality;
 use crate::cast::dlna::{
-    DiscoveredDlnaDevice, DlnaConnection, DlnaDiscovery, DlnaError, DlnaMetadata, DlnaPositionInfo,
-    DlnaStatus,
+    DiscoveredDlnaDevice, DlnaConnection, DlnaError, DlnaMetadata, DlnaPositionInfo, DlnaStatus,
 };
-use crate::cast::MediaServer;
 use crate::AppState;
 
-/// DLNA state shared across commands
-pub struct DlnaState {
-    pub discovery: Arc<Mutex<DlnaDiscovery>>,
-    pub connection: Arc<Mutex<Option<DlnaConnection>>>,
-    /// Shared media server (lazily initialized)
-    pub media_server: Arc<Mutex<Option<MediaServer>>>,
-}
-
-impl DlnaState {
-    pub fn new(media_server: Arc<Mutex<Option<MediaServer>>>) -> Result<Self, DlnaError> {
-        Ok(Self {
-            discovery: Arc::new(Mutex::new(DlnaDiscovery::new())),
-            connection: Arc::new(Mutex::new(None)),
-            media_server,
-        })
-    }
-
-    /// Ensure media server is started (lazy initialization)
-    pub async fn ensure_media_server(&self) -> Result<(), DlnaError> {
-        let mut server_guard = self.media_server.lock().await;
-        if server_guard.is_none() {
-            log::info!("Starting media server on demand for DLNA");
-            *server_guard = Some(MediaServer::start().map_err(|e| {
-                DlnaError::Connection(format!("Failed to start media server: {}", e))
-            })?);
-        }
-        Ok(())
-    }
-}
+// DlnaState lives in `super::state`; re-export from commands so any
+// historical `crate::cast::dlna::commands::DlnaState` paths continue
+// to compile.
+pub use super::state::DlnaState;
 
 // === Discovery ===
 

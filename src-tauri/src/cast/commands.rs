@@ -1,49 +1,17 @@
 //! Tauri commands for Chromecast casting
 
-use std::sync::Arc;
 use tauri::State;
-use tokio::sync::Mutex;
 
 use crate::api::models::Quality;
-use crate::cast::chromecast_thread::ChromecastHandle;
 use crate::cast::{
-    CastError, CastPositionInfo, CastStatus, DeviceDiscovery, DiscoveredDevice, MediaMetadata,
-    MediaServer,
+    CastError, CastPositionInfo, CastStatus, DiscoveredDevice, MediaMetadata,
 };
 use crate::library::{AudioFormat, LibraryState};
 use crate::AppState;
 
-/// Cast state shared across commands
-/// Uses a dedicated thread for Chromecast operations since rust_cast is not thread-safe
-pub struct CastState {
-    pub discovery: Arc<Mutex<DeviceDiscovery>>,
-    pub chromecast: ChromecastHandle,
-    /// Media server is lazily initialized on first cast operation to save CPU when not casting
-    pub media_server: Arc<Mutex<Option<MediaServer>>>,
-    pub connected_device_ip: Arc<Mutex<Option<String>>>,
-}
-
-impl CastState {
-    pub fn new() -> Result<Self, CastError> {
-        Ok(Self {
-            discovery: Arc::new(Mutex::new(DeviceDiscovery::new())),
-            chromecast: ChromecastHandle::new(),
-            // Don't start media server until needed - saves CPU when not casting
-            media_server: Arc::new(Mutex::new(None)),
-            connected_device_ip: Arc::new(Mutex::new(None)),
-        })
-    }
-
-    /// Get or create the media server (lazy initialization)
-    pub async fn get_or_create_media_server(&self) -> Result<(), CastError> {
-        let mut server_guard = self.media_server.lock().await;
-        if server_guard.is_none() {
-            log::info!("Starting media server on demand (lazy init)");
-            *server_guard = Some(MediaServer::start()?);
-        }
-        Ok(())
-    }
-}
+// CastState lives in `super::state`; re-export from commands so any
+// historical `crate::cast::commands::CastState` paths continue to compile.
+pub use super::state::CastState;
 
 // === Discovery ===
 
