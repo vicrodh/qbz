@@ -1,45 +1,26 @@
 //! Tauri commands for local library
 
-use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use tauri::{Emitter, State};
-use tokio::sync::Mutex;
 
 use crate::discogs::DiscogsClient;
 use crate::library::{
-    cue_to_tracks, get_artwork_cache_dir, thumbnails, ArtistImageInfo, CueParser, LibraryDatabase,
-    LibraryFolder, LibraryScanner, LibraryStats, LocalAlbum, LocalArtist, LocalTrack,
-    MetadataExtractor, ScanError, ScanProgress, ScanStatus,
+    cue_to_tracks, get_artwork_cache_dir, thumbnails, ArtistImageInfo, CueParser, LibraryFolder,
+    LibraryScanner, LibraryStats, LocalAlbum, LocalArtist, LocalTrack, MetadataExtractor,
+    ScanError, ScanProgress, ScanStatus,
 };
 use crate::network::{is_network_path, MountKind, NetworkFs};
 
-/// Library state shared across commands
-pub struct LibraryState {
-    pub db: Arc<Mutex<Option<LibraryDatabase>>>,
-    pub scan_progress: Arc<Mutex<ScanProgress>>,
-    pub scan_cancel: Arc<AtomicBool>,
-}
-
-impl LibraryState {
-    pub async fn init_at(&self, base_dir: &std::path::Path) -> Result<(), String> {
-        std::fs::create_dir_all(base_dir)
-            .map_err(|e| format!("Failed to create directory: {}", e))?;
-        let db_path = base_dir.join("library.db");
-        let db = LibraryDatabase::open(&db_path).map_err(|e| e.to_string())?;
-        let mut guard = self.db.lock().await;
-        *guard = Some(db);
-        Ok(())
-    }
-
-    pub async fn teardown(&self) {
-        let mut guard = self.db.lock().await;
-        *guard = None;
-    }
-}
+// Shared state types and DTOs live in `super::state`; re-export them from
+// this module so historical `crate::library::commands::*` paths used by
+// `commands_v2/legacy_compat.rs` continue to compile.
+pub use super::state::{
+    BackfillReport, CleanupResult, LibraryAlbumMetadataUpdateRequest,
+    LibraryAlbumTrackMetadataUpdate, LibraryState,
+};
 
 fn normalize_library_path(path: &Path) -> PathBuf {
     fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
@@ -122,14 +103,6 @@ pub async fn library_remove_folder(
     db.delete_tracks_in_folder(&path)
         .map_err(|e| e.to_string())?;
     Ok(())
-}
-
-/// Result of cleanup operation
-#[derive(Debug, Clone, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CleanupResult {
-    pub checked: usize,
-    pub removed: usize,
 }
 
 /// Clean up tracks whose files no longer exist on disk
@@ -2074,29 +2047,6 @@ pub async fn library_set_album_hidden(
         .map_err(|e| e.to_string())
 }
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LibraryAlbumTrackMetadataUpdate {
-    pub id: i64,
-    pub file_path: String,
-    pub cue_start_secs: Option<f64>,
-    pub title: String,
-    pub disc_number: Option<u32>,
-    pub track_number: Option<u32>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LibraryAlbumMetadataUpdateRequest {
-    pub album_group_key: String,
-    pub album_title: String,
-    pub album_artist: String,
-    pub year: Option<u32>,
-    pub genre: Option<String>,
-    pub catalog_number: Option<String>,
-    pub tracks: Vec<LibraryAlbumTrackMetadataUpdate>,
-}
-
 #[tauri::command]
 pub async fn library_update_album_metadata_impl(
     request: LibraryAlbumMetadataUpdateRequest,
@@ -2502,15 +2452,6 @@ pub async fn library_get_hidden_albums(
 }
 
 // === Qobuz Downloads Integration ===
-
-#[derive(serde::Serialize)]
-pub struct BackfillReport {
-    pub total_downloads: usize,
-    pub added_tracks: usize,
-    pub repaired_tracks: usize,
-    pub skipped_tracks: usize,
-    pub failed_tracks: Vec<String>,
-}
 
 #[tauri::command]
 pub async fn library_backfill_downloads(
