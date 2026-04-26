@@ -45,20 +45,32 @@ def main() -> int:
     lib_rs = load_text(root / "src-tauri/src/lib.rs")
     registered_v2 = set(registrations_pat.findall(lib_rs))
 
-    legacy_patterns = [
-        r"commands::([A-Za-z0-9_]+)",
-        r"library::commands::([A-Za-z0-9_]+)",
-        r"cast::commands::([A-Za-z0-9_]+)",
-        r"cast::dlna::commands::([A-Za-z0-9_]+)",
-        r"offline_cache::commands::([A-Za-z0-9_]+)",
-        r"offline::commands::([A-Za-z0-9_]+)",
-        r"network::commands::([A-Za-z0-9_]+)",
-        r"lyrics::commands::([A-Za-z0-9_]+)",
-        r"reco_store::commands::([A-Za-z0-9_]+)",
+    # Legacy module roots: any tauri::generate_handler! entry whose final
+    # leaf identifier is registered under one of these module paths counts
+    # as a legacy command. The leaf is the last `::ident` before the
+    # trailing comma in the handler list.
+    legacy_module_roots = [
+        "commands",
+        "library::commands",
+        "cast::commands",
+        "cast::dlna::commands",
+        "offline_cache::commands",
+        "offline::commands",
+        "network::commands",
+        "lyrics::commands",
+        "reco_store::commands",
+        "updates",
+        "config::legal_settings",
+        "desktop_theme",
+        "flatpak",
     ]
-    registered_legacy = set()
-    for pat in legacy_patterns:
-        registered_legacy |= set(re.findall(pat, lib_rs))
+    registered_legacy: set[str] = set()
+    for root_path in legacy_module_roots:
+        # Match `<root_path>(::<segment>)*::<leaf>,` and capture the leaf.
+        pat = re.compile(
+            rf"{re.escape(root_path)}(?:::[A-Za-z0-9_]+)*::([A-Za-z0-9_]+)\s*,"
+        )
+        registered_legacy |= set(pat.findall(lib_rs))
 
     v2_ok: list[tuple[str, str]] = []
     missing_v2: list[tuple[str, str]] = []
