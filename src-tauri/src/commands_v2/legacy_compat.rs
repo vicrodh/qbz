@@ -1484,6 +1484,11 @@ pub fn v2_is_running_in_flatpak() -> bool {
 }
 
 #[tauri::command]
+pub fn v2_get_flatpak_help_text() -> String {
+    crate::flatpak::get_flatpak_guidance()
+}
+
+#[tauri::command]
 pub fn v2_detect_desktop_theme() -> crate::desktop_theme::DesktopThemeInfo {
     crate::desktop_theme::detect_desktop_theme()
 }

@@ -2787,7 +2787,7 @@
     try {
       isFlatpak = await invoke<boolean>('v2_is_running_in_flatpak');
       if (isFlatpak) {
-        flatpakHelpText = await invoke<string>('get_flatpak_help_text');
+        flatpakHelpText = await invoke<string>('v2_get_flatpak_help_text');
       }
     } catch (err) {
       console.error('Failed to check Flatpak status:', err);

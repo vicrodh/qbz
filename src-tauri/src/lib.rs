@@ -1398,6 +1398,7 @@ pub fn run() {
             commands::playback::get_pipewire_sinks,
             commands::playback::get_audio_output_status,
             flatpak::get_flatpak_help_text,
+            commands_v2::v2_get_flatpak_help_text,
             config::legal_settings::get_qobuz_tos_accepted,
             updates::has_flatpak_welcome_been_shown,
             updates::has_snap_welcome_been_shown,
