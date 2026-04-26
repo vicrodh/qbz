@@ -60,6 +60,7 @@ def main() -> int:
         "lyrics::commands",
         "reco_store::commands",
         "updates",
+        "config::favorites_cache",
         "config::legal_settings",
         "desktop_theme",
         "flatpak",
