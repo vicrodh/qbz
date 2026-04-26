@@ -182,7 +182,7 @@
       rendererCount: 0,
     };
     try {
-      const status = await invoke<QconnectConnectionStatus>('v2_qconnect_get_status');
+      const status = await invoke<QconnectConnectionStatus>('v2_qconnect_status');
       const session = await invoke<QconnectSessionSnapshot>('v2_qconnect_session_snapshot');
       const out: QconnectDiag = { ...empty };
       out.running = !!status.running;
