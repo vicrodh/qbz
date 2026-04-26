@@ -229,7 +229,7 @@ export async function detectDesktopThemeCached(force = false): Promise<DesktopTh
   detectInFlight = (async () => {
     try {
       const { invoke } = await import('@tauri-apps/api/core');
-      const info = (await invoke('detect_desktop_theme')) as DesktopThemeInfo;
+      const info = (await invoke('v2_detect_desktop_theme')) as DesktopThemeInfo;
       cachedTheme = info;
       return info;
     } catch (e) {

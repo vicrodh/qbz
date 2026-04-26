@@ -1871,6 +1871,7 @@ pub fn run() {
             commands_v2::v2_clear_image_cache,
             // Desktop theme detection (KDE/Klassy → adaptive window controls)
             desktop_theme::detect_desktop_theme,
+            commands_v2::v2_detect_desktop_theme,
             // Mixtapes & Collections
             commands_v2::v2_list_mixtape_collections,
             commands_v2::v2_get_mixtape_collection,
