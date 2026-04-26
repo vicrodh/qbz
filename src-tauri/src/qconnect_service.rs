@@ -5275,13 +5275,13 @@ fn decode_hex_channel(raw: &str) -> Result<Vec<u8>, String> {
 mod tests {
     use super::{
         build_qconnect_file_audio_quality_snapshot, classify_qconnect_audio_quality,
-        decode_hex_channel, determine_queue_lookup_report_strategy, find_unique_renderer_id,
-        normalize_volume_to_fraction, parse_subscribe_channels, refresh_local_renderer_id,
-        resolve_controller_queue_item_from_snapshots, resolve_queue_item_ids_from_queue_state,
-        should_skip_renderer_report_due_to_stale_snapshot, QconnectFileAudioQualitySnapshot,
-        QconnectHandoffIntent, QconnectOutboundCommandType, QconnectRemoteSkipDirection,
-        QconnectRendererInfo, QconnectSessionState, QconnectTrackOrigin,
-        AUDIO_QUALITY_HIRES_LEVEL1,
+        decode_hex_channel, default_qconnect_device_info, determine_queue_lookup_report_strategy,
+        find_unique_renderer_id, normalize_volume_to_fraction, parse_subscribe_channels,
+        refresh_local_renderer_id, resolve_controller_queue_item_from_snapshots,
+        resolve_queue_item_ids_from_queue_state, should_skip_renderer_report_due_to_stale_snapshot,
+        QconnectFileAudioQualitySnapshot, QconnectHandoffIntent, QconnectOutboundCommandType,
+        QconnectRemoteSkipDirection, QconnectRendererInfo, QconnectSessionState,
+        QconnectTrackOrigin, AUDIO_QUALITY_HIRES_LEVEL1,
     };
     use qbz_models::RepeatMode;
     use qconnect_app::{
@@ -5396,6 +5396,9 @@ mod tests {
 
     #[test]
     fn refreshes_local_renderer_id_from_unique_fingerprint_when_uuid_missing() {
+        // Use the runtime-resolved local device info so the test stays correct
+        // regardless of hostname / env-var-driven device name overrides.
+        let local_device_info = default_qconnect_device_info();
         let mut session = QconnectSessionState {
             renderers: vec![
                 QconnectRendererInfo {
@@ -5409,10 +5412,10 @@ mod tests {
                 QconnectRendererInfo {
                     renderer_id: 6,
                     device_uuid: None,
-                    friendly_name: Some("QBZ Desktop".to_string()),
-                    brand: Some("QBZ".to_string()),
-                    model: Some("QBZ".to_string()),
-                    device_type: Some(5),
+                    friendly_name: local_device_info.friendly_name.clone(),
+                    brand: local_device_info.brand.clone(),
+                    model: local_device_info.model.clone(),
+                    device_type: local_device_info.device_type,
                 },
             ],
             ..Default::default()
