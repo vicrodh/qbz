@@ -4,11 +4,25 @@ import type {
   QconnectRendererSnapshot
 } from '$lib/services/qconnectRemoteQueue';
 
+/**
+ * Backend lifecycle state — kept in sync with `QconnectLifecycleState` in
+ * `src-tauri/src/qconnect_service.rs`. The toggle's on/off display reads
+ * `running` (derived from this), so a stuck reconnect loop is still visible as
+ * "on" and the user can disable it (issue #358).
+ */
+export type QconnectLifecycleState =
+  | 'off'
+  | 'connecting'
+  | 'connected'
+  | 'reconnecting'
+  | 'exhausted';
+
 export type QconnectConnectionStatus = {
   running: boolean;
   transport_connected: boolean;
   endpoint_url?: string | null;
   last_error?: string | null;
+  state?: QconnectLifecycleState;
 };
 
 export type QconnectRendererInfo = {
@@ -66,8 +80,19 @@ export const DEFAULT_QCONNECT_CONNECTION_STATUS: QconnectConnectionStatus = {
   running: false,
   transport_connected: false,
   endpoint_url: null,
-  last_error: null
+  last_error: null,
+  state: 'off'
 };
+
+/**
+ * The toggle's on/off reading. Returns true when the user has enabled
+ * QConnect even if the WS is currently re-establishing. This is required so a
+ * stuck reconnect loop still shows as "on" and the user can disable it from
+ * the UI (issue #358).
+ */
+export function isQconnectToggleOn(status: QconnectConnectionStatus): boolean {
+  return Boolean(status.running) || status.state === 'connecting' || status.state === 'reconnecting';
+}
 
 export const SHOW_QCONNECT_DEV_DIAGNOSTICS = import.meta.env.DEV;
 export const QCONNECT_DIAGNOSTIC_LOG_LIMIT = 200;
@@ -292,8 +317,17 @@ export async function fetchQconnectRuntimeState(): Promise<QconnectRuntimeStateS
   }
 }
 
-export async function toggleQconnectConnection(connected: boolean): Promise<void> {
-  if (connected) {
+/**
+ * Toggle QConnect on/off based on whether the runtime is currently considered
+ * "on" by the user. We must NOT base this on `transport_connected`: when the
+ * reconnect loop is stuck (Reconnecting / Connecting), `transport_connected`
+ * is false but the runtime is alive, and only `disconnect()` will tear it
+ * down. Calling `connect()` in that state used to error with "already
+ * running" — now it's a no-op and we still want the toggle to "turn it off".
+ * (issue #358)
+ */
+export async function toggleQconnectConnection(toggleOn: boolean): Promise<void> {
+  if (toggleOn) {
     await invoke('v2_qconnect_disconnect');
     return;
   }

@@ -371,6 +371,7 @@
     fetchQconnectRuntimeState,
     isQconnectPeerRendererActive,
     isQconnectRemoteModeActive as computeQconnectRemoteModeActive,
+    isQconnectToggleOn,
     logQconnectPlaybackReport as appendQconnectPlaybackReport,
     qconnectAdmissionReasonKey,
     shouldQconnectSuppressLocalPlaybackAutomation,
@@ -949,6 +950,14 @@
   let isQconnectPanelOpen = $state(false);
   let showQconnectDevButton = $state(localStorage.getItem('qbz-qconnect-dev-button') === 'true');
   let isQobuzConnectConnected = $state(false);
+  /**
+   * User-facing toggle state. True when the user has QConnect enabled even if
+   * the WS is currently re-establishing (Connecting/Reconnecting). This is
+   * separate from `isQobuzConnectConnected` so a stuck reconnect loop is
+   * still visible as "on" in the UI, allowing the user to disable it
+   * (issue #358).
+   */
+  let isQobuzConnectToggleOn = $state(false);
   let qobuzConnectBusy = $state(false);
   let qobuzConnectRefreshBusy = $state(false);
   let qobuzConnectStatus = $state<QconnectConnectionStatus>(DEFAULT_QCONNECT_CONNECTION_STATUS);
@@ -1147,8 +1156,15 @@
 
   function applyQobuzConnectStatus(status: QconnectConnectionStatus): void {
     qobuzConnectStatus = status;
-    const nextConnected = Boolean(status.transport_connected);
-    isQobuzConnectConnected = nextConnected;
+    // `isQobuzConnectConnected` reflects whether the WS is actually up — it
+    // gates "send command to QConnect server" calls (volume reports, position
+    // reports, etc.). It must NOT include Connecting/Reconnecting, otherwise
+    // we'd send commands while the transport is down.
+    isQobuzConnectConnected = Boolean(status.transport_connected);
+    // `isQobuzConnectToggleOn` is the user-facing on/off — true even during a
+    // stuck reconnect loop, so the user can disable it from the UI
+    // (issue #358).
+    isQobuzConnectToggleOn = isQconnectToggleOn(status);
   }
 
   $effect(() => {
@@ -1314,7 +1330,11 @@
     if (qobuzConnectBusy) return;
     qobuzConnectBusy = true;
     try {
-      await toggleQconnectConnection(isQobuzConnectConnected);
+      // Use the user-facing toggle state, not transport_connected. During a
+      // stuck reconnect loop `isQobuzConnectConnected` is false but
+      // `isQobuzConnectToggleOn` is true — clicking the toggle must call
+      // disconnect to break the loop (issue #358).
+      await toggleQconnectConnection(isQobuzConnectToggleOn);
     } catch (err) {
       console.error('Qobuz Connect toggle failed:', err);
       pushQobuzConnectDiagnostic('toggle', 'error', err);
@@ -4490,7 +4510,10 @@
 
     void refreshQobuzConnectRuntimeState();
     const qobuzConnectStatusInterval = setInterval(() => {
-      if (isQconnectPanelOpen || isQobuzConnectConnected) {
+      // Poll the runtime when the panel is open OR the toggle is on — this
+      // includes Connecting/Reconnecting/Exhausted, so the UI stays in sync
+      // through state transitions (issue #358).
+      if (isQconnectPanelOpen || isQobuzConnectToggleOn) {
         void refreshQobuzConnectRuntimeState();
       } else {
         void refreshQobuzConnectStatus();
@@ -5128,6 +5151,7 @@
     let unlistenLinkResolved: UnlistenFn | null = null;
     let unlistenQconnectEvent: UnlistenFn | null = null;
     let unlistenQconnectError: UnlistenFn | null = null;
+    let unlistenQconnectStatusChanged: UnlistenFn | null = null;
     let unlistenQconnectAdmissionBlocked: UnlistenFn | null = null;
     let unlistenQconnectDiagnostic: UnlistenFn | null = null;
     let unlistenQconnectRendererReportDebug: UnlistenFn | null = null;
@@ -5301,6 +5325,16 @@
       if (disposed) { unlisten7(); return; }
       unlistenQconnectError = unlisten7;
 
+      // Backend emits this whenever the lifecycle transitions
+      // (Connecting → Reconnecting → Exhausted, etc). Refresh status promptly
+      // so the toggle reflects the new state without waiting for the 5s poll
+      // (issue #358).
+      const unlistenStatusChanged = await listen('qconnect:status_changed', () => {
+        void refreshQobuzConnectStatus();
+      });
+      if (disposed) { unlistenStatusChanged(); return; }
+      unlistenQconnectStatusChanged = unlistenStatusChanged;
+
       const unlisten8 = await listen<QconnectAdmissionBlockedEvent>('qconnect:admission_blocked', (event) => {
         pushQobuzConnectDiagnostic('qconnect:admission_blocked', 'warn', event.payload);
         showToast($t(qconnectAdmissionReasonKey(event.payload.reason)), 'warning');
@@ -5353,6 +5387,7 @@
       unlistenLinkResolved?.();
       unlistenQconnectEvent?.();
       unlistenQconnectError?.();
+      unlistenQconnectStatusChanged?.();
       unlistenQconnectAdmissionBlocked?.();
       unlistenQconnectDiagnostic?.();
       unlistenQconnectRendererReportDebug?.();
@@ -6482,7 +6517,7 @@
         onCast={openCastPicker}
         {isCastConnected}
         onQobuzConnect={openQobuzConnectPanelFromNowPlaying}
-        {isQobuzConnectConnected}
+        isQobuzConnectConnected={isQobuzConnectToggleOn}
         onToggleLyrics={toggleLyricsSidebar}
         lyricsActive={lyricsSidebarVisible}
         onArtistClick={() => {
@@ -6529,7 +6564,7 @@
         onCast={openCastPicker}
         {isCastConnected}
         onQobuzConnect={openQobuzConnectPanelFromNowPlaying}
-        {isQobuzConnectConnected}
+        isQobuzConnectConnected={isQobuzConnectToggleOn}
         queueOpen={isQueueOpen}
         {volume}
         onVolumeChange={handleVolumeChange}
