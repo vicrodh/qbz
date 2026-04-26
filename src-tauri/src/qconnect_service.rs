@@ -417,10 +417,7 @@ async fn update_lifecycle_state_if_running(
     }
     guard.lifecycle_state = next;
     drop(guard);
-    let serialized = serde_json::to_string(&next)
-        .ok()
-        .and_then(|s| serde_json::from_str::<Value>(&s).ok())
-        .unwrap_or_else(|| json!("unknown"));
+    let serialized = serde_json::to_value(next).unwrap_or_else(|_| json!("unknown"));
     let _ = app_handle.emit(
         "qconnect:status_changed",
         json!({
