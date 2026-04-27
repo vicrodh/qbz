@@ -5,7 +5,7 @@ use qconnect_app::QueueCommandType;
 use qconnect_app::{QConnectQueueState, QConnectRendererState};
 
 use crate::core_bridge::CoreBridgeState;
-use crate::qconnect_service::{QconnectServiceState, QconnectVisibleQueueProjection};
+use crate::qconnect::{QconnectServiceState, QconnectVisibleQueueProjection};
 use crate::runtime::{CommandRequirement, RuntimeError, RuntimeManagerState};
 
 // ==================== Queue Commands (V2) ====================
@@ -308,7 +308,7 @@ mod tests {
         build_qconnect_remove_upcoming_payload, build_qconnect_reorder_payload,
         qconnect_loop_mode_from_repeat_mode, resolve_qconnect_shuffle_pivot,
     };
-    use crate::qconnect_service::QconnectVisibleQueueProjection;
+    use crate::qconnect::QconnectVisibleQueueProjection;
     use qbz_models::RepeatMode;
     use qconnect_app::{QConnectQueueState, QConnectRendererState};
     use qconnect_core::QueueItem;

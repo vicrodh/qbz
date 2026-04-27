@@ -6,7 +6,7 @@
 pub mod commands_v2;
 pub mod core_bridge;
 pub mod integrations_v2;
-pub mod qconnect_service;
+pub mod qconnect;
 pub mod runtime;
 pub mod session_lifecycle;
 pub mod tauri_adapter;
@@ -807,7 +807,7 @@ pub fn run() {
         .manage(commands_v2::OAuthCancelState::new())
         .manage(qbzd_discovery::QbzdDiscoveryState::new())
         .manage(runtime::RuntimeManagerState::new())
-        .manage(qconnect_service::QconnectServiceState::new())
+        .manage(qconnect::QconnectServiceState::new())
         .manage(user_data_paths)
         .setup(move |app| {
             log::info!(
@@ -1325,39 +1325,39 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands_v2::runtime_get_status,
             commands_v2::runtime_bootstrap,
-            qconnect_service::v2_qconnect_connect,
-            qconnect_service::v2_qconnect_disconnect,
-            qconnect_service::v2_qconnect_status,
-            qconnect_service::v2_qconnect_send_command,
-            qconnect_service::v2_qconnect_evaluate_queue_admission,
-            qconnect_service::v2_qconnect_send_command_with_admission,
-            qconnect_service::v2_qconnect_join_session,
-            qconnect_service::v2_qconnect_set_player_state,
-            qconnect_service::v2_qconnect_toggle_play_if_remote,
-            qconnect_service::v2_qconnect_play_track_if_remote,
-            qconnect_service::v2_qconnect_skip_next_if_remote,
-            qconnect_service::v2_qconnect_skip_previous_if_remote,
-            qconnect_service::v2_qconnect_set_volume_if_remote,
-            qconnect_service::v2_qconnect_mute_if_remote,
-            qconnect_service::v2_qconnect_stop_if_remote,
-            qconnect_service::v2_qconnect_toggle_shuffle_if_remote,
-            qconnect_service::v2_qconnect_cycle_repeat_if_remote,
-            qconnect_service::v2_qconnect_set_autoplay_mode_if_remote,
-            qconnect_service::v2_qconnect_autoplay_load_tracks_if_remote,
-            qconnect_service::v2_qconnect_set_active_renderer,
-            qconnect_service::v2_qconnect_set_volume,
-            qconnect_service::v2_qconnect_set_loop_mode,
-            qconnect_service::v2_qconnect_mute_volume,
-            qconnect_service::v2_qconnect_set_max_audio_quality,
-            qconnect_service::v2_qconnect_ask_for_renderer_state,
-            qconnect_service::v2_qconnect_queue_snapshot,
-            qconnect_service::v2_qconnect_renderer_snapshot,
-            qconnect_service::v2_qconnect_session_snapshot,
-            qconnect_service::v2_qconnect_report_playback_state,
-            qconnect_service::v2_qconnect_report_volume,
-            qconnect_service::v2_qconnect_get_device_name,
-            qconnect_service::v2_qconnect_set_device_name,
-            qconnect_service::v2_get_hostname,
+            qconnect::v2_qconnect_connect,
+            qconnect::v2_qconnect_disconnect,
+            qconnect::v2_qconnect_status,
+            qconnect::v2_qconnect_send_command,
+            qconnect::v2_qconnect_evaluate_queue_admission,
+            qconnect::v2_qconnect_send_command_with_admission,
+            qconnect::v2_qconnect_join_session,
+            qconnect::v2_qconnect_set_player_state,
+            qconnect::v2_qconnect_toggle_play_if_remote,
+            qconnect::v2_qconnect_play_track_if_remote,
+            qconnect::v2_qconnect_skip_next_if_remote,
+            qconnect::v2_qconnect_skip_previous_if_remote,
+            qconnect::v2_qconnect_set_volume_if_remote,
+            qconnect::v2_qconnect_mute_if_remote,
+            qconnect::v2_qconnect_stop_if_remote,
+            qconnect::v2_qconnect_toggle_shuffle_if_remote,
+            qconnect::v2_qconnect_cycle_repeat_if_remote,
+            qconnect::v2_qconnect_set_autoplay_mode_if_remote,
+            qconnect::v2_qconnect_autoplay_load_tracks_if_remote,
+            qconnect::v2_qconnect_set_active_renderer,
+            qconnect::v2_qconnect_set_volume,
+            qconnect::v2_qconnect_set_loop_mode,
+            qconnect::v2_qconnect_mute_volume,
+            qconnect::v2_qconnect_set_max_audio_quality,
+            qconnect::v2_qconnect_ask_for_renderer_state,
+            qconnect::v2_qconnect_queue_snapshot,
+            qconnect::v2_qconnect_renderer_snapshot,
+            qconnect::v2_qconnect_session_snapshot,
+            qconnect::v2_qconnect_report_playback_state,
+            qconnect::v2_qconnect_report_volume,
+            qconnect::v2_qconnect_get_device_name,
+            qconnect::v2_qconnect_set_device_name,
+            qconnect::v2_get_hostname,
             commands_v2::v2_is_logged_in,
             commands_v2::v2_login,
             commands_v2::v2_logout,
