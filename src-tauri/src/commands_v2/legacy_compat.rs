@@ -706,9 +706,14 @@ pub async fn v2_get_track_by_path(
     filePath: String,
     state: State<'_, LibraryState>,
 ) -> Result<Option<LocalTrack>, RuntimeError> {
-    crate::library::commands::get_track_by_path(filePath, state)
-        .await
-        .map_err(RuntimeError::Internal)
+    log::info!("Command: v2_get_track_by_path {}", filePath);
+
+    let guard__ = state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session - please log in".to_string()))?;
+    db.get_track_by_path(&filePath)
+        .map_err(|e| RuntimeError::Internal(e.to_string()))
 }
 
 #[tauri::command]
@@ -730,17 +735,30 @@ pub async fn v2_library_update_folder_settings(
     userOverrideNetwork: bool,
     state: State<'_, LibraryState>,
 ) -> Result<crate::library::LibraryFolder, RuntimeError> {
-    crate::library::commands::library_update_folder_settings(
+    log::info!(
+        "Command: v2_library_update_folder_settings {} alias={:?} enabled={}",
         id,
         alias,
+        enabled
+    );
+
+    let guard__ = state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session - please log in".to_string()))?;
+    db.update_folder_settings(
+        id,
+        alias.as_deref(),
         enabled,
         isNetwork,
-        networkFsType,
+        networkFsType.as_deref(),
         userOverrideNetwork,
-        state,
     )
-    .await
-    .map_err(RuntimeError::Internal)
+    .map_err(|e| RuntimeError::Internal(e.to_string()))?;
+
+    db.get_folder_by_id(id)
+        .map_err(|e| RuntimeError::Internal(e.to_string()))?
+        .ok_or_else(|| RuntimeError::Internal("Folder not found after update".to_string()))
 }
 
 #[tauri::command]

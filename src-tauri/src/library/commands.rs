@@ -339,43 +339,6 @@ pub async fn library_get_folder(
     db.get_folder_by_id(id).map_err(|e| e.to_string())
 }
 
-/// Update folder settings (alias, enabled, network info)
-#[tauri::command]
-pub async fn library_update_folder_settings(
-    id: i64,
-    alias: Option<String>,
-    enabled: bool,
-    is_network: bool,
-    network_fs_type: Option<String>,
-    user_override_network: bool,
-    state: State<'_, LibraryState>,
-) -> Result<LibraryFolder, String> {
-    log::info!(
-        "Command: library_update_folder_settings {} alias={:?} enabled={}",
-        id,
-        alias,
-        enabled
-    );
-
-    let guard__ = state.db.lock().await;
-    let db = guard__
-        .as_ref()
-        .ok_or("No active session - please log in")?;
-    db.update_folder_settings(
-        id,
-        alias.as_deref(),
-        enabled,
-        is_network,
-        network_fs_type.as_deref(),
-        user_override_network,
-    )
-    .map_err(|e| e.to_string())?;
-
-    db.get_folder_by_id(id)
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "Folder not found after update".to_string())
-}
-
 /// Enable or disable a folder
 #[tauri::command]
 pub async fn library_set_folder_enabled(
@@ -1313,21 +1276,6 @@ pub async fn library_get_track(
     db.get_track(track_id)
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "Track not found".to_string())
-}
-
-/// Get a track by file path (for offline playlist sync)
-#[tauri::command]
-pub async fn get_track_by_path(
-    file_path: String,
-    state: State<'_, LibraryState>,
-) -> Result<Option<LocalTrack>, String> {
-    log::info!("Command: get_track_by_path {}", file_path);
-
-    let guard__ = state.db.lock().await;
-    let db = guard__
-        .as_ref()
-        .ok_or("No active session - please log in")?;
-    db.get_track_by_path(&file_path).map_err(|e| e.to_string())
 }
 
 /// Play a local track by ID
