@@ -1,15 +1,9 @@
 //! Shared state and DTO types for the library module.
 //!
 //! These types were originally defined in `library/commands.rs` alongside
-//! their owning Tauri commands. They are relocated here so the type
-//! surface remains available after the legacy `#[tauri::command]`
-//! definitions in `commands.rs` are eventually removed.
-//!
-//! Consumers (`commands_v2`, `session_lifecycle`, `cast/commands.rs`,
-//! `offline_cache/commands.rs`, etc.) reach these via the existing
-//! re-exports in `library/mod.rs`. `commands.rs` itself re-exports the
-//! whole module so any historical `crate::library::commands::*` paths
-//! continue to compile.
+//! their owning Tauri commands. After legacy cleanup the commands module
+//! has been deleted and these types live here. Consumers reach them via
+//! the re-exports in `library/mod.rs` (`crate::library::LibraryState`).
 
 use serde::Deserialize;
 use std::sync::atomic::AtomicBool;

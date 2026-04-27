@@ -45,7 +45,7 @@ pub async fn activate_session(app: &tauri::AppHandle, user_id: u64) -> Result<()
         app.state::<crate::config::remote_control_settings::AllowedOriginsState>();
     // NOTE: legal_settings is GLOBAL - not per-user, not initialized/torn down here
     let updates = app.state::<crate::updates::UpdatesState>();
-    let library = app.state::<crate::library::commands::LibraryState>();
+    let library = app.state::<crate::library::LibraryState>();
     let reco = app.state::<crate::reco_store::RecoState>();
     let api_cache = app.state::<crate::api_cache::ApiCacheState>();
     let artist_vectors = app.state::<crate::artist_vectors::ArtistVectorStoreState>();
@@ -279,7 +279,7 @@ pub async fn deactivate_session(app: &tauri::AppHandle) -> Result<(), String> {
         app.state::<crate::config::remote_control_settings::AllowedOriginsState>();
     // NOTE: legal_settings is GLOBAL - not per-user, not initialized/torn down here
     let updates = app.state::<crate::updates::UpdatesState>();
-    let library = app.state::<crate::library::commands::LibraryState>();
+    let library = app.state::<crate::library::LibraryState>();
     let reco = app.state::<crate::reco_store::RecoState>();
     let api_cache = app.state::<crate::api_cache::ApiCacheState>();
     let artist_vectors = app.state::<crate::artist_vectors::ArtistVectorStoreState>();
@@ -381,7 +381,7 @@ pub async fn activate_offline_session(app: &tauri::AppHandle) -> Result<(), Stri
     // Initialize all per-user stores needed for offline operation.
     // This mirrors activate_session but skips online-only services
     // (MusicBrainz, ListenBrainz, Last.fm, API cache, artist vectors).
-    let library = app.state::<crate::library::commands::LibraryState>();
+    let library = app.state::<crate::library::LibraryState>();
     let offline = app.state::<crate::offline::OfflineState>();
     let offline_cache = app.state::<crate::offline_cache::OfflineCacheState>();
     let audio_settings = app.state::<crate::config::audio_settings::AudioSettingsState>();
