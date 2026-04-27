@@ -7,13 +7,13 @@
 //! - Progress events for UI updates
 
 pub mod cmaf_store;
-pub mod commands;
 pub mod db;
 pub mod downloader;
 pub mod metadata;
 pub mod migration;
 pub mod path_validator;
 pub mod playback;
+pub mod purge;
 pub mod secret_vault;
 
 use serde::{Deserialize, Serialize};
