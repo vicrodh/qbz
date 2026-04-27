@@ -9,7 +9,6 @@
 //! - Offline mode (accessibility of network content)
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
@@ -368,51 +367,6 @@ pub fn get_network_mounts() -> Vec<MountInfo> {
 /// Get all mounts with their classifications
 pub fn get_all_mounts() -> Vec<MountInfo> {
     parse_mount_info().unwrap_or_default()
-}
-
-// Tauri commands
-pub mod commands {
-    use super::*;
-
-    /// Get all network mounts currently visible
-    #[tauri::command]
-    pub fn get_network_mounts_cmd() -> Vec<MountInfo> {
-        get_network_mounts()
-    }
-
-    /// Check if a network mount is currently accessible
-    #[tauri::command]
-    pub fn check_mount_accessible(mount_point: String) -> bool {
-        check_mount_accessibility(&mount_point)
-    }
-
-    /// Batch check multiple paths for network status
-    #[tauri::command]
-    pub fn check_network_paths_batch(paths: Vec<String>) -> HashMap<String, NetworkPathInfo> {
-        let mounts = parse_mount_info().unwrap_or_default();
-
-        paths
-            .into_iter()
-            .map(|p| {
-                let path = Path::new(&p);
-                let info = if let Some(mount) = find_mount_for_path(path, &mounts) {
-                    let is_network = matches!(mount.kind, MountKind::Network(_));
-                    NetworkPathInfo {
-                        is_network,
-                        mount_info: Some(mount),
-                        path: p.clone(),
-                    }
-                } else {
-                    NetworkPathInfo {
-                        is_network: false,
-                        mount_info: None,
-                        path: p.clone(),
-                    }
-                };
-                (p, info)
-            })
-            .collect()
-    }
 }
 
 #[cfg(not(target_os = "linux"))]
