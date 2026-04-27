@@ -327,9 +327,14 @@ pub async fn v2_playlist_get_custom_order(
         .manager()
         .check_requirements(CommandRequirement::RequiresUserSession)
         .await?;
-    crate::library::playlist_get_custom_order(playlistId, library_state)
-        .await
-        .map_err(RuntimeError::Internal)
+    log::info!("Command: playlist_get_custom_order {}", playlistId);
+
+    let guard__ = library_state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session - please log in".to_string()))?;
+    db.get_playlist_custom_order(playlistId)
+        .map_err(|e| RuntimeError::Internal(e.to_string()))
 }
 
 #[tauri::command]
@@ -343,9 +348,14 @@ pub async fn v2_playlist_has_custom_order(
         .manager()
         .check_requirements(CommandRequirement::RequiresUserSession)
         .await?;
-    crate::library::playlist_has_custom_order(playlistId, library_state)
-        .await
-        .map_err(RuntimeError::Internal)
+    log::info!("Command: playlist_has_custom_order {}", playlistId);
+
+    let guard__ = library_state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session - please log in".to_string()))?;
+    db.has_playlist_custom_order(playlistId)
+        .map_err(|e| RuntimeError::Internal(e.to_string()))
 }
 
 #[tauri::command]
@@ -359,9 +369,17 @@ pub async fn v2_playlist_get_tracks_with_local_copies(
         .manager()
         .check_requirements(CommandRequirement::RequiresUserSession)
         .await?;
-    crate::library::playlist_get_tracks_with_local_copies(trackIds, library_state)
-        .await
-        .map_err(RuntimeError::Internal)
+
+    let guard__ = library_state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session - please log in".to_string()))?;
+
+    let local_ids = db
+        .get_tracks_with_local_copies(&trackIds)
+        .map_err(|e| RuntimeError::Internal(e.to_string()))?;
+
+    Ok(local_ids.into_iter().collect())
 }
 
 /// Search playlists (V2 - uses QbzCore)

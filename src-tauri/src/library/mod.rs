@@ -85,9 +85,6 @@ pub use state::{
     BackfillReport, CleanupResult, LibraryAlbumMetadataUpdateRequest,
     LibraryAlbumTrackMetadataUpdate, LibraryState,
 };
-pub use commands::{
-    playlist_get_custom_order, playlist_get_tracks_with_local_copies, playlist_has_custom_order,
-};
 
 use std::path::Path;
 use std::sync::atomic::AtomicBool;

@@ -747,23 +747,6 @@ pub async fn playlist_increment_play_count(
 
 // === Playlist Custom Track Order ===
 
-/// Get custom track order for a playlist
-/// Returns Vec of (track_id, is_local, position)
-#[tauri::command]
-pub async fn playlist_get_custom_order(
-    playlist_id: u64,
-    state: State<'_, LibraryState>,
-) -> Result<Vec<(i64, bool, i32)>, String> {
-    log::info!("Command: playlist_get_custom_order {}", playlist_id);
-
-    let guard__ = state.db.lock().await;
-    let db = guard__
-        .as_ref()
-        .ok_or("No active session - please log in")?;
-    db.get_playlist_custom_order(playlist_id)
-        .map_err(|e| e.to_string())
-}
-
 /// Initialize custom order for a playlist from current track arrangement
 #[tauri::command]
 pub async fn playlist_init_custom_order(
@@ -827,22 +810,6 @@ pub async fn playlist_move_track(
         .as_ref()
         .ok_or("No active session - please log in")?;
     db.move_playlist_track(playlist_id, track_id, is_local, new_position)
-        .map_err(|e| e.to_string())
-}
-
-/// Check if a playlist has custom order defined
-#[tauri::command]
-pub async fn playlist_has_custom_order(
-    playlist_id: u64,
-    state: State<'_, LibraryState>,
-) -> Result<bool, String> {
-    log::info!("Command: playlist_has_custom_order {}", playlist_id);
-
-    let guard__ = state.db.lock().await;
-    let db = guard__
-        .as_ref()
-        .ok_or("No active session - please log in")?;
-    db.has_playlist_custom_order(playlist_id)
         .map_err(|e| e.to_string())
 }
 
@@ -1287,25 +1254,6 @@ pub async fn playlist_get_local_track_id(
     // Fallback to metadata
     db.get_local_track_id_by_metadata(&title, &artist, &album)
         .map_err(|e| e.to_string())
-}
-
-/// Batch check which tracks have local copies (for offline mode)
-/// Returns a list of track IDs that have local versions
-#[tauri::command]
-pub async fn playlist_get_tracks_with_local_copies(
-    track_ids: Vec<u64>,
-    state: State<'_, LibraryState>,
-) -> Result<Vec<u64>, String> {
-    let guard__ = state.db.lock().await;
-    let db = guard__
-        .as_ref()
-        .ok_or("No active session - please log in")?;
-
-    let local_ids = db
-        .get_tracks_with_local_copies(&track_ids)
-        .map_err(|e| e.to_string())?;
-
-    Ok(local_ids.into_iter().collect())
 }
 
 /// Get playlists that have local content (for offline mode filtering)
