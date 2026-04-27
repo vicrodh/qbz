@@ -2,8 +2,8 @@
 //!
 //! Persists lightweight usage events for home recommendations.
 
-pub mod commands;
 pub mod db;
+pub mod helpers;
 
 use serde::{Deserialize, Serialize};
 use std::path::Path;
