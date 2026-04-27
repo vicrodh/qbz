@@ -632,6 +632,19 @@ async function handlePlaybackEvent(event: PlaybackEvent): Promise<void> {
   const prevDuration = duration;
   const prevPosition = currentTime;
   const prevWasPlaying = isPlaying;
+  // Captured BEFORE the null-out below: did we set up a gapless prefetch for
+  // the track we currently believe is playing? gaplessAttemptTrackId is set
+  // to currentTrack.id at the v2_play_next_gapless call site (line ~803).
+  // Without this gate, every external track change (QConnect renderer command,
+  // MPRIS, etc.) while qbz is the local renderer would mis-classify as a
+  // gapless transition and run the onGaplessTransition callback every backend
+  // tick (~1Hz) without ever updating currentTrack — leaving the UI stale and
+  // spamming v2_next_track.
+  const gaplessAttemptedForCurrent =
+    gaplessAttemptTrackId !== null
+    && currentTrack !== null
+    && gaplessAttemptTrackId === currentTrack.id;
+
   if (event.track_id !== 0 && gaplessAttemptTrackId !== null && gaplessAttemptTrackId !== event.track_id) {
     gaplessAttemptTrackId = null;
   }
@@ -639,12 +652,15 @@ async function handlePlaybackEvent(event: PlaybackEvent): Promise<void> {
   // Gapless transition: backend changed track_id because gapless playback advanced
   // Handle this BEFORE the external track change handler to prevent stale queue lookups
   // Skip when remote control mode is active — external service controls transitions.
+  // Requires gaplessAttemptedForCurrent so external track changes fall through
+  // to the "track changed externally" block (which actually updates currentTrack).
   const isGaplessTransition = !remoteControlMode
     && event.track_id !== 0
     && currentTrack
     && event.track_id !== currentTrack.id
     && event.is_playing
     && event.gapless_next_track_id === 0
+    && gaplessAttemptedForCurrent
     && onGaplessTransition;
 
   if (isGaplessTransition) {
