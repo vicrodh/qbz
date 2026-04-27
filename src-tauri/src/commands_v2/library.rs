@@ -767,12 +767,24 @@ pub async fn v2_library_clear_thumbnails_cache() -> Result<u64, String> {
 #[tauri::command]
 #[allow(non_snake_case)]
 pub async fn v2_library_get_thumbnail(artworkPath: String) -> Result<String, String> {
-    crate::library::library_get_thumbnail(artworkPath).await
+    log::debug!("Command: library_get_thumbnail for {}", artworkPath);
+
+    let source_path = std::path::PathBuf::from(&artworkPath);
+
+    if !source_path.exists() {
+        return Err(format!("Artwork file not found: {}", artworkPath));
+    }
+
+    let thumbnail_path =
+        thumbnails::get_or_generate_thumbnail(&source_path).map_err(|e| e.to_string())?;
+
+    Ok(thumbnail_path.to_string_lossy().to_string())
 }
 
 #[tauri::command]
 pub async fn v2_library_get_thumbnails_cache_size() -> Result<u64, String> {
-    crate::library::library_get_thumbnails_cache_size().await
+    log::debug!("Command: library_get_thumbnails_cache_size");
+    thumbnails::get_cache_size().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -2258,7 +2270,51 @@ pub async fn v2_library_cleanup_missing_files(
 pub async fn v2_library_fetch_missing_artwork(
     state: State<'_, LibraryState>,
 ) -> Result<u32, String> {
-    crate::library::library_fetch_missing_artwork(state).await
+    log::info!("Command: library_fetch_missing_artwork");
+
+    // Get Discogs client (proxy handles credentials)
+    let discogs = crate::discogs::DiscogsClient::new();
+
+    let artwork_cache = get_artwork_cache_dir();
+    let mut updated_count = 0u32;
+
+    // Get all albums without artwork
+    let albums_without_artwork: Vec<(String, String, String)> = {
+        let guard__ = state.db.lock().await;
+        let db = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
+        db.get_albums_without_artwork().map_err(|e| e.to_string())?
+    };
+
+    log::info!(
+        "Found {} albums without artwork",
+        albums_without_artwork.len()
+    );
+
+    for (group_key, album, artist) in albums_without_artwork {
+        // Try to fetch from Discogs
+        if let Some(artwork_path) = discogs.fetch_artwork(&artist, &album, &artwork_cache).await {
+            // Update all tracks in this album with the artwork
+            let guard__ = state.db.lock().await;
+            let db = guard__
+                .as_ref()
+                .ok_or("No active session - please log in")?;
+            if db
+                .update_album_group_artwork(&group_key, &artwork_path)
+                .is_ok()
+            {
+                updated_count += 1;
+                log::info!("Updated artwork for {} - {}", artist, album);
+            }
+        }
+
+        // Small delay to respect rate limits (60 requests/min)
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    }
+
+    log::info!("Fetched artwork for {} albums from Discogs", updated_count);
+    Ok(updated_count)
 }
 
 #[tauri::command]
