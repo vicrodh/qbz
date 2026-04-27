@@ -9,10 +9,12 @@ use qconnect_app::{QConnectQueueState, QConnectRendererState};
 use qconnect_core::QueueItem;
 use serde::{Deserialize, Serialize};
 
+use super::queue_resolution::{
+    find_cursor_index_by_queue_item_id, normalize_current_queue_item_id_from_queue_state,
+    ordered_queue_cursors, QconnectOrderedQueueCursor,
+};
 use super::{
-    default_qconnect_device_info, find_cursor_index_by_queue_item_id,
-    normalize_current_queue_item_id_from_queue_state, ordered_queue_cursors,
-    resolve_qconnect_device_uuid, QconnectOrderedQueueCursor, QconnectQueueVersionPayload,
+    default_qconnect_device_info, resolve_qconnect_device_uuid, QconnectQueueVersionPayload,
     QconnectRemoteSyncState, QconnectVisibleQueueProjection,
 };
 
