@@ -16,8 +16,9 @@ use super::queue_resolution::{
     dedupe_track_ids, resolve_core_shuffle_order, resolve_remote_start_index,
 };
 use super::session::is_peer_renderer_active;
+use super::track_loading::ensure_remote_track_loaded;
 use super::{
-    ensure_remote_track_loaded, model_track_to_core_queue_track, normalize_volume_to_fraction,
+    model_track_to_core_queue_track, normalize_volume_to_fraction,
     qconnect_repeat_mode_from_loop_mode, QconnectRemoteSyncState, PLAYING_STATE_PAUSED,
     PLAYING_STATE_PLAYING, PLAYING_STATE_STOPPED, PLAYING_STATE_UNKNOWN,
 };
