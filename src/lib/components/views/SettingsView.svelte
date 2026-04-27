@@ -69,7 +69,6 @@
     getStatus as getOfflineStatus,
     getSettings as getOfflineSettings,
     setManualOffline,
-    setShowPartialPlaylists,
     setAllowCastWhileOffline,
     setAllowImmediateScrobbling,
     setAllowAccumulatedScrobbling,
@@ -2565,14 +2564,6 @@
       showToast($t('offline.noNetworkToast'), 'error');
     } finally {
       isCheckingNetwork = false;
-    }
-  }
-
-  async function handleShowPartialPlaylistsChange(enabled: boolean) {
-    try {
-      await setShowPartialPlaylists(enabled);
-    } catch (error) {
-      console.error('Failed to set show partial playlists:', error);
     }
   }
 
