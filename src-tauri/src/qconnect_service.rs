@@ -359,7 +359,14 @@ struct QconnectRemoteSyncState {
     /// Session topology — stored from session management events (types 81-87).
     session: QconnectSessionState,
     session_renderer_states: HashMap<i32, QconnectSessionRendererState>,
+    /// Track of the most recent load attempt across paths (V2 play
+    /// handoff and ensure_remote_track_loaded). Used to suppress
+    /// redundant reloads when an echo SetState arrives during the
+    /// in-progress buffer/decode window of a previously triggered load.
+    last_load_attempt: Option<(u64, std::time::Instant)>,
 }
+
+const LOAD_ATTEMPT_DEDUP_WINDOW: std::time::Duration = std::time::Duration::from_secs(5);
 
 #[derive(Debug, Clone, Default)]
 struct QconnectSessionRendererState {
@@ -2234,13 +2241,17 @@ impl QconnectServiceState {
         track_id: u64,
         app_handle: &AppHandle,
     ) -> Result<bool, String> {
-        let (app, session) = {
+        let (app, session, sync_state) = {
             let guard = self.inner.lock().await;
             let Some(runtime) = guard.runtime.as_ref() else {
                 return Ok(false);
             };
             let session = runtime.sync_state.lock().await.session.clone();
-            (Arc::clone(&runtime.app), session)
+            (
+                Arc::clone(&runtime.app),
+                session,
+                Arc::clone(&runtime.sync_state),
+            )
         };
 
         let active_renderer_id = session.active_renderer_id;
@@ -2256,6 +2267,14 @@ impl QconnectServiceState {
         };
 
         if let Some(reason) = early_return_reason {
+            // Mark this track as a recent load attempt when the play is
+            // about to happen locally — this prevents the cloud's echo
+            // SetState (arriving ~1-2s later) from re-triggering a
+            // redundant load while the V2 path is still buffering.
+            if reason == "active_renderer_is_local" {
+                let mut state = sync_state.lock().await;
+                state.last_load_attempt = Some((track_id, std::time::Instant::now()));
+            }
             emit_qconnect_diagnostic(
                 app_handle,
                 "qconnect:play_track_handoff",
@@ -3007,10 +3026,6 @@ async fn apply_renderer_command_to_corebridge(
             ..
         } => {
             let resolved_playing_state = renderer_state.playing_state.or(*playing_state);
-            let target_position_secs = renderer_state
-                .current_position_ms
-                .or(*current_position_ms)
-                .map(|position_ms| position_ms / 1000);
             let mut projection_renderer_state = renderer_state.clone();
             if projection_renderer_state.current_track.is_none() {
                 projection_renderer_state.current_track = current_track.clone();
@@ -3019,8 +3034,11 @@ async fn apply_renderer_command_to_corebridge(
                 projection_renderer_state.next_track = next_track.clone();
             }
             let resolved_current_track = projection_renderer_state.current_track.as_ref();
-            let mut reloaded_for_restart = false;
-            if let Some(current_track) = resolved_current_track {
+            let peer_renderer_active = {
+                let state = sync_state.lock().await;
+                is_peer_renderer_active(&state.session)
+            };
+            if let Some(projected_track) = resolved_current_track {
                 let queue_state = {
                     let state = sync_state.lock().await;
                     state.last_remote_queue_state.clone()
@@ -3037,64 +3055,54 @@ async fn apply_renderer_command_to_corebridge(
                     false
                 };
 
-                if !projection_applied {
-                    // Guard: skip realigning the CoreBridge cursor when local
-                    // IS the active renderer. In that case this command is
-                    // just our own state echoed back by the Qobuz cloud, so
-                    // aligning here races with the user's already-advanced
-                    // local cursor and pushes a duplicate index into history.
-                    // Mirrors the gating used in sync_active_renderer_projection
-                    // (line ~1223): align when local is NOT the active renderer.
-                    // Bug #316.
-                    let should_align = {
-                        let state = sync_state.lock().await;
-                        !is_local_renderer_active(&state.session)
-                    };
-                    if should_align {
+                // Track-manipulation operations (cursor align, force-restart,
+                // ensure_remote_track_loaded) only run when the COMMAND
+                // explicitly specifies a current_track. The projection's
+                // resolved_current_track can be stale: when the cloud sends
+                // a state-only update (pause/resume) with command.current_track=null,
+                // the projection falls back to renderer_state.current_track,
+                // which is the cloud's last-known view of qbz's playback —
+                // potentially behind qbz's actual local advance. Using that
+                // stale value to align/load causes spurious track switches
+                // (e.g., pause from iOS made qbz jump back to a previous
+                // track). The outer renderer_state-based projection is still
+                // used for shuffle sync above and downstream playing_state /
+                // seek operations, which remain safe because they don't
+                // change the queue cursor or load tracks.
+                let _ = projected_track; // retained for shuffle projection above
+                if let Some(command_track) = current_track.as_ref() {
+                    if !projection_applied {
                         if let Err(err) =
-                            align_corebridge_queue_cursor(bridge, current_track.track_id).await
+                            align_corebridge_queue_cursor(bridge, command_track.track_id).await
                         {
                             log::warn!(
                                 "[QConnect] Failed to align CoreBridge queue cursor: {err}"
                             );
                         }
-                    } else {
-                        log::debug!(
-                            "[QConnect] Skipping align_corebridge_queue_cursor: local renderer is active (echo from cloud); track_id={}",
-                            current_track.track_id
-                        );
-                    }
-                }
-
-                if matches!(
-                    resolved_playing_state,
-                    Some(PLAYING_STATE_PLAYING | PLAYING_STATE_PAUSED)
-                ) {
-                    if let Some(target_position_secs) = target_position_secs {
-                        let playback_state = bridge.get_playback_state();
-                        if should_force_remote_track_restart(
-                            &playback_state,
-                            current_track.track_id,
-                            target_position_secs,
-                        ) {
-                            log::info!(
-                                "[QConnect] Restarting remote track {} from the beginning (current={}s target={}s)",
-                                current_track.track_id,
-                                playback_state.position,
-                                target_position_secs
-                            );
-                            load_remote_track_into_player(bridge, current_track.track_id).await?;
-                            reloaded_for_restart = true;
-                        }
                     }
 
-                    if !reloaded_for_restart {
+                    if matches!(
+                        resolved_playing_state,
+                        Some(PLAYING_STATE_PLAYING | PLAYING_STATE_PAUSED)
+                    ) {
+                        // Force-restart removed: the cloud routinely re-emits
+                        // SetState with current_position_ms=0 for the same
+                        // track when only secondary fields change (e.g.,
+                        // next_track corrections, queue_item_id refreshes).
+                        // Reloading the stream on every echo caused first-
+                        // track hiccup on album change and "needs several
+                        // taps" on prev/next. Track-change cases are handled
+                        // by align_corebridge_queue_cursor + ensure_remote_
+                        // track_loaded below; legitimate seek-to-start from
+                        // a peer controller can use the seek path with
+                        // target>1s if needed.
                         if let Err(err) =
-                            ensure_remote_track_loaded(bridge, current_track.track_id).await
+                            ensure_remote_track_loaded(bridge, sync_state, command_track.track_id)
+                                .await
                         {
                             log::warn!(
                                 "[QConnect] Failed to load remote track {}: {err}",
-                                current_track.track_id
+                                command_track.track_id
                             );
                         }
                     }
@@ -3120,15 +3128,27 @@ async fn apply_renderer_command_to_corebridge(
             }
 
             if let Some(position_ms) = renderer_state.current_position_ms.or(*current_position_ms) {
-                let current_pos_secs = bridge.get_playback_state().position;
+                let playback_state = bridge.get_playback_state();
+                let current_pos_secs = playback_state.position;
                 let target_secs = position_ms / 1000;
-                if reloaded_for_restart && target_secs <= 1 {
-                    return Ok(());
-                }
-                // Only seek if the position differs by more than 2 seconds to
-                // avoid audio hiccups from redundant seeks (e.g. when the server
-                // echoes back our own position in a SET_STATE after queue_load).
-                if current_pos_secs.abs_diff(target_secs) > 2 {
+                // Reject echo seeks: when the command targets the same track
+                // qbz is already playing AND target<=1s while local is well
+                // ahead, this is the cloud re-emitting a stale SetState
+                // (frequently fires on next_track corrections and queue_
+                // item_id refreshes). A real peer "go to start" intent
+                // would target the same track as the local one but the
+                // round-trip to qbz is already a few seconds, making this
+                // case indistinguishable from echo — favor stability.
+                let is_echo_reset = current_track
+                    .as_ref()
+                    .map(|cmd_track| cmd_track.track_id == playback_state.track_id)
+                    .unwrap_or(false)
+                    && target_secs <= 1
+                    && current_pos_secs > 2;
+                if peer_renderer_active
+                    && !is_echo_reset
+                    && current_pos_secs.abs_diff(target_secs) > 2
+                {
                     log::info!(
                         "[QConnect] SetState seek: current={}s target={}s",
                         current_pos_secs,
@@ -3208,6 +3228,13 @@ async fn sync_corebridge_remote_shuffle_projection(
             .map(|item| item.queue_item_id),
         renderer_state.next_track.as_ref().map(|item| item.track_id),
     );
+
+    // Same deferral rule as materialize_remote_queue_to_corebridge: do
+    // not invent an identity shuffle when the cloud hasn't yet sent the
+    // authoritative shuffle_order. Wait for the second QueueUpdated.
+    if core_shuffle_order.is_none() {
+        return Ok(false);
+    }
 
     let should_apply = {
         let state = sync_state.lock().await;
@@ -3383,17 +3410,29 @@ async fn materialize_remote_queue_to_corebridge(
         renderer_next_queue_item_id,
         renderer_next_track_id,
     );
+    // The cloud sends two QueueUpdated events during a shuffle toggle:
+    // first with shuffle_mode=true and shuffle_order=null (the flag
+    // broadcasts immediately), then ~400ms later with the computed
+    // shuffle_order. If we mark shuffle_enabled=true on the first event
+    // with an absent order, set_queue_with_order falls into its identity
+    // path (0,1,2,...) — that is qbz inventing a sequence that diverges
+    // from the order the cloud is about to authorize. Defer the engine
+    // shuffle activation until the authoritative order is present.
+    let effective_shuffle_enabled = queue_state.shuffle_mode && core_shuffle_order.is_some();
     log::info!(
-        "[QConnect] materialize_remote_queue: setting queue with {} tracks, start_index={:?}, local_track_id={:?}",
+        "[QConnect] materialize_remote_queue: setting queue with {} tracks, start_index={:?}, local_track_id={:?}, remote_shuffle_mode={}, shuffle_order_present={}, engine_shuffle_enabled={}",
         queue_tracks.len(),
         start_index,
-        current_playback_track_id
+        current_playback_track_id,
+        queue_state.shuffle_mode,
+        core_shuffle_order.is_some(),
+        effective_shuffle_enabled,
     );
     bridge
         .set_queue_with_order(
             queue_tracks,
             start_index,
-            queue_state.shuffle_mode,
+            effective_shuffle_enabled,
             core_shuffle_order.clone(),
         )
         .await;
@@ -3572,21 +3611,16 @@ async fn align_corebridge_queue_cursor(bridge: &CoreBridge, track_id: u64) -> Re
 
 fn should_reload_remote_track(
     playback_state: &qbz_player::PlaybackState,
-    has_loaded_audio: bool,
     track_id: u64,
 ) -> bool {
-    playback_state.track_id != track_id || !has_loaded_audio
-}
-
-fn should_force_remote_track_restart(
-    playback_state: &qbz_player::PlaybackState,
-    track_id: u64,
-    target_position_secs: u64,
-) -> bool {
-    playback_state.track_id == track_id
-        && track_id != 0
-        && target_position_secs <= 1
-        && playback_state.position > target_position_secs.saturating_add(2)
+    // Only reload when the track ID actually changed. The previous
+    // !has_loaded_audio gate fired during the buffering window of an
+    // initial load (qbz already started fetching but the audio engine
+    // hasn't reported the track as loaded yet) — when the cloud echo
+    // SetState arrived for the same track, this caused a redundant
+    // load_remote_track_into_player that interrupted the in-progress
+    // load. That was the residual first-track hiccup.
+    playback_state.track_id != track_id
 }
 
 async fn load_remote_track_into_player(bridge: &CoreBridge, track_id: u64) -> Result<(), String> {
@@ -3618,12 +3652,38 @@ async fn load_remote_track_into_player(bridge: &CoreBridge, track_id: u64) -> Re
     }
 }
 
-async fn ensure_remote_track_loaded(bridge: &CoreBridge, track_id: u64) -> Result<(), String> {
+/// Returns true if a load attempt for `track_id` was registered within the
+/// dedup window. The audio thread updates `playback_state.track_id` only
+/// after `engine.append(source)` succeeds — the buffer/decode window
+/// before that creates a gap during which an echoed SetState would
+/// otherwise re-trigger the same load and interrupt the in-progress one.
+fn is_recent_load_attempt(state: &QconnectRemoteSyncState, track_id: u64) -> bool {
+    match state.last_load_attempt {
+        Some((tid, ts)) => tid == track_id && ts.elapsed() < LOAD_ATTEMPT_DEDUP_WINDOW,
+        None => false,
+    }
+}
+
+async fn ensure_remote_track_loaded(
+    bridge: &CoreBridge,
+    sync_state: &Arc<Mutex<QconnectRemoteSyncState>>,
+    track_id: u64,
+) -> Result<(), String> {
+    {
+        let state = sync_state.lock().await;
+        if is_recent_load_attempt(&state, track_id) {
+            return Ok(());
+        }
+    }
     let playback_state = bridge.get_playback_state();
-    if !should_reload_remote_track(&playback_state, bridge.has_loaded_audio(), track_id) {
+    if !should_reload_remote_track(&playback_state, track_id) {
         return Ok(());
     }
 
+    {
+        let mut state = sync_state.lock().await;
+        state.last_load_attempt = Some((track_id, std::time::Instant::now()));
+    }
     load_remote_track_into_player(bridge, track_id).await
 }
 
@@ -5579,33 +5639,6 @@ mod tests {
     }
 
     #[test]
-    fn forces_remote_restart_for_same_track_reset_to_zero() {
-        let playback_state = qbz_player::PlaybackState {
-            is_playing: false,
-            position: 248,
-            duration: 251,
-            track_id: 72930174,
-            volume: 1.0,
-        };
-
-        assert!(super::should_force_remote_track_restart(
-            &playback_state,
-            72930174,
-            0,
-        ));
-        assert!(!super::should_force_remote_track_restart(
-            &playback_state,
-            72930174,
-            120,
-        ));
-        assert!(!super::should_force_remote_track_restart(
-            &playback_state,
-            72930175,
-            0,
-        ));
-    }
-
-    #[test]
     fn resolves_current_and_next_queue_item_ids_from_queue_order() {
         let queue: QConnectQueueState = serde_json::from_value(json!({
             "version": { "major": 4, "minor": 1 },
@@ -6026,7 +6059,7 @@ mod tests {
     }
 
     #[test]
-    fn reloads_remote_track_when_same_track_id_has_no_loaded_audio() {
+    fn reloads_remote_track_only_when_track_id_changed() {
         let playback_state = qbz_player::PlaybackState {
             is_playing: false,
             position: 0,
@@ -6035,19 +6068,14 @@ mod tests {
             volume: 1.0,
         };
 
-        assert!(super::should_reload_remote_track(
-            &playback_state,
-            false,
-            193849747,
-        ));
+        // Same track: do not reload, even if buffering still in progress.
         assert!(!super::should_reload_remote_track(
             &playback_state,
-            true,
             193849747,
         ));
+        // Different track: reload.
         assert!(super::should_reload_remote_track(
             &playback_state,
-            true,
             126886862,
         ));
     }
