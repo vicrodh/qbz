@@ -721,7 +721,7 @@ pub async fn v2_get_track_by_path(
 pub fn v2_check_network_path(
     path: String,
 ) -> Result<crate::network::NetworkPathInfo, RuntimeError> {
-    Ok(crate::network::commands::check_network_path(path))
+    Ok(crate::network::is_network_path(std::path::Path::new(&path)))
 }
 
 #[tauri::command]

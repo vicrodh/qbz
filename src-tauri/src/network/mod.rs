@@ -374,12 +374,6 @@ pub fn get_all_mounts() -> Vec<MountInfo> {
 pub mod commands {
     use super::*;
 
-    /// Check if a path is on a network filesystem
-    #[tauri::command]
-    pub fn check_network_path(path: String) -> NetworkPathInfo {
-        is_network_path(Path::new(&path))
-    }
-
     /// Get all network mounts currently visible
     #[tauri::command]
     pub fn get_network_mounts_cmd() -> Vec<MountInfo> {
