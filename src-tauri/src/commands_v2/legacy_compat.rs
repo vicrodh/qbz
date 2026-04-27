@@ -649,9 +649,30 @@ pub async fn v2_check_album_fully_cached(
     albumId: String,
     cache_state: State<'_, crate::offline_cache::OfflineCacheState>,
 ) -> Result<bool, RuntimeError> {
-    crate::offline_cache::commands::check_album_fully_cached(albumId, cache_state)
-        .await
-        .map_err(RuntimeError::Internal)
+    let guard__ = cache_state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session - please log in".to_string()))?;
+
+    // Get all tracks for this album
+    let tracks = db.get_all_tracks().map_err(RuntimeError::Internal)?;
+    let album_tracks: Vec<_> = tracks
+        .into_iter()
+        .filter(|t| t.album_id.as_deref() == Some(&albumId))
+        .collect();
+
+    if album_tracks.is_empty() {
+        return Ok(false);
+    }
+
+    // Check if all tracks are ready
+    for track in album_tracks {
+        if track.status != crate::offline_cache::OfflineCacheStatus::Ready {
+            return Ok(false);
+        }
+    }
+
+    Ok(true)
 }
 
 #[tauri::command]
@@ -660,9 +681,43 @@ pub async fn v2_check_albums_fully_cached_batch(
     albumIds: Vec<String>,
     cache_state: State<'_, crate::offline_cache::OfflineCacheState>,
 ) -> Result<std::collections::HashMap<String, bool>, RuntimeError> {
-    crate::offline_cache::commands::check_albums_fully_cached_batch(albumIds, cache_state)
-        .await
-        .map_err(RuntimeError::Internal)
+    use std::collections::HashMap;
+
+    if albumIds.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let guard__ = cache_state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session - please log in".to_string()))?;
+
+    let tracks = db.get_all_tracks().map_err(RuntimeError::Internal)?;
+
+    // Group tracks by album_id
+    let mut album_tracks: HashMap<&str, (usize, usize)> = HashMap::new(); // (total, ready)
+    for track in &tracks {
+        if let Some(ref aid) = track.album_id {
+            let entry = album_tracks.entry(aid.as_str()).or_insert((0, 0));
+            entry.0 += 1;
+            if track.status == crate::offline_cache::OfflineCacheStatus::Ready {
+                entry.1 += 1;
+            }
+        }
+    }
+
+    let result: HashMap<String, bool> = albumIds
+        .into_iter()
+        .map(|id| {
+            let fully_cached = album_tracks
+                .get(id.as_str())
+                .map(|(total, ready)| *total > 0 && *total == *ready)
+                .unwrap_or(false);
+            (id, fully_cached)
+        })
+        .collect();
+
+    Ok(result)
 }
 
 /// Shared helper: spawn the download task for a single track.
