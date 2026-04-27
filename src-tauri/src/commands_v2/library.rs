@@ -1296,14 +1296,56 @@ pub fn v2_set_show_network_folders_in_manual_offline(
 pub async fn v2_get_offline_status(
     state: State<'_, OfflineState>,
 ) -> Result<crate::offline::OfflineStatus, String> {
-    crate::offline::commands::get_offline_status(state).await
+    let settings = {
+        let guard__ = state
+            .store
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        let store = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
+        store.get_settings()?
+    };
+
+    // If manual offline mode is enabled, return immediately
+    if settings.manual_offline_mode {
+        return Ok(crate::offline::OfflineStatus {
+            is_offline: true,
+            reason: Some(crate::offline::OfflineReason::ManualOverride),
+            manual_mode_enabled: true,
+        });
+    }
+
+    // Check network connectivity
+    let has_network = crate::offline::check_network_connectivity().await;
+
+    if !has_network {
+        return Ok(crate::offline::OfflineStatus {
+            is_offline: true,
+            reason: Some(crate::offline::OfflineReason::NoNetwork),
+            manual_mode_enabled: false,
+        });
+    }
+
+    Ok(crate::offline::OfflineStatus {
+        is_offline: false,
+        reason: None,
+        manual_mode_enabled: false,
+    })
 }
 
 #[tauri::command]
 pub fn v2_get_offline_settings(
     state: State<'_, OfflineState>,
 ) -> Result<crate::offline::OfflineSettings, String> {
-    crate::offline::commands::get_offline_settings(state)
+    let guard__ = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
+    store.get_settings()
 }
 
 #[tauri::command]
@@ -1313,12 +1355,111 @@ pub async fn v2_set_manual_offline(
     audio_state: State<'_, crate::config::audio_settings::AudioSettingsState>,
     app_handle: tauri::AppHandle,
 ) -> Result<crate::offline::OfflineStatus, String> {
-    crate::offline::commands::set_manual_offline(enabled, state, audio_state, app_handle).await
+    use tauri::Emitter;
+
+    // 1) Persist the manual offline flag first so any concurrent reads
+    //    see the new mode immediately.
+    let (was_offline, stream_first_before): (bool, Option<bool>) = {
+        let guard__ = state
+            .store
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        let store = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
+        let prev = store
+            .get_settings()
+            .map(|s| s.manual_offline_mode)
+            .unwrap_or(false);
+        let snapshot = store
+            .get_pre_offline_stream_first_track()
+            .unwrap_or(None);
+        store.set_manual_offline_mode(enabled)?;
+        (prev, snapshot)
+    };
+
+    // 2) Coordinate the stream_first_track snapshot/restore. This is best-
+    //    effort — if the audio store isn't initialized yet (pre-login), we
+    //    just skip; the offline flag itself has been persisted.
+    if enabled && !was_offline {
+        // Entering offline mode: stash current value and force to false.
+        let current = {
+            let guard = audio_state
+                .store
+                .lock()
+                .map_err(|e| format!("Audio settings lock error: {}", e))?;
+            guard
+                .as_ref()
+                .and_then(|s| s.get_settings().ok())
+                .map(|s| s.stream_first_track)
+        };
+        if let Some(current_value) = current {
+            {
+                let guard = state
+                    .store
+                    .lock()
+                    .map_err(|e| format!("Lock error: {}", e))?;
+                if let Some(store) = guard.as_ref() {
+                    let _ = store.set_pre_offline_stream_first_track(Some(current_value));
+                }
+            }
+            if current_value {
+                let guard = audio_state
+                    .store
+                    .lock()
+                    .map_err(|e| format!("Audio settings lock error: {}", e))?;
+                if let Some(store) = guard.as_ref() {
+                    let _ = store.set_stream_first_track(false);
+                    log::info!(
+                        "[Offline] stream_first_track snapshot={}; forced to false while offline",
+                        current_value
+                    );
+                }
+            }
+        }
+    } else if !enabled && was_offline {
+        // Exiting offline mode: restore snapshot if we have one.
+        if let Some(snapshot_value) = stream_first_before {
+            {
+                let guard = audio_state
+                    .store
+                    .lock()
+                    .map_err(|e| format!("Audio settings lock error: {}", e))?;
+                if let Some(store) = guard.as_ref() {
+                    let _ = store.set_stream_first_track(snapshot_value);
+                    log::info!(
+                        "[Offline] restored stream_first_track to {}",
+                        snapshot_value
+                    );
+                }
+            }
+            {
+                let guard = state
+                    .store
+                    .lock()
+                    .map_err(|e| format!("Lock error: {}", e))?;
+                if let Some(store) = guard.as_ref() {
+                    let _ = store.set_pre_offline_stream_first_track(None);
+                }
+            }
+        }
+    }
+
+    // 3) Get updated status
+    let status = v2_get_offline_status(state).await?;
+
+    // 4) Emit events. offline-status-changed for the offline store;
+    //    audio-settings-changed so the SettingsView reloads its local
+    //    state of stream_first_track (we may have just mutated it).
+    let _ = app_handle.emit("offline-status-changed", &status);
+    let _ = app_handle.emit("audio-settings-changed", ());
+
+    Ok(status)
 }
 
 #[tauri::command]
 pub async fn v2_check_network() -> bool {
-    crate::offline::commands::check_network().await
+    crate::offline::check_network_connectivity().await
 }
 
 #[tauri::command]
@@ -1391,7 +1532,14 @@ pub fn v2_mark_scrobbles_sent(ids: Vec<i64>, state: State<'_, OfflineState>) -> 
 pub fn v2_get_pending_playlists(
     state: State<'_, OfflineState>,
 ) -> Result<Vec<crate::offline::PendingPlaylist>, String> {
-    crate::offline::commands::get_pending_playlists(state)
+    let guard__ = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
+    store.get_pending_playlists()
 }
 
 #[tauri::command]
