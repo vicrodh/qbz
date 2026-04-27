@@ -1868,13 +1868,6 @@ pub async fn playlist_clear_custom_order(
 
 // === Discogs Artwork ===
 
-/// Check if Discogs credentials are configured (proxy handles credentials)
-#[tauri::command]
-pub async fn discogs_has_credentials() -> Result<bool, String> {
-    // Proxy always provides credentials
-    Ok(true)
-}
-
 /// Fetch missing artwork from Discogs for albums without artwork
 /// Returns number of albums updated
 #[tauri::command]
@@ -2935,45 +2928,6 @@ pub async fn playlist_get_offline_available(
         .map_err(|e| e.to_string())?;
 
     Ok(playlists.iter().map(|p| p.qobuz_playlist_id).collect())
-}
-
-// === Discogs Artwork ===
-
-/// Search Discogs for artwork options
-#[tauri::command]
-pub async fn discogs_search_artwork(
-    artist: String,
-    album: String,
-    catalog_number: Option<String>,
-) -> Result<Vec<crate::discogs::DiscogsImageOption>, String> {
-    log::info!(
-        "Command: discogs_search_artwork {} - {} (catalog: {:?})",
-        artist,
-        album,
-        catalog_number
-    );
-
-    let client = DiscogsClient::new();
-    client
-        .search_artwork_options(&artist, &album, catalog_number.as_deref())
-        .await
-}
-
-/// Download and save Discogs artwork
-#[tauri::command]
-pub async fn discogs_download_artwork(
-    image_url: String,
-    artist: String,
-    album: String,
-) -> Result<String, String> {
-    log::info!("Command: discogs_download_artwork from {}", image_url);
-
-    let cache_dir = get_artwork_cache_dir();
-    let client = DiscogsClient::new();
-
-    client
-        .download_artwork_from_url(&image_url, &cache_dir, &artist, &album)
-        .await
 }
 
 /// Get multiple tracks by their IDs

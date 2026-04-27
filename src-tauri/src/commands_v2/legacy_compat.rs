@@ -550,9 +550,8 @@ pub async fn v2_library_update_folder_settings(
 
 #[tauri::command]
 pub async fn v2_discogs_has_credentials() -> Result<bool, RuntimeError> {
-    crate::library::commands::discogs_has_credentials()
-        .await
-        .map_err(RuntimeError::Internal)
+    // Proxy always provides credentials.
+    Ok(true)
 }
 
 #[tauri::command]
@@ -562,7 +561,16 @@ pub async fn v2_discogs_search_artwork(
     album: String,
     catalogNumber: Option<String>,
 ) -> Result<Vec<crate::discogs::DiscogsImageOption>, RuntimeError> {
-    crate::library::commands::discogs_search_artwork(artist, album, catalogNumber)
+    log::info!(
+        "Command: v2_discogs_search_artwork {} - {} (catalog: {:?})",
+        artist,
+        album,
+        catalogNumber
+    );
+
+    let client = crate::discogs::DiscogsClient::new();
+    client
+        .search_artwork_options(&artist, &album, catalogNumber.as_deref())
         .await
         .map_err(RuntimeError::Internal)
 }
@@ -574,7 +582,13 @@ pub async fn v2_discogs_download_artwork(
     artist: String,
     album: String,
 ) -> Result<String, RuntimeError> {
-    crate::library::commands::discogs_download_artwork(imageUrl, artist, album)
+    log::info!("Command: v2_discogs_download_artwork from {}", imageUrl);
+
+    let cache_dir = crate::library::get_artwork_cache_dir();
+    let client = crate::discogs::DiscogsClient::new();
+
+    client
+        .download_artwork_from_url(&imageUrl, &cache_dir, &artist, &album)
         .await
         .map_err(RuntimeError::Internal)
 }
