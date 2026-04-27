@@ -1676,14 +1676,29 @@ pub async fn v2_reco_get_home(
     limitFavorites: Option<u32>,
     state: State<'_, RecoState>,
 ) -> Result<HomeSeeds, String> {
-    crate::reco_store::commands::reco_get_home(
-        limitRecentAlbums,
-        limitContinueTracks,
-        limitTopArtists,
-        limitFavorites,
-        state,
-    )
-    .await
+    let limit_recent_albums = limitRecentAlbums.unwrap_or(12);
+    let limit_continue_tracks = limitContinueTracks.unwrap_or(10);
+    let limit_top_artists = limitTopArtists.unwrap_or(10);
+    let limit_favorites = limitFavorites.unwrap_or(12);
+
+    let guard__ = state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
+
+    let recently_played_album_ids = db.get_recent_album_ids(limit_recent_albums)?;
+    let continue_listening_track_ids = db.get_recent_track_ids(limit_continue_tracks)?;
+    let top_artist_ids = db.get_top_artist_ids(limit_top_artists)?;
+    let favorite_album_ids = db.get_favorite_album_ids(limit_favorites)?;
+    let favorite_track_ids = db.get_favorite_track_ids(limit_favorites)?;
+
+    Ok(HomeSeeds {
+        recently_played_album_ids,
+        continue_listening_track_ids,
+        top_artist_ids,
+        favorite_album_ids,
+        favorite_track_ids,
+    })
 }
 
 #[tauri::command]
@@ -1695,14 +1710,23 @@ pub async fn v2_reco_get_home_ml(
     limitFavorites: Option<u32>,
     state: State<'_, RecoState>,
 ) -> Result<HomeSeeds, String> {
-    crate::reco_store::commands::reco_get_home_ml(
-        limitRecentAlbums,
-        limitContinueTracks,
-        limitTopArtists,
-        limitFavorites,
-        state,
+    let limit_recent_albums = limitRecentAlbums.unwrap_or(12);
+    let limit_continue_tracks = limitContinueTracks.unwrap_or(10);
+    let limit_top_artists = limitTopArtists.unwrap_or(10);
+    let limit_favorites = limitFavorites.unwrap_or(12);
+
+    let guard__ = state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
+
+    crate::reco_store::commands::get_home_seeds_internal(
+        db,
+        limit_recent_albums,
+        limit_continue_tracks,
+        limit_top_artists,
+        limit_favorites,
     )
-    .await
 }
 
 #[tauri::command]
@@ -1716,16 +1740,216 @@ pub async fn v2_reco_get_home_resolved(
     app_state: State<'_, AppState>,
     cache_state: State<'_, ApiCacheState>,
 ) -> Result<HomeResolved, String> {
-    crate::reco_store::commands::reco_get_home_resolved(
-        limitRecentAlbums,
-        limitContinueTracks,
-        limitTopArtists,
-        limitFavorites,
-        reco_state,
-        app_state,
-        cache_state,
-    )
-    .await
+    use rand::seq::SliceRandom;
+    use std::collections::HashMap;
+
+    let limit_recent_albums = limitRecentAlbums.unwrap_or(12);
+    let limit_continue_tracks = limitContinueTracks.unwrap_or(10);
+    let limit_top_artists = limitTopArtists.unwrap_or(10);
+    let limit_favorites = limitFavorites.unwrap_or(12);
+
+    // Step 1: Get seeds (IDs) from reco DB
+    let seeds = {
+        let guard__ = reco_state.db.lock().await;
+        let db = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
+        crate::reco_store::commands::get_home_seeds_internal(
+            db,
+            limit_recent_albums,
+            limit_continue_tracks,
+            limit_top_artists,
+            limit_favorites,
+        )?
+    };
+
+    // Step 2: Collect all unique IDs needed
+    // For favorite albums: merge favorite album IDs + album IDs from favorite tracks
+    // (favorite tracks → their albums is done after track resolution)
+    let all_track_ids: Vec<u64> = {
+        let mut ids = seeds.continue_listening_track_ids.clone();
+        ids.extend(&seeds.favorite_track_ids);
+        ids.sort_unstable();
+        ids.dedup();
+        ids
+    };
+
+    let all_artist_ids: Vec<u64> = seeds.top_artist_ids.iter().map(|s| s.artist_id).collect();
+
+    // Build play_count map for artists
+    let artist_play_counts: HashMap<u64, u32> = seeds
+        .top_artist_ids
+        .iter()
+        .map(|s| (s.artist_id, s.play_count))
+        .collect();
+
+    // Step 3: Resolve all entity types in parallel.
+    // Recent albums, favorite albums, tracks, and artists are all independent.
+    let recent_albums_fut = crate::reco_store::commands::resolve_albums(
+        &seeds.recently_played_album_ids,
+        &reco_state,
+        &app_state,
+        &cache_state,
+    );
+    let favorite_albums_fut = crate::reco_store::commands::resolve_albums(
+        &seeds.favorite_album_ids,
+        &reco_state,
+        &app_state,
+        &cache_state,
+    );
+    let tracks_fut = crate::reco_store::commands::resolve_tracks(
+        &all_track_ids,
+        &reco_state,
+        &app_state,
+        &cache_state,
+    );
+    let artists_fut = crate::reco_store::commands::resolve_artists(
+        &all_artist_ids,
+        &artist_play_counts,
+        &reco_state,
+        &app_state,
+        &cache_state,
+    );
+
+    let (recently_played_albums, resolved_favorites, all_tracks, top_artists) = tokio::try_join!(
+        recent_albums_fut,
+        favorite_albums_fut,
+        tracks_fut,
+        artists_fut
+    )?;
+
+    // Build track lookup
+    let track_map: HashMap<u64, &crate::reco_store::TrackDisplayMeta> =
+        all_tracks.iter().map(|tr| (tr.id, tr)).collect();
+
+    let continue_listening_tracks: Vec<crate::reco_store::TrackDisplayMeta> = seeds
+        .continue_listening_track_ids
+        .iter()
+        .filter_map(|id| track_map.get(id).map(|tr| (*tr).clone()))
+        .collect();
+
+    // Step 4: "More From Favorites" = discover albums by favorite artists,
+    // excluding albums the user already has in favorites / recently played.
+
+    // 5b: Collect unique artist IDs from favorite albums + favorite tracks
+    let favorite_artist_ids: Vec<u64> = {
+        let mut ids = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for album in &resolved_favorites {
+            if let Some(aid) = album.artist_id {
+                if seen.insert(aid) {
+                    ids.push(aid);
+                }
+            }
+        }
+        for track_id in &seeds.favorite_track_ids {
+            if let Some(track) = track_map.get(track_id) {
+                if let Some(aid) = track.artist_id {
+                    if seen.insert(aid) {
+                        ids.push(aid);
+                    }
+                }
+            }
+        }
+        ids
+    };
+
+    // 5c: Build exclusion set (already-favorited + recently played albums)
+    let exclusion_set: std::sync::Arc<std::collections::HashSet<String>> = {
+        let mut set: std::collections::HashSet<String> =
+            seeds.favorite_album_ids.iter().cloned().collect();
+        for track_id in &seeds.favorite_track_ids {
+            if let Some(track) = track_map.get(track_id) {
+                if let Some(ref album_id) = track.album_id {
+                    if !album_id.is_empty() {
+                        set.insert(album_id.clone());
+                    }
+                }
+            }
+        }
+        for album_id in &seeds.recently_played_album_ids {
+            set.insert(album_id.clone());
+        }
+        std::sync::Arc::new(set)
+    };
+
+    // 5d: Fetch albums from favorite artists (parallel)
+    // Shuffle artists so every favorite gets a fair chance, cap 2 albums per artist
+    const MAX_ALBUMS_PER_ARTIST: usize = 2;
+    let favorite_albums = if favorite_artist_ids.is_empty() {
+        Vec::new()
+    } else {
+        // Shuffle artists so every favorite gets a fair chance
+        let shuffled_artists = {
+            let mut ids = favorite_artist_ids.clone();
+            ids.shuffle(&mut rand::rng());
+            ids
+        };
+
+        let sem = std::sync::Arc::new(tokio::sync::Semaphore::new(5));
+        let client = app_state.client.clone();
+        let reco_arc = reco_state.db.clone();
+
+        let mut handles = Vec::new();
+        for artist_id in shuffled_artists.iter().take(14) {
+            let sem = sem.clone();
+            let client = client.clone();
+            let reco_arc = reco_arc.clone();
+            let exclusion = exclusion_set.clone();
+            let artist_id = *artist_id;
+
+            handles.push(tokio::spawn(async move {
+                let _permit = sem.acquire().await.ok()?;
+                let artist = {
+                    let c = client.read().await;
+                    c.get_artist_with_pagination_and_locale(artist_id, true, Some(25), None, None)
+                        .await
+                        .ok()?
+                };
+                let albums = artist.albums?;
+                let mut results: Vec<crate::reco_store::AlbumCardMeta> = Vec::new();
+                for album in &albums.items {
+                    if results.len() >= MAX_ALBUMS_PER_ARTIST {
+                        break;
+                    }
+                    if !exclusion.contains(&album.id) {
+                        let meta = crate::reco_store::commands::album_to_card_meta(album);
+                        {
+                            let guard__ = reco_arc.lock().await;
+                            if let Some(db) = guard__.as_ref() {
+                                let _ = db.set_album_meta(&meta);
+                            }
+                        }
+                        results.push(meta);
+                    }
+                }
+                Some(results)
+            }));
+        }
+
+        let mut all_albums: Vec<crate::reco_store::AlbumCardMeta> = Vec::new();
+        for handle in handles {
+            if let Ok(Some(albums)) = handle.await {
+                all_albums.extend(albums);
+            }
+        }
+
+        // Deduplicate, shuffle, and limit
+        {
+            let mut seen = std::collections::HashSet::new();
+            all_albums.retain(|a| seen.insert(a.id.clone()));
+        }
+        all_albums.shuffle(&mut rand::rng());
+        all_albums.truncate(limit_favorites as usize);
+        all_albums
+    };
+
+    Ok(HomeResolved {
+        recently_played_albums,
+        continue_listening_tracks,
+        top_artists,
+        favorite_albums,
+    })
 }
 
 /// Get album suggestions (similar albums) from Qobuz /album/suggest API
