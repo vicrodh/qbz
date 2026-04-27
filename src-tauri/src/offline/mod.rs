@@ -935,32 +935,6 @@ pub mod commands {
 
     // === Pending Playlist Sync Commands ===
 
-    /// Create a playlist while offline (queued for sync)
-    #[tauri::command]
-    pub fn create_pending_playlist(
-        name: String,
-        description: Option<String>,
-        is_public: bool,
-        track_ids: Vec<u64>,
-        local_track_paths: Vec<String>,
-        state: State<'_, OfflineState>,
-    ) -> Result<i64, String> {
-        let guard__ = state
-            .store
-            .lock()
-            .map_err(|e| format!("Lock error: {}", e))?;
-        let store = guard__
-            .as_ref()
-            .ok_or("No active session - please log in")?;
-        store.create_pending_playlist(
-            &name,
-            description.as_deref(),
-            is_public,
-            &track_ids,
-            &local_track_paths,
-        )
-    }
-
     /// Get all playlists pending sync
     #[tauri::command]
     pub fn get_pending_playlists(
@@ -992,19 +966,6 @@ pub mod commands {
             .as_ref()
             .ok_or("No active session - please log in")?;
         store.add_tracks_to_pending_playlist(pending_id, &qobuz_track_ids, &local_track_paths)
-    }
-
-    /// Get count of pending playlists
-    #[tauri::command]
-    pub fn get_pending_playlist_count(state: State<'_, OfflineState>) -> Result<u32, String> {
-        let guard__ = state
-            .store
-            .lock()
-            .map_err(|e| format!("Lock error: {}", e))?;
-        let store = guard__
-            .as_ref()
-            .ok_or("No active session - please log in")?;
-        store.get_pending_playlist_count()
     }
 
     /// Update Qobuz playlist ID without marking as synced (for partial sync recovery)
@@ -1059,41 +1020,6 @@ pub mod commands {
 
     // === Scrobble Queue Commands ===
 
-    /// Queue a scrobble for later submission (when offline)
-    #[tauri::command]
-    pub fn queue_scrobble(
-        artist: String,
-        track: String,
-        album: Option<String>,
-        timestamp: i64,
-        state: State<'_, OfflineState>,
-    ) -> Result<i64, String> {
-        let guard__ = state
-            .store
-            .lock()
-            .map_err(|e| format!("Lock error: {}", e))?;
-        let store = guard__
-            .as_ref()
-            .ok_or("No active session - please log in")?;
-        store.queue_scrobble(&artist, &track, album.as_deref(), timestamp)
-    }
-
-    /// Get queued scrobbles (up to limit, default 50 for Last.fm batch)
-    #[tauri::command]
-    pub fn get_queued_scrobbles(
-        limit: Option<u32>,
-        state: State<'_, OfflineState>,
-    ) -> Result<Vec<QueuedScrobble>, String> {
-        let guard__ = state
-            .store
-            .lock()
-            .map_err(|e| format!("Lock error: {}", e))?;
-        let store = guard__
-            .as_ref()
-            .ok_or("No active session - please log in")?;
-        store.get_queued_scrobbles(limit.unwrap_or(50))
-    }
-
     /// Mark scrobbles as sent after successful Last.fm submission
     #[tauri::command]
     pub fn mark_scrobbles_sent(
@@ -1108,34 +1034,5 @@ pub mod commands {
             .as_ref()
             .ok_or("No active session - please log in")?;
         store.mark_scrobbles_sent(&ids)
-    }
-
-    /// Get count of queued (unsent) scrobbles
-    #[tauri::command]
-    pub fn get_queued_scrobble_count(state: State<'_, OfflineState>) -> Result<u32, String> {
-        let guard__ = state
-            .store
-            .lock()
-            .map_err(|e| format!("Lock error: {}", e))?;
-        let store = guard__
-            .as_ref()
-            .ok_or("No active session - please log in")?;
-        store.get_queued_scrobble_count()
-    }
-
-    /// Cleanup old sent scrobbles
-    #[tauri::command]
-    pub fn cleanup_sent_scrobbles(
-        older_than_days: Option<u32>,
-        state: State<'_, OfflineState>,
-    ) -> Result<u32, String> {
-        let guard__ = state
-            .store
-            .lock()
-            .map_err(|e| format!("Lock error: {}", e))?;
-        let store = guard__
-            .as_ref()
-            .ok_or("No active session - please log in")?;
-        store.cleanup_sent_scrobbles(older_than_days.unwrap_or(7))
     }
 }

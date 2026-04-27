@@ -3,7 +3,6 @@
 //! Fetches and caches lyrics from public providers.
 
 pub mod cache;
-pub mod commands;
 pub mod providers;
 
 use serde::{Deserialize, Serialize};

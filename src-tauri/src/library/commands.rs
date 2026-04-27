@@ -339,43 +339,6 @@ pub async fn library_get_folder(
     db.get_folder_by_id(id).map_err(|e| e.to_string())
 }
 
-/// Update folder settings (alias, enabled, network info)
-#[tauri::command]
-pub async fn library_update_folder_settings(
-    id: i64,
-    alias: Option<String>,
-    enabled: bool,
-    is_network: bool,
-    network_fs_type: Option<String>,
-    user_override_network: bool,
-    state: State<'_, LibraryState>,
-) -> Result<LibraryFolder, String> {
-    log::info!(
-        "Command: library_update_folder_settings {} alias={:?} enabled={}",
-        id,
-        alias,
-        enabled
-    );
-
-    let guard__ = state.db.lock().await;
-    let db = guard__
-        .as_ref()
-        .ok_or("No active session - please log in")?;
-    db.update_folder_settings(
-        id,
-        alias.as_deref(),
-        enabled,
-        is_network,
-        network_fs_type.as_deref(),
-        user_override_network,
-    )
-    .map_err(|e| e.to_string())?;
-
-    db.get_folder_by_id(id)
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "Folder not found after update".to_string())
-}
-
 /// Enable or disable a folder
 #[tauri::command]
 pub async fn library_set_folder_enabled(
@@ -1315,21 +1278,6 @@ pub async fn library_get_track(
         .ok_or_else(|| "Track not found".to_string())
 }
 
-/// Get a track by file path (for offline playlist sync)
-#[tauri::command]
-pub async fn get_track_by_path(
-    file_path: String,
-    state: State<'_, LibraryState>,
-) -> Result<Option<LocalTrack>, String> {
-    log::info!("Command: get_track_by_path {}", file_path);
-
-    let guard__ = state.db.lock().await;
-    let db = guard__
-        .as_ref()
-        .ok_or("No active session - please log in")?;
-    db.get_track_by_path(&file_path).map_err(|e| e.to_string())
-}
-
 /// Play a local track by ID
 #[tauri::command]
 pub async fn library_play_track(
@@ -1867,13 +1815,6 @@ pub async fn playlist_clear_custom_order(
 }
 
 // === Discogs Artwork ===
-
-/// Check if Discogs credentials are configured (proxy handles credentials)
-#[tauri::command]
-pub async fn discogs_has_credentials() -> Result<bool, String> {
-    // Proxy always provides credentials
-    Ok(true)
-}
 
 /// Fetch missing artwork from Discogs for albums without artwork
 /// Returns number of albums updated
@@ -2451,161 +2392,6 @@ pub async fn library_get_hidden_albums(
     db.get_hidden_albums().map_err(|e| e.to_string())
 }
 
-// === Qobuz Downloads Integration ===
-
-#[tauri::command]
-pub async fn library_backfill_downloads(
-    state: State<'_, LibraryState>,
-    offline_cache_state: State<'_, crate::offline_cache::OfflineCacheState>,
-) -> Result<BackfillReport, String> {
-    log::info!("Command: library_backfill_downloads");
-
-    let mut report = BackfillReport {
-        total_downloads: 0,
-        added_tracks: 0,
-        repaired_tracks: 0,
-        skipped_tracks: 0,
-        failed_tracks: Vec::new(),
-    };
-
-    // Get all ready cached tracks directly from offline cache DB
-    let cached_tracks = {
-        let cache_db_opt__ = offline_cache_state.db.lock().await;
-        let cache_db = cache_db_opt__
-            .as_ref()
-            .ok_or("No active session - please log in")?;
-
-        let mut stmt = cache_db
-            .conn()
-            .prepare("SELECT track_id, title, artist, album, album_id, duration_secs, file_path, quality, bit_depth, sample_rate FROM cached_tracks WHERE status = 'ready'")
-            .map_err(|e| format!("Failed to query cached tracks: {}", e))?;
-
-        let rows = stmt
-            .query_map([], |row| {
-                Ok((
-                    row.get::<_, i64>(0)? as u64,                    // track_id
-                    row.get::<_, String>(1)?,                        // title
-                    row.get::<_, String>(2)?,                        // artist
-                    row.get::<_, Option<String>>(3)?,                // album
-                    row.get::<_, i64>(5)? as u64,                    // duration_secs
-                    row.get::<_, String>(6)?,                        // file_path
-                    row.get::<_, Option<i64>>(8)?.map(|v| v as u32), // bit_depth
-                    row.get::<_, Option<f64>>(9)?,                   // sample_rate
-                ))
-            })
-            .map_err(|e| format!("Failed to map rows: {}", e))?;
-
-        rows.collect::<Result<Vec<_>, _>>()
-            .map_err(|e| format!("Failed to collect cached tracks: {}", e))?
-    }; // cache_db lock is dropped here
-
-    report.total_downloads = cached_tracks.len();
-
-    let library_db_opt__ = state.db.lock().await;
-    let library_db = library_db_opt__
-        .as_ref()
-        .ok_or("No active session - please log in")?;
-
-    for (track_id, title, artist, album, duration_secs, file_path, bit_depth, sample_rate) in
-        cached_tracks
-    {
-        // Strategy: Try to match by qobuz_track_id first, then by file_path
-        // This handles both intact downloads and downloads damaged by scanner
-
-        let exists_by_id = library_db
-            .track_exists_by_qobuz_id(track_id)
-            .unwrap_or(false);
-
-        let exists_by_path = library_db.track_exists_by_path(&file_path).unwrap_or(false);
-
-        if exists_by_id {
-            // Track exists with correct qobuz_track_id (not damaged)
-            // Check if it just needs source repair
-            match library_db.is_qobuz_cached_track_by_path(&file_path) {
-                Ok(true) => {
-                    // Already marked as cached track, nothing to do
-                    report.skipped_tracks += 1;
-                }
-                Ok(false) => {
-                    // Has qobuz_track_id but lost source marker - unusual case
-                    log::info!(
-                        "Repairing source for track with intact ID {}: {}",
-                        track_id,
-                        title
-                    );
-                    match library_db.repair_qobuz_cached_track_by_path(track_id, &file_path) {
-                        Ok(true) => report.repaired_tracks += 1,
-                        Ok(false) => report.skipped_tracks += 1,
-                        Err(e) => {
-                            log::warn!("Failed to repair track {}: {}", track_id, e);
-                            report.failed_tracks.push(title);
-                        }
-                    }
-                }
-                Err(e) => {
-                    log::warn!(
-                        "Failed to check cached track status for {}: {}",
-                        track_id,
-                        e
-                    );
-                    report.failed_tracks.push(title);
-                }
-            }
-            continue;
-        }
-
-        if exists_by_path {
-            // Track exists by path but lost qobuz_track_id (damaged by scanner)
-            log::info!(
-                "Repairing damaged cached track (lost ID) {}: {}",
-                track_id,
-                title
-            );
-            match library_db.repair_qobuz_cached_track_by_path(track_id, &file_path) {
-                Ok(true) => report.repaired_tracks += 1,
-                Ok(false) => report.skipped_tracks += 1,
-                Err(e) => {
-                    log::warn!("Failed to repair track by path {}: {}", track_id, e);
-                    report.failed_tracks.push(title);
-                }
-            }
-            continue;
-        }
-
-        // Track doesn't exist - extract track/disc number from file tags
-        let (track_num, disc_num) =
-            match MetadataExtractor::extract(std::path::Path::new(&file_path)) {
-                Ok(meta) => (meta.track_number, meta.disc_number),
-                Err(e) => {
-                    log::warn!("Could not extract metadata from {}: {}", file_path, e);
-                    (None, None)
-                }
-            };
-
-        // Insert as new
-        match library_db.insert_qobuz_cached_track_direct(
-            track_id,
-            &title,
-            &artist,
-            album.as_deref(),
-            duration_secs,
-            &file_path,
-            bit_depth,
-            sample_rate,
-            track_num,
-            disc_num,
-        ) {
-            Ok(_) => report.added_tracks += 1,
-            Err(e) => {
-                log::warn!("Failed to insert track {}: {}", track_id, e);
-                report.failed_tracks.push(title);
-            }
-        }
-    }
-
-    Ok(report)
-}
-
 // === Artist Images Management ===
 
 // ArtistImageInfo is now defined in qbz-library, re-exported via crate::library
@@ -2935,45 +2721,6 @@ pub async fn playlist_get_offline_available(
         .map_err(|e| e.to_string())?;
 
     Ok(playlists.iter().map(|p| p.qobuz_playlist_id).collect())
-}
-
-// === Discogs Artwork ===
-
-/// Search Discogs for artwork options
-#[tauri::command]
-pub async fn discogs_search_artwork(
-    artist: String,
-    album: String,
-    catalog_number: Option<String>,
-) -> Result<Vec<crate::discogs::DiscogsImageOption>, String> {
-    log::info!(
-        "Command: discogs_search_artwork {} - {} (catalog: {:?})",
-        artist,
-        album,
-        catalog_number
-    );
-
-    let client = DiscogsClient::new();
-    client
-        .search_artwork_options(&artist, &album, catalog_number.as_deref())
-        .await
-}
-
-/// Download and save Discogs artwork
-#[tauri::command]
-pub async fn discogs_download_artwork(
-    image_url: String,
-    artist: String,
-    album: String,
-) -> Result<String, String> {
-    log::info!("Command: discogs_download_artwork from {}", image_url);
-
-    let cache_dir = get_artwork_cache_dir();
-    let client = DiscogsClient::new();
-
-    client
-        .download_artwork_from_url(&image_url, &cache_dir, &artist, &album)
-        .await
 }
 
 /// Get multiple tracks by their IDs
