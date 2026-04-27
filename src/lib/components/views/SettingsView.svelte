@@ -69,7 +69,6 @@
     getStatus as getOfflineStatus,
     getSettings as getOfflineSettings,
     setManualOffline,
-    setShowPartialPlaylists,
     setAllowCastWhileOffline,
     setAllowImmediateScrobbling,
     setAllowAccumulatedScrobbling,
@@ -1343,7 +1342,7 @@
   // Plex LAN POC state
   let plexEnabled = $state(getUserItem('qbz-plex-enabled') === 'true');
   let plexUiCollapsed = $state(getUserItem('qbz-plex-ui-collapsed') === 'true');
-  let plexManualTokenMode = $state(false);
+  let plexManualTokenMode = $state(getUserItem('qbz-plex-poc-manual-token-mode') === 'true');
   let plexServerUrl = $state('http://127.0.0.1');
   let plexBaseUrl = $state(getUserItem('qbz-plex-poc-base-url') || 'http://127.0.0.1:32400');
   let plexToken = $state(getUserItem('qbz-plex-poc-token') || '');
@@ -1370,6 +1369,7 @@
   const PLEX_CACHE_SERVER_ID_KEY = 'qbz-plex-poc-machine-id';
   const PLEX_CLIENT_ID_KEY = 'qbz-plex-poc-client-id';
   const PLEX_METADATA_WRITE_KEY = 'qbz-plex-poc-metadata-write-enabled';
+  const PLEX_MANUAL_TOKEN_MODE_KEY = 'qbz-plex-poc-manual-token-mode';
 
   // Qobuz Link Handler state
   let qobuzLinkHandlerEnabled = $state(false);
@@ -1501,10 +1501,11 @@
     const unsubscribeZoom = subscribeZoom(updateZoomLevel);
 
     // Load library settings
+    // Use !== 'false' (default ON) to match LocalLibraryView's read convention.
+    // Both files now agree: stored 'false' => OFF; everything else (including
+    // null on first run, or stale 'true') => ON.
     const savedFetchArtistImages = getUserItem('qbz-fetch-artist-images');
-    if (savedFetchArtistImages !== null) {
-      fetchQobuzArtistImages = savedFetchArtistImages === 'true';
-    }
+    fetchQobuzArtistImages = savedFetchArtistImages !== 'false';
 
     // Load download settings
     loadDownloadSettings();
@@ -2564,14 +2565,6 @@
       showToast($t('offline.noNetworkToast'), 'error');
     } finally {
       isCheckingNetwork = false;
-    }
-  }
-
-  async function handleShowPartialPlaylistsChange(enabled: boolean) {
-    try {
-      await setShowPartialPlaylists(enabled);
-    } catch (error) {
-      console.error('Failed to set show partial playlists:', error);
     }
   }
 
@@ -5463,7 +5456,10 @@
           <span class="setting-label">{$t('settings.integrations.plexManualTokenToggle')}</span>
           <small class="setting-note">{$t('settings.integrations.plexManualTokenHelp')}</small>
         </div>
-        <Toggle enabled={plexManualTokenMode} onchange={(enabled) => plexManualTokenMode = enabled} />
+        <Toggle enabled={plexManualTokenMode} onchange={(enabled) => {
+          plexManualTokenMode = enabled;
+          setUserItem(PLEX_MANUAL_TOKEN_MODE_KEY, enabled ? 'true' : 'false');
+        }} />
       </div>
 
       {#if plexManualTokenMode}
@@ -5974,6 +5970,12 @@
         </small>
       </div>
       <div class="remote-control-actions">
+        <button
+          class="connect-btn"
+          onclick={() => showRemoteControlGuide = true}
+        >
+          {$t('settings.integrations.remoteControlSetupGuide')}
+        </button>
         <button
           class="connect-btn connected"
           onclick={handleRemoteControlRegenerateToken}
