@@ -5975,6 +5975,12 @@
       </div>
       <div class="remote-control-actions">
         <button
+          class="connect-btn"
+          onclick={() => showRemoteControlGuide = true}
+        >
+          {$t('settings.integrations.remoteControlSetupGuide')}
+        </button>
+        <button
           class="connect-btn connected"
           onclick={handleRemoteControlRegenerateToken}
           disabled={!remoteControlEnabled || remoteControlLoading}
