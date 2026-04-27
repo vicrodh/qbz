@@ -31,15 +31,18 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 use crate::{
     api::{Album, Artist, Playlist, SearchResultsPage, Track},
     artist_blacklist::BlacklistState,
-    commands,
+    commands_v2,
     config::{
         audio_settings::AudioSettingsState,
         playback_preferences::{AutoplayMode, PlaybackPreferences, PlaybackPreferencesState},
         remote_control_settings::{RemoteControlSettings, RemoteControlSettingsState},
     },
+    core_bridge::CoreBridgeState,
+    offline::OfflineState,
     offline_cache::OfflineCacheState,
     player::PlaybackEvent,
     queue::{QueueState as QueueStateData, QueueTrack},
+    runtime::RuntimeManagerState,
     AppState,
 };
 
@@ -640,14 +643,22 @@ async fn play_queue_track(ctx: &ApiContext, track: QueueTrack) -> Result<QueueTr
     let app_state = ctx.app_handle.state::<AppState>();
     let offline_cache = ctx.app_handle.state::<OfflineCacheState>();
     let audio_settings = ctx.app_handle.state::<AudioSettingsState>();
+    let bridge = ctx.app_handle.state::<CoreBridgeState>();
+    let offline_state = ctx.app_handle.state::<OfflineState>();
+    let runtime = ctx.app_handle.state::<RuntimeManagerState>();
 
-    if let Err(err) = commands::playback::play_track(
+    if let Err(err) = commands_v2::v2_play_track(
         track.id,
-        Some(track.duration_secs),
         None,
-        app_state,
+        None,
+        Some(track.duration_secs),
+        bridge,
         offline_cache,
         audio_settings,
+        offline_state,
+        app_state,
+        ctx.app_handle.clone(),
+        runtime,
     )
     .await
     {
@@ -666,7 +677,10 @@ async fn seek(
     Json(payload): Json<SeekRequest>,
 ) -> Result<StatusCode, StatusCode> {
     let app_state = ctx.app_handle.state::<AppState>();
-    commands::playback::seek(payload.position, app_state)
+    let bridge = ctx.app_handle.state::<CoreBridgeState>();
+    let runtime = ctx.app_handle.state::<RuntimeManagerState>();
+    commands_v2::v2_seek(payload.position, bridge, app_state, runtime)
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     emit_playback_update(&ctx.app_handle);
     Ok(StatusCode::NO_CONTENT)
@@ -676,8 +690,11 @@ async fn set_volume(
     State(ctx): State<ApiContext>,
     Json(payload): Json<VolumeRequest>,
 ) -> Result<StatusCode, StatusCode> {
-    let app_state = ctx.app_handle.state::<AppState>();
-    commands::playback::set_volume(payload.volume, app_state)
+    let bridge = ctx.app_handle.state::<CoreBridgeState>();
+    let audio_settings = ctx.app_handle.state::<AudioSettingsState>();
+    let runtime = ctx.app_handle.state::<RuntimeManagerState>();
+    commands_v2::v2_set_volume(payload.volume, bridge, audio_settings, runtime)
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     emit_playback_update(&ctx.app_handle);
     Ok(StatusCode::NO_CONTENT)
@@ -859,13 +876,21 @@ async fn play_queue_index(
         if !t.is_local {
             let offline_cache = ctx.app_handle.state::<OfflineCacheState>();
             let audio_settings = ctx.app_handle.state::<AudioSettingsState>();
-            if let Err(err) = commands::playback::play_track(
+            let bridge = ctx.app_handle.state::<CoreBridgeState>();
+            let offline_state = ctx.app_handle.state::<OfflineState>();
+            let runtime = ctx.app_handle.state::<RuntimeManagerState>();
+            if let Err(err) = commands_v2::v2_play_track(
                 t.id,
-                Some(t.duration_secs),
                 None,
-                app_state,
+                None,
+                Some(t.duration_secs),
+                bridge,
                 offline_cache,
                 audio_settings,
+                offline_state,
+                app_state,
+                ctx.app_handle.clone(),
+                runtime,
             )
             .await
             {
@@ -1026,13 +1051,21 @@ async fn play_album(
         if !first_track.is_local {
             let offline_cache = ctx.app_handle.state::<OfflineCacheState>();
             let audio_settings = ctx.app_handle.state::<AudioSettingsState>();
-            if let Err(err) = commands::playback::play_track(
+            let bridge = ctx.app_handle.state::<CoreBridgeState>();
+            let offline_state = ctx.app_handle.state::<OfflineState>();
+            let runtime = ctx.app_handle.state::<RuntimeManagerState>();
+            if let Err(err) = commands_v2::v2_play_track(
                 first_track.id,
-                Some(first_track.duration_secs),
                 None,
-                app_state,
+                None,
+                Some(first_track.duration_secs),
+                bridge,
                 offline_cache,
                 audio_settings,
+                offline_state,
+                app_state,
+                ctx.app_handle.clone(),
+                runtime,
             )
             .await
             {
