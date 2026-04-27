@@ -2,7 +2,6 @@
 //!
 //! Core functionality is in qbz-cast crate, this module provides Tauri commands.
 
-pub mod commands;
 pub mod state;
 
 // Re-export from qbz-cast

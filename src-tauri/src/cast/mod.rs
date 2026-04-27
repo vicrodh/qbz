@@ -4,7 +4,6 @@
 //! The core casting logic is in the qbz-cast crate.
 
 pub mod chromecast_thread;
-pub mod commands;
 pub mod device;
 pub mod discovery;
 pub mod dlna;
