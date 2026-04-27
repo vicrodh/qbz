@@ -453,20 +453,36 @@ pub fn v2_create_pending_playlist(
     localTrackPaths: Vec<String>,
     state: State<'_, OfflineState>,
 ) -> Result<i64, RuntimeError> {
-    crate::offline::commands::create_pending_playlist(
-        name,
-        description,
-        isPublic,
-        trackIds,
-        localTrackPaths,
-        state,
-    )
-    .map_err(RuntimeError::Internal)
+    let guard__ = state
+        .store
+        .lock()
+        .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
+    let store = guard__
+        .as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session - please log in".to_string()))?;
+    store
+        .create_pending_playlist(
+            &name,
+            description.as_deref(),
+            isPublic,
+            &trackIds,
+            &localTrackPaths,
+        )
+        .map_err(RuntimeError::Internal)
 }
 
 #[tauri::command]
 pub fn v2_get_pending_playlist_count(state: State<'_, OfflineState>) -> Result<u32, RuntimeError> {
-    crate::offline::commands::get_pending_playlist_count(state).map_err(RuntimeError::Internal)
+    let guard__ = state
+        .store
+        .lock()
+        .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
+    let store = guard__
+        .as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session - please log in".to_string()))?;
+    store
+        .get_pending_playlist_count()
+        .map_err(RuntimeError::Internal)
 }
 
 #[tauri::command]
@@ -477,7 +493,15 @@ pub fn v2_queue_scrobble(
     timestamp: i64,
     state: State<'_, OfflineState>,
 ) -> Result<i64, RuntimeError> {
-    crate::offline::commands::queue_scrobble(artist, track, album, timestamp, state)
+    let guard__ = state
+        .store
+        .lock()
+        .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
+    let store = guard__
+        .as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session - please log in".to_string()))?;
+    store
+        .queue_scrobble(&artist, &track, album.as_deref(), timestamp)
         .map_err(RuntimeError::Internal)
 }
 
@@ -487,12 +511,30 @@ pub fn v2_get_queued_scrobbles(
     limit: Option<u32>,
     state: State<'_, OfflineState>,
 ) -> Result<Vec<crate::offline::QueuedScrobble>, RuntimeError> {
-    crate::offline::commands::get_queued_scrobbles(limit, state).map_err(RuntimeError::Internal)
+    let guard__ = state
+        .store
+        .lock()
+        .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
+    let store = guard__
+        .as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session - please log in".to_string()))?;
+    store
+        .get_queued_scrobbles(limit.unwrap_or(50))
+        .map_err(RuntimeError::Internal)
 }
 
 #[tauri::command]
 pub fn v2_get_queued_scrobble_count(state: State<'_, OfflineState>) -> Result<u32, RuntimeError> {
-    crate::offline::commands::get_queued_scrobble_count(state).map_err(RuntimeError::Internal)
+    let guard__ = state
+        .store
+        .lock()
+        .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
+    let store = guard__
+        .as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session - please log in".to_string()))?;
+    store
+        .get_queued_scrobble_count()
+        .map_err(RuntimeError::Internal)
 }
 
 #[tauri::command]
@@ -501,7 +543,15 @@ pub fn v2_cleanup_sent_scrobbles(
     olderThanDays: Option<u32>,
     state: State<'_, OfflineState>,
 ) -> Result<u32, RuntimeError> {
-    crate::offline::commands::cleanup_sent_scrobbles(olderThanDays, state)
+    let guard__ = state
+        .store
+        .lock()
+        .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
+    let store = guard__
+        .as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session - please log in".to_string()))?;
+    store
+        .cleanup_sent_scrobbles(olderThanDays.unwrap_or(7))
         .map_err(RuntimeError::Internal)
 }
 
