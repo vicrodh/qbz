@@ -15,7 +15,7 @@ use super::QconnectRemoteSyncState;
 
 const LOAD_ATTEMPT_DEDUP_WINDOW: Duration = Duration::from_secs(5);
 
-fn should_reload_remote_track(
+pub(super) fn should_reload_remote_track(
     playback_state: &qbz_player::PlaybackState,
     track_id: u64,
 ) -> bool {

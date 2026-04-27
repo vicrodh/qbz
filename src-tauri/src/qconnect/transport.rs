@@ -351,14 +351,14 @@ fn normalize_opt_string(value: Option<String>) -> Option<String> {
     })
 }
 
-fn parse_subscribe_channels(items: Vec<String>) -> Result<Vec<Vec<u8>>, String> {
+pub(super) fn parse_subscribe_channels(items: Vec<String>) -> Result<Vec<Vec<u8>>, String> {
     items
         .into_iter()
         .map(|item| decode_hex_channel(&item))
         .collect()
 }
 
-fn decode_hex_channel(raw: &str) -> Result<Vec<u8>, String> {
+pub(super) fn decode_hex_channel(raw: &str) -> Result<Vec<u8>, String> {
     let normalized = raw.trim().trim_start_matches("0x").trim_start_matches("0X");
     if normalized.is_empty() {
         return Err("empty subscribe channel hex value".to_string());

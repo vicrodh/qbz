@@ -2635,14 +2635,21 @@ pub fn v2_get_hostname() -> Result<String, RuntimeError> {
 
 #[cfg(test)]
 mod tests {
+    use super::queue_resolution::{
+        resolve_controller_queue_item_from_snapshots, resolve_queue_item_ids_from_queue_state,
+        QconnectRemoteSkipDirection,
+    };
+    use super::session::{
+        find_unique_renderer_id, refresh_local_renderer_id, QconnectFileAudioQualitySnapshot,
+    };
+    use super::transport::{
+        decode_hex_channel, default_qconnect_device_info, parse_subscribe_channels,
+    };
     use super::{
         build_qconnect_file_audio_quality_snapshot, classify_qconnect_audio_quality,
-        decode_hex_channel, default_qconnect_device_info, determine_queue_lookup_report_strategy,
-        find_unique_renderer_id, normalize_volume_to_fraction, parse_subscribe_channels,
-        refresh_local_renderer_id, resolve_controller_queue_item_from_snapshots,
-        resolve_queue_item_ids_from_queue_state, should_skip_renderer_report_due_to_stale_snapshot,
-        QconnectFileAudioQualitySnapshot, QconnectHandoffIntent, QconnectOutboundCommandType,
-        QconnectRemoteSkipDirection, QconnectRendererInfo, QconnectSessionState,
+        determine_queue_lookup_report_strategy, normalize_volume_to_fraction,
+        should_skip_renderer_report_due_to_stale_snapshot, QconnectHandoffIntent,
+        QconnectOutboundCommandType, QconnectRendererInfo, QconnectSessionState,
         QconnectTrackOrigin, AUDIO_QUALITY_HIRES_LEVEL1,
     };
     use qbz_models::RepeatMode;
@@ -3014,7 +3021,7 @@ mod tests {
             ..Default::default()
         };
 
-        let snapshot = super::build_session_renderer_snapshot(&queue, Some(&renderer_state), None);
+        let snapshot = super::session::build_session_renderer_snapshot(&queue, Some(&renderer_state), None);
 
         assert_eq!(snapshot.active, Some(true));
         assert_eq!(snapshot.playing_state, Some(super::PLAYING_STATE_PLAYING));
@@ -3051,7 +3058,7 @@ mod tests {
         }))
         .expect("queue state");
 
-        let snapshot = super::build_session_renderer_snapshot(
+        let snapshot = super::session::build_session_renderer_snapshot(
             &queue,
             Some(&super::QconnectSessionRendererState::default()),
             Some(2),
@@ -3313,7 +3320,7 @@ mod tests {
         .expect("queue state");
 
         assert_eq!(
-            super::resolve_core_shuffle_order(
+            super::queue_resolution::resolve_core_shuffle_order(
                 &queue,
                 Some(0),
                 Some(72930174),
@@ -3349,7 +3356,7 @@ mod tests {
         .expect("queue state");
 
         assert_eq!(
-            super::resolve_core_shuffle_order(
+            super::queue_resolution::resolve_core_shuffle_order(
                 &queue,
                 Some(8),
                 Some(43013252),
@@ -3371,12 +3378,12 @@ mod tests {
         };
 
         // Same track: do not reload, even if buffering still in progress.
-        assert!(!super::should_reload_remote_track(
+        assert!(!super::track_loading::should_reload_remote_track(
             &playback_state,
             193849747,
         ));
         // Different track: reload.
-        assert!(super::should_reload_remote_track(
+        assert!(super::track_loading::should_reload_remote_track(
             &playback_state,
             126886862,
         ));
@@ -3457,7 +3464,7 @@ mod tests {
         }))
         .expect("next queue state");
 
-        assert!(super::queue_state_needs_materialization(
+        assert!(super::corebridge::queue_state_needs_materialization(
             Some(&previous),
             &next
         ));
@@ -3497,7 +3504,7 @@ mod tests {
         }))
         .expect("next queue state");
 
-        assert!(!super::queue_state_needs_materialization(
+        assert!(!super::corebridge::queue_state_needs_materialization(
             Some(&previous),
             &next
         ));
@@ -3535,7 +3542,7 @@ mod tests {
                 &renderer,
                 QconnectRemoteSkipDirection::Next,
             ),
-            super::QconnectControllerQueueItemResolution {
+            super::queue_resolution::QconnectControllerQueueItemResolution {
                 target_queue_item_id: Some(1),
                 strategy: "renderer_next_queue_item_id_verified",
                 queue_index: Some(2),
@@ -3577,7 +3584,7 @@ mod tests {
                 &renderer,
                 QconnectRemoteSkipDirection::Previous,
             ),
-            super::QconnectControllerQueueItemResolution {
+            super::queue_resolution::QconnectControllerQueueItemResolution {
                 target_queue_item_id: Some(0),
                 strategy: "restart_current_queue_item",
                 queue_index: Some(0),
@@ -3619,7 +3626,7 @@ mod tests {
                 &renderer,
                 QconnectRemoteSkipDirection::Previous,
             ),
-            super::QconnectControllerQueueItemResolution {
+            super::queue_resolution::QconnectControllerQueueItemResolution {
                 target_queue_item_id: Some(0),
                 strategy: "queue_item_before_current",
                 queue_index: Some(0),
@@ -3661,7 +3668,7 @@ mod tests {
                 &renderer,
                 QconnectRemoteSkipDirection::Previous,
             ),
-            super::QconnectControllerQueueItemResolution {
+            super::queue_resolution::QconnectControllerQueueItemResolution {
                 target_queue_item_id: Some(0),
                 strategy: "queue_item_before_current",
                 queue_index: Some(0),
