@@ -4,7 +4,6 @@
 //! Commands and remote metadata remain Tauri-specific.
 
 // Tauri-specific modules (stay here)
-pub mod commands;
 pub mod remote_metadata;
 pub mod state;
 

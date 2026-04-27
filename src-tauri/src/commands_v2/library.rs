@@ -1868,7 +1868,7 @@ pub async fn v2_reco_get_home_ml(
         .as_ref()
         .ok_or("No active session - please log in")?;
 
-    crate::reco_store::commands::get_home_seeds_internal(
+    crate::reco_store::helpers::get_home_seeds_internal(
         db,
         limit_recent_albums,
         limit_continue_tracks,
@@ -1902,7 +1902,7 @@ pub async fn v2_reco_get_home_resolved(
         let db = guard__
             .as_ref()
             .ok_or("No active session - please log in")?;
-        crate::reco_store::commands::get_home_seeds_internal(
+        crate::reco_store::helpers::get_home_seeds_internal(
             db,
             limit_recent_albums,
             limit_continue_tracks,
@@ -1933,25 +1933,25 @@ pub async fn v2_reco_get_home_resolved(
 
     // Step 3: Resolve all entity types in parallel.
     // Recent albums, favorite albums, tracks, and artists are all independent.
-    let recent_albums_fut = crate::reco_store::commands::resolve_albums(
+    let recent_albums_fut = crate::reco_store::helpers::resolve_albums(
         &seeds.recently_played_album_ids,
         &reco_state,
         &app_state,
         &cache_state,
     );
-    let favorite_albums_fut = crate::reco_store::commands::resolve_albums(
+    let favorite_albums_fut = crate::reco_store::helpers::resolve_albums(
         &seeds.favorite_album_ids,
         &reco_state,
         &app_state,
         &cache_state,
     );
-    let tracks_fut = crate::reco_store::commands::resolve_tracks(
+    let tracks_fut = crate::reco_store::helpers::resolve_tracks(
         &all_track_ids,
         &reco_state,
         &app_state,
         &cache_state,
     );
-    let artists_fut = crate::reco_store::commands::resolve_artists(
+    let artists_fut = crate::reco_store::helpers::resolve_artists(
         &all_artist_ids,
         &artist_play_counts,
         &reco_state,
@@ -2061,7 +2061,7 @@ pub async fn v2_reco_get_home_resolved(
                         break;
                     }
                     if !exclusion.contains(&album.id) {
-                        let meta = crate::reco_store::commands::album_to_card_meta(album);
+                        let meta = crate::reco_store::helpers::album_to_card_meta(album);
                         {
                             let guard__ = reco_arc.lock().await;
                             if let Some(db) = guard__.as_ref() {
@@ -2154,7 +2154,7 @@ pub async fn v2_reco_get_forgotten_favorites(
     }
 
     // Resolve album IDs to metadata using the same 3-tier cache as home
-    crate::reco_store::commands::resolve_albums(&album_ids, &reco_state, &app_state, &cache_state)
+    crate::reco_store::helpers::resolve_albums(&album_ids, &reco_state, &app_state, &cache_state)
         .await
 }
 

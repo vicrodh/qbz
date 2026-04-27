@@ -35,7 +35,6 @@ pub mod audio;
 pub mod audio_device_watch;
 pub mod cache;
 pub mod cast;
-pub mod commands;
 pub mod config;
 pub mod credentials;
 pub mod discogs;
