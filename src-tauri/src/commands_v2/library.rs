@@ -801,7 +801,24 @@ pub async fn v2_library_get_tracks_by_ids(
     trackIds: Vec<i64>,
     library_state: State<'_, LibraryState>,
 ) -> Result<Vec<LocalTrack>, String> {
-    crate::library::library_get_tracks_by_ids(trackIds, library_state).await
+    log::info!(
+        "Command: library_get_tracks_by_ids ({} tracks)",
+        trackIds.len()
+    );
+
+    let guard__ = library_state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
+    let mut tracks = Vec::new();
+
+    for track_id in trackIds {
+        if let Some(track) = db.get_track(track_id).map_err(|e| e.to_string())? {
+            tracks.push(track);
+        }
+    }
+
+    Ok(tracks)
 }
 
 #[tauri::command]
@@ -2023,17 +2040,54 @@ pub async fn v2_update_playlist_folder(
     isHidden: Option<bool>,
     state: State<'_, LibraryState>,
 ) -> Result<crate::library::PlaylistFolder, String> {
-    crate::library::update_playlist_folder(
-        id,
-        name,
-        iconType,
-        iconPreset,
-        iconColor,
-        customImagePath,
+    log::info!("Command: update_playlist_folder {}", id);
+
+    // Handle custom image - copy to persistent storage if provided
+    // Uses Option<Option<&str>> semantics: None = don't update, Some(None) = clear, Some(Some(path)) = set new
+    let final_custom_image: Option<Option<String>> = if let Some(source_path) = customImagePath {
+        if source_path.is_empty() {
+            // Empty string means clear the image
+            Some(None)
+        } else {
+            let source = std::path::Path::new(&source_path);
+            if !source.exists() {
+                return Err(format!("Source image does not exist: {}", source_path));
+            }
+
+            let artwork_dir = get_artwork_cache_dir();
+            let extension = source.extension().and_then(|e| e.to_str()).unwrap_or("jpg");
+            let filename = format!(
+                "folder_{}_{}.{}",
+                id,
+                chrono::Utc::now().timestamp(),
+                extension
+            );
+            let dest_path = artwork_dir.join(filename);
+
+            std::fs::copy(source, &dest_path)
+                .map_err(|e| format!("Failed to copy image: {}", e))?;
+
+            log::info!("Copied folder image to: {}", dest_path.display());
+            Some(Some(dest_path.to_string_lossy().to_string()))
+        }
+    } else {
+        None
+    };
+
+    let guard__ = state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
+    db.update_playlist_folder(
+        &id,
+        name.as_deref(),
+        iconType.as_deref(),
+        iconPreset.as_deref(),
+        iconColor.as_deref(),
+        final_custom_image.as_ref().map(|o| o.as_deref()),
         isHidden,
-        state,
     )
-    .await
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -2400,7 +2454,14 @@ pub async fn v2_library_get_album_tracks(
     albumGroupKey: String,
     state: State<'_, LibraryState>,
 ) -> Result<Vec<crate::library::LocalTrack>, String> {
-    crate::library::library_get_album_tracks(albumGroupKey, state).await
+    log::info!("Command: library_get_album_tracks {}", albumGroupKey);
+
+    let guard__ = state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
+    db.get_album_tracks(&albumGroupKey)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

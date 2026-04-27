@@ -86,8 +86,7 @@ pub use state::{
     LibraryAlbumTrackMetadataUpdate, LibraryState,
 };
 pub use commands::{
-    library_get_album_tracks, library_get_tracks_by_ids, playlist_get_custom_order,
-    playlist_get_tracks_with_local_copies, playlist_has_custom_order, update_playlist_folder,
+    playlist_get_custom_order, playlist_get_tracks_with_local_copies, playlist_has_custom_order,
 };
 
 use std::path::Path;

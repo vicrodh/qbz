@@ -308,21 +308,6 @@ pub async fn library_get_albums(
     Ok(albums)
 }
 
-#[tauri::command]
-pub async fn library_get_album_tracks(
-    album_group_key: String,
-    state: State<'_, LibraryState>,
-) -> Result<Vec<LocalTrack>, String> {
-    log::info!("Command: library_get_album_tracks {}", album_group_key);
-
-    let guard__ = state.db.lock().await;
-    let db = guard__
-        .as_ref()
-        .ok_or("No active session - please log in")?;
-    db.get_album_tracks(&album_group_key)
-        .map_err(|e| e.to_string())
-}
-
 // === Playback ===
 
 #[tauri::command]
@@ -1345,32 +1330,6 @@ pub async fn playlist_get_offline_available(
     Ok(playlists.iter().map(|p| p.qobuz_playlist_id).collect())
 }
 
-/// Get multiple tracks by their IDs
-#[tauri::command]
-pub async fn library_get_tracks_by_ids(
-    track_ids: Vec<i64>,
-    state: State<'_, LibraryState>,
-) -> Result<Vec<LocalTrack>, String> {
-    log::info!(
-        "Command: library_get_tracks_by_ids ({} tracks)",
-        track_ids.len()
-    );
-
-    let guard__ = state.db.lock().await;
-    let db = guard__
-        .as_ref()
-        .ok_or("No active session - please log in")?;
-    let mut tracks = Vec::new();
-
-    for track_id in track_ids {
-        if let Some(track) = db.get_track(track_id).map_err(|e| e.to_string())? {
-            tracks.push(track);
-        }
-    }
-
-    Ok(tracks)
-}
-
 // === Playlist Folders ===
 
 /// Create a new playlist folder
@@ -1409,67 +1368,6 @@ pub async fn get_playlist_folders(
         .as_ref()
         .ok_or("No active session - please log in")?;
     db.get_all_playlist_folders().map_err(|e| e.to_string())
-}
-
-/// Update a playlist folder
-#[tauri::command]
-pub async fn update_playlist_folder(
-    id: String,
-    name: Option<String>,
-    icon_type: Option<String>,
-    icon_preset: Option<String>,
-    icon_color: Option<String>,
-    custom_image_path: Option<String>,
-    is_hidden: Option<bool>,
-    state: State<'_, LibraryState>,
-) -> Result<PlaylistFolder, String> {
-    log::info!("Command: update_playlist_folder {}", id);
-
-    // Handle custom image - copy to persistent storage if provided
-    // Uses Option<Option<&str>> semantics: None = don't update, Some(None) = clear, Some(Some(path)) = set new
-    let final_custom_image: Option<Option<String>> = if let Some(source_path) = custom_image_path {
-        if source_path.is_empty() {
-            // Empty string means clear the image
-            Some(None)
-        } else {
-            let source = Path::new(&source_path);
-            if !source.exists() {
-                return Err(format!("Source image does not exist: {}", source_path));
-            }
-
-            let artwork_dir = get_artwork_cache_dir();
-            let extension = source.extension().and_then(|e| e.to_str()).unwrap_or("jpg");
-            let filename = format!(
-                "folder_{}_{}.{}",
-                id,
-                chrono::Utc::now().timestamp(),
-                extension
-            );
-            let dest_path = artwork_dir.join(filename);
-
-            fs::copy(source, &dest_path).map_err(|e| format!("Failed to copy image: {}", e))?;
-
-            log::info!("Copied folder image to: {}", dest_path.display());
-            Some(Some(dest_path.to_string_lossy().to_string()))
-        }
-    } else {
-        None
-    };
-
-    let guard__ = state.db.lock().await;
-    let db = guard__
-        .as_ref()
-        .ok_or("No active session - please log in")?;
-    db.update_playlist_folder(
-        &id,
-        name.as_deref(),
-        icon_type.as_deref(),
-        icon_preset.as_deref(),
-        icon_color.as_deref(),
-        final_custom_image.as_ref().map(|o| o.as_deref()),
-        is_hidden,
-    )
-    .map_err(|e| e.to_string())
 }
 
 /// Delete a playlist folder (playlists return to root)
