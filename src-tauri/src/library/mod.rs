@@ -86,12 +86,11 @@ pub use state::{
     LibraryAlbumTrackMetadataUpdate, LibraryState,
 };
 pub use commands::{
-    library_add_folder, library_cleanup_missing_files, library_fetch_missing_artwork,
-    library_get_album_tracks, library_get_artists, library_get_folders,
-    library_get_folders_with_metadata, library_get_scan_progress, library_get_stats,
-    library_get_thumbnail, library_get_thumbnails_cache_size, library_get_tracks_by_ids,
-    library_search, playlist_get_custom_order, playlist_get_tracks_with_local_copies,
-    playlist_has_custom_order, update_playlist_folder,
+    library_fetch_missing_artwork, library_get_album_tracks, library_get_artists,
+    library_get_scan_progress, library_get_stats, library_get_thumbnail,
+    library_get_thumbnails_cache_size, library_get_tracks_by_ids, library_search,
+    playlist_get_custom_order, playlist_get_tracks_with_local_copies, playlist_has_custom_order,
+    update_playlist_folder,
 };
 
 use std::path::Path;

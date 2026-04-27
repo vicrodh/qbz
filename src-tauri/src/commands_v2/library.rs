@@ -2061,14 +2061,69 @@ pub async fn v2_library_get_stats(
 
 #[tauri::command]
 pub async fn v2_library_get_folders(state: State<'_, LibraryState>) -> Result<Vec<String>, String> {
-    crate::library::library_get_folders(state).await
+    log::info!("Command: library_get_folders");
+
+    let guard__ = state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
+    db.get_folders().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn v2_library_get_folders_with_metadata(
     state: State<'_, LibraryState>,
 ) -> Result<Vec<crate::library::LibraryFolder>, String> {
-    crate::library::library_get_folders_with_metadata(state).await
+    log::info!("Command: library_get_folders_with_metadata");
+
+    let guard__ = state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
+    let mut folders = db.get_folders_with_metadata().map_err(|e| e.to_string())?;
+
+    // Refresh network detection for folders without user override
+    for folder in &mut folders {
+        if !folder.user_override_network {
+            let path = std::path::Path::new(&folder.path);
+            let network_info = crate::network::is_network_path(path);
+
+            // Update if detection differs from stored value
+            if network_info.is_network != folder.is_network {
+                log::info!(
+                    "Updating network status for folder {}: {} -> {}",
+                    folder.path,
+                    folder.is_network,
+                    network_info.is_network
+                );
+
+                // Extract network filesystem type
+                let fs_type = network_info.mount_info.as_ref().and_then(|mi| {
+                    if let crate::network::MountKind::Network(nfs) = &mi.kind {
+                        Some(format!("{:?}", nfs).to_lowercase())
+                    } else {
+                        None
+                    }
+                });
+
+                // Update database
+                let _ = db.update_folder_settings(
+                    folder.id,
+                    folder.alias.as_deref(),
+                    folder.enabled,
+                    network_info.is_network,
+                    fs_type.as_deref(),
+                    false, // not user override
+                );
+
+                // Update the folder struct for return
+                folder.is_network = network_info.is_network;
+                folder.network_fs_type = fs_type;
+            }
+        }
+    }
+
+    Ok(folders)
 }
 
 #[tauri::command]
@@ -2076,14 +2131,112 @@ pub async fn v2_library_add_folder(
     path: String,
     state: State<'_, LibraryState>,
 ) -> Result<crate::library::LibraryFolder, String> {
-    crate::library::library_add_folder(path, state).await
+    use crate::network::{is_network_path, MountKind, NetworkFs};
+
+    log::info!("Command: library_add_folder {}", path);
+
+    // Validate path exists and is a directory
+    let path_ref = std::path::Path::new(&path);
+    if !path_ref.exists() {
+        return Err(format!("Path does not exist: {}", path));
+    }
+    if !path_ref.is_dir() {
+        return Err(format!("Path is not a directory: {}", path));
+    }
+
+    // Detect if this is a network folder
+    let network_info = is_network_path(path_ref);
+    let (is_network, fs_type) = if network_info.is_network {
+        let fs_type = network_info
+            .mount_info
+            .as_ref()
+            .and_then(|m| match &m.kind {
+                MountKind::Network(nfs) => Some(match nfs {
+                    NetworkFs::Cifs => "cifs".to_string(),
+                    NetworkFs::Nfs => "nfs".to_string(),
+                    NetworkFs::Sshfs => "sshfs".to_string(),
+                    NetworkFs::Rclone => "rclone".to_string(),
+                    NetworkFs::Webdav => "webdav".to_string(),
+                    NetworkFs::Gluster => "glusterfs".to_string(),
+                    NetworkFs::Ceph => "ceph".to_string(),
+                    NetworkFs::Other(s) => s.clone(),
+                }),
+                _ => None,
+            });
+        (true, fs_type)
+    } else {
+        (false, None)
+    };
+
+    log::info!(
+        "Folder network info: is_network={}, fs_type={:?}",
+        is_network,
+        fs_type
+    );
+
+    let guard__ = state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
+    let id = db
+        .add_folder_with_network_info(&path, is_network, fs_type.as_deref())
+        .map_err(|e| e.to_string())?;
+
+    // Return the full folder info
+    db.get_folder_by_id(id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "Failed to retrieve folder after insert".to_string())
 }
 
 #[tauri::command]
 pub async fn v2_library_cleanup_missing_files(
     state: State<'_, LibraryState>,
 ) -> Result<crate::library::CleanupResult, String> {
-    crate::library::library_cleanup_missing_files(state).await
+    log::info!("Command: library_cleanup_missing_files");
+
+    let guard__ = state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
+
+    // Get all track paths
+    let tracks = db.get_all_track_paths().map_err(|e| e.to_string())?;
+    let total = tracks.len();
+    log::info!("Checking {} tracks for missing files...", total);
+
+    // Find tracks whose files don't exist
+    let mut missing_ids: Vec<i64> = Vec::new();
+    for (id, path) in &tracks {
+        if !std::path::Path::new(path).exists() {
+            log::debug!("Missing file: {}", path);
+            missing_ids.push(*id);
+        }
+    }
+
+    log::info!(
+        "Found {} missing files out of {} tracks",
+        missing_ids.len(),
+        total
+    );
+
+    // Delete missing tracks in batches
+    let removed = if !missing_ids.is_empty() {
+        let mut total_removed = 0;
+        for chunk in missing_ids.chunks(500) {
+            let count = db.delete_tracks_by_ids(chunk).map_err(|e| e.to_string())?;
+            total_removed += count;
+        }
+        total_removed
+    } else {
+        0
+    };
+
+    log::info!("Removed {} tracks with missing files", removed);
+
+    Ok(crate::library::CleanupResult {
+        checked: total,
+        removed,
+    })
 }
 
 #[tauri::command]
