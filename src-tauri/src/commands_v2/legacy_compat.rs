@@ -308,10 +308,155 @@ pub async fn v2_share_album_songlink(
 pub async fn v2_library_backfill_downloads(
     state: State<'_, LibraryState>,
     offline_cache_state: State<'_, crate::offline_cache::OfflineCacheState>,
-) -> Result<crate::library::commands::BackfillReport, RuntimeError> {
-    crate::library::commands::library_backfill_downloads(state, offline_cache_state)
-        .await
-        .map_err(RuntimeError::Internal)
+) -> Result<crate::library::BackfillReport, RuntimeError> {
+    use crate::library::{BackfillReport, MetadataExtractor};
+
+    log::info!("Command: v2_library_backfill_downloads");
+
+    let mut report = BackfillReport {
+        total_downloads: 0,
+        added_tracks: 0,
+        repaired_tracks: 0,
+        skipped_tracks: 0,
+        failed_tracks: Vec::new(),
+    };
+
+    // Get all ready cached tracks directly from offline cache DB
+    let cached_tracks = {
+        let cache_db_opt__ = offline_cache_state.db.lock().await;
+        let cache_db = cache_db_opt__
+            .as_ref()
+            .ok_or_else(|| RuntimeError::Internal("No active session - please log in".to_string()))?;
+
+        let mut stmt = cache_db
+            .conn()
+            .prepare("SELECT track_id, title, artist, album, album_id, duration_secs, file_path, quality, bit_depth, sample_rate FROM cached_tracks WHERE status = 'ready'")
+            .map_err(|e| RuntimeError::Internal(format!("Failed to query cached tracks: {}", e)))?;
+
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, i64>(0)? as u64,                    // track_id
+                    row.get::<_, String>(1)?,                        // title
+                    row.get::<_, String>(2)?,                        // artist
+                    row.get::<_, Option<String>>(3)?,                // album
+                    row.get::<_, i64>(5)? as u64,                    // duration_secs
+                    row.get::<_, String>(6)?,                        // file_path
+                    row.get::<_, Option<i64>>(8)?.map(|v| v as u32), // bit_depth
+                    row.get::<_, Option<f64>>(9)?,                   // sample_rate
+                ))
+            })
+            .map_err(|e| RuntimeError::Internal(format!("Failed to map rows: {}", e)))?;
+
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| RuntimeError::Internal(format!("Failed to collect cached tracks: {}", e)))?
+    }; // cache_db lock is dropped here
+
+    report.total_downloads = cached_tracks.len();
+
+    let library_db_opt__ = state.db.lock().await;
+    let library_db = library_db_opt__
+        .as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session - please log in".to_string()))?;
+
+    for (track_id, title, artist, album, duration_secs, file_path, bit_depth, sample_rate) in
+        cached_tracks
+    {
+        // Strategy: Try to match by qobuz_track_id first, then by file_path
+        // This handles both intact downloads and downloads damaged by scanner
+
+        let exists_by_id = library_db
+            .track_exists_by_qobuz_id(track_id)
+            .unwrap_or(false);
+
+        let exists_by_path = library_db.track_exists_by_path(&file_path).unwrap_or(false);
+
+        if exists_by_id {
+            // Track exists with correct qobuz_track_id (not damaged)
+            // Check if it just needs source repair
+            match library_db.is_qobuz_cached_track_by_path(&file_path) {
+                Ok(true) => {
+                    // Already marked as cached track, nothing to do
+                    report.skipped_tracks += 1;
+                }
+                Ok(false) => {
+                    // Has qobuz_track_id but lost source marker - unusual case
+                    log::info!(
+                        "Repairing source for track with intact ID {}: {}",
+                        track_id,
+                        title
+                    );
+                    match library_db.repair_qobuz_cached_track_by_path(track_id, &file_path) {
+                        Ok(true) => report.repaired_tracks += 1,
+                        Ok(false) => report.skipped_tracks += 1,
+                        Err(e) => {
+                            log::warn!("Failed to repair track {}: {}", track_id, e);
+                            report.failed_tracks.push(title);
+                        }
+                    }
+                }
+                Err(e) => {
+                    log::warn!(
+                        "Failed to check cached track status for {}: {}",
+                        track_id,
+                        e
+                    );
+                    report.failed_tracks.push(title);
+                }
+            }
+            continue;
+        }
+
+        if exists_by_path {
+            // Track exists by path but lost qobuz_track_id (damaged by scanner)
+            log::info!(
+                "Repairing damaged cached track (lost ID) {}: {}",
+                track_id,
+                title
+            );
+            match library_db.repair_qobuz_cached_track_by_path(track_id, &file_path) {
+                Ok(true) => report.repaired_tracks += 1,
+                Ok(false) => report.skipped_tracks += 1,
+                Err(e) => {
+                    log::warn!("Failed to repair track by path {}: {}", track_id, e);
+                    report.failed_tracks.push(title);
+                }
+            }
+            continue;
+        }
+
+        // Track doesn't exist - extract track/disc number from file tags
+        let (track_num, disc_num) =
+            match MetadataExtractor::extract(std::path::Path::new(&file_path)) {
+                Ok(meta) => (meta.track_number, meta.disc_number),
+                Err(e) => {
+                    log::warn!("Could not extract metadata from {}: {}", file_path, e);
+                    (None, None)
+                }
+            };
+
+        // Insert as new
+        match library_db.insert_qobuz_cached_track_direct(
+            track_id,
+            &title,
+            &artist,
+            album.as_deref(),
+            duration_secs,
+            &file_path,
+            bit_depth,
+            sample_rate,
+            track_num,
+            disc_num,
+        ) {
+            Ok(_) => report.added_tracks += 1,
+            Err(e) => {
+                log::warn!("Failed to insert track {}: {}", track_id, e);
+                report.failed_tracks.push(title);
+            }
+        }
+    }
+
+    Ok(report)
 }
 
 #[tauri::command]
