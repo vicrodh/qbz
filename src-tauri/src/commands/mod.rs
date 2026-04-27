@@ -1,9 +1,0 @@
-//! Legacy commands module.
-//!
-//! NOTE:
-//! The active frontend/runtime contract is V2 (`runtime_*` + `v2_*`) only.
-//! This module keeps only the minimal internal legacy pieces still referenced
-//! by non-frontend subsystems while hard-delete migration is in progress.
-
-pub mod user_session;
-pub use user_session::*;

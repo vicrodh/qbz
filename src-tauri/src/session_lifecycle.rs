@@ -7,10 +7,35 @@
 //! from multiple places (runtime_bootstrap, commands, etc.) without
 //! duplicating the complex state initialization logic.
 
+use std::path::Path;
+use std::sync::{Arc, Mutex};
+
 use tauri::{Emitter, Manager};
 
 use crate::runtime::{RuntimeEvent, RuntimeManagerState};
 use crate::user_data::UserDataPaths;
+
+/// Helper to init a type-alias state (Arc<Mutex<Option<Store>>>) at a path.
+pub fn init_type_alias_state<S, F>(
+    state: &Arc<Mutex<Option<S>>>,
+    base_dir: &Path,
+    constructor: F,
+) -> Result<(), String>
+where
+    F: FnOnce(&Path) -> Result<S, String>,
+{
+    let store = constructor(base_dir)?;
+    let mut guard = state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    *guard = Some(store);
+    Ok(())
+}
+
+/// Helper to teardown a type-alias state.
+pub fn teardown_type_alias_state<S>(state: &Arc<Mutex<Option<S>>>) {
+    if let Ok(mut guard) = state.lock() {
+        *guard = None;
+    }
+}
 
 /// Activate a user session from anywhere given an AppHandle.
 ///
@@ -21,8 +46,8 @@ use crate::user_data::UserDataPaths;
 /// 4. Updates runtime state
 /// 5. Emits UserSessionActivated event
 ///
-/// Note: This is the core logic extracted from `activate_user_session` command.
-/// It can be called from runtime_bootstrap, v2_login, or the command itself.
+/// Note: This is the core logic invoked from runtime_bootstrap and v2_login
+/// after the legacy `activate_user_session` Tauri command was retired.
 pub async fn activate_session(app: &tauri::AppHandle, user_id: u64) -> Result<(), String> {
     log::info!("[SessionLifecycle] Activating session");
 
@@ -171,12 +196,12 @@ pub async fn activate_session(app: &tauri::AppHandle, user_id: u64) -> Result<()
     use crate::config::{
         download_settings::DownloadSettingsStore, subscription_state::SubscriptionStateStore,
     };
-    crate::commands::user_session::init_type_alias_state(
+    init_type_alias_state(
         &*subscription_state,
         &data_dir,
         SubscriptionStateStore::new_at,
     )?;
-    crate::commands::user_session::init_type_alias_state(
+    init_type_alias_state(
         &*download_settings,
         &data_dir,
         DownloadSettingsStore::new_at,
@@ -327,8 +352,8 @@ pub async fn deactivate_session(app: &tauri::AppHandle) -> Result<(), String> {
 
     // Type-alias states (per-user settings)
     // NOTE: LegalSettingsState is GLOBAL (not per-user) - NOT torn down here
-    crate::commands::user_session::teardown_type_alias_state(&*subscription_state);
-    crate::commands::user_session::teardown_type_alias_state(&*download_settings);
+    teardown_type_alias_state(&*subscription_state);
+    teardown_type_alias_state(&*download_settings);
 
     // Clear the active user but KEEP last_user_id on disk.
     // Offline mode needs it to load the user's library and settings
@@ -420,7 +445,7 @@ pub async fn activate_offline_session(app: &tauri::AppHandle) -> Result<(), Stri
     // Download settings — needed for "Show in Local Library" toggle
     {
         use crate::config::download_settings::DownloadSettingsStore;
-        crate::commands::user_session::init_type_alias_state(
+        init_type_alias_state(
             &*download_settings,
             &data_dir,
             DownloadSettingsStore::new_at,
