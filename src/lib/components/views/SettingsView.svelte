@@ -1501,10 +1501,11 @@
     const unsubscribeZoom = subscribeZoom(updateZoomLevel);
 
     // Load library settings
+    // Use !== 'false' (default ON) to match LocalLibraryView's read convention.
+    // Both files now agree: stored 'false' => OFF; everything else (including
+    // null on first run, or stale 'true') => ON.
     const savedFetchArtistImages = getUserItem('qbz-fetch-artist-images');
-    if (savedFetchArtistImages !== null) {
-      fetchQobuzArtistImages = savedFetchArtistImages === 'true';
-    }
+    fetchQobuzArtistImages = savedFetchArtistImages !== 'false';
 
     // Load download settings
     loadDownloadSettings();
