@@ -6,8 +6,8 @@ use tauri::State;
 
 use crate::discogs::DiscogsClient;
 use crate::library::{
-    get_artwork_cache_dir, thumbnails, ArtistImageInfo, LibraryFolder, LibraryStats, LocalAlbum,
-    LocalArtist, LocalTrack, MetadataExtractor, ScanProgress,
+    get_artwork_cache_dir, thumbnails, ArtistImageInfo, LibraryFolder, LocalAlbum, LocalTrack,
+    MetadataExtractor,
 };
 
 // Shared state types and DTOs live in `super::state`; re-export them from
@@ -267,17 +267,6 @@ pub async fn library_check_folder_accessible(path: String) -> Result<bool, Strin
     }
 }
 
-// === Scanning ===
-
-
-#[tauri::command]
-pub async fn library_get_scan_progress(
-    state: State<'_, LibraryState>,
-) -> Result<ScanProgress, String> {
-    let progress = state.scan_progress.lock().await;
-    Ok(progress.clone())
-}
-
 // === Queries ===
 
 #[tauri::command]
@@ -332,105 +321,6 @@ pub async fn library_get_album_tracks(
         .ok_or("No active session - please log in")?;
     db.get_album_tracks(&album_group_key)
         .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub async fn library_get_artists(
-    exclude_network_folders: Option<bool>,
-    state: State<'_, LibraryState>,
-    download_settings_state: State<'_, crate::config::DownloadSettingsState>,
-) -> Result<Vec<LocalArtist>, String> {
-    log::info!(
-        "Command: library_get_artists (exclude_network: {:?})",
-        exclude_network_folders
-    );
-
-    // Get download settings
-    let include_qobuz = download_settings_state
-        .lock()
-        .map_err(|e| format!("Failed to lock download settings: {}", e))?
-        .as_ref()
-        .and_then(|s| s.get_settings().ok())
-        .map(|s| s.show_in_library)
-        .unwrap_or(false);
-
-    let guard__ = state.db.lock().await;
-    let db = guard__
-        .as_ref()
-        .ok_or("No active session - please log in")?;
-
-    // Use optimized SQL-based filtering instead of N+1 query pattern
-    let artists = db
-        .get_artists_with_filter(include_qobuz, exclude_network_folders.unwrap_or(false))
-        .map_err(|e| e.to_string())?;
-
-    log::info!("Returning {} artists", artists.len());
-    Ok(artists)
-}
-
-#[tauri::command]
-pub async fn library_search(
-    query: String,
-    limit: Option<u32>,
-    exclude_network_folders: Option<bool>,
-    state: State<'_, LibraryState>,
-    download_settings_state: State<'_, crate::config::DownloadSettingsState>,
-) -> Result<Vec<LocalTrack>, String> {
-    log::info!(
-        "Command: library_search \"{}\" (exclude_network: {:?})",
-        query,
-        exclude_network_folders
-    );
-
-    // Get download settings
-    let include_qobuz = download_settings_state
-        .lock()
-        .map_err(|e| format!("Failed to lock download settings: {}", e))?
-        .as_ref()
-        .and_then(|s| s.get_settings().ok())
-        .map(|s| s.show_in_library)
-        .unwrap_or(false);
-
-    let guard__ = state.db.lock().await;
-    let db = guard__
-        .as_ref()
-        .ok_or("No active session - please log in")?;
-
-    // Use optimized SQL-based filtering
-    // limit = 0 means no limit (fetch all tracks)
-    let tracks = db
-        .search_with_filter(
-            &query,
-            limit.unwrap_or(0),
-            include_qobuz,
-            exclude_network_folders.unwrap_or(false),
-        )
-        .map_err(|e| e.to_string())?;
-
-    log::info!("Search returned {} tracks", tracks.len());
-    Ok(tracks)
-}
-
-#[tauri::command]
-pub async fn library_get_stats(
-    state: State<'_, LibraryState>,
-    download_settings_state: State<'_, crate::config::DownloadSettingsState>,
-) -> Result<LibraryStats, String> {
-    log::info!("Command: library_get_stats");
-
-    let include_qobuz = download_settings_state
-        .lock()
-        .map_err(|e| format!("Failed to lock download settings: {}", e))?
-        .as_ref()
-        .and_then(|s| s.get_settings().ok())
-        .map(|s| s.show_in_library)
-        .unwrap_or(false);
-
-    let guard__ = state.db.lock().await;
-    let db = guard__
-        .as_ref()
-        .ok_or("No active session - please log in")?;
-    db.get_stats(include_qobuz).map_err(|e| e.to_string())
 }
 
 // === Playback ===

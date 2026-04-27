@@ -779,7 +779,8 @@ pub async fn v2_library_get_thumbnails_cache_size() -> Result<u64, String> {
 pub async fn v2_library_get_scan_progress(
     library_state: State<'_, LibraryState>,
 ) -> Result<ScanProgress, String> {
-    crate::library::library_get_scan_progress(library_state).await
+    let progress = library_state.scan_progress.lock().await;
+    Ok(progress.clone())
 }
 
 #[tauri::command]
@@ -2056,7 +2057,21 @@ pub async fn v2_library_get_stats(
     state: State<'_, LibraryState>,
     download_settings_state: State<'_, DownloadSettingsState>,
 ) -> Result<crate::library::LibraryStats, String> {
-    crate::library::library_get_stats(state, download_settings_state).await
+    log::info!("Command: library_get_stats");
+
+    let include_qobuz = download_settings_state
+        .lock()
+        .map_err(|e| format!("Failed to lock download settings: {}", e))?
+        .as_ref()
+        .and_then(|s| s.get_settings().ok())
+        .map(|s| s.show_in_library)
+        .unwrap_or(false);
+
+    let guard__ = state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
+    db.get_stats(include_qobuz).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -2252,8 +2267,32 @@ pub async fn v2_library_get_artists(
     state: State<'_, LibraryState>,
     download_settings_state: State<'_, DownloadSettingsState>,
 ) -> Result<Vec<crate::library::LocalArtist>, String> {
-    crate::library::library_get_artists(exclude_network_folders, state, download_settings_state)
-        .await
+    log::info!(
+        "Command: library_get_artists (exclude_network: {:?})",
+        exclude_network_folders
+    );
+
+    // Get download settings
+    let include_qobuz = download_settings_state
+        .lock()
+        .map_err(|e| format!("Failed to lock download settings: {}", e))?
+        .as_ref()
+        .and_then(|s| s.get_settings().ok())
+        .map(|s| s.show_in_library)
+        .unwrap_or(false);
+
+    let guard__ = state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
+
+    // Use optimized SQL-based filtering instead of N+1 query pattern
+    let artists = db
+        .get_artists_with_filter(include_qobuz, exclude_network_folders.unwrap_or(false))
+        .map_err(|e| e.to_string())?;
+
+    log::info!("Returning {} artists", artists.len());
+    Ok(artists)
 }
 
 #[tauri::command]
@@ -2264,14 +2303,39 @@ pub async fn v2_library_search(
     state: State<'_, LibraryState>,
     download_settings_state: State<'_, DownloadSettingsState>,
 ) -> Result<Vec<crate::library::LocalTrack>, String> {
-    crate::library::library_search(
+    log::info!(
+        "Command: library_search \"{}\" (exclude_network: {:?})",
         query,
-        limit,
-        exclude_network_folders,
-        state,
-        download_settings_state,
-    )
-    .await
+        exclude_network_folders
+    );
+
+    // Get download settings
+    let include_qobuz = download_settings_state
+        .lock()
+        .map_err(|e| format!("Failed to lock download settings: {}", e))?
+        .as_ref()
+        .and_then(|s| s.get_settings().ok())
+        .map(|s| s.show_in_library)
+        .unwrap_or(false);
+
+    let guard__ = state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
+
+    // Use optimized SQL-based filtering
+    // limit = 0 means no limit (fetch all tracks)
+    let tracks = db
+        .search_with_filter(
+            &query,
+            limit.unwrap_or(0),
+            include_qobuz,
+            exclude_network_folders.unwrap_or(false),
+        )
+        .map_err(|e| e.to_string())?;
+
+    log::info!("Search returned {} tracks", tracks.len());
+    Ok(tracks)
 }
 
 #[tauri::command]
