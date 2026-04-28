@@ -418,6 +418,7 @@ pub async fn v2_set_media_metadata(
     duration_secs: Option<u64>,
     cover_url: Option<String>,
     app_state: State<'_, AppState>,
+    app_handle: tauri::AppHandle,
 ) -> Result<(), RuntimeError> {
     log::info!("[V2] Command: set_media_metadata - {} by {}", title, artist);
     crate::update_media_controls_metadata(
@@ -428,6 +429,17 @@ pub async fn v2_set_media_metadata(
         duration_secs,
         cover_url,
     );
+
+    // Push the same metadata into the Linux SNI tooltip so panel hover shows
+    // the live track info instead of the static "QBZ — Music Player" string.
+    #[cfg(target_os = "linux")]
+    {
+        use tauri::Manager;
+        if let Some(tray) = app_handle.try_state::<crate::tray_linux_ksni::LinuxTrayHandle>() {
+            tray.set_track(title.clone(), artist.clone(), album.clone());
+        }
+    }
+    let _ = app_handle;
     Ok(())
 }
 

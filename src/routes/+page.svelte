@@ -5210,6 +5210,7 @@
     let unlistenTrayPlayPause: UnlistenFn | null = null;
     let unlistenTrayNext: UnlistenFn | null = null;
     let unlistenTrayPrevious: UnlistenFn | null = null;
+    let unlistenTrayVolumeDelta: UnlistenFn | null = null;
     let unlistenMediaControls: UnlistenFn | null = null;
     let unlistenLinkResolved: UnlistenFn | null = null;
     let unlistenQconnectEvent: UnlistenFn | null = null;
@@ -5241,6 +5242,19 @@
       });
       if (disposed) { unlisten3(); return; }
       unlistenTrayPrevious = unlisten3;
+
+      // Tray scroll wheel: backend emits a normalised tick count (positive
+      // = wheel-up = volume up, negative = wheel-down). Each tick = 5%.
+      const unlistenVol = await listen<number>('tray:volume_delta', async (event) => {
+        const ticks = typeof event.payload === 'number' ? event.payload : 0;
+        if (!ticks) return;
+        const delta = ticks * 5;
+        const next = Math.max(0, Math.min(100, Math.round(volume + delta)));
+        if (next === volume) return;
+        await handleVolumeChange(next);
+      });
+      if (disposed) { unlistenVol(); return; }
+      unlistenTrayVolumeDelta = unlistenVol;
 
       const unlisten4 = await listen('media:control', async (event) => {
         const payload = event.payload as MediaControlPayload;
@@ -5446,6 +5460,7 @@
       unlistenTrayPlayPause?.();
       unlistenTrayNext?.();
       unlistenTrayPrevious?.();
+      unlistenTrayVolumeDelta?.();
       unlistenMediaControls?.();
       unlistenLinkResolved?.();
       unlistenQconnectEvent?.();

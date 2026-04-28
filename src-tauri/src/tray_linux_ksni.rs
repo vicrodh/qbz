@@ -5,20 +5,30 @@
 //! always shows the menu. See issue #310.
 //!
 //! `ksni` is a pure-Rust SNI implementation that exposes the full protocol
-//! including `Activate` (left-click), `SecondaryActivate` (middle-click) and
-//! `ContextMenu` (right-click → menu). Same SNI compatibility as the old
-//! tray (both need an SNI-aware panel: KDE native, GNOME w/ extension,
-//! XFCE/Cinnamon/MATE/Budgie, wlroots tray widgets).
+//! including `Activate` (left-click), `SecondaryActivate` (middle-click),
+//! `Scroll` (wheel) and `ContextMenu` (right-click → menu). Same SNI
+//! compatibility as the old tray (both need an SNI-aware panel: KDE native,
+//! GNOME w/ extension, XFCE/Cinnamon/MATE/Budgie, wlroots tray widgets).
 //!
 //! This module runs a ksni `TrayService` in a dedicated background thread
 //! (via the blocking API). All callbacks receive `&mut QbzTray` and close
 //! over the Tauri `AppHandle` to emit events and manipulate the main window.
+//!
+//! The returned `LinuxTrayHandle` is stored in Tauri state so the rest of
+//! the backend (metadata setter, playback poll loop) can push live updates
+//! into the SNI tooltip — replicating the rich tooltip the Plasma media
+//! plasmoid shows on hover.
+
+use std::sync::{
+    mpsc::{self, Sender},
+    Arc, Mutex,
+};
 
 use image::GenericImageView;
 use ksni::{
     blocking::TrayMethods,
     menu::StandardItem,
-    Icon, MenuItem, ToolTip, Tray,
+    Icon, MenuItem, Orientation, ToolTip, Tray,
 };
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -106,9 +116,19 @@ fn decode_tray_icons() -> Result<Vec<Icon>, String> {
     sources.iter().map(|b| decode_pixmap(b)).collect()
 }
 
+/// Now-playing info shown in the tooltip. Cleared when no track is loaded.
+#[derive(Clone, Debug, Default)]
+struct NowPlaying {
+    title: String,
+    artist: String,
+    album: String,
+}
+
 struct QbzTray {
     app: AppHandle,
     icons: Vec<Icon>,
+    now_playing: Option<NowPlaying>,
+    is_playing: bool,
 }
 
 impl QbzTray {
@@ -133,6 +153,12 @@ impl QbzTray {
     fn emit_to_main(&self, event: &str) {
         if let Some(window) = self.app.get_webview_window("main") {
             let _ = window.emit(event, ());
+        }
+    }
+
+    fn emit_payload<S: serde::Serialize + Clone>(&self, event: &str, payload: S) {
+        if let Some(window) = self.app.get_webview_window("main") {
+            let _ = window.emit(event, payload);
         }
     }
 }
@@ -160,26 +186,76 @@ impl Tray for QbzTray {
     }
 
     fn tool_tip(&self) -> ToolTip {
+        // Plasma's media plasmoid renders a multi-line tooltip with the track
+        // title bolded on top and secondary lines below. SNI's ToolTip has a
+        // (title, description) split that maps onto the same visual: panels
+        // typically render `title` bold and `description` as wrapping body
+        // text that respects '\n'.
+        let (title, description) = match &self.now_playing {
+            Some(np) => {
+                let header = if np.title.is_empty() {
+                    "QBZ".to_string()
+                } else {
+                    np.title.clone()
+                };
+                let mut lines: Vec<String> = Vec::with_capacity(3);
+                if !np.artist.is_empty() {
+                    lines.push(format!("by {}", np.artist));
+                }
+                if !np.album.is_empty() {
+                    lines.push(np.album.clone());
+                }
+                lines.push(if self.is_playing {
+                    "Middle-click to pause".to_string()
+                } else {
+                    "Middle-click to play".to_string()
+                });
+                lines.push("Scroll to adjust volume".to_string());
+                (header, lines.join("\n"))
+            }
+            None => (
+                "QBZ".to_string(),
+                "Music Player\nNothing playing".to_string(),
+            ),
+        };
         ToolTip {
-            title: "QBZ".into(),
-            description: "Music Player".into(),
+            title,
+            description,
             icon_name: String::new(),
             icon_pixmap: vec![],
         }
     }
 
-    /// Primary click (left) — the headline feature of switching to ksni.
+    /// Primary click (left) — toggle main window visibility.
     fn activate(&mut self, _x: i32, _y: i32) {
         log::info!("[tray] primary activate (left click)");
         self.toggle_window();
     }
 
-    /// Secondary click (middle) — same as left for symmetry; users who were
-    /// middle-clicking on the old build to open the menu still get a useful
-    /// behavior.
+    /// Secondary click (middle) — play/pause, mirroring the Plasma media
+    /// plasmoid behaviour. When nothing is loaded the frontend simply ignores
+    /// the toggle, so emitting unconditionally is safe.
     fn secondary_activate(&mut self, _x: i32, _y: i32) {
-        log::info!("[tray] secondary activate (middle click)");
-        self.toggle_window();
+        log::info!("[tray] secondary activate (middle click) -> play/pause");
+        self.emit_to_main("tray:play_pause");
+    }
+
+    /// Mouse wheel — adjust volume in 5%-per-notch steps. Most panels (KDE
+    /// Plasma, GNOME Shell appindicator) report ±120 per wheel notch
+    /// following the X11/wayland convention; touch-pad scrolls produce
+    /// smaller fractional deltas. We normalise by dividing by 120 and fall
+    /// back to `signum()` so very small deltas still register one tick.
+    fn scroll(&mut self, delta: i32, orientation: Orientation) {
+        if !matches!(orientation, Orientation::Vertical) || delta == 0 {
+            return;
+        }
+        let mut ticks = delta / 120;
+        if ticks == 0 {
+            ticks = delta.signum();
+        }
+        log::debug!("[tray] scroll delta={} ticks={}", delta, ticks);
+        // Positive ticks = wheel-up = volume up, matching Plasma plasmoid.
+        self.emit_payload("tray:volume_delta", ticks);
     }
 
     fn menu(&self) -> Vec<MenuItem<Self>> {
@@ -223,17 +299,132 @@ impl Tray for QbzTray {
     }
 }
 
+/// Updates dispatched from the rest of the backend into the ksni worker.
+///
+/// We cannot call `ksni::blocking::Handle::update` directly from a Tauri
+/// command or from the playback poll loop — `ksni` 0.3 with `feature =
+/// "blocking"` wraps every update in `Runtime::block_on`, which panics when
+/// invoked from within an existing tokio runtime (which is exactly what
+/// Tauri commands and `tauri::async_runtime::spawn` tasks run on). The
+/// panic is silently swallowed by the runtime, so updates appear to
+/// succeed but the tooltip never changes.
+///
+/// To avoid the nested-runtime issue we serialise updates over a
+/// `std::sync::mpsc` channel and apply them from a dedicated `std::thread`
+/// that lives entirely outside any tokio context.
+enum TrayUpdate {
+    SetTrack {
+        title: String,
+        artist: String,
+        album: String,
+    },
+    ClearTrack,
+    SetPlaying(bool),
+}
+
+/// Cross-thread handle to the live ksni tray. Cloneable; mutators just
+/// forward to the worker thread, so they are safe to call from any
+/// async context. When the tray is disabled or failed to start, the
+/// inner sender stays `None` and every mutator becomes a no-op.
+#[derive(Clone)]
+pub struct LinuxTrayHandle {
+    sender: Arc<Mutex<Option<Sender<TrayUpdate>>>>,
+}
+
+impl LinuxTrayHandle {
+    pub fn empty() -> Self {
+        Self {
+            sender: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    fn install(&self, handle: ksni::blocking::Handle<QbzTray>) {
+        let (tx, rx) = mpsc::channel::<TrayUpdate>();
+        std::thread::Builder::new()
+            .name("qbz-tray-updater".into())
+            .spawn(move || {
+                while let Ok(msg) = rx.recv() {
+                    match msg {
+                        TrayUpdate::SetTrack {
+                            title,
+                            artist,
+                            album,
+                        } => {
+                            log::debug!(
+                                "[tray] tooltip update -> {} / {} / {}",
+                                title,
+                                artist,
+                                album
+                            );
+                            handle.update(move |tray| {
+                                tray.now_playing = Some(NowPlaying {
+                                    title,
+                                    artist,
+                                    album,
+                                });
+                            });
+                        }
+                        TrayUpdate::ClearTrack => {
+                            log::debug!("[tray] tooltip cleared");
+                            handle.update(|tray| {
+                                tray.now_playing = None;
+                                tray.is_playing = false;
+                            });
+                        }
+                        TrayUpdate::SetPlaying(is_playing) => {
+                            handle.update(move |tray| {
+                                tray.is_playing = is_playing;
+                            });
+                        }
+                    }
+                }
+                log::debug!("[tray] updater thread exiting");
+            })
+            .expect("spawn tray updater thread");
+        if let Ok(mut guard) = self.sender.lock() {
+            *guard = Some(tx);
+        }
+    }
+
+    fn send(&self, msg: TrayUpdate) {
+        let guard = match self.sender.lock() {
+            Ok(g) => g,
+            Err(_) => return,
+        };
+        if let Some(tx) = guard.as_ref() {
+            let _ = tx.send(msg);
+        }
+    }
+
+    pub fn set_track(&self, title: String, artist: String, album: String) {
+        self.send(TrayUpdate::SetTrack {
+            title,
+            artist,
+            album,
+        });
+    }
+
+    pub fn clear_track(&self) {
+        self.send(TrayUpdate::ClearTrack);
+    }
+
+    pub fn set_playing(&self, is_playing: bool) {
+        self.send(TrayUpdate::SetPlaying(is_playing));
+    }
+}
+
 /// Initialize the Linux ksni tray service. Spawns a background thread that
-/// owns the SNI service; the returned Handle is intentionally leaked because
-/// the tray is a singleton that lives for the app's lifetime (dropping the
-/// handle would tear down the tray).
-pub fn init(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
+/// owns the SNI service and returns a cloneable handle so live tooltip
+/// updates can be pushed in from the rest of the backend.
+pub fn init(app: &AppHandle) -> Result<LinuxTrayHandle, Box<dyn std::error::Error>> {
     log::info!("Initializing ksni tray (Linux, SNI primary-activate enabled)");
 
     let icons = decode_tray_icons()?;
     let tray = QbzTray {
         app: app.clone(),
         icons,
+        now_playing: None,
+        is_playing: false,
     };
 
     // Flatpak requires disabling the well-known DBus name because the sandbox
@@ -245,11 +436,9 @@ pub fn init(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         tray.spawn()?
     };
 
-    // Keep the service alive for the app lifetime. We don't need to update the
-    // tray dynamically yet; if we do in the future (e.g., change icon when
-    // playing), we'd store this handle in AppState instead.
-    std::mem::forget(handle);
+    let live = LinuxTrayHandle::empty();
+    live.install(handle);
 
     log::info!("ksni tray initialized");
-    Ok(())
+    Ok(live)
 }

@@ -1211,6 +1211,27 @@ pub fn run() {
                         }
                     }
 
+                    // Mirror playback state into the Linux SNI tooltip so the
+                    // tray hover hint flips between "Middle-click to pause"
+                    // and "Middle-click to play". Track metadata is pushed
+                    // separately via v2_set_media_metadata; here we only
+                    // touch the play/pause flag and clear on track-stop.
+                    // `should_update_mpris` already debounces to actual
+                    // state transitions (plus position ticks while playing),
+                    // so the cost is bounded.
+                    #[cfg(target_os = "linux")]
+                    if should_update_mpris {
+                        if let Some(tray) = app_handle
+                            .try_state::<crate::tray_linux_ksni::LinuxTrayHandle>()
+                        {
+                            if track_id == 0 {
+                                tray.clear_track();
+                            } else {
+                                tray.set_playing(is_playing);
+                            }
+                        }
+                    }
+
                     // Idle inhibit: prevent screen/suspend while playing (Linux only, via XDG Portal)
                     #[cfg(target_os = "linux")]
                     if is_playing != last_is_playing || track_cleared {
