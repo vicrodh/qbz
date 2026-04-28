@@ -896,12 +896,21 @@
 
   <!-- Breadcrumb Navigation (when inside a folder, only in folder mode and not tree) -->
   {#if folderMode && viewMode !== 'tree' && currentFolderId && currentFolder}
+    {@const breadcrumbFolder = currentFolder}
     <div class="breadcrumb">
       <button class="breadcrumb-item" onclick={navigateToRoot}>
         {$t('playlist.allPlaylists')}
       </button>
       <ChevronRight size={14} class="breadcrumb-separator" />
-      <span class="breadcrumb-current">{currentFolder.name}</span>
+      <span class="breadcrumb-current">{breadcrumbFolder.name}</span>
+      <button
+        class="breadcrumb-edit"
+        onclick={() => openEditFolderModal(breadcrumbFolder)}
+        title={$t('library.editFolder')}
+        aria-label={$t('library.editFolder')}
+      >
+        <Pencil size={14} />
+      </button>
     </div>
   {/if}
 
@@ -1768,6 +1777,26 @@
   .breadcrumb-current {
     color: var(--text-primary);
     font-weight: 500;
+  }
+
+  .breadcrumb-edit {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    background: none;
+    border: none;
+    border-radius: 4px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: background-color 150ms ease, color 150ms ease;
+  }
+
+  .breadcrumb-edit:hover {
+    color: var(--text-primary);
+    background-color: var(--bg-hover, rgba(255, 255, 255, 0.06));
   }
 
   /* Folders Section */
