@@ -4,6 +4,7 @@
   import type { OfflineCacheStatus } from '$lib/stores/offlineCacheState';
   import { isBlacklisted as isArtistBlacklisted } from '$lib/stores/artistBlacklistStore';
   import { restoreScrollOnBackForward } from '$lib/utils/scrollRestore';
+  import { formatTrackTitle } from '$lib/utils/trackTitle';
 
   // Use generic types to match whatever caller passes
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -98,7 +99,7 @@
     // Optional accessors with defaults for LocalTrack structure
     getTrackId = (track: Track) => track.id,
     getTrackNumber = (track: Track, idx: number) => track.track_number ?? idx + 1,
-    getTrackTitle = (track: Track) => track.title,
+    getTrackTitle = (track: Track) => formatTrackTitle(track),
     getTrackArtist = (track: Track) => track.artist,
     getTrackDuration = (track: Track) => track.duration_secs,
     getTrackAlbumKey = (track: Track) => track.album_group_key,

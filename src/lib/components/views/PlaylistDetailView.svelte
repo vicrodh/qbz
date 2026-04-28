@@ -2,6 +2,7 @@
   import { ArrowLeft, Play, Shuffle, ListMusic, Search, X, ChevronDown, ChevronRight, ChevronUp, ImagePlus, PenLine, ChartNoAxesColumn, Heart, CloudDownload, ListPlus, GripVertical, SquareCheckBig, Bookmark } from 'lucide-svelte';
   import AlbumMenu from '../AlbumMenu.svelte';
   import { openAddToMixtape } from '$lib/stores/addToMixtapeModalStore';
+  import { formatTrackTitle } from '$lib/utils/trackTitle';
   import PlaylistCollage from '../PlaylistCollage.svelte';
   import { cachedSrc } from '$lib/actions/cachedImage';
   import PlaylistModal from '../PlaylistModal.svelte';
@@ -2798,7 +2799,7 @@
             <TrackRow
               trackId={track.isLocal ? undefined : track.id}
               number={idx + 1}
-              title={track.title}
+              title={formatTrackTitle(track)}
               artist={track.artist}
               album={track.album}
               showArtwork={true}

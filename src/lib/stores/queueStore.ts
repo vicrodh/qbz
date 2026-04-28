@@ -14,6 +14,10 @@ export interface QueueTrack {
   id: string;
   artwork: string;
   title: string;
+  /** Qobuz subtitle/edition (e.g. "Player's Ball Mix"). Render with
+   *  formatTrackTitle() so remix/reissue albums are distinguishable
+   *  from originals (#360). */
+  version?: string | null;
   artist: string;
   duration: string;
   available?: boolean; // Whether track is available (false when offline without local copy)
@@ -24,6 +28,10 @@ export interface QueueTrack {
 export interface BackendQueueTrack {
   id: number;
   title: string;
+  /** Subtitle/edition info from Qobuz (e.g. "Player's Ball Mix"). Render
+   * with formatTrackTitle() so remix/reissue albums are distinguishable
+   * from originals (issue #360). */
+  version?: string | null;
   artist: string;
   album: string;
   duration_secs: number;
@@ -196,6 +204,7 @@ async function applyBackendQueueState(queueState: BackendQueueState): Promise<vo
     id: String(track.id),
     artwork: track.artwork_url || '',
     title: track.title,
+    version: track.version ?? null,
     artist: track.artist,
     duration: formatDuration(track.duration_secs),
     available: !isOfflineMode || localTrackIds.has(track.id) || localCopies.has(track.id),

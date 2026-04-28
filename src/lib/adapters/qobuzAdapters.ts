@@ -376,6 +376,7 @@ export function convertQobuzAlbum(album: QobuzAlbum): AlbumDetail {
       id: track.id,
       number: index + 1,
       title: track.title,
+      version: track.version ?? null,
       artist: track.performer?.name,
       duration: formatDuration(track.duration),
       durationSeconds: track.duration,

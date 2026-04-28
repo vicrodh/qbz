@@ -234,6 +234,7 @@ async fn resolve_qobuz_album(
             CoreQueueTrack {
                 id: track.id,
                 title: track.title.clone(),
+                version: track.version.clone(),
                 artist,
                 album: album_title.clone(),
                 duration_secs: track.duration as u64,
@@ -377,6 +378,7 @@ fn track_to_queue_track_from_api(track: &crate::api::Track) -> CoreQueueTrack {
     CoreQueueTrack {
         id: track.id,
         title: track.title.clone(),
+        version: track.version.clone(),
         artist,
         album,
         duration_secs: track.duration as u64,
@@ -412,6 +414,7 @@ fn plex_cached_track_to_queue_track(track: &crate::plex::PlexCachedTrack) -> Cor
     CoreQueueTrack {
         id,
         title: track.title.clone(),
+        version: None,
         artist: track.artist.clone(),
         album: track.album.clone(),
         duration_secs: track.duration_secs,
@@ -450,6 +453,7 @@ pub fn local_track_to_queue_track(track: &qbz_library::LocalTrack) -> CoreQueueT
         // Local ids start from 1 and are never negative in practice.
         id: track.id as u64,
         title: track.title.clone(),
+        version: None,
         artist: track.artist.clone(),
         album: track.album_group_title.clone(),
         duration_secs: track.duration_secs,
@@ -489,6 +493,7 @@ mod tests {
                 .map(|i| CoreQueueTrack {
                     id: i as u64,
                     title: format!("{}-t{}", item.title, i),
+                    version: None,
                     artist: item.subtitle.clone().unwrap_or_default(),
                     album: item.title.clone(),
                     duration_secs: 180,
@@ -584,6 +589,7 @@ mod tests {
         CoreQueueTrack {
             id: 0,
             title: "t".into(),
+            version: None,
             artist: "a".into(),
             album: "alb".into(),
             duration_secs: 100,

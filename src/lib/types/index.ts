@@ -16,6 +16,9 @@ export interface QobuzImage {
 export interface QobuzTrack {
   id: number;
   title: string;
+  /** Subtitle/edition info from Qobuz (e.g. "Player's Ball Mix"). Render
+   *  via formatTrackTitle() to disambiguate remixes/reissues (#360). */
+  version?: string | null;
   duration: number;
   track_number?: number;
   album?: {
@@ -166,6 +169,9 @@ export interface Track {
   id: number;
   number: number;
   title: string;
+  /** Qobuz subtitle/edition (e.g. "Player's Ball Mix"). Render with
+   *  formatTrackTitle() (#360). */
+  version?: string | null;
   artist?: string;
   duration: string;
   durationSeconds: number;
@@ -350,6 +356,8 @@ export interface PlaylistTrack {
   id: number;
   number: number;
   title: string;
+  /** Qobuz subtitle/edition (#360). */
+  version?: string | null;
   artist?: string;
   album?: string;
   albumArt?: string;
@@ -374,6 +382,8 @@ export interface DisplayTrack {
   id: number;
   number?: number;
   title: string;
+  /** Qobuz subtitle/edition (#360). */
+  version?: string | null;
   artist?: string;
   album?: string;
   albumArt?: string;

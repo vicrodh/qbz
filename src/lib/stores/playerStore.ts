@@ -41,6 +41,9 @@ import { syncQueueState } from '$lib/stores/queueStore';
 export interface PlayingTrack {
   id: number;
   title: string;
+  /** Qobuz subtitle/edition info (e.g. "Player's Ball Mix"). Render
+   * via formatTrackTitle() in UI components (#360). */
+  version?: string | null;
   artist: string;
   album: string;
   artwork: string;
@@ -96,6 +99,8 @@ interface PlaybackEvent {
 interface QueueTrack {
   id: number;
   title: string;
+  /** Subtitle/edition info from Qobuz (e.g. "Player's Ball Mix") (#360). */
+  version?: string | null;
   artist: string;
   album: string;
   duration_secs: number;
@@ -691,6 +696,7 @@ async function handlePlaybackEvent(event: PlaybackEvent): Promise<void> {
         currentTrack = {
           id: queueTrack.id,
           title: queueTrack.title,
+          version: queueTrack.version ?? null,
           artist: queueTrack.artist,
           album: queueTrack.album,
           artwork: queueTrack.artwork_url || '',

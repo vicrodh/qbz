@@ -125,6 +125,7 @@ pub(super) fn model_track_to_core_queue_track(track: &Track) -> QueueTrack {
     QueueTrack {
         id: track.id,
         title: track.title.clone(),
+        version: track.version.clone(),
         artist,
         album,
         duration_secs: track.duration as u64,

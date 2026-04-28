@@ -207,6 +207,7 @@ export function buildQueueTrackFromQobuz(track: QobuzTrack): BackendQueueTrack {
   return {
     id: track.id,
     title: track.title,
+    version: track.version ?? null,
     artist: track.performer?.name || 'Unknown Artist',
     album: track.album?.title || '',
     duration_secs: track.duration,
@@ -239,6 +240,7 @@ export function buildQueueTrackFromAlbumTrack(
   return {
     id: track.id,
     title: track.title,
+    version: track.version ?? null,
     artist: track.artist || albumArtist || 'Unknown Artist',
     album: albumTitle || '',
     duration_secs: track.durationSeconds,
@@ -264,6 +266,7 @@ export function buildQueueTrackFromPlaylistTrack(track: PlaylistTrack): BackendQ
   return {
     id: track.id,
     title: track.title,
+    version: track.version ?? null,
     artist: track.artist || 'Unknown Artist',
     album: track.album || 'Playlist',
     duration_secs: track.durationSeconds,

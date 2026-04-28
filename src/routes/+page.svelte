@@ -184,6 +184,7 @@
   import { resolveAwardIdByName } from '$lib/stores/awardCatalogStore';
   import { getDefaultFavoritesTab } from '$lib/utils/favorites';
   import { platform } from '$lib/utils/platform';
+  import { formatTrackTitle } from '$lib/utils/trackTitle';
   import type { FavoritesPreferences, ResolvedMusician } from '$lib/types';
 
   // Mixtapes / Collections views and store
@@ -1224,6 +1225,7 @@
       id: String(track.id),
       artwork: track.artwork_url || '',
       title: track.title,
+      version: track.version ?? null,
       artist: track.artist,
       duration: formatDuration(track.duration_secs),
       trackId: track.id
@@ -5478,6 +5480,7 @@
           id: String(trk.id),
           artwork: trk.artwork_url || '',
           title: trk.title,
+          version: trk.version ?? null,
           artist: trk.artist,
           duration: formatDuration(trk.duration_secs),
           trackId: trk.id
@@ -5521,11 +5524,16 @@
     });
   });
 
-  // Derived values for NowPlayingBar
+  // Derived values for NowPlayingBar. `version` is propagated raw so
+  // each render site can call formatTrackTitle() to compose the
+  // displayed string. Keeping the field separate (instead of pre-
+  // formatting here) lets components style title vs version
+  // differently if desired (#360).
   const currentQueueTrack = $derived<QueueTrack | null>(currentTrack ? {
     id: String(currentTrack.id),
     artwork: currentTrack.artwork,
     title: currentTrack.title,
+    version: currentTrack.version ?? null,
     artist: currentTrack.artist,
     duration: formatDuration(currentTrack.duration),
     trackId: currentTrack.id // For favorite checking in QueuePanel
@@ -6484,7 +6492,7 @@
     {#if currentTrack}
       <NowPlayingBar
         artwork={resolvedArtwork}
-        trackTitle={currentTrack.title}
+        trackTitle={formatTrackTitle(currentTrack)}
         artist={currentTrack.artist}
         album={currentTrack.album}
         quality={currentTrack.quality}
@@ -6586,7 +6594,7 @@
           if (isFocusModeOpen) closeFocusMode();
         }}
         artwork={resolvedArtwork}
-        trackTitle={currentTrack.title}
+        trackTitle={formatTrackTitle(currentTrack)}
         artist={currentTrack.artist}
         album={currentTrack.album}
         trackId={currentTrack.id}

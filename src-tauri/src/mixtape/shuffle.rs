@@ -347,6 +347,7 @@ mod tests {
         CoreQueueTrack {
             id,
             title: title.to_string(),
+            version: None,
             artist: artist.to_string(),
             album: String::new(),
             duration_secs: 0,

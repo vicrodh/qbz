@@ -427,6 +427,10 @@ mod tests {
 pub struct V2QueueTrack {
     pub id: u64,
     pub title: String,
+    /// Subtitle/edition info from Qobuz (e.g. "Player's Ball Mix"),
+    /// rendered parenthesized after the title in the frontend (#360).
+    #[serde(default)]
+    pub version: Option<String>,
     pub artist: String,
     pub album: String,
     pub duration_secs: u64,
@@ -462,6 +466,7 @@ impl From<V2QueueTrack> for CoreQueueTrack {
         Self {
             id: t.id,
             title: t.title,
+            version: t.version,
             artist: t.artist,
             album: t.album,
             duration_secs: t.duration_secs,
@@ -485,6 +490,7 @@ impl From<CoreQueueTrack> for V2QueueTrack {
         Self {
             id: t.id,
             title: t.title,
+            version: t.version,
             artist: t.artist,
             album: t.album,
             duration_secs: t.duration_secs,

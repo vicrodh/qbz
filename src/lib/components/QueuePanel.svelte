@@ -9,6 +9,7 @@
     subscribe as subscribeFavorites
   } from '$lib/stores/favoritesStore';
   import { getUserItem, setUserItem } from '$lib/utils/userStorage';
+  import { formatTrackTitle } from '$lib/utils/trackTitle';
 
   interface QueueTrack {
     id: string;
@@ -314,7 +315,7 @@
               </div>
               <div class="np-info">
                 <div class="np-title-row">
-                  <span class="np-title">{currentTrack.title}</span>
+                  <span class="np-title">{formatTrackTitle(currentTrack)}</span>
                   {#if currentTrack.parental_warning}
                     <span class="explicit-badge" title={ $t('library.explicit') }></span>
                   {/if}
@@ -367,7 +368,7 @@
                   <span class="track-number">{originalIndex + 1}</span>
                   <div class="track-info">
                     <div class="track-title-row">
-                      <span class="track-title">{queueTrack.title}</span>
+                      <span class="track-title">{formatTrackTitle(queueTrack)}</span>
                       {#if queueTrack.parental_warning}
                         <span class="explicit-badge" title={ $t('library.explicit') }></span>
                       {/if}
@@ -433,7 +434,7 @@
                 >
                   <img use:cachedSrc={track.artwork} alt={track.title} class="history-artwork" />
                   <div class="track-info">
-                    <div class="track-title">{track.title}</div>
+                    <div class="track-title">{formatTrackTitle(track)}</div>
                     <div class="track-artist">{track.artist}</div>
                   </div>
                   <span class="track-duration">{track.duration}</span>

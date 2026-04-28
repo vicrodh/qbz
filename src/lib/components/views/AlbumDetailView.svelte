@@ -13,6 +13,7 @@
   } from '$lib/stores/customAlbumCoverStore';
   import { ArrowLeft, Play, Shuffle, Heart, Radio, CloudDownload, ChevronLeft, ChevronRight, LoaderCircle, SquareCheckBig, BookOpen, Disc3, CassetteTape } from 'lucide-svelte';
   import { openAddToMixtape } from '$lib/stores/addToMixtapeModalStore';
+  import { formatTrackTitle } from '$lib/utils/trackTitle';
   import { cachedSrc } from '$lib/actions/cachedImage';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackRow from '../TrackRow.svelte';
@@ -38,6 +39,8 @@
     id: number;
     number: number;
     title: string;
+    /** Qobuz subtitle/edition (e.g. "Player's Ball Mix") (#360). */
+    version?: string | null;
     artist?: string;
     artistId?: number;
     duration: string;
@@ -262,6 +265,7 @@
     return tracks.map(trk => ({
       id: trk.id,
       title: trk.title,
+      version: trk.version ?? null,
       artist: trk.artist || album.artist,
       album: album.title,
       duration_secs: trk.durationSeconds,
@@ -731,7 +735,7 @@
         <TrackRow
           trackId={track.id}
           number={track.number}
-          title={track.title}
+          title={formatTrackTitle(track)}
           artist={track.artist}
           duration={track.duration}
           quality={track.quality}
