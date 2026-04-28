@@ -19,7 +19,10 @@
 //! into the SNI tooltip — replicating the rich tooltip the Plasma media
 //! plasmoid shows on hover.
 
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    mpsc::{self, Sender},
+    Arc, Mutex,
+};
 
 use image::GenericImageView;
 use ksni::{
@@ -296,61 +299,117 @@ impl Tray for QbzTray {
     }
 }
 
-/// Cross-thread handle to the live ksni tray. Cloneable; updates funnel
-/// through `Handle::update`, which schedules a property-changed signal so
-/// SNI panels redraw the tooltip on the next hover.
+/// Updates dispatched from the rest of the backend into the ksni worker.
 ///
-/// When the tray is disabled or failed to start, the inner option stays
-/// `None` and every mutator becomes a no-op.
+/// We cannot call `ksni::blocking::Handle::update` directly from a Tauri
+/// command or from the playback poll loop — `ksni` 0.3 with `feature =
+/// "blocking"` wraps every update in `Runtime::block_on`, which panics when
+/// invoked from within an existing tokio runtime (which is exactly what
+/// Tauri commands and `tauri::async_runtime::spawn` tasks run on). The
+/// panic is silently swallowed by the runtime, so updates appear to
+/// succeed but the tooltip never changes.
+///
+/// To avoid the nested-runtime issue we serialise updates over a
+/// `std::sync::mpsc` channel and apply them from a dedicated `std::thread`
+/// that lives entirely outside any tokio context.
+enum TrayUpdate {
+    SetTrack {
+        title: String,
+        artist: String,
+        album: String,
+    },
+    ClearTrack,
+    SetPlaying(bool),
+}
+
+/// Cross-thread handle to the live ksni tray. Cloneable; mutators just
+/// forward to the worker thread, so they are safe to call from any
+/// async context. When the tray is disabled or failed to start, the
+/// inner sender stays `None` and every mutator becomes a no-op.
 #[derive(Clone)]
 pub struct LinuxTrayHandle {
-    inner: Arc<Mutex<Option<ksni::blocking::Handle<QbzTray>>>>,
+    sender: Arc<Mutex<Option<Sender<TrayUpdate>>>>,
 }
 
 impl LinuxTrayHandle {
     pub fn empty() -> Self {
         Self {
-            inner: Arc::new(Mutex::new(None)),
+            sender: Arc::new(Mutex::new(None)),
         }
     }
 
     fn install(&self, handle: ksni::blocking::Handle<QbzTray>) {
-        if let Ok(mut guard) = self.inner.lock() {
-            *guard = Some(handle);
+        let (tx, rx) = mpsc::channel::<TrayUpdate>();
+        std::thread::Builder::new()
+            .name("qbz-tray-updater".into())
+            .spawn(move || {
+                while let Ok(msg) = rx.recv() {
+                    match msg {
+                        TrayUpdate::SetTrack {
+                            title,
+                            artist,
+                            album,
+                        } => {
+                            log::debug!(
+                                "[tray] tooltip update -> {} / {} / {}",
+                                title,
+                                artist,
+                                album
+                            );
+                            handle.update(move |tray| {
+                                tray.now_playing = Some(NowPlaying {
+                                    title,
+                                    artist,
+                                    album,
+                                });
+                            });
+                        }
+                        TrayUpdate::ClearTrack => {
+                            log::debug!("[tray] tooltip cleared");
+                            handle.update(|tray| {
+                                tray.now_playing = None;
+                                tray.is_playing = false;
+                            });
+                        }
+                        TrayUpdate::SetPlaying(is_playing) => {
+                            handle.update(move |tray| {
+                                tray.is_playing = is_playing;
+                            });
+                        }
+                    }
+                }
+                log::debug!("[tray] updater thread exiting");
+            })
+            .expect("spawn tray updater thread");
+        if let Ok(mut guard) = self.sender.lock() {
+            *guard = Some(tx);
         }
     }
 
-    fn with<F: FnOnce(&mut QbzTray)>(&self, f: F) {
-        let guard = match self.inner.lock() {
+    fn send(&self, msg: TrayUpdate) {
+        let guard = match self.sender.lock() {
             Ok(g) => g,
             Err(_) => return,
         };
-        if let Some(handle) = guard.as_ref() {
-            handle.update(f);
+        if let Some(tx) = guard.as_ref() {
+            let _ = tx.send(msg);
         }
     }
 
     pub fn set_track(&self, title: String, artist: String, album: String) {
-        self.with(move |tray| {
-            tray.now_playing = Some(NowPlaying {
-                title,
-                artist,
-                album,
-            });
+        self.send(TrayUpdate::SetTrack {
+            title,
+            artist,
+            album,
         });
     }
 
     pub fn clear_track(&self) {
-        self.with(|tray| {
-            tray.now_playing = None;
-            tray.is_playing = false;
-        });
+        self.send(TrayUpdate::ClearTrack);
     }
 
     pub fn set_playing(&self, is_playing: bool) {
-        self.with(move |tray| {
-            tray.is_playing = is_playing;
-        });
+        self.send(TrayUpdate::SetPlaying(is_playing));
     }
 }
 
