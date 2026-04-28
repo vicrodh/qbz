@@ -1328,7 +1328,13 @@
     "noQbzdFoundHint": "Certifique-se de que o qbzd esta em execucao no dispositivo alvo",
     "recentDaemons": "Recentes",
     "discoveredDaemons": "Descobertos na rede",
-    "queue": "Fila",
+    "queue": {
+      "label": "Fila",
+      "stopAfterThis": "Parar após esta faixa",
+      "cancelStopAfter": "Cancelar parar após esta",
+      "removeAllAfter": "Remover todas as faixas seguintes",
+      "tracksRemoved": "{count} faixas removidas da fila"
+    },
     "upNext": "A Seguir",
     "ofTotal": "de",
     "remaining": "restantes",

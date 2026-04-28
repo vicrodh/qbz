@@ -1328,7 +1328,13 @@
     "noQbzdFoundHint": "Make sure qbzd is running on the target device",
     "recentDaemons": "Recent",
     "discoveredDaemons": "Discovered on network",
-    "queue": "Queue",
+    "queue": {
+      "label": "Queue",
+      "stopAfterThis": "Stop after this track",
+      "cancelStopAfter": "Cancel stop after this",
+      "removeAllAfter": "Remove all tracks after this",
+      "tracksRemoved": "{count} tracks removed from queue"
+    },
     "upNext": "Up Next",
     "ofTotal": "of",
     "remaining": "left",
