@@ -606,6 +606,7 @@ export function reset(): void {
   hasAuthoritativeRepeatSnapshot = false;
   localTrackIds = new Set();
   tracksWithLocalCopies = new Set();
+  stopAfterTrackId.set(null);
   notifyListeners();
 }
 
