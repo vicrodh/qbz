@@ -144,6 +144,7 @@
     setAutoplayMode,
     setShowContextIcon,
     setPersistSession,
+    setResumePlaybackPosition,
     type AutoplayMode
   } from '$lib/stores/playbackPreferencesStore';
   import {
@@ -984,6 +985,7 @@
   let autoplayMode = $state<AutoplayMode>('continue');
   let showContextIcon = $state(true);
   let persistSession = $state(false);
+  let resumePlaybackPosition = $state(false);
   let gaplessPlayback = $state(true);
   let crossfade = $state(0);
   let normalizeVolume = $state(false);
@@ -3293,9 +3295,11 @@
       autoplayMode = prefs.autoplay_mode;
       showContextIcon = prefs.show_context_icon;
       persistSession = prefs.persist_session;
+      resumePlaybackPosition = prefs.resume_playback_position;
       console.log('[Settings] Set autoplayMode to:', autoplayMode);
       console.log('[Settings] Set showContextIcon to:', showContextIcon);
       console.log('[Settings] Set persistSession to:', persistSession);
+      console.log('[Settings] Set resumePlaybackPosition to:', resumePlaybackPosition);
     } catch (err) {
       console.error('Failed to load playback preferences:', err);
     }
@@ -3381,6 +3385,17 @@
       console.log('[Settings] Persist session saved successfully');
     } catch (err) {
       console.error('[Settings] Failed to set persist session:', err);
+    }
+  }
+
+  async function handleResumePlaybackPositionChange(resume: boolean) {
+    console.log('[Settings] Changing resume playback position to:', resume);
+    try {
+      await setResumePlaybackPosition(resume);
+      resumePlaybackPosition = resume;
+      console.log('[Settings] Resume playback position saved successfully');
+    } catch (err) {
+      console.error('[Settings] Failed to set resume playback position:', err);
     }
   }
 
@@ -4267,6 +4282,13 @@
         <span class="setting-desc">{$t('settings.playback.persistSessionDesc')}</span>
       </div>
       <Toggle enabled={persistSession} onchange={handlePersistSessionChange} />
+    </div>
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.playback.resumePlaybackPosition')}</span>
+        <span class="setting-desc">{$t('settings.playback.resumePlaybackPositionDesc')}</span>
+      </div>
+      <Toggle enabled={resumePlaybackPosition} onchange={handleResumePlaybackPositionChange} />
     </div>
     <div class="setting-row">
       <div class="setting-info">

@@ -4125,9 +4125,19 @@
               console.debug('[Session] Could not restore playback context');
             }
 
-            // First play will load a fresh stream instead of seeking
-            setPendingSessionRestore(track.id);
-            console.log(`[Session] Track ${track.id} restored visually (paused at 0:00)`);
+            // The restored track is shown paused; the user's first
+            // press of play loads a fresh stream. If they opted into
+            // resume-playback-position (#317), we also forward the
+            // saved offset so togglePlay() seeks once the stream is
+            // ready. Default behavior remains "fresh start at 0:00".
+            const resumePosition = getCachedPreferences().resume_playback_position
+              ? session.current_position_secs
+              : undefined;
+            setPendingSessionRestore(track.id, resumePosition);
+            console.log(
+              `[Session] Track ${track.id} restored visually`,
+              resumePosition ? `(will resume @ ${resumePosition}s on first play)` : '(fresh at 0:00)'
+            );
           }
 
           console.log('[Session] Session restored successfully');

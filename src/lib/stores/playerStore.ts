@@ -186,8 +186,12 @@ let gaplessRequestInFlight = false;
 // One-shot guard: attempt gapless pre-queue only once per current track.
 let gaplessAttemptTrackId: number | null = null;
 
-// Session restore state - when set, next play will load the track first
-let pendingSessionRestore: { trackId: number } | null = null;
+// Session restore state — when set, next play will load the track first.
+// `positionSecs` (when present) is honored only if the user enabled the
+// "resume playback position" preference (issue #317). Default is to
+// start the restored track from the beginning, so opening the app the
+// next morning lands on a clean 0:00.
+let pendingSessionRestore: { trackId: number; positionSecs?: number } | null = null;
 
 // Listeners
 const listeners = new Set<() => void>();
@@ -346,11 +350,17 @@ export function setQueueEnded(ended: boolean): void {
 // ============ Playback Controls ============
 
 /**
- * Set pending session restore - will load track on next play
+ * Set pending session restore — will load track on next play. Pass
+ * `positionSecs` only when the user opted into resume-playback-position
+ * (issue #317). Without it, the restored track starts from 0.
  */
-export function setPendingSessionRestore(trackId: number): void {
-  pendingSessionRestore = { trackId };
-  console.log('[Player] Set pending session restore:', trackId);
+export function setPendingSessionRestore(trackId: number, positionSecs?: number): void {
+  pendingSessionRestore = { trackId, positionSecs };
+  console.log(
+    '[Player] Set pending session restore:',
+    trackId,
+    positionSecs ? `(resume @ ${positionSecs}s)` : '(start at 0:00)'
+  );
 }
 
 /**
@@ -408,10 +418,17 @@ export async function togglePlay(): Promise<void> {
     if (newIsPlaying) {
       // Check if we need to load the track first (session restore)
       if (pendingSessionRestore && pendingSessionRestore.trackId === currentTrack.id) {
-        console.log('[Player] Loading restored track from start:', pendingSessionRestore.trackId);
+        const restorePosition = pendingSessionRestore.positionSecs ?? 0;
+        console.log(
+          '[Player] Loading restored track:',
+          pendingSessionRestore.trackId,
+          restorePosition > 0 ? `(will seek to ${restorePosition}s)` : '(from start)'
+        );
         pendingSessionRestore = null; // Clear before loading
 
-        // Restore source-specific playback (always from start)
+        // Restore source-specific playback (always from start; if the
+        // user enabled resume-playback-position the seek is queued
+        // below and applied once the stream is loaded).
         if (currentTrack.source === 'plex') {
           const plexBaseUrl = getUserItem('qbz-plex-poc-base-url') || '';
           const plexToken = getUserItem('qbz-plex-poc-token') || '';
@@ -443,6 +460,16 @@ export async function togglePlay(): Promise<void> {
             getStreamingQuality(),
             currentTrack.duration ? Math.round(currentTrack.duration) : null,
           );
+        }
+
+        // Apply the user's saved playback position (#317 opt-in).
+        // Queue via the existing pendingSeekPosition / flushPendingSeek
+        // path so the seek runs against an already-loaded stream and
+        // honors the in-flight guard. If the position is at or near 0,
+        // skip — the load already starts there.
+        if (restorePosition > 1) {
+          pendingSeekPosition = restorePosition;
+          void flushPendingSeek();
         }
 
       } else {

@@ -97,6 +97,14 @@ pub fn v2_set_persist_session(
 }
 
 #[tauri::command]
+pub fn v2_set_resume_playback_position(
+    resume: bool,
+    state: State<'_, PlaybackPreferencesState>,
+) -> Result<(), String> {
+    state.set_resume_playback_position(resume)
+}
+
+#[tauri::command]
 pub fn v2_get_playback_preferences(
     state: State<'_, PlaybackPreferencesState>,
 ) -> Result<PlaybackPreferences, String> {
