@@ -34,6 +34,8 @@ struct InternalState {
     repeat: RepeatMode,
     /// History of played track indices (for going back)
     history: VecDeque<usize>,
+    /// Track ID to stop after (optional)
+    stop_after_track_id: Option<u64>,
 }
 
 /// Queue manager for handling playback queue
@@ -58,6 +60,7 @@ impl QueueManager {
                 shuffle_position: 0,
                 repeat: RepeatMode::Off,
                 history: VecDeque::with_capacity(50),
+                stop_after_track_id: None,
             }),
         }
     }
@@ -713,6 +716,28 @@ impl QueueManager {
         self.state.lock().unwrap().repeat
     }
 
+    /// Set the "stop after" marker on a specific track ID. Replaces any
+    /// previous marker. Silent no-op if the track ID is not currently in
+    /// the queue (defensive check — frontend should only ever pass IDs
+    /// from the current queue).
+    pub fn set_stop_after(&self, track_id: u64) {
+        let mut state = self.state.lock().unwrap();
+        if state.tracks.iter().any(|t| t.id == track_id) {
+            state.stop_after_track_id = Some(track_id);
+        }
+    }
+
+    /// Clear the marker (user cancellation from UI).
+    pub fn clear_stop_after(&self) {
+        let mut state = self.state.lock().unwrap();
+        state.stop_after_track_id = None;
+    }
+
+    /// Read current marker (used by `get_state()` for serialization).
+    pub fn get_stop_after(&self) -> Option<u64> {
+        self.state.lock().unwrap().stop_after_track_id
+    }
+
     /// Get queue state for frontend
     pub fn get_state(&self) -> QueueState {
         let state = self.state.lock().unwrap();
@@ -932,6 +957,7 @@ mod tests {
         QueueTrack {
             id,
             title: format!("Track {}", id),
+            version: None,
             artist: "Artist".to_string(),
             album: "Album".to_string(),
             duration_secs: 180,
@@ -1478,5 +1504,62 @@ mod tests {
             state.history.iter().copied().collect::<Vec<_>>(),
             vec![3, 2, 1]
         );
+    }
+
+    // ============ Stop-After Marker — Basic API ============
+
+    #[test]
+    fn test_set_stop_after_stores_marker() {
+        let queue = QueueManager::new();
+        queue.add_track(create_test_track(101));
+        queue.add_track(create_test_track(102));
+        queue.add_track(create_test_track(103));
+
+        queue.set_stop_after(102);
+
+        assert_eq!(queue.get_stop_after(), Some(102));
+    }
+
+    #[test]
+    fn test_set_stop_after_replaces_previous_marker() {
+        let queue = QueueManager::new();
+        queue.add_track(create_test_track(101));
+        queue.add_track(create_test_track(102));
+
+        queue.set_stop_after(101);
+        queue.set_stop_after(102);
+
+        assert_eq!(queue.get_stop_after(), Some(102));
+    }
+
+    #[test]
+    fn test_clear_stop_after_resets_marker() {
+        let queue = QueueManager::new();
+        queue.add_track(create_test_track(101));
+        queue.set_stop_after(101);
+
+        queue.clear_stop_after();
+
+        assert_eq!(queue.get_stop_after(), None);
+    }
+
+    #[test]
+    fn test_set_stop_after_silently_ignores_unknown_id() {
+        let queue = QueueManager::new();
+        queue.add_track(create_test_track(101));
+        queue.add_track(create_test_track(102));
+
+        queue.set_stop_after(999); // not in queue
+
+        assert_eq!(queue.get_stop_after(), None);
+    }
+
+    #[test]
+    fn test_set_stop_after_on_empty_queue_is_noop() {
+        let queue = QueueManager::new();
+
+        queue.set_stop_after(101);
+
+        assert_eq!(queue.get_stop_after(), None);
     }
 }
