@@ -15,21 +15,22 @@ use crate::core_bridge::CoreBridgeState;
 use crate::runtime::{CommandRequirement, RuntimeError, RuntimeManagerState};
 use crate::AppState;
 
-use super::session::QconnectFileAudioQualitySnapshot;
+use super::service::QconnectServiceState;
+use super::session::{QconnectFileAudioQualitySnapshot, QconnectRendererReportDebugEvent};
 use super::transport::{
     persist_device_name, resolve_default_qconnect_device_name, resolve_system_hostname,
     resolve_transport_config,
 };
 use super::{
     QconnectAdmissionBlockedEvent, QconnectAdmissionResult, QconnectAskForRendererStateRequest,
-    QconnectConnectOptions, QconnectConnectionStatus, QconnectJoinSessionRequest,
-    QconnectMuteVolumeRequest, QconnectQueueVersionPayload, QconnectRendererReportDebugEvent,
-    QconnectHandoffIntent, QconnectSendCommandRequest, QconnectSendCommandWithAdmissionRequest,
-    QconnectServiceState, QconnectSessionState, QconnectSetActiveRendererRequest,
-    QconnectSetLoopModeRequest, QconnectSetMaxAudioQualityRequest, QconnectSetPlayerStateRequest,
-    QconnectSetVolumeRequest, QconnectTrackOrigin, AUDIO_QUALITY_CD, AUDIO_QUALITY_HIRES_LEVEL1,
-    AUDIO_QUALITY_HIRES_LEVEL2, AUDIO_QUALITY_HIRES_LEVEL3, AUDIO_QUALITY_MP3,
-    AUDIO_QUALITY_UNKNOWN, BUFFER_STATE_OK, DEFAULT_QCONNECT_CHANNEL_COUNT,
+    QconnectConnectOptions, QconnectConnectionStatus, QconnectHandoffIntent,
+    QconnectJoinSessionRequest, QconnectMuteVolumeRequest, QconnectQueueVersionPayload,
+    QconnectSendCommandRequest, QconnectSendCommandWithAdmissionRequest, QconnectSessionState,
+    QconnectSetActiveRendererRequest, QconnectSetLoopModeRequest,
+    QconnectSetMaxAudioQualityRequest, QconnectSetPlayerStateRequest, QconnectSetVolumeRequest,
+    QconnectTrackOrigin, AUDIO_QUALITY_CD, AUDIO_QUALITY_HIRES_LEVEL1, AUDIO_QUALITY_HIRES_LEVEL2,
+    AUDIO_QUALITY_HIRES_LEVEL3, AUDIO_QUALITY_MP3, AUDIO_QUALITY_UNKNOWN, BUFFER_STATE_OK,
+    DEFAULT_QCONNECT_CHANNEL_COUNT,
 };
 
 pub(super) fn classify_qconnect_audio_quality(sample_rate: u32, bit_depth: u32) -> i32 {

@@ -13,9 +13,9 @@ use super::queue_resolution::{
     find_cursor_index_by_queue_item_id, normalize_current_queue_item_id_from_queue_state,
     ordered_queue_cursors, QconnectOrderedQueueCursor,
 };
+use super::transport::{default_qconnect_device_info, resolve_qconnect_device_uuid};
 use super::{
-    default_qconnect_device_info, resolve_qconnect_device_uuid, QconnectQueueVersionPayload,
-    QconnectRemoteSyncState, QconnectVisibleQueueProjection,
+    QconnectQueueVersionPayload, QconnectRemoteSyncState, QconnectVisibleQueueProjection,
 };
 
 pub(super) fn queue_item_snapshot_for_cursor(
@@ -290,7 +290,7 @@ pub(super) fn build_visible_queue_projection(
     queue: &QConnectQueueState,
     renderer: &QConnectRendererState,
 ) -> QconnectVisibleQueueProjection {
-    use super::find_cursor_index_by_track_id;
+    use super::queue_resolution::find_cursor_index_by_track_id;
 
     let cursors = ordered_queue_cursors(queue);
 

@@ -100,7 +100,7 @@ fn maps_qconnect_track_origin_to_core_origin_and_handoff() {
 
 #[test]
 fn refreshes_local_renderer_id_from_exact_device_uuid_match() {
-    let local_device_uuid = super::resolve_qconnect_device_uuid();
+    let local_device_uuid = super::transport::resolve_qconnect_device_uuid();
     let mut session = QconnectSessionState {
         renderers: vec![
             QconnectRendererInfo {
@@ -476,7 +476,7 @@ fn effective_renderer_snapshot_prefers_session_cursor_over_stale_app_snapshot() 
         ..Default::default()
     };
 
-    let snapshot = super::build_effective_renderer_snapshot(
+    let snapshot = super::session::build_effective_renderer_snapshot(
         &queue,
         &base_renderer,
         Some(&renderer_state),
@@ -542,7 +542,7 @@ fn effective_renderer_snapshot_preserves_authoritative_renderer_next_track() {
         ..Default::default()
     };
 
-    let snapshot = super::build_effective_renderer_snapshot(&queue, &base_renderer, None, None);
+    let snapshot = super::session::build_effective_renderer_snapshot(&queue, &base_renderer, None, None);
 
     assert_eq!(
         snapshot
@@ -593,7 +593,7 @@ fn visible_queue_projection_respects_remote_shuffle_order() {
         ..Default::default()
     };
 
-    let projection = super::build_visible_queue_projection(&queue, &renderer);
+    let projection = super::session::build_visible_queue_projection(&queue, &renderer);
 
     assert_eq!(
         projection
@@ -640,7 +640,7 @@ fn visible_queue_projection_can_infer_current_from_next_anchor() {
         ..Default::default()
     };
 
-    let projection = super::build_visible_queue_projection(&queue, &renderer);
+    let projection = super::session::build_visible_queue_projection(&queue, &renderer);
 
     assert_eq!(
         projection
