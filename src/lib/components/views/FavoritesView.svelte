@@ -56,6 +56,8 @@
   interface FavoriteTrack {
     id: number;
     title: string;
+    /** Qobuz subtitle/edition (e.g. "Player's Ball Mix") (#360). */
+    version?: string | null;
     duration: number;
     track_number: number;
     performer?: { id?: number; name: string };
@@ -339,6 +341,7 @@
       .map(track => ({
         id: track.id,
         title: track.title,
+        version: track.version ?? null,
         artist: track.performer?.name || 'Unknown',
         album: track.album?.title,
         albumId: track.album?.id,
@@ -1230,6 +1233,7 @@
     return tracks.map(trk => ({
       id: trk.id,
       title: trk.title,
+      version: trk.version ?? null,
       artist: trk.performer?.name || 'Unknown Artist',
       album: trk.album?.title || 'Favorites',
       duration_secs: trk.duration,

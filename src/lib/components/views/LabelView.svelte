@@ -34,6 +34,8 @@
   interface Track {
     id: number;
     title: string;
+    /** Qobuz subtitle/edition (#360). */
+    version?: string | null;
     duration: number;
     album?: {
       id: string;
@@ -475,6 +477,7 @@
     return tracks.map((track) => ({
       id: track.id,
       title: track.title,
+      version: track.version ?? null,
       artist: track.performer?.name || pageData?.name || '',
       album: track.album?.title || '',
       duration_secs: track.duration,
@@ -525,6 +528,7 @@
       onTrackPlay({
         id: track.id,
         title: track.title,
+        version: track.version ?? null,
         artist: track.performer?.name || pageData?.name || '',
         album: track.album?.title || '',
         albumArt: track.album?.image?.large || track.album?.image?.thumbnail || '',

@@ -356,6 +356,7 @@
     await playTrack({
       id: track.id,
       title: track.title,
+      version: track.version ?? null,
       artist: track.artist,
       album: track.album,
       artwork: track.artwork_url || '',

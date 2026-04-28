@@ -312,6 +312,7 @@ export async function fetchLyrics(): Promise<void> {
     const result = await invoke<LyricsPayload | null>('v2_lyrics_get', {
       trackId: track.id,
       title: track.title,
+      version: track.version ?? null,
       artist: track.artist,
       album: track.album || null,
       durationSecs: track.duration || null

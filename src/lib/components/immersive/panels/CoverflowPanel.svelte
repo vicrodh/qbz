@@ -1,5 +1,6 @@
 <script lang="ts">
   import { t } from 'svelte-i18n';
+  import { formatTrackTitle } from '$lib/utils/trackTitle';
   import QualityBadge from '$lib/components/QualityBadge.svelte';
   import { cachedSrc } from '$lib/actions/cachedImage';
 
@@ -60,7 +61,7 @@
         items.push({
           index: queueIndex,
           artwork: track.artwork,
-          title: track.title,
+          title: formatTrackTitle(track),
           artist: track.artist,
           position: offset
         });

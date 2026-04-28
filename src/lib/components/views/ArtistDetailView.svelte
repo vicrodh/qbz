@@ -42,6 +42,8 @@
   interface Track {
     id: number;
     title: string;
+    /** Qobuz subtitle/edition (e.g. "Player's Ball Mix") (#360). */
+    version?: string | null;
     duration: number;
     album?: {
       id: string;
@@ -63,6 +65,8 @@
   interface DisplayTrack {
     id: number;
     title: string;
+    /** Qobuz subtitle/edition (#360). */
+    version?: string | null;
     artist: string;
     album: string;
     albumArt: string;
@@ -462,6 +466,7 @@
       .map(trk => ({
         id: trk.id,
         title: trk.title,
+        version: trk.version ?? null,
         artist: trk.performer?.name || artist?.name || 'Unknown',
         album: trk.album?.title || '',
         duration_secs: trk.duration,
@@ -556,6 +561,7 @@
     return tracks.map(track => ({
       id: track.id,
       title: track.title,
+      version: track.version ?? null,
       duration: track.duration ?? 0,
       album: track.album ? {
         id: track.album.id,
@@ -775,6 +781,7 @@
         onTrackPlay({
           id: firstTrack.id,
           title: firstTrack.title,
+          version: firstTrack.version ?? null,
           artist: firstTrack.artist,
           album: firstTrack.album,
           albumArt: firstTrack.artwork_url || '',
@@ -827,6 +834,7 @@
         onTrackPlay({
           id: firstTrack.id,
           title: firstTrack.title,
+          version: firstTrack.version ?? null,
           artist: firstTrack.artist,
           album: firstTrack.album,
           albumArt: firstTrack.artwork_url || '',
@@ -867,6 +875,7 @@
         onTrackPlay({
           id: firstTrack.id,
           title: firstTrack.title,
+          version: firstTrack.version ?? null,
           artist: firstTrack.artist,
           album: firstTrack.album,
           albumArt: firstTrack.artwork_url || '',
@@ -905,6 +914,7 @@
         onTrackPlay({
           id: firstTrack.id,
           title: firstTrack.title,
+          version: firstTrack.version ?? null,
           artist: firstTrack.artist,
           album: firstTrack.album,
           albumArt: firstTrack.artwork_url || '',
@@ -1216,6 +1226,7 @@
     return tracks.map((track) => ({
       id: track.id,
       title: track.title,
+      version: track.version ?? null,
       artist: track.performer?.name || artist.name,
       album: track.album?.title || '',
       duration_secs: track.duration,
@@ -1261,6 +1272,7 @@
       onTrackPlay({
         id: track.id,
         title: track.title,
+        version: track.version ?? null,
         artist: track.performer?.name || artist.name,
         album: track.album?.title || '',
         albumArt: track.album?.image?.large || track.album?.image?.thumbnail || '',

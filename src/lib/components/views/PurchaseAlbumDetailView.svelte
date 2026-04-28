@@ -122,6 +122,7 @@
     return {
       id: track.id,
       title: track.title,
+      version: track.version ?? null,
       number: track.track_number,
       artist: track.performer?.name || album?.artist.name,
       album: album?.title || track.album?.title,

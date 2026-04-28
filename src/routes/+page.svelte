@@ -1183,6 +1183,7 @@
     return {
       id: track.id,
       title: track.title,
+      version: track.version ?? null,
       artist: track.artist,
       album: track.album,
       artwork: track.artwork_url || '',
@@ -1585,6 +1586,7 @@
       const queueTracks = playableTracks.map((trk) => ({
         id: trk.id,
         title: trk.title,
+        version: trk.version ?? null,
         artist: trk.artist || converted.artist || 'Unknown Artist',
         album: converted.title || '',
         duration_secs: trk.durationSeconds,
@@ -1738,6 +1740,7 @@
         .map((trk) => ({
           id: trk.id,
           title: trk.title,
+          version: trk.version ?? null,
           artist: trk.artist || converted.artist || 'Unknown Artist',
           album: albumTitle,
           duration_secs: trk.durationSeconds,
@@ -2185,6 +2188,7 @@
     const queueTracks: BackendQueueTrack[] = album.tracks.map(trk => ({
       id: trk.id,
       title: trk.title,
+      version: trk.version ?? null,
       artist: trk.artist || album.artist || 'Unknown Artist',
       album: album.title || '',
       duration_secs: trk.durationSeconds,
@@ -2211,6 +2215,7 @@
     await playTrack({
       id: firstTrack.id,
       title: firstTrack.title,
+      version: firstTrack.version ?? null,
       artist: firstTrack.artist || album.artist || 'Unknown Artist',
       album: album.title || '',
       artwork,
@@ -2234,6 +2239,7 @@
       const queued = await queueTrackNext({
         id: trk.id,
         title: trk.title,
+        version: trk.version ?? null,
         artist: trk.artist || album.artist || 'Unknown Artist',
         album: album.title || '',
         duration_secs: trk.durationSeconds,
@@ -2267,6 +2273,7 @@
     const queueTracks: BackendQueueTrack[] = album.tracks.map(trk => ({
       id: trk.id,
       title: trk.title,
+      version: trk.version ?? null,
       artist: trk.artist || album.artist || 'Unknown Artist',
       album: album.title || '',
       duration_secs: trk.durationSeconds,
@@ -2342,6 +2349,7 @@
       await cacheTracksForOfflineBatch(tracksToDownload.map(track => ({
         id: track.id,
         title: track.title,
+        version: track.version ?? null,
         artist: track.artist || album.artist || 'Unknown',
         album: album.title,
         albumId: album.id,
@@ -2567,6 +2575,7 @@
     await playTrack({
       id: track.id,
       title: track.title,
+      version: track.version ?? null,
       artist: track.performer?.name || 'Unknown Artist',
       album: track.album?.title || '',
       artwork,
@@ -2625,6 +2634,7 @@
       const queueTracks: BackendQueueTrack[] = playableTracks.map(trk => ({
         id: trk.id,
         title: trk.title,
+        version: trk.version ?? null,
         artist: trk.artist || album.artist || 'Unknown Artist',
         album: album.title || '',
         duration_secs: trk.durationSeconds,
@@ -2652,6 +2662,7 @@
     await playTrack({
       id: track.id,
       title: track.title,
+      version: track.version ?? null,
       artist: track.artist || selectedAlbum?.artist || 'Unknown Artist',
       album: selectedAlbum?.title || '',
       artwork,
@@ -2955,6 +2966,7 @@
     await playTrack({
       id: track.id,
       title: track.title,
+      version: track.version ?? null,
       artist: track.artist,
       album: track.album,
       artwork: resolveQueueTrackArtwork(track.artwork_url),
@@ -3126,6 +3138,7 @@
       await handleTrackPlay({
         id: historyTrack.id,
         title: historyTrack.title,
+        version: historyTrack.version ?? null,
         performer: { name: historyTrack.artist },
         album: { title: historyTrack.album, image: { large: historyTrack.artwork_url || '' } },
         duration: historyTrack.duration_secs,
@@ -3207,6 +3220,7 @@
         playTrack({
           id: firstTrack.id,
           title: firstTrack.title,
+          version: firstTrack.version ?? null,
           artist: firstTrack.artist,
           album: firstTrack.album,
           artwork: firstTrack.artwork_url || '',
@@ -3241,6 +3255,7 @@
         playTrack({
           id: firstTrack.id,
           title: firstTrack.title,
+          version: firstTrack.version ?? null,
           artist: firstTrack.artist,
           album: firstTrack.album,
           artwork: firstTrack.artwork_url || '',
@@ -3276,6 +3291,7 @@
         playTrack({
           id: firstTrack.id,
           title: firstTrack.title,
+          version: firstTrack.version ?? null,
           artist: firstTrack.artist,
           album: firstTrack.album,
           artwork: firstTrack.artwork_url || '',
@@ -3317,6 +3333,7 @@
       const queued = await queueTrackNext({
         id: trk.id,
         title: trk.title,
+        version: trk.version ?? null,
         artist: trk.artist || album.artist || 'Unknown Artist',
         album: album.title || '',
         duration_secs: trk.durationSeconds,
@@ -3360,6 +3377,7 @@
     const queueTracks: BackendQueueTrack[] = playableTracks.map(trk => ({
       id: trk.id,
       title: trk.title,
+      version: trk.version ?? null,
       artist: trk.artist || album.artist || 'Unknown Artist',
       album: album.title || '',
       duration_secs: trk.durationSeconds,
@@ -3518,6 +3536,7 @@
       await cacheTracksForOfflineBatch(tracksToDownload.map(track => ({
         id: track.id,
         title: track.title,
+        version: track.version ?? null,
         artist: track.artist || album.artist || 'Unknown',
         album: album.title,
         albumId: album.id,
@@ -3552,6 +3571,7 @@
       await cacheTracksForOfflineBatch(album.tracks.map(track => ({
         id: track.id,
         title: track.title,
+        version: track.version ?? null,
         artist: track.artist || album.artist || 'Unknown',
         album: album.title,
         albumId: album.id,
@@ -3588,6 +3608,7 @@
         await cacheTracksForOfflineBatch(album.tracks.items.map(track => ({
           id: track.id,
           title: track.title,
+          version: track.version ?? null,
           artist: track.performer?.name || album.artist?.name || 'Unknown',
           album: album.title,
           albumId: album.id,
@@ -3693,6 +3714,7 @@
     playTrack({
       id: track.id,
       title: track.title,
+      version: track.version ?? null,
       artist: track.artist || 'Unknown Artist',
       album: track.album || 'Playlist',
       artwork: track.albumArt || '',
@@ -3723,6 +3745,7 @@
       {
         id: track.id,
         title: track.title,
+        version: track.version ?? null,
         artist: track.artist || 'Unknown Artist',
         album: track.album || 'Playlist',
         artwork: track.albumArt || '',
@@ -4066,6 +4089,7 @@
             setCurrentTrack({
               id: track.id,
               title: track.title,
+              version: track.version ?? null,
               artist: track.artist,
               album: track.album,
               artwork: resolveQueueTrackArtwork(track.artwork_url),
@@ -4271,6 +4295,7 @@
       const allTracks: PersistedQueueTrack[] = tracks.map(track => ({
         id: track.id,
         title: track.title,
+        version: track.version ?? null,
         artist: track.artist,
         album: track.album,
         duration_secs: track.duration_secs,
@@ -4467,6 +4492,7 @@
       await playTrack({
         id: next.id,
         title: next.title,
+        version: next.version ?? null,
         artist: next.artist,
         album: next.album,
         duration: next.duration_secs,

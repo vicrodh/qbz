@@ -37,6 +37,8 @@ export interface PurchasedAlbum {
 export interface PurchasedTrack {
   id: number;
   title: string;
+  /** Qobuz subtitle/edition (#360). */
+  version?: string | null;
   track_number: number;
   media_number?: number;
   duration: number;

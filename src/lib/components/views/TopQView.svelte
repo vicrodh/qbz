@@ -401,6 +401,7 @@
     return {
       id: track.id,
       title: track.title,
+      version: track.version ?? null,
       artist: track.performer?.name || 'Unknown Artist',
       album: track.album?.title,
       albumArt: getQobuzImage(track.album?.image),
@@ -423,6 +424,7 @@
       .map(trk => ({
         id: trk.id,
         title: trk.title,
+        version: trk.version ?? null,
         artist: trk.performer?.name || 'Unknown Artist',
         album: trk.album?.title || 'TopQ',
         duration_secs: trk.duration || 0,

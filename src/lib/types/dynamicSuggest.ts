@@ -8,6 +8,8 @@ export interface DynamicTrackToAnalyseInput {
 export interface DynamicSuggestTrack {
   id: number;
   title: string;
+  /** Qobuz subtitle/edition (#360). */
+  version?: string | null;
   duration?: number;
   performer?: { id?: number; name: string };
   album?: {
