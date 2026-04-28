@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy, tick } from 'svelte';
+  import { get } from 'svelte/store';
   import { ChevronUp } from 'lucide-svelte';
   import { invoke, convertFileSrc } from '@tauri-apps/api/core';
   import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -277,6 +278,7 @@
     startQueueEventListener,
     stopQueueEventListener,
     consumeStopAfterIf,
+    stopAfterTrackId,
     type QueueTrack,
     type BackendQueueTrack,
     type RepeatMode
@@ -5148,15 +5150,25 @@
     setGaplessGetNextTrackId(() => {
       // Only suppress local gapless when a peer renderer owns playback.
       if (qconnectSuppressLocalPlaybackAutomation) return null;
+
+      // Stop-after marker: if the currently-playing track is marked,
+      // suppress gapless prefetch so the track ends naturally and
+      // setOnTrackEnded → consumeStopAfterIf can fire and pause.
+      // Without this, the audio engine would seamlessly transition to
+      // the next track before the natural-end callback runs.
+      const currentId = currentTrack?.id ?? null;
+      const marker = get(stopAfterTrackId);
+      if (currentId !== null && marker === currentId) {
+        return null;
+      }
+
       try {
         const queueState = getQueueState();
         if (queueState.queue.length > 0) {
-          const currentId = currentTrack?.id ?? null;
-
           if (queueState.repeatMode == 'one') {
             return currentId;
           }
-          
+
           const firstId = Number(queueState.queue[0].id);
           if (!Number.isNaN(firstId) && firstId > 0 && firstId !== currentId) {
             return firstId;
