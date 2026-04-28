@@ -34,6 +34,8 @@ struct InternalState {
     repeat: RepeatMode,
     /// History of played track indices (for going back)
     history: VecDeque<usize>,
+    /// Track ID to stop after (optional)
+    stop_after_track_id: Option<u64>,
 }
 
 /// Queue manager for handling playback queue
@@ -58,6 +60,7 @@ impl QueueManager {
                 shuffle_position: 0,
                 repeat: RepeatMode::Off,
                 history: VecDeque::with_capacity(50),
+                stop_after_track_id: None,
             }),
         }
     }
@@ -122,6 +125,7 @@ impl QueueManager {
     /// Set the entire queue (replaces existing)
     pub fn set_queue(&self, new_tracks: Vec<QueueTrack>, start_index: Option<usize>) {
         let mut state = self.state.lock().unwrap();
+        state.stop_after_track_id = None;
         // Remap history by track id BEFORE replacing tracks so that legitimate
         // plays survive queue version bumps / reorders. Entries whose track is
         // no longer present are dropped. See bug #316.
@@ -163,6 +167,7 @@ impl QueueManager {
         shuffle_order: Option<Vec<usize>>,
     ) {
         let mut state = self.state.lock().unwrap();
+        state.stop_after_track_id = None;
         // Remap history by track id BEFORE replacing tracks so that legitimate
         // plays survive queue version bumps / reorders. Entries whose track is
         // no longer present are dropped. See bug #316.
@@ -205,6 +210,7 @@ impl QueueManager {
     /// including the current track.
     pub fn clear(&self, keep_current: bool) {
         let mut state = self.state.lock().unwrap();
+        state.stop_after_track_id = None;
 
         if keep_current && state.current_index.is_some() {
             state.tracks.truncate(1);
@@ -228,6 +234,11 @@ impl QueueManager {
         }
 
         let removed = state.tracks.remove(index);
+
+        // Invalidate marker if the removed track matches
+        if state.stop_after_track_id == Some(removed.id) {
+            state.stop_after_track_id = None;
+        }
 
         // Adjust current index if needed
         if let Some(curr_idx) = state.current_index {
@@ -287,6 +298,11 @@ impl QueueManager {
 
         let removed = state.tracks.remove(actual_index);
 
+        // Invalidate marker if the removed track matches
+        if state.stop_after_track_id == Some(removed.id) {
+            state.stop_after_track_id = None;
+        }
+
         if let Some(curr_idx) = state.current_index {
             if actual_index < curr_idx {
                 state.current_index = Some(curr_idx - 1);
@@ -313,6 +329,50 @@ impl QueueManager {
             Self::remove_index_from_shuffle_internal(&mut state, actual_index);
         }
         Some(removed)
+    }
+
+    /// Remove all tracks at indices greater than `index`. The track at
+    /// `index` is preserved. Returns the number of tracks removed.
+    /// If the marker referenced a track in the removed range, the marker
+    /// is cleared. No-op (returns 0) if `index` is the last position or
+    /// out of bounds.
+    pub fn remove_after(&self, index: usize) -> usize {
+        let mut state = self.state.lock().unwrap();
+
+        if index + 1 >= state.tracks.len() {
+            return 0;
+        }
+
+        let cutoff = index + 1;
+        let removed_ids: Vec<u64> = state.tracks[cutoff..].iter().map(|t| t.id).collect();
+        let removed_count = removed_ids.len();
+
+        // Drop the tail of `tracks`.
+        state.tracks.truncate(cutoff);
+
+        // If shuffle is active, also drop indices >= cutoff from shuffle_order
+        // (preserve relative order of surviving indices).
+        if state.shuffle {
+            state.shuffle_order.retain(|&i| i < cutoff);
+            // shuffle_position remains valid since we only dropped tracks AFTER
+            // the current playing one (precondition: index >= current_index in
+            // the typical UI flow; defensive clamp below handles edge cases).
+            if state.shuffle_position >= state.shuffle_order.len() {
+                state.shuffle_position = state.shuffle_order.len().saturating_sub(1);
+            }
+        }
+
+        // Drop history entries pointing past the cutoff.
+        state.history.retain(|&i| i < cutoff);
+
+        // Invalidate marker if it pointed into the removed range.
+        if let Some(marker_id) = state.stop_after_track_id {
+            if removed_ids.contains(&marker_id) {
+                state.stop_after_track_id = None;
+            }
+        }
+
+        removed_count
     }
 
     /// Move a track from one position to another
@@ -713,6 +773,43 @@ impl QueueManager {
         self.state.lock().unwrap().repeat
     }
 
+    /// Set the "stop after" marker on a specific track ID. Replaces any
+    /// previous marker. Silent no-op if the track ID is not currently in
+    /// the queue (defensive check — frontend should only ever pass IDs
+    /// from the current queue).
+    pub fn set_stop_after(&self, track_id: u64) {
+        let mut state = self.state.lock().unwrap();
+        if state.tracks.iter().any(|t| t.id == track_id) {
+            state.stop_after_track_id = Some(track_id);
+        }
+    }
+
+    /// Clear the marker (user cancellation from UI).
+    pub fn clear_stop_after(&self) {
+        let mut state = self.state.lock().unwrap();
+        state.stop_after_track_id = None;
+    }
+
+    /// Read current marker (used by `get_state()` for serialization).
+    pub fn get_stop_after(&self) -> Option<u64> {
+        self.state.lock().unwrap().stop_after_track_id
+    }
+
+    /// One-shot consume: if the finished track ID matches the marker,
+    /// clear it and return true. Otherwise return false. The
+    /// auto-advance driver calls this on every natural track-end and
+    /// pauses (instead of advancing) when it returns true. Manual skip
+    /// paths must NOT call this.
+    pub fn consume_stop_after_if(&self, finished_track_id: u64) -> bool {
+        let mut state = self.state.lock().unwrap();
+        if state.stop_after_track_id == Some(finished_track_id) {
+            state.stop_after_track_id = None;
+            true
+        } else {
+            false
+        }
+    }
+
     /// Get queue state for frontend
     pub fn get_state(&self) -> QueueState {
         let state = self.state.lock().unwrap();
@@ -761,6 +858,7 @@ impl QueueManager {
             shuffle: state.shuffle,
             repeat: state.repeat,
             total_tracks: state.tracks.len(),
+            stop_after_track_id: state.stop_after_track_id,
         }
     }
 
@@ -932,6 +1030,7 @@ mod tests {
         QueueTrack {
             id,
             title: format!("Track {}", id),
+            version: None,
             artist: "Artist".to_string(),
             album: "Album".to_string(),
             duration_secs: 180,
@@ -1478,5 +1577,264 @@ mod tests {
             state.history.iter().copied().collect::<Vec<_>>(),
             vec![3, 2, 1]
         );
+    }
+
+    // ============ Stop-After Marker — Basic API ============
+
+    #[test]
+    fn test_set_stop_after_stores_marker() {
+        let queue = QueueManager::new();
+        queue.add_track(create_test_track(101));
+        queue.add_track(create_test_track(102));
+        queue.add_track(create_test_track(103));
+
+        queue.set_stop_after(102);
+
+        assert_eq!(queue.get_stop_after(), Some(102));
+    }
+
+    #[test]
+    fn test_set_stop_after_replaces_previous_marker() {
+        let queue = QueueManager::new();
+        queue.add_track(create_test_track(101));
+        queue.add_track(create_test_track(102));
+
+        queue.set_stop_after(101);
+        queue.set_stop_after(102);
+
+        assert_eq!(queue.get_stop_after(), Some(102));
+    }
+
+    #[test]
+    fn test_clear_stop_after_resets_marker() {
+        let queue = QueueManager::new();
+        queue.add_track(create_test_track(101));
+        queue.set_stop_after(101);
+
+        queue.clear_stop_after();
+
+        assert_eq!(queue.get_stop_after(), None);
+    }
+
+    #[test]
+    fn test_set_stop_after_silently_ignores_unknown_id() {
+        let queue = QueueManager::new();
+        queue.add_track(create_test_track(101));
+        queue.add_track(create_test_track(102));
+
+        queue.set_stop_after(999); // not in queue
+
+        assert_eq!(queue.get_stop_after(), None);
+    }
+
+    #[test]
+    fn test_set_stop_after_on_empty_queue_is_noop() {
+        let queue = QueueManager::new();
+
+        queue.set_stop_after(101);
+
+        assert_eq!(queue.get_stop_after(), None);
+    }
+
+    // ============ Stop-After Marker — Consume (Firing Path) ============
+
+    #[test]
+    fn test_consume_stop_after_if_fires_on_match() {
+        let queue = QueueManager::new();
+        queue.add_track(create_test_track(101));
+        queue.add_track(create_test_track(102));
+        queue.set_stop_after(102);
+
+        let fired = queue.consume_stop_after_if(102);
+
+        assert!(fired, "consume should return true on match");
+        assert_eq!(queue.get_stop_after(), None, "marker should be cleared after firing");
+    }
+
+    #[test]
+    fn test_consume_stop_after_if_does_not_fire_on_mismatch() {
+        let queue = QueueManager::new();
+        queue.add_track(create_test_track(101));
+        queue.add_track(create_test_track(102));
+        queue.set_stop_after(102);
+
+        let fired = queue.consume_stop_after_if(101);
+
+        assert!(!fired, "consume should return false on mismatch");
+        assert_eq!(queue.get_stop_after(), Some(102), "marker should remain on mismatch");
+    }
+
+    #[test]
+    fn test_consume_stop_after_if_with_no_marker_returns_false() {
+        let queue = QueueManager::new();
+        queue.add_track(create_test_track(101));
+
+        let fired = queue.consume_stop_after_if(101);
+
+        assert!(!fired);
+    }
+
+    // ============ Stop-After Marker — Invalidation on Queue Mutations ============
+
+    #[test]
+    fn test_set_queue_invalidates_marker() {
+        let queue = QueueManager::new();
+        queue.add_track(create_test_track(101));
+        queue.add_track(create_test_track(102));
+        queue.set_stop_after(102);
+
+        queue.set_queue(vec![create_test_track(201), create_test_track(202)], None);
+
+        assert_eq!(queue.get_stop_after(), None);
+    }
+
+    #[test]
+    fn test_clear_invalidates_marker() {
+        let queue = QueueManager::new();
+        queue.add_track(create_test_track(101));
+        queue.add_track(create_test_track(102));
+        queue.set_stop_after(102);
+
+        queue.clear(true);
+
+        assert_eq!(queue.get_stop_after(), None);
+    }
+
+    #[test]
+    fn test_remove_track_invalidates_marker_when_marked_track_removed() {
+        let queue = QueueManager::new();
+        queue.add_track(create_test_track(101));
+        queue.add_track(create_test_track(102));
+        queue.add_track(create_test_track(103));
+        queue.set_stop_after(102);
+
+        queue.remove_track(1); // removes track 102
+
+        assert_eq!(queue.get_stop_after(), None);
+    }
+
+    #[test]
+    fn test_remove_track_keeps_marker_when_other_track_removed() {
+        let queue = QueueManager::new();
+        queue.add_track(create_test_track(101));
+        queue.add_track(create_test_track(102));
+        queue.add_track(create_test_track(103));
+        queue.set_stop_after(102);
+
+        queue.remove_track(0); // removes track 101
+
+        assert_eq!(queue.get_stop_after(), Some(102));
+    }
+
+    #[test]
+    fn test_move_track_does_not_invalidate_marker() {
+        let queue = QueueManager::new();
+        queue.add_track(create_test_track(101));
+        queue.add_track(create_test_track(102));
+        queue.add_track(create_test_track(103));
+        queue.set_stop_after(102);
+
+        queue.move_track(1, 0); // 102 moves to position 0
+
+        assert_eq!(queue.get_stop_after(), Some(102));
+    }
+
+    #[test]
+    fn test_remove_after_returns_count() {
+        let queue = QueueManager::new();
+        for id in [101, 102, 103, 104, 105] {
+            queue.add_track(create_test_track(id));
+        }
+
+        let removed = queue.remove_after(1);
+
+        assert_eq!(removed, 3, "should remove indices 2, 3, 4");
+        let state = queue.get_state();
+        assert_eq!(state.total_tracks, 2);
+    }
+
+    #[test]
+    fn test_remove_after_on_last_index_is_noop() {
+        let queue = QueueManager::new();
+        for id in [101, 102, 103] {
+            queue.add_track(create_test_track(id));
+        }
+
+        let removed = queue.remove_after(2);
+
+        assert_eq!(removed, 0);
+        assert_eq!(queue.get_state().total_tracks, 3);
+    }
+
+    #[test]
+    fn test_remove_after_with_index_out_of_bounds_is_noop() {
+        let queue = QueueManager::new();
+        queue.add_track(create_test_track(101));
+        queue.add_track(create_test_track(102));
+
+        let removed = queue.remove_after(99);
+
+        assert_eq!(removed, 0);
+        assert_eq!(queue.get_state().total_tracks, 2);
+    }
+
+    #[test]
+    fn test_remove_after_invalidates_marker_when_in_removed_range() {
+        let queue = QueueManager::new();
+        for id in [101, 102, 103, 104] {
+            queue.add_track(create_test_track(id));
+        }
+        queue.set_stop_after(103);
+
+        queue.remove_after(1); // removes 103, 104
+
+        assert_eq!(queue.get_stop_after(), None);
+    }
+
+    #[test]
+    fn test_remove_after_keeps_marker_when_before_range() {
+        let queue = QueueManager::new();
+        for id in [101, 102, 103, 104] {
+            queue.add_track(create_test_track(id));
+        }
+        queue.set_stop_after(101);
+
+        queue.remove_after(2); // removes 104 only (index 3)
+
+        assert_eq!(queue.get_stop_after(), Some(101));
+    }
+
+    #[test]
+    fn test_remove_after_keeps_marker_when_at_pivot_index() {
+        let queue = QueueManager::new();
+        for id in [101, 102, 103, 104] {
+            queue.add_track(create_test_track(id));
+        }
+        queue.set_stop_after(102);
+
+        queue.remove_after(1); // removes indices 2, 3 — track 102 (at index 1) stays
+
+        assert_eq!(queue.get_stop_after(), Some(102));
+    }
+
+    #[test]
+    fn test_get_state_includes_stop_after() {
+        let queue = QueueManager::new();
+        queue.add_track(create_test_track(101));
+        queue.set_stop_after(101);
+
+        let state = queue.get_state();
+
+        assert_eq!(state.stop_after_track_id, Some(101));
+    }
+
+    #[test]
+    fn test_get_state_returns_none_when_no_marker() {
+        let queue = QueueManager::new();
+        queue.add_track(create_test_track(101));
+
+        let state = queue.get_state();
+
+        assert_eq!(state.stop_after_track_id, None);
     }
 }

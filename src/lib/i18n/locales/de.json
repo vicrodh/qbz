@@ -2840,5 +2840,11 @@
     "numberOfSongs": "Anzahl der Songs",
     "songsAvailable": "{n} Songs verfügbar",
     "allOption": "Alle ({n})"
+  },
+  "queue": {
+    "stopAfterThis": "Nach diesem Titel anhalten",
+    "cancelStopAfter": "Anhalten nach diesem Titel abbrechen",
+    "removeAllAfter": "Alle nachfolgenden Titel entfernen",
+    "tracksRemoved": "{count, plural, one {# Titel aus der Warteschlange entfernt} other {# Titel aus der Warteschlange entfernt}}"
   }
 }

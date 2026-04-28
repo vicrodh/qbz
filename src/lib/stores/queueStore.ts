@@ -6,6 +6,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { writable, get } from 'svelte/store';
 import { cmdToggleShuffle, cmdSetRepeatMode, cmdAddToQueue, cmdAddToQueueNext, cmdAddTracksToQueue, cmdAddTracksToQueueNext, cmdSetQueue, cmdClearQueue } from '$lib/services/commandRouter';
 
 // ============ Types ============
@@ -59,9 +60,15 @@ interface BackendQueueState {
   shuffle: boolean;
   repeat: 'Off' | 'All' | 'One';
   total_tracks: number;
+  stop_after_track_id: number | null;
 }
 
 export type RepeatMode = 'off' | 'all' | 'one';
+
+// ============ Stores ============
+
+/** Currently-marked "stop after" track ID. null = no marker. */
+export const stopAfterTrackId = writable<number | null>(null);
 
 // ============ State ============
 
@@ -218,6 +225,7 @@ async function applyBackendQueueState(queueState: BackendQueueState): Promise<vo
   if (pendingRepeatMode === repeatMode) {
     pendingRepeatMode = null;
   }
+  stopAfterTrackId.set(queueState.stop_after_track_id);
   notifyListeners();
 }
 
@@ -505,6 +513,56 @@ export async function moveQueueTrack(fromIndex: number, toIndex: number): Promis
   }
 }
 
+/**
+ * Set the stop-after marker on a track ID. Replaces any previous marker.
+ */
+export async function setStopAfter(trackId: number): Promise<void> {
+  await invoke('v2_queue_set_stop_after', { trackId });
+  await syncQueueState();
+}
+
+/**
+ * Clear the stop-after marker (user cancellation).
+ */
+export async function clearStopAfter(): Promise<void> {
+  await invoke('v2_queue_clear_stop_after');
+  await syncQueueState();
+}
+
+/**
+ * Toggle the marker on a track: clears if currently set on that track, otherwise sets.
+ */
+export async function toggleStopAfter(trackId: number): Promise<void> {
+  const current = get(stopAfterTrackId);
+  if (current === trackId) {
+    await clearStopAfter();
+  } else {
+    await setStopAfter(trackId);
+  }
+}
+
+/**
+ * One-shot consume: called by natural-end handlers before advancing.
+ * Returns true if the marker fired (caller should pause instead of advance).
+ */
+export async function consumeStopAfterIf(finishedTrackId: number): Promise<boolean> {
+  const fired = await invoke<boolean>('v2_queue_consume_stop_after_if', { finishedTrackId });
+  if (fired) {
+    await syncQueueState();
+  }
+  return fired;
+}
+
+/**
+ * Remove all queue tracks after the given index. Returns count removed.
+ * Auto-clears marker if it referenced any removed track.
+ */
+export async function removeAfter(index: number): Promise<number> {
+  const count = await invoke<number>('v2_queue_remove_after', { index });
+  await syncQueueState();
+  return count;
+}
+
 // ============ Local Track Management ============
 
 /**
@@ -548,6 +606,7 @@ export function reset(): void {
   hasAuthoritativeRepeatSnapshot = false;
   localTrackIds = new Set();
   tracksWithLocalCopies = new Set();
+  stopAfterTrackId.set(null);
   notifyListeners();
 }
 
