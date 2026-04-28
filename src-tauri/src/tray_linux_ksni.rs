@@ -147,9 +147,12 @@ impl Tray for QbzTray {
     }
 
     fn icon_name(&self) -> String {
-        // Fall back to the themed icon name when the panel prefers it over
-        // pixmap data (some GNOME extensions, certain remote X11 setups).
-        "com.blitzfc.qbz".into()
+        // Intentionally empty: SNI panels (KDE Plasma especially) prefer
+        // IconName over IconPixmap when both are present, and resolving the
+        // app id `com.blitzfc.qbz` against the icon theme picks up the full
+        // colour app icon instead of our themed monochrome glyph (issue #362).
+        // An empty name forces panels to render IconPixmap directly.
+        String::new()
     }
 
     fn icon_pixmap(&self) -> Vec<Icon> {
