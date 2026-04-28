@@ -276,6 +276,7 @@
     setOfflineMode as setQueueOfflineMode,
     startQueueEventListener,
     stopQueueEventListener,
+    consumeStopAfterIf,
     type QueueTrack,
     type BackendQueueTrack,
     type RepeatMode
@@ -5005,6 +5006,18 @@
         await stopPlayback();
         setIsPlaying(false);
         return;
+      }
+      // Stop-after marker: if the just-finished track was marked, pause
+      // and don't advance. Manual-skip paths don't go through this
+      // callback, so the marker correctly only fires on natural end.
+      const finishedId = currentTrack?.id ?? null;
+      if (finishedId !== null) {
+        const fired = await consumeStopAfterIf(finishedId);
+        if (fired) {
+          await stopPlayback();
+          setIsPlaying(false);
+          return;
+        }
       }
       const previousTrackId = currentTrack?.id ?? null;
       let nextTrackResult = await nextTrackGuarded();
