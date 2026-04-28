@@ -738,6 +738,21 @@ impl QueueManager {
         self.state.lock().unwrap().stop_after_track_id
     }
 
+    /// One-shot consume: if the finished track ID matches the marker,
+    /// clear it and return true. Otherwise return false. The
+    /// auto-advance driver calls this on every natural track-end and
+    /// pauses (instead of advancing) when it returns true. Manual skip
+    /// paths must NOT call this.
+    pub fn consume_stop_after_if(&self, finished_track_id: u64) -> bool {
+        let mut state = self.state.lock().unwrap();
+        if state.stop_after_track_id == Some(finished_track_id) {
+            state.stop_after_track_id = None;
+            true
+        } else {
+            false
+        }
+    }
+
     /// Get queue state for frontend
     pub fn get_state(&self) -> QueueState {
         let state = self.state.lock().unwrap();
@@ -1561,5 +1576,43 @@ mod tests {
         queue.set_stop_after(101);
 
         assert_eq!(queue.get_stop_after(), None);
+    }
+
+    // ============ Stop-After Marker — Consume (Firing Path) ============
+
+    #[test]
+    fn test_consume_stop_after_if_fires_on_match() {
+        let queue = QueueManager::new();
+        queue.add_track(create_test_track(101));
+        queue.add_track(create_test_track(102));
+        queue.set_stop_after(102);
+
+        let fired = queue.consume_stop_after_if(102);
+
+        assert!(fired, "consume should return true on match");
+        assert_eq!(queue.get_stop_after(), None, "marker should be cleared after firing");
+    }
+
+    #[test]
+    fn test_consume_stop_after_if_does_not_fire_on_mismatch() {
+        let queue = QueueManager::new();
+        queue.add_track(create_test_track(101));
+        queue.add_track(create_test_track(102));
+        queue.set_stop_after(102);
+
+        let fired = queue.consume_stop_after_if(101);
+
+        assert!(!fired, "consume should return false on mismatch");
+        assert_eq!(queue.get_stop_after(), Some(102), "marker should remain on mismatch");
+    }
+
+    #[test]
+    fn test_consume_stop_after_if_with_no_marker_returns_false() {
+        let queue = QueueManager::new();
+        queue.add_track(create_test_track(101));
+
+        let fired = queue.consume_stop_after_if(101);
+
+        assert!(!fired);
     }
 }
