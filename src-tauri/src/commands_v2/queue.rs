@@ -864,9 +864,9 @@ pub async fn v2_queue_consume_stop_after_if(
     finished_track_id: u64,
     bridge: State<'_, CoreBridgeState>,
 ) -> Result<bool, RuntimeError> {
-    log::info!("[V2] queue_consume_stop_after_if: {}", finished_track_id);
+    log::debug!("[V2] queue_consume_stop_after_if: {}", finished_track_id);
     let bridge = bridge.get().await;
-    Ok(bridge.core().queue().read().await.consume_stop_after_if(finished_track_id))
+    Ok(bridge.core().queue().write().await.consume_stop_after_if(finished_track_id))
 }
 
 /// Remove all queue tracks at indices > `index`. Returns the count
