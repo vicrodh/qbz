@@ -1328,13 +1328,7 @@
     "noQbzdFoundHint": "Stellen Sie sicher, dass qbzd auf dem Zielgerat lauft",
     "recentDaemons": "Zuletzt verwendet",
     "discoveredDaemons": "Im Netzwerk entdeckt",
-    "queue": {
-      "label": "Warteschlange",
-      "stopAfterThis": "Nach diesem Titel anhalten",
-      "cancelStopAfter": "Anhalten nach diesem Titel abbrechen",
-      "removeAllAfter": "Alle nachfolgenden Titel entfernen",
-      "tracksRemoved": "{count} Titel aus der Warteschlange entfernt"
-    },
+    "queue": "Warteschlange",
     "upNext": "Als Nächstes",
     "ofTotal": "von",
     "remaining": "links",
@@ -2846,5 +2840,11 @@
     "numberOfSongs": "Anzahl der Songs",
     "songsAvailable": "{n} Songs verfügbar",
     "allOption": "Alle ({n})"
+  },
+  "queue": {
+    "stopAfterThis": "Nach diesem Titel anhalten",
+    "cancelStopAfter": "Anhalten nach diesem Titel abbrechen",
+    "removeAllAfter": "Alle nachfolgenden Titel entfernen",
+    "tracksRemoved": "{count} Titel aus der Warteschlange entfernt"
   }
 }

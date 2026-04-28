@@ -1328,13 +1328,7 @@
     "noQbzdFoundHint": "Assurez-vous que qbzd est en cours d'execution sur l'appareil cible",
     "recentDaemons": "Recents",
     "discoveredDaemons": "Decouverts sur le reseau",
-    "queue": {
-      "label": "File d'attente",
-      "stopAfterThis": "Arrêter après ce morceau",
-      "cancelStopAfter": "Annuler l'arrêt après ce morceau",
-      "removeAllAfter": "Supprimer tous les morceaux suivants",
-      "tracksRemoved": "{count} morceaux supprimés de la file d'attente"
-    },
+    "queue": "File d'attente",
     "upNext": "À suivre",
     "ofTotal": "de",
     "remaining": "restant",
@@ -2846,5 +2840,11 @@
     "numberOfSongs": "Nombre de chansons",
     "songsAvailable": "{n} chansons disponibles",
     "allOption": "Toutes ({n})"
+  },
+  "queue": {
+    "stopAfterThis": "Arrêter après ce morceau",
+    "cancelStopAfter": "Annuler l'arrêt après ce morceau",
+    "removeAllAfter": "Supprimer tous les morceaux suivants",
+    "tracksRemoved": "{count} morceaux supprimés de la file d'attente"
   }
 }

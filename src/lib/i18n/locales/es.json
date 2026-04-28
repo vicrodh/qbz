@@ -1328,13 +1328,7 @@
     "noQbzdFoundHint": "Asegurate de que qbzd este corriendo en el dispositivo",
     "recentDaemons": "Recientes",
     "discoveredDaemons": "Descubiertos en la red",
-    "queue": {
-      "label": "Cola",
-      "stopAfterThis": "Detener después de esta canción",
-      "cancelStopAfter": "Cancelar detener después de esta",
-      "removeAllAfter": "Eliminar todas las canciones siguientes",
-      "tracksRemoved": "{count} canciones eliminadas de la cola"
-    },
+    "queue": "Cola",
     "upNext": "Siguiente",
     "ofTotal": "de",
     "remaining": "restantes",
@@ -2852,5 +2846,11 @@
     "numberOfSongs": "Cantidad de canciones",
     "songsAvailable": "{n} canciones disponibles",
     "allOption": "Todas ({n})"
+  },
+  "queue": {
+    "stopAfterThis": "Detener después de esta canción",
+    "cancelStopAfter": "Cancelar detener después de esta",
+    "removeAllAfter": "Eliminar todas las canciones siguientes",
+    "tracksRemoved": "{count} canciones eliminadas de la cola"
   }
 }
