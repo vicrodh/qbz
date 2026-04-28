@@ -2404,23 +2404,6 @@
     flex-shrink: 0;
   }
 
-  .section {
-    margin-bottom: 32px;
-  }
-
-  .section-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 16px;
-  }
-
-  .section-header h2 {
-    font-size: 22px;
-    font-weight: 600;
-    color: var(--text-primary);
-  }
-
   .section-title {
     font-size: 22px;
     font-weight: 600;
@@ -2439,21 +2422,6 @@
 
   .loading-playlists :global(.spinner) {
     animation: spin 1s linear infinite;
-  }
-
-  .track-list {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .track-list.compact {
-    gap: 4px;
-  }
-
-  .track-list.compact :global(.track-row.compact) {
-    height: 40px;
-    padding: 0 10px;
   }
 
   .artist-card {

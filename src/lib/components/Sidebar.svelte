@@ -2528,29 +2528,6 @@
     padding: 0 8px;
   }
 
-  .section-header-btn {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    width: 100%;
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: 0 8px;
-    margin-bottom: 6px;
-    color: var(--text-muted);
-    transition: color 150ms ease;
-  }
-
-  .section-header-btn:hover {
-    color: var(--text-primary);
-  }
-
-  .section-header-btn .section-header {
-    margin-bottom: 0;
-    padding: 0;
-  }
-
   .playlists-section {
     flex: 1;
     padding-bottom: 12px;

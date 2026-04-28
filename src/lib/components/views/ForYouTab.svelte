@@ -2014,16 +2014,6 @@
     color: var(--text-muted);
   }
 
-  /* ---- Track list ---- */
-  .track-list {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .track-list.compact {
-    gap: 0;
-  }
-
   /* ---- Skeleton loading ---- */
   .skeleton-section {
     display: flex;
