@@ -478,6 +478,12 @@
   import { ImmersivePlayer } from '$lib/components/immersive';
   import PlaylistModal from '$lib/components/PlaylistModal.svelte';
   import PlaylistImportModal from '$lib/components/PlaylistImportModal.svelte';
+  import FolderEditModal from '$lib/components/FolderEditModal.svelte';
+  import {
+    updateFolder as updateFolderStore,
+    deleteFolder as deleteFolderStore,
+    type PlaylistFolder
+  } from '$lib/stores/playlistFoldersStore';
   import TrackInfoModal from '$lib/components/TrackInfoModal.svelte';
   import AlbumCreditsModal from '$lib/components/AlbumCreditsModal.svelte';
   import MusicianModal from '$lib/components/MusicianModal.svelte';
@@ -983,6 +989,12 @@
   let playlistModalEditIsHidden = $state(false);
   let playlistModalEditCurrentFolderId = $state<string | null>(null);
   let isPlaylistImportOpen = $state(false);
+  // Folder edit modal triggered from the sidebar context menu (issue #364).
+  // The Playlist Manager view owns its own FolderEditModal instance for its
+  // own folder cards/breadcrumb, so this one only handles sidebar-originated
+  // edits and stays mounted at the page level so it works from any view.
+  let isSidebarFolderEditOpen = $state(false);
+  let editingSidebarFolder = $state<PlaylistFolder | null>(null);
   let isAboutModalOpen = $state(false);
   let isShortcutsModalOpen = $state(false);
   let isKeybindingsSettingsOpen = $state(false);
@@ -3863,6 +3875,59 @@
     openPlaylistModal('edit', []);
   }
 
+  function handleSidebarFolderEdit(folder: PlaylistFolder) {
+    editingSidebarFolder = folder;
+    isSidebarFolderEditOpen = true;
+  }
+
+  function closeSidebarFolderEdit() {
+    isSidebarFolderEditOpen = false;
+    editingSidebarFolder = null;
+  }
+
+  async function handleSidebarFolderSave(
+    folder: PlaylistFolder | null,
+    updates: {
+      name: string;
+      iconType: string;
+      iconPreset: string;
+      iconColor: string;
+      customImagePath?: string;
+      isHidden?: boolean;
+    }
+  ) {
+    if (!folder) {
+      // Sidebar entry only edits existing folders; defensive guard.
+      closeSidebarFolderEdit();
+      return;
+    }
+    await updateFolderStore(folder.id, {
+      name: updates.name,
+      iconType: updates.iconType,
+      iconPreset: updates.iconPreset,
+      iconColor: updates.iconColor,
+      customImagePath: updates.customImagePath,
+      isHidden: updates.isHidden
+    });
+    closeSidebarFolderEdit();
+  }
+
+  async function handleSidebarFolderDelete(folder: PlaylistFolder) {
+    const { ask } = await import('@tauri-apps/plugin-dialog');
+    const confirmed = await ask(
+      `Delete folder "${folder.name}"? Playlists inside will be moved to root.`,
+      {
+        title: 'Delete folder?',
+        kind: 'warning',
+        okLabel: 'Delete',
+        cancelLabel: 'Cancel'
+      }
+    );
+    if (!confirmed) return;
+    await deleteFolderStore(folder.id);
+    closeSidebarFolderEdit();
+  }
+
   function handlePlaylistModalClose() {
     clearPlaylistEditContext();
     closePlaylistModal();
@@ -5678,6 +5743,7 @@
       onImportPlaylist={openImportPlaylist}
       onPlaylistManagerClick={() => navigateTo('playlist-manager')}
       onEditPlaylist={handleSidebarPlaylistEdit}
+      onEditFolder={handleSidebarFolderEdit}
       onSettingsClick={() => navigateTo('settings')}
       onKeybindingsClick={() => isKeybindingsSettingsOpen = true}
       onAboutClick={() => isAboutModalOpen = true}
@@ -6763,6 +6829,15 @@
       isOpen={isPlaylistImportOpen}
       onClose={closePlaylistImport}
       onSuccess={handlePlaylistImported}
+    />
+
+    <!-- Folder Edit Modal (sidebar entry-point — issue #364) -->
+    <FolderEditModal
+      isOpen={isSidebarFolderEditOpen}
+      folder={editingSidebarFolder}
+      onClose={closeSidebarFolderEdit}
+      onSave={handleSidebarFolderSave}
+      onDelete={handleSidebarFolderDelete}
     />
 
     <!-- About Modal -->

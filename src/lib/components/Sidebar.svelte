@@ -95,6 +95,7 @@
       isHidden: boolean;
       currentFolderId: string | null;
     }) => void;
+    onEditFolder?: (folder: PlaylistFolder) => void;
     onSettingsClick?: () => void;
     onKeybindingsClick?: () => void;
     onAboutClick?: () => void;
@@ -122,6 +123,7 @@
     onImportPlaylist,
     onPlaylistManagerClick,
     onEditPlaylist,
+    onEditFolder,
     onSettingsClick,
     onKeybindingsClick,
     onAboutClick,
@@ -1500,6 +1502,12 @@
     closeContextMenu();
   }
 
+  function editFolderFromContextMenu() {
+    if (!contextMenu.folder || !onEditFolder) return;
+    onEditFolder(contextMenu.folder);
+    closeContextMenu();
+  }
+
   function handlePlaylistDragStart(e: DragEvent, playlistId: number) {
     const fromFolderId = getPlaylistFolderId(playlistId);
     draggedPlaylistId = playlistId;
@@ -2223,6 +2231,12 @@
   >
     {#if contextMenu.folder}
       {@const contextFolderHidden = contextMenu.folder.is_hidden ?? false}
+      {#if onEditFolder}
+        <button class="context-menu-item" onclick={editFolderFromContextMenu}>
+          <Pencil size={14} />
+          {$t('library.editFolder')}
+        </button>
+      {/if}
       <button class="context-menu-item" onclick={toggleFolderHiddenFromContextMenu}>
         {#if contextFolderHidden}
           <Eye size={14} />
