@@ -80,6 +80,7 @@ pub struct QueueState {
     pub shuffle: bool,
     pub repeat: RepeatMode,
     pub total_tracks: usize,
+    pub stop_after_track_id: Option<u64>,
 }
 
 // ============ Playback State ============

@@ -858,6 +858,7 @@ impl QueueManager {
             shuffle: state.shuffle,
             repeat: state.repeat,
             total_tracks: state.tracks.len(),
+            stop_after_track_id: state.stop_after_track_id,
         }
     }
 
@@ -1814,5 +1815,26 @@ mod tests {
         queue.remove_after(1); // removes indices 2, 3 — track 102 (at index 1) stays
 
         assert_eq!(queue.get_stop_after(), Some(102));
+    }
+
+    #[test]
+    fn test_get_state_includes_stop_after() {
+        let queue = QueueManager::new();
+        queue.add_track(create_test_track(101));
+        queue.set_stop_after(101);
+
+        let state = queue.get_state();
+
+        assert_eq!(state.stop_after_track_id, Some(101));
+    }
+
+    #[test]
+    fn test_get_state_returns_none_when_no_marker() {
+        let queue = QueueManager::new();
+        queue.add_track(create_test_track(101));
+
+        let state = queue.get_state();
+
+        assert_eq!(state.stop_after_track_id, None);
     }
 }
