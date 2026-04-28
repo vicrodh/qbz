@@ -379,7 +379,7 @@ export async function playTrack(
 
     // Show system notification with artwork and quality info
     await showTrackNotification(
-      track.title,
+      formatTrackTitle(track),
       track.artist,
       track.album,
       track.artwork,
@@ -387,12 +387,13 @@ export async function playTrack(
       track.samplingRate
     );
 
-    // Update Last.fm
-    await updateLastfmNowPlaying(track.title, track.artist, track.album, track.duration, track.id);
+    // Update Last.fm — enrich title with `version` so remixes/editions
+    // scrobble correctly (#360, mirrors MPRIS/UI behavior).
+    await updateLastfmNowPlaying(formatTrackTitle(track), track.artist, track.album, track.duration, track.id);
 
-    // Update ListenBrainz (with MusicBrainz enrichment)
+    // Update ListenBrainz (with MusicBrainz enrichment) — same enrichment (#360).
     await updateListenBrainzNowPlaying(
-      track.title,
+      formatTrackTitle(track),
       track.artist,
       track.album,
       track.duration,
