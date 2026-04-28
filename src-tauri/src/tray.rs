@@ -19,6 +19,8 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Emitter, Manager,
 };
+#[cfg(target_os = "linux")]
+use tauri::Manager;
 use tauri::AppHandle;
 
 #[cfg(not(target_os = "linux"))]
@@ -94,10 +96,16 @@ fn load_tray_icon() -> Image<'static> {
 /// Initialize the system tray icon. Dispatches to the platform-specific
 /// backend: ksni on Linux (see `tray_linux_ksni`), Tauri's built-in tray on
 /// macOS. Falls back to a clean error on unknown targets.
+///
+/// On Linux this also installs the live `LinuxTrayHandle` into Tauri state
+/// so the rest of the backend can push live tooltip updates as the player
+/// state changes.
 pub fn init_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(target_os = "linux")]
     {
-        return tray_linux_ksni::init(app);
+        let handle = tray_linux_ksni::init(app)?;
+        app.manage(handle);
+        return Ok(());
     }
 
     #[cfg(not(target_os = "linux"))]
