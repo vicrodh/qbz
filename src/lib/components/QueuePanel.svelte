@@ -271,13 +271,13 @@
 
   async function handleToggleStopAfter(e: MouseEvent, trackId: number) {
     e.stopPropagation();
-    openMenuIndex = null;
+    closeMenu();
     await toggleStopAfter(trackId);
   }
 
   async function handleRemoveAfter(e: MouseEvent, index: number) {
     e.stopPropagation();
-    openMenuIndex = null;
+    closeMenu();
     const removed = await removeAfter(index);
     if (removed > 0) {
       showToast(

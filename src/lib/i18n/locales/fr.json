@@ -2845,6 +2845,6 @@
     "stopAfterThis": "Arrêter après ce morceau",
     "cancelStopAfter": "Annuler l'arrêt après ce morceau",
     "removeAllAfter": "Supprimer tous les morceaux suivants",
-    "tracksRemoved": "{count} morceaux supprimés de la file d'attente"
+    "tracksRemoved": "{count, plural, one {# morceau supprimé de la file d'attente} other {# morceaux supprimés de la file d'attente}}"
   }
 }

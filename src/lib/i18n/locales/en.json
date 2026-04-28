@@ -2851,6 +2851,6 @@
     "stopAfterThis": "Stop after this track",
     "cancelStopAfter": "Cancel stop after this",
     "removeAllAfter": "Remove all tracks after this",
-    "tracksRemoved": "{count} tracks removed from queue"
+    "tracksRemoved": "{count, plural, one {# track removed from queue} other {# tracks removed from queue}}"
   }
 }

@@ -2845,6 +2845,6 @@
     "stopAfterThis": "Parar após esta faixa",
     "cancelStopAfter": "Cancelar parar após esta",
     "removeAllAfter": "Remover todas as faixas seguintes",
-    "tracksRemoved": "{count} faixas removidas da fila"
+    "tracksRemoved": "{count, plural, one {# faixa removida da fila} other {# faixas removidas da fila}}"
   }
 }

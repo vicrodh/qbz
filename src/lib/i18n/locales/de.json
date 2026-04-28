@@ -2845,6 +2845,6 @@
     "stopAfterThis": "Nach diesem Titel anhalten",
     "cancelStopAfter": "Anhalten nach diesem Titel abbrechen",
     "removeAllAfter": "Alle nachfolgenden Titel entfernen",
-    "tracksRemoved": "{count} Titel aus der Warteschlange entfernt"
+    "tracksRemoved": "{count, plural, one {# Titel aus der Warteschlange entfernt} other {# Titel aus der Warteschlange entfernt}}"
   }
 }
