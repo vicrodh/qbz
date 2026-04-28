@@ -22,8 +22,18 @@ use ksni::{
 };
 use tauri::{AppHandle, Emitter, Manager};
 
-const TRAY_ICON_DARK_PNG: &[u8] = include_bytes!("../icons/tray-dark.png");
-const TRAY_ICON_LIGHT_PNG: &[u8] = include_bytes!("../icons/tray-light.png");
+// Multiple pixmap sizes per StatusNotifierItem spec — panels pick the best
+// match for their bar height (22 = base, 44/64 = HiDPI). All are monochromatic
+// silhouettes of the qbz glyph: black on transparent for light panels, white
+// for dark panels. Generated from icons/icon-symbolic.svg via Inkscape.
+const TRAY_ICON_LIGHT_22: &[u8] = include_bytes!("../icons/tray-light-22.png");
+const TRAY_ICON_LIGHT_32: &[u8] = include_bytes!("../icons/tray-light-32.png");
+const TRAY_ICON_LIGHT_44: &[u8] = include_bytes!("../icons/tray-light-44.png");
+const TRAY_ICON_LIGHT_64: &[u8] = include_bytes!("../icons/tray-light-64.png");
+const TRAY_ICON_DARK_22: &[u8] = include_bytes!("../icons/tray-dark-22.png");
+const TRAY_ICON_DARK_32: &[u8] = include_bytes!("../icons/tray-dark-32.png");
+const TRAY_ICON_DARK_44: &[u8] = include_bytes!("../icons/tray-dark-44.png");
+const TRAY_ICON_DARK_64: &[u8] = include_bytes!("../icons/tray-dark-64.png");
 
 fn is_flatpak() -> bool {
     std::env::var("FLATPAK_ID").is_ok() || std::path::Path::new("/.flatpak-info").exists()
@@ -66,8 +76,7 @@ fn prefer_dark_tray() -> bool {
 }
 
 /// Convert an embedded RGBA PNG to the ARGB32 big-endian layout ksni expects.
-fn decode_tray_icon() -> Result<Icon, String> {
-    let bytes = if prefer_dark_tray() { TRAY_ICON_DARK_PNG } else { TRAY_ICON_LIGHT_PNG };
+fn decode_pixmap(bytes: &[u8]) -> Result<Icon, String> {
     let img = image::load_from_memory(bytes)
         .map_err(|e| format!("decode tray icon: {e}"))?;
     let (width, height) = img.dimensions();
@@ -85,9 +94,21 @@ fn decode_tray_icon() -> Result<Icon, String> {
     })
 }
 
+/// Decode all monochromatic pixmap sizes for the active theme. Panels pick the
+/// best size from the list; supplying 22/32/44/64 covers standard SNI bar
+/// heights and HiDPI variants.
+fn decode_tray_icons() -> Result<Vec<Icon>, String> {
+    let sources: [&[u8]; 4] = if prefer_dark_tray() {
+        [TRAY_ICON_DARK_22, TRAY_ICON_DARK_32, TRAY_ICON_DARK_44, TRAY_ICON_DARK_64]
+    } else {
+        [TRAY_ICON_LIGHT_22, TRAY_ICON_LIGHT_32, TRAY_ICON_LIGHT_44, TRAY_ICON_LIGHT_64]
+    };
+    sources.iter().map(|b| decode_pixmap(b)).collect()
+}
+
 struct QbzTray {
     app: AppHandle,
-    icon: Icon,
+    icons: Vec<Icon>,
 }
 
 impl QbzTray {
@@ -132,7 +153,7 @@ impl Tray for QbzTray {
     }
 
     fn icon_pixmap(&self) -> Vec<Icon> {
-        vec![self.icon.clone()]
+        self.icons.clone()
     }
 
     fn tool_tip(&self) -> ToolTip {
@@ -206,10 +227,10 @@ impl Tray for QbzTray {
 pub fn init(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     log::info!("Initializing ksni tray (Linux, SNI primary-activate enabled)");
 
-    let icon = decode_tray_icon()?;
+    let icons = decode_tray_icons()?;
     let tray = QbzTray {
         app: app.clone(),
-        icon,
+        icons,
     };
 
     // Flatpak requires disabling the well-known DBus name because the sandbox
