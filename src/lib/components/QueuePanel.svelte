@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
-  import { X, Search, Heart, EllipsisVertical, Trash2, ListPlus, Info } from 'lucide-svelte';
+  import { X, Search, Heart, EllipsisVertical, Trash2, ListPlus, Info, CircleStop, ListX } from 'lucide-svelte';
   import { t } from '$lib/i18n';
   import { cachedSrc } from '$lib/actions/cachedImage';
   import {
@@ -10,6 +10,12 @@
   } from '$lib/stores/favoritesStore';
   import { getUserItem, setUserItem } from '$lib/utils/userStorage';
   import { formatTrackTitle } from '$lib/utils/trackTitle';
+  import {
+    stopAfterTrackId,
+    toggleStopAfter,
+    removeAfter
+  } from '$lib/stores/queueStore';
+  import { showToast } from '$lib/stores/toastStore';
 
   interface QueueTrack {
     id: string;
@@ -263,6 +269,24 @@
     closeMenu();
   }
 
+  async function handleToggleStopAfter(e: MouseEvent, trackId: number) {
+    e.stopPropagation();
+    openMenuIndex = null;
+    await toggleStopAfter(trackId);
+  }
+
+  async function handleRemoveAfter(e: MouseEvent, index: number) {
+    e.stopPropagation();
+    openMenuIndex = null;
+    const removed = await removeAfter(index);
+    if (removed > 0) {
+      showToast(
+        $t('queue.tracksRemoved', { values: { count: removed } }),
+        'info'
+      );
+    }
+  }
+
   // Close menu when clicking outside
   function handlePanelClick() {
     if (openMenuIndex !== null || openHistoryMenuId !== null) {
@@ -365,7 +389,13 @@
                   tabindex={isUnavailable ? -1 : 0}
                   onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleTrackClick(queueTrack, originalIndex); } }}
                 >
-                  <span class="track-number">{originalIndex + 1}</span>
+                  <span class="track-number">
+                    {#if Number(queueTrack.id) === $stopAfterTrackId}
+                      <CircleStop size={12} class="stop-after-marker" />
+                    {:else}
+                      {originalIndex + 1}
+                    {/if}
+                  </span>
                   <div class="track-info">
                     <div class="track-title-row">
                       <span class="track-title">{formatTrackTitle(queueTrack)}</span>
@@ -390,6 +420,23 @@
                           <Trash2 size={14} />
                           <span>{$t('player.removeFromQueue')}</span>
                         </button>
+
+                        <button class="menu-item" onclick={(e) => handleToggleStopAfter(e, Number(queueTrack.id))}>
+                          <CircleStop size={14} />
+                          <span>
+                            {Number(queueTrack.id) === $stopAfterTrackId
+                              ? $t('queue.cancelStopAfter')
+                              : $t('queue.stopAfterThis')}
+                          </span>
+                        </button>
+
+                        {#if originalIndex < upcomingTracks.length - 1}
+                          <button class="menu-item" onclick={(e) => handleRemoveAfter(e, originalIndex)}>
+                            <ListX size={14} />
+                            <span>{$t('queue.removeAllAfter')}</span>
+                          </button>
+                        {/if}
+
                         <button class="menu-item" onclick={(e) => handleAddToPlaylist(e, queueTrack.id)}>
                           <ListPlus size={14} />
                           <span>{$t('actions.addToPlaylist')}</span>
@@ -1156,5 +1203,9 @@
 
   .search-close:hover {
     color: var(--text-primary);
+  }
+
+  .stop-after-marker {
+    color: var(--accent);
   }
 </style>
