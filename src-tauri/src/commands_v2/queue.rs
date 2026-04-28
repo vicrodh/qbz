@@ -830,3 +830,54 @@ pub async fn v2_add_tracks_to_queue_next(
     }
     Ok(())
 }
+
+/// Set the stop-after marker on a track ID. Replaces any previous
+/// marker. No-op if the track ID is not in the current queue.
+#[tauri::command]
+pub async fn v2_queue_set_stop_after(
+    track_id: u64,
+    bridge: State<'_, CoreBridgeState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] queue_set_stop_after: {}", track_id);
+    let bridge = bridge.get().await;
+    bridge.core().queue().write().await.set_stop_after(track_id);
+    Ok(())
+}
+
+/// Clear the stop-after marker (user cancellation).
+#[tauri::command]
+pub async fn v2_queue_clear_stop_after(
+    bridge: State<'_, CoreBridgeState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] queue_clear_stop_after");
+    let bridge = bridge.get().await;
+    bridge.core().queue().write().await.clear_stop_after();
+    Ok(())
+}
+
+/// One-shot consume: called by the frontend's natural-end handler
+/// before advancing. Returns true if the marker fired (caller should
+/// pause); false otherwise (caller proceeds with advance). Manual
+/// skip paths must NOT call this.
+#[tauri::command]
+pub async fn v2_queue_consume_stop_after_if(
+    finished_track_id: u64,
+    bridge: State<'_, CoreBridgeState>,
+) -> Result<bool, RuntimeError> {
+    log::info!("[V2] queue_consume_stop_after_if: {}", finished_track_id);
+    let bridge = bridge.get().await;
+    Ok(bridge.core().queue().read().await.consume_stop_after_if(finished_track_id))
+}
+
+/// Remove all queue tracks at indices > `index`. Returns the count
+/// removed. Auto-clears the stop-after marker if it referenced any
+/// removed track.
+#[tauri::command]
+pub async fn v2_queue_remove_after(
+    index: usize,
+    bridge: State<'_, CoreBridgeState>,
+) -> Result<usize, RuntimeError> {
+    log::info!("[V2] queue_remove_after: index {}", index);
+    let bridge = bridge.get().await;
+    Ok(bridge.core().queue().write().await.remove_after(index))
+}
