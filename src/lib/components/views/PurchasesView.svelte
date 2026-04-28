@@ -1,5 +1,6 @@
 <script lang="ts">
   import { t, locale } from '$lib/i18n';
+  import { formatTrackTitle } from '$lib/utils/trackTitle';
   import {
     Search, X, Download, Check, LoaderCircle, Music, Disc3, ShoppingBag,
     ChevronDown, LayoutGrid, List
@@ -945,7 +946,7 @@
                   {/if}
                 </div>
                 <div class="track-info">
-                  <span class="track-title">{track.title}</span>
+                  <span class="track-title">{formatTrackTitle(track)}</span>
                   <span class="track-meta">
                     <button
                       class="artist-link"

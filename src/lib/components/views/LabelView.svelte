@@ -1,5 +1,6 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
+  import { formatTrackTitle } from '$lib/utils/trackTitle';
   import { cmdAddTracksToQueue, cmdAddTracksToQueueNext } from '$lib/services/commandRouter';
   import { resolveArtistImage } from '$lib/stores/customArtistImageStore';
   import { onMount, onDestroy } from 'svelte';
@@ -1050,7 +1051,7 @@
                 </button>
               </div>
               <div class="track-info">
-                <div class="track-title">{track.title}</div>
+                <div class="track-title">{formatTrackTitle(track)}</div>
                 {#if track.album?.id && onTrackGoToAlbum}
                   <button
                     class="track-album track-link"

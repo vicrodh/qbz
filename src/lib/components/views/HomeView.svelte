@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { formatTrackTitle } from '$lib/utils/trackTitle';
   import { invoke } from '@tauri-apps/api/core';
   import { resolveArtistImage } from '$lib/stores/customArtistImageStore';
   import { Music, User, LoaderCircle, ArrowRight, House } from 'lucide-svelte';
@@ -648,6 +649,7 @@
     return {
       id: track.id,
       title: track.title,
+      version: track.version ?? null,
       artist: track.performer?.name || 'Unknown Artist',
       album: track.album?.title,
       albumArt: getQobuzImage(track.album?.image),
@@ -686,6 +688,7 @@
     return tracks.map(track => ({
       id: track.id,
       title: track.title,
+      version: track.version ?? null,
       artist: track.artist || 'Unknown Artist',
       album: track.album || '',
       duration_secs: track.durationSeconds,
@@ -1543,7 +1546,7 @@
               {@const trackBlacklisted = track.artistId ? isArtistBlacklisted(track.artistId) : false}
               <TrackGridCard
                 trackId={track.id}
-                title={track.title}
+                title={formatTrackTitle(track)}
                 album={track.album ?? ''}
                 artwork={track.albumArt ?? null}
                 isPlaying={isPlaybackActive && isThisActiveTrack}

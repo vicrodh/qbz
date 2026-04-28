@@ -1,5 +1,6 @@
 <script lang="ts">
   import { invoke, convertFileSrc } from '@tauri-apps/api/core';
+  import { formatTrackTitle } from '$lib/utils/trackTitle';
   import { cmdAddTracksToQueue, cmdAddTracksToQueueNext } from '$lib/services/commandRouter';
   import { open, save } from '@tauri-apps/plugin-dialog';
   import { openUrl } from '@tauri-apps/plugin-opener';
@@ -2200,7 +2201,7 @@
                 </button>
               </div>
               <div class="track-info">
-                <div class="track-title">{track.title}</div>
+                <div class="track-title">{formatTrackTitle(track)}</div>
                 {#if track.album?.id && onTrackGoToAlbum}
                   <button
                     class="track-album track-link"

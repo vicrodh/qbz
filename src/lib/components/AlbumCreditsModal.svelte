@@ -1,5 +1,6 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
+  import { formatTrackTitle } from '$lib/utils/trackTitle';
   import { t, locale } from 'svelte-i18n';
   import { Play, ChevronDown, ChevronUp, LoaderCircle, X } from 'lucide-svelte';
   import type { AlbumCredits, QobuzAlbum, Performer, TrackCredits } from '$lib/types';
@@ -314,7 +315,7 @@
                         {/if}
                       </div>
                       <div class="track-info">
-                        <span class="track-title">{track.title}</span>
+                        <span class="track-title">{formatTrackTitle(track)}</span>
                         <span class="track-artist">{track.artist}</span>
                       </div>
                       {#if hasCredits}

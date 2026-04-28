@@ -1,5 +1,6 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
+  import { formatTrackTitle } from '$lib/utils/trackTitle';
   import { LoaderCircle, Disc3, Clock, Music2, Tag, Building2 } from 'lucide-svelte';
   import { t } from '$lib/i18n';
   import type { TrackInfo, Performer } from '$lib/types';
@@ -154,7 +155,7 @@
     <div class="info-content">
       <!-- Track Header -->
       <div class="track-header">
-        <h2 class="track-title">{trackInfo.track.title}</h2>
+        <h2 class="track-title">{formatTrackTitle(trackInfo.track)}</h2>
         {#if trackInfo.track.album?.title}
           <p class="album-title">{trackInfo.track.album.title}</p>
         {/if}

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
+  import { formatTrackTitle } from '$lib/utils/trackTitle';
   import { cmdAddTracksToQueue, cmdAddTracksToQueueNext } from '$lib/services/commandRouter';
   import { getUserInfo } from '$lib/stores/authStore';
   import { resolveArtistImage } from '$lib/stores/customArtistImageStore';
@@ -1245,7 +1246,7 @@
   // Accessor functions for VirtualizedTrackList (adapts FavoriteTrack to expected interface)
   const getFavoriteTrackId = (trk: FavoriteTrack) => trk.id;
   const getFavoriteTrackNumber = (trk: FavoriteTrack, idx: number) => trk.track_number || idx + 1;
-  const getFavoriteTrackTitle = (trk: FavoriteTrack) => trk.title;
+  const getFavoriteTrackTitle = (trk: FavoriteTrack) => formatTrackTitle(trk);
   const getFavoriteTrackArtist = (trk: FavoriteTrack) => trk.performer?.name;
   const getFavoriteTrackDuration = (trk: FavoriteTrack) => trk.duration;
   const getFavoriteTrackAlbumKey = (trk: FavoriteTrack) => trk.album?.id;

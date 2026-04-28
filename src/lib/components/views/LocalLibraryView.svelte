@@ -1,5 +1,6 @@
 <script lang="ts">
   import { invoke, convertFileSrc } from '@tauri-apps/api/core';
+  import { formatTrackTitle } from '$lib/utils/trackTitle';
   import { setCustomImage } from '$lib/stores/customArtistImageStore';
   import { getThumbnailUrl, getCachedThumbnailUrl } from '$lib/services/thumbnailService';
   import { open, ask } from '@tauri-apps/plugin-dialog';
@@ -3569,7 +3570,7 @@
           {#each section.tracks as track, index (track.id)}
             <TrackRow
               number={section.useIndexNumbering ? index + 1 : (track.track_number || index + 1)}
-              title={track.title}
+              title={formatTrackTitle(track)}
               artist={track.artist !== selectedAlbum?.artist ? track.artist : undefined}
               duration={formatDuration(track.duration_secs)}
               quality={getQualityBadge(track)}

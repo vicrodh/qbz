@@ -1,5 +1,6 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
+  import { formatTrackTitle } from '$lib/utils/trackTitle';
   import { cmdAddTracksToQueue, cmdAddTracksToQueueNext } from '$lib/services/commandRouter';
   import { onMount, onDestroy } from 'svelte';
   import { ArrowLeft, CloudDownload, Heart, Info, ListPlus, Play, Search, Shuffle, X, SquareCheckBig } from 'lucide-svelte';
@@ -601,7 +602,7 @@
         <TrackRow
           trackId={track.id}
           number={index + 1}
-          title={track.title}
+          title={formatTrackTitle(track)}
           artist={track.performer?.name}
           album={track.album?.title}
           duration={formatDuration(track.duration || 0)}
