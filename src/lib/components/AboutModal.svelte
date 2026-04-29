@@ -129,6 +129,9 @@
               <strong>Lucide</strong> — {$t('about.attributions.lucideDesc')} (ISC)
             </div>
             <div class="attribution">
+              <strong>Kawarp</strong> — {$t('about.attributions.kawarpDesc')} (MIT)
+            </div>
+            <div class="attribution">
               <strong>MusicBrainz</strong> — {$t('about.attributions.musicBrainzDesc')}
             </div>
             <div class="attribution">

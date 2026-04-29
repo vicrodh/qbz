@@ -3,6 +3,7 @@
     "attributions": {
       "lrclibDesc": "Anbieter synchronisierter Liedtexte",
       "lucideDesc": "Symbolbibliothek",
+      "kawarpDesc": "WebGL-Renderer für animierte Hintergründe",
       "lyricsOVHDesc": "Songtext-API",
       "musicBrainzDesc": "Musik-Metadaten-Datenbank",
       "rodioSymphoniaDesc": "Audio-Wiedergabe-Engine",

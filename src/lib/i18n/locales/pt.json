@@ -3,6 +3,7 @@
     "attributions": {
       "lrclibDesc": "Provedor de letras sincronizadas",
       "lucideDesc": "Biblioteca de ícones",
+      "kawarpDesc": "Renderizador de fundos animados WebGL",
       "lyricsOVHDesc": "API de letras",
       "musicBrainzDesc": "Banco de dados de metadados musicais",
       "rodioSymphoniaDesc": "Mecanismo de reprodução de áudio",

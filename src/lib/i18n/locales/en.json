@@ -18,6 +18,7 @@
       "svelteDesc": "UI framework",
       "rodioSymphoniaDesc": "Audio playback engine",
       "lucideDesc": "Icon library",
+      "kawarpDesc": "WebGL animated background renderer",
       "musicBrainzDesc": "Music metadata database",
       "songLinkOdesliDesc": "Music link aggregation API",
       "lrclibDesc": "Synced lyrics provider",

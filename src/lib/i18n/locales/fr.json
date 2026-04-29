@@ -18,6 +18,7 @@
       "svelteDesc": "Framework d'UI",
       "rodioSymphoniaDesc": "Moteur de lecture audio",
       "lucideDesc": "Bibliothèque d'icônes",
+      "kawarpDesc": "Moteur de rendu d'arrière-plans animés WebGL",
       "musicBrainzDesc": "Base de donnée de données musicales",
       "songLinkOdesliDesc": "API d'aggrégation musicale",
       "lrclibDesc": "Fournisseur de paroles synchronisées",
