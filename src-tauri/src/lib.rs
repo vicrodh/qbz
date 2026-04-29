@@ -766,6 +766,7 @@ pub fn run() {
 
     // Clone settings for use in closures
     let enable_tray = tray_settings.enable_tray;
+    let tray_icon_theme = tray_settings.tray_icon_theme.clone();
 
     // Initialize per-user data paths (no user active yet until login)
     let user_data_paths = user_data::UserDataPaths::new();
@@ -937,7 +938,9 @@ pub fn run() {
 
             // Initialize system tray icon (only if enabled)
             if enable_tray {
-                if let Err(e) = tray::init_tray(app.handle()) {
+                if let Err(e) =
+                    tray::init_tray(app.handle(), Some(tray_icon_theme.as_str()))
+                {
                     log::error!("Failed to initialize tray icon: {}", e);
                 }
             } else {
@@ -1409,6 +1412,7 @@ pub fn run() {
             commands_v2::v2_set_enable_tray,
             commands_v2::v2_set_minimize_to_tray,
             commands_v2::v2_set_close_to_tray,
+            commands_v2::v2_set_tray_icon_theme,
             commands_v2::v2_get_tray_settings,
             commands_v2::v2_set_autoplay_mode,
             commands_v2::v2_set_show_context_icon,

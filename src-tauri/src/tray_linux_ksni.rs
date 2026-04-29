@@ -104,11 +104,24 @@ fn decode_pixmap(bytes: &[u8]) -> Result<Icon, String> {
     })
 }
 
+/// Resolve which icon variant to load. `theme_override` accepts "auto",
+/// "light", "dark"; anything else falls through to system detection. The
+/// override exists for desktops like GNOME where the top bar is dark even
+/// when the system theme reports light, leaving auto-detected dark
+/// glyphs invisible.
+fn resolve_dark_tray(theme_override: Option<&str>) -> bool {
+    match theme_override {
+        Some("light") => false,
+        Some("dark") => true,
+        _ => prefer_dark_tray(),
+    }
+}
+
 /// Decode all monochromatic pixmap sizes for the active theme. Panels pick the
 /// best size from the list; supplying 22/32/44/64 covers standard SNI bar
 /// heights and HiDPI variants.
-fn decode_tray_icons() -> Result<Vec<Icon>, String> {
-    let sources: [&[u8]; 4] = if prefer_dark_tray() {
+fn decode_tray_icons(theme_override: Option<&str>) -> Result<Vec<Icon>, String> {
+    let sources: [&[u8]; 4] = if resolve_dark_tray(theme_override) {
         [TRAY_ICON_DARK_22, TRAY_ICON_DARK_32, TRAY_ICON_DARK_44, TRAY_ICON_DARK_64]
     } else {
         [TRAY_ICON_LIGHT_22, TRAY_ICON_LIGHT_32, TRAY_ICON_LIGHT_44, TRAY_ICON_LIGHT_64]
@@ -320,6 +333,10 @@ enum TrayUpdate {
     },
     ClearTrack,
     SetPlaying(bool),
+    /// Re-decode pixmaps for the requested theme override and push them
+    /// to the live ksni service. Triggers a `NewIcon` SNI signal so
+    /// panels re-fetch the icon without restart.
+    SetIconTheme(String),
 }
 
 /// Cross-thread handle to the live ksni tray. Cloneable; mutators just
@@ -376,6 +393,23 @@ impl LinuxTrayHandle {
                                 tray.is_playing = is_playing;
                             });
                         }
+                        TrayUpdate::SetIconTheme(theme) => {
+                            log::info!("[tray] icon theme override -> {}", theme);
+                            match decode_tray_icons(Some(&theme)) {
+                                Ok(new_icons) => {
+                                    handle.update(move |tray| {
+                                        tray.icons = new_icons;
+                                    });
+                                }
+                                Err(e) => {
+                                    log::error!(
+                                        "[tray] failed to decode icons for theme '{}': {}",
+                                        theme,
+                                        e
+                                    );
+                                }
+                            }
+                        }
                     }
                 }
                 log::debug!("[tray] updater thread exiting");
@@ -411,15 +445,29 @@ impl LinuxTrayHandle {
     pub fn set_playing(&self, is_playing: bool) {
         self.send(TrayUpdate::SetPlaying(is_playing));
     }
+
+    pub fn set_icon_theme(&self, theme: String) {
+        self.send(TrayUpdate::SetIconTheme(theme));
+    }
 }
 
 /// Initialize the Linux ksni tray service. Spawns a background thread that
 /// owns the SNI service and returns a cloneable handle so live tooltip
 /// updates can be pushed in from the rest of the backend.
-pub fn init(app: &AppHandle) -> Result<LinuxTrayHandle, Box<dyn std::error::Error>> {
-    log::info!("Initializing ksni tray (Linux, SNI primary-activate enabled)");
+///
+/// `theme_override` is the persisted user preference: "auto" (system
+/// detection), "light", or "dark". GNOME users often pick "light" because
+/// its top bar is permanently dark even when the system theme isn't.
+pub fn init(
+    app: &AppHandle,
+    theme_override: Option<&str>,
+) -> Result<LinuxTrayHandle, Box<dyn std::error::Error>> {
+    log::info!(
+        "Initializing ksni tray (Linux, SNI primary-activate enabled, theme={:?})",
+        theme_override
+    );
 
-    let icons = decode_tray_icons()?;
+    let icons = decode_tray_icons(theme_override)?;
     let tray = QbzTray {
         app: app.clone(),
         icons,

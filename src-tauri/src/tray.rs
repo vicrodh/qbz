@@ -99,11 +99,16 @@ fn load_tray_icon() -> Image<'static> {
 ///
 /// On Linux this also installs the live `LinuxTrayHandle` into Tauri state
 /// so the rest of the backend can push live tooltip updates as the player
-/// state changes.
-pub fn init_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
+/// state changes. `theme_override` is the persisted user preference for
+/// the icon variant ("auto"/"light"/"dark"); ignored on macOS.
+pub fn init_tray(
+    app: &AppHandle,
+    #[cfg_attr(not(target_os = "linux"), allow(unused_variables))]
+    theme_override: Option<&str>,
+) -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(target_os = "linux")]
     {
-        let handle = tray_linux_ksni::init(app)?;
+        let handle = tray_linux_ksni::init(app, theme_override)?;
         app.manage(handle);
         return Ok(());
     }
