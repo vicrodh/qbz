@@ -41,23 +41,26 @@
 
   onMount(() => {
     if (!canvasEl) return;
-    // Demo defaults from kawarp.boidu.dev with two tweaks for QBZ:
-    //   - scale 1.0 → 1.5 widens the area sampled per frame so non-dominant
-    //     colours from the cover (the peach/sand band on Billie's cover, the
-    //     yellow bursts on a Caifanes sleeve, etc.) get exposed instead of
-    //     averaging out into the dominant tone. Closer in spirit to the
-    //     CSS-translate behaviour of the existing ImmersiveBackground.
-    //   - animationSpeed 1.0 → 1.2 speeds the domain-warp drift so the
-    //     "the colours move" perception lands without being hyper.
+    // Demo defaults from kawarp.boidu.dev with two color-side tweaks so
+    // sub-dominant colours from the cover come through without dragging
+    // the look toward Static's translate-of-detail behaviour. Earlier we
+    // tried widening `scale` which surfaced detail but made kawarp look
+    // closer to Static — wrong direction. Instead keep scale at default
+    // and push the colour pipeline:
+    //   - saturation 1.5 → 1.8: amplifies all colours, including the
+    //     muted ones that get drowned by the dark dominant tone on
+    //     covers like Billie's underwater shot.
+    //   - tintIntensity 0.15 → 0.08: half the dark-blue tint pull so
+    //     the cover's own palette dominates instead of the global tint.
     kawarp = new Kawarp(canvasEl, {
       warpIntensity: 1.0,
       blurPasses: 8,
-      animationSpeed: 1.2,
+      animationSpeed: 1.0,
       transitionDuration: 1000,
-      saturation: 1.5,
-      tintIntensity: 0.15,
+      saturation: 1.8,
+      tintIntensity: 0.08,
       dithering: 0.008,
-      scale: 1.5,
+      scale: 1.0,
     });
     if (artwork) {
       lastLoadedArtwork = artwork;
