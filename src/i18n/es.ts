@@ -301,7 +301,7 @@ export const es = {
     categories: {
       core: {
         title: 'Tecnologías base',
-        items: ['Rust', 'Tauri', 'Svelte', 'Vite', 'SQLite'],
+        items: ['Rust', 'Tauri', 'Svelte', 'Vite', 'SQLite', 'Kawarp'],
       },
       audio: {
         title: 'Librerías de audio y media',
