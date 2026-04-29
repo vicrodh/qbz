@@ -4,7 +4,7 @@
   import { getCurrentWindow } from '@tauri-apps/api/window';
 
   export type ImmersiveTab = 'lyrics' | 'trackInfo' | 'suggestions' | 'queue';
-  export type FocusTab = 'coverflow' | 'static' | 'visualizer' | 'neon-flow' | 'tunnel-flow' | 'comet-flow' | 'oscilloscope' | 'spectral-ribbon' | 'energy-bands' | 'lissajous' | 'transient-pulse' | 'album-reactive' | 'linebed' | 'lyrics-focus' | 'queue-focus';
+  export type FocusTab = 'coverflow' | 'static' | 'kawarp' | 'visualizer' | 'neon-flow' | 'tunnel-flow' | 'comet-flow' | 'oscilloscope' | 'spectral-ribbon' | 'energy-bands' | 'lissajous' | 'transient-pulse' | 'album-reactive' | 'linebed' | 'lyrics-focus' | 'queue-focus';
   export type ViewMode = 'focus' | 'split';
 
   const VISUALIZER_TABS: FocusTab[] = ['visualizer', 'neon-flow', 'tunnel-flow', 'comet-flow', 'oscilloscope', 'spectral-ribbon', 'energy-bands', 'lissajous', 'transient-pulse', 'album-reactive', 'linebed'];
@@ -124,6 +124,7 @@
   const focusTabsTop: { id: FocusTab; labelKey: string; icon: typeof Disc3 }[] = [
     { id: 'coverflow', labelKey: 'settings.appearance.immersiveViews.coverflow', icon: Disc3 },
     { id: 'static', labelKey: 'settings.appearance.immersiveViews.static', icon: Image },
+    { id: 'kawarp', labelKey: 'settings.appearance.immersiveViews.kawarp', icon: Image },
   ];
 
   const focusTabsBottom: { id: FocusTab; labelKey: string; icon: typeof Disc3 }[] = [

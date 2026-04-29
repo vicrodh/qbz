@@ -13,6 +13,7 @@
   import QueuePanel from './panels/QueuePanel.svelte';
   import CoverflowPanel from './panels/CoverflowPanel.svelte';
   import StaticPanel from './panels/StaticPanel.svelte';
+  import KawarpPanel from './panels/KawarpPanel.svelte';
   import VisualizerPanel from './panels/VisualizerPanel.svelte';
   import NeonFlowPanel from './panels/NeonFlowPanel.svelte';
   import TunnelFlowPanel from './panels/TunnelFlowPanel.svelte';
@@ -185,7 +186,7 @@
   }
 
   // Immersive view persistence
-  type ImmersiveViewKey = 'coverflow' | 'static' | 'visualizer' | 'neon-flow' | 'tunnel-flow' | 'comet-flow' | 'oscilloscope' | 'spectral-ribbon' | 'energy-bands' | 'lissajous' | 'transient-pulse' | 'album-reactive' | 'lyrics-focus' | 'queue-focus' | 'split-lyrics' | 'split-trackInfo' | 'split-suggestions' | 'split-queue';
+  type ImmersiveViewKey = 'coverflow' | 'static' | 'kawarp' | 'visualizer' | 'neon-flow' | 'tunnel-flow' | 'comet-flow' | 'oscilloscope' | 'spectral-ribbon' | 'energy-bands' | 'lissajous' | 'transient-pulse' | 'album-reactive' | 'lyrics-focus' | 'queue-focus' | 'split-lyrics' | 'split-trackInfo' | 'split-suggestions' | 'split-queue';
 
   function applyStoredView(key: ImmersiveViewKey) {
     if (key.startsWith('split-')) {
@@ -487,6 +488,22 @@
       {:else if activeFocusTab === 'static'}
         <!-- Static: Single centered artwork -->
         <StaticPanel
+          {artwork}
+          {trackTitle}
+          {artist}
+          {album}
+          {isPlaying}
+          {quality}
+          {bitDepth}
+          {samplingRate}
+          {originalBitDepth}
+          {originalSamplingRate}
+          {format}
+          {explicit}
+        />
+      {:else if activeFocusTab === 'kawarp'}
+        <!-- Kawarp POC: identical layout to Static, kawarp WebGL bg added later. -->
+        <KawarpPanel
           {artwork}
           {trackTitle}
           {artist}
