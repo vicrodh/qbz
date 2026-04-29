@@ -55,10 +55,10 @@
     //     regions instead of letting them float as flat colour.
     kawarp = new Kawarp(canvasEl, {
       warpIntensity: 1.0,
-      blurPasses: 8,
+      blurPasses: 7,
       animationSpeed: 1.0,
       transitionDuration: 1000,
-      saturation: 2.0,
+      saturation: 1.9,
       tintIntensity: 0.03,
       dithering: 0.008,
       scale: 1.0,
