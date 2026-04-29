@@ -438,8 +438,8 @@
       ondblclick={toggleMaximize}
     ></div>
 
-    <!-- Background (skip for canvas-based visualizers that render their own black background) -->
-    {#if activeFocusTab !== 'visualizer' && activeFocusTab !== 'neon-flow' && activeFocusTab !== 'tunnel-flow' && activeFocusTab !== 'comet-flow' && activeFocusTab !== 'oscilloscope' && activeFocusTab !== 'spectral-ribbon' && activeFocusTab !== 'energy-bands' && activeFocusTab !== 'lissajous' && activeFocusTab !== 'transient-pulse'}
+    <!-- Background (skip for canvas-based panels that render their own background) -->
+    {#if activeFocusTab !== 'visualizer' && activeFocusTab !== 'neon-flow' && activeFocusTab !== 'tunnel-flow' && activeFocusTab !== 'comet-flow' && activeFocusTab !== 'oscilloscope' && activeFocusTab !== 'spectral-ribbon' && activeFocusTab !== 'energy-bands' && activeFocusTab !== 'lissajous' && activeFocusTab !== 'transient-pulse' && activeFocusTab !== 'kawarp'}
       <ImmersiveBackground {artwork} />
     {/if}
 

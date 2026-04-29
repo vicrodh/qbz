@@ -1,6 +1,8 @@
 <script lang="ts">
   import { t } from 'svelte-i18n';
   import QualityBadge from '$lib/components/QualityBadge.svelte';
+  import { Kawarp } from '@kawarp/core';
+  import { onMount, onDestroy } from 'svelte';
 
   interface Props {
     artwork: string;
@@ -31,9 +33,58 @@
     originalSamplingRate,
     format
   }: Props = $props();
+
+  let canvasEl: HTMLCanvasElement | undefined = $state();
+  let kawarp: Kawarp | undefined;
+  let lastLoadedArtwork: string | null = null;
+  let resizeObserver: ResizeObserver | undefined;
+
+  onMount(() => {
+    if (!canvasEl) return;
+    kawarp = new Kawarp(canvasEl, {
+      // Tuned for album cover ambience: gentle warp, deep blur, slow speed,
+      // 1s crossfade between tracks (matches the gapless lead time so the
+      // background is already on the new artwork before the audio swap).
+      warpIntensity: 0.65,
+      blurPasses: 12,
+      animationSpeed: 0.6,
+      transitionDuration: 1000,
+      saturation: 1.4,
+      tintIntensity: 0.12,
+      dithering: 0.012,
+      scale: 1.0,
+    });
+    if (artwork) {
+      lastLoadedArtwork = artwork;
+      kawarp.loadImage(artwork).catch((e) => console.warn('[KawarpPanel] loadImage failed:', e));
+    }
+    kawarp.start();
+
+    // Keep the canvas backing store in sync with the rendered size so the
+    // shader doesn't stretch when the immersive view resizes.
+    resizeObserver = new ResizeObserver(() => kawarp?.resize());
+    resizeObserver.observe(canvasEl);
+  });
+
+  // React to track changes by reloading the source — kawarp does its own
+  // crossfade between the previous and the new image.
+  $effect(() => {
+    if (kawarp && artwork && artwork !== lastLoadedArtwork) {
+      lastLoadedArtwork = artwork;
+      kawarp.loadImage(artwork).catch((e) => console.warn('[KawarpPanel] loadImage failed:', e));
+    }
+  });
+
+  onDestroy(() => {
+    resizeObserver?.disconnect();
+    kawarp?.dispose();
+    kawarp = undefined;
+  });
 </script>
 
 <div class="static-panel">
+  <canvas bind:this={canvasEl} class="kawarp-canvas" aria-hidden="true"></canvas>
+
   <div class="artwork-wrapper">
     <div class="artwork-container" class:playing={isPlaying}>
       <img src={artwork} alt={trackTitle} class="artwork" />
@@ -83,6 +134,23 @@
     padding-left: 40px;
     padding-right: 40px;
     z-index: 5;
+    /* Solid fallback before WebGL paints, and a base for letterboxing if the
+       canvas backs off on a low-spec / WebKit failure. */
+    background: var(--bg-primary, #0a0a0b);
+  }
+
+  .kawarp-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    pointer-events: none;
+    /* Composited on its own layer so WebKitGTK doesn't repaint surrounding
+       text on every animation frame — same trick used on the sticky-header
+       fix in 1.2.10. */
+    will-change: transform;
+    transform: translateZ(0);
   }
 
   .artwork-wrapper {

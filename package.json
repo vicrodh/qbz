@@ -27,6 +27,7 @@
   "license": "MIT",
   "dependencies": {
     "@icons-pack/svelte-simple-icons": "^7.2.0",
+    "@kawarp/core": "^1.1.1",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-clipboard-manager": "^2",
     "@tauri-apps/plugin-dialog": "^2.7.0",
