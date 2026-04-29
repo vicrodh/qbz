@@ -1301,6 +1301,21 @@
   let enableTray = $state(true);
   let minimizeToTray = $state(false);
   let closeToTray = $state(false);
+  let trayIconTheme = $state<'auto' | 'light' | 'dark'>('auto');
+  const TRAY_ICON_THEME_KEYS = ['auto', 'light', 'dark'] as const;
+  type TrayIconTheme = (typeof TRAY_ICON_THEME_KEYS)[number];
+
+  function getTrayIconThemeOptions(): string[] {
+    return TRAY_ICON_THEME_KEYS.map(key => $t(`settings.appearance.tray.iconTheme.${key}`));
+  }
+  function getTrayIconThemeDisplayValue(): string {
+    return $t(`settings.appearance.tray.iconTheme.${trayIconTheme}`);
+  }
+  function trayIconThemeFromDisplayValue(displayValue: string): TrayIconTheme | null {
+    const options = getTrayIconThemeOptions();
+    const idx = options.indexOf(displayValue);
+    return idx >= 0 ? TRAY_ICON_THEME_KEYS[idx] : null;
+  }
 
   // Library settings
   let fetchQobuzArtistImages = $state(true);
@@ -3309,6 +3324,7 @@
     enable_tray: boolean;
     minimize_to_tray: boolean;
     close_to_tray: boolean;
+    tray_icon_theme: string;
   }
 
   async function loadTraySettings() {
@@ -3317,6 +3333,10 @@
       enableTray = settings.enable_tray;
       minimizeToTray = settings.minimize_to_tray;
       closeToTray = settings.close_to_tray;
+      trayIconTheme =
+        settings.tray_icon_theme === 'light' || settings.tray_icon_theme === 'dark'
+          ? settings.tray_icon_theme
+          : 'auto';
     } catch (err) {
       console.error('Failed to load tray settings:', err);
     }
@@ -3349,6 +3369,18 @@
       closeToTray = value;
     } catch (err) {
       console.error('Failed to set close to tray:', err);
+      showToast($t('toast.failedSaveTray'), 'error');
+    }
+  }
+
+  async function handleTrayIconThemeChange(displayValue: string) {
+    const next = trayIconThemeFromDisplayValue(displayValue);
+    if (!next) return;
+    try {
+      await invoke('v2_set_tray_icon_theme', { value: next });
+      trayIconTheme = next;
+    } catch (err) {
+      console.error('Failed to set tray icon theme:', err);
       showToast($t('toast.failedSaveTray'), 'error');
     }
   }
@@ -4813,6 +4845,17 @@
         <span class="setting-desc">{$t('settings.appearance.tray.closeToTrayDesc')}</span>
       </div>
       <Toggle enabled={closeToTray} onchange={(v) => handleCloseToTrayChange(v)} disabled={!enableTray} />
+    </div>
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.appearance.tray.iconTheme.label')}</span>
+        <span class="setting-desc">{$t('settings.appearance.tray.iconTheme.desc')}</span>
+      </div>
+      <Dropdown
+        value={getTrayIconThemeDisplayValue()}
+        options={getTrayIconThemeOptions()}
+        onchange={handleTrayIconThemeChange}
+      />
     </div>
     {/if}
 

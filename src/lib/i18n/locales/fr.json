@@ -2250,7 +2250,14 @@
         "minimizeToTray": "Réduire à la barre d'état",
         "minimizeToTrayDesc": "Masquer la fenêtre dans la barre d'état lors de la minimisation",
         "closeToTray": "Réduire dans la barre d'état système",
-        "closeToTrayDesc": "Masquer la fenêtre dans la barre d'état au lieu de quitter"
+        "closeToTrayDesc": "Masquer la fenêtre dans la barre d'état au lieu de quitter",
+        "iconTheme": {
+          "label": "Variante de l'icône",
+          "desc": "Forcer une icône claire ou foncée si la détection automatique se trompe (par ex. la barre supérieure toujours sombre de GNOME)",
+          "auto": "Automatique",
+          "light": "Icône claire",
+          "dark": "Icône foncée"
+        }
       },
       "composition": {
         "title": "Composition",

@@ -2241,7 +2241,14 @@
         "minimizeToTray": "In den Tray minimieren",
         "minimizeToTrayDesc": "Fenster beim Minimieren in den Tray verschieben",
         "closeToTray": "In den Systemtray schließen",
-        "closeToTrayDesc": "Fenster in den Tray minimieren statt beenden"
+        "closeToTrayDesc": "Fenster in den Tray minimieren statt beenden",
+        "iconTheme": {
+          "label": "Symbolvariante",
+          "desc": "Erzwinge ein helles oder dunkles Symbol, falls die automatische Erkennung nicht passt (z. B. die dauerhaft dunkle GNOME-Topbar)",
+          "auto": "Automatisch",
+          "light": "Helles Symbol",
+          "dark": "Dunkles Symbol"
+        }
       },
       "composition": {
         "title": "Komposition",
