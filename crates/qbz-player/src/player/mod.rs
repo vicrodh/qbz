@@ -2560,6 +2560,17 @@ impl Player {
                                 let pos = thread_state.current_position();
                                 let dur = thread_state.duration.load(Ordering::SeqCst);
 
+                                // Track whether a gapless transition fired in this iteration
+                                // so the "approaching end" check below can skip itself.
+                                // Without this, the stale pos/dur snapshot above would arm
+                                // gapless_request_armed=true for the new track immediately
+                                // (because pos/dur still point at the outgoing track at the
+                                // moment of swap), and the flag never resets during the new
+                                // track's playback — so the real "approaching end" trigger
+                                // for the new track never fires and gapless playback stalls
+                                // out at engine-empty.
+                                let mut transition_consumed_pending = false;
+
                                 // Gapless transition detection: when position exceeds current
                                 // track duration, the queued next track has started playing
                                 if let Some(ref pending) = gapless_pending {
@@ -2581,8 +2592,13 @@ impl Player {
                                         thread_state
                                             .set_normalization_gain(pending.normalization_gain);
                                         thread_state.set_gapless_next_track_id(0);
+                                        // Reset gapless_ready as well — the previous "approaching end"
+                                        // signal has been consumed by the transition, so any sticky
+                                        // true value would suppress the next track's signal.
+                                        thread_state.set_gapless_ready(false);
                                         gapless_pending = None;
                                         gapless_request_armed = false;
+                                        transition_consumed_pending = true;
                                     }
                                 }
 
@@ -2610,8 +2626,10 @@ impl Player {
                                             thread_state
                                                 .set_normalization_gain(pending.normalization_gain);
                                             thread_state.set_gapless_next_track_id(0);
+                                            thread_state.set_gapless_ready(false);
                                             gapless_pending = None;
                                             gapless_request_armed = false;
+                                            transition_consumed_pending = true;
                                         }
                                     }
                                 }
@@ -2642,6 +2660,7 @@ impl Player {
                                     .map(|s| s.gapless_enabled)
                                     .unwrap_or(false);
                                 if gapless_enabled
+                                    && !transition_consumed_pending
                                     && dur > 0
                                     && pos + GAPLESS_LEAD_SECS >= dur
                                     && gapless_pending.is_none()
