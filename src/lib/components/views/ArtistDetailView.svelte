@@ -3087,11 +3087,16 @@
     width: 100%;
     height: 100%;
     /* Standard root-view padding — matches AlbumDetailView / FavoritesView /
-       PlaylistDetailView so the Back button and hero line up across the app. */
-    padding: 8px 8px 0 18px;
+       PlaylistDetailView so the Back button and hero line up across the app.
+       NOTE: padding-top is intentionally 0. CSS sticky pins to the
+       scrollport's inset edge, which is the *padding box* top — so any
+       padding-top on this container would translate into a visible gap
+       between the scroll container's border edge and the pinned
+       .jump-nav. The 8px breathing room that lived here moved onto
+       .back-btn's margin-top below. */
+    padding: 0 8px 0 18px;
     overflow-y: auto;
     position: relative;
-    background: var(--bg-primary, #0b0b0b);
   }
 
   .artist-body {
@@ -3367,7 +3372,10 @@
     background: none;
     border: none;
     cursor: pointer;
-    margin-top: 8px;
+    /* 16 = 8 (was on .artist-detail's padding-top, which had to go so the
+       sticky .jump-nav can pin at the actual visible top edge) + 8
+       (original margin). Keeps the visual offset identical to before. */
+    margin-top: 16px;
     margin-bottom: 24px;
     transition: color 150ms ease;
   }
@@ -3915,6 +3923,10 @@
 
   .jump-nav {
     position: sticky;
+    /* `top: 0` pins to the scrollport's padding-box top. Now that
+       .artist-detail has padding-top: 0 the padding-box top coincides
+       with the visible top edge, so the bar pins flush — no gap, no
+       solid-color hack needed. */
     top: 0;
     z-index: 50;
     display: flex;
@@ -3924,14 +3936,7 @@
     padding: 10px 24px;
     background: var(--bg-primary);
     border-bottom: 1px solid var(--alpha-6);
-    /* Original drop shadow downward + solid bg-primary extension upward
-       to cover the few-px gap that opens between the titlebar and this
-       bar once it pins. Combined with the compositing-layer hints below,
-       this is the same fix imageCacheService uses for WebKitGTK 2.50+
-       repaint bugs. */
-    box-shadow:
-      0 4px 8px -4px rgba(0, 0, 0, 0.5),
-      0 -32px 0 0 var(--bg-primary);
+    box-shadow: 0 4px 8px -4px rgba(0, 0, 0, 0.5);
     margin: 0 -8px 24px -24px;
     width: calc(100% + 32px);
     will-change: transform;
