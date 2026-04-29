@@ -2947,10 +2947,14 @@
 
 <style>
   .playlist-detail {
-    padding: 8px 8px 100px 18px;
+    /* padding-top is intentionally 0. CSS sticky pins to the
+       scrollport's padding-box top — any padding-top here would push
+       the pinned .tracks-sticky-header that many pixels below the
+       visible top edge, leaving a gap. The 8px breathing room moved
+       onto .nav-row's margin-top below. */
+    padding: 0 8px 100px 18px;
     overflow-y: auto;
     height: 100%;
-    background: var(--bg-primary, #0b0b0b);
   }
 
   /* Custom scrollbar */
@@ -2975,6 +2979,9 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    /* 8 was on .playlist-detail's padding-top, which had to go so the
+       .tracks-sticky-header pins flush to the visible top. */
+    margin-top: 8px;
     margin-bottom: 24px;
   }
 
@@ -3262,18 +3269,20 @@
      whole scroll range instead of getting dragged out with .view-transition. */
   .tracks-sticky-header {
     position: sticky;
+    /* `top: 0` pins to the scrollport's padding-box top. Now that
+       .playlist-detail has padding-top: 0 the padding-box top
+       coincides with the visible top edge, so the bar pins flush. */
     top: 0;
     z-index: 10;
     background: var(--bg-primary, #0b0b0b);
+    /* Internal breathing room so the toolbar selects/buttons don't sit
+       flush against the window titlebar once pinned. The bar is taller
+       than .jump-nav so this is more visible here. */
+    padding-top: 10px;
     /* Force own compositing layer so WebKitGTK 2.50+ renders the solid
-       background cleanly when the sticky pins — without this, scrolled
-       content bleeds through a few px above the bar during repaints. */
+       background cleanly when the sticky pins. */
     will-change: transform;
     transform: translateZ(0);
-    /* Paint the bg-primary fill upward as a box-shadow so any gap between
-       the sticky's top edge and the titlebar (caused by compositing-layer
-       rounding or subpixel offset) stays covered. */
-    box-shadow: 0 -32px 0 0 var(--bg-primary, #0b0b0b);
   }
 
   .track-list-header {
