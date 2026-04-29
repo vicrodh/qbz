@@ -58,7 +58,7 @@
       blurPasses: 7,
       animationSpeed: 1.15,
       transitionDuration: 1000,
-      saturation: 1.9,
+      saturation: 1.7,
       tintIntensity: 0.03,
       dithering: 0.008,
       scale: 1.0,
