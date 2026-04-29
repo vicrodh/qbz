@@ -41,20 +41,23 @@
 
   onMount(() => {
     if (!canvasEl) return;
-    // Match the kawarp.boidu.dev demo defaults exactly so the look in QBZ
-    // is what users see on the upstream homepage. Earlier we shipped a
-    // tamer profile (warp 0.65, slower, deeper blur) which on
-    // monochromatic / low-contrast covers looked granular and flat
-    // versus the demo's livelier domain warp.
+    // Demo defaults from kawarp.boidu.dev with two tweaks for QBZ:
+    //   - scale 1.0 → 1.5 widens the area sampled per frame so non-dominant
+    //     colours from the cover (the peach/sand band on Billie's cover, the
+    //     yellow bursts on a Caifanes sleeve, etc.) get exposed instead of
+    //     averaging out into the dominant tone. Closer in spirit to the
+    //     CSS-translate behaviour of the existing ImmersiveBackground.
+    //   - animationSpeed 1.0 → 1.2 speeds the domain-warp drift so the
+    //     "the colours move" perception lands without being hyper.
     kawarp = new Kawarp(canvasEl, {
       warpIntensity: 1.0,
       blurPasses: 8,
-      animationSpeed: 1.0,
+      animationSpeed: 1.2,
       transitionDuration: 1000,
       saturation: 1.5,
       tintIntensity: 0.15,
       dithering: 0.008,
-      scale: 1.0,
+      scale: 1.5,
     });
     if (artwork) {
       lastLoadedArtwork = artwork;
