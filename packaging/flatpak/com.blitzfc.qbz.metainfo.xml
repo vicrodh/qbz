@@ -69,6 +69,11 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="1.2.10" date="2026-04-29">
+      <description>
+        <p>Fix an issue with gapless play introduced by a new feature in 1.2.9.</p>
+      </description>
+    </release>
     <release version="1.2.9" date="2026-04-29">
       <description>
         <p>Quiet Polish: QConnect cleanup, Linux tray for everyone, sticky and sidebar fixes.</p>

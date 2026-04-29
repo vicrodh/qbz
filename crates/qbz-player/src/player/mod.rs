@@ -2560,8 +2560,40 @@ impl Player {
                                 let pos = thread_state.current_position();
                                 let dur = thread_state.duration.load(Ordering::SeqCst);
 
+                                // Track whether a gapless transition fired in this iteration
+                                // so the "approaching end" check below can skip itself.
+                                // Without this, the stale pos/dur snapshot above would arm
+                                // gapless_request_armed=true for the new track immediately
+                                // (because pos/dur still point at the outgoing track at the
+                                // moment of swap), and the flag never resets during the new
+                                // track's playback — so the real "approaching end" trigger
+                                // for the new track never fires and gapless playback stalls
+                                // out at engine-empty.
+                                let mut transition_consumed_pending = false;
+
                                 // Gapless transition detection: when position exceeds current
-                                // track duration, the queued next track has started playing
+                                // track duration, the queued next track has started playing.
+                                //
+                                // ORDERING NOTE: the polling loop in lib.rs reads `track_id`,
+                                // `gapless_next_track_id`, and other fields as separate atomic
+                                // loads, so it can observe an inconsistent intermediate state
+                                // if these stores aren't ordered carefully. The frontend's
+                                // `isGaplessTransition` predicate requires
+                                // `event.gapless_next_track_id === 0` AND
+                                // `event.track_id !== currentTrack.id`. If the polling loop
+                                // reads `track_id` post-swap but `gapless_next_track_id`
+                                // pre-reset, both conditions can't be satisfied simultaneously
+                                // and the frontend mis-classifies the gapless transition as an
+                                // external track change — leaving the UI stuck on the previous
+                                // title while the audio plays the new track.
+                                //
+                                // To eliminate that race, clear the "transition complete"
+                                // markers (`gapless_next_track_id`, `gapless_ready`) BEFORE
+                                // mutating `track_id`. Any racing reader either sees the old
+                                // track_id with cleared slots (no transition observed yet, will
+                                // catch up on next tick) or the new track_id with cleared slots
+                                // (clean gapless transition), but never the inconsistent
+                                // mid-swap mix.
                                 if let Some(ref pending) = gapless_pending {
                                     if dur > 0 && pos >= dur {
                                         log::info!(
@@ -2569,6 +2601,12 @@ impl Player {
                                             thread_state.current_track_id.load(Ordering::SeqCst),
                                             pending.track_id, pos, dur
                                         );
+                                        // Clear gapless slot markers FIRST so a racing reader
+                                        // never sees the inconsistent track_id-changed +
+                                        // slot-still-set combination.
+                                        thread_state.set_gapless_next_track_id(0);
+                                        thread_state.set_gapless_ready(false);
+                                        // Now safe to swap the track identity.
                                         thread_state
                                             .current_track_id
                                             .store(pending.track_id, Ordering::SeqCst);
@@ -2580,14 +2618,15 @@ impl Player {
                                         current_normalization_gain = pending.normalization_gain;
                                         thread_state
                                             .set_normalization_gain(pending.normalization_gain);
-                                        thread_state.set_gapless_next_track_id(0);
                                         gapless_pending = None;
                                         gapless_request_armed = false;
+                                        transition_consumed_pending = true;
                                     }
                                 }
 
                                 // ALSA Direct gapless: the writer thread signals transitions
-                                // via an atomic flag instead of position-based detection
+                                // via an atomic flag instead of position-based detection.
+                                // Same ordering rationale as above.
                                 if let Some(ref engine) = current_engine {
                                     if engine.take_source_transition() {
                                         if let Some(ref pending) = gapless_pending {
@@ -2598,6 +2637,8 @@ impl Player {
                                                     .load(Ordering::SeqCst),
                                                 pending.track_id
                                             );
+                                            thread_state.set_gapless_next_track_id(0);
+                                            thread_state.set_gapless_ready(false);
                                             thread_state
                                                 .current_track_id
                                                 .store(pending.track_id, Ordering::SeqCst);
@@ -2609,9 +2650,9 @@ impl Player {
                                             current_normalization_gain = pending.normalization_gain;
                                             thread_state
                                                 .set_normalization_gain(pending.normalization_gain);
-                                            thread_state.set_gapless_next_track_id(0);
                                             gapless_pending = None;
                                             gapless_request_armed = false;
+                                            transition_consumed_pending = true;
                                         }
                                     }
                                 }
@@ -2642,6 +2683,7 @@ impl Player {
                                     .map(|s| s.gapless_enabled)
                                     .unwrap_or(false);
                                 if gapless_enabled
+                                    && !transition_consumed_pending
                                     && dur > 0
                                     && pos + GAPLESS_LEAD_SECS >= dur
                                     && gapless_pending.is_none()
