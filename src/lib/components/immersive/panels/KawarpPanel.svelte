@@ -41,17 +41,19 @@
 
   onMount(() => {
     if (!canvasEl) return;
+    // Match the kawarp.boidu.dev demo defaults exactly so the look in QBZ
+    // is what users see on the upstream homepage. Earlier we shipped a
+    // tamer profile (warp 0.65, slower, deeper blur) which on
+    // monochromatic / low-contrast covers looked granular and flat
+    // versus the demo's livelier domain warp.
     kawarp = new Kawarp(canvasEl, {
-      // Tuned for album cover ambience: gentle warp, deep blur, slow speed,
-      // 1s crossfade between tracks (matches the gapless lead time so the
-      // background is already on the new artwork before the audio swap).
-      warpIntensity: 0.65,
-      blurPasses: 12,
-      animationSpeed: 0.6,
+      warpIntensity: 1.0,
+      blurPasses: 8,
+      animationSpeed: 1.0,
       transitionDuration: 1000,
-      saturation: 1.4,
-      tintIntensity: 0.12,
-      dithering: 0.012,
+      saturation: 1.5,
+      tintIntensity: 0.15,
+      dithering: 0.008,
       scale: 1.0,
     });
     if (artwork) {
@@ -157,6 +159,13 @@
     display: flex;
     flex-direction: column;
     align-items: center;
+    /* Lift above the kawarp canvas (which sits at z:0 inside this same
+       stacking context). Without this the cover would still render on top
+       because .artwork-container has its own position:relative, but track-info
+       below was being painted UNDER the canvas — so we anchor every content
+       wrapper above z:0 explicitly. */
+    position: relative;
+    z-index: 1;
   }
 
   .artwork-container {
@@ -192,6 +201,9 @@
     gap: 6px;
     max-width: 600px;
     margin-top: 8px;
+    /* See .artwork-wrapper note: lift above z:0 canvas. */
+    position: relative;
+    z-index: 1;
   }
 
   .now-playing-indicator {
