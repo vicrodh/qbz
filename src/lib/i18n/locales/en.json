@@ -2256,7 +2256,14 @@
         "minimizeToTray": "Minimize to tray",
         "minimizeToTrayDesc": "Hide window to tray when minimizing",
         "closeToTray": "Close to tray",
-        "closeToTrayDesc": "Hide window to tray instead of quitting"
+        "closeToTrayDesc": "Hide window to tray instead of quitting",
+        "iconTheme": {
+          "label": "Tray icon variant",
+          "desc": "Force a light or dark glyph if your panel auto-detection looks wrong (e.g. GNOME's permanently dark top bar)",
+          "auto": "Auto",
+          "light": "Light icon",
+          "dark": "Dark icon"
+        }
       },
       "composition": {
         "title": "Composition",

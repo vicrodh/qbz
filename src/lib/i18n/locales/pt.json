@@ -2250,7 +2250,14 @@
         "minimizeToTray": "Minimizar para a bandeja",
         "minimizeToTrayDesc": "Ocultar janela na bandeja ao minimizar",
         "closeToTray": "Fechar para a bandeja",
-        "closeToTrayDesc": "Ocultar janela na bandeja em vez de encerrar"
+        "closeToTrayDesc": "Ocultar janela na bandeja em vez de encerrar",
+        "iconTheme": {
+          "label": "Variante do ícone",
+          "desc": "Força um ícone claro ou escuro se a detecção automática não funcionar (p. ex. a barra superior sempre escura do GNOME)",
+          "auto": "Automático",
+          "light": "Ícone claro",
+          "dark": "Ícone escuro"
+        }
       },
       "composition": {
         "title": "Composição",
