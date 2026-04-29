@@ -28,8 +28,10 @@ export function HomePage() {
   ]
 
   const capabilityIcons: Record<CapabilityKey, string> = {
+    networkPlayback: '/assets/icons/network-playback.svg',
     audio: '/assets/icons/audio-spec.svg',
     library: '/assets/icons/nas.svg',
+    myQbz: '/assets/icons/cassette.svg',
     playlists: '/assets/icons/playlist.svg',
     desktop: '/assets/icons/linux-desktop.svg',
     casting: '/assets/icons/cast-audio.svg',

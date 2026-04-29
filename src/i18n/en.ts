@@ -79,6 +79,14 @@ export const en = {
     title: 'Key capabilities',
     lead: 'Focused features that do what the web player cannot.',
     items: {
+      networkPlayback: {
+        title: 'Network playback',
+        bullets: [
+          'Qobuz Connect integration.',
+          'Control playback from the Qobuz app on phone or web.',
+          'Seamless handoff between devices.',
+        ],
+      },
       audio: {
         title: 'Native audio playback',
         bullets: [
@@ -93,6 +101,14 @@ export const en = {
           'Folder scanning with metadata extraction.',
           'Cover art discovery and caching.',
           'CUE sheet support and SQLite indexing.',
+        ],
+      },
+      myQbz: {
+        title: 'My QBZ',
+        bullets: [
+          'Mixtapes — curated, mood-driven sequences blending your library with Qobuz.',
+          'Collections — personal groupings of albums, artists, and tracks across sources.',
+          'Complete your music library combining your local library with Qobuz.',
         ],
       },
       playlists: {
@@ -112,7 +128,7 @@ export const en = {
         ],
       },
       casting: {
-        title: 'Network playback',
+        title: 'Casting',
         bullets: [
           'Chromecast and DLNA/UPnP support.',
           'Unified device picker with handoff.',
@@ -190,6 +206,7 @@ export const en = {
           'Algorithmic suggestions based on your local playback history.',
           'Powered by unique Qobuz and MusicBrainz metadata combination.',
           'Expand playlists with one click.',
+          'No telemetry — everything stays local.',
         ],
       },
     },

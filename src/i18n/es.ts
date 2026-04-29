@@ -79,6 +79,14 @@ export const es = {
     title: 'Capacidades clave',
     lead: 'Funciones puntuales para lo que el reproductor web no puede.',
     items: {
+      networkPlayback: {
+        title: 'Reproducción en red',
+        bullets: [
+          'Integración con Qobuz Connect.',
+          'Controla la reproducción desde la app de Qobuz en el teléfono o web.',
+          'Handoff fluido entre dispositivos.',
+        ],
+      },
       audio: {
         title: 'Reproducción de audio nativa',
         bullets: [
@@ -93,6 +101,14 @@ export const es = {
           'Escaneo de carpetas con extracción de metadatos.',
           'Descubrimiento y caché de carátulas.',
           'Soporte CUE e indexado en SQLite.',
+        ],
+      },
+      myQbz: {
+        title: 'My QBZ',
+        bullets: [
+          'Mixtapes — secuencias curadas que mezclan tu biblioteca con Qobuz.',
+          'Collections — agrupaciones personales de álbumes, artistas y canciones entre fuentes.',
+          'Completa tu biblioteca musical combinando tu biblioteca local con Qobuz.',
         ],
       },
       playlists: {
@@ -112,7 +128,7 @@ export const es = {
         ],
       },
       casting: {
-        title: 'Reproducción en red',
+        title: 'Casting',
         bullets: [
           'Soporte Chromecast y DLNA/UPnP.',
           'Selector unificado con handoff.',
@@ -190,6 +206,7 @@ export const es = {
           'Sugerencias algorítmicas basadas en tu historial local de reproducción.',
           'Powered by combinación única de metadatos de Qobuz y MusicBrainz.',
           'Expande playlists con un clic.',
+          'Sin telemetría — todo se queda local.',
         ],
       },
     },
