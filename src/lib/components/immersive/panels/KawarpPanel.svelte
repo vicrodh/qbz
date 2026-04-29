@@ -41,24 +41,25 @@
 
   onMount(() => {
     if (!canvasEl) return;
-    // Demo defaults from kawarp.boidu.dev with two color-side tweaks so
-    // sub-dominant colours from the cover come through without dragging
-    // the look toward Static's translate-of-detail behaviour. Earlier we
-    // tried widening `scale` which surfaced detail but made kawarp look
-    // closer to Static — wrong direction. Instead keep scale at default
-    // and push the colour pipeline:
-    //   - saturation 1.5 → 1.8: amplifies all colours, including the
-    //     muted ones that get drowned by the dark dominant tone on
-    //     covers like Billie's underwater shot.
-    //   - tintIntensity 0.15 → 0.08: half the dark-blue tint pull so
-    //     the cover's own palette dominates instead of the global tint.
+    // Demo defaults from kawarp.boidu.dev with the colour pipeline pushed
+    // further so sub-dominant colours surface clearly without forcing
+    // detail through (which would mimic Static's translate-of-regions
+    // and kill kawarp's distinct fluid look). After two iterations the
+    // sweet spot trades global tint for chromatic punch:
+    //   - saturation 1.5 → 2.0: muted palette colours register at full
+    //     strength on low-contrast covers; dominant colours stay clean
+    //     because saturation is multiplicative, not additive.
+    //   - tintIntensity 0.15 → 0.03: kill the global dark-blue tint
+    //     almost entirely so the cover's own palette is what you see.
+    //     A trace amount (0.03) keeps a subtle anchor on pure-black
+    //     regions instead of letting them float as flat colour.
     kawarp = new Kawarp(canvasEl, {
       warpIntensity: 1.0,
       blurPasses: 8,
       animationSpeed: 1.0,
       transitionDuration: 1000,
-      saturation: 1.8,
-      tintIntensity: 0.08,
+      saturation: 2.0,
+      tintIntensity: 0.03,
       dithering: 0.008,
       scale: 1.0,
     });
