@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { formatTrackTitle } from '$lib/utils/trackTitle';
   import { t, locale } from '$lib/i18n';
   import { invoke } from '@tauri-apps/api/core';
   import { ArrowLeft, Download, Check, LoaderCircle, TriangleAlert, Library, Play, X } from 'lucide-svelte';
@@ -121,6 +122,7 @@
     return {
       id: track.id,
       title: track.title,
+      version: track.version ?? null,
       number: track.track_number,
       artist: track.performer?.name || album?.artist.name,
       album: album?.title || track.album?.title,
@@ -413,7 +415,7 @@
                 {/if}
               </div>
               <div class="col-title">
-                <span class="track-title">{track.title}</span>
+                <span class="track-title">{formatTrackTitle(track)}</span>
                 {#if track.performer.name !== album.artist.name}
                   <span class="track-performer">{track.performer.name}</span>
                 {/if}

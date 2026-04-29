@@ -92,12 +92,17 @@ where
 mod tests {
     use super::*;
     use rodio::buffer::SamplesBuffer;
+    use std::num::NonZero;
     use std::sync::atomic::AtomicBool;
 
     #[test]
     fn test_tapped_source_passes_through() {
         let samples: Vec<f32> = vec![0.5, 0.75, -0.5, -0.25, 0.0];
-        let source = SamplesBuffer::new(1, 44100, samples.clone());
+        let source = SamplesBuffer::new(
+            NonZero::new(1u16).unwrap(),
+            NonZero::new(44100u32).unwrap(),
+            samples.clone(),
+        );
 
         let ring_buffer = Arc::new(RingBuffer::new(16));
         let enabled = Arc::new(AtomicBool::new(true));
@@ -112,7 +117,11 @@ mod tests {
     #[test]
     fn test_tapped_source_fills_ring_buffer() {
         let samples: Vec<f32> = vec![1.0, 0.0, -1.0];
-        let source = SamplesBuffer::new(1, 44100, samples);
+        let source = SamplesBuffer::new(
+            NonZero::new(1u16).unwrap(),
+            NonZero::new(44100u32).unwrap(),
+            samples,
+        );
 
         let ring_buffer = Arc::new(RingBuffer::new(16));
         let enabled = Arc::new(AtomicBool::new(true));

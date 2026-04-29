@@ -15,6 +15,10 @@ use serde::{Deserialize, Serialize};
 pub struct QueueTrack {
     pub id: u64,
     pub title: String,
+    /// Subtitle/edition info from Qobuz (e.g. "Player's Ball Mix") that
+    /// the frontend renders parenthesized after the title (issue #360).
+    #[serde(default)]
+    pub version: Option<String>,
     pub artist: String,
     pub album: String,
     pub duration_secs: u64,
@@ -76,6 +80,7 @@ pub struct QueueState {
     pub shuffle: bool,
     pub repeat: RepeatMode,
     pub total_tracks: usize,
+    pub stop_after_track_id: Option<u64>,
 }
 
 // ============ Playback State ============

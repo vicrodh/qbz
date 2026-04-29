@@ -1,5 +1,6 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
+  import { formatTrackTitle } from '$lib/utils/trackTitle';
   import { RefreshCw, Plus, X, Info, Sparkles, Play, Check } from 'lucide-svelte';
   import { fade, slide } from 'svelte/transition';
   import { flip } from 'svelte/animate';
@@ -418,7 +419,7 @@
             </div>
 
             <div class="track-info">
-              <div class="track-title">{track.title}</div>
+              <div class="track-title">{formatTrackTitle(track)}</div>
               <div class="track-meta">
                 {#if track.artist_id && onGoToArtist}
                   <button

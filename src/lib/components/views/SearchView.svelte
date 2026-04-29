@@ -9,6 +9,7 @@
   import ViewTransition from '../ViewTransition.svelte';
   import TrackMenu from '../TrackMenu.svelte';
   import { openAddToMixtape } from '$lib/stores/addToMixtapeModalStore';
+  import { formatTrackTitle } from '$lib/utils/trackTitle';
   import QualityBadge from '../QualityBadge.svelte';
   import { formatQuality } from '$lib/adapters/qobuzAdapters';
   import { replacePlaybackQueue } from '$lib/services/queuePlaybackService';
@@ -334,6 +335,8 @@
   interface Track {
     id: number;
     title: string;
+    /** Qobuz subtitle/edition (#360). */
+    version?: string | null;
     duration: number;
     album?: {
       id?: string;
@@ -702,6 +705,7 @@
     return tracks.map(track => ({
       id: track.id,
       title: track.title,
+      version: track.version ?? null,
       artist: track.performer?.name || 'Unknown Artist',
       album: track.album?.title || '',
       duration_secs: track.duration,
@@ -1483,7 +1487,7 @@
                       style="--ticker-offset: {popularTitleOffset}; --ticker-duration: {popularTitleDuration};"
                       bind:this={popularTitleRef}
                     >
-                      <span class="popular-title-text" bind:this={popularTitleTextRef}>{track.title}</span>
+                      <span class="popular-title-text" bind:this={popularTitleTextRef}>{formatTrackTitle(track)}</span>
                     </div>
                     <div
                       class="popular-card-subtitle"
@@ -1722,7 +1726,7 @@
                       </button>
                     </div>
                     <div class="track-info">
-                      <div class="track-title">{track.title}</div>
+                      <div class="track-title">{formatTrackTitle(track)}</div>
                       {#if track.performer?.id && onTrackGoToArtist}
                         <button
                           class="track-artist track-link"
@@ -1930,7 +1934,7 @@
                       </button>
                     </div>
                     <div class="track-info">
-                      <div class="track-title">{track.title}</div>
+                      <div class="track-title">{formatTrackTitle(track)}</div>
                       {#if track.performer?.id && onTrackGoToArtist}
                         <button
                           class="track-artist track-link"

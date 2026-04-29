@@ -6,7 +6,7 @@
 pub mod commands_v2;
 pub mod core_bridge;
 pub mod integrations_v2;
-pub mod qconnect_service;
+pub mod qconnect;
 pub mod runtime;
 pub mod session_lifecycle;
 pub mod tauri_adapter;
@@ -35,7 +35,6 @@ pub mod audio;
 pub mod audio_device_watch;
 pub mod cache;
 pub mod cast;
-pub mod commands;
 pub mod config;
 pub mod credentials;
 pub mod discogs;
@@ -134,9 +133,13 @@ impl AppState {
             }
         };
 
-        // Create audio cache (L1 - memory, 400MB) with optional disk spillover
+        // Create audio cache (L1 - memory) with optional disk spillover.
+        // The L1 cap is sized per host: Normal hosts get the historical
+        // 400 MB; LowMemory hosts (issue #331) drop to 50 MB so the cache
+        // alone can never claim 40 % of a 1 GB Pi.
+        let l1_cap = qbz_core::system_capabilities::memory_profile().audio_cache_l1_max_bytes;
         let audio_cache = if let Some(pc) = playback_cache {
-            Arc::new(AudioCache::with_playback_cache(400 * 1024 * 1024, pc))
+            Arc::new(AudioCache::with_playback_cache(l1_cap, pc))
         } else {
             Arc::new(AudioCache::default())
         };
@@ -513,6 +516,20 @@ pub fn run() {
 
     log::info!("QBZ starting...");
 
+    // Resolve and log the system memory profile up front so the chosen
+    // prefetch / buffer caps are visible at boot rather than the first
+    // playback action. The profile is cached in qbz-core's OnceLock,
+    // so subsequent callers (commands_v2/playback.rs, etc.) hit the
+    // cache.
+    let mem_profile = qbz_core::system_capabilities::memory_profile();
+
+    // Wire the streaming-buffer cap into qbz-player's process-wide state
+    // so StreamingConfig::from_speed_mbps clamps to the host's memory
+    // profile. Without this, slow connections inflate the initial
+    // buffer to 2 MB — counterproductive on a memory-pressured host
+    // where the slowness is itself the symptom (issue #331).
+    qbz_player::player::set_max_initial_buffer_bytes(mem_profile.max_initial_buffer_bytes);
+
     #[cfg(target_os = "linux")]
     apply_linux_webkit_workarounds();
 
@@ -749,6 +766,7 @@ pub fn run() {
 
     // Clone settings for use in closures
     let enable_tray = tray_settings.enable_tray;
+    let tray_icon_theme = tray_settings.tray_icon_theme.clone();
 
     // Initialize per-user data paths (no user active yet until login)
     let user_data_paths = user_data::UserDataPaths::new();
@@ -790,7 +808,7 @@ pub fn run() {
         .manage(commands_v2::OAuthCancelState::new())
         .manage(qbzd_discovery::QbzdDiscoveryState::new())
         .manage(runtime::RuntimeManagerState::new())
-        .manage(qconnect_service::QconnectServiceState::new())
+        .manage(qconnect::QconnectServiceState::new())
         .manage(user_data_paths)
         .setup(move |app| {
             log::info!(
@@ -920,7 +938,9 @@ pub fn run() {
 
             // Initialize system tray icon (only if enabled)
             if enable_tray {
-                if let Err(e) = tray::init_tray(app.handle()) {
+                if let Err(e) =
+                    tray::init_tray(app.handle(), Some(tray_icon_theme.as_str()))
+                {
                     log::error!("Failed to initialize tray icon: {}", e);
                 }
             } else {
@@ -931,6 +951,61 @@ pub fn run() {
             app.state::<AppState>()
                 .media_controls
                 .init(app.handle().clone());
+
+            // Memory watchdog (issue #331). Only spawn on memory-constrained
+            // hosts — on Normal-class machines the audio cache fits comfortably
+            // in RAM and the polling cost is wasted. On a Pi 3B with 1 GB total
+            // and ~150 MB locked by the WebView, the L1 cache (default cap
+            // 400 MB) plus a few prefetched HiRes tracks routinely pushes the
+            // kernel into swap. The watchdog flushes the cache when
+            // MemAvailable falls below 5 % of total, breaking the swap-thrash
+            // loop reported by codehd7.
+            {
+                use qbz_core::system_capabilities;
+                let resolved_profile = system_capabilities::memory_profile();
+                if resolved_profile.class == system_capabilities::MemoryClass::LowMemory {
+                    let watchdog_cache = app.state::<AppState>().audio_cache.clone();
+                    tauri::async_runtime::spawn(async move {
+                        let mut interval =
+                            tokio::time::interval(std::time::Duration::from_secs(10));
+                        let mut was_critical = false;
+                        loop {
+                            interval.tick().await;
+                            let Some(pressure) = system_capabilities::read_memory_pressure()
+                            else {
+                                continue;
+                            };
+                            if pressure.is_critical && !was_critical {
+                                log::warn!(
+                                    "[memory-watchdog] Critical pressure: {:.1}% available ({} MB of {} MB) - evicting audio caches",
+                                    pressure.available_pct,
+                                    pressure.mem_available_kb / 1024,
+                                    pressure.mem_total_kb / 1024,
+                                );
+                                watchdog_cache.clear();
+                                was_critical = true;
+                            } else if pressure.is_low && !was_critical {
+                                log::info!(
+                                    "[memory-watchdog] Low pressure: {:.1}% available ({} MB)",
+                                    pressure.available_pct,
+                                    pressure.mem_available_kb / 1024,
+                                );
+                            } else if !pressure.is_low {
+                                if was_critical {
+                                    log::info!(
+                                        "[memory-watchdog] Recovered: {:.1}% available",
+                                        pressure.available_pct,
+                                    );
+                                }
+                                was_critical = false;
+                            }
+                        }
+                    });
+                    log::info!(
+                        "[memory-watchdog] Started for LowMemory host (poll every 10s)"
+                    );
+                }
+            }
 
             // Initialize CoreBridge (new multi-crate architecture)
             // Store V2 player state for event loop access
@@ -1139,6 +1214,27 @@ pub fn run() {
                         }
                     }
 
+                    // Mirror playback state into the Linux SNI tooltip so the
+                    // tray hover hint flips between "Middle-click to pause"
+                    // and "Middle-click to play". Track metadata is pushed
+                    // separately via v2_set_media_metadata; here we only
+                    // touch the play/pause flag and clear on track-stop.
+                    // `should_update_mpris` already debounces to actual
+                    // state transitions (plus position ticks while playing),
+                    // so the cost is bounded.
+                    #[cfg(target_os = "linux")]
+                    if should_update_mpris {
+                        if let Some(tray) = app_handle
+                            .try_state::<crate::tray_linux_ksni::LinuxTrayHandle>()
+                        {
+                            if track_id == 0 {
+                                tray.clear_track();
+                            } else {
+                                tray.set_playing(is_playing);
+                            }
+                        }
+                    }
+
                     // Idle inhibit: prevent screen/suspend while playing (Linux only, via XDG Portal)
                     #[cfg(target_os = "linux")]
                     if is_playing != last_is_playing || track_cleared {
@@ -1253,39 +1349,39 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands_v2::runtime_get_status,
             commands_v2::runtime_bootstrap,
-            qconnect_service::v2_qconnect_connect,
-            qconnect_service::v2_qconnect_disconnect,
-            qconnect_service::v2_qconnect_status,
-            qconnect_service::v2_qconnect_send_command,
-            qconnect_service::v2_qconnect_evaluate_queue_admission,
-            qconnect_service::v2_qconnect_send_command_with_admission,
-            qconnect_service::v2_qconnect_join_session,
-            qconnect_service::v2_qconnect_set_player_state,
-            qconnect_service::v2_qconnect_toggle_play_if_remote,
-            qconnect_service::v2_qconnect_play_track_if_remote,
-            qconnect_service::v2_qconnect_skip_next_if_remote,
-            qconnect_service::v2_qconnect_skip_previous_if_remote,
-            qconnect_service::v2_qconnect_set_volume_if_remote,
-            qconnect_service::v2_qconnect_mute_if_remote,
-            qconnect_service::v2_qconnect_stop_if_remote,
-            qconnect_service::v2_qconnect_toggle_shuffle_if_remote,
-            qconnect_service::v2_qconnect_cycle_repeat_if_remote,
-            qconnect_service::v2_qconnect_set_autoplay_mode_if_remote,
-            qconnect_service::v2_qconnect_autoplay_load_tracks_if_remote,
-            qconnect_service::v2_qconnect_set_active_renderer,
-            qconnect_service::v2_qconnect_set_volume,
-            qconnect_service::v2_qconnect_set_loop_mode,
-            qconnect_service::v2_qconnect_mute_volume,
-            qconnect_service::v2_qconnect_set_max_audio_quality,
-            qconnect_service::v2_qconnect_ask_for_renderer_state,
-            qconnect_service::v2_qconnect_queue_snapshot,
-            qconnect_service::v2_qconnect_renderer_snapshot,
-            qconnect_service::v2_qconnect_session_snapshot,
-            qconnect_service::v2_qconnect_report_playback_state,
-            qconnect_service::v2_qconnect_report_volume,
-            qconnect_service::v2_qconnect_get_device_name,
-            qconnect_service::v2_qconnect_set_device_name,
-            qconnect_service::v2_get_hostname,
+            qconnect::v2_qconnect_connect,
+            qconnect::v2_qconnect_disconnect,
+            qconnect::v2_qconnect_status,
+            qconnect::v2_qconnect_send_command,
+            qconnect::v2_qconnect_evaluate_queue_admission,
+            qconnect::v2_qconnect_send_command_with_admission,
+            qconnect::v2_qconnect_join_session,
+            qconnect::v2_qconnect_set_player_state,
+            qconnect::v2_qconnect_toggle_play_if_remote,
+            qconnect::v2_qconnect_play_track_if_remote,
+            qconnect::v2_qconnect_skip_next_if_remote,
+            qconnect::v2_qconnect_skip_previous_if_remote,
+            qconnect::v2_qconnect_set_volume_if_remote,
+            qconnect::v2_qconnect_mute_if_remote,
+            qconnect::v2_qconnect_stop_if_remote,
+            qconnect::v2_qconnect_toggle_shuffle_if_remote,
+            qconnect::v2_qconnect_cycle_repeat_if_remote,
+            qconnect::v2_qconnect_set_autoplay_mode_if_remote,
+            qconnect::v2_qconnect_autoplay_load_tracks_if_remote,
+            qconnect::v2_qconnect_set_active_renderer,
+            qconnect::v2_qconnect_set_volume,
+            qconnect::v2_qconnect_set_loop_mode,
+            qconnect::v2_qconnect_mute_volume,
+            qconnect::v2_qconnect_set_max_audio_quality,
+            qconnect::v2_qconnect_ask_for_renderer_state,
+            qconnect::v2_qconnect_queue_snapshot,
+            qconnect::v2_qconnect_renderer_snapshot,
+            qconnect::v2_qconnect_session_snapshot,
+            qconnect::v2_qconnect_report_playback_state,
+            qconnect::v2_qconnect_report_volume,
+            qconnect::v2_qconnect_get_device_name,
+            qconnect::v2_qconnect_set_device_name,
+            qconnect::v2_get_hostname,
             commands_v2::v2_is_logged_in,
             commands_v2::v2_login,
             commands_v2::v2_logout,
@@ -1303,32 +1399,11 @@ pub fn run() {
             commands_v2::v2_get_user_info,
             commands_v2::v2_save_credentials,
             commands_v2::v2_clear_saved_credentials,
-            // Temporary compatibility commands still invoked by frontend during migration
-            offline_cache::commands::check_album_fully_cached,
-            network::commands::check_network_path,
-            offline::commands::create_pending_playlist,
-            offline::commands::get_pending_playlist_count,
-            offline::commands::queue_scrobble,
-            offline::commands::get_queued_scrobbles,
-            offline::commands::get_queued_scrobble_count,
-            offline::commands::cleanup_sent_scrobbles,
-            library::commands::discogs_has_credentials,
-            library::commands::discogs_search_artwork,
-            library::commands::discogs_download_artwork,
-            library::commands::library_update_folder_settings,
-            library::commands::get_track_by_path,
-            commands::search::get_artist_basic,
-            commands::search::get_artist_detail,
-            commands::search::get_artist_tracks,
-            commands::search::get_artist_albums,
-            commands::search::get_releases_grid,
-            commands::playback::get_pipewire_sinks,
-            commands::playback::get_audio_output_status,
             flatpak::get_flatpak_help_text,
+            commands_v2::v2_get_flatpak_help_text,
             config::legal_settings::get_qobuz_tos_accepted,
             updates::has_flatpak_welcome_been_shown,
             updates::has_snap_welcome_been_shown,
-            lyrics::commands::lyrics_get,
             config::favorites_cache::is_track_favorite,
             commands_v2::v2_set_api_locale,
             commands_v2::v2_set_use_system_titlebar,
@@ -1337,10 +1412,12 @@ pub fn run() {
             commands_v2::v2_set_enable_tray,
             commands_v2::v2_set_minimize_to_tray,
             commands_v2::v2_set_close_to_tray,
+            commands_v2::v2_set_tray_icon_theme,
             commands_v2::v2_get_tray_settings,
             commands_v2::v2_set_autoplay_mode,
             commands_v2::v2_set_show_context_icon,
             commands_v2::v2_set_persist_session,
+            commands_v2::v2_set_resume_playback_position,
             commands_v2::v2_get_playback_preferences,
             commands_v2::v2_get_favorites_preferences,
             commands_v2::v2_save_favorites_preferences,
@@ -1506,6 +1583,7 @@ pub fn run() {
             commands_v2::v2_is_running_in_flatpak,
             commands_v2::v2_is_running_in_snap,
             commands_v2::v2_mark_snap_welcome_shown,
+            commands_v2::v2_has_snap_welcome_been_shown,
             commands_v2::v2_detect_legacy_cached_files,
             commands_v2::v2_reco_log_event,
             commands_v2::v2_reco_train_scores,
@@ -1552,6 +1630,7 @@ pub fn run() {
             commands_v2::v2_library_refresh_album_metadata_from_files,
             commands_v2::v2_factory_reset,
             commands_v2::v2_set_qobuz_tos_accepted,
+            commands_v2::v2_get_qobuz_tos_accepted,
             commands_v2::v2_get_update_preferences,
             commands_v2::v2_get_current_version,
             commands_v2::v2_check_for_updates,
@@ -1563,6 +1642,7 @@ pub fn run() {
             commands_v2::v2_has_whats_new_been_shown,
             commands_v2::v2_mark_whats_new_shown,
             commands_v2::v2_mark_flatpak_welcome_shown,
+            commands_v2::v2_has_flatpak_welcome_been_shown,
             commands_v2::v2_is_auto_update_eligible,
             commands_v2::v2_get_backend_logs,
             commands_v2::v2_upload_logs_to_paste,
@@ -1593,6 +1673,10 @@ pub fn run() {
             commands_v2::v2_move_queue_track,
             commands_v2::v2_add_tracks_to_queue,
             commands_v2::v2_add_tracks_to_queue_next,
+            commands_v2::v2_queue_set_stop_after,
+            commands_v2::v2_queue_clear_stop_after,
+            commands_v2::v2_queue_consume_stop_after_if,
+            commands_v2::v2_queue_remove_after,
             commands_v2::v2_search_albums,
             commands_v2::v2_search_tracks,
             commands_v2::v2_search_artists,
@@ -1626,6 +1710,10 @@ pub fn run() {
             commands_v2::v2_get_artist_page,
             commands_v2::v2_get_similar_artists,
             commands_v2::v2_get_artist_with_albums,
+            commands_v2::v2_get_artist_albums,
+            commands_v2::v2_get_artist_detail,
+            commands_v2::v2_get_artist_tracks,
+            commands_v2::v2_get_releases_grid,
             commands_v2::v2_get_label_page,
             commands_v2::v2_get_label_explore,
             commands_v2::v2_get_label_albums,
@@ -1650,6 +1738,8 @@ pub fn run() {
             commands_v2::v2_prefetch_track,
             commands_v2::v2_reinit_audio_device,
             commands_v2::v2_check_audio_device_presence,
+            commands_v2::v2_get_audio_output_status,
+            commands_v2::v2_get_pipewire_sinks,
             commands_v2::v2_get_audio_settings,
             commands_v2::v2_set_audio_output_device,
             commands_v2::v2_set_audio_exclusive_mode,
@@ -1795,6 +1885,7 @@ pub fn run() {
             commands_v2::v2_clear_image_cache,
             // Desktop theme detection (KDE/Klassy → adaptive window controls)
             desktop_theme::detect_desktop_theme,
+            commands_v2::v2_detect_desktop_theme,
             // Mixtapes & Collections
             commands_v2::v2_list_mixtape_collections,
             commands_v2::v2_get_mixtape_collection,
@@ -1813,6 +1904,8 @@ pub fn run() {
             commands_v2::v2_reorder_mixtape_items,
             commands_v2::v2_enqueue_collection,
             commands_v2::v2_enqueue_collection_item,
+            commands_v2::v2_collection_unique_track_count,
+            commands_v2::v2_collection_shuffle_tracks,
             commands_v2::v2_skip_to_next_item,
             commands_v2::v2_skip_to_previous_item,
         ])

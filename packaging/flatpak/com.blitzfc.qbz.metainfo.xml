@@ -69,6 +69,20 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="1.2.9" date="2026-04-29">
+      <description>
+        <p>Quiet Polish: QConnect cleanup, Linux tray for everyone, sticky and sidebar fixes.</p>
+        <ul>
+          <li>QConnect (#316): qconnect_service.rs split into a 12-file module; History duplicates fixed (cursor-align skipped when local is the active renderer); History gaps fixed (set_queue remaps by track id instead of clearing); first-track hiccup, prev/next bouncing, and shuffle drift resolved</li>
+          <li>Linux tray: live tooltip with track title and "by Artist" plus inline hints, middle-click play/pause, vertical scroll adjusts volume in 5 percent steps; new Auto / Light / Dark icon override for GNOME's permanently dark top bar</li>
+          <li>UI polish: sticky headers no longer leave a gap at the titlebar (padding-top moved off the scroll container); Edit folder shortcut in the playlist sidebar context menu and on the Playlist Manager breadcrumb (#364); shift-range and Ctrl/Cmd+A multi-select across the remaining views</li>
+          <li>Streaming and playback: Qobuz subtitle/edition propagated through queue, MPRIS, and Last.fm + ListenBrainz scrobbles (#360); opt-in resume of seek position on session restore (#317); audio device enumeration skips virtual ALSA PCMs and routes libasound's verbose errors to log::debug</li>
+          <li>Build and packaging: x86-64-v3 baseline dropped so pre-Haswell CPUs no longer SIGILL on launch; legacy V2 wrappers removed across library, network, offline_cache, reco, cast/dlna, and api_server playback</li>
+          <li>Stratego theme: imperial crimson and bone white, AAA contrast on every text level</li>
+          <li>Stop-after / remove-after: queue context menu adds a one-shot stop marker and a tail-drop from a pivot</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.2.8" date="2026-04-21">
       <description>
         <p>Mixtapes &amp; Collections: two new first-class container types for curating your listening, independent from Qobuz's own playlists.</p>

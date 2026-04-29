@@ -767,19 +767,32 @@ pub async fn v2_library_clear_thumbnails_cache() -> Result<u64, String> {
 #[tauri::command]
 #[allow(non_snake_case)]
 pub async fn v2_library_get_thumbnail(artworkPath: String) -> Result<String, String> {
-    crate::library::library_get_thumbnail(artworkPath).await
+    log::debug!("Command: library_get_thumbnail for {}", artworkPath);
+
+    let source_path = std::path::PathBuf::from(&artworkPath);
+
+    if !source_path.exists() {
+        return Err(format!("Artwork file not found: {}", artworkPath));
+    }
+
+    let thumbnail_path =
+        thumbnails::get_or_generate_thumbnail(&source_path).map_err(|e| e.to_string())?;
+
+    Ok(thumbnail_path.to_string_lossy().to_string())
 }
 
 #[tauri::command]
 pub async fn v2_library_get_thumbnails_cache_size() -> Result<u64, String> {
-    crate::library::library_get_thumbnails_cache_size().await
+    log::debug!("Command: library_get_thumbnails_cache_size");
+    thumbnails::get_cache_size().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn v2_library_get_scan_progress(
     library_state: State<'_, LibraryState>,
 ) -> Result<ScanProgress, String> {
-    crate::library::library_get_scan_progress(library_state).await
+    let progress = library_state.scan_progress.lock().await;
+    Ok(progress.clone())
 }
 
 #[tauri::command]
@@ -788,7 +801,24 @@ pub async fn v2_library_get_tracks_by_ids(
     trackIds: Vec<i64>,
     library_state: State<'_, LibraryState>,
 ) -> Result<Vec<LocalTrack>, String> {
-    crate::library::library_get_tracks_by_ids(trackIds, library_state).await
+    log::info!(
+        "Command: library_get_tracks_by_ids ({} tracks)",
+        trackIds.len()
+    );
+
+    let guard__ = library_state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
+    let mut tracks = Vec::new();
+
+    for track_id in trackIds {
+        if let Some(track) = db.get_track(track_id).map_err(|e| e.to_string())? {
+            tracks.push(track);
+        }
+    }
+
+    Ok(tracks)
 }
 
 #[tauri::command]
@@ -1266,14 +1296,56 @@ pub fn v2_set_show_network_folders_in_manual_offline(
 pub async fn v2_get_offline_status(
     state: State<'_, OfflineState>,
 ) -> Result<crate::offline::OfflineStatus, String> {
-    crate::offline::commands::get_offline_status(state).await
+    let settings = {
+        let guard__ = state
+            .store
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        let store = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
+        store.get_settings()?
+    };
+
+    // If manual offline mode is enabled, return immediately
+    if settings.manual_offline_mode {
+        return Ok(crate::offline::OfflineStatus {
+            is_offline: true,
+            reason: Some(crate::offline::OfflineReason::ManualOverride),
+            manual_mode_enabled: true,
+        });
+    }
+
+    // Check network connectivity
+    let has_network = crate::offline::check_network_connectivity().await;
+
+    if !has_network {
+        return Ok(crate::offline::OfflineStatus {
+            is_offline: true,
+            reason: Some(crate::offline::OfflineReason::NoNetwork),
+            manual_mode_enabled: false,
+        });
+    }
+
+    Ok(crate::offline::OfflineStatus {
+        is_offline: false,
+        reason: None,
+        manual_mode_enabled: false,
+    })
 }
 
 #[tauri::command]
 pub fn v2_get_offline_settings(
     state: State<'_, OfflineState>,
 ) -> Result<crate::offline::OfflineSettings, String> {
-    crate::offline::commands::get_offline_settings(state)
+    let guard__ = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
+    store.get_settings()
 }
 
 #[tauri::command]
@@ -1283,12 +1355,111 @@ pub async fn v2_set_manual_offline(
     audio_state: State<'_, crate::config::audio_settings::AudioSettingsState>,
     app_handle: tauri::AppHandle,
 ) -> Result<crate::offline::OfflineStatus, String> {
-    crate::offline::commands::set_manual_offline(enabled, state, audio_state, app_handle).await
+    use tauri::Emitter;
+
+    // 1) Persist the manual offline flag first so any concurrent reads
+    //    see the new mode immediately.
+    let (was_offline, stream_first_before): (bool, Option<bool>) = {
+        let guard__ = state
+            .store
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        let store = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
+        let prev = store
+            .get_settings()
+            .map(|s| s.manual_offline_mode)
+            .unwrap_or(false);
+        let snapshot = store
+            .get_pre_offline_stream_first_track()
+            .unwrap_or(None);
+        store.set_manual_offline_mode(enabled)?;
+        (prev, snapshot)
+    };
+
+    // 2) Coordinate the stream_first_track snapshot/restore. This is best-
+    //    effort — if the audio store isn't initialized yet (pre-login), we
+    //    just skip; the offline flag itself has been persisted.
+    if enabled && !was_offline {
+        // Entering offline mode: stash current value and force to false.
+        let current = {
+            let guard = audio_state
+                .store
+                .lock()
+                .map_err(|e| format!("Audio settings lock error: {}", e))?;
+            guard
+                .as_ref()
+                .and_then(|s| s.get_settings().ok())
+                .map(|s| s.stream_first_track)
+        };
+        if let Some(current_value) = current {
+            {
+                let guard = state
+                    .store
+                    .lock()
+                    .map_err(|e| format!("Lock error: {}", e))?;
+                if let Some(store) = guard.as_ref() {
+                    let _ = store.set_pre_offline_stream_first_track(Some(current_value));
+                }
+            }
+            if current_value {
+                let guard = audio_state
+                    .store
+                    .lock()
+                    .map_err(|e| format!("Audio settings lock error: {}", e))?;
+                if let Some(store) = guard.as_ref() {
+                    let _ = store.set_stream_first_track(false);
+                    log::info!(
+                        "[Offline] stream_first_track snapshot={}; forced to false while offline",
+                        current_value
+                    );
+                }
+            }
+        }
+    } else if !enabled && was_offline {
+        // Exiting offline mode: restore snapshot if we have one.
+        if let Some(snapshot_value) = stream_first_before {
+            {
+                let guard = audio_state
+                    .store
+                    .lock()
+                    .map_err(|e| format!("Audio settings lock error: {}", e))?;
+                if let Some(store) = guard.as_ref() {
+                    let _ = store.set_stream_first_track(snapshot_value);
+                    log::info!(
+                        "[Offline] restored stream_first_track to {}",
+                        snapshot_value
+                    );
+                }
+            }
+            {
+                let guard = state
+                    .store
+                    .lock()
+                    .map_err(|e| format!("Lock error: {}", e))?;
+                if let Some(store) = guard.as_ref() {
+                    let _ = store.set_pre_offline_stream_first_track(None);
+                }
+            }
+        }
+    }
+
+    // 3) Get updated status
+    let status = v2_get_offline_status(state).await?;
+
+    // 4) Emit events. offline-status-changed for the offline store;
+    //    audio-settings-changed so the SettingsView reloads its local
+    //    state of stream_first_track (we may have just mutated it).
+    let _ = app_handle.emit("offline-status-changed", &status);
+    let _ = app_handle.emit("audio-settings-changed", ());
+
+    Ok(status)
 }
 
 #[tauri::command]
 pub async fn v2_check_network() -> bool {
-    crate::offline::commands::check_network().await
+    crate::offline::check_network_connectivity().await
 }
 
 #[tauri::command]
@@ -1361,7 +1532,14 @@ pub fn v2_mark_scrobbles_sent(ids: Vec<i64>, state: State<'_, OfflineState>) -> 
 pub fn v2_get_pending_playlists(
     state: State<'_, OfflineState>,
 ) -> Result<Vec<crate::offline::PendingPlaylist>, String> {
-    crate::offline::commands::get_pending_playlists(state)
+    let guard__ = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
+    store.get_pending_playlists()
 }
 
 #[tauri::command]
@@ -1646,14 +1824,29 @@ pub async fn v2_reco_get_home(
     limitFavorites: Option<u32>,
     state: State<'_, RecoState>,
 ) -> Result<HomeSeeds, String> {
-    crate::reco_store::commands::reco_get_home(
-        limitRecentAlbums,
-        limitContinueTracks,
-        limitTopArtists,
-        limitFavorites,
-        state,
-    )
-    .await
+    let limit_recent_albums = limitRecentAlbums.unwrap_or(12);
+    let limit_continue_tracks = limitContinueTracks.unwrap_or(10);
+    let limit_top_artists = limitTopArtists.unwrap_or(10);
+    let limit_favorites = limitFavorites.unwrap_or(12);
+
+    let guard__ = state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
+
+    let recently_played_album_ids = db.get_recent_album_ids(limit_recent_albums)?;
+    let continue_listening_track_ids = db.get_recent_track_ids(limit_continue_tracks)?;
+    let top_artist_ids = db.get_top_artist_ids(limit_top_artists)?;
+    let favorite_album_ids = db.get_favorite_album_ids(limit_favorites)?;
+    let favorite_track_ids = db.get_favorite_track_ids(limit_favorites)?;
+
+    Ok(HomeSeeds {
+        recently_played_album_ids,
+        continue_listening_track_ids,
+        top_artist_ids,
+        favorite_album_ids,
+        favorite_track_ids,
+    })
 }
 
 #[tauri::command]
@@ -1665,14 +1858,23 @@ pub async fn v2_reco_get_home_ml(
     limitFavorites: Option<u32>,
     state: State<'_, RecoState>,
 ) -> Result<HomeSeeds, String> {
-    crate::reco_store::commands::reco_get_home_ml(
-        limitRecentAlbums,
-        limitContinueTracks,
-        limitTopArtists,
-        limitFavorites,
-        state,
+    let limit_recent_albums = limitRecentAlbums.unwrap_or(12);
+    let limit_continue_tracks = limitContinueTracks.unwrap_or(10);
+    let limit_top_artists = limitTopArtists.unwrap_or(10);
+    let limit_favorites = limitFavorites.unwrap_or(12);
+
+    let guard__ = state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
+
+    crate::reco_store::helpers::get_home_seeds_internal(
+        db,
+        limit_recent_albums,
+        limit_continue_tracks,
+        limit_top_artists,
+        limit_favorites,
     )
-    .await
 }
 
 #[tauri::command]
@@ -1686,16 +1888,216 @@ pub async fn v2_reco_get_home_resolved(
     app_state: State<'_, AppState>,
     cache_state: State<'_, ApiCacheState>,
 ) -> Result<HomeResolved, String> {
-    crate::reco_store::commands::reco_get_home_resolved(
-        limitRecentAlbums,
-        limitContinueTracks,
-        limitTopArtists,
-        limitFavorites,
-        reco_state,
-        app_state,
-        cache_state,
-    )
-    .await
+    use rand::seq::SliceRandom;
+    use std::collections::HashMap;
+
+    let limit_recent_albums = limitRecentAlbums.unwrap_or(12);
+    let limit_continue_tracks = limitContinueTracks.unwrap_or(10);
+    let limit_top_artists = limitTopArtists.unwrap_or(10);
+    let limit_favorites = limitFavorites.unwrap_or(12);
+
+    // Step 1: Get seeds (IDs) from reco DB
+    let seeds = {
+        let guard__ = reco_state.db.lock().await;
+        let db = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
+        crate::reco_store::helpers::get_home_seeds_internal(
+            db,
+            limit_recent_albums,
+            limit_continue_tracks,
+            limit_top_artists,
+            limit_favorites,
+        )?
+    };
+
+    // Step 2: Collect all unique IDs needed
+    // For favorite albums: merge favorite album IDs + album IDs from favorite tracks
+    // (favorite tracks → their albums is done after track resolution)
+    let all_track_ids: Vec<u64> = {
+        let mut ids = seeds.continue_listening_track_ids.clone();
+        ids.extend(&seeds.favorite_track_ids);
+        ids.sort_unstable();
+        ids.dedup();
+        ids
+    };
+
+    let all_artist_ids: Vec<u64> = seeds.top_artist_ids.iter().map(|s| s.artist_id).collect();
+
+    // Build play_count map for artists
+    let artist_play_counts: HashMap<u64, u32> = seeds
+        .top_artist_ids
+        .iter()
+        .map(|s| (s.artist_id, s.play_count))
+        .collect();
+
+    // Step 3: Resolve all entity types in parallel.
+    // Recent albums, favorite albums, tracks, and artists are all independent.
+    let recent_albums_fut = crate::reco_store::helpers::resolve_albums(
+        &seeds.recently_played_album_ids,
+        &reco_state,
+        &app_state,
+        &cache_state,
+    );
+    let favorite_albums_fut = crate::reco_store::helpers::resolve_albums(
+        &seeds.favorite_album_ids,
+        &reco_state,
+        &app_state,
+        &cache_state,
+    );
+    let tracks_fut = crate::reco_store::helpers::resolve_tracks(
+        &all_track_ids,
+        &reco_state,
+        &app_state,
+        &cache_state,
+    );
+    let artists_fut = crate::reco_store::helpers::resolve_artists(
+        &all_artist_ids,
+        &artist_play_counts,
+        &reco_state,
+        &app_state,
+        &cache_state,
+    );
+
+    let (recently_played_albums, resolved_favorites, all_tracks, top_artists) = tokio::try_join!(
+        recent_albums_fut,
+        favorite_albums_fut,
+        tracks_fut,
+        artists_fut
+    )?;
+
+    // Build track lookup
+    let track_map: HashMap<u64, &crate::reco_store::TrackDisplayMeta> =
+        all_tracks.iter().map(|tr| (tr.id, tr)).collect();
+
+    let continue_listening_tracks: Vec<crate::reco_store::TrackDisplayMeta> = seeds
+        .continue_listening_track_ids
+        .iter()
+        .filter_map(|id| track_map.get(id).map(|tr| (*tr).clone()))
+        .collect();
+
+    // Step 4: "More From Favorites" = discover albums by favorite artists,
+    // excluding albums the user already has in favorites / recently played.
+
+    // 5b: Collect unique artist IDs from favorite albums + favorite tracks
+    let favorite_artist_ids: Vec<u64> = {
+        let mut ids = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for album in &resolved_favorites {
+            if let Some(aid) = album.artist_id {
+                if seen.insert(aid) {
+                    ids.push(aid);
+                }
+            }
+        }
+        for track_id in &seeds.favorite_track_ids {
+            if let Some(track) = track_map.get(track_id) {
+                if let Some(aid) = track.artist_id {
+                    if seen.insert(aid) {
+                        ids.push(aid);
+                    }
+                }
+            }
+        }
+        ids
+    };
+
+    // 5c: Build exclusion set (already-favorited + recently played albums)
+    let exclusion_set: std::sync::Arc<std::collections::HashSet<String>> = {
+        let mut set: std::collections::HashSet<String> =
+            seeds.favorite_album_ids.iter().cloned().collect();
+        for track_id in &seeds.favorite_track_ids {
+            if let Some(track) = track_map.get(track_id) {
+                if let Some(ref album_id) = track.album_id {
+                    if !album_id.is_empty() {
+                        set.insert(album_id.clone());
+                    }
+                }
+            }
+        }
+        for album_id in &seeds.recently_played_album_ids {
+            set.insert(album_id.clone());
+        }
+        std::sync::Arc::new(set)
+    };
+
+    // 5d: Fetch albums from favorite artists (parallel)
+    // Shuffle artists so every favorite gets a fair chance, cap 2 albums per artist
+    const MAX_ALBUMS_PER_ARTIST: usize = 2;
+    let favorite_albums = if favorite_artist_ids.is_empty() {
+        Vec::new()
+    } else {
+        // Shuffle artists so every favorite gets a fair chance
+        let shuffled_artists = {
+            let mut ids = favorite_artist_ids.clone();
+            ids.shuffle(&mut rand::rng());
+            ids
+        };
+
+        let sem = std::sync::Arc::new(tokio::sync::Semaphore::new(5));
+        let client = app_state.client.clone();
+        let reco_arc = reco_state.db.clone();
+
+        let mut handles = Vec::new();
+        for artist_id in shuffled_artists.iter().take(14) {
+            let sem = sem.clone();
+            let client = client.clone();
+            let reco_arc = reco_arc.clone();
+            let exclusion = exclusion_set.clone();
+            let artist_id = *artist_id;
+
+            handles.push(tokio::spawn(async move {
+                let _permit = sem.acquire().await.ok()?;
+                let artist = {
+                    let c = client.read().await;
+                    c.get_artist_with_pagination_and_locale(artist_id, true, Some(25), None, None)
+                        .await
+                        .ok()?
+                };
+                let albums = artist.albums?;
+                let mut results: Vec<crate::reco_store::AlbumCardMeta> = Vec::new();
+                for album in &albums.items {
+                    if results.len() >= MAX_ALBUMS_PER_ARTIST {
+                        break;
+                    }
+                    if !exclusion.contains(&album.id) {
+                        let meta = crate::reco_store::helpers::album_to_card_meta(album);
+                        {
+                            let guard__ = reco_arc.lock().await;
+                            if let Some(db) = guard__.as_ref() {
+                                let _ = db.set_album_meta(&meta);
+                            }
+                        }
+                        results.push(meta);
+                    }
+                }
+                Some(results)
+            }));
+        }
+
+        let mut all_albums: Vec<crate::reco_store::AlbumCardMeta> = Vec::new();
+        for handle in handles {
+            if let Ok(Some(albums)) = handle.await {
+                all_albums.extend(albums);
+            }
+        }
+
+        // Deduplicate, shuffle, and limit
+        {
+            let mut seen = std::collections::HashSet::new();
+            all_albums.retain(|a| seen.insert(a.id.clone()));
+        }
+        all_albums.shuffle(&mut rand::rng());
+        all_albums.truncate(limit_favorites as usize);
+        all_albums
+    };
+
+    Ok(HomeResolved {
+        recently_played_albums,
+        continue_listening_tracks,
+        top_artists,
+        favorite_albums,
+    })
 }
 
 /// Get album suggestions (similar albums) from Qobuz /album/suggest API
@@ -1752,7 +2154,7 @@ pub async fn v2_reco_get_forgotten_favorites(
     }
 
     // Resolve album IDs to metadata using the same 3-tier cache as home
-    crate::reco_store::commands::resolve_albums(&album_ids, &reco_state, &app_state, &cache_state)
+    crate::reco_store::helpers::resolve_albums(&album_ids, &reco_state, &app_state, &cache_state)
         .await
 }
 
@@ -2010,17 +2412,54 @@ pub async fn v2_update_playlist_folder(
     isHidden: Option<bool>,
     state: State<'_, LibraryState>,
 ) -> Result<crate::library::PlaylistFolder, String> {
-    crate::library::update_playlist_folder(
-        id,
-        name,
-        iconType,
-        iconPreset,
-        iconColor,
-        customImagePath,
+    log::info!("Command: update_playlist_folder {}", id);
+
+    // Handle custom image - copy to persistent storage if provided
+    // Uses Option<Option<&str>> semantics: None = don't update, Some(None) = clear, Some(Some(path)) = set new
+    let final_custom_image: Option<Option<String>> = if let Some(source_path) = customImagePath {
+        if source_path.is_empty() {
+            // Empty string means clear the image
+            Some(None)
+        } else {
+            let source = std::path::Path::new(&source_path);
+            if !source.exists() {
+                return Err(format!("Source image does not exist: {}", source_path));
+            }
+
+            let artwork_dir = get_artwork_cache_dir();
+            let extension = source.extension().and_then(|e| e.to_str()).unwrap_or("jpg");
+            let filename = format!(
+                "folder_{}_{}.{}",
+                id,
+                chrono::Utc::now().timestamp(),
+                extension
+            );
+            let dest_path = artwork_dir.join(filename);
+
+            std::fs::copy(source, &dest_path)
+                .map_err(|e| format!("Failed to copy image: {}", e))?;
+
+            log::info!("Copied folder image to: {}", dest_path.display());
+            Some(Some(dest_path.to_string_lossy().to_string()))
+        }
+    } else {
+        None
+    };
+
+    let guard__ = state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
+    db.update_playlist_folder(
+        &id,
+        name.as_deref(),
+        iconType.as_deref(),
+        iconPreset.as_deref(),
+        iconColor.as_deref(),
+        final_custom_image.as_ref().map(|o| o.as_deref()),
         isHidden,
-        state,
     )
-    .await
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -2056,19 +2495,88 @@ pub async fn v2_library_get_stats(
     state: State<'_, LibraryState>,
     download_settings_state: State<'_, DownloadSettingsState>,
 ) -> Result<crate::library::LibraryStats, String> {
-    crate::library::library_get_stats(state, download_settings_state).await
+    log::info!("Command: library_get_stats");
+
+    let include_qobuz = download_settings_state
+        .lock()
+        .map_err(|e| format!("Failed to lock download settings: {}", e))?
+        .as_ref()
+        .and_then(|s| s.get_settings().ok())
+        .map(|s| s.show_in_library)
+        .unwrap_or(false);
+
+    let guard__ = state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
+    db.get_stats(include_qobuz).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn v2_library_get_folders(state: State<'_, LibraryState>) -> Result<Vec<String>, String> {
-    crate::library::library_get_folders(state).await
+    log::info!("Command: library_get_folders");
+
+    let guard__ = state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
+    db.get_folders().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn v2_library_get_folders_with_metadata(
     state: State<'_, LibraryState>,
 ) -> Result<Vec<crate::library::LibraryFolder>, String> {
-    crate::library::library_get_folders_with_metadata(state).await
+    log::info!("Command: library_get_folders_with_metadata");
+
+    let guard__ = state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
+    let mut folders = db.get_folders_with_metadata().map_err(|e| e.to_string())?;
+
+    // Refresh network detection for folders without user override
+    for folder in &mut folders {
+        if !folder.user_override_network {
+            let path = std::path::Path::new(&folder.path);
+            let network_info = crate::network::is_network_path(path);
+
+            // Update if detection differs from stored value
+            if network_info.is_network != folder.is_network {
+                log::info!(
+                    "Updating network status for folder {}: {} -> {}",
+                    folder.path,
+                    folder.is_network,
+                    network_info.is_network
+                );
+
+                // Extract network filesystem type
+                let fs_type = network_info.mount_info.as_ref().and_then(|mi| {
+                    if let crate::network::MountKind::Network(nfs) = &mi.kind {
+                        Some(format!("{:?}", nfs).to_lowercase())
+                    } else {
+                        None
+                    }
+                });
+
+                // Update database
+                let _ = db.update_folder_settings(
+                    folder.id,
+                    folder.alias.as_deref(),
+                    folder.enabled,
+                    network_info.is_network,
+                    fs_type.as_deref(),
+                    false, // not user override
+                );
+
+                // Update the folder struct for return
+                folder.is_network = network_info.is_network;
+                folder.network_fs_type = fs_type;
+            }
+        }
+    }
+
+    Ok(folders)
 }
 
 #[tauri::command]
@@ -2076,21 +2584,163 @@ pub async fn v2_library_add_folder(
     path: String,
     state: State<'_, LibraryState>,
 ) -> Result<crate::library::LibraryFolder, String> {
-    crate::library::library_add_folder(path, state).await
+    use crate::network::{is_network_path, MountKind, NetworkFs};
+
+    log::info!("Command: library_add_folder {}", path);
+
+    // Validate path exists and is a directory
+    let path_ref = std::path::Path::new(&path);
+    if !path_ref.exists() {
+        return Err(format!("Path does not exist: {}", path));
+    }
+    if !path_ref.is_dir() {
+        return Err(format!("Path is not a directory: {}", path));
+    }
+
+    // Detect if this is a network folder
+    let network_info = is_network_path(path_ref);
+    let (is_network, fs_type) = if network_info.is_network {
+        let fs_type = network_info
+            .mount_info
+            .as_ref()
+            .and_then(|m| match &m.kind {
+                MountKind::Network(nfs) => Some(match nfs {
+                    NetworkFs::Cifs => "cifs".to_string(),
+                    NetworkFs::Nfs => "nfs".to_string(),
+                    NetworkFs::Sshfs => "sshfs".to_string(),
+                    NetworkFs::Rclone => "rclone".to_string(),
+                    NetworkFs::Webdav => "webdav".to_string(),
+                    NetworkFs::Gluster => "glusterfs".to_string(),
+                    NetworkFs::Ceph => "ceph".to_string(),
+                    NetworkFs::Other(s) => s.clone(),
+                }),
+                _ => None,
+            });
+        (true, fs_type)
+    } else {
+        (false, None)
+    };
+
+    log::info!(
+        "Folder network info: is_network={}, fs_type={:?}",
+        is_network,
+        fs_type
+    );
+
+    let guard__ = state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
+    let id = db
+        .add_folder_with_network_info(&path, is_network, fs_type.as_deref())
+        .map_err(|e| e.to_string())?;
+
+    // Return the full folder info
+    db.get_folder_by_id(id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "Failed to retrieve folder after insert".to_string())
 }
 
 #[tauri::command]
 pub async fn v2_library_cleanup_missing_files(
     state: State<'_, LibraryState>,
 ) -> Result<crate::library::CleanupResult, String> {
-    crate::library::library_cleanup_missing_files(state).await
+    log::info!("Command: library_cleanup_missing_files");
+
+    let guard__ = state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
+
+    // Get all track paths
+    let tracks = db.get_all_track_paths().map_err(|e| e.to_string())?;
+    let total = tracks.len();
+    log::info!("Checking {} tracks for missing files...", total);
+
+    // Find tracks whose files don't exist
+    let mut missing_ids: Vec<i64> = Vec::new();
+    for (id, path) in &tracks {
+        if !std::path::Path::new(path).exists() {
+            log::debug!("Missing file: {}", path);
+            missing_ids.push(*id);
+        }
+    }
+
+    log::info!(
+        "Found {} missing files out of {} tracks",
+        missing_ids.len(),
+        total
+    );
+
+    // Delete missing tracks in batches
+    let removed = if !missing_ids.is_empty() {
+        let mut total_removed = 0;
+        for chunk in missing_ids.chunks(500) {
+            let count = db.delete_tracks_by_ids(chunk).map_err(|e| e.to_string())?;
+            total_removed += count;
+        }
+        total_removed
+    } else {
+        0
+    };
+
+    log::info!("Removed {} tracks with missing files", removed);
+
+    Ok(crate::library::CleanupResult {
+        checked: total,
+        removed,
+    })
 }
 
 #[tauri::command]
 pub async fn v2_library_fetch_missing_artwork(
     state: State<'_, LibraryState>,
 ) -> Result<u32, String> {
-    crate::library::library_fetch_missing_artwork(state).await
+    log::info!("Command: library_fetch_missing_artwork");
+
+    // Get Discogs client (proxy handles credentials)
+    let discogs = crate::discogs::DiscogsClient::new();
+
+    let artwork_cache = get_artwork_cache_dir();
+    let mut updated_count = 0u32;
+
+    // Get all albums without artwork
+    let albums_without_artwork: Vec<(String, String, String)> = {
+        let guard__ = state.db.lock().await;
+        let db = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
+        db.get_albums_without_artwork().map_err(|e| e.to_string())?
+    };
+
+    log::info!(
+        "Found {} albums without artwork",
+        albums_without_artwork.len()
+    );
+
+    for (group_key, album, artist) in albums_without_artwork {
+        // Try to fetch from Discogs
+        if let Some(artwork_path) = discogs.fetch_artwork(&artist, &album, &artwork_cache).await {
+            // Update all tracks in this album with the artwork
+            let guard__ = state.db.lock().await;
+            let db = guard__
+                .as_ref()
+                .ok_or("No active session - please log in")?;
+            if db
+                .update_album_group_artwork(&group_key, &artwork_path)
+                .is_ok()
+            {
+                updated_count += 1;
+                log::info!("Updated artwork for {} - {}", artist, album);
+            }
+        }
+
+        // Small delay to respect rate limits (60 requests/min)
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    }
+
+    log::info!("Fetched artwork for {} albums from Discogs", updated_count);
+    Ok(updated_count)
 }
 
 #[tauri::command]
@@ -2099,8 +2749,32 @@ pub async fn v2_library_get_artists(
     state: State<'_, LibraryState>,
     download_settings_state: State<'_, DownloadSettingsState>,
 ) -> Result<Vec<crate::library::LocalArtist>, String> {
-    crate::library::library_get_artists(exclude_network_folders, state, download_settings_state)
-        .await
+    log::info!(
+        "Command: library_get_artists (exclude_network: {:?})",
+        exclude_network_folders
+    );
+
+    // Get download settings
+    let include_qobuz = download_settings_state
+        .lock()
+        .map_err(|e| format!("Failed to lock download settings: {}", e))?
+        .as_ref()
+        .and_then(|s| s.get_settings().ok())
+        .map(|s| s.show_in_library)
+        .unwrap_or(false);
+
+    let guard__ = state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
+
+    // Use optimized SQL-based filtering instead of N+1 query pattern
+    let artists = db
+        .get_artists_with_filter(include_qobuz, exclude_network_folders.unwrap_or(false))
+        .map_err(|e| e.to_string())?;
+
+    log::info!("Returning {} artists", artists.len());
+    Ok(artists)
 }
 
 #[tauri::command]
@@ -2111,14 +2785,39 @@ pub async fn v2_library_search(
     state: State<'_, LibraryState>,
     download_settings_state: State<'_, DownloadSettingsState>,
 ) -> Result<Vec<crate::library::LocalTrack>, String> {
-    crate::library::library_search(
+    log::info!(
+        "Command: library_search \"{}\" (exclude_network: {:?})",
         query,
-        limit,
-        exclude_network_folders,
-        state,
-        download_settings_state,
-    )
-    .await
+        exclude_network_folders
+    );
+
+    // Get download settings
+    let include_qobuz = download_settings_state
+        .lock()
+        .map_err(|e| format!("Failed to lock download settings: {}", e))?
+        .as_ref()
+        .and_then(|s| s.get_settings().ok())
+        .map(|s| s.show_in_library)
+        .unwrap_or(false);
+
+    let guard__ = state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
+
+    // Use optimized SQL-based filtering
+    // limit = 0 means no limit (fetch all tracks)
+    let tracks = db
+        .search_with_filter(
+            &query,
+            limit.unwrap_or(0),
+            include_qobuz,
+            exclude_network_folders.unwrap_or(false),
+        )
+        .map_err(|e| e.to_string())?;
+
+    log::info!("Search returned {} tracks", tracks.len());
+    Ok(tracks)
 }
 
 #[tauri::command]
@@ -2127,7 +2826,14 @@ pub async fn v2_library_get_album_tracks(
     albumGroupKey: String,
     state: State<'_, LibraryState>,
 ) -> Result<Vec<crate::library::LocalTrack>, String> {
-    crate::library::library_get_album_tracks(albumGroupKey, state).await
+    log::info!("Command: library_get_album_tracks {}", albumGroupKey);
+
+    let guard__ = state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
+    db.get_album_tracks(&albumGroupKey)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

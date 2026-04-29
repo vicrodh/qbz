@@ -240,16 +240,3 @@ export async function cmdGetHardwareAudioStatus(): Promise<unknown> {
   }
 }
 
-export async function cmdUpdateAudioSettings(patch: Record<string, unknown>): Promise<unknown> {
-  const target = getTarget();
-  if (target.type === 'qbzd') {
-    return remotePost('/api/audio/settings', patch);
-  } else {
-    // Local: individual invoke calls per field
-    if ('backend_type' in patch) await invoke('v2_set_audio_backend', { backendType: patch.backend_type });
-    if ('output_device' in patch) await invoke('v2_set_audio_device', { deviceName: patch.output_device });
-    if ('exclusive_mode' in patch) await invoke('v2_set_exclusive_mode', { enabled: patch.exclusive_mode });
-    if ('dac_passthrough' in patch) await invoke('v2_set_dac_passthrough', { enabled: patch.dac_passthrough });
-    return invoke('v2_get_audio_settings');
-  }
-}

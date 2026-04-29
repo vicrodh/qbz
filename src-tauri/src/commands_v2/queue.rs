@@ -5,7 +5,7 @@ use qconnect_app::QueueCommandType;
 use qconnect_app::{QConnectQueueState, QConnectRendererState};
 
 use crate::core_bridge::CoreBridgeState;
-use crate::qconnect_service::{QconnectServiceState, QconnectVisibleQueueProjection};
+use crate::qconnect::{QconnectServiceState, QconnectVisibleQueueProjection};
 use crate::runtime::{CommandRequirement, RuntimeError, RuntimeManagerState};
 
 // ==================== Queue Commands (V2) ====================
@@ -308,7 +308,7 @@ mod tests {
         build_qconnect_remove_upcoming_payload, build_qconnect_reorder_payload,
         qconnect_loop_mode_from_repeat_mode, resolve_qconnect_shuffle_pivot,
     };
-    use crate::qconnect_service::QconnectVisibleQueueProjection;
+    use crate::qconnect::QconnectVisibleQueueProjection;
     use qbz_models::RepeatMode;
     use qconnect_app::{QConnectQueueState, QConnectRendererState};
     use qconnect_core::QueueItem;
@@ -427,6 +427,10 @@ mod tests {
 pub struct V2QueueTrack {
     pub id: u64,
     pub title: String,
+    /// Subtitle/edition info from Qobuz (e.g. "Player's Ball Mix"),
+    /// rendered parenthesized after the title in the frontend (#360).
+    #[serde(default)]
+    pub version: Option<String>,
     pub artist: String,
     pub album: String,
     pub duration_secs: u64,
@@ -462,6 +466,7 @@ impl From<V2QueueTrack> for CoreQueueTrack {
         Self {
             id: t.id,
             title: t.title,
+            version: t.version,
             artist: t.artist,
             album: t.album,
             duration_secs: t.duration_secs,
@@ -485,6 +490,7 @@ impl From<CoreQueueTrack> for V2QueueTrack {
         Self {
             id: t.id,
             title: t.title,
+            version: t.version,
             artist: t.artist,
             album: t.album,
             duration_secs: t.duration_secs,
@@ -823,4 +829,55 @@ pub async fn v2_add_tracks_to_queue_next(
         bridge.add_track_next(track.into()).await;
     }
     Ok(())
+}
+
+/// Set the stop-after marker on a track ID. Replaces any previous
+/// marker. No-op if the track ID is not in the current queue.
+#[tauri::command]
+pub async fn v2_queue_set_stop_after(
+    track_id: u64,
+    bridge: State<'_, CoreBridgeState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] queue_set_stop_after: {}", track_id);
+    let bridge = bridge.get().await;
+    bridge.core().queue().write().await.set_stop_after(track_id);
+    Ok(())
+}
+
+/// Clear the stop-after marker (user cancellation).
+#[tauri::command]
+pub async fn v2_queue_clear_stop_after(
+    bridge: State<'_, CoreBridgeState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] queue_clear_stop_after");
+    let bridge = bridge.get().await;
+    bridge.core().queue().write().await.clear_stop_after();
+    Ok(())
+}
+
+/// One-shot consume: called by the frontend's natural-end handler
+/// before advancing. Returns true if the marker fired (caller should
+/// pause); false otherwise (caller proceeds with advance). Manual
+/// skip paths must NOT call this.
+#[tauri::command]
+pub async fn v2_queue_consume_stop_after_if(
+    finished_track_id: u64,
+    bridge: State<'_, CoreBridgeState>,
+) -> Result<bool, RuntimeError> {
+    log::debug!("[V2] queue_consume_stop_after_if: {}", finished_track_id);
+    let bridge = bridge.get().await;
+    Ok(bridge.core().queue().write().await.consume_stop_after_if(finished_track_id))
+}
+
+/// Remove all queue tracks at indices > `index`. Returns the count
+/// removed. Auto-clears the stop-after marker if it referenced any
+/// removed track.
+#[tauri::command]
+pub async fn v2_queue_remove_after(
+    index: usize,
+    bridge: State<'_, CoreBridgeState>,
+) -> Result<usize, RuntimeError> {
+    log::info!("[V2] queue_remove_after: index {}", index);
+    let bridge = bridge.get().await;
+    Ok(bridge.core().queue().write().await.remove_after(index))
 }

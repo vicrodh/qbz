@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy, tick } from 'svelte';
+  import { get } from 'svelte/store';
   import { ChevronUp } from 'lucide-svelte';
   import { invoke, convertFileSrc } from '@tauri-apps/api/core';
   import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -184,6 +185,7 @@
   import { resolveAwardIdByName } from '$lib/stores/awardCatalogStore';
   import { getDefaultFavoritesTab } from '$lib/utils/favorites';
   import { platform } from '$lib/utils/platform';
+  import { formatTrackTitle } from '$lib/utils/trackTitle';
   import type { FavoritesPreferences, ResolvedMusician } from '$lib/types';
 
   // Mixtapes / Collections views and store
@@ -275,6 +277,8 @@
     setOfflineMode as setQueueOfflineMode,
     startQueueEventListener,
     stopQueueEventListener,
+    consumeStopAfterIf,
+    stopAfterTrackId,
     type QueueTrack,
     type BackendQueueTrack,
     type RepeatMode
@@ -371,6 +375,7 @@
     fetchQconnectRuntimeState,
     isQconnectPeerRendererActive,
     isQconnectRemoteModeActive as computeQconnectRemoteModeActive,
+    isQconnectToggleOn,
     logQconnectPlaybackReport as appendQconnectPlaybackReport,
     qconnectAdmissionReasonKey,
     shouldQconnectSuppressLocalPlaybackAutomation,
@@ -473,6 +478,12 @@
   import { ImmersivePlayer } from '$lib/components/immersive';
   import PlaylistModal from '$lib/components/PlaylistModal.svelte';
   import PlaylistImportModal from '$lib/components/PlaylistImportModal.svelte';
+  import FolderEditModal from '$lib/components/FolderEditModal.svelte';
+  import {
+    updateFolder as updateFolderStore,
+    deleteFolder as deleteFolderStore,
+    type PlaylistFolder
+  } from '$lib/stores/playlistFoldersStore';
   import TrackInfoModal from '$lib/components/TrackInfoModal.svelte';
   import AlbumCreditsModal from '$lib/components/AlbumCreditsModal.svelte';
   import MusicianModal from '$lib/components/MusicianModal.svelte';
@@ -949,6 +960,14 @@
   let isQconnectPanelOpen = $state(false);
   let showQconnectDevButton = $state(localStorage.getItem('qbz-qconnect-dev-button') === 'true');
   let isQobuzConnectConnected = $state(false);
+  /**
+   * User-facing toggle state. True when the user has QConnect enabled even if
+   * the WS is currently re-establishing (Connecting/Reconnecting). This is
+   * separate from `isQobuzConnectConnected` so a stuck reconnect loop is
+   * still visible as "on" in the UI, allowing the user to disable it
+   * (issue #358).
+   */
+  let isQobuzConnectToggleOn = $state(false);
   let qobuzConnectBusy = $state(false);
   let qobuzConnectRefreshBusy = $state(false);
   let qobuzConnectStatus = $state<QconnectConnectionStatus>(DEFAULT_QCONNECT_CONNECTION_STATUS);
@@ -970,6 +989,12 @@
   let playlistModalEditIsHidden = $state(false);
   let playlistModalEditCurrentFolderId = $state<string | null>(null);
   let isPlaylistImportOpen = $state(false);
+  // Folder edit modal triggered from the sidebar context menu (issue #364).
+  // The Playlist Manager view owns its own FolderEditModal instance for its
+  // own folder cards/breadcrumb, so this one only handles sidebar-originated
+  // edits and stays mounted at the page level so it works from any view.
+  let isSidebarFolderEditOpen = $state(false);
+  let editingSidebarFolder = $state<PlaylistFolder | null>(null);
   let isAboutModalOpen = $state(false);
   let isShortcutsModalOpen = $state(false);
   let isKeybindingsSettingsOpen = $state(false);
@@ -1147,8 +1172,15 @@
 
   function applyQobuzConnectStatus(status: QconnectConnectionStatus): void {
     qobuzConnectStatus = status;
-    const nextConnected = Boolean(status.transport_connected);
-    isQobuzConnectConnected = nextConnected;
+    // `isQobuzConnectConnected` reflects whether the WS is actually up — it
+    // gates "send command to QConnect server" calls (volume reports, position
+    // reports, etc.). It must NOT include Connecting/Reconnecting, otherwise
+    // we'd send commands while the transport is down.
+    isQobuzConnectConnected = Boolean(status.transport_connected);
+    // `isQobuzConnectToggleOn` is the user-facing on/off — true even during a
+    // stuck reconnect loop, so the user can disable it from the UI
+    // (issue #358).
+    isQobuzConnectToggleOn = isQconnectToggleOn(status);
   }
 
   $effect(() => {
@@ -1166,6 +1198,7 @@
     return {
       id: track.id,
       title: track.title,
+      version: track.version ?? null,
       artist: track.artist,
       album: track.album,
       artwork: track.artwork_url || '',
@@ -1208,6 +1241,7 @@
       id: String(track.id),
       artwork: track.artwork_url || '',
       title: track.title,
+      version: track.version ?? null,
       artist: track.artist,
       duration: formatDuration(track.duration_secs),
       trackId: track.id
@@ -1314,7 +1348,11 @@
     if (qobuzConnectBusy) return;
     qobuzConnectBusy = true;
     try {
-      await toggleQconnectConnection(isQobuzConnectConnected);
+      // Use the user-facing toggle state, not transport_connected. During a
+      // stuck reconnect loop `isQobuzConnectConnected` is false but
+      // `isQobuzConnectToggleOn` is true — clicking the toggle must call
+      // disconnect to break the loop (issue #358).
+      await toggleQconnectConnection(isQobuzConnectToggleOn);
     } catch (err) {
       console.error('Qobuz Connect toggle failed:', err);
       pushQobuzConnectDiagnostic('toggle', 'error', err);
@@ -1563,6 +1601,7 @@
       const queueTracks = playableTracks.map((trk) => ({
         id: trk.id,
         title: trk.title,
+        version: trk.version ?? null,
         artist: trk.artist || converted.artist || 'Unknown Artist',
         album: converted.title || '',
         duration_secs: trk.durationSeconds,
@@ -1716,6 +1755,7 @@
         .map((trk) => ({
           id: trk.id,
           title: trk.title,
+          version: trk.version ?? null,
           artist: trk.artist || converted.artist || 'Unknown Artist',
           album: albumTitle,
           duration_secs: trk.durationSeconds,
@@ -1837,7 +1877,7 @@
         g => g.type === 'ep' || g.type === 'single' || g.type === 'epSingle'
       );
       if (!hasEpGroup && selectedArtist.epsSingles.length === 0) {
-        invoke<ReleasesGridResponse>('get_releases_grid', {
+        invoke<ReleasesGridResponse>('v2_get_releases_grid', {
           artistId, releaseType: 'epSingle', limit: 25, offset: 0
         }).then(result => {
           if (result.items.length > 0 && selectedArtist?.id === artistId) {
@@ -2108,7 +2148,7 @@
 
     isArtistAlbumsLoading = true;
     try {
-      const result = await invoke<ReleasesGridResponse>('get_releases_grid', {
+      const result = await invoke<ReleasesGridResponse>('v2_get_releases_grid', {
         artistId: selectedArtist.id,
         releaseType: apiReleaseType,
         limit: 25,
@@ -2163,6 +2203,7 @@
     const queueTracks: BackendQueueTrack[] = album.tracks.map(trk => ({
       id: trk.id,
       title: trk.title,
+      version: trk.version ?? null,
       artist: trk.artist || album.artist || 'Unknown Artist',
       album: album.title || '',
       duration_secs: trk.durationSeconds,
@@ -2189,6 +2230,7 @@
     await playTrack({
       id: firstTrack.id,
       title: firstTrack.title,
+      version: firstTrack.version ?? null,
       artist: firstTrack.artist || album.artist || 'Unknown Artist',
       album: album.title || '',
       artwork,
@@ -2212,6 +2254,7 @@
       const queued = await queueTrackNext({
         id: trk.id,
         title: trk.title,
+        version: trk.version ?? null,
         artist: trk.artist || album.artist || 'Unknown Artist',
         album: album.title || '',
         duration_secs: trk.durationSeconds,
@@ -2245,6 +2288,7 @@
     const queueTracks: BackendQueueTrack[] = album.tracks.map(trk => ({
       id: trk.id,
       title: trk.title,
+      version: trk.version ?? null,
       artist: trk.artist || album.artist || 'Unknown Artist',
       album: album.title || '',
       duration_secs: trk.durationSeconds,
@@ -2320,6 +2364,7 @@
       await cacheTracksForOfflineBatch(tracksToDownload.map(track => ({
         id: track.id,
         title: track.title,
+        version: track.version ?? null,
         artist: track.artist || album.artist || 'Unknown',
         album: album.title,
         albumId: album.id,
@@ -2545,6 +2590,7 @@
     await playTrack({
       id: track.id,
       title: track.title,
+      version: track.version ?? null,
       artist: track.performer?.name || 'Unknown Artist',
       album: track.album?.title || '',
       artwork,
@@ -2603,6 +2649,7 @@
       const queueTracks: BackendQueueTrack[] = playableTracks.map(trk => ({
         id: trk.id,
         title: trk.title,
+        version: trk.version ?? null,
         artist: trk.artist || album.artist || 'Unknown Artist',
         album: album.title || '',
         duration_secs: trk.durationSeconds,
@@ -2630,6 +2677,7 @@
     await playTrack({
       id: track.id,
       title: track.title,
+      version: track.version ?? null,
       artist: track.artist || selectedAlbum?.artist || 'Unknown Artist',
       album: selectedAlbum?.title || '',
       artwork,
@@ -2933,6 +2981,7 @@
     await playTrack({
       id: track.id,
       title: track.title,
+      version: track.version ?? null,
       artist: track.artist,
       album: track.album,
       artwork: resolveQueueTrackArtwork(track.artwork_url),
@@ -3104,6 +3153,7 @@
       await handleTrackPlay({
         id: historyTrack.id,
         title: historyTrack.title,
+        version: historyTrack.version ?? null,
         performer: { name: historyTrack.artist },
         album: { title: historyTrack.album, image: { large: historyTrack.artwork_url || '' } },
         duration: historyTrack.duration_secs,
@@ -3185,6 +3235,7 @@
         playTrack({
           id: firstTrack.id,
           title: firstTrack.title,
+          version: firstTrack.version ?? null,
           artist: firstTrack.artist,
           album: firstTrack.album,
           artwork: firstTrack.artwork_url || '',
@@ -3219,6 +3270,7 @@
         playTrack({
           id: firstTrack.id,
           title: firstTrack.title,
+          version: firstTrack.version ?? null,
           artist: firstTrack.artist,
           album: firstTrack.album,
           artwork: firstTrack.artwork_url || '',
@@ -3254,6 +3306,7 @@
         playTrack({
           id: firstTrack.id,
           title: firstTrack.title,
+          version: firstTrack.version ?? null,
           artist: firstTrack.artist,
           album: firstTrack.album,
           artwork: firstTrack.artwork_url || '',
@@ -3295,6 +3348,7 @@
       const queued = await queueTrackNext({
         id: trk.id,
         title: trk.title,
+        version: trk.version ?? null,
         artist: trk.artist || album.artist || 'Unknown Artist',
         album: album.title || '',
         duration_secs: trk.durationSeconds,
@@ -3338,6 +3392,7 @@
     const queueTracks: BackendQueueTrack[] = playableTracks.map(trk => ({
       id: trk.id,
       title: trk.title,
+      version: trk.version ?? null,
       artist: trk.artist || album.artist || 'Unknown Artist',
       album: album.title || '',
       duration_secs: trk.durationSeconds,
@@ -3496,6 +3551,7 @@
       await cacheTracksForOfflineBatch(tracksToDownload.map(track => ({
         id: track.id,
         title: track.title,
+        version: track.version ?? null,
         artist: track.artist || album.artist || 'Unknown',
         album: album.title,
         albumId: album.id,
@@ -3530,6 +3586,7 @@
       await cacheTracksForOfflineBatch(album.tracks.map(track => ({
         id: track.id,
         title: track.title,
+        version: track.version ?? null,
         artist: track.artist || album.artist || 'Unknown',
         album: album.title,
         albumId: album.id,
@@ -3566,6 +3623,7 @@
         await cacheTracksForOfflineBatch(album.tracks.items.map(track => ({
           id: track.id,
           title: track.title,
+          version: track.version ?? null,
           artist: track.performer?.name || album.artist?.name || 'Unknown',
           album: album.title,
           albumId: album.id,
@@ -3671,6 +3729,7 @@
     playTrack({
       id: track.id,
       title: track.title,
+      version: track.version ?? null,
       artist: track.artist || 'Unknown Artist',
       album: track.album || 'Playlist',
       artwork: track.albumArt || '',
@@ -3701,6 +3760,7 @@
       {
         id: track.id,
         title: track.title,
+        version: track.version ?? null,
         artist: track.artist || 'Unknown Artist',
         album: track.album || 'Playlist',
         artwork: track.albumArt || '',
@@ -3813,6 +3873,59 @@
     playlistModalEditIsHidden = payload.isHidden;
     playlistModalEditCurrentFolderId = payload.currentFolderId;
     openPlaylistModal('edit', []);
+  }
+
+  function handleSidebarFolderEdit(folder: PlaylistFolder) {
+    editingSidebarFolder = folder;
+    isSidebarFolderEditOpen = true;
+  }
+
+  function closeSidebarFolderEdit() {
+    isSidebarFolderEditOpen = false;
+    editingSidebarFolder = null;
+  }
+
+  async function handleSidebarFolderSave(
+    folder: PlaylistFolder | null,
+    updates: {
+      name: string;
+      iconType: string;
+      iconPreset: string;
+      iconColor: string;
+      customImagePath?: string;
+      isHidden?: boolean;
+    }
+  ) {
+    if (!folder) {
+      // Sidebar entry only edits existing folders; defensive guard.
+      closeSidebarFolderEdit();
+      return;
+    }
+    await updateFolderStore(folder.id, {
+      name: updates.name,
+      iconType: updates.iconType,
+      iconPreset: updates.iconPreset,
+      iconColor: updates.iconColor,
+      customImagePath: updates.customImagePath,
+      isHidden: updates.isHidden
+    });
+    closeSidebarFolderEdit();
+  }
+
+  async function handleSidebarFolderDelete(folder: PlaylistFolder) {
+    const { ask } = await import('@tauri-apps/plugin-dialog');
+    const confirmed = await ask(
+      `Delete folder "${folder.name}"? Playlists inside will be moved to root.`,
+      {
+        title: 'Delete folder?',
+        kind: 'warning',
+        okLabel: 'Delete',
+        cancelLabel: 'Cancel'
+      }
+    );
+    if (!confirmed) return;
+    await deleteFolderStore(folder.id);
+    closeSidebarFolderEdit();
   }
 
   function handlePlaylistModalClose() {
@@ -4044,6 +4157,7 @@
             setCurrentTrack({
               id: track.id,
               title: track.title,
+              version: track.version ?? null,
               artist: track.artist,
               album: track.album,
               artwork: resolveQueueTrackArtwork(track.artwork_url),
@@ -4079,9 +4193,19 @@
               console.debug('[Session] Could not restore playback context');
             }
 
-            // First play will load a fresh stream instead of seeking
-            setPendingSessionRestore(track.id);
-            console.log(`[Session] Track ${track.id} restored visually (paused at 0:00)`);
+            // The restored track is shown paused; the user's first
+            // press of play loads a fresh stream. If they opted into
+            // resume-playback-position (#317), we also forward the
+            // saved offset so togglePlay() seeks once the stream is
+            // ready. Default behavior remains "fresh start at 0:00".
+            const resumePosition = getCachedPreferences().resume_playback_position
+              ? session.current_position_secs
+              : undefined;
+            setPendingSessionRestore(track.id, resumePosition);
+            console.log(
+              `[Session] Track ${track.id} restored visually`,
+              resumePosition ? `(will resume @ ${resumePosition}s on first play)` : '(fresh at 0:00)'
+            );
           }
 
           console.log('[Session] Session restored successfully');
@@ -4249,6 +4373,7 @@
       const allTracks: PersistedQueueTrack[] = tracks.map(track => ({
         id: track.id,
         title: track.title,
+        version: track.version ?? null,
         artist: track.artist,
         album: track.album,
         duration_secs: track.duration_secs,
@@ -4445,6 +4570,7 @@
       await playTrack({
         id: next.id,
         title: next.title,
+        version: next.version ?? null,
         artist: next.artist,
         album: next.album,
         duration: next.duration_secs,
@@ -4490,7 +4616,10 @@
 
     void refreshQobuzConnectRuntimeState();
     const qobuzConnectStatusInterval = setInterval(() => {
-      if (isQconnectPanelOpen || isQobuzConnectConnected) {
+      // Poll the runtime when the panel is open OR the toggle is on — this
+      // includes Connecting/Reconnecting/Exhausted, so the UI stays in sync
+      // through state transitions (issue #358).
+      if (isQconnectPanelOpen || isQobuzConnectToggleOn) {
         void refreshQobuzConnectRuntimeState();
       } else {
         void refreshQobuzConnectStatus();
@@ -4945,6 +5074,18 @@
         setIsPlaying(false);
         return;
       }
+      // Stop-after marker: if the just-finished track was marked, pause
+      // and don't advance. Manual-skip paths don't go through this
+      // callback, so the marker correctly only fires on natural end.
+      const finishedId = currentTrack?.id ?? null;
+      if (finishedId !== null) {
+        const fired = await consumeStopAfterIf(finishedId);
+        if (fired) {
+          await stopPlayback();
+          setIsPlaying(false);
+          return;
+        }
+      }
       const previousTrackId = currentTrack?.id ?? null;
       let nextTrackResult = await nextTrackGuarded();
       if (!nextTrackResult && isInfinitePlayEnabled()) {
@@ -5074,15 +5215,25 @@
     setGaplessGetNextTrackId(() => {
       // Only suppress local gapless when a peer renderer owns playback.
       if (qconnectSuppressLocalPlaybackAutomation) return null;
+
+      // Stop-after marker: if the currently-playing track is marked,
+      // suppress gapless prefetch so the track ends naturally and
+      // setOnTrackEnded → consumeStopAfterIf can fire and pause.
+      // Without this, the audio engine would seamlessly transition to
+      // the next track before the natural-end callback runs.
+      const currentId = currentTrack?.id ?? null;
+      const marker = get(stopAfterTrackId);
+      if (currentId !== null && marker === currentId) {
+        return null;
+      }
+
       try {
         const queueState = getQueueState();
         if (queueState.queue.length > 0) {
-          const currentId = currentTrack?.id ?? null;
-
           if (queueState.repeatMode == 'one') {
             return currentId;
           }
-          
+
           const firstId = Number(queueState.queue[0].id);
           if (!Number.isNaN(firstId) && firstId > 0 && firstId !== currentId) {
             return firstId;
@@ -5124,10 +5275,12 @@
     let unlistenTrayPlayPause: UnlistenFn | null = null;
     let unlistenTrayNext: UnlistenFn | null = null;
     let unlistenTrayPrevious: UnlistenFn | null = null;
+    let unlistenTrayVolumeDelta: UnlistenFn | null = null;
     let unlistenMediaControls: UnlistenFn | null = null;
     let unlistenLinkResolved: UnlistenFn | null = null;
     let unlistenQconnectEvent: UnlistenFn | null = null;
     let unlistenQconnectError: UnlistenFn | null = null;
+    let unlistenQconnectStatusChanged: UnlistenFn | null = null;
     let unlistenQconnectAdmissionBlocked: UnlistenFn | null = null;
     let unlistenQconnectDiagnostic: UnlistenFn | null = null;
     let unlistenQconnectRendererReportDebug: UnlistenFn | null = null;
@@ -5154,6 +5307,19 @@
       });
       if (disposed) { unlisten3(); return; }
       unlistenTrayPrevious = unlisten3;
+
+      // Tray scroll wheel: backend emits a normalised tick count (positive
+      // = wheel-up = volume up, negative = wheel-down). Each tick = 5%.
+      const unlistenVol = await listen<number>('tray:volume_delta', async (event) => {
+        const ticks = typeof event.payload === 'number' ? event.payload : 0;
+        if (!ticks) return;
+        const delta = ticks * 5;
+        const next = Math.max(0, Math.min(100, Math.round(volume + delta)));
+        if (next === volume) return;
+        await handleVolumeChange(next);
+      });
+      if (disposed) { unlistenVol(); return; }
+      unlistenTrayVolumeDelta = unlistenVol;
 
       const unlisten4 = await listen('media:control', async (event) => {
         const payload = event.payload as MediaControlPayload;
@@ -5301,6 +5467,16 @@
       if (disposed) { unlisten7(); return; }
       unlistenQconnectError = unlisten7;
 
+      // Backend emits this whenever the lifecycle transitions
+      // (Connecting → Reconnecting → Exhausted, etc). Refresh status promptly
+      // so the toggle reflects the new state without waiting for the 5s poll
+      // (issue #358).
+      const unlistenStatusChanged = await listen('qconnect:status_changed', () => {
+        void refreshQobuzConnectStatus();
+      });
+      if (disposed) { unlistenStatusChanged(); return; }
+      unlistenQconnectStatusChanged = unlistenStatusChanged;
+
       const unlisten8 = await listen<QconnectAdmissionBlockedEvent>('qconnect:admission_blocked', (event) => {
         pushQobuzConnectDiagnostic('qconnect:admission_blocked', 'warn', event.payload);
         showToast($t(qconnectAdmissionReasonKey(event.payload.reason)), 'warning');
@@ -5349,10 +5525,12 @@
       unlistenTrayPlayPause?.();
       unlistenTrayNext?.();
       unlistenTrayPrevious?.();
+      unlistenTrayVolumeDelta?.();
       unlistenMediaControls?.();
       unlistenLinkResolved?.();
       unlistenQconnectEvent?.();
       unlistenQconnectError?.();
+      unlistenQconnectStatusChanged?.();
       unlistenQconnectAdmissionBlocked?.();
       unlistenQconnectDiagnostic?.();
       unlistenQconnectRendererReportDebug?.();
@@ -5443,6 +5621,7 @@
           id: String(trk.id),
           artwork: trk.artwork_url || '',
           title: trk.title,
+          version: trk.version ?? null,
           artist: trk.artist,
           duration: formatDuration(trk.duration_secs),
           trackId: trk.id
@@ -5486,11 +5665,16 @@
     });
   });
 
-  // Derived values for NowPlayingBar
+  // Derived values for NowPlayingBar. `version` is propagated raw so
+  // each render site can call formatTrackTitle() to compose the
+  // displayed string. Keeping the field separate (instead of pre-
+  // formatting here) lets components style title vs version
+  // differently if desired (#360).
   const currentQueueTrack = $derived<QueueTrack | null>(currentTrack ? {
     id: String(currentTrack.id),
     artwork: currentTrack.artwork,
     title: currentTrack.title,
+    version: currentTrack.version ?? null,
     artist: currentTrack.artist,
     duration: formatDuration(currentTrack.duration),
     trackId: currentTrack.id // For favorite checking in QueuePanel
@@ -5559,6 +5743,7 @@
       onImportPlaylist={openImportPlaylist}
       onPlaylistManagerClick={() => navigateTo('playlist-manager')}
       onEditPlaylist={handleSidebarPlaylistEdit}
+      onEditFolder={handleSidebarFolderEdit}
       onSettingsClick={() => navigateTo('settings')}
       onKeybindingsClick={() => isKeybindingsSettingsOpen = true}
       onAboutClick={() => isAboutModalOpen = true}
@@ -6449,7 +6634,7 @@
     {#if currentTrack}
       <NowPlayingBar
         artwork={resolvedArtwork}
-        trackTitle={currentTrack.title}
+        trackTitle={formatTrackTitle(currentTrack)}
         artist={currentTrack.artist}
         album={currentTrack.album}
         quality={currentTrack.quality}
@@ -6482,7 +6667,7 @@
         onCast={openCastPicker}
         {isCastConnected}
         onQobuzConnect={openQobuzConnectPanelFromNowPlaying}
-        {isQobuzConnectConnected}
+        {isQobuzConnectToggleOn}
         onToggleLyrics={toggleLyricsSidebar}
         lyricsActive={lyricsSidebarVisible}
         onArtistClick={() => {
@@ -6529,7 +6714,7 @@
         onCast={openCastPicker}
         {isCastConnected}
         onQobuzConnect={openQobuzConnectPanelFromNowPlaying}
-        {isQobuzConnectConnected}
+        {isQobuzConnectToggleOn}
         queueOpen={isQueueOpen}
         {volume}
         onVolumeChange={handleVolumeChange}
@@ -6551,7 +6736,7 @@
           if (isFocusModeOpen) closeFocusMode();
         }}
         artwork={resolvedArtwork}
-        trackTitle={currentTrack.title}
+        trackTitle={formatTrackTitle(currentTrack)}
         artist={currentTrack.artist}
         album={currentTrack.album}
         trackId={currentTrack.id}
@@ -6644,6 +6829,15 @@
       isOpen={isPlaylistImportOpen}
       onClose={closePlaylistImport}
       onSuccess={handlePlaylistImported}
+    />
+
+    <!-- Folder Edit Modal (sidebar entry-point — issue #364) -->
+    <FolderEditModal
+      isOpen={isSidebarFolderEditOpen}
+      folder={editingSidebarFolder}
+      onClose={closeSidebarFolderEdit}
+      onSave={handleSidebarFolderSave}
+      onDelete={handleSidebarFolderDelete}
     />
 
     <!-- About Modal -->

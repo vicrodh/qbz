@@ -1,5 +1,6 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
+  import { formatTrackTitle } from '$lib/utils/trackTitle';
   import { cmdAddTracksToQueue, cmdAddTracksToQueueNext } from '$lib/services/commandRouter';
   import { onMount, onDestroy } from 'svelte';
   import { ArrowLeft, Info, ListPlus, Play, RefreshCw, Search, Shuffle, X, SquareCheckBig } from 'lucide-svelte';
@@ -14,6 +15,7 @@
   import { setPlaybackContext } from '$lib/stores/playbackContextStore';
   import { isBlacklisted as isArtistBlacklisted } from '$lib/stores/artistBlacklistStore';
   import { getUserItem, setUserItem } from '$lib/utils/userStorage';
+  import { applyShiftRange, isSelectAllShortcut } from '$lib/utils/multiSelect';
   import type { OfflineCacheStatus } from '$lib/stores/offlineCacheState';
   import type { DisplayTrack } from '$lib/types';
   import type {
@@ -115,16 +117,32 @@
   // Multi-select
   let multiSelectMode = $state(false);
   let multiSelectedIds = $state(new Set<number>());
+  let lastSelectedIndex = $state<number | null>(null);
 
   function toggleMultiSelectMode() {
     multiSelectMode = !multiSelectMode;
-    if (!multiSelectMode) multiSelectedIds = new Set();
+    if (!multiSelectMode) {
+      multiSelectedIds = new Set();
+      lastSelectedIndex = null;
+    }
   }
 
-  function toggleMultiSelect(id: number) {
+  function toggleMultiSelect(id: number, index: number, event?: MouseEvent | KeyboardEvent) {
+    if (event?.shiftKey && lastSelectedIndex !== null) {
+      const ids = filteredTracks.map(track => track.id);
+      multiSelectedIds = applyShiftRange({
+        current: multiSelectedIds,
+        ids,
+        lastIndex: lastSelectedIndex,
+        currentIndex: index,
+      });
+      lastSelectedIndex = index;
+      return;
+    }
     const next = new Set(multiSelectedIds);
     if (next.has(id)) next.delete(id); else next.add(id);
     multiSelectedIds = next;
+    lastSelectedIndex = index;
   }
 
   function toggleSelectAll() {
@@ -135,6 +153,17 @@
       multiSelectedIds = new Set(allIds);
     }
   }
+
+  $effect(() => {
+    if (!multiSelectMode) return;
+    const handler = (e: KeyboardEvent) => {
+      if (!isSelectAllShortcut(e)) return;
+      e.preventDefault();
+      multiSelectedIds = new Set(filteredTracks.map(track => track.id));
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  });
 
   async function handleBulkPlayNext() {
     const selected = filteredTracks.filter(trk => multiSelectedIds.has(trk.id));
@@ -372,6 +401,7 @@
     return {
       id: track.id,
       title: track.title,
+      version: track.version ?? null,
       artist: track.performer?.name || 'Unknown Artist',
       album: track.album?.title,
       albumArt: getQobuzImage(track.album?.image),
@@ -394,6 +424,7 @@
       .map(trk => ({
         id: trk.id,
         title: trk.title,
+        version: trk.version ?? null,
         artist: trk.performer?.name || 'Unknown Artist',
         album: trk.album?.title || 'TopQ',
         duration_secs: trk.duration || 0,
@@ -634,7 +665,7 @@
           <TrackRow
             trackId={track.id}
             number={index + 1}
-            title={track.title}
+            title={formatTrackTitle(track)}
             artist={track.performer?.name}
             album={track.album?.title}
             duration={formatDuration(track.duration || 0)}
@@ -647,7 +678,7 @@
             selectable={multiSelectMode}
             selected={multiSelectedIds.has(track.id)}
             dragTrackIds={multiSelectMode && multiSelectedIds.has(track.id) ? [...multiSelectedIds] : undefined}
-            onToggleSelect={() => toggleMultiSelect(track.id)}
+            onToggleSelect={(e) => toggleMultiSelect(track.id, index, e)}
             hideDownload={trackBlacklisted}
             hideFavorite={trackBlacklisted}
             downloadStatus={cacheStatus.status}

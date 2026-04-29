@@ -75,6 +75,10 @@ qbz-nix-docs/
 # AI agent instructions and planning docs (untracked)
 .github/copilot-instructions.md
 docs/superpowers/
+CLAUDE.md
+AGENTS.md
+
 /crates/target/
 # /crates/Cargo.lock  # tracked for reproducible qbzd CI builds
 test-results/
+

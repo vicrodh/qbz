@@ -6,14 +6,30 @@
 # clears 400+ MB/s. For HiRes (200 MB+ tracks) this is the difference
 # between a 20-second gap and a sub-second one.
 #
-# Two things needed on x86_64:
-# 1. `target-cpu=x86-64-v3` = Haswell microarchitecture baseline
-#    (2013+). Every CPU QBZ realistically runs on supports it. This
-#    gives AVX2, BMI2, etc. for general codegen.
-# 2. `target-feature=+aes,+ssse3` to explicitly enable the AES-NI
-#    instruction set — which is NOT included in x86-64-v3 as a
-#    microarch level. Without this flag the `aes` crate's hardware
-#    dispatch never gets compiled in, no matter how capable the CPU.
+# What we need is ONLY the AES-NI instruction set compiled in. The
+# `aes` crate uses `cpufeatures::new!` to do a runtime CPUID check
+# before dispatching to the hardware path, so as long as the AES-NI
+# code is present in the binary, CPUs without AES-NI fall back to the
+# software implementation gracefully — no crash, just slower decrypt.
+#
+# `target-feature=+aes,+ssse3` is what enables that compile-in.
+# SSSE3 has been in every x86_64 CPU since 2006 (Core 2).
+#
+# We deliberately do NOT set `target-cpu=x86-64-v3` (Haswell baseline,
+# 2013). v3 includes AVX2/BMI2/FMA/LZCNT/MOVBE and LLVM will freely
+# emit those instructions anywhere in the binary — including the
+# startup path, long before CMAF runs. On pre-Haswell CPUs (Sandy
+# Bridge 2011, Ivy Bridge 2012, AMD Bulldozer/Piledriver) the process
+# dies with SIGILL at launch. See issue #353 (Linux, Sandy Bridge) and
+# discussion #343 (macOS, 2012 MacBookPro9,1 / Ivy Bridge). Raising
+# the baseline gave no CMAF speedup — the perf win came entirely from
+# `+aes` — so we keep the AES-NI path and drop the incompatible
+# baseline.
+#
+# If a future hot loop ever warrants AVX2/BMI2, the correct pattern is
+# per-function `#[target_feature]` with runtime dispatch (as the `aes`
+# crate already does via `cpufeatures`), NOT a global microarch bump
+# that silently breaks older hardware.
 #
 # IMPORTANT: these flags MUST be scoped to x86_64 targets. Using
 # `[build] rustflags = ...` applies them to every target, which on
@@ -23,4 +39,4 @@
 # get their own AES/crypto extensions automatically via `aes` crate's
 # armv8 path — we don't need to force anything there.
 [target.'cfg(target_arch = "x86_64")']
-rustflags = ["-C", "target-cpu=x86-64-v3", "-C", "target-feature=+aes,+ssse3"]
+rustflags = ["-C", "target-feature=+aes,+ssse3"]

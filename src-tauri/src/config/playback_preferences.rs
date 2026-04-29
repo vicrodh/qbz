@@ -50,6 +50,13 @@ pub struct PlaybackPreferences {
     pub autoplay_mode: AutoplayMode,
     pub show_context_icon: bool,
     pub persist_session: bool,
+    /// Sub-preference of `persist_session`. When true, restoring a
+    /// session also seeks to `current_position_secs` of the saved
+    /// track. When false (default), the saved track is shown paused at
+    /// 0:00 and the user starts the next listen fresh — the common
+    /// preference for "open app the next morning to a clean slate"
+    /// (issue #317).
+    pub resume_playback_position: bool,
 }
 
 impl Default for PlaybackPreferences {
@@ -58,6 +65,7 @@ impl Default for PlaybackPreferences {
             autoplay_mode: AutoplayMode::ContinueWithinSource,
             show_context_icon: false,
             persist_session: false,
+            resume_playback_position: false,
         }
     }
 }
@@ -140,10 +148,31 @@ impl PlaybackPreferencesStore {
             info!("[PlaybackPrefs] persist_session migration successful");
         }
 
+        // Step 3c: Check if resume_playback_position column exists
+        let resume_position_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('playback_preferences') WHERE name='resume_playback_position'",
+                [],
+                |row| {
+                    let count: i32 = row.get(0)?;
+                    Ok(count > 0)
+                }
+            )
+            .unwrap_or(false);
+
+        if !resume_position_exists {
+            info!("[PlaybackPrefs] Migrating: adding resume_playback_position column");
+            conn.execute(
+                "ALTER TABLE playback_preferences ADD COLUMN resume_playback_position INTEGER NOT NULL DEFAULT 0",
+                []
+            ).map_err(|e| format!("Failed to add resume_playback_position column: {}", e))?;
+            info!("[PlaybackPrefs] resume_playback_position migration successful");
+        }
+
         // Step 4: Insert default row if it doesn't exist
         conn.execute(
-            "INSERT OR IGNORE INTO playback_preferences (id, autoplay_mode, show_context_icon, persist_session)
-            VALUES (1, 'continue', 0, 0)",
+            "INSERT OR IGNORE INTO playback_preferences (id, autoplay_mode, show_context_icon, persist_session, resume_playback_position)
+            VALUES (1, 'continue', 0, 0, 0)",
             [],
         )
         .map_err(|e| format!("Failed to insert default preferences: {}", e))?;
@@ -165,16 +194,18 @@ impl PlaybackPreferencesStore {
     pub fn get_preferences(&self) -> Result<PlaybackPreferences, String> {
         self.conn
             .query_row(
-                "SELECT autoplay_mode, show_context_icon, persist_session FROM playback_preferences WHERE id = 1",
+                "SELECT autoplay_mode, show_context_icon, persist_session, resume_playback_position FROM playback_preferences WHERE id = 1",
                 [],
                 |row| {
                     let autoplay_str: String = row.get(0)?;
                     let show_icon: i32 = row.get(1)?;
                     let persist: i32 = row.get(2)?;
+                    let resume_pos: i32 = row.get(3)?;
                     Ok(PlaybackPreferences {
                         autoplay_mode: AutoplayMode::from_db_value(&autoplay_str),
                         show_context_icon: show_icon != 0,
                         persist_session: persist != 0,
+                        resume_playback_position: resume_pos != 0,
                     })
                 },
             )
@@ -211,13 +242,28 @@ impl PlaybackPreferencesStore {
         Ok(())
     }
 
+    pub fn set_resume_playback_position(&self, resume: bool) -> Result<(), String> {
+        self.conn
+            .execute(
+                "UPDATE playback_preferences SET resume_playback_position = ?1 WHERE id = 1",
+                params![if resume { 1 } else { 0 }],
+            )
+            .map_err(|e| format!("Failed to set resume playback position: {}", e))?;
+        Ok(())
+    }
+
     /// Reset all playback preferences to their default values
     pub fn reset_all(&self) -> Result<PlaybackPreferences, String> {
         let defaults = PlaybackPreferences::default();
         self.conn
             .execute(
-                "UPDATE playback_preferences SET autoplay_mode = ?1, show_context_icon = ?2, persist_session = ?3 WHERE id = 1",
-                params![defaults.autoplay_mode.to_db_value(), if defaults.show_context_icon { 1 } else { 0 }, if defaults.persist_session { 1 } else { 0 }],
+                "UPDATE playback_preferences SET autoplay_mode = ?1, show_context_icon = ?2, persist_session = ?3, resume_playback_position = ?4 WHERE id = 1",
+                params![
+                    defaults.autoplay_mode.to_db_value(),
+                    if defaults.show_context_icon { 1 } else { 0 },
+                    if defaults.persist_session { 1 } else { 0 },
+                    if defaults.resume_playback_position { 1 } else { 0 },
+                ],
             )
             .map_err(|e| format!("Failed to reset playback preferences: {}", e))?;
         Ok(defaults)
@@ -297,6 +343,15 @@ impl PlaybackPreferencesState {
         let store = guard.as_ref().ok_or("No active session - please log in")?;
         store.set_persist_session(persist)
     }
+
+    pub fn set_resume_playback_position(&self, resume: bool) -> Result<(), String> {
+        let guard = self
+            .store
+            .lock()
+            .map_err(|_| "Failed to lock playback preferences store".to_string())?;
+        let store = guard.as_ref().ok_or("No active session - please log in")?;
+        store.set_resume_playback_position(resume)
+    }
 }
 
 // Tauri commands
@@ -336,4 +391,12 @@ pub fn set_persist_session(
     state: tauri::State<PlaybackPreferencesState>,
 ) -> Result<(), String> {
     state.set_persist_session(persist)
+}
+
+#[tauri::command]
+pub fn set_resume_playback_position(
+    resume: bool,
+    state: tauri::State<PlaybackPreferencesState>,
+) -> Result<(), String> {
+    state.set_resume_playback_position(resume)
 }

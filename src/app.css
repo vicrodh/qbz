@@ -1210,6 +1210,72 @@
   --alpha-95: rgba(255, 255, 255, 0.95);
 }
 
+/* Stratego Theme (Dark - imperial crimson + bone white, inspired by samurai mask + war mandala) */
+[data-theme="stratego"] {
+  /* Backgrounds — near-black canvas, matches the void behind the mask */
+  --bg-primary: #0a0a0b;
+  --bg-secondary: #141418;
+  --bg-tertiary: #1d1e22;
+  --bg-hover: #282a30;
+
+  /* Text — bone-white ivory, matches the mask teeth and kanji */
+  --text-primary: #ece6d6;
+  --text-secondary: #b5afa0;
+  --text-muted: #8a857a;
+  --text-disabled: #4a4842;
+
+  /*
+   * Accent — bright imperial crimson, matches the face-stripes and mandala glow.
+   * Bright enough to work as foreground text on every bg tier (accent labels,
+   * volume fill, subscription chip, tab underlines…): AA on bg-primary 4.75:1,
+   * on bg-secondary 4.47:1, on bg-tertiary 4.25:1. Button fills pair with a
+   * near-black btn-primary-text so button surfaces stay AA 4.75:1. Trade-off:
+   * the previous bone-on-deep-crimson look (AAA on buttons but invisible as fg)
+   * is swapped for a consistent brightness that works across the ~300 places
+   * the app uses the accent as a foreground color.
+   */
+  --accent-primary: #ed2f3d;
+  --accent-hover: #f74a58;
+  --accent-active: #c41e2a;
+  --btn-primary-text: #0a0a0a;
+
+  /* Status — bright alert red (distinct from accent) + antique gold (dragon crest horns) */
+  --danger: #e63946;
+  --danger-bg: rgba(230, 57, 70, 0.1);
+  --danger-border: rgba(230, 57, 70, 0.3);
+  --danger-hover: rgba(230, 57, 70, 0.2);
+  --warning: #c4a56a;
+  --warning-bg: rgba(196, 165, 106, 0.1);
+  --warning-border: rgba(196, 165, 106, 0.3);
+  --warning-hover: rgba(196, 165, 106, 0.2);
+
+  /* Borders — steel grey tones from the helmet armor */
+  --border-subtle: #2a2a30;
+  --border-strong: #3a3a42;
+
+  /* Alpha tokens (white-based for dark theme) */
+  --alpha-4: rgba(255, 255, 255, 0.04);
+  --alpha-5: rgba(255, 255, 255, 0.05);
+  --alpha-6: rgba(255, 255, 255, 0.06);
+  --alpha-8: rgba(255, 255, 255, 0.08);
+  --alpha-10: rgba(255, 255, 255, 0.1);
+  --alpha-15: rgba(255, 255, 255, 0.15);
+  --alpha-18: rgba(255, 255, 255, 0.18);
+  --alpha-20: rgba(255, 255, 255, 0.2);
+  --alpha-25: rgba(255, 255, 255, 0.25);
+  --alpha-30: rgba(255, 255, 255, 0.3);
+  --alpha-35: rgba(255, 255, 255, 0.35);
+  --alpha-40: rgba(255, 255, 255, 0.4);
+  --alpha-45: rgba(255, 255, 255, 0.45);
+  --alpha-50: rgba(255, 255, 255, 0.5);
+  --alpha-60: rgba(255, 255, 255, 0.6);
+  --alpha-70: rgba(255, 255, 255, 0.7);
+  --alpha-80: rgba(255, 255, 255, 0.8);
+  --alpha-85: rgba(255, 255, 255, 0.85);
+  --alpha-90: rgba(255, 255, 255, 0.9);
+  --alpha-95: rgba(255, 255, 255, 0.95);
+}
+
 /* Kurosaki Theme (Light - inspired by Ichigo's inner world) */
 [data-theme="kurosaki"] {
   /* Backgrounds */

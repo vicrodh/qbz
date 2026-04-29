@@ -342,7 +342,8 @@
     "shuffleAlbums": "Mode album aléatoire",
     "playModeInOrder": "Dans l'ordre",
     "playModeAlbumShuffle": "Aléatoire par album",
-    "trackCount": "{count} pistes"
+    "trackCount": "{count} pistes",
+    "shuffleTracksMix": "File aléatoire depuis cette collection"
   },
   "confirm": {
     "deletePlaylist": "Êtes-vous sûr de vouloir supprimer cette playlist ?",
@@ -2031,7 +2032,9 @@
       "showContextIcon": "Afficher le contexte du titre en cours de lecture dans le lecteur",
       "showContextIconTooltip": "Affiche le contexte depuis lequel le titre actuel est lu (album, artiste, playlist, etc.)",
       "persistSession": "Restaurer la session au démarrage",
-      "persistSessionDesc": "Se souvenir de votre file d'attente, position de lecture et vue actuelle au redémarrage",
+      "persistSessionDesc": "Se souvenir de votre file d'attente et vue actuelle au redémarrage (titre en pause à 0:00)",
+      "resumePlaybackPosition": "Reprendre à la position sauvegardée",
+      "resumePlaybackPositionDesc": "Lors de la restauration d'une session, passer à l'endroit où vous vous êtes arrêté au lieu de redémarrer le titre du début",
       "streamUncached": "Streamer les titres non mis en cache",
       "streamUncachedDesc": "Démarrez la lecture plus rapidement lorsque le titre n'est pas dans le cache. La recherche peut être limitée pendant la mise en tampon initiale.",
       "initialBuffer": "Taille du tampon initiale",
@@ -2069,6 +2072,7 @@
         "langley": "Langley",
         "ayanami": "Ayanami",
         "iscariot": "Iscariot",
+        "stratego": "Stratego",
         "system": "Systeme",
         "wcagLight": "WCAG Clair",
         "wcagDark": "WCAG Sombre",
@@ -2246,7 +2250,15 @@
         "minimizeToTray": "Réduire à la barre d'état",
         "minimizeToTrayDesc": "Masquer la fenêtre dans la barre d'état lors de la minimisation",
         "closeToTray": "Réduire dans la barre d'état système",
-        "closeToTrayDesc": "Masquer la fenêtre dans la barre d'état au lieu de quitter"
+        "closeToTrayDesc": "Masquer la fenêtre dans la barre d'état au lieu de quitter",
+        "iconTheme": {
+          "label": "Variante de l'icône",
+          "desc": "Choisis une icône monochrome adaptée à ta barre (Plasma, la barre supérieure toujours sombre de GNOME) ou le logo vinyle couleur",
+          "auto": "Automatique",
+          "mono-light": "Mono claire",
+          "mono-dark": "Mono foncée",
+          "color": "Couleur"
+        }
       },
       "composition": {
         "title": "Composition",
@@ -2701,6 +2713,7 @@
     "refreshingTrackOffline": "Actualisation de « {title} » pour une écoute hors ligne",
     "refreshingAlbumOffline": "Actualisation de tous les titres de « {album} » pour une écoute hors ligne",
     "failedLoadAlbumRefresh": "Échec du chargement de l'album pour la mise à jour hors ligne",
+    "playingAlbum": "{count, plural, =1 {Lecture de l''album} other {Lecture de {count} titres}}",
     "playingTracksNext": "Lecture de {count} titres ensuite",
     "addedTracksToQueue": "{count} titres ajoutés à la file d'attente",
     "failedPreviousTrack": "Impossible de revenir au titre précédent",
@@ -2758,7 +2771,8 @@
     "playlistUpdated": "Playlist mise à jour",
     "findingSimilarArtists": "Trouver des artistes similaires...",
     "awardUnavailable": "Détail non disponible pour cette récompense.",
-    "audioDeviceMissing": "Le périphérique '{device}' n'est plus disponible. Utilisation du périphérique par défaut."
+    "audioDeviceMissing": "Le périphérique '{device}' n'est plus disponible. Utilisation du périphérique par défaut.",
+    "mixTrimmed": "{actual} chansons ajoutées à la file (tu en as demandé {requested} ; certaines fusionnées ou limitées par album)."
   },
   "topMixes": {
     "title": "TopQ",
@@ -2824,5 +2838,21 @@
     "title": "WeeklyQ",
     "subtitle": "Basé sur vos écoutes hebdomadaires.",
     "cardDesc": "Profitez chaque vendredi d'un nouveau mix personnalisé."
+  },
+  "mixModal": {
+    "title": "File aléatoire",
+    "computing": "Chargement…",
+    "confirm": "Ajouter à la file",
+    "loadFailed": "Impossible de charger le nombre de chansons",
+    "body": "Crée une file aléatoire avec des chansons de cette collection. Combien de chansons veux-tu ?",
+    "numberOfSongs": "Nombre de chansons",
+    "songsAvailable": "{n} chansons disponibles",
+    "allOption": "Toutes ({n})"
+  },
+  "queue": {
+    "stopAfterThis": "Arrêter après ce morceau",
+    "cancelStopAfter": "Annuler l'arrêt après ce morceau",
+    "removeAllAfter": "Supprimer tous les morceaux suivants",
+    "tracksRemoved": "{count, plural, one {# morceau supprimé de la file d'attente} other {# morceaux supprimés de la file d'attente}}"
   }
 }

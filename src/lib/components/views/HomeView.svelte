@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { formatTrackTitle } from '$lib/utils/trackTitle';
   import { invoke } from '@tauri-apps/api/core';
   import { resolveArtistImage } from '$lib/stores/customArtistImageStore';
   import { Music, User, LoaderCircle, ArrowRight, House } from 'lucide-svelte';
@@ -599,7 +600,7 @@
     for (let i = 0; i < uncachedSeeds.length; i += BATCH_SIZE) {
       const batch = uncachedSeeds.slice(i, i + BATCH_SIZE);
       const results = await Promise.allSettled(
-        batch.map(seed => invoke<QobuzArtist>('get_artist_basic', { artistId: seed.artistId }))
+        batch.map(seed => invoke<QobuzArtist>('v2_get_artist', { artistId: seed.artistId }))
       );
       
       results.forEach((result, index) => {
@@ -648,6 +649,7 @@
     return {
       id: track.id,
       title: track.title,
+      version: track.version ?? null,
       artist: track.performer?.name || 'Unknown Artist',
       album: track.album?.title,
       albumArt: getQobuzImage(track.album?.image),
@@ -686,6 +688,7 @@
     return tracks.map(track => ({
       id: track.id,
       title: track.title,
+      version: track.version ?? null,
       artist: track.artist || 'Unknown Artist',
       album: track.album || '',
       duration_secs: track.durationSeconds,
@@ -1543,7 +1546,7 @@
               {@const trackBlacklisted = track.artistId ? isArtistBlacklisted(track.artistId) : false}
               <TrackGridCard
                 trackId={track.id}
-                title={track.title}
+                title={formatTrackTitle(track)}
                 album={track.album ?? ''}
                 artwork={track.albumArt ?? null}
                 isPlaying={isPlaybackActive && isThisActiveTrack}
@@ -2401,23 +2404,6 @@
     flex-shrink: 0;
   }
 
-  .section {
-    margin-bottom: 32px;
-  }
-
-  .section-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 16px;
-  }
-
-  .section-header h2 {
-    font-size: 22px;
-    font-weight: 600;
-    color: var(--text-primary);
-  }
-
   .section-title {
     font-size: 22px;
     font-weight: 600;
@@ -2436,21 +2422,6 @@
 
   .loading-playlists :global(.spinner) {
     animation: spin 1s linear infinite;
-  }
-
-  .track-list {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .track-list.compact {
-    gap: 4px;
-  }
-
-  .track-list.compact :global(.track-row.compact) {
-    height: 40px;
-    padding: 0 10px;
   }
 
   .artist-card {

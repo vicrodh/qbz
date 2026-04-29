@@ -32,6 +32,8 @@ pub mod pipewire_backend;
 #[cfg(target_os = "linux")]
 pub mod alsa_backend;
 #[cfg(target_os = "linux")]
+pub mod alsa_error_handler;
+#[cfg(target_os = "linux")]
 pub mod pulse_backend;
 pub mod alsa_direct;
 pub mod coreaudio_direct;
@@ -42,6 +44,7 @@ pub mod dynamic_amplify;
 pub mod loudness;
 pub mod loudness_analyzer;
 pub mod loudness_cache;
+pub mod output_sinks;
 pub mod settings;
 pub mod visualizer;
 
@@ -63,6 +66,7 @@ pub use dynamic_amplify::DynamicAmplify;
 pub use loudness::{calculate_gain_factor, db_to_linear, extract_replaygain, ReplayGainData};
 pub use loudness_analyzer::LoudnessAnalyzer;
 pub use loudness_cache::LoudnessCache;
+pub use output_sinks::{list_output_sinks, OutputSinkInfo};
 pub use settings::AudioSettings;
 pub use visualizer::{RingBuffer, TappedSource, VisualizerTap};
 

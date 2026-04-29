@@ -225,7 +225,7 @@
         {downloadStateVersion}
         {isAlbumDownloaded}
         onLoadMore={!searchQuery.trim() ? handleLoadMore : undefined}
-        {loadingMore}
+        isLoadingMore={loadingMore}
         {getQualityLabel}
         {getAlbumYear}
       />

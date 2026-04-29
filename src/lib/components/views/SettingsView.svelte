@@ -69,7 +69,6 @@
     getStatus as getOfflineStatus,
     getSettings as getOfflineSettings,
     setManualOffline,
-    setShowPartialPlaylists,
     setAllowCastWhileOffline,
     setAllowImmediateScrobbling,
     setAllowAccumulatedScrobbling,
@@ -145,6 +144,7 @@
     setAutoplayMode,
     setShowContextIcon,
     setPersistSession,
+    setResumePlaybackPosition,
     type AutoplayMode
   } from '$lib/stores/playbackPreferencesStore';
   import {
@@ -592,6 +592,7 @@
     'Ikari':             { value: 'ikari',            type: 'dark' },
     'Ayanami':           { value: 'ayanami',          type: 'dark' },
     'Iscariot':          { value: 'iscariot',         type: 'dark' },
+    'Stratego':          { value: 'stratego',         type: 'dark' },
     'Rumi':              { value: 'rumi',             type: 'dark' },
     'Zoey':              { value: 'zoey',             type: 'dark' },
     'Mira':              { value: 'mira',             type: 'dark' },
@@ -984,6 +985,7 @@
   let autoplayMode = $state<AutoplayMode>('continue');
   let showContextIcon = $state(true);
   let persistSession = $state(false);
+  let resumePlaybackPosition = $state(false);
   let gaplessPlayback = $state(true);
   let crossfade = $state(0);
   let normalizeVolume = $state(false);
@@ -1299,6 +1301,34 @@
   let enableTray = $state(true);
   let minimizeToTray = $state(false);
   let closeToTray = $state(false);
+  type TrayIconTheme = 'auto' | 'mono-light' | 'mono-dark' | 'color';
+  let trayIconTheme = $state<TrayIconTheme>('auto');
+  const TRAY_ICON_THEME_KEYS: readonly TrayIconTheme[] = ['auto', 'mono-light', 'mono-dark', 'color'];
+  // i18n key lookup uses the kebab-case identifier directly (e.g.
+  // `iconTheme.mono-light`); the JSON files mirror these keys.
+
+  function getTrayIconThemeOptions(): string[] {
+    return TRAY_ICON_THEME_KEYS.map(key => $t(`settings.appearance.tray.iconTheme.${key}`));
+  }
+  function getTrayIconThemeDisplayValue(): string {
+    return $t(`settings.appearance.tray.iconTheme.${trayIconTheme}`);
+  }
+  function trayIconThemeFromDisplayValue(displayValue: string): TrayIconTheme | null {
+    const options = getTrayIconThemeOptions();
+    const idx = options.indexOf(displayValue);
+    return idx >= 0 ? TRAY_ICON_THEME_KEYS[idx] : null;
+  }
+  // Migration: 1.2.9-pre stored "light"/"dark" with inverted semantics
+  // (picking "Light icon" produced the dark glyph). Backend normalises
+  // those legacy values to the user-intent equivalents.
+  function normaliseTrayTheme(raw: string): TrayIconTheme {
+    if (raw === 'mono-light' || raw === 'mono-dark' || raw === 'color' || raw === 'auto') {
+      return raw;
+    }
+    if (raw === 'light') return 'mono-light';
+    if (raw === 'dark') return 'mono-dark';
+    return 'auto';
+  }
 
   // Library settings
   let fetchQobuzArtistImages = $state(true);
@@ -1342,7 +1372,7 @@
   // Plex LAN POC state
   let plexEnabled = $state(getUserItem('qbz-plex-enabled') === 'true');
   let plexUiCollapsed = $state(getUserItem('qbz-plex-ui-collapsed') === 'true');
-  let plexManualTokenMode = $state(false);
+  let plexManualTokenMode = $state(getUserItem('qbz-plex-poc-manual-token-mode') === 'true');
   let plexServerUrl = $state('http://127.0.0.1');
   let plexBaseUrl = $state(getUserItem('qbz-plex-poc-base-url') || 'http://127.0.0.1:32400');
   let plexToken = $state(getUserItem('qbz-plex-poc-token') || '');
@@ -1369,6 +1399,7 @@
   const PLEX_CACHE_SERVER_ID_KEY = 'qbz-plex-poc-machine-id';
   const PLEX_CLIENT_ID_KEY = 'qbz-plex-poc-client-id';
   const PLEX_METADATA_WRITE_KEY = 'qbz-plex-poc-metadata-write-enabled';
+  const PLEX_MANUAL_TOKEN_MODE_KEY = 'qbz-plex-poc-manual-token-mode';
 
   // Qobuz Link Handler state
   let qobuzLinkHandlerEnabled = $state(false);
@@ -1500,10 +1531,11 @@
     const unsubscribeZoom = subscribeZoom(updateZoomLevel);
 
     // Load library settings
+    // Use !== 'false' (default ON) to match LocalLibraryView's read convention.
+    // Both files now agree: stored 'false' => OFF; everything else (including
+    // null on first run, or stale 'true') => ON.
     const savedFetchArtistImages = getUserItem('qbz-fetch-artist-images');
-    if (savedFetchArtistImages !== null) {
-      fetchQobuzArtistImages = savedFetchArtistImages === 'true';
-    }
+    fetchQobuzArtistImages = savedFetchArtistImages !== 'false';
 
     // Load download settings
     loadDownloadSettings();
@@ -2566,14 +2598,6 @@
     }
   }
 
-  async function handleShowPartialPlaylistsChange(enabled: boolean) {
-    try {
-      await setShowPartialPlaylists(enabled);
-    } catch (error) {
-      console.error('Failed to set show partial playlists:', error);
-    }
-  }
-
   async function handleAllowCastChange(enabled: boolean) {
     try {
       await setAllowCastWhileOffline(enabled);
@@ -2715,7 +2739,7 @@
   async function loadAudioDevices() {
     try {
       // Load PipeWire sinks - these have friendly descriptions already
-      const sinks = await invoke<PipewireSink[]>('get_pipewire_sinks').catch(() => [] as PipewireSink[]);
+      const sinks = await invoke<PipewireSink[]>('v2_get_pipewire_sinks').catch(() => [] as PipewireSink[]);
       pipewireSinks = sinks;
 
       // Load hardware audio status
@@ -2786,7 +2810,7 @@
     try {
       isFlatpak = await invoke<boolean>('v2_is_running_in_flatpak');
       if (isFlatpak) {
-        flatpakHelpText = await invoke<string>('get_flatpak_help_text');
+        flatpakHelpText = await invoke<string>('v2_get_flatpak_help_text');
       }
     } catch (err) {
       console.error('Failed to check Flatpak status:', err);
@@ -3299,9 +3323,11 @@
       autoplayMode = prefs.autoplay_mode;
       showContextIcon = prefs.show_context_icon;
       persistSession = prefs.persist_session;
+      resumePlaybackPosition = prefs.resume_playback_position;
       console.log('[Settings] Set autoplayMode to:', autoplayMode);
       console.log('[Settings] Set showContextIcon to:', showContextIcon);
       console.log('[Settings] Set persistSession to:', persistSession);
+      console.log('[Settings] Set resumePlaybackPosition to:', resumePlaybackPosition);
     } catch (err) {
       console.error('Failed to load playback preferences:', err);
     }
@@ -3311,6 +3337,7 @@
     enable_tray: boolean;
     minimize_to_tray: boolean;
     close_to_tray: boolean;
+    tray_icon_theme: string;
   }
 
   async function loadTraySettings() {
@@ -3319,6 +3346,7 @@
       enableTray = settings.enable_tray;
       minimizeToTray = settings.minimize_to_tray;
       closeToTray = settings.close_to_tray;
+      trayIconTheme = normaliseTrayTheme(settings.tray_icon_theme);
     } catch (err) {
       console.error('Failed to load tray settings:', err);
     }
@@ -3355,6 +3383,18 @@
     }
   }
 
+  async function handleTrayIconThemeChange(displayValue: string) {
+    const next = trayIconThemeFromDisplayValue(displayValue);
+    if (!next) return;
+    try {
+      await invoke('v2_set_tray_icon_theme', { value: next });
+      trayIconTheme = next;
+    } catch (err) {
+      console.error('Failed to set tray icon theme:', err);
+      showToast($t('toast.failedSaveTray'), 'error');
+    }
+  }
+
   async function handleAutoplayModeChange(mode: AutoplayMode) {
     console.log('[Settings] Changing autoplay mode to:', mode);
     try {
@@ -3387,6 +3427,17 @@
       console.log('[Settings] Persist session saved successfully');
     } catch (err) {
       console.error('[Settings] Failed to set persist session:', err);
+    }
+  }
+
+  async function handleResumePlaybackPositionChange(resume: boolean) {
+    console.log('[Settings] Changing resume playback position to:', resume);
+    try {
+      await setResumePlaybackPosition(resume);
+      resumePlaybackPosition = resume;
+      console.log('[Settings] Resume playback position saved successfully');
+    } catch (err) {
+      console.error('[Settings] Failed to set resume playback position:', err);
     }
   }
 
@@ -4276,6 +4327,13 @@
     </div>
     <div class="setting-row">
       <div class="setting-info">
+        <span class="setting-label">{$t('settings.playback.resumePlaybackPosition')}</span>
+        <span class="setting-desc">{$t('settings.playback.resumePlaybackPositionDesc')}</span>
+      </div>
+      <Toggle enabled={resumePlaybackPosition} onchange={handleResumePlaybackPositionChange} />
+    </div>
+    <div class="setting-row">
+      <div class="setting-info">
         <span class="setting-label">{$t('settings.playback.gapless')}</span>
         <span class="setting-desc">{gaplessDisabledReasonKey ? $t(gaplessDisabledReasonKey) : $t('settings.playback.gaplessDesc')}</span>
       </div>
@@ -4797,6 +4855,17 @@
         <span class="setting-desc">{$t('settings.appearance.tray.closeToTrayDesc')}</span>
       </div>
       <Toggle enabled={closeToTray} onchange={(v) => handleCloseToTrayChange(v)} disabled={!enableTray} />
+    </div>
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.appearance.tray.iconTheme.label')}</span>
+        <span class="setting-desc">{$t('settings.appearance.tray.iconTheme.desc')}</span>
+      </div>
+      <Dropdown
+        value={getTrayIconThemeDisplayValue()}
+        options={getTrayIconThemeOptions()}
+        onchange={handleTrayIconThemeChange}
+      />
     </div>
     {/if}
 
@@ -5462,7 +5531,10 @@
           <span class="setting-label">{$t('settings.integrations.plexManualTokenToggle')}</span>
           <small class="setting-note">{$t('settings.integrations.plexManualTokenHelp')}</small>
         </div>
-        <Toggle enabled={plexManualTokenMode} onchange={(enabled) => plexManualTokenMode = enabled} />
+        <Toggle enabled={plexManualTokenMode} onchange={(enabled) => {
+          plexManualTokenMode = enabled;
+          setUserItem(PLEX_MANUAL_TOKEN_MODE_KEY, enabled ? 'true' : 'false');
+        }} />
       </div>
 
       {#if plexManualTokenMode}
@@ -5973,6 +6045,12 @@
         </small>
       </div>
       <div class="remote-control-actions">
+        <button
+          class="connect-btn"
+          onclick={() => showRemoteControlGuide = true}
+        >
+          {$t('settings.integrations.remoteControlSetupGuide')}
+        </button>
         <button
           class="connect-btn connected"
           onclick={handleRemoteControlRegenerateToken}

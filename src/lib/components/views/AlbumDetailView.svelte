@@ -13,6 +13,7 @@
   } from '$lib/stores/customAlbumCoverStore';
   import { ArrowLeft, Play, Shuffle, Heart, Radio, CloudDownload, ChevronLeft, ChevronRight, LoaderCircle, SquareCheckBig, BookOpen, Disc3, CassetteTape } from 'lucide-svelte';
   import { openAddToMixtape } from '$lib/stores/addToMixtapeModalStore';
+  import { formatTrackTitle } from '$lib/utils/trackTitle';
   import { cachedSrc } from '$lib/actions/cachedImage';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackRow from '../TrackRow.svelte';
@@ -32,11 +33,14 @@
   import ImageLightbox from '../ImageLightbox.svelte';
   import BookletViewer from '../BookletViewer.svelte';
   import type { QobuzGoody } from '$lib/types';
+  import { applyShiftRange, isSelectAllShortcut } from '$lib/utils/multiSelect';
 
   interface Track {
     id: number;
     number: number;
     title: string;
+    /** Qobuz subtitle/edition (e.g. "Player's Ball Mix") (#360). */
+    version?: string | null;
     artist?: string;
     artistId?: number;
     duration: string;
@@ -201,16 +205,32 @@
   // Multi-select
   let multiSelectMode = $state(false);
   let multiSelectedIds = $state(new Set<number>());
+  let lastSelectedIndex = $state<number | null>(null);
 
   function toggleMultiSelectMode() {
     multiSelectMode = !multiSelectMode;
-    if (!multiSelectMode) multiSelectedIds = new Set();
+    if (!multiSelectMode) {
+      multiSelectedIds = new Set();
+      lastSelectedIndex = null;
+    }
   }
 
-  function toggleMultiSelect(id: number) {
+  function toggleMultiSelect(id: number, index: number, event?: MouseEvent | KeyboardEvent) {
+    if (event?.shiftKey && lastSelectedIndex !== null && album?.tracks) {
+      const ids = album.tracks.map(track => track.id);
+      multiSelectedIds = applyShiftRange({
+        current: multiSelectedIds,
+        ids,
+        lastIndex: lastSelectedIndex,
+        currentIndex: index,
+      });
+      lastSelectedIndex = index;
+      return;
+    }
     const next = new Set(multiSelectedIds);
     if (next.has(id)) next.delete(id); else next.add(id);
     multiSelectedIds = next;
+    lastSelectedIndex = index;
   }
 
   function toggleSelectAll() {
@@ -223,6 +243,17 @@
     }
   }
 
+  $effect(() => {
+    if (!multiSelectMode) return;
+    const handler = (e: KeyboardEvent) => {
+      if (!isSelectAllShortcut(e)) return;
+      e.preventDefault();
+      if (album?.tracks) multiSelectedIds = new Set(album.tracks.map(track => track.id));
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  });
+
   const selectAllState = $derived(
     !album?.tracks || album.tracks.length === 0 ? 'none' as const
     : multiSelectedIds.size === 0 ? 'none' as const
@@ -234,6 +265,7 @@
     return tracks.map(trk => ({
       id: trk.id,
       title: trk.title,
+      version: trk.version ?? null,
       artist: trk.artist || album.artist,
       album: album.title,
       duration_secs: trk.durationSeconds,
@@ -703,7 +735,7 @@
         <TrackRow
           trackId={track.id}
           number={track.number}
-          title={track.title}
+          title={formatTrackTitle(track)}
           artist={track.artist}
           duration={track.duration}
           quality={track.quality}
@@ -714,7 +746,7 @@
           selectable={multiSelectMode}
           selected={multiSelectedIds.has(track.id)}
           dragTrackIds={multiSelectMode && multiSelectedIds.has(track.id) ? [...multiSelectedIds] : undefined}
-          onToggleSelect={() => toggleMultiSelect(track.id)}
+          onToggleSelect={(e) => toggleMultiSelect(track.id, trackIndex, e)}
           downloadStatus={downloadInfo.status}
           downloadProgress={downloadInfo.progress}
           hideFavorite={trackBlacklisted}

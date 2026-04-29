@@ -19,7 +19,7 @@
     onSearchInput?: (query: string) => void;
     onSearchClear?: () => void;
     controlsPosition?: 'right' | 'left';
-    controlsShape?: 'rectangular' | 'circular' | 'square';
+    controlsShape?: 'rectangular' | 'circular' | 'square' | 'full-height-rounded';
     controlsSize?: 'small' | 'normal' | 'large';
     controlsColors?: {
       minimize: ButtonColorSet;

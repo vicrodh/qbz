@@ -15,6 +15,11 @@ export interface PlaybackPreferences {
   autoplay_mode: AutoplayMode;
   show_context_icon: boolean;
   persist_session: boolean;
+  /** Sub-preference of persist_session: when true, restore also seeks
+   *  to the saved track position. When false (default), the restored
+   *  track is shown paused at 0:00 (#360 / issue 317 — the common
+   *  "fresh start each day" behavior). */
+  resume_playback_position: boolean;
 }
 
 // ============ State ============
@@ -22,7 +27,8 @@ export interface PlaybackPreferences {
 let preferences: PlaybackPreferences = {
   autoplay_mode: 'continue',
   show_context_icon: true,
-  persist_session: false
+  persist_session: false,
+  resume_playback_position: false
 };
 
 const listeners = new Set<() => void>();
@@ -82,6 +88,18 @@ export async function setPersistSession(persist: boolean): Promise<void> {
   if (skipIfRemote()) return;
   await invoke('v2_set_persist_session', { persist });
   preferences.persist_session = persist;
+  notifyListeners();
+}
+
+/**
+ * Set whether to resume the saved playback position (seek to where the
+ * user left off) when restoring a session. Sub-preference of
+ * `persist_session` — has no effect when persist is off. Default: false.
+ */
+export async function setResumePlaybackPosition(resume: boolean): Promise<void> {
+  if (skipIfRemote()) return;
+  await invoke('v2_set_resume_playback_position', { resume });
+  preferences.resume_playback_position = resume;
   notifyListeners();
 }
 

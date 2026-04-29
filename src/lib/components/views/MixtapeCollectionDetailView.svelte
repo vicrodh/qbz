@@ -29,10 +29,13 @@
   import QualityBadgeStatic from '../QualityBadgeStatic.svelte';
   import BulkActionBar from '../BulkActionBar.svelte';
   import TrackRow from '../TrackRow.svelte';
+  import TrackMixModal from '../TrackMixModal.svelte';
+  import DjIcon from '$lib/icons/DjIcon.svelte';
   import { cachedSrc } from '$lib/actions/cachedImage';
   import { preloadImages } from '$lib/services/imageCacheService';
   import { showToast } from '$lib/stores/toastStore';
   import { getUserItem, setUserItem, removeUserItem } from '$lib/utils/userStorage';
+  import { applyShiftRange, isSelectAllShortcut } from '$lib/utils/multiSelect';
   import { openAddToMixtape } from '$lib/stores/addToMixtapeModalStore';
   import { playTrack } from '$lib/services/playbackService';
   import { playQueueIndex } from '$lib/stores/queueStore';
@@ -93,12 +96,28 @@
   // ArtistDetailView's popular-tracks multi-select.
   let selectMode = $state(false);
   let selectedPositions = $state<Set<number>>(new Set());
+  let lastSelectedPosition = $state<number | null>(null);
   const hasSelection = $derived(selectedPositions.size > 0);
 
   function toggleSelectMode() {
     selectMode = !selectMode;
-    if (!selectMode) selectedPositions = new Set();
+    if (!selectMode) {
+      selectedPositions = new Set();
+      lastSelectedPosition = null;
+    }
   }
+
+  $effect(() => {
+    if (!selectMode) return;
+    const handler = (e: KeyboardEvent) => {
+      if (!isSelectAllShortcut(e)) return;
+      e.preventDefault();
+      if (!collection) return;
+      selectedPositions = new Set(collection.items.map((it) => it.position));
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  });
 
   // ── View mode ─────────────────────────────────────────────────────────────
   // 'list'     — default album-row listing (no chevron, no tracks inline)
@@ -692,15 +711,28 @@
     return url.replace(/_(50|100|150|230|300|600|max|org)\.jpg/i, `_${target}.jpg`);
   }
 
-  function toggleSelect(position: number) {
+  function toggleSelect(position: number, event?: MouseEvent | KeyboardEvent) {
+    if (event?.shiftKey && lastSelectedPosition !== null && collection) {
+      const positions = collection.items.map((it) => it.position);
+      selectedPositions = applyShiftRange({
+        current: selectedPositions,
+        ids: positions,
+        lastIndex: positions.indexOf(lastSelectedPosition),
+        currentIndex: positions.indexOf(position),
+      });
+      lastSelectedPosition = position;
+      return;
+    }
     const next = new Set(selectedPositions);
     if (next.has(position)) next.delete(position);
     else next.add(position);
     selectedPositions = next;
+    lastSelectedPosition = position;
   }
 
   function clearSelection() {
     selectedPositions = new Set();
+    lastSelectedPosition = null;
   }
 
   function selectedItems(): MixtapeCollectionItem[] {
@@ -755,6 +787,7 @@
   let renameModalOpen = $state(false);
   let descriptionModalOpen = $state(false);
   let confirmDeleteOpen = $state(false);
+  let mixModalOpen = $state(false);
 
   // Edit drafts
   let draftName = $state('');
@@ -1292,6 +1325,32 @@
       else if (openItemMenu !== null) openItemMenu = null;
     }
   }
+
+  async function handleConfirmMix(sampleSize: number) {
+    if (!collection || playLoading) return;
+    mixModalOpen = false;
+    playLoading = true;
+    try {
+      const result = await invoke<{ requestedCount: number; actualCount: number }>(
+        'v2_collection_shuffle_tracks',
+        { collectionId, sampleSize },
+      );
+      await startPlaybackFromQueue();
+      if (result.actualCount < result.requestedCount) {
+        showToast(
+          $t('toast.mixTrimmed', {
+            values: { actual: result.actualCount, requested: result.requestedCount },
+          }),
+          'info',
+        );
+      }
+    } catch (err) {
+      console.error('[MixtapeCollectionDetailView] shuffle tracks failed:', err);
+      showToast($t('toast.failedStartPlayback') || 'Failed to start playback', 'error');
+    } finally {
+      playLoading = false;
+    }
+  }
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -1371,6 +1430,19 @@
                 <LoaderCircle size={18} class="spin" />
               {:else}
                 <Shuffle size={18} />
+              {/if}
+            </button>
+            <button
+              class="action-btn-circle"
+              onclick={() => (mixModalOpen = true)}
+              disabled={collection.items.length === 0 || playLoading}
+              title={$t('common.shuffleTracksMix')}
+              aria-label={$t('common.shuffleTracksMix')}
+            >
+              {#if playLoading}
+                <LoaderCircle size={18} class="spin" />
+              {:else}
+                <DjIcon size={18} />
               {/if}
             </button>
             <div class="overflow-wrap">
@@ -1634,9 +1706,9 @@
               class:is-selected={isSelected}
               role="button"
               tabindex="0"
-              onclick={() => {
+              onclick={(e) => {
                 if (selectMode) {
-                  toggleSelect(item.position);
+                  toggleSelect(item.position, e);
                 } else {
                   onOpenItem?.(item.source, item.item_type, item.source_item_id);
                 }
@@ -1644,7 +1716,7 @@
               onkeydown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault();
-                  if (selectMode) toggleSelect(item.position);
+                  if (selectMode) toggleSelect(item.position, e);
                   else onOpenItem?.(item.source, item.item_type, item.source_item_id);
                 }
               }}
@@ -1732,8 +1804,11 @@
                   type="checkbox"
                   class="row-checkbox"
                   checked={isSelected}
-                  onclick={(e) => e.stopPropagation()}
-                  onchange={() => toggleSelect(item.position)}
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    toggleSelect(item.position, e);
+                  }}
                   aria-label={$t('collectionDetail.selectItem') || 'Select item'}
                 />
               {:else}
@@ -2065,6 +2140,15 @@
         </div>
       </div>
     {/if}
+
+    <!-- DJ-Mix random-track sampler modal -->
+    <TrackMixModal
+      open={mixModalOpen}
+      collectionId={collectionId}
+      totalRawTracks={collection.items.length}
+      onClose={() => (mixModalOpen = false)}
+      onConfirm={handleConfirmMix}
+    />
   {/if}
 </div>
 

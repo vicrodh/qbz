@@ -1,5 +1,6 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
+  import { formatTrackTitle } from '$lib/utils/trackTitle';
   import { cmdAddTracksToQueue, cmdAddTracksToQueueNext } from '$lib/services/commandRouter';
   import { getUserInfo } from '$lib/stores/authStore';
   import { resolveArtistImage } from '$lib/stores/customArtistImageStore';
@@ -27,6 +28,7 @@
   import { categorizeAlbum, getQobuzImage, formatQuality } from '$lib/adapters/qobuzAdapters';
   import { replacePlaybackQueue } from '$lib/services/queuePlaybackService';
   import { getUserItem, setUserItem } from '$lib/utils/userStorage';
+  import { isSelectAllShortcut } from '$lib/utils/multiSelect';
   import GenreFilterButton from '../GenreFilterButton.svelte';
   import {
     hasActiveFilter as hasGenreFilter,
@@ -54,6 +56,8 @@
   interface FavoriteTrack {
     id: number;
     title: string;
+    /** Qobuz subtitle/edition (e.g. "Player's Ball Mix") (#360). */
+    version?: string | null;
     duration: number;
     track_number: number;
     performer?: { id?: number; name: string };
@@ -281,6 +285,23 @@
     selectedTrackIds = next;
   }
 
+  function addTracksToSelection(ids: number[]) {
+    const next = new Set(selectedTrackIds);
+    for (const id of ids) next.add(id);
+    selectedTrackIds = next;
+  }
+
+  $effect(() => {
+    if (!trackSelectMode) return;
+    const handler = (e: KeyboardEvent) => {
+      if (!isSelectAllShortcut(e)) return;
+      e.preventDefault();
+      selectedTrackIds = new Set(filteredTracks.map((track) => track.id));
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  });
+
   async function handleBulkPlayNext() {
     const selected = filteredTracks.filter(trk => selectedTrackIds.has(trk.id));
     const tracks = buildFavoritesQueueTracks(selected);
@@ -320,6 +341,7 @@
       .map(track => ({
         id: track.id,
         title: track.title,
+        version: track.version ?? null,
         artist: track.performer?.name || 'Unknown',
         album: track.album?.title,
         albumId: track.album?.id,
@@ -920,7 +942,7 @@
     artistAlbumsError = null;
 
     try {
-      const result = await invoke<{ items: QobuzAlbum[]; total: number }>('get_artist_albums', {
+      const result = await invoke<{ items: QobuzAlbum[]; total: number }>('v2_get_artist_albums', {
         artistId: artist.id,
         limit: 500, // Fetch more to ensure we have enough Discography albums after filtering
         offset: 0
@@ -1211,6 +1233,7 @@
     return tracks.map(trk => ({
       id: trk.id,
       title: trk.title,
+      version: trk.version ?? null,
       artist: trk.performer?.name || 'Unknown Artist',
       album: trk.album?.title || 'Favorites',
       duration_secs: trk.duration,
@@ -1227,7 +1250,7 @@
   // Accessor functions for VirtualizedTrackList (adapts FavoriteTrack to expected interface)
   const getFavoriteTrackId = (trk: FavoriteTrack) => trk.id;
   const getFavoriteTrackNumber = (trk: FavoriteTrack, idx: number) => trk.track_number || idx + 1;
-  const getFavoriteTrackTitle = (trk: FavoriteTrack) => trk.title;
+  const getFavoriteTrackTitle = (trk: FavoriteTrack) => formatTrackTitle(trk);
   const getFavoriteTrackArtist = (trk: FavoriteTrack) => trk.performer?.name;
   const getFavoriteTrackDuration = (trk: FavoriteTrack) => trk.duration;
   const getFavoriteTrackAlbumKey = (trk: FavoriteTrack) => trk.album?.id;
@@ -1778,6 +1801,7 @@
               selectable={trackSelectMode}
               selectedIds={selectedTrackIds}
               onToggleSelect={toggleTrackSelect}
+              onToggleSelectRange={addTracksToSelection}
             />
           </div>
         </div>

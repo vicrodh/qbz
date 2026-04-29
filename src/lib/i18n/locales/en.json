@@ -342,7 +342,8 @@
     "shuffleAlbums": "Shuffle albums",
     "playModeInOrder": "In order",
     "playModeAlbumShuffle": "Album shuffle",
-    "trackCount": "{count} tracks"
+    "trackCount": "{count} tracks",
+    "shuffleTracksMix": "Random queue from this collection"
   },
   "confirm": {
     "deletePlaylist": "Are you sure you want to delete this playlist?",
@@ -2031,7 +2032,9 @@
       "showContextIcon": "Show track playing context in player",
       "showContextIconTooltip": "Shows the context from which the current track is being played (album, artist, playlist, etc.)",
       "persistSession": "Restore session on startup",
-      "persistSessionDesc": "Remember your queue, playback position, and current view when restarting",
+      "persistSessionDesc": "Remember your queue and current view when restarting (track shown paused at 0:00)",
+      "resumePlaybackPosition": "Resume playback position",
+      "resumePlaybackPositionDesc": "When restoring a session, seek to where you left off instead of starting the track from the beginning",
       "streamUncached": "Stream Uncached Tracks",
       "streamUncachedDesc": "Start playback faster when track is not in cache. Seeking may be limited during initial buffering.",
       "initialBuffer": "Initial Buffer Size",
@@ -2069,6 +2072,7 @@
         "langley": "Langley",
         "ayanami": "Ayanami",
         "iscariot": "Iscariot",
+        "stratego": "Stratego",
         "system": "System",
         "wcagLight": "WCAG Light",
         "wcagDark": "WCAG Dark",
@@ -2252,7 +2256,15 @@
         "minimizeToTray": "Minimize to tray",
         "minimizeToTrayDesc": "Hide window to tray when minimizing",
         "closeToTray": "Close to tray",
-        "closeToTrayDesc": "Hide window to tray instead of quitting"
+        "closeToTrayDesc": "Hide window to tray instead of quitting",
+        "iconTheme": {
+          "label": "Tray icon variant",
+          "desc": "Pick a mono glyph to match your panel (Plasma, GNOME's permanently dark top bar) or the full colour vinyl logo",
+          "auto": "Auto",
+          "mono-light": "Mono light",
+          "mono-dark": "Mono dark",
+          "color": "Color"
+        }
       },
       "composition": {
         "title": "Composition",
@@ -2708,6 +2720,7 @@
     "refreshingTrackOffline": "Refreshing \"{title}\" for offline",
     "refreshingAlbumOffline": "Refreshing all tracks from \"{album}\" for offline",
     "failedLoadAlbumRefresh": "Failed to load album for offline refresh",
+    "playingAlbum": "{count, plural, =1 {Playing album} other {Playing {count} tracks}}",
     "playingTracksNext": "Playing {count} tracks next",
     "addedTracksToQueue": "Added {count} tracks to queue",
     "failedPreviousTrack": "Failed to go to previous track",
@@ -2764,7 +2777,8 @@
     "copied": "Copied!",
     "findingSimilarArtists": "Finding similar artists...",
     "awardUnavailable": "Award detail not available for this entry.",
-    "audioDeviceMissing": "Output device '{device}' is no longer available. Using system default."
+    "audioDeviceMissing": "Output device '{device}' is no longer available. Using system default.",
+    "mixTrimmed": "Added {actual} songs to your queue (you asked for {requested}; some merged or capped per album)."
   },
   "topMixes": {
     "title": "TopQ",
@@ -2830,5 +2844,21 @@
     "title": "WeeklyQ",
     "subtitle": "Based on your weekly listening.",
     "cardDesc": "Take a weekly journey with a fresh mix <strong>every Friday</strong>."
+  },
+  "mixModal": {
+    "title": "Random queue",
+    "computing": "Loading…",
+    "confirm": "Add to queue",
+    "loadFailed": "Couldn't load song count",
+    "body": "Create a random queue with songs from this collection. How many songs do you want?",
+    "numberOfSongs": "Number of songs",
+    "songsAvailable": "{n} songs available",
+    "allOption": "All ({n})"
+  },
+  "queue": {
+    "stopAfterThis": "Stop after this track",
+    "cancelStopAfter": "Cancel stop after this",
+    "removeAllAfter": "Remove all tracks after this",
+    "tracksRemoved": "{count, plural, one {# track removed from queue} other {# tracks removed from queue}}"
   }
 }

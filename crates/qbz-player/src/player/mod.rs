@@ -14,7 +14,8 @@ mod playback_engine;
 mod streaming_source;
 
 pub use streaming_source::{
-    BufferWriter, BufferedMediaSource, InMemorySource, IncrementalStreamingSource, StreamingConfig,
+    max_initial_buffer_bytes, set_max_initial_buffer_bytes, BufferWriter, BufferedMediaSource,
+    InMemorySource, IncrementalStreamingSource, StreamingConfig,
 };
 
 use rodio::buffer::SamplesBuffer;

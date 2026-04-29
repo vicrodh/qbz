@@ -790,3 +790,192 @@ pub async fn v2_skip_to_previous_item(
 
     Ok(())
 }
+
+// ──────────────────────────── Track-mix shuffle ────────────────────────────
+
+/// Returns the number of distinct songs in the collection after similarity-
+/// based deduplication. Used by the DJ-mix modal to size the slider of pickable
+/// queue sizes. Deterministic — same collection state yields the same count.
+#[tauri::command]
+pub async fn v2_collection_unique_track_count(
+    collection_id: String,
+    library: State<'_, LibraryState>,
+    state: State<'_, crate::AppState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<usize, RuntimeError> {
+    use crate::mixtape::enqueue::{ProdItemResolver, resolve_collection_tracks};
+    use crate::mixtape::shuffle;
+
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresUserSession)
+        .await?;
+
+    log::info!("[V2] collection_unique_track_count id={}", collection_id);
+
+    // 1. Load the collection.
+    let collection = {
+        let guard = acquire_db!(library);
+        let db = guard.as_ref().ok_or(RuntimeError::UserSessionNotActivated)?;
+        db.with_connection(|conn| {
+            crate::mixtape::repo::get_collection(conn, &collection_id)
+                .map_err(|e| RuntimeError::Internal(e.to_string()))
+        })?
+        .ok_or_else(|| RuntimeError::Internal("collection not found".into()))?
+    };
+
+    // 2. Resolve the natural in-order track list (we count, not play).
+    let client_guard = state.client.read().await;
+    let client = client_guard.clone();
+    drop(client_guard);
+
+    let resolver = ProdItemResolver {
+        client: &client,
+        library: &library,
+    };
+
+    let tracks = resolve_collection_tracks(
+        collection.items.clone(),
+        qbz_models::mixtape::CollectionPlayMode::InOrder,
+        &resolver,
+    )
+    .await;
+
+    let count = shuffle::unique_track_count(&tracks);
+    log::info!(
+        "[V2] collection_unique_track_count id={}: total={} unique={}",
+        collection_id,
+        tracks.len(),
+        count
+    );
+    Ok(count)
+}
+
+/// Result of [`v2_collection_shuffle_tracks`]: how many tracks the user asked
+/// for and how many actually ended up in the queue. The two can differ when
+/// dedup or the per-album cap shrinks the available pool.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShuffleTracksResult {
+    pub requested_count: usize,
+    pub actual_count: usize,
+}
+
+/// Replace the queue with a randomly sampled mix of `sample_size` tracks drawn
+/// from the collection's natural track list, after similarity-based dedup and
+/// with a per-album cap. Starts playback from index 0.
+///
+/// Mirrors the side effects of `v2_enqueue_collection` in `replace` mode:
+/// stamps `queue_source_collection` and bumps the play counter. Does NOT
+/// modify the collection's persistent `play_mode` — this is a one-off action.
+#[tauri::command]
+pub async fn v2_collection_shuffle_tracks(
+    collection_id: String,
+    sample_size: usize,
+    library: State<'_, LibraryState>,
+    state: State<'_, crate::AppState>,
+    bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<ShuffleTracksResult, RuntimeError> {
+    use crate::mixtape::enqueue::{ProdItemResolver, resolve_collection_tracks};
+    use crate::mixtape::shuffle;
+
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresUserSession)
+        .await?;
+
+    log::info!(
+        "[V2] collection_shuffle_tracks id={} sample_size={}",
+        collection_id,
+        sample_size
+    );
+
+    if sample_size == 0 {
+        return Err(RuntimeError::Internal(
+            "sample_size must be greater than 0".into(),
+        ));
+    }
+
+    // 1. Load the collection.
+    let collection = {
+        let guard = acquire_db!(library);
+        let db = guard.as_ref().ok_or(RuntimeError::UserSessionNotActivated)?;
+        db.with_connection(|conn| {
+            crate::mixtape::repo::get_collection(conn, &collection_id)
+                .map_err(|e| RuntimeError::Internal(e.to_string()))
+        })?
+        .ok_or_else(|| RuntimeError::Internal("collection not found".into()))?
+    };
+
+    // 2. Resolve the natural in-order track list.
+    let client_guard = state.client.read().await;
+    let client = client_guard.clone();
+    drop(client_guard);
+
+    let resolver = ProdItemResolver {
+        client: &client,
+        library: &library,
+    };
+
+    let tracks = resolve_collection_tracks(
+        collection.items.clone(),
+        qbz_models::mixtape::CollectionPlayMode::InOrder,
+        &resolver,
+    )
+    .await;
+
+    if tracks.is_empty() {
+        return Err(RuntimeError::Internal(
+            "collection resolved to 0 playable tracks".into(),
+        ));
+    }
+
+    // 3. Dedup + sample. ThreadRng is not Send, so confine it to a sync
+    //    scope that ends before any subsequent .await.
+    let sampled = {
+        let mut rng = rand::rng();
+        let unique = shuffle::dedup_by_similarity(tracks, &mut rng);
+        shuffle::hybrid_sample(unique, sample_size, &mut rng)
+    };
+
+    if sampled.is_empty() {
+        return Err(RuntimeError::Internal(
+            "sample produced 0 tracks".into(),
+        ));
+    }
+
+    let actual = sampled.len();
+    log::info!(
+        "[V2] collection_shuffle_tracks id={}: requested={} actual={}",
+        collection_id,
+        sample_size,
+        actual
+    );
+
+    // 4. Replace the queue and start playback from index 0.
+    let bridge = bridge.get().await;
+    bridge.set_queue(sampled, Some(0)).await;
+    bridge.play_index(0).await;
+
+    // 5. Stamp queue source so skip-next/prev know the boundary semantics.
+    runtime
+        .manager()
+        .set_queue_source_collection(Some(collection_id.clone()))
+        .await;
+
+    // 6. Bump play stats (best-effort).
+    {
+        let guard = acquire_db!(library);
+        if let Some(db) = guard.as_ref() {
+            let _ = db.with_connection(|conn| {
+                crate::mixtape::repo::touch_play(conn, &collection_id)
+            });
+        }
+    }
+
+    Ok(ShuffleTracksResult {
+        requested_count: sample_size,
+        actual_count: actual,
+    })
+}

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { List, Play, History } from 'lucide-svelte';
+  import { formatTrackTitle } from '$lib/utils/trackTitle';
   import { t } from '$lib/i18n';
   import { cachedSrc } from '$lib/actions/cachedImage';
 
@@ -118,7 +119,7 @@
               </button>
               <img use:cachedSrc={track.artwork} alt="" class="track-artwork" />
               <div class="track-info">
-                <div class="track-title">{track.title}</div>
+                <div class="track-title">{formatTrackTitle(track)}</div>
                 <div class="track-artist">{track.artist}</div>
               </div>
               <div class="track-duration">{formatDuration(track.duration)}</div>
@@ -147,7 +148,7 @@
               </button>
               <img use:cachedSrc={track.artwork} alt="" class="track-artwork" />
               <div class="track-info">
-                <div class="track-title">{track.title}</div>
+                <div class="track-title">{formatTrackTitle(track)}</div>
                 <div class="track-artist">{track.artist}</div>
               </div>
               <div class="track-duration">{formatDuration(track.duration)}</div>

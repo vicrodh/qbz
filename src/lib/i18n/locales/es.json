@@ -342,7 +342,8 @@
     "shuffleAlbums": "Aleatorio entre álbumes",
     "playModeInOrder": "En orden",
     "playModeAlbumShuffle": "Álbumes aleatorios",
-    "trackCount": "{count} pistas"
+    "trackCount": "{count} pistas",
+    "shuffleTracksMix": "Cola aleatoria de esta colección"
   },
   "confirm": {
     "deletePlaylist": "¿Estás seguro de que quieres eliminar esta lista?",
@@ -2031,7 +2032,9 @@
       "showContextIcon": "Mostrar contexto de reproducción en el reproductor",
       "showContextIconTooltip": "Muestra el contexto desde donde se reproduce la pista actual (álbum, artista, playlist, etc.)",
       "persistSession": "Restaurar sesión al iniciar",
-      "persistSessionDesc": "Recuerda tu cola, posición de reproducción y vista actual al reiniciar",
+      "persistSessionDesc": "Recuerda tu cola y vista actual al reiniciar (pista en pausa al 0:00)",
+      "resumePlaybackPosition": "Continuar desde la posición guardada",
+      "resumePlaybackPositionDesc": "Al restaurar una sesión, salta a donde quedaste en lugar de empezar la pista desde el principio",
       "streamUncached": "Transmitir Pistas Sin Caché",
       "streamUncachedDesc": "Inicia la reproducción más rápido cuando la pista no está en caché. La búsqueda puede estar limitada durante el buffering inicial.",
       "initialBuffer": "Tamaño del Buffer Inicial",
@@ -2069,6 +2072,7 @@
         "langley": "Langley",
         "ayanami": "Ayanami",
         "iscariot": "Iscariot",
+        "stratego": "Stratego",
         "system": "Sistema",
         "wcagLight": "WCAG Claro",
         "wcagDark": "WCAG Oscuro",
@@ -2252,7 +2256,15 @@
         "minimizeToTray": "Minimizar a bandeja",
         "minimizeToTrayDesc": "Ocultar ventana a la bandeja al minimizar",
         "closeToTray": "Cerrar a bandeja",
-        "closeToTrayDesc": "Ocultar ventana a la bandeja en vez de cerrar"
+        "closeToTrayDesc": "Ocultar ventana a la bandeja en vez de cerrar",
+        "iconTheme": {
+          "label": "Variante del icono",
+          "desc": "Elige un icono monocromático para tu barra (Plasma, la barra superior siempre oscura de GNOME) o el vinilo a color",
+          "auto": "Automático",
+          "mono-light": "Mono claro",
+          "mono-dark": "Mono oscuro",
+          "color": "Color"
+        }
       },
       "composition": {
         "title": "Composicion",
@@ -2707,6 +2719,7 @@
     "refreshingTrackOffline": "Actualizando \"{title}\" para offline",
     "refreshingAlbumOffline": "Actualizando todas las pistas de \"{album}\" para offline",
     "failedLoadAlbumRefresh": "Error al cargar álbum para actualizar offline",
+    "playingAlbum": "{count, plural, =1 {Reproduciendo álbum} other {Reproduciendo {count} pistas}}",
     "playingTracksNext": "Reproduciendo {count} pistas a continuación",
     "addedTracksToQueue": "{count} pistas agregadas a la cola",
     "failedPreviousTrack": "Error al ir a pista anterior",
@@ -2764,7 +2777,8 @@
     "laodingDevices": "Cargando dispositivos...",
     "findingSimilarArtists": "Encontrar artistas similares...",
     "awardUnavailable": "No hay detalle disponible para este premio.",
-    "audioDeviceMissing": "El dispositivo '{device}' ya no está disponible. Usando el predeterminado del sistema."
+    "audioDeviceMissing": "El dispositivo '{device}' ya no está disponible. Usando el predeterminado del sistema.",
+    "mixTrimmed": "Se agregaron {actual} canciones a la cola (pediste {requested}; algunas se fusionaron o quedaron limitadas por álbum)."
   },
   "topMixes": {
     "title": "TopQ",
@@ -2830,5 +2844,21 @@
     "title": "WeeklyQ",
     "subtitle": "Basado en tus escuchas semanales.",
     "cardDesc": "Un viaje semanal con un mix fresco <strong>cada viernes</strong>."
+  },
+  "mixModal": {
+    "title": "Cola aleatoria",
+    "computing": "Cargando…",
+    "confirm": "Agregar a la cola",
+    "loadFailed": "No se pudo cargar el conteo",
+    "body": "Crea una cola aleatoria con canciones de esta colección. ¿Cuántas canciones quieres?",
+    "numberOfSongs": "Cantidad de canciones",
+    "songsAvailable": "{n} canciones disponibles",
+    "allOption": "Todas ({n})"
+  },
+  "queue": {
+    "stopAfterThis": "Detener después de esta canción",
+    "cancelStopAfter": "Cancelar detener después de esta",
+    "removeAllAfter": "Eliminar todas las canciones siguientes",
+    "tracksRemoved": "{count, plural, one {# canción eliminada de la cola} other {# canciones eliminadas de la cola}}"
   }
 }

@@ -54,7 +54,7 @@ function snapshotPlayback(): Record<string, unknown> {
 
 async function snapshotQconnect(): Promise<Record<string, unknown>> {
   try {
-    const status = await invoke<QconnectConnectionStatus>('v2_qconnect_get_status');
+    const status = await invoke<QconnectConnectionStatus>('v2_qconnect_status');
     const session = await invoke<QconnectSessionSnapshot>('v2_qconnect_session_snapshot');
     const activeId = session?.active_renderer_id ?? null;
     const localId = session?.local_renderer_id ?? null;

@@ -8,6 +8,7 @@
   import NavigationItem from './NavigationItem.svelte';
   import PlaylistCoverCollage from './PlaylistCoverCollage.svelte';
   import { getShowPlaylistCollage, subscribePlaylistCollage } from '$lib/stores/sidebarStore';
+  import { preloadImages } from '$lib/services/imageCacheService';
   import UserCard from './UserCard.svelte';
   import MyQbzNavEditModal from './MyQbzNavEditModal.svelte';
   import {
@@ -94,6 +95,7 @@
       isHidden: boolean;
       currentFolderId: string | null;
     }) => void;
+    onEditFolder?: (folder: PlaylistFolder) => void;
     onSettingsClick?: () => void;
     onKeybindingsClick?: () => void;
     onAboutClick?: () => void;
@@ -121,6 +123,7 @@
     onImportPlaylist,
     onPlaylistManagerClick,
     onEditPlaylist,
+    onEditFolder,
     onSettingsClick,
     onKeybindingsClick,
     onAboutClick,
@@ -904,6 +907,25 @@
     return `p-${item.playlist.id}`;
   }
 
+  // Warm the shared image cache with every playlist's collage tiles as
+  // soon as userPlaylists is populated. preloadImages is fire-and-forget
+  // and dedupes against the in-memory resolvedUrls map in
+  // imageCacheService, so this effect re-running on every playlist
+  // update is cheap. Same downscale regex as PlaylistCoverCollage — the
+  // sidebar renders tiles at the _50 variant, so that is what we want on
+  // disk. Skipped when the user opted out of the collage in Settings.
+  $effect(() => {
+    if (!showPlaylistCollage || userPlaylists.length === 0) return;
+    const tiles: string[] = [];
+    for (const p of userPlaylists) {
+      const imgs = p.images150 ?? p.images300 ?? p.images ?? [];
+      for (const url of imgs.slice(0, 4)) {
+        if (url) tiles.push(url.replace(/_(150|300|600)\.jpg(\?.*)?$/i, '_50.jpg$2'));
+      }
+    }
+    if (tiles.length > 0) preloadImages(tiles);
+  });
+
   // Subscribe to global floating menu store
   $effect(() => {
     const unsubscribe = subscribeFloatingMenu(() => {
@@ -1477,6 +1499,12 @@
       isHidden: current?.hidden ?? false,
       currentFolderId: current?.folder_id ?? null
     });
+    closeContextMenu();
+  }
+
+  function editFolderFromContextMenu() {
+    if (!contextMenu.folder || !onEditFolder) return;
+    onEditFolder(contextMenu.folder);
     closeContextMenu();
   }
 
@@ -2203,6 +2231,12 @@
   >
     {#if contextMenu.folder}
       {@const contextFolderHidden = contextMenu.folder.is_hidden ?? false}
+      {#if onEditFolder}
+        <button class="context-menu-item" onclick={editFolderFromContextMenu}>
+          <Pencil size={14} />
+          {$t('library.editFolder')}
+        </button>
+      {/if}
       <button class="context-menu-item" onclick={toggleFolderHiddenFromContextMenu}>
         {#if contextFolderHidden}
           <Eye size={14} />
@@ -2506,29 +2540,6 @@
     letter-spacing: 0.05em;
     margin-bottom: 6px;
     padding: 0 8px;
-  }
-
-  .section-header-btn {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    width: 100%;
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: 0 8px;
-    margin-bottom: 6px;
-    color: var(--text-muted);
-    transition: color 150ms ease;
-  }
-
-  .section-header-btn:hover {
-    color: var(--text-primary);
-  }
-
-  .section-header-btn .section-header {
-    margin-bottom: 0;
-    padding: 0;
   }
 
   .playlists-section {

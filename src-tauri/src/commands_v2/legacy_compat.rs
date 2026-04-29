@@ -308,10 +308,155 @@ pub async fn v2_share_album_songlink(
 pub async fn v2_library_backfill_downloads(
     state: State<'_, LibraryState>,
     offline_cache_state: State<'_, crate::offline_cache::OfflineCacheState>,
-) -> Result<crate::library::commands::BackfillReport, RuntimeError> {
-    crate::library::commands::library_backfill_downloads(state, offline_cache_state)
-        .await
-        .map_err(RuntimeError::Internal)
+) -> Result<crate::library::BackfillReport, RuntimeError> {
+    use crate::library::{BackfillReport, MetadataExtractor};
+
+    log::info!("Command: v2_library_backfill_downloads");
+
+    let mut report = BackfillReport {
+        total_downloads: 0,
+        added_tracks: 0,
+        repaired_tracks: 0,
+        skipped_tracks: 0,
+        failed_tracks: Vec::new(),
+    };
+
+    // Get all ready cached tracks directly from offline cache DB
+    let cached_tracks = {
+        let cache_db_opt__ = offline_cache_state.db.lock().await;
+        let cache_db = cache_db_opt__
+            .as_ref()
+            .ok_or_else(|| RuntimeError::Internal("No active session - please log in".to_string()))?;
+
+        let mut stmt = cache_db
+            .conn()
+            .prepare("SELECT track_id, title, artist, album, album_id, duration_secs, file_path, quality, bit_depth, sample_rate FROM cached_tracks WHERE status = 'ready'")
+            .map_err(|e| RuntimeError::Internal(format!("Failed to query cached tracks: {}", e)))?;
+
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, i64>(0)? as u64,                    // track_id
+                    row.get::<_, String>(1)?,                        // title
+                    row.get::<_, String>(2)?,                        // artist
+                    row.get::<_, Option<String>>(3)?,                // album
+                    row.get::<_, i64>(5)? as u64,                    // duration_secs
+                    row.get::<_, String>(6)?,                        // file_path
+                    row.get::<_, Option<i64>>(8)?.map(|v| v as u32), // bit_depth
+                    row.get::<_, Option<f64>>(9)?,                   // sample_rate
+                ))
+            })
+            .map_err(|e| RuntimeError::Internal(format!("Failed to map rows: {}", e)))?;
+
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| RuntimeError::Internal(format!("Failed to collect cached tracks: {}", e)))?
+    }; // cache_db lock is dropped here
+
+    report.total_downloads = cached_tracks.len();
+
+    let library_db_opt__ = state.db.lock().await;
+    let library_db = library_db_opt__
+        .as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session - please log in".to_string()))?;
+
+    for (track_id, title, artist, album, duration_secs, file_path, bit_depth, sample_rate) in
+        cached_tracks
+    {
+        // Strategy: Try to match by qobuz_track_id first, then by file_path
+        // This handles both intact downloads and downloads damaged by scanner
+
+        let exists_by_id = library_db
+            .track_exists_by_qobuz_id(track_id)
+            .unwrap_or(false);
+
+        let exists_by_path = library_db.track_exists_by_path(&file_path).unwrap_or(false);
+
+        if exists_by_id {
+            // Track exists with correct qobuz_track_id (not damaged)
+            // Check if it just needs source repair
+            match library_db.is_qobuz_cached_track_by_path(&file_path) {
+                Ok(true) => {
+                    // Already marked as cached track, nothing to do
+                    report.skipped_tracks += 1;
+                }
+                Ok(false) => {
+                    // Has qobuz_track_id but lost source marker - unusual case
+                    log::info!(
+                        "Repairing source for track with intact ID {}: {}",
+                        track_id,
+                        title
+                    );
+                    match library_db.repair_qobuz_cached_track_by_path(track_id, &file_path) {
+                        Ok(true) => report.repaired_tracks += 1,
+                        Ok(false) => report.skipped_tracks += 1,
+                        Err(e) => {
+                            log::warn!("Failed to repair track {}: {}", track_id, e);
+                            report.failed_tracks.push(title);
+                        }
+                    }
+                }
+                Err(e) => {
+                    log::warn!(
+                        "Failed to check cached track status for {}: {}",
+                        track_id,
+                        e
+                    );
+                    report.failed_tracks.push(title);
+                }
+            }
+            continue;
+        }
+
+        if exists_by_path {
+            // Track exists by path but lost qobuz_track_id (damaged by scanner)
+            log::info!(
+                "Repairing damaged cached track (lost ID) {}: {}",
+                track_id,
+                title
+            );
+            match library_db.repair_qobuz_cached_track_by_path(track_id, &file_path) {
+                Ok(true) => report.repaired_tracks += 1,
+                Ok(false) => report.skipped_tracks += 1,
+                Err(e) => {
+                    log::warn!("Failed to repair track by path {}: {}", track_id, e);
+                    report.failed_tracks.push(title);
+                }
+            }
+            continue;
+        }
+
+        // Track doesn't exist - extract track/disc number from file tags
+        let (track_num, disc_num) =
+            match MetadataExtractor::extract(std::path::Path::new(&file_path)) {
+                Ok(meta) => (meta.track_number, meta.disc_number),
+                Err(e) => {
+                    log::warn!("Could not extract metadata from {}: {}", file_path, e);
+                    (None, None)
+                }
+            };
+
+        // Insert as new
+        match library_db.insert_qobuz_cached_track_direct(
+            track_id,
+            &title,
+            &artist,
+            album.as_deref(),
+            duration_secs,
+            &file_path,
+            bit_depth,
+            sample_rate,
+            track_num,
+            disc_num,
+        ) {
+            Ok(_) => report.added_tracks += 1,
+            Err(e) => {
+                log::warn!("Failed to insert track {}: {}", track_id, e);
+                report.failed_tracks.push(title);
+            }
+        }
+    }
+
+    Ok(report)
 }
 
 #[tauri::command]
@@ -324,9 +469,123 @@ pub async fn v2_lyrics_get(
     durationSecs: Option<u64>,
     state: State<'_, LyricsState>,
 ) -> Result<Option<crate::lyrics::LyricsPayload>, RuntimeError> {
-    crate::lyrics::commands::lyrics_get(trackId, title, artist, album, durationSecs, state)
-        .await
-        .map_err(RuntimeError::Internal)
+    use crate::lyrics::providers::{fetch_lrclib, fetch_lyrics_ovh};
+    use crate::lyrics::{build_cache_key, LyricsPayload};
+
+    let track_id = trackId;
+    let duration_secs = durationSecs;
+
+    let title_trimmed = title.trim();
+    let artist_trimmed = artist.trim();
+
+    if title_trimmed.is_empty() || artist_trimmed.is_empty() {
+        return Err(RuntimeError::Internal(
+            "Lyrics lookup requires title and artist".to_string(),
+        ));
+    }
+
+    let cache_key = build_cache_key(title_trimmed, artist_trimmed, duration_secs);
+
+    // Try cache by track_id first, then by key.
+    // If cached entry has plain but no synced lyrics, treat as miss and re-fetch
+    // (search-first strategy is likely to find synced now).
+    {
+        let db_opt__ = state.db.lock().await;
+        let db = db_opt__
+            .as_ref()
+            .ok_or_else(|| RuntimeError::Internal("No active session - please log in".to_string()))?;
+
+        let cached = if let Some(id) = track_id {
+            db.get_by_track_id(id).ok().flatten()
+        } else {
+            None
+        }
+        .or_else(|| db.get_by_cache_key(&cache_key).ok().flatten());
+
+        if let Some(payload) = cached {
+            let has_synced = payload
+                .synced_lrc
+                .as_ref()
+                .map(|s| !s.trim().is_empty())
+                .unwrap_or(false);
+            if has_synced {
+                return Ok(Some(payload));
+            }
+            // plain-only cache: fall through to re-fetch for synced
+        }
+    }
+
+    // Provider chain: LRCLIB (with 1 retry on network error) -> lyrics.ovh
+    let lrclib_data = match fetch_lrclib(title_trimmed, artist_trimmed, duration_secs).await {
+        Ok(data) => data,
+        Err(e) => {
+            // Network error — retry once
+            eprintln!("[Lyrics] LRCLIB attempt 1 failed: {}, retrying…", e);
+            match fetch_lrclib(title_trimmed, artist_trimmed, duration_secs).await {
+                Ok(data) => data,
+                Err(e2) => {
+                    eprintln!(
+                        "[Lyrics] LRCLIB attempt 2 failed: {}, falling back to lyrics.ovh",
+                        e2
+                    );
+                    None
+                }
+            }
+        }
+    };
+
+    if let Some(data) = lrclib_data {
+        let payload = LyricsPayload {
+            track_id,
+            title: title_trimmed.to_string(),
+            artist: artist_trimmed.to_string(),
+            album: album.clone(),
+            duration_secs,
+            plain: data.plain,
+            synced_lrc: data.synced_lrc,
+            provider: data.provider,
+            cached: false,
+        };
+
+        let db_opt__ = state.db.lock().await;
+        let db = db_opt__
+            .as_ref()
+            .ok_or_else(|| RuntimeError::Internal("No active session - please log in".to_string()))?;
+        db.upsert(&cache_key, &payload)
+            .map_err(RuntimeError::Internal)?;
+        return Ok(Some(payload));
+    }
+
+    if let Some(data) = fetch_lyrics_ovh(title_trimmed, artist_trimmed).await {
+        let payload = LyricsPayload {
+            track_id,
+            title: title_trimmed.to_string(),
+            artist: artist_trimmed.to_string(),
+            album,
+            duration_secs,
+            plain: data.plain,
+            synced_lrc: data.synced_lrc,
+            provider: data.provider,
+            cached: false,
+        };
+
+        let db_opt__ = state.db.lock().await;
+        let db = db_opt__
+            .as_ref()
+            .ok_or_else(|| RuntimeError::Internal("No active session - please log in".to_string()))?;
+        db.upsert(&cache_key, &payload)
+            .map_err(RuntimeError::Internal)?;
+        return Ok(Some(payload));
+    }
+
+    Ok(None)
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct V2LyricsCacheStats {
+    pub entries: u64,
+    pub size_bytes: u64,
 }
 
 #[tauri::command]
@@ -339,20 +598,36 @@ pub fn v2_create_pending_playlist(
     localTrackPaths: Vec<String>,
     state: State<'_, OfflineState>,
 ) -> Result<i64, RuntimeError> {
-    crate::offline::commands::create_pending_playlist(
-        name,
-        description,
-        isPublic,
-        trackIds,
-        localTrackPaths,
-        state,
-    )
-    .map_err(RuntimeError::Internal)
+    let guard__ = state
+        .store
+        .lock()
+        .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
+    let store = guard__
+        .as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session - please log in".to_string()))?;
+    store
+        .create_pending_playlist(
+            &name,
+            description.as_deref(),
+            isPublic,
+            &trackIds,
+            &localTrackPaths,
+        )
+        .map_err(RuntimeError::Internal)
 }
 
 #[tauri::command]
 pub fn v2_get_pending_playlist_count(state: State<'_, OfflineState>) -> Result<u32, RuntimeError> {
-    crate::offline::commands::get_pending_playlist_count(state).map_err(RuntimeError::Internal)
+    let guard__ = state
+        .store
+        .lock()
+        .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
+    let store = guard__
+        .as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session - please log in".to_string()))?;
+    store
+        .get_pending_playlist_count()
+        .map_err(RuntimeError::Internal)
 }
 
 #[tauri::command]
@@ -363,7 +638,15 @@ pub fn v2_queue_scrobble(
     timestamp: i64,
     state: State<'_, OfflineState>,
 ) -> Result<i64, RuntimeError> {
-    crate::offline::commands::queue_scrobble(artist, track, album, timestamp, state)
+    let guard__ = state
+        .store
+        .lock()
+        .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
+    let store = guard__
+        .as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session - please log in".to_string()))?;
+    store
+        .queue_scrobble(&artist, &track, album.as_deref(), timestamp)
         .map_err(RuntimeError::Internal)
 }
 
@@ -373,12 +656,30 @@ pub fn v2_get_queued_scrobbles(
     limit: Option<u32>,
     state: State<'_, OfflineState>,
 ) -> Result<Vec<crate::offline::QueuedScrobble>, RuntimeError> {
-    crate::offline::commands::get_queued_scrobbles(limit, state).map_err(RuntimeError::Internal)
+    let guard__ = state
+        .store
+        .lock()
+        .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
+    let store = guard__
+        .as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session - please log in".to_string()))?;
+    store
+        .get_queued_scrobbles(limit.unwrap_or(50))
+        .map_err(RuntimeError::Internal)
 }
 
 #[tauri::command]
 pub fn v2_get_queued_scrobble_count(state: State<'_, OfflineState>) -> Result<u32, RuntimeError> {
-    crate::offline::commands::get_queued_scrobble_count(state).map_err(RuntimeError::Internal)
+    let guard__ = state
+        .store
+        .lock()
+        .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
+    let store = guard__
+        .as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session - please log in".to_string()))?;
+    store
+        .get_queued_scrobble_count()
+        .map_err(RuntimeError::Internal)
 }
 
 #[tauri::command]
@@ -387,7 +688,15 @@ pub fn v2_cleanup_sent_scrobbles(
     olderThanDays: Option<u32>,
     state: State<'_, OfflineState>,
 ) -> Result<u32, RuntimeError> {
-    crate::offline::commands::cleanup_sent_scrobbles(olderThanDays, state)
+    let guard__ = state
+        .store
+        .lock()
+        .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
+    let store = guard__
+        .as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session - please log in".to_string()))?;
+    store
+        .cleanup_sent_scrobbles(olderThanDays.unwrap_or(7))
         .map_err(RuntimeError::Internal)
 }
 
@@ -397,9 +706,14 @@ pub async fn v2_get_track_by_path(
     filePath: String,
     state: State<'_, LibraryState>,
 ) -> Result<Option<LocalTrack>, RuntimeError> {
-    crate::library::commands::get_track_by_path(filePath, state)
-        .await
-        .map_err(RuntimeError::Internal)
+    log::info!("Command: v2_get_track_by_path {}", filePath);
+
+    let guard__ = state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session - please log in".to_string()))?;
+    db.get_track_by_path(&filePath)
+        .map_err(|e| RuntimeError::Internal(e.to_string()))
 }
 
 #[tauri::command]
@@ -407,7 +721,7 @@ pub async fn v2_get_track_by_path(
 pub fn v2_check_network_path(
     path: String,
 ) -> Result<crate::network::NetworkPathInfo, RuntimeError> {
-    Ok(crate::network::commands::check_network_path(path))
+    Ok(crate::network::is_network_path(std::path::Path::new(&path)))
 }
 
 #[tauri::command]
@@ -421,24 +735,36 @@ pub async fn v2_library_update_folder_settings(
     userOverrideNetwork: bool,
     state: State<'_, LibraryState>,
 ) -> Result<crate::library::LibraryFolder, RuntimeError> {
-    crate::library::commands::library_update_folder_settings(
+    log::info!(
+        "Command: v2_library_update_folder_settings {} alias={:?} enabled={}",
         id,
         alias,
+        enabled
+    );
+
+    let guard__ = state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session - please log in".to_string()))?;
+    db.update_folder_settings(
+        id,
+        alias.as_deref(),
         enabled,
         isNetwork,
-        networkFsType,
+        networkFsType.as_deref(),
         userOverrideNetwork,
-        state,
     )
-    .await
-    .map_err(RuntimeError::Internal)
+    .map_err(|e| RuntimeError::Internal(e.to_string()))?;
+
+    db.get_folder_by_id(id)
+        .map_err(|e| RuntimeError::Internal(e.to_string()))?
+        .ok_or_else(|| RuntimeError::Internal("Folder not found after update".to_string()))
 }
 
 #[tauri::command]
 pub async fn v2_discogs_has_credentials() -> Result<bool, RuntimeError> {
-    crate::library::commands::discogs_has_credentials()
-        .await
-        .map_err(RuntimeError::Internal)
+    // Proxy always provides credentials.
+    Ok(true)
 }
 
 #[tauri::command]
@@ -448,7 +774,16 @@ pub async fn v2_discogs_search_artwork(
     album: String,
     catalogNumber: Option<String>,
 ) -> Result<Vec<crate::discogs::DiscogsImageOption>, RuntimeError> {
-    crate::library::commands::discogs_search_artwork(artist, album, catalogNumber)
+    log::info!(
+        "Command: v2_discogs_search_artwork {} - {} (catalog: {:?})",
+        artist,
+        album,
+        catalogNumber
+    );
+
+    let client = crate::discogs::DiscogsClient::new();
+    client
+        .search_artwork_options(&artist, &album, catalogNumber.as_deref())
         .await
         .map_err(RuntimeError::Internal)
 }
@@ -460,7 +795,13 @@ pub async fn v2_discogs_download_artwork(
     artist: String,
     album: String,
 ) -> Result<String, RuntimeError> {
-    crate::library::commands::discogs_download_artwork(imageUrl, artist, album)
+    log::info!("Command: v2_discogs_download_artwork from {}", imageUrl);
+
+    let cache_dir = crate::library::get_artwork_cache_dir();
+    let client = crate::discogs::DiscogsClient::new();
+
+    client
+        .download_artwork_from_url(&imageUrl, &cache_dir, &artist, &album)
         .await
         .map_err(RuntimeError::Internal)
 }
@@ -471,9 +812,30 @@ pub async fn v2_check_album_fully_cached(
     albumId: String,
     cache_state: State<'_, crate::offline_cache::OfflineCacheState>,
 ) -> Result<bool, RuntimeError> {
-    crate::offline_cache::commands::check_album_fully_cached(albumId, cache_state)
-        .await
-        .map_err(RuntimeError::Internal)
+    let guard__ = cache_state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session - please log in".to_string()))?;
+
+    // Get all tracks for this album
+    let tracks = db.get_all_tracks().map_err(RuntimeError::Internal)?;
+    let album_tracks: Vec<_> = tracks
+        .into_iter()
+        .filter(|t| t.album_id.as_deref() == Some(&albumId))
+        .collect();
+
+    if album_tracks.is_empty() {
+        return Ok(false);
+    }
+
+    // Check if all tracks are ready
+    for track in album_tracks {
+        if track.status != crate::offline_cache::OfflineCacheStatus::Ready {
+            return Ok(false);
+        }
+    }
+
+    Ok(true)
 }
 
 #[tauri::command]
@@ -482,9 +844,43 @@ pub async fn v2_check_albums_fully_cached_batch(
     albumIds: Vec<String>,
     cache_state: State<'_, crate::offline_cache::OfflineCacheState>,
 ) -> Result<std::collections::HashMap<String, bool>, RuntimeError> {
-    crate::offline_cache::commands::check_albums_fully_cached_batch(albumIds, cache_state)
-        .await
-        .map_err(RuntimeError::Internal)
+    use std::collections::HashMap;
+
+    if albumIds.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let guard__ = cache_state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session - please log in".to_string()))?;
+
+    let tracks = db.get_all_tracks().map_err(RuntimeError::Internal)?;
+
+    // Group tracks by album_id
+    let mut album_tracks: HashMap<&str, (usize, usize)> = HashMap::new(); // (total, ready)
+    for track in &tracks {
+        if let Some(ref aid) = track.album_id {
+            let entry = album_tracks.entry(aid.as_str()).or_insert((0, 0));
+            entry.0 += 1;
+            if track.status == crate::offline_cache::OfflineCacheStatus::Ready {
+                entry.1 += 1;
+            }
+        }
+    }
+
+    let result: HashMap<String, bool> = albumIds
+        .into_iter()
+        .map(|id| {
+            let fully_cached = album_tracks
+                .get(id.as_str())
+                .map(|(total, ready)| *total > 0 && *total == *ready)
+                .unwrap_or(false);
+            (id, fully_cached)
+        })
+        .collect();
+
+    Ok(result)
 }
 
 /// Shared helper: spawn the download task for a single track.
@@ -1145,16 +1541,380 @@ pub async fn v2_start_legacy_migration(
     Ok(())
 }
 
+// === Library scan / metadata helpers (inlined from legacy library/commands.rs) ===
+
+fn library_normalize_path(path: &std::path::Path) -> PathBuf {
+    fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+}
+
+async fn library_process_cue_file(
+    cue_path: &std::path::Path,
+    state: &State<'_, crate::library::LibraryState>,
+) -> Result<(), String> {
+    let mut cue =
+        crate::library::CueParser::parse(cue_path).map_err(|e| e.to_string())?;
+
+    // Get audio file properties
+    let audio_path = library_normalize_path(std::path::Path::new(&cue.audio_file));
+    if !audio_path.exists() {
+        return Err(format!("Audio file not found: {}", cue.audio_file));
+    }
+    cue.audio_file = audio_path.to_string_lossy().to_string();
+
+    let properties = crate::library::MetadataExtractor::extract_properties(audio_path.as_path())
+        .map_err(|e| e.to_string())?;
+    let format = crate::library::MetadataExtractor::detect_format(audio_path.as_path());
+
+    // Convert CUE to tracks
+    let mut tracks = crate::library::cue_to_tracks(&cue, properties.duration_secs, format, &properties);
+
+    // Apply sidecar overrides if present (matches by file_path + cue_start_secs)
+    if let Some(group_key) = tracks
+        .first()
+        .map(|track| track.album_group_key.trim().to_string())
+        .filter(|k| !k.is_empty())
+    {
+        let album_dir = std::path::Path::new(&group_key);
+        if album_dir.is_dir() {
+            if let Ok(Some(sidecar)) = crate::library::read_album_sidecar(album_dir) {
+                for track in tracks.iter_mut() {
+                    crate::library::apply_sidecar_to_track(track, &sidecar);
+                }
+            }
+        }
+    }
+
+    let artwork_cache = crate::library::get_artwork_cache_dir();
+    let mut artwork_path =
+        crate::library::MetadataExtractor::extract_artwork(audio_path.as_path(), &artwork_cache);
+    if artwork_path.is_none() {
+        if let Some(folder_art) = crate::library::MetadataExtractor::find_folder_artwork(
+            audio_path.as_path(),
+            cue.title.as_deref(),
+        ) {
+            artwork_path = crate::library::MetadataExtractor::cache_artwork_file(
+                std::path::Path::new(&folder_art),
+                &artwork_cache,
+            );
+        }
+    }
+    if let Some(path) = artwork_path.as_ref() {
+        for track in tracks.iter_mut() {
+            track.artwork_path = Some(path.clone());
+        }
+    }
+
+    // Insert tracks
+    let guard__ = state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
+    let group_key = tracks
+        .first()
+        .map(|track| track.album_group_key.clone())
+        .unwrap_or_default();
+
+    for track in tracks {
+        db.insert_track(&track).map_err(|e| e.to_string())?;
+    }
+
+    if let (Some(path), false) = (artwork_path.as_ref(), group_key.is_empty()) {
+        let _ = db.update_album_group_artwork(&group_key, path);
+    }
+
+    Ok(())
+}
+
+fn library_apply_sidecar_override_if_present(
+    track: &mut LocalTrack,
+    cache: &mut std::collections::HashMap<String, Option<crate::library::AlbumTagSidecar>>,
+) {
+    let group_key = track.album_group_key.trim();
+    if group_key.is_empty() {
+        return;
+    }
+
+    let cached = cache.entry(group_key.to_string()).or_insert_with(|| {
+        let album_dir = std::path::Path::new(group_key);
+        if !album_dir.is_dir() {
+            return None;
+        }
+
+        match crate::library::read_album_sidecar(album_dir) {
+            Ok(sidecar) => sidecar,
+            Err(err) => {
+                log::warn!(
+                    "Failed to read LocalLibrary sidecar for {}: {}",
+                    album_dir.display(),
+                    err
+                );
+                None
+            }
+        }
+    });
+
+    if let Some(sidecar) = cached.as_ref() {
+        crate::library::apply_sidecar_to_track(track, sidecar);
+    }
+}
+
+fn library_compute_track_artist_match(tracks: &[LocalTrack]) -> Option<String> {
+    let mut artists: HashSet<String> = HashSet::new();
+    for track in tracks {
+        let value = track
+            .album_artist
+            .as_deref()
+            .unwrap_or(track.artist.as_str())
+            .trim();
+        if value.is_empty() {
+            continue;
+        }
+        artists.insert(value.to_string());
+        if artists.len() > 1 {
+            return None;
+        }
+    }
+
+    artists.into_iter().next()
+}
+
 #[tauri::command]
-pub async fn v2_library_scan(state: State<'_, crate::library::LibraryState>) -> Result<(), String> {
-    crate::library::library_scan_impl(state).await
+pub async fn v2_library_scan(
+    state: State<'_, crate::library::LibraryState>,
+) -> Result<(), String> {
+    use std::sync::atomic::Ordering;
+    use crate::library::{ScanError, ScanProgress, ScanStatus, LibraryScanner, MetadataExtractor, CueParser, get_artwork_cache_dir};
+
+    log::info!("Command: library_scan");
+
+    // Get folders to scan
+    let folders = {
+        let guard__ = state.db.lock().await;
+        let db = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
+        db.get_folders().map_err(|e| e.to_string())?
+    };
+
+    if folders.is_empty() {
+        return Err("No library folders configured".to_string());
+    }
+
+    // Reset cancel flag and progress
+    state.scan_cancel.store(false, Ordering::Relaxed);
+    {
+        let mut progress = state.scan_progress.lock().await;
+        *progress = ScanProgress {
+            status: ScanStatus::Scanning,
+            total_files: 0,
+            processed_files: 0,
+            current_file: None,
+            errors: Vec::new(),
+        };
+    }
+
+    let scanner = LibraryScanner::new();
+    let mut all_errors: Vec<ScanError> = Vec::new();
+    let mut sidecar_cache: std::collections::HashMap<String, Option<crate::library::AlbumTagSidecar>> =
+        std::collections::HashMap::new();
+
+    for folder in &folders {
+        log::info!("Scanning folder: {}", folder);
+
+        // Scan for files
+        let scan_result = match scanner.scan_directory(std::path::Path::new(folder)) {
+            Ok(result) => result,
+            Err(e) => {
+                all_errors.push(ScanError {
+                    file_path: folder.clone(),
+                    error: e.to_string(),
+                });
+                continue;
+            }
+        };
+
+        let total_files = scan_result.audio_files.len() + scan_result.cue_files.len();
+
+        // Update total count
+        {
+            let mut progress = state.scan_progress.lock().await;
+            progress.total_files += total_files as u32;
+        }
+
+        // Process CUE files first (they create multiple tracks from one file)
+        for cue_path in &scan_result.cue_files {
+            // Check for cancellation
+            if state.scan_cancel.load(Ordering::Relaxed) {
+                let mut progress = state.scan_progress.lock().await;
+                progress.status = ScanStatus::Cancelled;
+                progress.current_file = None;
+                log::info!("Library scan cancelled by user");
+                return Ok(());
+            }
+
+            {
+                let mut progress = state.scan_progress.lock().await;
+                progress.current_file = Some(cue_path.to_string_lossy().to_string());
+            }
+
+            match library_process_cue_file(cue_path, &state).await {
+                Ok(_) => {}
+                Err(e) => {
+                    all_errors.push(ScanError {
+                        file_path: cue_path.to_string_lossy().to_string(),
+                        error: e,
+                    });
+                }
+            }
+
+            {
+                let mut progress = state.scan_progress.lock().await;
+                progress.processed_files += 1;
+            }
+        }
+
+        // Process regular audio files (skip if covered by CUE)
+        let cue_audio_files: HashSet<String> = scan_result
+            .cue_files
+            .iter()
+            .filter_map(|p| {
+                CueParser::parse(p).ok().map(|cue| {
+                    library_normalize_path(std::path::Path::new(&cue.audio_file))
+                        .to_string_lossy()
+                        .to_string()
+                })
+            })
+            .collect();
+
+        for audio_path in &scan_result.audio_files {
+            // Check for cancellation
+            if state.scan_cancel.load(Ordering::Relaxed) {
+                let mut progress = state.scan_progress.lock().await;
+                progress.status = ScanStatus::Cancelled;
+                progress.current_file = None;
+                log::info!("Library scan cancelled by user");
+                return Ok(());
+            }
+
+            // Skip if this file is referenced by a CUE sheet
+            let canonical_path = library_normalize_path(audio_path);
+            let path_str = canonical_path.to_string_lossy().to_string();
+            if cue_audio_files.contains(&path_str) {
+                let mut progress = state.scan_progress.lock().await;
+                progress.processed_files += 1;
+                continue;
+            }
+
+            {
+                let mut progress = state.scan_progress.lock().await;
+                progress.current_file = Some(path_str.clone());
+            }
+
+            match MetadataExtractor::extract(&canonical_path) {
+                Ok(mut track) => {
+                    library_apply_sidecar_override_if_present(&mut track, &mut sidecar_cache);
+                    // Try to extract embedded artwork, fallback to cached folder artwork
+                    let artwork_cache = get_artwork_cache_dir();
+                    let mut artwork_path =
+                        MetadataExtractor::extract_artwork(&canonical_path, &artwork_cache);
+                    if artwork_path.is_none() {
+                        let album_hint = if !track.album_group_title.is_empty() {
+                            Some(track.album_group_title.as_str())
+                        } else {
+                            Some(track.album.as_str())
+                        };
+                        if let Some(folder_art) =
+                            MetadataExtractor::find_folder_artwork(&canonical_path, album_hint)
+                        {
+                            artwork_path = MetadataExtractor::cache_artwork_file(
+                                std::path::Path::new(&folder_art),
+                                &artwork_cache,
+                            );
+                        }
+                    }
+                    track.artwork_path = artwork_path;
+
+                    let guard__ = state.db.lock().await;
+                    let db = guard__
+                        .as_ref()
+                        .ok_or("No active session - please log in")?;
+                    if let Err(e) = db.insert_track(&track) {
+                        all_errors.push(ScanError {
+                            file_path: path_str,
+                            error: e.to_string(),
+                        });
+                    } else if let (Some(artwork_path), false) = (
+                        track.artwork_path.as_ref(),
+                        track.album_group_key.is_empty(),
+                    ) {
+                        let _ = db.update_album_group_artwork(&track.album_group_key, artwork_path);
+                    }
+                }
+                Err(e) => {
+                    all_errors.push(ScanError {
+                        file_path: path_str,
+                        error: e.to_string(),
+                    });
+                }
+            }
+
+            {
+                let mut progress = state.scan_progress.lock().await;
+                progress.processed_files += 1;
+            }
+        }
+    }
+
+    // Clean up tracks whose files no longer exist on disk
+    {
+        let mut progress = state.scan_progress.lock().await;
+        progress.current_file = Some("Cleaning up missing files...".to_string());
+    }
+    {
+        let guard__ = state.db.lock().await;
+        if let Some(db) = guard__.as_ref() {
+            if let Ok(tracks) = db.get_all_track_paths() {
+                let missing_ids: Vec<i64> = tracks
+                    .iter()
+                    .filter(|(_, path)| !std::path::Path::new(path).exists())
+                    .map(|(id, _)| *id)
+                    .collect();
+                if !missing_ids.is_empty() {
+                    log::info!("Removing {} tracks with missing files", missing_ids.len());
+                    for chunk in missing_ids.chunks(500) {
+                        if let Err(e) = db.delete_tracks_by_ids(chunk) {
+                            log::error!("Failed to delete missing tracks: {}", e);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Mark complete
+    {
+        let mut progress = state.scan_progress.lock().await;
+        progress.status = if all_errors.is_empty() {
+            ScanStatus::Complete
+        } else {
+            ScanStatus::Complete // Still complete, but with errors
+        };
+        progress.current_file = None;
+        progress.errors = all_errors;
+    }
+
+    log::info!("Library scan complete");
+    Ok(())
 }
 
 #[tauri::command]
 pub async fn v2_library_stop_scan(
     state: State<'_, crate::library::LibraryState>,
 ) -> Result<(), String> {
-    crate::library::library_stop_scan_impl(state).await
+    use std::sync::atomic::Ordering;
+    log::info!("Command: library_stop_scan");
+    state.scan_cancel.store(true, Ordering::Relaxed);
+    Ok(())
 }
 
 #[tauri::command]
@@ -1162,14 +1922,287 @@ pub async fn v2_library_scan_folder(
     folder_id: i64,
     state: State<'_, crate::library::LibraryState>,
 ) -> Result<(), String> {
-    crate::library::library_scan_folder_impl(folder_id, state).await
+    use std::sync::atomic::Ordering;
+    use crate::library::{ScanError, ScanProgress, ScanStatus, LibraryScanner, MetadataExtractor, CueParser, get_artwork_cache_dir};
+
+    log::info!("Command: library_scan_folder {}", folder_id);
+
+    // Get folder info
+    let folder = {
+        let guard__ = state.db.lock().await;
+        let db = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
+        db.get_folder_by_id(folder_id)
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| format!("Folder with ID {} not found", folder_id))?
+    };
+
+    if !folder.enabled {
+        return Err("Cannot scan disabled folder".to_string());
+    }
+
+    // Refresh network detection if not user overridden
+    if !folder.user_override_network {
+        let path = std::path::Path::new(&folder.path);
+        let network_info = crate::network::is_network_path(path);
+
+        if network_info.is_network != folder.is_network {
+            log::info!(
+                "Updating network status for folder {} during scan: {} -> {}",
+                folder.path,
+                folder.is_network,
+                network_info.is_network
+            );
+
+            let fs_type = network_info.mount_info.as_ref().and_then(|mi| {
+                if let crate::network::MountKind::Network(nfs) = &mi.kind {
+                    Some(format!("{:?}", nfs).to_lowercase())
+                } else {
+                    None
+                }
+            });
+
+            let guard__ = state.db.lock().await;
+            let db = guard__
+                .as_ref()
+                .ok_or("No active session - please log in")?;
+            let _ = db.update_folder_settings(
+                folder.id,
+                folder.alias.as_deref(),
+                folder.enabled,
+                network_info.is_network,
+                fs_type.as_deref(),
+                false,
+            );
+        }
+    }
+
+    // Reset cancel flag and progress
+    state.scan_cancel.store(false, Ordering::Relaxed);
+    {
+        let mut progress = state.scan_progress.lock().await;
+        *progress = ScanProgress {
+            status: ScanStatus::Scanning,
+            total_files: 0,
+            processed_files: 0,
+            current_file: None,
+            errors: Vec::new(),
+        };
+    }
+
+    let scanner = LibraryScanner::new();
+    let mut all_errors: Vec<ScanError> = Vec::new();
+    let mut sidecar_cache: std::collections::HashMap<String, Option<crate::library::AlbumTagSidecar>> =
+        std::collections::HashMap::new();
+
+    log::info!("Scanning single folder: {}", folder.path);
+
+    // Scan for files
+    let scan_result = match scanner.scan_directory(std::path::Path::new(&folder.path)) {
+        Ok(result) => result,
+        Err(e) => {
+            let mut progress = state.scan_progress.lock().await;
+            progress.status = ScanStatus::Complete;
+            progress.errors = vec![ScanError {
+                file_path: folder.path.clone(),
+                error: e.to_string(),
+            }];
+            return Err(e.to_string());
+        }
+    };
+
+    let total_files = scan_result.audio_files.len() + scan_result.cue_files.len();
+
+    // Update total count
+    {
+        let mut progress = state.scan_progress.lock().await;
+        progress.total_files = total_files as u32;
+    }
+
+    // Process CUE files first
+    for cue_path in &scan_result.cue_files {
+        if state.scan_cancel.load(Ordering::Relaxed) {
+            let mut progress = state.scan_progress.lock().await;
+            progress.status = ScanStatus::Cancelled;
+            progress.current_file = None;
+            log::info!("Library scan cancelled by user");
+            return Ok(());
+        }
+
+        {
+            let mut progress = state.scan_progress.lock().await;
+            progress.current_file = Some(cue_path.to_string_lossy().to_string());
+        }
+
+        match library_process_cue_file(cue_path, &state).await {
+            Ok(_) => {}
+            Err(e) => {
+                all_errors.push(ScanError {
+                    file_path: cue_path.to_string_lossy().to_string(),
+                    error: e,
+                });
+            }
+        }
+
+        {
+            let mut progress = state.scan_progress.lock().await;
+            progress.processed_files += 1;
+        }
+    }
+
+    // Process regular audio files
+    let cue_audio_files: HashSet<String> = scan_result
+        .cue_files
+        .iter()
+        .filter_map(|p| {
+            CueParser::parse(p).ok().map(|cue| {
+                library_normalize_path(std::path::Path::new(&cue.audio_file))
+                    .to_string_lossy()
+                    .to_string()
+            })
+        })
+        .collect();
+
+    for audio_path in &scan_result.audio_files {
+        if state.scan_cancel.load(Ordering::Relaxed) {
+            let mut progress = state.scan_progress.lock().await;
+            progress.status = ScanStatus::Cancelled;
+            progress.current_file = None;
+            log::info!("Library scan cancelled by user");
+            return Ok(());
+        }
+
+        let canonical_path = library_normalize_path(audio_path);
+        let path_str = canonical_path.to_string_lossy().to_string();
+        if cue_audio_files.contains(&path_str) {
+            let mut progress = state.scan_progress.lock().await;
+            progress.processed_files += 1;
+            continue;
+        }
+
+        {
+            let mut progress = state.scan_progress.lock().await;
+            progress.current_file = Some(path_str.clone());
+        }
+
+        match MetadataExtractor::extract(&canonical_path) {
+            Ok(mut track) => {
+                library_apply_sidecar_override_if_present(&mut track, &mut sidecar_cache);
+                let artwork_cache = get_artwork_cache_dir();
+                let mut artwork_path =
+                    MetadataExtractor::extract_artwork(&canonical_path, &artwork_cache);
+                if artwork_path.is_none() {
+                    if let Some(folder_art) = MetadataExtractor::find_folder_artwork(
+                        canonical_path.as_path(),
+                        Some(&track.album),
+                    ) {
+                        artwork_path = MetadataExtractor::cache_artwork_file(
+                            std::path::Path::new(&folder_art),
+                            &artwork_cache,
+                        );
+                    }
+                }
+                track.artwork_path = artwork_path.clone();
+
+                let guard__ = state.db.lock().await;
+                let db = guard__
+                    .as_ref()
+                    .ok_or("No active session - please log in")?;
+                let group_key = track.album_group_key.clone();
+                if let Err(e) = db.insert_track(&track) {
+                    all_errors.push(ScanError {
+                        file_path: path_str,
+                        error: e.to_string(),
+                    });
+                } else if let Some(path) = artwork_path.as_ref() {
+                    if !group_key.is_empty() {
+                        let _ = db.update_album_group_artwork(&group_key, path);
+                    }
+                }
+            }
+            Err(e) => {
+                all_errors.push(ScanError {
+                    file_path: path_str,
+                    error: e.to_string(),
+                });
+            }
+        }
+
+        {
+            let mut progress = state.scan_progress.lock().await;
+            progress.processed_files += 1;
+        }
+    }
+
+    // Clean up tracks in this folder whose files no longer exist on disk
+    {
+        let mut progress = state.scan_progress.lock().await;
+        progress.current_file = Some("Cleaning up missing files...".to_string());
+    }
+    {
+        let guard__ = state.db.lock().await;
+        let db = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
+        if let Ok(tracks) = db.get_all_track_paths() {
+            let folder_prefix = if folder.path.ends_with('/') {
+                folder.path.clone()
+            } else {
+                format!("{}/", folder.path)
+            };
+            let missing_ids: Vec<i64> = tracks
+                .iter()
+                .filter(|(_, path)| {
+                    path.starts_with(&folder_prefix) && !std::path::Path::new(path).exists()
+                })
+                .map(|(id, _)| *id)
+                .collect();
+            if !missing_ids.is_empty() {
+                log::info!(
+                    "Removing {} tracks with missing files from folder {}",
+                    missing_ids.len(),
+                    folder.path
+                );
+                for chunk in missing_ids.chunks(500) {
+                    if let Err(e) = db.delete_tracks_by_ids(chunk) {
+                        log::error!("Failed to delete missing tracks: {}", e);
+                    }
+                }
+            }
+        }
+
+        // Update folder scan time
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        let _ = db.update_folder_scan_time(&folder.path, now);
+    }
+
+    // Update final status
+    {
+        let mut progress = state.scan_progress.lock().await;
+        progress.status = ScanStatus::Complete;
+        progress.current_file = None;
+        progress.errors = all_errors;
+    }
+
+    log::info!("Single folder scan complete");
+    Ok(())
 }
 
 #[tauri::command]
 pub async fn v2_library_clear(
     state: State<'_, crate::library::LibraryState>,
 ) -> Result<(), String> {
-    crate::library::library_clear_impl(state).await
+    log::info!("Command: library_clear");
+
+    let guard__ = state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
+    db.clear_all_tracks().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1177,7 +2210,104 @@ pub async fn v2_library_update_album_metadata(
     request: crate::library::LibraryAlbumMetadataUpdateRequest,
     state: State<'_, crate::library::LibraryState>,
 ) -> Result<(), String> {
-    crate::library::library_update_album_metadata_impl(request, state).await
+    log::info!(
+        "Command: library_update_album_metadata {}",
+        request.album_group_key
+    );
+
+    if request.album_group_key.trim().is_empty() {
+        return Err("Album ID is required.".to_string());
+    }
+    if request.album_title.trim().is_empty() {
+        return Err("Album title is required.".to_string());
+    }
+    if request.tracks.is_empty() {
+        return Err("Album track list is empty.".to_string());
+    }
+
+    let album_dir = PathBuf::from(request.album_group_key.trim());
+    if !album_dir.is_dir() {
+        return Err("Album folder not found on disk.".to_string());
+    }
+
+    // Write sidecar first (persistence), then update DB.
+    let sidecar_result = tokio::task::spawn_blocking({
+        let album_dir = album_dir.clone();
+        let request = request.clone();
+        move || -> Result<(), String> {
+            let album = crate::library::AlbumMetadataOverride {
+                album_title: Some(request.album_title.trim().to_string()),
+                album_artist: Some(request.album_artist.trim().to_string())
+                    .filter(|s| !s.is_empty()),
+                year: request.year,
+                genre: request
+                    .genre
+                    .as_ref()
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty()),
+                catalog_number: request
+                    .catalog_number
+                    .as_ref()
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty()),
+            };
+
+            let tracks = request
+                .tracks
+                .iter()
+                .map(|t| crate::library::TrackMetadataOverride {
+                    file_path: t.file_path.clone(),
+                    cue_start_secs: t.cue_start_secs,
+                    title: Some(t.title.trim().to_string()),
+                    disc_number: t.disc_number,
+                    track_number: t.track_number,
+                })
+                .collect::<Vec<_>>();
+
+            let sidecar = crate::library::AlbumTagSidecar::new(album, tracks);
+            crate::library::write_album_sidecar(&album_dir, &sidecar)
+                .map_err(|e| format!("Failed to write sidecar: {}", e))?;
+
+            Ok(())
+        }
+    })
+    .await
+    .map_err(|e| format!("Failed to write sidecar: {}", e))?;
+    sidecar_result?;
+
+    let mut guard__ = state.db.lock().await;
+    let db = guard__
+        .as_mut()
+        .ok_or("No active session - please log in")?;
+    let existing_tracks = db
+        .get_album_tracks(&request.album_group_key)
+        .map_err(|e| e.to_string())?;
+
+    let track_artist_match = library_compute_track_artist_match(&existing_tracks);
+    let track_updates = request
+        .tracks
+        .iter()
+        .map(|t| crate::library::AlbumTrackUpdate {
+            id: t.id,
+            title: t.title.clone(),
+            disc_number: t.disc_number,
+            track_number: t.track_number,
+        })
+        .collect::<Vec<_>>();
+
+    db.update_album_group_metadata(
+        &request.album_group_key,
+        &request.album_title,
+        &request.album_artist,
+        request.year,
+        request.genre.as_deref(),
+        request.catalog_number.as_deref(),
+        track_artist_match.as_deref(),
+        &track_updates,
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -1186,7 +2316,193 @@ pub async fn v2_library_write_album_metadata_to_files(
     request: crate::library::LibraryAlbumMetadataUpdateRequest,
     state: State<'_, crate::library::LibraryState>,
 ) -> Result<(), String> {
-    crate::library::library_write_album_metadata_to_files_impl(app, request, state).await
+    use std::collections::HashMap;
+    use crate::library::LibraryAlbumTrackMetadataUpdate;
+
+    log::info!(
+        "Command: library_write_album_metadata_to_files {}",
+        request.album_group_key
+    );
+
+    if request.album_group_key.trim().is_empty() {
+        return Err("Album ID is required.".to_string());
+    }
+    if request.album_title.trim().is_empty() {
+        return Err("Album title is required.".to_string());
+    }
+    if request.tracks.is_empty() {
+        return Err("Album track list is empty.".to_string());
+    }
+
+    let guard__ = state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
+    let existing_tracks = db
+        .get_album_tracks(&request.album_group_key)
+        .map_err(|e| e.to_string())?;
+    if existing_tracks
+        .iter()
+        .any(|t| t.cue_file_path.is_some() || t.cue_start_secs.is_some())
+    {
+        return Err("Writing tags to files is not supported for CUE-based albums. Use sidecar mode instead.".to_string());
+    }
+    drop(guard__);
+
+    let album_dir = PathBuf::from(request.album_group_key.trim());
+    if !album_dir.is_dir() {
+        return Err("Album folder not found on disk.".to_string());
+    }
+
+    // Write embedded tags for each track file.
+    let write_result = tokio::task::spawn_blocking({
+        let request = request.clone();
+        move || -> Result<(), String> {
+            use lofty::prelude::*;
+            use lofty::tag::{ItemKey, Tag};
+            use lofty::config::WriteOptions;
+
+            // Ensure we only write each file once.
+            let mut by_file: HashMap<String, &LibraryAlbumTrackMetadataUpdate> = HashMap::new();
+            for track in &request.tracks {
+                by_file.entry(track.file_path.clone()).or_insert(track);
+            }
+
+            let total = by_file.len();
+            let mut current = 0usize;
+
+            for (file_path, track) in by_file {
+                current += 1;
+                // Emit progress event
+                let _ = app.emit("library:tag_write_progress", serde_json::json!({
+                    "current": current,
+                    "total": total
+                }));
+                let path = std::path::Path::new(&file_path);
+                if !path.is_file() {
+                    return Err("One or more audio files were not found on disk.".to_string());
+                }
+
+                let mut tagged_file =
+                    lofty::read_from_path(path).map_err(|_| "Failed to read audio file tags.".to_string())?;
+
+                let primary_type = tagged_file.primary_tag_type();
+                if tagged_file.primary_tag_mut().is_none() && tagged_file.first_tag_mut().is_none() {
+                    tagged_file.insert_tag(Tag::new(primary_type));
+                }
+
+                {
+                    let tag = if let Some(tag) = tagged_file.primary_tag_mut() {
+                        tag
+                    } else if let Some(tag) = tagged_file.first_tag_mut() {
+                        tag
+                    } else {
+                        return Err("Failed to access audio file tags.".to_string());
+                    };
+
+                    tag.set_title(track.title.trim().to_string());
+                    tag.set_album(request.album_title.trim().to_string());
+                    tag.set_artist(request.album_artist.trim().to_string());
+
+                    if let Some(no) = track.track_number {
+                        tag.set_track(no);
+                    }
+                    if let Some(disc) = track.disc_number {
+                        tag.set_disk(disc);
+                    }
+
+                    // Album artist (not part of Accessor).
+                    if request.album_artist.trim().is_empty() {
+                        tag.remove_key(ItemKey::AlbumArtist);
+                    } else {
+                        tag.insert_text(ItemKey::AlbumArtist, request.album_artist.trim().to_string());
+                    }
+
+                    // Year / Genre
+                    if let Some(year) = request.year {
+                        tag.set_date(lofty::tag::items::Timestamp {
+                            year: year as u16,
+                            ..Default::default()
+                        });
+                    } else {
+                        tag.remove_date();
+                    }
+
+                    if let Some(ref genre) = request.genre {
+                        let g = genre.trim();
+                        if g.is_empty() {
+                            tag.remove_genre();
+                        } else {
+                            tag.set_genre(g.to_string());
+                        }
+                    } else {
+                        tag.remove_genre();
+                    }
+
+                    if let Some(ref cat) = request.catalog_number {
+                        let c = cat.trim();
+                        if c.is_empty() {
+                            tag.remove_key(ItemKey::CatalogNumber);
+                        } else {
+                            tag.insert_text(ItemKey::CatalogNumber, c.to_string());
+                        }
+                    } else {
+                        tag.remove_key(ItemKey::CatalogNumber);
+                    }
+                }
+
+                tagged_file
+                    .save_to_path(path, WriteOptions::default())
+                    .map_err(|_| "Failed to write tags to audio files. Check that the album folder is mounted read-write and you have permissions.".to_string())?;
+            }
+
+            Ok(())
+        }
+    })
+    .await
+    .map_err(|e| format!("Failed to write tags: {}", e))?;
+    write_result?;
+
+    // Remove sidecar (direct-edit mode disables sidecar persistence).
+    let _ = tokio::task::spawn_blocking({
+        let album_dir = album_dir.clone();
+        move || crate::library::delete_album_sidecar(&album_dir)
+    })
+    .await;
+
+    // Update DB from the requested values.
+    let mut guard__ = state.db.lock().await;
+    let db = guard__
+        .as_mut()
+        .ok_or("No active session - please log in")?;
+    let existing_tracks = db
+        .get_album_tracks(&request.album_group_key)
+        .map_err(|e| e.to_string())?;
+    let track_artist_match = library_compute_track_artist_match(&existing_tracks);
+    let track_updates = request
+        .tracks
+        .iter()
+        .map(|t| crate::library::AlbumTrackUpdate {
+            id: t.id,
+            title: t.title.clone(),
+            disc_number: t.disc_number,
+            track_number: t.track_number,
+        })
+        .collect::<Vec<_>>();
+
+    db.update_album_group_metadata(
+        &request.album_group_key,
+        &request.album_title,
+        &request.album_artist,
+        request.year,
+        request.genre.as_deref(),
+        request.catalog_number.as_deref(),
+        track_artist_match.as_deref(),
+        &track_updates,
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -1194,7 +2510,93 @@ pub async fn v2_library_refresh_album_metadata_from_files(
     album_group_key: String,
     state: State<'_, crate::library::LibraryState>,
 ) -> Result<(), String> {
-    crate::library::library_refresh_album_metadata_from_files_impl(album_group_key, state).await
+    log::info!(
+        "Command: library_refresh_album_metadata_from_files {}",
+        album_group_key
+    );
+
+    if album_group_key.trim().is_empty() {
+        return Err("Album ID is required.".to_string());
+    }
+
+    let guard__ = state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
+    let existing_tracks = db
+        .get_album_tracks(&album_group_key)
+        .map_err(|e| e.to_string())?;
+    if existing_tracks.is_empty() {
+        return Err("Album not found.".to_string());
+    }
+    if existing_tracks
+        .iter()
+        .any(|t| t.cue_file_path.is_some() || t.cue_start_secs.is_some())
+    {
+        return Err(
+            "Refreshing metadata from files is not supported for CUE-based albums.".to_string(),
+        );
+    }
+    drop(guard__);
+
+    let album_dir = PathBuf::from(album_group_key.trim());
+    if !album_dir.is_dir() {
+        return Err("Album folder not found on disk.".to_string());
+    }
+
+    // Delete sidecar, then refresh DB from embedded tags.
+    let refresh = tokio::task::spawn_blocking({
+        let existing_tracks = existing_tracks.clone();
+        let album_dir = album_dir.clone();
+        move || -> Result<Vec<crate::library::TrackMetadataUpdateFull>, String> {
+            let _ = crate::library::delete_album_sidecar(&album_dir);
+
+            let mut updates: Vec<crate::library::TrackMetadataUpdateFull> = Vec::new();
+            for track in existing_tracks {
+                let path = std::path::Path::new(&track.file_path);
+                if !path.is_file() {
+                    return Err("One or more audio files were not found on disk.".to_string());
+                }
+
+                let extracted = crate::library::MetadataExtractor::extract(path)
+                    .map_err(|_| "Failed to read audio file tags.".to_string())?;
+
+                let album_group_title = if extracted.album_group_title.trim().is_empty() {
+                    extracted.album.clone()
+                } else {
+                    extracted.album_group_title.clone()
+                };
+
+                updates.push(crate::library::TrackMetadataUpdateFull {
+                    id: track.id,
+                    title: extracted.title,
+                    artist: extracted.artist,
+                    album: extracted.album,
+                    album_artist: extracted.album_artist,
+                    album_group_title,
+                    track_number: extracted.track_number,
+                    disc_number: extracted.disc_number,
+                    year: extracted.year,
+                    genre: extracted.genre,
+                    catalog_number: extracted.catalog_number,
+                });
+            }
+
+            Ok(updates)
+        }
+    })
+    .await
+    .map_err(|e| format!("Failed to refresh metadata: {}", e))?;
+    let updates = refresh?;
+
+    let mut guard__ = state.db.lock().await;
+    let db = guard__
+        .as_mut()
+        .ok_or("No active session - please log in")?;
+    db.update_tracks_metadata_by_id(&updates)
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -1300,6 +2702,13 @@ pub fn v2_set_qobuz_tos_accepted(
 }
 
 #[tauri::command]
+pub fn v2_get_qobuz_tos_accepted(
+    state: State<'_, crate::config::legal_settings::LegalSettingsState>,
+) -> Result<bool, String> {
+    crate::config::legal_settings::get_qobuz_tos_accepted(state)
+}
+
+#[tauri::command]
 pub fn v2_set_update_check_on_launch(
     enabled: bool,
     state: State<'_, crate::updates::UpdatesState>,
@@ -1383,6 +2792,13 @@ pub fn v2_mark_flatpak_welcome_shown(
 }
 
 #[tauri::command]
+pub fn v2_has_flatpak_welcome_been_shown(
+    state: State<'_, crate::updates::UpdatesState>,
+) -> Result<bool, String> {
+    crate::updates::has_flatpak_welcome_been_shown(state)
+}
+
+#[tauri::command]
 pub fn v2_get_backend_logs() -> Vec<String> {
     crate::logging::get_backend_logs()
 }
@@ -1410,8 +2826,27 @@ pub fn v2_get_download_settings(
 #[tauri::command]
 pub async fn v2_lyrics_get_cache_stats(
     state: State<'_, crate::lyrics::LyricsState>,
-) -> Result<crate::lyrics::commands::LyricsCacheStats, String> {
-    crate::lyrics::commands::lyrics_get_cache_stats(state).await
+) -> Result<V2LyricsCacheStats, String> {
+    let entries = {
+        let db_opt__ = state.db.lock().await;
+        let db = db_opt__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
+        db.count_entries()?
+    };
+
+    // Approximate on-disk usage as the SQLite DB file size.
+    let db_path = dirs::cache_dir()
+        .ok_or("Could not determine cache directory")?
+        .join("qbz")
+        .join("lyrics")
+        .join("lyrics.db");
+    let size_bytes = std::fs::metadata(&db_path).map(|m| m.len()).unwrap_or(0);
+
+    Ok(V2LyricsCacheStats {
+        entries,
+        size_bytes,
+    })
 }
 
 #[tauri::command]
@@ -1470,6 +2905,16 @@ pub fn v2_is_running_in_flatpak() -> bool {
 }
 
 #[tauri::command]
+pub fn v2_get_flatpak_help_text() -> String {
+    crate::flatpak::get_flatpak_guidance()
+}
+
+#[tauri::command]
+pub fn v2_detect_desktop_theme() -> crate::desktop_theme::DesktopThemeInfo {
+    crate::desktop_theme::detect_desktop_theme()
+}
+
+#[tauri::command]
 pub fn v2_is_auto_update_eligible() -> bool {
     crate::updates::is_auto_update_eligible()
 }
@@ -1484,6 +2929,13 @@ pub fn v2_mark_snap_welcome_shown(
     state: State<'_, crate::updates::UpdatesState>,
 ) -> Result<(), String> {
     crate::updates::mark_snap_welcome_shown(state)
+}
+
+#[tauri::command]
+pub fn v2_has_snap_welcome_been_shown(
+    state: State<'_, crate::updates::UpdatesState>,
+) -> Result<bool, String> {
+    crate::updates::has_snap_welcome_been_shown(state)
 }
 
 #[tauri::command]

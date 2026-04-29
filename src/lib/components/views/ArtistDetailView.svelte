@@ -1,5 +1,6 @@
 <script lang="ts">
   import { invoke, convertFileSrc } from '@tauri-apps/api/core';
+  import { formatTrackTitle } from '$lib/utils/trackTitle';
   import { cmdAddTracksToQueue, cmdAddTracksToQueueNext } from '$lib/services/commandRouter';
   import { open, save } from '@tauri-apps/plugin-dialog';
   import { openUrl } from '@tauri-apps/plugin-opener';
@@ -17,6 +18,7 @@
   import { showToast } from '$lib/stores/toastStore';
   import { openAddToMixtape } from '$lib/stores/addToMixtapeModalStore';
   import type { ArtistDetail, QobuzArtist, PageArtistTrack, PageArtistSimilarItem } from '$lib/types';
+  import { applyShiftRange, isSelectAllShortcut } from '$lib/utils/multiSelect';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackMenu from '../TrackMenu.svelte';
   import BulkActionBar from '../BulkActionBar.svelte';
@@ -40,6 +42,8 @@
   interface Track {
     id: number;
     title: string;
+    /** Qobuz subtitle/edition (e.g. "Player's Ball Mix") (#360). */
+    version?: string | null;
     duration: number;
     album?: {
       id: string;
@@ -61,6 +65,8 @@
   interface DisplayTrack {
     id: number;
     title: string;
+    /** Qobuz subtitle/edition (#360). */
+    version?: string | null;
     artist: string;
     album: string;
     albumArt: string;
@@ -399,16 +405,32 @@
   // Multi-select (popular tracks)
   let multiSelectMode = $state(false);
   let multiSelectedIds = $state(new Set<number>());
+  let lastSelectedIndex = $state<number | null>(null);
 
   function toggleMultiSelectMode() {
     multiSelectMode = !multiSelectMode;
-    if (!multiSelectMode) multiSelectedIds = new Set();
+    if (!multiSelectMode) {
+      multiSelectedIds = new Set();
+      lastSelectedIndex = null;
+    }
   }
 
-  function toggleMultiSelect(id: number) {
+  function toggleMultiSelect(id: number, index: number, event?: MouseEvent | KeyboardEvent) {
+    if (event?.shiftKey && lastSelectedIndex !== null) {
+      const ids = visibleTracks.map(track => track.id);
+      multiSelectedIds = applyShiftRange({
+        current: multiSelectedIds,
+        ids,
+        lastIndex: lastSelectedIndex,
+        currentIndex: index,
+      });
+      lastSelectedIndex = index;
+      return;
+    }
     const next = new Set(multiSelectedIds);
     if (next.has(id)) next.delete(id); else next.add(id);
     multiSelectedIds = next;
+    lastSelectedIndex = index;
   }
 
   function toggleSelectAll() {
@@ -419,6 +441,17 @@
       multiSelectedIds = new Set(allIds);
     }
   }
+
+  $effect(() => {
+    if (!multiSelectMode) return;
+    const handler = (e: KeyboardEvent) => {
+      if (!isSelectAllShortcut(e)) return;
+      e.preventDefault();
+      multiSelectedIds = new Set(visibleTracks.map(track => track.id));
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  });
 
   const selectAllState = $derived(
     !visibleTracks || visibleTracks.length === 0 ? 'none' as const
@@ -433,6 +466,7 @@
       .map(trk => ({
         id: trk.id,
         title: trk.title,
+        version: trk.version ?? null,
         artist: trk.performer?.name || artist?.name || 'Unknown',
         album: trk.album?.title || '',
         duration_secs: trk.duration,
@@ -527,6 +561,7 @@
     return tracks.map(track => ({
       id: track.id,
       title: track.title,
+      version: track.version ?? null,
       duration: track.duration ?? 0,
       album: track.album ? {
         id: track.album.id,
@@ -746,6 +781,7 @@
         onTrackPlay({
           id: firstTrack.id,
           title: firstTrack.title,
+          version: firstTrack.version ?? null,
           artist: firstTrack.artist,
           album: firstTrack.album,
           albumArt: firstTrack.artwork_url || '',
@@ -798,6 +834,7 @@
         onTrackPlay({
           id: firstTrack.id,
           title: firstTrack.title,
+          version: firstTrack.version ?? null,
           artist: firstTrack.artist,
           album: firstTrack.album,
           albumArt: firstTrack.artwork_url || '',
@@ -838,6 +875,7 @@
         onTrackPlay({
           id: firstTrack.id,
           title: firstTrack.title,
+          version: firstTrack.version ?? null,
           artist: firstTrack.artist,
           album: firstTrack.album,
           albumArt: firstTrack.artwork_url || '',
@@ -876,6 +914,7 @@
         onTrackPlay({
           id: firstTrack.id,
           title: firstTrack.title,
+          version: firstTrack.version ?? null,
           artist: firstTrack.artist,
           album: firstTrack.album,
           albumArt: firstTrack.artwork_url || '',
@@ -1187,6 +1226,7 @@
     return tracks.map((track) => ({
       id: track.id,
       title: track.title,
+      version: track.version ?? null,
       artist: track.performer?.name || artist.name,
       album: track.album?.title || '',
       duration_secs: track.duration,
@@ -1232,6 +1272,7 @@
       onTrackPlay({
         id: track.id,
         title: track.title,
+        version: track.version ?? null,
         artist: track.performer?.name || artist.name,
         album: track.album?.title || '',
         albumArt: track.album?.image?.large || track.album?.image?.thumbnail || '',
@@ -2106,8 +2147,8 @@
                 }
                 document.body.appendChild(ghost); e.dataTransfer.setDragImage(ghost, 0, 20); requestAnimationFrame(() => ghost.remove());
               }}
-              onclick={() => multiSelectMode ? toggleMultiSelect(track.id) : handleTrackPlay(track, index)}
-              onkeydown={(e) => e.key === 'Enter' && (multiSelectMode ? toggleMultiSelect(track.id) : handleTrackPlay(track, index))}
+              onclick={(e) => multiSelectMode ? toggleMultiSelect(track.id, index, e) : handleTrackPlay(track, index)}
+              onkeydown={(e) => e.key === 'Enter' && (multiSelectMode ? toggleMultiSelect(track.id, index, e) : handleTrackPlay(track, index))}
               oncontextmenu={(e) => {
                 if (multiSelectMode) return;
                 e.preventDefault();
@@ -2116,11 +2157,18 @@
             >
               {#if multiSelectMode}
                 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
-                <label class="track-checkbox-wrap" onclick={(e) => e.stopPropagation()}>
+                <label
+                  class="track-checkbox-wrap"
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    toggleMultiSelect(track.id, index, e);
+                  }}
+                >
                   <input
                     type="checkbox"
                     checked={multiSelectedIds.has(track.id)}
-                    onchange={() => toggleMultiSelect(track.id)}
+                    tabindex={-1}
+                    onclick={(e) => e.preventDefault()}
                     aria-label={$t('actions.select')}
                     style="width:15px;height:15px;cursor:pointer;accent-color:var(--accent-primary);"
                   />
@@ -2165,7 +2213,7 @@
                 </button>
               </div>
               <div class="track-info">
-                <div class="track-title">{track.title}</div>
+                <div class="track-title">{formatTrackTitle(track)}</div>
                 {#if track.album?.id && onTrackGoToAlbum}
                   <button
                     class="track-album track-link"
@@ -3039,8 +3087,14 @@
     width: 100%;
     height: 100%;
     /* Standard root-view padding — matches AlbumDetailView / FavoritesView /
-       PlaylistDetailView so the Back button and hero line up across the app. */
-    padding: 8px 8px 0 18px;
+       PlaylistDetailView so the Back button and hero line up across the app.
+       NOTE: padding-top is intentionally 0. CSS sticky pins to the
+       scrollport's inset edge, which is the *padding box* top — so any
+       padding-top on this container would translate into a visible gap
+       between the scroll container's border edge and the pinned
+       .jump-nav. The 8px breathing room that lived here moved onto
+       .back-btn's margin-top below. */
+    padding: 0 8px 0 18px;
     overflow-y: auto;
     position: relative;
   }
@@ -3318,7 +3372,10 @@
     background: none;
     border: none;
     cursor: pointer;
-    margin-top: 8px;
+    /* 16 = 8 (was on .artist-detail's padding-top, which had to go so the
+       sticky .jump-nav can pin at the actual visible top edge) + 8
+       (original margin). Keeps the visual offset identical to before. */
+    margin-top: 16px;
     margin-bottom: 24px;
     transition: color 150ms ease;
   }
@@ -3866,6 +3923,10 @@
 
   .jump-nav {
     position: sticky;
+    /* `top: 0` pins to the scrollport's padding-box top. Now that
+       .artist-detail has padding-top: 0 the padding-box top coincides
+       with the visible top edge, so the bar pins flush — no gap, no
+       solid-color hack needed. */
     top: 0;
     z-index: 50;
     display: flex;
@@ -3878,6 +3939,8 @@
     box-shadow: 0 4px 8px -4px rgba(0, 0, 0, 0.5);
     margin: 0 -8px 24px -24px;
     width: calc(100% + 32px);
+    will-change: transform;
+    transform: translateZ(0);
   }
 
   .jump-nav-left {

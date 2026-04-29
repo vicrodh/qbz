@@ -1,5 +1,6 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
+  import { formatTrackTitle } from '$lib/utils/trackTitle';
   import { X, Search, Play, Check, CircleAlert, LoaderCircle } from 'lucide-svelte';
   import { t } from '$lib/i18n';
 
@@ -189,7 +190,7 @@
                   {/if}
                 </div>
                 <div class="track-info">
-                  <div class="track-title">{track.title}</div>
+                  <div class="track-title">{formatTrackTitle(track)}</div>
                   <div class="track-meta">
                     <span class="artist">{track.performer?.name ?? 'Unknown'}</span>
                     <span class="separator">•</span>

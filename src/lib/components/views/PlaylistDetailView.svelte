@@ -2,6 +2,7 @@
   import { ArrowLeft, Play, Shuffle, ListMusic, Search, X, ChevronDown, ChevronRight, ChevronUp, ImagePlus, PenLine, ChartNoAxesColumn, Heart, CloudDownload, ListPlus, GripVertical, SquareCheckBig, Bookmark } from 'lucide-svelte';
   import AlbumMenu from '../AlbumMenu.svelte';
   import { openAddToMixtape } from '$lib/stores/addToMixtapeModalStore';
+  import { formatTrackTitle } from '$lib/utils/trackTitle';
   import PlaylistCollage from '../PlaylistCollage.svelte';
   import { cachedSrc } from '$lib/actions/cachedImage';
   import PlaylistModal from '../PlaylistModal.svelte';
@@ -30,6 +31,7 @@
   import { t } from '$lib/i18n';
   import { onMount, tick } from 'svelte';
   import { getUserItem, setUserItem } from '$lib/utils/userStorage';
+  import { applyShiftRange, isSelectAllShortcut } from '$lib/utils/multiSelect';
   import { replacePlaybackQueue } from '$lib/services/queuePlaybackService';
 
   interface PlaylistTrack {
@@ -365,6 +367,7 @@
   // Multi-select state (bulk actions, works in all sort modes)
   let multiSelectMode = $state(false);
   let multiSelectedKeys = $state(new Set<string>());
+  let lastSelectedIndex = $state<number | null>(null);
 
   // User ownership state (to show "Copy to Library" button for non-owned playlists)
   let currentUserId = $state<number | null>(null);
@@ -1182,45 +1185,66 @@
     }
   }
 
-  // Move a track to a new position
-  async function moveTrack(trackId: number, isLocal: boolean, fromIndex: number, toIndex: number) {
+  // Serializes concurrent moveTrack calls so backend writes land in the order
+  // the user issued them. Tauri's tokio mutex isn't strictly FIFO, so without
+  // this, two rapid clicks could persist out of order.
+  let pendingTrackReorder: Promise<void> = Promise.resolve();
+
+  // Move a track to a new position.
+  //
+  // Rebuilds `customOrderMap` from the visible displayTracks order with a
+  // clean 0..N-1 numbering, then ships the full ordering to
+  // `v2_playlist_set_custom_order` (which DELETEs + INSERTs the table for
+  // this playlist on the backend, so it self-heals any pre-existing
+  // corruption like duplicate or non-contiguous positions).
+  //
+  // The previous implementation shifted positions in-place using the click's
+  // `fromIndex/toIndex` (display-space) against `pos` values stored in the
+  // map (custom-order-space). That only worked when the two spaces aligned;
+  // any drift (e.g. a duplicate position from an earlier failed move)
+  // silently wedged the algorithm: clicks would no-op and the user had to
+  // toggle sort mode to force a re-fetch.
+  async function moveTrack(_trackId: number, _isLocal: boolean, fromIndex: number, toIndex: number) {
     if (fromIndex === toIndex) return;
+    if (fromIndex < 0 || fromIndex >= displayTracks.length) return;
+    if (toIndex < 0 || toIndex >= displayTracks.length) return;
 
-    // Optimistic update: reorder the map
-    const key = `${trackId}:${isLocal}`;
-    const newMap = new Map(customOrderMap);
+    // Build the canonical (trackId, isLocal) tuples in their CURRENT visible
+    // order, then splice the moved entry into its target slot.
+    const orderedKeys = displayTracks.map(trk => ({
+      trackId: (trk.isLocal ?? false) ? Math.abs(trk.id) : trk.id,
+      isLocal: trk.isLocal ?? false,
+    }));
+    const [moved] = orderedKeys.splice(fromIndex, 1);
+    orderedKeys.splice(toIndex, 0, moved);
 
-    // Adjust positions
-    for (const [k, pos] of newMap) {
-      if (k === key) {
-        newMap.set(k, toIndex);
-      } else if (fromIndex < toIndex) {
-        // Moving down: shift tracks between from+1 and to up
-        if (pos > fromIndex && pos <= toIndex) {
-          newMap.set(k, pos - 1);
-        }
-      } else {
-        // Moving up: shift tracks between to and from-1 down
-        if (pos >= toIndex && pos < fromIndex) {
-          newMap.set(k, pos + 1);
-        }
-      }
-    }
+    // Rewrite the map with contiguous 0..N-1 positions — guarantees no ties
+    // and no gaps regardless of what state we started from.
+    const newMap = new Map<string, number>();
+    orderedKeys.forEach((entry, idx) => {
+      newMap.set(`${entry.trackId}:${entry.isLocal}`, idx);
+    });
     customOrderMap = newMap;
 
-    // Persist to backend
-    try {
-      await invoke('v2_playlist_move_track', {
-        playlistId,
-        trackId: Math.abs(trackId),
-        isLocal,
-        newPosition: toIndex
+    // Serialize backend writes; the backend command is a full DELETE + INSERT
+    // so the latest call always wins and earlier in-flight calls don't matter
+    // semantically — but we still chain to keep observability sane.
+    const orders: Array<[number, boolean, number]> = orderedKeys.map((entry, idx) => [
+      entry.trackId,
+      entry.isLocal,
+      idx,
+    ]);
+    pendingTrackReorder = pendingTrackReorder
+      .catch(() => undefined)
+      .then(async () => {
+        try {
+          await invoke('v2_playlist_set_custom_order', { playlistId, orders });
+        } catch (err) {
+          console.error('Failed to persist custom order:', err);
+          await loadOrInitCustomOrder();
+        }
       });
-    } catch (err) {
-      console.error('Failed to move track:', err);
-      // Reload to get consistent state
-      await loadOrInitCustomOrder();
-    }
+    await pendingTrackReorder;
   }
 
   // Helper to move track up one position
@@ -1316,14 +1340,29 @@
 
   function toggleMultiSelectMode() {
     multiSelectMode = !multiSelectMode;
-    if (!multiSelectMode) multiSelectedKeys = new Set();
+    if (!multiSelectMode) {
+      multiSelectedKeys = new Set();
+      lastSelectedIndex = null;
+    }
   }
 
-  function toggleMultiSelect(track: DisplayTrack) {
+  function toggleMultiSelect(track: DisplayTrack, index: number, event?: MouseEvent | KeyboardEvent) {
     const key = getTrackKey(track);
+    if (event?.shiftKey && lastSelectedIndex !== null) {
+      const keys = displayTracks.map(trk => getTrackKey(trk));
+      multiSelectedKeys = applyShiftRange({
+        current: multiSelectedKeys,
+        ids: keys,
+        lastIndex: lastSelectedIndex,
+        currentIndex: index,
+      });
+      lastSelectedIndex = index;
+      return;
+    }
     const next = new Set(multiSelectedKeys);
     if (next.has(key)) next.delete(key); else next.add(key);
     multiSelectedKeys = next;
+    lastSelectedIndex = index;
   }
 
   function toggleSelectAll() {
@@ -1334,6 +1373,17 @@
       multiSelectedKeys = new Set(allKeys);
     }
   }
+
+  $effect(() => {
+    if (!multiSelectMode) return;
+    const handler = (e: KeyboardEvent) => {
+      if (!isSelectAllShortcut(e)) return;
+      e.preventDefault();
+      multiSelectedKeys = new Set(displayTracks.map(track => getTrackKey(track)));
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  });
 
   async function handleBulkPlayNext() {
     const selected = displayTracks.filter(trk => multiSelectedKeys.has(getTrackKey(trk)));
@@ -2697,11 +2747,18 @@
             {#if multiSelectMode && !isCustomOrderMode}
               {@const trackKey = getTrackKey(track)}
               <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
-              <label class="track-checkbox" onclick={(e: MouseEvent) => e.stopPropagation()}>
+              <label
+                class="track-checkbox"
+                onclick={(e: MouseEvent) => {
+                  e.stopPropagation();
+                  toggleMultiSelect(track, idx, e);
+                }}
+              >
                 <input
                   type="checkbox"
                   checked={multiSelectedKeys.has(trackKey)}
-                  onchange={() => toggleMultiSelect(track)}
+                  tabindex={-1}
+                  onclick={(e) => e.preventDefault()}
                   aria-label={$t('actions.select')}
                 />
               </label>
@@ -2742,7 +2799,7 @@
             <TrackRow
               trackId={track.isLocal ? undefined : track.id}
               number={idx + 1}
-              title={track.title}
+              title={formatTrackTitle(track)}
               artist={track.artist}
               album={track.album}
               showArtwork={true}
@@ -2890,7 +2947,12 @@
 
 <style>
   .playlist-detail {
-    padding: 8px 8px 100px 18px;
+    /* padding-top is intentionally 0. CSS sticky pins to the
+       scrollport's padding-box top — any padding-top here would push
+       the pinned .tracks-sticky-header that many pixels below the
+       visible top edge, leaving a gap. The 8px breathing room moved
+       onto .nav-row's margin-top below. */
+    padding: 0 8px 100px 18px;
     overflow-y: auto;
     height: 100%;
   }
@@ -2917,6 +2979,9 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    /* 8 was on .playlist-detail's padding-top, which had to go so the
+       .tracks-sticky-header pins flush to the visible top. */
+    margin-top: 8px;
     margin-bottom: 24px;
   }
 
@@ -3204,9 +3269,20 @@
      whole scroll range instead of getting dragged out with .view-transition. */
   .tracks-sticky-header {
     position: sticky;
+    /* `top: 0` pins to the scrollport's padding-box top. Now that
+       .playlist-detail has padding-top: 0 the padding-box top
+       coincides with the visible top edge, so the bar pins flush. */
     top: 0;
     z-index: 10;
     background: var(--bg-primary, #0b0b0b);
+    /* Internal breathing room so the toolbar selects/buttons don't sit
+       flush against the window titlebar once pinned. The bar is taller
+       than .jump-nav so this is more visible here. */
+    padding-top: 10px;
+    /* Force own compositing layer so WebKitGTK 2.50+ renders the solid
+       background cleanly when the sticky pins. */
+    will-change: transform;
+    transform: translateZ(0);
   }
 
   .track-list-header {
@@ -3293,7 +3369,7 @@
     display: flex;
     align-items: center;
     gap: 16px;
-    padding-top: 8px;
+    padding-top: -2px;
     padding-bottom: 0;
     margin-bottom: 0;
   }

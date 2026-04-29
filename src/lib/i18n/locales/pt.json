@@ -342,7 +342,8 @@
     "shuffleAlbums": "Aleatório entre álbuns",
     "playModeInOrder": "Em ordem",
     "playModeAlbumShuffle": "Aleatório por álbum",
-    "trackCount": "{count} faixas"
+    "trackCount": "{count} faixas",
+    "shuffleTracksMix": "Fila aleatória desta coleção"
   },
   "confirm": {
     "deletePlaylist": "Tem certeza de que deseja excluir esta playlist?",
@@ -2031,7 +2032,9 @@
       "showContextIcon": "Mostrar contexto de reprodução da faixa no player",
       "showContextIconTooltip": "Mostra o contexto de onde a faixa atual está sendo reproduzida (álbum, artista, playlist, etc.)",
       "persistSession": "Restaurar sessão na inicialização",
-      "persistSessionDesc": "Lembrar sua fila, posição de reprodução e visualização atual ao reiniciar",
+      "persistSessionDesc": "Lembrar sua fila e visualização atual ao reiniciar (faixa em pausa em 0:00)",
+      "resumePlaybackPosition": "Retomar posição de reprodução",
+      "resumePlaybackPositionDesc": "Ao restaurar uma sessão, ir para onde você parou em vez de iniciar a faixa do começo",
       "streamUncached": "Transmitir Faixas sem Cache",
       "streamUncachedDesc": "Iniciar reprodução mais rápido quando a faixa não está no cache. A busca pode ser limitada durante o buffer inicial.",
       "initialBuffer": "Tamanho do Buffer Inicial",
@@ -2069,6 +2072,7 @@
         "langley": "Langley",
         "ayanami": "Ayanami",
         "iscariot": "Iscariot",
+        "stratego": "Stratego",
         "system": "Sistema",
         "wcagLight": "WCAG Claro",
         "wcagDark": "WCAG Escuro",
@@ -2246,7 +2250,15 @@
         "minimizeToTray": "Minimizar para a bandeja",
         "minimizeToTrayDesc": "Ocultar janela na bandeja ao minimizar",
         "closeToTray": "Fechar para a bandeja",
-        "closeToTrayDesc": "Ocultar janela na bandeja em vez de encerrar"
+        "closeToTrayDesc": "Ocultar janela na bandeja em vez de encerrar",
+        "iconTheme": {
+          "label": "Variante do ícone",
+          "desc": "Escolha um ícone monocromático para a sua barra (Plasma, a barra superior sempre escura do GNOME) ou o logotipo vinil colorido",
+          "auto": "Automático",
+          "mono-light": "Mono claro",
+          "mono-dark": "Mono escuro",
+          "color": "Cor"
+        }
       },
       "composition": {
         "title": "Composição",
@@ -2701,6 +2713,7 @@
     "refreshingTrackOffline": "Atualizando \"{title}\" para offline",
     "refreshingAlbumOffline": "Atualizando todas as faixas de \"{album}\" para offline",
     "failedLoadAlbumRefresh": "Falha ao carregar álbum para atualização offline",
+    "playingAlbum": "{count, plural, =1 {Reproduzindo álbum} other {Reproduzindo {count} faixas}}",
     "playingTracksNext": "Reproduzindo {count} faixas em seguida",
     "addedTracksToQueue": "{count} faixas adicionadas à fila",
     "failedPreviousTrack": "Falha ao voltar à faixa anterior",
@@ -2758,7 +2771,8 @@
     "laodingDevices": "Carregando dispositivos...",
     "findingSimilarArtists": "Encontrando artistas semelhantes...",
     "awardUnavailable": "Detalhe não disponível para este prêmio.",
-    "audioDeviceMissing": "Dispositivo '{device}' não está mais disponível. Usando o padrão do sistema."
+    "audioDeviceMissing": "Dispositivo '{device}' não está mais disponível. Usando o padrão do sistema.",
+    "mixTrimmed": "{actual} músicas adicionadas à fila (pediste {requested}; algumas foram fundidas ou limitadas por álbum)."
   },
   "topMixes": {
     "title": "TopQ",
@@ -2824,5 +2838,21 @@
     "title": "WeeklyQ",
     "subtitle": "Baseado nas suas audições semanais.",
     "cardDesc": "Faça uma jornada semanal com um mix novo <strong>toda sexta-feira</strong>."
+  },
+  "mixModal": {
+    "title": "Fila aleatória",
+    "computing": "A carregar…",
+    "confirm": "Adicionar à fila",
+    "loadFailed": "Não foi possível carregar a contagem",
+    "body": "Cria uma fila aleatória com músicas desta coleção. Quantas músicas queres?",
+    "numberOfSongs": "Número de músicas",
+    "songsAvailable": "{n} músicas disponíveis",
+    "allOption": "Todas ({n})"
+  },
+  "queue": {
+    "stopAfterThis": "Parar após esta faixa",
+    "cancelStopAfter": "Cancelar parar após esta",
+    "removeAllAfter": "Remover todas as faixas seguintes",
+    "tracksRemoved": "{count, plural, one {# faixa removida da fila} other {# faixas removidas da fila}}"
   }
 }

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { formatTrackTitle } from '$lib/utils/trackTitle';
   import { invoke } from '@tauri-apps/api/core';
   import { Music, User, LoaderCircle, ArrowRight, Heart, Play, Share2, UserPlus } from 'lucide-svelte';
   import { cachedSrc } from '$lib/actions/cachedImage';
@@ -680,6 +681,7 @@
       const queueTracks = spotlightData.topTracks.map(track => ({
         id: track.id,
         title: track.title,
+        version: track.version ?? null,
         artist: track.artist?.name?.display || spotlightData!.artistName,
         album: track.album?.title || '',
         duration_secs: track.duration ?? 0,
@@ -813,6 +815,7 @@
     return tracks.map(track => ({
       id: track.id,
       title: track.title,
+      version: track.version ?? null,
       artist: track.artist || 'Unknown Artist',
       album: track.album || '',
       duration_secs: track.durationSeconds,
@@ -1043,7 +1046,7 @@
         {@const trackBlacklisted = track.artistId ? isArtistBlacklisted(track.artistId) : false}
         <TrackGridCard
           trackId={track.id}
-          title={track.title}
+          title={formatTrackTitle(track)}
           album={track.album ?? ''}
           artwork={track.albumArt ?? null}
           isPlaying={isPlaybackActive && isThisActiveTrack}
@@ -2009,16 +2012,6 @@
   .artist-meta {
     font-size: 12px;
     color: var(--text-muted);
-  }
-
-  /* ---- Track list ---- */
-  .track-list {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .track-list.compact {
-    gap: 0;
   }
 
   /* ---- Skeleton loading ---- */

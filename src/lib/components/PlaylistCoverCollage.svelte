@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { cachedSrc } from '$lib/actions/cachedImage';
+
   interface Props {
     images?: string[] | null | undefined;
     size?: number;
@@ -27,7 +29,7 @@
 {:else if tiles.length < 4}
   <img
     class="single"
-    src={tiles[0]}
+    use:cachedSrc={tiles[0]}
     alt=""
     loading="lazy"
     decoding="async"
@@ -36,7 +38,7 @@
 {:else}
   <div class="collage" style="width: {size}px; height: {size}px;">
     {#each tiles.slice(0, 4) as url}
-      <img src={url} alt="" loading="lazy" decoding="async" />
+      <img use:cachedSrc={url} alt="" loading="lazy" decoding="async" />
     {/each}
   </div>
 {/if}

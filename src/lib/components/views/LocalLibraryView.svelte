@@ -1,5 +1,6 @@
 <script lang="ts">
   import { invoke, convertFileSrc } from '@tauri-apps/api/core';
+  import { formatTrackTitle } from '$lib/utils/trackTitle';
   import { setCustomImage } from '$lib/stores/customArtistImageStore';
   import { getThumbnailUrl, getCachedThumbnailUrl } from '$lib/services/thumbnailService';
   import { open, ask } from '@tauri-apps/plugin-dialog';
@@ -18,6 +19,7 @@
   import ViewTransition from '../ViewTransition.svelte';
   import { t } from '$lib/i18n';
   import { getUserItem } from '$lib/utils/userStorage';
+  import { applyShiftRange, isSelectAllShortcut } from '$lib/utils/multiSelect';
   import { downloadSettingsVersion } from '$lib/stores/downloadSettingsStore';
   import { showToast } from '$lib/stores/toastStore';
   import AlbumCard from '../AlbumCard.svelte';
@@ -549,6 +551,43 @@
     selectedTrackIds = next;
   }
 
+  function addTracksToSelection(ids: number[]) {
+    const next = new Set(selectedTrackIds);
+    for (const id of ids) next.add(id);
+    selectedTrackIds = next;
+  }
+
+  const trackSelectAllState = $derived(
+    tracks.length === 0 ? 'none' as const
+    : selectedTrackIds.size === 0 ? 'none' as const
+    : selectedTrackIds.size >= tracks.length ? 'all' as const
+    : 'partial' as const
+  );
+
+  function toggleTrackSelectAll() {
+    if (trackSelectAllState === 'all') {
+      selectedTrackIds = new Set();
+    } else {
+      selectedTrackIds = new Set(tracks.map((trk) => trk.id));
+    }
+  }
+
+  // Ctrl/Cmd+A while the tracks tab's select mode is active selects
+  // every visible track. We read `tracks` at fire-time (not via the
+  // effect's reactive deps) so flipping select mode doesn't re-attach
+  // the listener every time the library mutates. The shortcut is a
+  // no-op when focus is in a text input (search field etc.).
+  $effect(() => {
+    if (!trackSelectMode) return;
+    const handler = (e: KeyboardEvent) => {
+      if (!isSelectAllShortcut(e)) return;
+      e.preventDefault();
+      selectedTrackIds = new Set(tracks.map((trk) => trk.id));
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  });
+
   function selectedLocalTracks(): LocalTrack[] {
     // Union of library-wide tracks and current album tracks so selection works
     // from both the tracks tab and the album detail view.
@@ -620,6 +659,38 @@
     else next.add(album.id);
     selectedAlbumIds = next;
   }
+
+  function addAlbumsToSelection(ids: string[]) {
+    const next = new Set(selectedAlbumIds);
+    for (const id of ids) next.add(id);
+    selectedAlbumIds = next;
+  }
+
+  const albumSelectAllState = $derived(
+    albums.length === 0 ? 'none' as const
+    : selectedAlbumIds.size === 0 ? 'none' as const
+    : selectedAlbumIds.size >= albums.length ? 'all' as const
+    : 'partial' as const
+  );
+
+  function toggleAlbumSelectAll() {
+    if (albumSelectAllState === 'all') {
+      selectedAlbumIds = new Set();
+    } else {
+      selectedAlbumIds = new Set(albums.map((a) => a.id));
+    }
+  }
+
+  $effect(() => {
+    if (!albumSelectMode) return;
+    const handler = (e: KeyboardEvent) => {
+      if (!isSelectAllShortcut(e)) return;
+      e.preventDefault();
+      selectedAlbumIds = new Set(albums.map((a) => a.id));
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  });
 
   function selectedAlbums(): LocalAlbum[] {
     return albums.filter((a) => selectedAlbumIds.has(a.id));
@@ -3499,7 +3570,7 @@
           {#each section.tracks as track, index (track.id)}
             <TrackRow
               number={section.useIndexNumbering ? index + 1 : (track.track_number || index + 1)}
-              title={track.title}
+              title={formatTrackTitle(track)}
               artist={track.artist !== selectedAlbum?.artist ? track.artist : undefined}
               duration={formatDuration(track.duration_secs)}
               quality={getQualityBadge(track)}
@@ -4095,6 +4166,18 @@
               <SquareCheckBig size={16} />
             </button>
 
+            {#if albumSelectMode}
+              <label class="select-all-checkbox" title={$t('actions.selectAll')}>
+                <input
+                  type="checkbox"
+                  checked={albumSelectAllState === 'all'}
+                  indeterminate={albumSelectAllState === 'partial'}
+                  onchange={toggleAlbumSelectAll}
+                />
+                <span>{$t('actions.selectAll')}</span>
+              </label>
+            {/if}
+
             {#if albumGroupingEnabled && albumGroupMode === 'alpha'}
               <div class="alpha-index-inline">
                 {#each alphaIndexLetters as letter}
@@ -4140,6 +4223,7 @@
                   selectable={albumSelectMode}
                   selectedAlbumIds={selectedAlbumIds}
                   onAlbumToggleSelect={toggleAlbumSelect}
+                  onAlbumToggleSelectRange={addAlbumsToSelection}
                 />
               </div>
             </div>
@@ -4300,6 +4384,17 @@
             >
               <SquareCheckBig size={16} />
             </button>
+            {#if trackSelectMode}
+              <label class="select-all-checkbox" title={$t('actions.selectAll')}>
+                <input
+                  type="checkbox"
+                  checked={trackSelectAllState === 'all'}
+                  indeterminate={trackSelectAllState === 'partial'}
+                  onchange={toggleTrackSelectAll}
+                />
+                <span>{$t('actions.selectAll')}</span>
+              </label>
+            {/if}
             <div class="dropdown-container">
               <button
                 class="control-btn"
@@ -4395,6 +4490,7 @@
                 selectable={trackSelectMode}
                 selectedIds={selectedTrackIds}
                 onToggleSelect={toggleTrackSelect}
+                onToggleSelectRange={addTracksToSelection}
               />
             </div>
           </div>
@@ -5692,6 +5788,23 @@
     align-items: center;
     gap: 12px;
     margin-bottom: 16px;
+  }
+
+  .select-all-checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .select-all-checkbox input[type='checkbox'] {
+    width: 15px;
+    height: 15px;
+    cursor: pointer;
+    accent-color: var(--accent-primary);
   }
 
   .track-sections {

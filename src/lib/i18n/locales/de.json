@@ -342,7 +342,8 @@
     "shuffleAlbums": "Alben-Zufallsmodus",
     "playModeInOrder": "Der Reihe nach",
     "playModeAlbumShuffle": "Alben-Zufallsmodus",
-    "trackCount": "{count} Titel"
+    "trackCount": "{count} Titel",
+    "shuffleTracksMix": "Zufällige Warteschlange aus dieser Sammlung"
   },
   "confirm": {
     "deletePlaylist": "Sind Sie sicher, dass Sie diese Playlist löschen möchten?",
@@ -2031,7 +2032,9 @@
       "showContextIcon": "Kontext des abgespielten Titels im Player anzeigen",
       "showContextIconTooltip": "Zeigt den Kontext, aus dem der aktuelle Titel abgespielt wird (Album, Künstler, Playlist usw.)",
       "persistSession": "Sitzung beim Start wiederherstellen",
-      "persistSessionDesc": "Warteschlange, Wiedergabeposition und aktuelle Ansicht beim Neustart merken",
+      "persistSessionDesc": "Warteschlange und aktuelle Ansicht beim Neustart merken (Titel pausiert bei 0:00)",
+      "resumePlaybackPosition": "Wiedergabeposition fortsetzen",
+      "resumePlaybackPositionDesc": "Beim Wiederherstellen einer Sitzung an die letzte Position springen, statt den Titel von vorne zu starten",
       "streamUncached": "Nicht zwischengespeicherte Titel streamen",
       "streamUncachedDesc": "Startet die Wiedergabe schneller, wenn der Titel nicht im Cache ist. Vorspulen kann während der initialen Pufferung eingeschränkt sein.",
       "initialBuffer": "Initiale Puffergröße",
@@ -2069,6 +2072,7 @@
         "langley": "Langley",
         "ayanami": "Ayanami",
         "iscariot": "Iscariot",
+        "stratego": "Stratego",
         "system": "System",
         "wcagLight": "WCAG Hell",
         "wcagDark": "WCAG Dunkel",
@@ -2237,7 +2241,15 @@
         "minimizeToTray": "In den Tray minimieren",
         "minimizeToTrayDesc": "Fenster beim Minimieren in den Tray verschieben",
         "closeToTray": "In den Systemtray schließen",
-        "closeToTrayDesc": "Fenster in den Tray minimieren statt beenden"
+        "closeToTrayDesc": "Fenster in den Tray minimieren statt beenden",
+        "iconTheme": {
+          "label": "Symbolvariante",
+          "desc": "Wähle ein monochromes Symbol passend zur Leiste (Plasma, die dauerhaft dunkle GNOME-Topbar) oder das farbige Vinyl-Logo",
+          "auto": "Automatisch",
+          "mono-light": "Mono hell",
+          "mono-dark": "Mono dunkel",
+          "color": "Farbe"
+        }
       },
       "composition": {
         "title": "Komposition",
@@ -2701,6 +2713,7 @@
     "refreshingTrackOffline": "\"{title}\" wird für offline aktualisiert",
     "refreshingAlbumOffline": "Alle Titel von \"{album}\" werden für offline aktualisiert",
     "failedLoadAlbumRefresh": "Album konnte nicht für Offline-Aktualisierung geladen werden",
+    "playingAlbum": "{count, plural, =1 {Album wird abgespielt} other {{count} Titel werden abgespielt}}",
     "playingTracksNext": "{count} Titel werden als Nächstes abgespielt",
     "addedTracksToQueue": "{count} Titel zur Warteschlange hinzugefügt",
     "failedPreviousTrack": "Zum vorherigen Titel wechseln fehlgeschlagen",
@@ -2758,7 +2771,8 @@
     "laodingDevices": "Geräte werden geladen...",
     "findingSimilarArtists": "Suche nach ähnlichen Künstlern...",
     "awardUnavailable": "Detailansicht für diese Auszeichnung nicht verfügbar.",
-    "audioDeviceMissing": "Ausgabegerät '{device}' ist nicht mehr verfügbar. Standardgerät wird verwendet."
+    "audioDeviceMissing": "Ausgabegerät '{device}' ist nicht mehr verfügbar. Standardgerät wird verwendet.",
+    "mixTrimmed": "{actual} Songs zur Warteschlange hinzugefügt (du wolltest {requested}; einige wurden zusammengeführt oder pro Album begrenzt)."
   },
   "topMixes": {
     "title": "TopQ",
@@ -2824,5 +2838,21 @@
     "title": "WeeklyQ",
     "subtitle": "Basierend auf deinem woechentlichen Hoerverlauf.",
     "cardDesc": "Eine woechentliche Reise mit einem frischen Mix <strong>jeden Freitag</strong>."
+  },
+  "mixModal": {
+    "title": "Zufällige Warteschlange",
+    "computing": "Lade…",
+    "confirm": "Zur Warteschlange",
+    "loadFailed": "Song-Anzahl konnte nicht geladen werden",
+    "body": "Erstelle eine zufällige Warteschlange mit Songs aus dieser Sammlung. Wie viele Songs möchtest du?",
+    "numberOfSongs": "Anzahl der Songs",
+    "songsAvailable": "{n} Songs verfügbar",
+    "allOption": "Alle ({n})"
+  },
+  "queue": {
+    "stopAfterThis": "Nach diesem Titel anhalten",
+    "cancelStopAfter": "Anhalten nach diesem Titel abbrechen",
+    "removeAllAfter": "Alle nachfolgenden Titel entfernen",
+    "tracksRemoved": "{count, plural, one {# Titel aus der Warteschlange entfernt} other {# Titel aus der Warteschlange entfernt}}"
   }
 }

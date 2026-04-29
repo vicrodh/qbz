@@ -2,7 +2,7 @@
 //!
 //! Core functionality is in qbz-cast crate, this module provides Tauri commands.
 
-pub mod commands;
+pub mod state;
 
 // Re-export from qbz-cast
 pub use qbz_cast::{
@@ -11,4 +11,4 @@ pub use qbz_cast::{
 };
 
 // Re-export Tauri command state
-pub use commands::DlnaState;
+pub use state::DlnaState;

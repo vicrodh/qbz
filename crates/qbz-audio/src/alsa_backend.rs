@@ -62,6 +62,19 @@ fn find_best_fallback_rate(requested: u32, supported: &[u32]) -> u32 {
     supported.iter().copied().max().unwrap_or(48000)
 }
 
+/// Return `true` when the given CPAL/ALSA PCM name matches one of the ID
+/// shapes our `/proc/asound`-driven enumeration ever looks up.
+///
+/// Used by `build_cpal_device_map` to drop virtual PCMs (dmix, route,
+/// surround*, pulse, null, …) whose probing only produces noise.
+fn is_known_pcm_id(name: &str) -> bool {
+    name == "default"
+        || name.starts_with("sysdefault:CARD=")
+        || name.starts_with("front:CARD=")
+        || name.starts_with("hdmi:CARD=")
+        || name.starts_with("iec958:CARD=")
+}
+
 /// Extract supported sample rates from a CPAL device
 fn get_supported_sample_rates(device: &rodio::cpal::Device) -> Option<Vec<u32>> {
     use rodio::cpal::traits::DeviceTrait;
@@ -335,6 +348,23 @@ fn extract_card_name_from_device(device_id: &str) -> Option<String> {
     }
 }
 
+/// Check whether the card referenced by an ALSA device id is registered
+/// in `/proc/asound/cards`. Used as a presence gate before attempting the
+/// `hw:CARD=…,DEV=…` fallback in `create_output_stream` — we only want to
+/// retry against the raw kernel PCM when the card actually exists.
+///
+/// Distinct from `get_hw_supported_rates`: that one parses
+/// `/proc/asound/cardN/stream0`, which is only emitted by the USB-audio
+/// driver. I2S / PCI / built-in cards (HifiBerry, intel-hda, etc.) don't
+/// have a stream0 file at all, so using rate-readability as a presence
+/// check made the fallback a no-op for the very devices that needed it
+/// (issue #331 — HifiBerry Digi2 Pro on Raspberry Pi OS).
+fn is_card_present_in_proc(device_id: &str) -> bool {
+    extract_card_name_from_device(device_id)
+        .and_then(|card| find_card_number_by_name(&card))
+        .is_some()
+}
+
 /// Read hardware-supported sample rates from /proc/asound/cardN/stream0.
 /// Returns None if rates cannot be determined (treat as "try anyway").
 fn get_hw_supported_rates(card_name: &str) -> Option<Vec<u32>> {
@@ -546,15 +576,26 @@ impl AlsaBackend {
         Ok(devices)
     }
 
-    /// Build a map of device_id -> CPAL Device for sample rate queries
-    /// This is OPTIONAL enrichment - devices may be missing if in exclusive use
+    /// Build a map of device_id -> CPAL Device for sample rate queries.
+    /// This is OPTIONAL enrichment — devices may be missing if in exclusive use.
+    ///
+    /// Only the PCM name patterns we actually look up downstream are kept:
+    /// `default`, `sysdefault:CARD=…`, and `{front,hdmi,iec958}:CARD=…,DEV=…`.
+    /// Virtual PCMs (`dmix:`, `route:`, `surround51:` and the like) are
+    /// dropped — we never query them, and letting them reach a later
+    /// `supported_output_configs()` call just invites spurious libasound
+    /// errors ("unable to open slave", "no matching channel map") on systems
+    /// where PipeWire or another client holds the underlying hardware.
     fn build_cpal_device_map(&self) -> HashMap<String, rodio::cpal::Device> {
         let mut map = HashMap::new();
 
         if let Ok(output_devices) = self.host.output_devices() {
             for device in output_devices {
                 if let Ok(description) = device.description() {
-                    map.insert(description.name().to_string(), device);
+                    let name = description.name().to_string();
+                    if is_known_pcm_id(&name) {
+                        map.insert(name, device);
+                    }
                 }
             }
         }
@@ -966,11 +1007,7 @@ impl AudioBackend for AlsaBackend {
             let resolved = match primary {
                 Some(d) => Some(d),
                 None => match build_hw_fallback_id(device_id) {
-                    Some(hw_id)
-                        if extract_card_name_from_device(device_id)
-                            .and_then(|card| get_hw_supported_rates(&card))
-                            .is_some() =>
-                    {
+                    Some(hw_id) if is_card_present_in_proc(device_id) => {
                         log::warn!(
                             "[ALSA Backend] '{}' not resolvable by ALSA (alias likely missing in asound.conf); trying fallback '{}'",
                             device_id,
@@ -996,9 +1033,7 @@ impl AudioBackend for AlsaBackend {
             };
 
             resolved.ok_or_else(|| {
-                let proc_found = extract_card_name_from_device(device_id)
-                    .and_then(|card| get_hw_supported_rates(&card))
-                    .is_some();
+                let proc_found = is_card_present_in_proc(device_id);
                 if proc_found {
                     format!(
                         "Device '{}' is present in /proc/asound but CPAL cannot open it (usually a sample-rate/format mismatch — track rate {}Hz, or an ALSA name format mismatch). Try the plughw plugin in audio settings.",
@@ -1159,5 +1194,119 @@ impl AudioBackend for AlsaBackend {
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn build_hw_fallback_id_rewrites_iec958_alias() {
+        // The exact case from issue #331 — HifiBerry Digi2 Pro on RPi OS.
+        assert_eq!(
+            build_hw_fallback_id("iec958:CARD=sndrpihifiberry,DEV=0"),
+            Some("hw:CARD=sndrpihifiberry,DEV=0".to_string())
+        );
+    }
+
+    #[test]
+    fn build_hw_fallback_id_handles_every_alias_prefix() {
+        assert_eq!(
+            build_hw_fallback_id("front:CARD=Generic,DEV=0"),
+            Some("hw:CARD=Generic,DEV=0".to_string())
+        );
+        assert_eq!(
+            build_hw_fallback_id("sysdefault:CARD=PCH,DEV=0"),
+            Some("hw:CARD=PCH,DEV=0".to_string())
+        );
+        assert_eq!(
+            build_hw_fallback_id("hdmi:CARD=HDMI,DEV=3"),
+            Some("hw:CARD=HDMI,DEV=3".to_string())
+        );
+    }
+
+    #[test]
+    fn build_hw_fallback_id_defaults_dev_when_missing() {
+        // Some alias forms don't carry DEV=; default to 0 so we still
+        // produce a valid hw: id.
+        assert_eq!(
+            build_hw_fallback_id("iec958:CARD=NameOnly"),
+            Some("hw:CARD=NameOnly,DEV=0".to_string())
+        );
+    }
+
+    #[test]
+    fn build_hw_fallback_id_returns_none_for_non_alias_inputs() {
+        // Raw hw:/plughw: ids don't need a fallback — they're already
+        // the kernel PCM. `default` and unknown shapes don't match any
+        // known alias prefix.
+        assert_eq!(build_hw_fallback_id("hw:0,0"), None);
+        assert_eq!(build_hw_fallback_id("plughw:0,0"), None);
+        assert_eq!(build_hw_fallback_id("default"), None);
+        assert_eq!(build_hw_fallback_id("pulse"), None);
+        assert_eq!(build_hw_fallback_id(""), None);
+    }
+
+    #[test]
+    fn extract_card_name_from_device_handles_alias_prefixes() {
+        // Alias forms — pure string parse, no /proc lookup involved.
+        assert_eq!(
+            extract_card_name_from_device("iec958:CARD=sndrpihifiberry,DEV=0"),
+            Some("sndrpihifiberry".to_string())
+        );
+        assert_eq!(
+            extract_card_name_from_device("front:CARD=Generic,DEV=0"),
+            Some("Generic".to_string())
+        );
+        assert_eq!(
+            extract_card_name_from_device("hdmi:CARD=HDMI_C,DEV=3"),
+            Some("HDMI_C".to_string())
+        );
+        assert_eq!(
+            extract_card_name_from_device("sysdefault:CARD=PCH,DEV=0"),
+            Some("PCH".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_card_name_from_device_rejects_non_card_pcms() {
+        // These shapes don't carry a CARD= component and should not
+        // resolve to anything in /proc/asound.
+        assert_eq!(extract_card_name_from_device("default"), None);
+        assert_eq!(extract_card_name_from_device("pulse"), None);
+        assert_eq!(extract_card_name_from_device("null"), None);
+        assert_eq!(extract_card_name_from_device(""), None);
+    }
+
+    #[test]
+    fn is_card_present_in_proc_short_circuits_on_unparseable_ids() {
+        // For inputs without a CARD= component, the helper must short-
+        // circuit to false without ever touching /proc — so this stays
+        // safe regardless of host audio configuration.
+        assert!(!is_card_present_in_proc("default"));
+        assert!(!is_card_present_in_proc("pulse"));
+        assert!(!is_card_present_in_proc("null"));
+        assert!(!is_card_present_in_proc(""));
+    }
+
+    #[test]
+    fn is_known_pcm_id_keeps_only_lookup_targets() {
+        // Positive: every shape downstream code actually queries.
+        assert!(is_known_pcm_id("default"));
+        assert!(is_known_pcm_id("sysdefault:CARD=PCH"));
+        assert!(is_known_pcm_id("front:CARD=Generic,DEV=0"));
+        assert!(is_known_pcm_id("hdmi:CARD=HDMI,DEV=3"));
+        assert!(is_known_pcm_id("iec958:CARD=sndrpihifiberry,DEV=0"));
+
+        // Negative: virtual PCMs that only emit noise when probed.
+        assert!(!is_known_pcm_id("dmix:CARD=PCH,DEV=0"));
+        assert!(!is_known_pcm_id("dsnoop:CARD=PCH,DEV=0"));
+        assert!(!is_known_pcm_id("route:CARD=PCH"));
+        assert!(!is_known_pcm_id("surround51:CARD=PCH"));
+        assert!(!is_known_pcm_id("pulse"));
+        assert!(!is_known_pcm_id("null"));
+        assert!(!is_known_pcm_id("hw:0,0"));
+        assert!(!is_known_pcm_id("plughw:0,0"));
     }
 }

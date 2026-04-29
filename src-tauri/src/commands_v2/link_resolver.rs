@@ -1746,6 +1746,7 @@ pub async fn v2_create_infinite_radio(
             tracks.push(super::queue::V2QueueTrack {
                 id: core.id,
                 title: core.title,
+                version: core.version,
                 artist: core.artist,
                 album: core.album,
                 duration_secs: core.duration_secs,
@@ -1795,6 +1796,7 @@ fn track_to_queue_track_from_api(track: &crate::api::Track) -> CoreQueueTrack {
     CoreQueueTrack {
         id: track.id,
         title: track.title.clone(),
+        version: track.version.clone(),
         artist,
         album,
         duration_secs: track.duration as u64,

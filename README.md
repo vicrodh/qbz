@@ -275,31 +275,11 @@ npm run tauri dev       # development
 npm run tauri build     # production (DEB, RPM, AppImage)
 ```
 
-### API Proxy (for self-hosted builds)
+### API Proxy
 
-Pre-built releases include a hosted API proxy for Last.fm, Discogs, Tidal, and Spotify integrations — no API keys needed.
+Last.fm, Discogs, Tidal, Spotify-import, and MusicBrainz traffic goes through a hosted Cloudflare Workers proxy (`qbz-api-proxy.blitzkriegfc.workers.dev`) that holds all credentials server-side. Both pre-built releases and source builds use it out of the box — **no API keys or `.env` file required**.
 
-If you build from source and want these integrations, you can either:
-
-1. **Deploy your own proxy** (recommended) — a Cloudflare Worker that securely holds API keys server-side:
-
-```bash
-git clone https://github.com/vicrodh/qbz-api-proxy.git
-cd qbz-api-proxy
-# Add your API keys to wrangler.toml or via `wrangler secret put`
-wrangler deploy
-```
-
-Then set the proxy URL before building QBZ:
-
-```bash
-export QBZ_API_PROXY_URL="https://your-worker.your-account.workers.dev"
-npm run tauri build
-```
-
-2. **Use direct API keys** — set them in `.env` (see `.env.example`). Keys are embedded at compile time.
-
-> MusicBrainz and Spotify playlist import work without any API keys or proxy.
+If you want to run against your own proxy (for development, or if you fork QBZ), the proxy source lives at [`vicrodh/qbz-api-proxy`](https://github.com/vicrodh/qbz-api-proxy). Deploy it with `wrangler deploy` and then edit the `*_PROXY_URL` constants in `src-tauri/src/lastfm/mod.rs`, `discogs/mod.rs`, `playlist_import/providers/tidal.rs`, and `musicbrainz/client.rs` to point at your worker before rebuilding.
 
 ### Environment Variables
 

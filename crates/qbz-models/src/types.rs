@@ -193,6 +193,11 @@ pub struct Track {
     pub id: u64,
     #[serde(default)]
     pub title: String,
+    /// Subtitle/edition info from Qobuz (e.g. "Player's Ball Mix",
+    /// "Nine Inch Noize Version", "Remastered 2024"). Frontend renders
+    /// it parenthesized after the title so remix and reissue albums are
+    /// distinguishable from originals (issue #360).
+    pub version: Option<String>,
     pub isrc: Option<String>,
     #[serde(default)]
     pub duration: u32,

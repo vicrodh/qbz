@@ -280,6 +280,11 @@ impl BackendManager {
 
     /// Create a backend instance
     pub fn create_backend(backend_type: AudioBackendType) -> BackendResult<Box<dyn AudioBackend>> {
+        // Install the custom ALSA error handler once per process, before any
+        // CPAL/ALSA enumeration fires. Idempotent via std::sync::Once.
+        #[cfg(target_os = "linux")]
+        crate::alsa_error_handler::install_once();
+
         match backend_type {
             AudioBackendType::PipeWire => {
                 #[cfg(target_os = "linux")]

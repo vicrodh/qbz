@@ -90,30 +90,83 @@ impl StreamingConfig {
     /// - Normal (2-5 MB/s): 512KB
     /// - Slow (1-2 MB/s): 1MB (more buffer to prevent stutter)
     /// - Very slow (<1 MB/s): 2MB
+    ///
+    /// Result is clamped to the process-wide cap configured via
+    /// [`set_max_initial_buffer_bytes`] (typically derived from the host's
+    /// memory profile — see qbz-core's system_capabilities). On
+    /// memory-constrained hosts the slow-connection branches would
+    /// otherwise inflate to 2 MB, which is exactly the wrong direction
+    /// when "slow connection" is itself a symptom of swap thrash
+    /// (issue #331, Pi 3B).
     pub fn from_speed_mbps(speed_mbps: f64) -> Self {
-        let initial_buffer = if speed_mbps >= 10.0 {
-            256 * 1024 // 256KB - instant start for very fast connections
-        } else if speed_mbps >= 5.0 {
-            384 * 1024 // 384KB
-        } else if speed_mbps >= 2.0 {
-            512 * 1024 // 512KB - default
-        } else if speed_mbps >= 1.0 {
-            1024 * 1024 // 1MB - more buffer for slower connections
+        let cap = MAX_INITIAL_BUFFER_BYTES.load(std::sync::atomic::Ordering::Relaxed);
+        let cfg = Self::from_speed_mbps_with_cap(speed_mbps, cap);
+
+        if cfg.initial_buffer_bytes < raw_initial_buffer_for_speed(speed_mbps) {
+            log::info!(
+                "Dynamic buffer: {:.1} MB/s detected → {}KB (capped from {}KB by host memory profile)",
+                speed_mbps,
+                cfg.initial_buffer_bytes / 1024,
+                raw_initial_buffer_for_speed(speed_mbps) / 1024
+            );
         } else {
-            2 * 1024 * 1024 // 2MB - maximum buffer for very slow connections
-        };
+            log::info!(
+                "Dynamic buffer: {:.1} MB/s detected → {}KB initial buffer",
+                speed_mbps,
+                cfg.initial_buffer_bytes / 1024
+            );
+        }
 
-        log::info!(
-            "Dynamic buffer: {:.1} MB/s detected → {}KB initial buffer",
-            speed_mbps,
-            initial_buffer / 1024
-        );
+        cfg
+    }
 
+    /// Pure variant of [`from_speed_mbps`] — derives the speed-based
+    /// initial buffer and clamps to `cap` without touching global state
+    /// or logging. Exposed for unit tests; production callers should use
+    /// `from_speed_mbps`, which reads the process-wide cap.
+    pub fn from_speed_mbps_with_cap(speed_mbps: f64, cap: usize) -> Self {
+        let raw_initial_buffer = raw_initial_buffer_for_speed(speed_mbps);
         Self {
-            initial_buffer_bytes: initial_buffer,
+            initial_buffer_bytes: raw_initial_buffer.min(cap),
             max_buffer_bytes: 100 * 1024 * 1024,
         }
     }
+}
+
+/// Speed-driven initial buffer size, before any cap is applied.
+/// Pure function — used by both `from_speed_mbps` and
+/// `from_speed_mbps_with_cap` so they share the same ladder.
+fn raw_initial_buffer_for_speed(speed_mbps: f64) -> usize {
+    if speed_mbps >= 10.0 {
+        256 * 1024 // 256KB - instant start for very fast connections
+    } else if speed_mbps >= 5.0 {
+        384 * 1024 // 384KB
+    } else if speed_mbps >= 2.0 {
+        512 * 1024 // 512KB - default
+    } else if speed_mbps >= 1.0 {
+        1024 * 1024 // 1MB - more buffer for slower connections
+    } else {
+        2 * 1024 * 1024 // 2MB - maximum buffer for very slow connections
+    }
+}
+
+/// Process-wide cap for dynamically-derived initial buffer sizes.
+/// Defaults to `usize::MAX` (no cap) so behavior is unchanged unless the
+/// host explicitly configures it via [`set_max_initial_buffer_bytes`] —
+/// typically once at process start, derived from the detected memory
+/// profile.
+static MAX_INITIAL_BUFFER_BYTES: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(usize::MAX);
+
+/// Set the process-wide cap for `StreamingConfig::from_speed_mbps`.
+/// Subsequent calls to that constructor clamp their result to this cap.
+pub fn set_max_initial_buffer_bytes(bytes: usize) {
+    MAX_INITIAL_BUFFER_BYTES.store(bytes, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Read the current cap. Mainly useful for tests.
+pub fn max_initial_buffer_bytes() -> usize {
+    MAX_INITIAL_BUFFER_BYTES.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 /// Internal state shared between reader and writer
@@ -928,6 +981,64 @@ mod tests {
     use super::*;
     use std::thread;
     use std::time::Duration;
+
+    #[test]
+    fn raw_initial_buffer_for_speed_follows_documented_ladder() {
+        // Each band of the documented speed ladder produces its own size.
+        assert_eq!(raw_initial_buffer_for_speed(20.0), 256 * 1024);
+        assert_eq!(raw_initial_buffer_for_speed(10.0), 256 * 1024);
+        assert_eq!(raw_initial_buffer_for_speed(7.0), 384 * 1024);
+        assert_eq!(raw_initial_buffer_for_speed(5.0), 384 * 1024);
+        assert_eq!(raw_initial_buffer_for_speed(3.0), 512 * 1024);
+        assert_eq!(raw_initial_buffer_for_speed(2.0), 512 * 1024);
+        assert_eq!(raw_initial_buffer_for_speed(1.5), 1024 * 1024);
+        assert_eq!(raw_initial_buffer_for_speed(1.0), 1024 * 1024);
+        assert_eq!(raw_initial_buffer_for_speed(0.5), 2 * 1024 * 1024);
+        assert_eq!(raw_initial_buffer_for_speed(0.0), 2 * 1024 * 1024);
+    }
+
+    #[test]
+    fn from_speed_mbps_with_cap_passes_through_when_under_cap() {
+        // Cap above the raw value: result equals the raw ladder.
+        let cfg = StreamingConfig::from_speed_mbps_with_cap(0.0, 4 * 1024 * 1024);
+        assert_eq!(cfg.initial_buffer_bytes, 2 * 1024 * 1024);
+    }
+
+    #[test]
+    fn from_speed_mbps_with_cap_clamps_slow_connection_to_low_memory_cap() {
+        // The case from issue #331: Pi 3B, slow connection because of swap
+        // thrash, would otherwise inflate the buffer to 2 MB. With the
+        // LowMemory profile's 256KB cap applied, we stay at 256KB.
+        let cfg = StreamingConfig::from_speed_mbps_with_cap(0.0, 256 * 1024);
+        assert_eq!(cfg.initial_buffer_bytes, 256 * 1024);
+
+        let cfg = StreamingConfig::from_speed_mbps_with_cap(1.5, 256 * 1024);
+        assert_eq!(cfg.initial_buffer_bytes, 256 * 1024);
+    }
+
+    #[test]
+    fn from_speed_mbps_with_cap_no_op_for_normal_profile() {
+        // Normal profile cap is 2 MB — equal to the slowest raw band, so
+        // any raw value passes through unchanged.
+        let cap = 2 * 1024 * 1024;
+        for speed in [0.0, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0] {
+            let cfg = StreamingConfig::from_speed_mbps_with_cap(speed, cap);
+            assert_eq!(
+                cfg.initial_buffer_bytes,
+                raw_initial_buffer_for_speed(speed),
+                "cap should not bind for speed={}",
+                speed
+            );
+        }
+    }
+
+    #[test]
+    fn from_speed_mbps_with_cap_max_buffer_unchanged() {
+        // Whatever the cap, the secondary max_buffer_bytes stays at its
+        // module default; we are only clamping the initial fill target.
+        let cfg = StreamingConfig::from_speed_mbps_with_cap(0.5, 64 * 1024);
+        assert_eq!(cfg.max_buffer_bytes, 100 * 1024 * 1024);
+    }
 
     #[test]
     fn test_basic_read_write() {
