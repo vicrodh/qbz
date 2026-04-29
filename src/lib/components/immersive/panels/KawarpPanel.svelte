@@ -56,7 +56,7 @@
     kawarp = new Kawarp(canvasEl, {
       warpIntensity: 1.0,
       blurPasses: 7,
-      animationSpeed: 1.0,
+      animationSpeed: 1.15,
       transitionDuration: 1000,
       saturation: 1.9,
       tintIntensity: 0.03,
