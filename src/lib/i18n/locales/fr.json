@@ -2253,10 +2253,11 @@
         "closeToTrayDesc": "Masquer la fenêtre dans la barre d'état au lieu de quitter",
         "iconTheme": {
           "label": "Variante de l'icône",
-          "desc": "Forcer une icône claire ou foncée si la détection automatique se trompe (par ex. la barre supérieure toujours sombre de GNOME)",
+          "desc": "Choisis une icône monochrome adaptée à ta barre (Plasma, la barre supérieure toujours sombre de GNOME) ou le logo vinyle couleur",
           "auto": "Automatique",
-          "light": "Icône claire",
-          "dark": "Icône foncée"
+          "mono-light": "Mono claire",
+          "mono-dark": "Mono foncée",
+          "color": "Couleur"
         }
       },
       "composition": {

@@ -2259,10 +2259,11 @@
         "closeToTrayDesc": "Hide window to tray instead of quitting",
         "iconTheme": {
           "label": "Tray icon variant",
-          "desc": "Force a light or dark glyph if your panel auto-detection looks wrong (e.g. GNOME's permanently dark top bar)",
+          "desc": "Pick a mono glyph to match your panel (Plasma, GNOME's permanently dark top bar) or the full colour vinyl logo",
           "auto": "Auto",
-          "light": "Light icon",
-          "dark": "Dark icon"
+          "mono-light": "Mono light",
+          "mono-dark": "Mono dark",
+          "color": "Color"
         }
       },
       "composition": {

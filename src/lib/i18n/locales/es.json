@@ -2259,10 +2259,11 @@
         "closeToTrayDesc": "Ocultar ventana a la bandeja en vez de cerrar",
         "iconTheme": {
           "label": "Variante del icono",
-          "desc": "Fuerza un icono claro u oscuro si la detección automática no acierta (p. ej. la barra superior siempre oscura de GNOME)",
+          "desc": "Elige un icono monocromático para tu barra (Plasma, la barra superior siempre oscura de GNOME) o el vinilo a color",
           "auto": "Automático",
-          "light": "Icono claro",
-          "dark": "Icono oscuro"
+          "mono-light": "Mono claro",
+          "mono-dark": "Mono oscuro",
+          "color": "Color"
         }
       },
       "composition": {

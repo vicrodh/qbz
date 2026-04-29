@@ -1301,9 +1301,11 @@
   let enableTray = $state(true);
   let minimizeToTray = $state(false);
   let closeToTray = $state(false);
-  let trayIconTheme = $state<'auto' | 'light' | 'dark'>('auto');
-  const TRAY_ICON_THEME_KEYS = ['auto', 'light', 'dark'] as const;
-  type TrayIconTheme = (typeof TRAY_ICON_THEME_KEYS)[number];
+  type TrayIconTheme = 'auto' | 'mono-light' | 'mono-dark' | 'color';
+  let trayIconTheme = $state<TrayIconTheme>('auto');
+  const TRAY_ICON_THEME_KEYS: readonly TrayIconTheme[] = ['auto', 'mono-light', 'mono-dark', 'color'];
+  // i18n key lookup uses the kebab-case identifier directly (e.g.
+  // `iconTheme.mono-light`); the JSON files mirror these keys.
 
   function getTrayIconThemeOptions(): string[] {
     return TRAY_ICON_THEME_KEYS.map(key => $t(`settings.appearance.tray.iconTheme.${key}`));
@@ -1315,6 +1317,17 @@
     const options = getTrayIconThemeOptions();
     const idx = options.indexOf(displayValue);
     return idx >= 0 ? TRAY_ICON_THEME_KEYS[idx] : null;
+  }
+  // Migration: 1.2.9-pre stored "light"/"dark" with inverted semantics
+  // (picking "Light icon" produced the dark glyph). Backend normalises
+  // those legacy values to the user-intent equivalents.
+  function normaliseTrayTheme(raw: string): TrayIconTheme {
+    if (raw === 'mono-light' || raw === 'mono-dark' || raw === 'color' || raw === 'auto') {
+      return raw;
+    }
+    if (raw === 'light') return 'mono-light';
+    if (raw === 'dark') return 'mono-dark';
+    return 'auto';
   }
 
   // Library settings
@@ -3333,10 +3346,7 @@
       enableTray = settings.enable_tray;
       minimizeToTray = settings.minimize_to_tray;
       closeToTray = settings.close_to_tray;
-      trayIconTheme =
-        settings.tray_icon_theme === 'light' || settings.tray_icon_theme === 'dark'
-          ? settings.tray_icon_theme
-          : 'auto';
+      trayIconTheme = normaliseTrayTheme(settings.tray_icon_theme);
     } catch (err) {
       console.error('Failed to load tray settings:', err);
     }

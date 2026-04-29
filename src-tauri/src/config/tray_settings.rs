@@ -19,10 +19,12 @@ pub struct TraySettings {
     pub minimize_to_tray: bool,
     /// Hide window to tray instead of quitting when clicking close
     pub close_to_tray: bool,
-    /// Tray icon variant override: "auto" (default; follows system color
-    /// scheme), "light" (white glyph for dark panels — useful on GNOME
-    /// where the top bar is dark even with a light system theme), or
-    /// "dark" (black glyph for light panels).
+    /// Tray icon variant override:
+    ///   - "auto" (default; follows system color scheme),
+    ///   - "mono-light" (light-coloured glyph for dark panels — useful
+    ///     on GNOME where the top bar is permanently dark),
+    ///   - "mono-dark" (dark-coloured glyph for light panels),
+    ///   - "color" (full colour vinyl logo).
     #[serde(default = "default_tray_icon_theme")]
     pub tray_icon_theme: String,
 }
@@ -31,11 +33,18 @@ fn default_tray_icon_theme() -> String {
     "auto".to_string()
 }
 
-/// Coerce free-form values to the supported set. Anything outside
-/// "auto"/"light"/"dark" falls back to "auto".
+/// Coerce free-form values to the supported set. Anything outside the
+/// supported list falls back to "auto".
+///
+/// Legacy 1.2.9-pre values "light"/"dark" had inverted semantics
+/// relative to the labels users saw (picking "Light" got the dark
+/// glyph and vice-versa). They're remapped here to the value that
+/// matches the user's original intent.
 pub fn normalize_tray_icon_theme(input: &str) -> String {
     match input {
-        "light" | "dark" | "auto" => input.to_string(),
+        "mono-light" | "mono-dark" | "color" | "auto" => input.to_string(),
+        "light" => "mono-light".to_string(),
+        "dark" => "mono-dark".to_string(),
         _ => "auto".to_string(),
     }
 }

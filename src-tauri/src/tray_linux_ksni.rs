@@ -33,17 +33,27 @@ use ksni::{
 use tauri::{AppHandle, Emitter, Manager};
 
 // Multiple pixmap sizes per StatusNotifierItem spec — panels pick the best
-// match for their bar height (22 = base, 44/64 = HiDPI). All are monochromatic
-// silhouettes of the qbz glyph: black on transparent for light panels, white
-// for dark panels. Generated from icons/icon-symbolic.svg via Inkscape.
-const TRAY_ICON_LIGHT_22: &[u8] = include_bytes!("../icons/tray-light-22.png");
-const TRAY_ICON_LIGHT_32: &[u8] = include_bytes!("../icons/tray-light-32.png");
-const TRAY_ICON_LIGHT_44: &[u8] = include_bytes!("../icons/tray-light-44.png");
-const TRAY_ICON_LIGHT_64: &[u8] = include_bytes!("../icons/tray-light-64.png");
-const TRAY_ICON_DARK_22: &[u8] = include_bytes!("../icons/tray-dark-22.png");
-const TRAY_ICON_DARK_32: &[u8] = include_bytes!("../icons/tray-dark-32.png");
-const TRAY_ICON_DARK_44: &[u8] = include_bytes!("../icons/tray-dark-44.png");
-const TRAY_ICON_DARK_64: &[u8] = include_bytes!("../icons/tray-dark-64.png");
+// match for their bar height (22 = base, 32/44/64 = HiDPI). The mono
+// variants are silhouettes of the qbz glyph generated from
+// `icons/icon-symbolic.svg`; the color variant is the full vinyl logo
+// rendered from `icons/icon.svg`. All sizes use a 2px content inset so
+// the glyph doesn't crowd the bar against neighbouring icons.
+//
+// Legacy filename note: `tray-light-*` holds the BLACK glyph (intended
+// for LIGHT panels) and `tray-dark-*` holds the WHITE glyph. The
+// constants below use glyph-colour names so the mapping is explicit.
+const TRAY_ICON_MONO_BLACK_22: &[u8] = include_bytes!("../icons/tray-light-22.png");
+const TRAY_ICON_MONO_BLACK_32: &[u8] = include_bytes!("../icons/tray-light-32.png");
+const TRAY_ICON_MONO_BLACK_44: &[u8] = include_bytes!("../icons/tray-light-44.png");
+const TRAY_ICON_MONO_BLACK_64: &[u8] = include_bytes!("../icons/tray-light-64.png");
+const TRAY_ICON_MONO_WHITE_22: &[u8] = include_bytes!("../icons/tray-dark-22.png");
+const TRAY_ICON_MONO_WHITE_32: &[u8] = include_bytes!("../icons/tray-dark-32.png");
+const TRAY_ICON_MONO_WHITE_44: &[u8] = include_bytes!("../icons/tray-dark-44.png");
+const TRAY_ICON_MONO_WHITE_64: &[u8] = include_bytes!("../icons/tray-dark-64.png");
+const TRAY_ICON_COLOR_22: &[u8] = include_bytes!("../icons/tray-color-22.png");
+const TRAY_ICON_COLOR_32: &[u8] = include_bytes!("../icons/tray-color-32.png");
+const TRAY_ICON_COLOR_44: &[u8] = include_bytes!("../icons/tray-color-44.png");
+const TRAY_ICON_COLOR_64: &[u8] = include_bytes!("../icons/tray-color-64.png");
 
 fn is_flatpak() -> bool {
     std::env::var("FLATPAK_ID").is_ok() || std::path::Path::new("/.flatpak-info").exists()
@@ -104,27 +114,64 @@ fn decode_pixmap(bytes: &[u8]) -> Result<Icon, String> {
     })
 }
 
-/// Resolve which icon variant to load. `theme_override` accepts "auto",
-/// "light", "dark"; anything else falls through to system detection. The
-/// override exists for desktops like GNOME where the top bar is dark even
-/// when the system theme reports light, leaving auto-detected dark
-/// glyphs invisible.
-fn resolve_dark_tray(theme_override: Option<&str>) -> bool {
+#[derive(Clone, Copy, Debug)]
+enum IconVariant {
+    /// Black glyph — for light panels.
+    MonoBlack,
+    /// White glyph — for dark panels (Plasma dark, GNOME top bar).
+    MonoWhite,
+    /// Full color vinyl — for users who'd rather see the logo than a
+    /// monochrome silhouette.
+    Color,
+}
+
+/// Resolve which icon variant to load. `theme_override` accepts:
+///   - "auto" (or unrecognised values) — system color-scheme detection
+///   - "mono-light" — white (light-coloured) glyph
+///   - "mono-dark"  — black (dark-coloured) glyph
+///   - "color"      — full vinyl logo
+///
+/// The override exists for desktops like GNOME where the top bar is
+/// dark even when the system theme reports light, leaving auto-detected
+/// dark glyphs invisible.
+fn resolve_variant(theme_override: Option<&str>) -> IconVariant {
     match theme_override {
-        Some("light") => false,
-        Some("dark") => true,
-        _ => prefer_dark_tray(),
+        Some("mono-light") => IconVariant::MonoWhite,
+        Some("mono-dark") => IconVariant::MonoBlack,
+        Some("color") => IconVariant::Color,
+        _ => {
+            if prefer_dark_tray() {
+                IconVariant::MonoWhite
+            } else {
+                IconVariant::MonoBlack
+            }
+        }
     }
 }
 
-/// Decode all monochromatic pixmap sizes for the active theme. Panels pick the
-/// best size from the list; supplying 22/32/44/64 covers standard SNI bar
-/// heights and HiDPI variants.
+/// Decode pixmaps for the resolved variant. Panels pick the best size
+/// from the list; supplying 22/32/44/64 covers standard SNI bar heights
+/// and HiDPI variants.
 fn decode_tray_icons(theme_override: Option<&str>) -> Result<Vec<Icon>, String> {
-    let sources: [&[u8]; 4] = if resolve_dark_tray(theme_override) {
-        [TRAY_ICON_DARK_22, TRAY_ICON_DARK_32, TRAY_ICON_DARK_44, TRAY_ICON_DARK_64]
-    } else {
-        [TRAY_ICON_LIGHT_22, TRAY_ICON_LIGHT_32, TRAY_ICON_LIGHT_44, TRAY_ICON_LIGHT_64]
+    let sources: [&[u8]; 4] = match resolve_variant(theme_override) {
+        IconVariant::MonoBlack => [
+            TRAY_ICON_MONO_BLACK_22,
+            TRAY_ICON_MONO_BLACK_32,
+            TRAY_ICON_MONO_BLACK_44,
+            TRAY_ICON_MONO_BLACK_64,
+        ],
+        IconVariant::MonoWhite => [
+            TRAY_ICON_MONO_WHITE_22,
+            TRAY_ICON_MONO_WHITE_32,
+            TRAY_ICON_MONO_WHITE_44,
+            TRAY_ICON_MONO_WHITE_64,
+        ],
+        IconVariant::Color => [
+            TRAY_ICON_COLOR_22,
+            TRAY_ICON_COLOR_32,
+            TRAY_ICON_COLOR_44,
+            TRAY_ICON_COLOR_64,
+        ],
     };
     sources.iter().map(|b| decode_pixmap(b)).collect()
 }

@@ -2244,10 +2244,11 @@
         "closeToTrayDesc": "Fenster in den Tray minimieren statt beenden",
         "iconTheme": {
           "label": "Symbolvariante",
-          "desc": "Erzwinge ein helles oder dunkles Symbol, falls die automatische Erkennung nicht passt (z. B. die dauerhaft dunkle GNOME-Topbar)",
+          "desc": "Wähle ein monochromes Symbol passend zur Leiste (Plasma, die dauerhaft dunkle GNOME-Topbar) oder das farbige Vinyl-Logo",
           "auto": "Automatisch",
-          "light": "Helles Symbol",
-          "dark": "Dunkles Symbol"
+          "mono-light": "Mono hell",
+          "mono-dark": "Mono dunkel",
+          "color": "Farbe"
         }
       },
       "composition": {
