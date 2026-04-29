@@ -1,9 +1,7 @@
-# 1.2.9 — Quiet Polish (QConnect cleanup + tray for everyone)
+# 1.2.9 — Quiet Polish 
 
-Two main threads of work since 1.2.8: splitting the single-file
-QConnect service into a proper module so the History duplicates and
-missing-tracks regression could finally be untangled, and a long
-overdue round of tray polish on Linux. Details on each below.
+Not big features on this release, just polishing, bugfixing and
+performance related changes.
 
 A handful of smaller fixes and conveniences round it out: sticky
 headers no longer leave a gap at the titlebar, an Edit folder
@@ -11,26 +9,20 @@ shortcut finally lives in the playlist sidebar context menu, and
 shift-range + Ctrl/Cmd+A multi-select now reaches the remaining
 views.
 
-If you're upgrading from 1.2.4 or earlier, everything from 1.2.5
-through 1.2.8 (Accolade Watch + Mixtapes & Collections) is still in
-here.
+Two main threads of work since 1.2.8: splitting the single-file
+QConnect service into a proper module so the History duplicates and
+missing-tracks regression could finally be untangled, and a long
+overdue round of tray polish on Linux. Details on each below.
 
----
+Much of the work in this version is focused on laying the groundwork 
+for the CLI and daemonized versions. The next release will likely take 
+a little longer to arrive —unless there’s a major bug to fix, which 
+I hope isn’t the case— because the work on the daemon is turning out 
+to be much more involved than I expected. 
 
-## QConnect (#316)
+I mean, it’s straightforward, but we want a daemon that’s on par of 
+quiality with the current client, right? 
 
-  - **Service split into a module** — `qconnect_service.rs` is now twelve focused files (transport, session, queue resolution, CoreBridge bridging, event sink, track loading, types, commands, tests…)
-  - **History duplicates + gaps fixed** — cursor-align skipped when local is the active renderer; `set_queue` remaps history by track id instead of clearing it on every echoed reorder
-  - **First-track hiccup, prev/next bouncing, shuffle drift** — single pass through the cursor-resolution path
-
----
-
-## Linux tray
-
-  - **Live tooltip** — track title / "by Artist" / album on hover, plus inline hints (Middle-click to pause, Scroll to adjust volume) that flip with state
-  - **Middle-click + scroll wired** — middle-click toggles play/pause and vertical scroll adjusts volume in 5 % steps, mirroring the Plasma media plasmoid
-  - **Icon variant picker** — Auto / Mono light / Mono dark / Color dropdown in Settings → Appearance → System Tray, for desktops where auto-detection picks the wrong glyph (e.g. GNOME's permanently dark top bar)
-  - **Updates from a dedicated thread** — ksni 0.3's blocking handle panics from a tokio context; the new worker thread sidesteps that entirely
 
 ---
 
@@ -50,6 +42,23 @@ here.
   - **Session resume position** (#317) — opt-in restore of the seek position on next launch
   - **Gapless one-shot guard** — prefetch-attempted bit now gates the gapless transition so a stray late-cancel can't trip the next-track hand-off
   - **Audio enumeration** — virtual ALSA PCMs are skipped during the CPAL probe; libasound's verbose enumeration errors route to `log::debug`
+---
+
+## QConnect (#316)
+
+  - **Service split into a module** — `qconnect_service.rs` is now twelve focused files (transport, session, queue resolution, CoreBridge bridging, event sink, track loading, types, commands, tests…)
+  - **History duplicates + gaps fixed** — cursor-align skipped when local is the active renderer; `set_queue` remaps history by track id instead of clearing it on every echoed reorder
+  - **First-track hiccup, prev/next bouncing, shuffle drift** — single pass through the cursor-resolution path
+
+---
+
+## Look 'n Feel
+
+  - **Cache images on sidebar** - Collages on the sidebar are now cached for a smoth scrolling. 
+  - **Live tooltip** — track title / "by Artist" / album on hover, plus inline hints (Middle-click to pause, Scroll to adjust volume) that flip with state
+  - **Middle-click + scroll wired** — middle-click toggles play/pause and vertical scroll adjusts volume in 5 % steps, mirroring the Plasma media plasmoid
+  - **Icon variant picker** — Auto / Mono light / Mono dark / Color dropdown in Settings → Appearance → System Tray, for desktops where auto-detection picks the wrong glyph (e.g. GNOME's permanently dark top bar)
+  - **Updates from a dedicated thread** — ksni 0.3's blocking handle panics from a tokio context; the new worker thread sidesteps that entirely
 
 ---
 
@@ -61,5 +70,9 @@ here.
   - **Dependency bumps** — typescript 6.0.3, ashpd 0.13.10, notify-rust 4.16.0, rustls-webpki 0.103.13, plus the usual minor/patch swarm
 
 ---
+
+Thanks for everyon collaborating with this project. 
+
+This release also include contributions from @afonsojramos as usual, thank your for yor commitment with this and the MacOs version of Qbz. 
 
 Full changelog: https://github.com/vicrodh/qbz/compare/v1.2.8...v1.2.9
