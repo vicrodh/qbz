@@ -3,7 +3,7 @@ runtime: org.gnome.Platform
 runtime-version: '49'
 sdk: org.gnome.Sdk
 sdk-extensions:
-  - org.freedesktop.Sdk.Extension.node20
+  - org.freedesktop.Sdk.Extension.node24
   - org.freedesktop.Sdk.Extension.rust-stable
   - org.freedesktop.Sdk.Extension.llvm20
 command: qbz
@@ -23,6 +23,9 @@ finish-args:
 
   # Required for tray icon visibility in Flatpak sandbox
   - --filesystem=xdg-run/tray-icon:create
+
+  # Discord
+  - --filesystem=xdg-run/app/com.discordapp.Discord:create
 
   # Notifications and tray
   - --talk-name=org.freedesktop.Notifications
@@ -138,11 +141,11 @@ modules:
   - name: qbz
     buildsystem: simple
     build-options:
-      append-path: /usr/lib/sdk/node20/bin:/usr/lib/sdk/rust-stable/bin:/usr/lib/sdk/llvm20/bin
+      append-path: /usr/lib/sdk/node24/bin:/usr/lib/sdk/rust-stable/bin:/usr/lib/sdk/llvm20/bin
       build-args:
         - --share=network
       env:
-        npm_config_nodedir: /usr/lib/sdk/node20
+        npm_config_nodedir: /usr/lib/sdk/node24
         LIBCLANG_PATH: /usr/lib/sdk/llvm20/lib
     build-commands:
       - npm ci
@@ -152,7 +155,9 @@ modules:
       # not linked into the Flatpak binary.
       - export PATH="$PWD/node_modules/.bin:$PATH" && npm run tauri build -- --no-bundle -- --no-default-features
       - install -Dm755 src-tauri/target/release/qbz /app/bin/qbz
+      - install -D -t ${FLATPAK_DEST}/bin/ qbz-wrapper
       - install -Dm644 packaging/flatpak/com.blitzfc.qbz.desktop /app/share/applications/com.blitzfc.qbz.desktop
+      - desktop-file-edit --set-key=Exec --set-value='/app/bin/qbz-wrapper' /app/share/applications/com.blitzfc.qbz.desktop
       - install -Dm644 packaging/flatpak/com.blitzfc.qbz.metainfo.xml /app/share/metainfo/com.blitzfc.qbz.metainfo.xml
       - install -Dm644 LICENSE /app/share/licenses/com.blitzfc.qbz/LICENSE
       - install -Dm644 src-tauri/icons/128x128.png /app/share/icons/hicolor/128x128/apps/com.blitzfc.qbz.png
@@ -168,3 +173,12 @@ modules:
           - node_modules
           - src-tauri/target
           - .svelte-kit
+      - type: script
+        commands:
+          - |
+            for i in {0..9}; do
+              test -S $XDG_RUNTIME_DIR/discord-ipc-$i ||
+                ln -sf {app/com.discordapp.Discord,$XDG_RUNTIME_DIR}/discord-ipc-$i;
+            done
+            qbz "$@"
+        dest-filename: qbz-wrapper
