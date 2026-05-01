@@ -13,6 +13,7 @@ mod event_sink;
 mod queue_resolution;
 mod service;
 mod session;
+pub mod startup;
 mod track_loading;
 mod transport;
 mod types;
