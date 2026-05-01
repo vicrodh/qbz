@@ -6,7 +6,8 @@
 
 use qconnect_app::{
     evaluate_remote_queue_admission, resolve_handoff_intent, QConnectQueueState,
-    QConnectRendererState, QueueCommandType, RendererReport, RendererReportType,
+    QConnectRendererState, QconnectStartupMode, QueueCommandType, RendererReport,
+    RendererReportType,
 };
 use tauri::{AppHandle, Emitter, Manager, State};
 use uuid::Uuid;
@@ -840,6 +841,19 @@ pub async fn v2_qconnect_set_device_name(
         *guard = Some(trimmed.clone());
         persist_device_name(Some(&trimmed));
     }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn v2_qconnect_get_startup_mode() -> Result<String, RuntimeError> {
+    Ok(super::startup::load_startup_mode().as_str().to_string())
+}
+
+#[tauri::command]
+pub async fn v2_qconnect_set_startup_mode(mode: String) -> Result<(), RuntimeError> {
+    let parsed = QconnectStartupMode::from_str(&mode)
+        .ok_or_else(|| RuntimeError::Internal(format!("invalid startup mode: {mode}")))?;
+    super::startup::save_startup_mode(parsed);
     Ok(())
 }
 
