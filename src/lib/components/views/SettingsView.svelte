@@ -1409,6 +1409,29 @@
   let qconnectDeviceName = $state('');
   let qconnectDeviceNameDefault = $state('');
 
+  // QConnect startup mode
+  let qconnectStartupMode = $state<'off' | 'on' | 'remember_last'>('off');
+
+  async function loadQconnectStartupMode() {
+    try {
+      const value = await invoke<string>('v2_qconnect_get_startup_mode');
+      if (value === 'off' || value === 'on' || value === 'remember_last') {
+        qconnectStartupMode = value;
+      }
+    } catch (err) {
+      console.warn('[Settings] Failed to load QConnect startup mode:', err);
+    }
+  }
+
+  async function setQconnectStartupMode(mode: 'off' | 'on' | 'remember_last') {
+    qconnectStartupMode = mode;
+    try {
+      await invoke('v2_qconnect_set_startup_mode', { mode });
+    } catch (err) {
+      console.error('[Settings] Failed to save QConnect startup mode:', err);
+    }
+  }
+
   async function loadQconnectDeviceName() {
     try {
       const [name, hostname] = await Promise.all([
@@ -1596,8 +1619,9 @@
       .then((registered) => { qobuzLinkHandlerEnabled = registered; })
       .catch((err) => { console.warn('Could not check qobuzapp handler:', err); });
 
-    // Load QConnect device name
+    // Load QConnect device name and startup mode
     loadQconnectDeviceName();
+    loadQconnectStartupMode();
 
     // Warm-start Plex panel from local cache and refresh in background
     hydratePlexAddressFieldsFromBaseUrl();
@@ -5275,6 +5299,36 @@
         value={qconnectDeviceName}
         placeholder={qconnectDeviceNameDefault}
         onchange={(e) => handleQconnectDeviceNameChange(e.currentTarget.value)}
+      />
+    </div>
+
+    <!-- Qobuz Connect Startup Mode -->
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.integrations.qconnect.startupMode.title')}</span>
+        <small class="setting-note">{$t('settings.integrations.qconnect.startupMode.description')}</small>
+        <small class="setting-note">{$t('settings.integrations.qconnect.startupMode.localLibraryNote')}</small>
+      </div>
+      <Dropdown
+        value={qconnectStartupMode === 'off'
+          ? $t('settings.integrations.qconnect.startupMode.off')
+          : qconnectStartupMode === 'on'
+            ? $t('settings.integrations.qconnect.startupMode.on')
+            : $t('settings.integrations.qconnect.startupMode.rememberLast')}
+        options={[
+          $t('settings.integrations.qconnect.startupMode.off'),
+          $t('settings.integrations.qconnect.startupMode.on'),
+          $t('settings.integrations.qconnect.startupMode.rememberLast')
+        ]}
+        onchange={(label) => {
+          if (label === $t('settings.integrations.qconnect.startupMode.on')) {
+            setQconnectStartupMode('on');
+          } else if (label === $t('settings.integrations.qconnect.startupMode.rememberLast')) {
+            setQconnectStartupMode('remember_last');
+          } else {
+            setQconnectStartupMode('off');
+          }
+        }}
       />
     </div>
 

@@ -2455,7 +2455,17 @@
       "qconnectDeviceName": "Nome do dispositivo",
       "qconnectDeviceNameDesc": "Nome exibido no Qobuz Connect",
       "noProtocolDeviceFound": "Nenhum dispositivo {protocol} encontrado",
-      "noProtocolDeviceFoundHint": "Certifique-se de que os dispositivos estejam na mesma rede"
+      "noProtocolDeviceFoundHint": "Certifique-se de que os dispositivos estejam na mesma rede",
+      "qconnect": {
+        "startupMode": {
+          "title": "Conectar automaticamente ao iniciar",
+          "description": "Escolha se o Qobuz Connect ativa automaticamente quando o QBZ abre.",
+          "off": "Desligado",
+          "on": "Sempre ligado",
+          "rememberLast": "Lembrar último estado",
+          "localLibraryNote": "Lembre-se: Qobuz Connect não é compatível com a biblioteca local."
+        }
+      }
     },
     "storage": {
       "title": "Armazenamento",

@@ -542,8 +542,23 @@ fn main() {
         qbz_nix_lib::logging::log_startup(&format!("[QBZ] GPU rendering: {}", gpu_status));
     }
 
+    // CLI flags: --enable-qconnect / --disable-qconnect (volatile per-launch override)
+    let qconnect_force_on = std::env::args().any(|a| a == "--enable-qconnect");
+    let qconnect_force_off = std::env::args().any(|a| a == "--disable-qconnect");
+    let qconnect_cli_override: Option<bool> = match (qconnect_force_on, qconnect_force_off) {
+        (true, false) => Some(true),
+        (false, true) => Some(false),
+        (true, true) => {
+            log::warn!(
+                "[QConnect] Both --enable-qconnect and --disable-qconnect provided; --enable-qconnect wins"
+            );
+            Some(true)
+        }
+        (false, false) => None,
+    };
+
     // Catch panics during startup and show a recovery message
-    let result = std::panic::catch_unwind(|| qbz_nix_lib::run());
+    let result = std::panic::catch_unwind(|| qbz_nix_lib::run(qconnect_cli_override));
 
     if let Err(panic_info) = result {
         let msg = if let Some(s) = panic_info.downcast_ref::<String>() {

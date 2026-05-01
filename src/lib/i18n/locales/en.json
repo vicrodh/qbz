@@ -2461,7 +2461,17 @@
       "qconnectDeviceName": "Device Name",
       "qconnectDeviceNameDesc": "Name displayed in Qobuz Connect",
       "noProtocolDeviceFound": "No {protocol} devices found",
-      "noProtocolDeviceFoundHint": "Make sure devices are on the same network"
+      "noProtocolDeviceFoundHint": "Make sure devices are on the same network",
+      "qconnect": {
+        "startupMode": {
+          "title": "Auto-connect on startup",
+          "description": "Choose whether Qobuz Connect activates automatically when QBZ launches.",
+          "off": "Off",
+          "on": "Always on",
+          "rememberLast": "Remember last state",
+          "localLibraryNote": "Remember, Qobuz Connect is not compatible with local library."
+        }
+      }
     },
     "storage": {
       "title": "Storage",

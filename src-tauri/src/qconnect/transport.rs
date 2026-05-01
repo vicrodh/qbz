@@ -178,7 +178,7 @@ pub(super) fn persist_device_name(name: Option<&str>) {
     }
 }
 
-pub(super) async fn resolve_transport_config(
+pub(crate) async fn resolve_transport_config(
     options: QconnectConnectOptions,
     app_state: &AppState,
 ) -> Result<WsTransportConfig, String> {

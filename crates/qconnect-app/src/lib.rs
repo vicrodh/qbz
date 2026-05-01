@@ -7,8 +7,10 @@ mod error;
 mod events;
 mod feature_flags;
 mod state;
+pub mod startup;
 
 pub use app::QconnectApp;
+pub use startup::{compute_effective_startup, QconnectStartupMode};
 pub use error::QconnectAppError;
 pub use events::{NoOpEventSink, QconnectAppEvent, QconnectEventSink};
 pub use feature_flags::{

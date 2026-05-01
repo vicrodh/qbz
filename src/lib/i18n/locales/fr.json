@@ -2455,7 +2455,17 @@
       "plexStatusError": "Erreur Plex : {erreur}",
       "plexStatusPlaying": "Lecture : {titre}",
       "plexTrackMeta": "{artist} - {album} - {rate} Hz / {bits}-bit",
-      "remoteControlSetupGuide": "Guide de configuration"
+      "remoteControlSetupGuide": "Guide de configuration",
+      "qconnect": {
+        "startupMode": {
+          "title": "Se connecter automatiquement au démarrage",
+          "description": "Choisissez si Qobuz Connect s'active automatiquement au lancement de QBZ.",
+          "off": "Désactivé",
+          "on": "Toujours activé",
+          "rememberLast": "Mémoriser le dernier état",
+          "localLibraryNote": "Rappel : Qobuz Connect n'est pas compatible avec la bibliothèque locale."
+        }
+      }
     },
     "storage": {
       "title": "Stockage",
