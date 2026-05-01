@@ -41,6 +41,7 @@ pub async fn runtime_bootstrap(
     app_state: State<'_, AppState>,
     core_bridge: State<'_, CoreBridgeState>,
     audio_settings: State<'_, AudioSettingsState>,
+    qconnect_cli_override: State<'_, crate::qconnect::startup::QconnectCliOverride>,
 ) -> Result<RuntimeStatus, RuntimeError> {
     let manager = runtime.manager();
 
@@ -213,6 +214,15 @@ pub async fn runtime_bootstrap(
                         }
                     }
                 }
+
+                // QConnect auto-connect-on-startup. Only fires here, after a successful
+                // OAuth restore + session activation, because service.connect requires
+                // a fully initialized client.
+                crate::qconnect::startup::maybe_auto_connect_after_bootstrap(
+                    &app,
+                    qconnect_cli_override.0,
+                )
+                .await;
             }
             Err(e) => {
                 // Token expired — clear it and let user re-login via OAuth

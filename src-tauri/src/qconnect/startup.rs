@@ -89,3 +89,76 @@ pub fn save_last_known_state(state: bool) {
         rusqlite::params![value],
     );
 }
+
+/// Tauri-managed wrapper for the volatile CLI override
+/// (`--enable-qconnect` / `--disable-qconnect`).
+///
+/// Set once in `pub fn run` and read from inside the bootstrap command,
+/// because the auto-connect dispatch must wait until OAuth restore + session
+/// activation are complete.
+pub struct QconnectCliOverride(pub Option<bool>);
+
+/// Trigger QConnect auto-connect AFTER the runtime is fully bootstrapped
+/// (client init + OAuth restore + CoreBridge auth + session activation).
+///
+/// Called from inside `v2_runtime_bootstrap` after the OAuth success path
+/// completes. If startup_mode + last_known_state + cli_override resolve to
+/// "should not connect", returns early. Otherwise spawns a fire-and-forget
+/// task that mirrors the `v2_qconnect_connect` connect path.
+///
+/// On failure the lifecycle stays Off; the existing reconnect loop only
+/// fires for established sessions, not for failed initial connects.
+pub async fn maybe_auto_connect_after_bootstrap(
+    app: &tauri::AppHandle,
+    cli_override: Option<bool>,
+) {
+    use qconnect_app::compute_effective_startup;
+    use tauri::Manager;
+
+    let mode = load_startup_mode();
+    let last = load_last_known_state();
+    let should_connect = compute_effective_startup(mode, cli_override, last);
+
+    log::info!(
+        "[QConnect] post-bootstrap startup decision: mode={} cli_override={:?} last_known={:?} -> {}",
+        mode.as_str(),
+        cli_override,
+        last,
+        should_connect
+    );
+
+    if !should_connect {
+        return;
+    }
+
+    let app_handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let service = app_handle.state::<crate::qconnect::QconnectServiceState>();
+        let app_state = app_handle.state::<crate::AppState>();
+        let core_bridge = app_handle.state::<crate::core_bridge::CoreBridgeState>();
+
+        // Use default options; auto-discovery via qws/createToken resolves
+        // endpoint+JWT (see transport.rs::resolve_transport_config).
+        let config = match crate::qconnect::transport::resolve_transport_config(
+            Default::default(),
+            &app_state,
+        )
+        .await
+        {
+            Ok(c) => c,
+            Err(e) => {
+                log::warn!("[QConnect] startup auto-connect transport resolve failed: {e}");
+                return;
+            }
+        };
+
+        if let Err(e) = service
+            .connect(app_handle.clone(), core_bridge.0.clone(), config)
+            .await
+        {
+            log::warn!("[QConnect] startup auto-connect failed: {e}");
+        } else {
+            log::info!("[QConnect] startup auto-connect succeeded");
+        }
+    });
+}
