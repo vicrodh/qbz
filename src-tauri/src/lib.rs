@@ -495,7 +495,7 @@ fn handle_qobuz_link(handle: &tauri::AppHandle, url: &str, delay: bool) {
     }
 }
 
-pub fn run() {
+pub fn run(_qconnect_cli_override: Option<bool>) {
     // Load .env file if present (for development)
     // Silently ignore if not found (production builds use compile-time env vars)
     dotenvy::dotenv().ok();
