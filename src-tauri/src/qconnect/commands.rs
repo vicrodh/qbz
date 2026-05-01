@@ -108,17 +108,34 @@ pub async fn v2_qconnect_connect(
         .await
         .map_err(RuntimeError::Internal)?;
 
-    service
+    let result = service
         .connect(app_handle, core_bridge.0.clone(), config)
         .await
-        .map_err(RuntimeError::Internal)
+        .map_err(RuntimeError::Internal);
+
+    // Write-through last_known_state when mode == RememberLast.
+    if result.is_ok()
+        && super::startup::load_startup_mode() == QconnectStartupMode::RememberLast
+    {
+        super::startup::save_last_known_state(true);
+    }
+
+    result
 }
 
 #[tauri::command]
 pub async fn v2_qconnect_disconnect(
     service: State<'_, QconnectServiceState>,
 ) -> Result<QconnectConnectionStatus, RuntimeError> {
-    service.disconnect().await.map_err(RuntimeError::Internal)
+    let result = service.disconnect().await.map_err(RuntimeError::Internal);
+
+    if result.is_ok()
+        && super::startup::load_startup_mode() == QconnectStartupMode::RememberLast
+    {
+        super::startup::save_last_known_state(false);
+    }
+
+    result
 }
 
 #[tauri::command]
