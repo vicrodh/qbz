@@ -2448,6 +2448,16 @@
       "plexStatusPlaying": "Spielt: {title}",
       "noProtocolDeviceFound": "Keine {protocol}-Geräte gefunden",
       "noProtocolDeviceFoundHint": "Stellen Sie sicher, dass sich die Geräte im selben Netzwerk befinden",
+      "qconnect": {
+        "startupMode": {
+          "title": "Beim Start automatisch verbinden",
+          "description": "Lege fest, ob Qobuz Connect beim Start von QBZ automatisch aktiviert wird.",
+          "off": "Aus",
+          "on": "Immer an",
+          "rememberLast": "Letzten Zustand merken",
+          "localLibraryNote": "Hinweis: Qobuz Connect ist nicht mit der lokalen Bibliothek kompatibel."
+        }
+      },
       "plexStatusPlayingDirect": "Direkte Wiedergabe von Plex: {title} ({rate} Hz / {bits}-bit, {contentType}).",
       "plexStatusPlayingFallback": "{title} wird abgespielt, aber die direkte Wiedergabe ist nicht bestätigt (Teil: {partKey}).",
       "plexStatusSectionsLoaded": "{count} Musikabschnitte geladen.",
