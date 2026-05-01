@@ -1432,6 +1432,8 @@ pub fn run(qconnect_cli_override: Option<bool>) {
             qconnect::v2_qconnect_report_volume,
             qconnect::v2_qconnect_get_device_name,
             qconnect::v2_qconnect_set_device_name,
+            qconnect::v2_qconnect_get_startup_mode,
+            qconnect::v2_qconnect_set_startup_mode,
             qconnect::v2_get_hostname,
             commands_v2::v2_is_logged_in,
             commands_v2::v2_login,
