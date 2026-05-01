@@ -2458,7 +2458,7 @@
       "remoteControlSetupGuide": "Guide de configuration",
       "qconnect": {
         "startupMode": {
-          "title": "Se connecter automatiquement au démarrage",
+          "title": "Connecter Qobuz Connect automatiquement au démarrage",
           "description": "Choisissez si Qobuz Connect s'active automatiquement au lancement de QBZ.",
           "off": "Désactivé",
           "on": "Toujours activé",

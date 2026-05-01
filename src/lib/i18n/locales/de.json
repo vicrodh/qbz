@@ -2451,7 +2451,7 @@
       "noProtocolDeviceFoundHint": "Stellen Sie sicher, dass sich die Geräte im selben Netzwerk befinden",
       "qconnect": {
         "startupMode": {
-          "title": "Beim Start automatisch verbinden",
+          "title": "Qobuz Connect beim Start automatisch verbinden",
           "description": "Lege fest, ob Qobuz Connect beim Start von QBZ automatisch aktiviert wird.",
           "off": "Aus",
           "on": "Immer an",
