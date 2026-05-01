@@ -1007,55 +1007,6 @@ pub fn run(qconnect_cli_override: Option<bool>) {
                 }
             }
 
-            // QConnect auto-connect-on-startup decision.
-            {
-                use qconnect_app::compute_effective_startup;
-                let mode = crate::qconnect::startup::load_startup_mode();
-                let last = crate::qconnect::startup::load_last_known_state();
-                let should_connect = compute_effective_startup(mode, qconnect_cli_override, last);
-
-                log::info!(
-                    "[QConnect] startup decision: mode={} cli_override={:?} last_known={:?} -> {}",
-                    mode.as_str(),
-                    qconnect_cli_override,
-                    last,
-                    should_connect
-                );
-
-                if should_connect {
-                    let app_handle = app.handle().clone();
-                    tauri::async_runtime::spawn(async move {
-                        // Best-effort: pull the managed states by handle.
-                        let service = app_handle.state::<crate::qconnect::QconnectServiceState>();
-                        let core_bridge = app_handle.state::<crate::core_bridge::CoreBridgeState>();
-                        let app_state = app_handle.state::<crate::AppState>();
-
-                        // Use default options; auto-discovery via qws/createToken resolves
-                        // endpoint+JWT (see transport.rs::resolve_transport_config).
-                        let config = match crate::qconnect::transport::resolve_transport_config(
-                            Default::default(),
-                            &app_state,
-                        )
-                        .await
-                        {
-                            Ok(c) => c,
-                            Err(e) => {
-                                log::warn!("[QConnect] startup auto-connect transport resolve failed: {e}");
-                                return;
-                            }
-                        };
-
-                        if let Err(e) = service.connect(app_handle.clone(), core_bridge.0.clone(), config).await {
-                            log::warn!("[QConnect] startup auto-connect failed: {e}");
-                            // Lifecycle stays Off; existing reconnect loop only fires for
-                            // established sessions, not for failed initial connects.
-                        } else {
-                            log::info!("[QConnect] startup auto-connect succeeded");
-                        }
-                    });
-                }
-            }
-
             // Initialize CoreBridge (new multi-crate architecture)
             // Store V2 player state for event loop access
             let v2_player_state: Arc<tokio::sync::RwLock<Option<qbz_player::SharedState>>> =
@@ -1309,6 +1260,57 @@ pub fn run(qconnect_cli_override: Option<bool>) {
                     tokio::time::sleep(sleep_duration).await;
                 }
             });
+
+            // QConnect auto-connect-on-startup decision.
+            // Placed last so CoreBridge and all other managed state is initialized
+            // before the spawned task runs service.connect.
+            {
+                use qconnect_app::compute_effective_startup;
+                let mode = crate::qconnect::startup::load_startup_mode();
+                let last = crate::qconnect::startup::load_last_known_state();
+                let should_connect = compute_effective_startup(mode, qconnect_cli_override, last);
+
+                log::info!(
+                    "[QConnect] startup decision: mode={} cli_override={:?} last_known={:?} -> {}",
+                    mode.as_str(),
+                    qconnect_cli_override,
+                    last,
+                    should_connect
+                );
+
+                if should_connect {
+                    let app_handle = app.handle().clone();
+                    tauri::async_runtime::spawn(async move {
+                        // Best-effort: pull the managed states by handle.
+                        let service = app_handle.state::<crate::qconnect::QconnectServiceState>();
+                        let core_bridge = app_handle.state::<crate::core_bridge::CoreBridgeState>();
+                        let app_state = app_handle.state::<crate::AppState>();
+
+                        // Use default options; auto-discovery via qws/createToken resolves
+                        // endpoint+JWT (see transport.rs::resolve_transport_config).
+                        let config = match crate::qconnect::transport::resolve_transport_config(
+                            Default::default(),
+                            &app_state,
+                        )
+                        .await
+                        {
+                            Ok(c) => c,
+                            Err(e) => {
+                                log::warn!("[QConnect] startup auto-connect transport resolve failed: {e}");
+                                return;
+                            }
+                        };
+
+                        if let Err(e) = service.connect(app_handle.clone(), core_bridge.0.clone(), config).await {
+                            log::warn!("[QConnect] startup auto-connect failed: {e}");
+                            // Lifecycle stays Off; existing reconnect loop only fires for
+                            // established sessions, not for failed initial connects.
+                        } else {
+                            log::info!("[QConnect] startup auto-connect succeeded");
+                        }
+                    });
+                }
+            }
 
             Ok(())
         })
