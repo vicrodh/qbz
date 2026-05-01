@@ -15,7 +15,7 @@ mod service;
 mod session;
 pub mod startup;
 mod track_loading;
-mod transport;
+pub(crate) mod transport;
 mod types;
 
 pub use commands::*;
