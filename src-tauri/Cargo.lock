@@ -2850,6 +2850,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "if-addrs"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c0a05c691e1fae256cf7013d99dad472dc52d5543322761f83ec8d47eab40d2b"
+dependencies = [
+ "libc",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "image"
 version = "0.25.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3396,10 +3406,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8fe7c11a1eb3cfbfcf702d1601c1f5f4c102cdc8665b8a557783ef634741676e"
 dependencies = [
  "flume",
- "if-addrs",
+ "if-addrs 0.13.4",
  "log",
  "polling 2.8.0",
  "socket2 0.5.10",
+]
+
+[[package]]
+name = "mdns-sd"
+version = "0.19.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c2bb8ce26633738d98ffcef71ec58bff967c6675be50229823c2835f6316e67e"
+dependencies = [
+ "fastrand",
+ "flume",
+ "if-addrs 0.15.0",
+ "log",
+ "mio",
+ "socket-pktinfo",
+ "socket2 0.6.2",
 ]
 
 [[package]]
@@ -3473,6 +3498,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a69bcab0ad47271a0234d9422b131806bf3968021e5dc9328caf2d4cd58557fc"
 dependencies = [
  "libc",
+ "log",
  "wasi 0.11.1+wasi-snapshot-preview1",
  "windows-sys 0.61.2",
 ]
@@ -4824,7 +4850,7 @@ version = "0.1.0"
 dependencies = [
  "futures-util",
  "log",
- "mdns-sd",
+ "mdns-sd 0.11.5",
  "rupnp",
  "rust_cast",
  "serde",
@@ -4935,7 +4961,7 @@ dependencies = [
  "lofty",
  "log",
  "md-5",
- "mdns-sd",
+ "mdns-sd 0.19.1",
  "mupdf",
  "notify-rust",
  "open",
@@ -5615,7 +5641,7 @@ dependencies = [
  "http-body-util",
  "hyper",
  "hyper-util",
- "if-addrs",
+ "if-addrs 0.13.4",
  "roxmltree",
  "ssdp-client",
  "tokio",
@@ -6208,6 +6234,17 @@ name = "smallvec"
 version = "1.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
+
+[[package]]
+name = "socket-pktinfo"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "927136cc2ae6a1b0e66ac6b1210902b75c3f726db004a73bc18686dcd0dcd22f"
+dependencies = [
+ "libc",
+ "socket2 0.6.2",
+ "windows-sys 0.60.2",
+]
 
 [[package]]
 name = "socket2"
