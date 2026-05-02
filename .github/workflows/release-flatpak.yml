@@ -94,7 +94,7 @@ jobs:
             org.gnome.Sdk//49
           # Install SDK extensions - flatpak-builder will auto-resolve the correct version based on the SDK
           flatpak install --user -y --noninteractive flathub \
-            org.freedesktop.Sdk.Extension.node20//25.08 \
+            org.freedesktop.Sdk.Extension.node24//25.08 \
             org.freedesktop.Sdk.Extension.rust-stable//25.08 \
             org.freedesktop.Sdk.Extension.llvm20//25.08
 
