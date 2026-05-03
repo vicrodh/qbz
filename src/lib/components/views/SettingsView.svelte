@@ -2822,11 +2822,14 @@
 
   async function handleRefreshDevices() {
     if (isLoadingDevices) return;
-    const backendType = selectedBackend === 'ALSA Direct' ? 'Alsa' :
-                        selectedBackend === 'PipeWire' ? 'PipeWire' :
-                        selectedBackend === 'PulseAudio' ? 'Pulse' : null;
-    if (backendType) {
-      await loadBackendDevices(backendType);
+    // Look up the backend_type for the currently-selected backend.
+    // Works for every backend that v2_get_available_backends returned
+    // (PipeWire/ALSA Direct/PulseAudio on Linux, System Audio on
+    // macOS/Windows). 'Auto' has no entry, so refresh stays a no-op
+    // there — matches the existing Linux behavior.
+    const backend = availableBackends.find(b => b.name === selectedBackend);
+    if (backend) {
+      await loadBackendDevices(backend.backend_type);
     }
   }
 
@@ -2899,6 +2902,16 @@
             }
           }
         }
+      } else if (platform !== 'linux' && availableBackends.length === 1) {
+        // Non-Linux platforms expose a single backend (CoreAudio on
+        // macOS, WASAPI on Windows). Pick it automatically so the
+        // device picker is populated — there is no meaningful "Auto"
+        // choice when only one backend exists, and leaving it on
+        // "Auto" leaves the picker stuck at "System Default" only.
+        const onlyBackend = availableBackends[0];
+        selectedBackend = onlyBackend.name;
+        await loadBackendDevices(onlyBackend.backend_type);
+        outputDevice = 'System Default';
       } else {
         selectedBackend = 'Auto';
         // Auto mode: always use System Default (no device selection)
