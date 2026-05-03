@@ -1054,7 +1054,7 @@
   // per-playlist fetches double, surfacing as duplicated playlists in the UI
   // (https://github.com/vicrodh/qbz issue: doubled sidebar playlists).
   // Track previous value so we only reload on actual transitions.
-  let prevIsOffline = $state<boolean | undefined>(undefined);
+  let prevIsOffline: boolean | undefined = undefined;
   $effect(() => {
     const current = isOffline;
     if (prevIsOffline === undefined) {
