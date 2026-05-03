@@ -1047,11 +1047,24 @@
     }
   });
 
-  // Reload playlists when offline status changes
+  // Reload playlists when offline status changes.
+  // IMPORTANT: this $effect must NOT fire on initial mount — `onMount` already
+  // calls `loadSidebarData()` which loads playlists. If both fire, two
+  // concurrent `v2_get_user_playlists` invocations race and downstream
+  // per-playlist fetches double, surfacing as duplicated playlists in the UI
+  // (https://github.com/vicrodh/qbz issue: doubled sidebar playlists).
+  // Track previous value so we only reload on actual transitions.
+  let prevIsOffline = $state<boolean | undefined>(undefined);
   $effect(() => {
-    // Track isOffline to trigger reload when it changes
-    if (isOffline !== undefined) {
-      console.log('[Sidebar] Offline status changed, reloading playlists:', isOffline);
+    const current = isOffline;
+    if (prevIsOffline === undefined) {
+      // Initial subscription — onMount handles the first load.
+      prevIsOffline = current;
+      return;
+    }
+    if (prevIsOffline !== current) {
+      prevIsOffline = current;
+      console.log('[Sidebar] Offline status changed, reloading playlists:', current);
       loadUserPlaylists();
     }
   });
