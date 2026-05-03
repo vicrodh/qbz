@@ -1999,7 +1999,27 @@ impl QobuzClient {
             .and_then(|p| p.get("items"))
             .ok_or_else(|| ApiError::ApiResponse("No playlists in response".to_string()))?;
 
-        Ok(serde_json::from_value(playlists.clone())?)
+        let mut playlists: Vec<Playlist> = serde_json::from_value(playlists.clone())?;
+        let original_len = playlists.len();
+        // Qobuz's /playlist/getUserPlaylists returns the same logical playlist with two
+        // distinct numerical IDs (different ID ranges). The official web UI dedupes these.
+        // Dedup at the API boundary by (name, owner.id) so callers see one entry per
+        // logical playlist, while still allowing legitimately-same-named playlists from
+        // different owners (e.g., followed) to coexist.
+        let mut seen: std::collections::HashSet<(String, u64)> =
+            std::collections::HashSet::new();
+        playlists.retain(|p| {
+            let key = (p.name.trim().to_lowercase(), p.owner.id);
+            seen.insert(key)
+        });
+        if playlists.len() != original_len {
+            log::info!(
+                "get_user_playlists: deduped {} -> {} playlists by (name, owner.id)",
+                original_len,
+                playlists.len()
+            );
+        }
+        Ok(playlists)
     }
 
     /// Search playlists
