@@ -1999,7 +1999,39 @@ impl QobuzClient {
             .and_then(|p| p.get("items"))
             .ok_or_else(|| ApiError::ApiResponse("No playlists in response".to_string()))?;
 
-        Ok(serde_json::from_value(playlists.clone())?)
+        let playlists: Vec<Playlist> = serde_json::from_value(playlists.clone())?;
+        let original_len = playlists.len();
+        // Qobuz's /playlist/getUserPlaylists returns the same logical playlist with two
+        // distinct numerical IDs (different ID ranges). The official web UI dedupes these.
+        // Dedup at the API boundary by (name, owner.id) so callers see one entry per
+        // logical playlist, while still allowing legitimately-same-named playlists from
+        // different owners (e.g., followed) to coexist.
+        //
+        // Pick a deterministic canonical row for each duplicate group so the exposed
+        // playlist.id is stable across API response reordering. Use the smallest
+        // numerical playlist ID as the canonical representative.
+        let mut deduped: Vec<Playlist> = Vec::with_capacity(original_len);
+        let mut seen: std::collections::HashMap<(String, u64), usize> =
+            std::collections::HashMap::new();
+        for p in playlists {
+            let key = (p.name.trim().to_lowercase(), p.owner.id);
+            if let Some(&idx) = seen.get(&key) {
+                if p.id < deduped[idx].id {
+                    deduped[idx] = p;
+                }
+            } else {
+                seen.insert(key, deduped.len());
+                deduped.push(p);
+            }
+        }
+        if deduped.len() != original_len {
+            log::info!(
+                "get_user_playlists: deduped {} -> {} playlists by (name, owner.id) using smallest playlist id as canonical",
+                original_len,
+                deduped.len()
+            );
+        }
+        Ok(deduped)
     }
 
     /// Search playlists
