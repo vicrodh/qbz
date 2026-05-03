@@ -107,7 +107,7 @@ export function getTitleBarVariant(): 'full' | 'stripped' {
 export function getTitleBarHeight(): number {
   if (platform === 'macos') return 0;
   if (mode === 'system' || mode === 'hidden') return 0;
-  return mode === 'plasma' ? 32 : 40;
+  return mode === 'plasma' ? 32 : 44;
 }
 
 export function getShowWindowControls(): boolean {
