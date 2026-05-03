@@ -172,3 +172,16 @@ export function setTitlebarNavConfig(newConfig: Partial<TitlebarNavConfig>): voi
   persist();
   notifyListeners();
 }
+
+import { getMode } from './titleBarStore';
+
+/**
+ * Whether the titlebar nav should render.
+ * In 'qbz' and 'plasma' modes, follows the user's per-item config.
+ * In 'system' and 'hidden' modes, the titlebar is gone — nav not applicable.
+ */
+export function isTitlebarNavEffectivelyEnabled(): boolean {
+  const mode = getMode();
+  if (mode !== 'qbz' && mode !== 'plasma') return false;
+  return isTitlebarNavEnabled();
+}

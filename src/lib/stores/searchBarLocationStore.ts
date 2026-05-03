@@ -74,3 +74,17 @@ export function setSearchBarLocation(value: SearchBarLocation): void {
 export function toggleSearchBarLocation(): void {
   setSearchBarLocation(location === 'sidebar' ? 'titlebar' : 'sidebar');
 }
+
+import { getMode } from './titleBarStore';
+
+/**
+ * Effective search-bar location after applying mode rules.
+ * In 'system' and 'hidden' modes, the custom titlebar does not render,
+ * so search must fall back to the sidebar. In 'qbz' and 'plasma' modes,
+ * the user pref applies.
+ */
+export function getEffectiveSearchBarLocation(): SearchBarLocation {
+  const mode = getMode();
+  if (mode === 'system' || mode === 'hidden') return 'sidebar';
+  return getSearchBarLocation();
+}
