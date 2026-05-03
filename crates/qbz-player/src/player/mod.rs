@@ -2098,9 +2098,16 @@ impl Player {
                                 .playback_start_millis
                                 .store(0, Ordering::SeqCst);
                             thread_state.position_at_start.store(0, Ordering::SeqCst);
-                            // Drop the stream to release the device and stop background CPU use.
-                            drop(stream_opt.take());
-                            *pause_suspend_deadline = None;
+                            // Defer dropping the stream so a Play immediately following Stop
+                            // (the frontend's track-change pattern is Stop → Play, not append)
+                            // can reuse the open device. Tearing CoreAudio down between every
+                            // track was producing the audible click on track change. The idle
+                            // loop's pause-suspend handler (below) drops the stream when this
+                            // deadline fires; Play / Resume / Seek / ReinitDevice all clear
+                            // the deadline so they reuse or replace the stream as needed.
+                            *pause_suspend_deadline = Some(
+                                Instant::now() + Duration::from_millis(PAUSE_SUSPEND_DELAY_MS),
+                            );
                             // Reset PipeWire clock if bit-perfect was active
                             #[cfg(target_os = "linux")]
                             if thread_settings
