@@ -322,8 +322,8 @@
   /* Stripped variant: KWin SSD owns chrome. No drag, no dblclick, no controls,
      no rounded chrome of our own — just the strip below the SSD with search/nav. */
   .titlebar.variant-stripped {
-    height: 32px;
-    min-height: 32px;
+    height: 42px;
+    min-height: 42px;
     border-radius: 0;
     box-shadow: none;
     -webkit-app-region: no-drag;
