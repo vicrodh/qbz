@@ -573,16 +573,28 @@
   }
 
   // Ctrl/Cmd+A while the tracks tab's select mode is active selects
-  // every visible track. We read `tracks` at fire-time (not via the
-  // effect's reactive deps) so flipping select mode doesn't re-attach
-  // the listener every time the library mutates. The shortcut is a
-  // no-op when focus is in a text input (search field etc.).
+  // every visible track. We read `tracks`/`albumTracks` at fire-time
+  // (not via the effect's reactive deps) so flipping select mode
+  // doesn't re-attach the listener every time the library mutates.
+  // When the user has drilled into an album (selectedAlbum != null)
+  // the shortcut scopes to that album's tracks; otherwise it covers
+  // the library-wide tracks tab. The shortcut is a no-op when focus
+  // is in a text input (search field etc.).
   $effect(() => {
     if (!trackSelectMode) return;
     const handler = (e: KeyboardEvent) => {
       if (!isSelectAllShortcut(e)) return;
       e.preventDefault();
-      selectedTrackIds = new Set(tracks.map((trk) => trk.id));
+      if (selectedAlbum) {
+        // Album detail: union — preserve any selections built up from
+        // other views (tracks tab, etc.) instead of clobbering them.
+        const next = new Set(selectedTrackIds);
+        for (const trk of albumTracks) next.add(trk.id);
+        selectedTrackIds = next;
+      } else {
+        // Tracks tab covers the entire library, so replace == "select all".
+        selectedTrackIds = new Set(tracks.map((trk) => trk.id));
+      }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
@@ -1170,6 +1182,52 @@
   // Album detail state (for viewing album tracks)
   let selectedAlbum = $state<LocalAlbum | null>(null);
   let albumTracks = $state<LocalTrack[]>([]);
+
+  // Album-detail multi-select helpers — shift-click anchor + select-all
+  // state derived against the open album's track list. selectedTrackIds
+  // is the same Set the tracks tab uses, so selections compose cleanly
+  // when the user moves between views (see selectedLocalTracks above).
+  let albumDetailLastSelectedIndex = $state<number | null>(null);
+
+  $effect(() => {
+    // Reset anchor when leaving select mode or closing the album view.
+    if (!trackSelectMode || !selectedAlbum) albumDetailLastSelectedIndex = null;
+  });
+
+  const albumDetailSelectAllState = $derived(
+    albumTracks.length === 0 ? 'none' as const
+    : albumTracks.every((trk) => selectedTrackIds.has(trk.id)) ? 'all' as const
+    : albumTracks.some((trk) => selectedTrackIds.has(trk.id)) ? 'partial' as const
+    : 'none' as const
+  );
+
+  function toggleAlbumDetailSelectAll() {
+    if (albumDetailSelectAllState === 'all') {
+      const next = new Set(selectedTrackIds);
+      for (const trk of albumTracks) next.delete(trk.id);
+      selectedTrackIds = next;
+    } else {
+      const next = new Set(selectedTrackIds);
+      for (const trk of albumTracks) next.add(trk.id);
+      selectedTrackIds = next;
+    }
+  }
+
+  function toggleAlbumDetailTrackSelect(id: number, index: number, event?: MouseEvent | KeyboardEvent) {
+    if (event?.shiftKey && albumDetailLastSelectedIndex !== null) {
+      const ids = albumTracks.map((trk) => trk.id);
+      selectedTrackIds = applyShiftRange({
+        current: selectedTrackIds,
+        ids,
+        lastIndex: albumDetailLastSelectedIndex,
+        currentIndex: index,
+      });
+      albumDetailLastSelectedIndex = index;
+      return;
+    }
+    toggleTrackSelect(id);
+    albumDetailLastSelectedIndex = index;
+  }
   let albumTrackSearch = $state('');
   let showAlbumTrackSearch = $state(false);
 
@@ -3555,6 +3613,17 @@
 
       <div class="track-list">
         <div class="track-list-header">
+          {#if trackSelectMode}
+            <div class="col-select-all">
+              <input
+                type="checkbox"
+                checked={albumDetailSelectAllState === 'all'}
+                indeterminate={albumDetailSelectAllState === 'partial'}
+                onchange={toggleAlbumDetailSelectAll}
+                title={$t('actions.selectAll')}
+              />
+            </div>
+          {/if}
           <div class="col-number">#</div>
           <div class="col-title">{$t('tracklist.title')}</div>
           <div class="col-duration">{$t('tracklist.duration')}</div>
@@ -3582,7 +3651,10 @@
               hideFavorite={true}
               selectable={trackSelectMode}
               selected={selectedTrackIds.has(track.id)}
-              onToggleSelect={() => toggleTrackSelect(track.id)}
+              onToggleSelect={(e) => {
+                const absIdx = albumTracks.findIndex((trk) => trk.id === track.id);
+                toggleAlbumDetailTrackSelect(track.id, absIdx, e);
+              }}
               onArtistClick={track.artist && track.artist !== selectedAlbum?.artist
                 ? () => handleLocalArtistClick(track.artist)
                 : undefined}
@@ -5893,6 +5965,21 @@
     box-sizing: border-box;
     border-bottom: 1px solid var(--bg-tertiary);
     margin-bottom: 8px;
+  }
+
+  .track-list-header .col-select-all {
+    width: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .track-list-header .col-select-all input[type='checkbox'] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent-primary);
+    cursor: pointer;
   }
 
   .track-list-header .col-number {
