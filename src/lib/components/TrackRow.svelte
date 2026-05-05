@@ -289,7 +289,7 @@
         checked={selected}
         tabindex={-1}
         aria-label="Select track"
-        onclick={(e) => e.preventDefault()}
+        style="pointer-events: none;"
       />
     </div>
   {/if}
@@ -515,11 +515,11 @@
   }
 
   .track-row.selected {
-    background-color: color-mix(in srgb, var(--accent-primary) 12%, transparent);
+    background-color: color-mix(in srgb, var(--accent-primary) 22%, transparent);
   }
 
   .track-row.selected.hovered {
-    background-color: color-mix(in srgb, var(--accent-primary) 20%, transparent);
+    background-color: color-mix(in srgb, var(--accent-primary) 30%, transparent);
   }
 
   .track-checkbox {

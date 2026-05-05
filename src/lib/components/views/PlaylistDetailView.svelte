@@ -1309,14 +1309,19 @@
 
   // === Batch Selection Functions ===
 
-  function getTrackKey(track: DisplayTrack): string {
+  // Key includes the row's index so duplicate tracks (same trackId+isLocal
+  // appearing twice in a playlist) get distinct selection keys. Without the
+  // index, the underlying Set collapses both entries into one, causing the
+  // bug where clicking either duplicate selects the other and Delete removes
+  // both. See issue #386.
+  function getTrackKey(track: DisplayTrack, index: number): string {
     const isLocal = track.isLocal ?? false;
     const trackId = isLocal ? Math.abs(track.id) : track.id;
-    return `${trackId}:${isLocal}`;
+    return `${trackId}:${isLocal}:${index}`;
   }
 
-  function toggleTrackSelection(track: DisplayTrack) {
-    const key = getTrackKey(track);
+  function toggleTrackSelection(track: DisplayTrack, index: number) {
+    const key = getTrackKey(track, index);
     const newSet = new Set(selectedTrackKeys);
     if (newSet.has(key)) {
       newSet.delete(key);
@@ -1332,9 +1337,9 @@
 
   function selectAllTracks() {
     const newSet = new Set<string>();
-    for (const track of displayTracks) {
-      newSet.add(getTrackKey(track));
-    }
+    displayTracks.forEach((track, index) => {
+      newSet.add(getTrackKey(track, index));
+    });
     selectedTrackKeys = newSet;
   }
 
@@ -1347,9 +1352,9 @@
   }
 
   function toggleMultiSelect(track: DisplayTrack, index: number, event?: MouseEvent | KeyboardEvent) {
-    const key = getTrackKey(track);
+    const key = getTrackKey(track, index);
     if (event?.shiftKey && lastSelectedIndex !== null) {
-      const keys = displayTracks.map(trk => getTrackKey(trk));
+      const keys = displayTracks.map((trk, i) => getTrackKey(trk, i));
       multiSelectedKeys = applyShiftRange({
         current: multiSelectedKeys,
         ids: keys,
@@ -1366,7 +1371,7 @@
   }
 
   function toggleSelectAll() {
-    const allKeys = displayTracks.map(track => getTrackKey(track));
+    const allKeys = displayTracks.map((track, i) => getTrackKey(track, i));
     if (multiSelectedKeys.size === allKeys.length) {
       multiSelectedKeys = new Set();
     } else {
@@ -1379,14 +1384,14 @@
     const handler = (e: KeyboardEvent) => {
       if (!isSelectAllShortcut(e)) return;
       e.preventDefault();
-      multiSelectedKeys = new Set(displayTracks.map(track => getTrackKey(track)));
+      multiSelectedKeys = new Set(displayTracks.map((track, i) => getTrackKey(track, i)));
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   });
 
   async function handleBulkPlayNext() {
-    const selected = displayTracks.filter(trk => multiSelectedKeys.has(getTrackKey(trk)));
+    const selected = displayTracks.filter((trk, i) => multiSelectedKeys.has(getTrackKey(trk, i)));
     const { queueTracks } = buildQueueTracks(selected);
     await cmdAddTracksToQueueNext(queueTracks);
     multiSelectedKeys = new Set();
@@ -1394,7 +1399,7 @@
   }
 
   async function handleBulkPlayLater() {
-    const selected = displayTracks.filter(trk => multiSelectedKeys.has(getTrackKey(trk)));
+    const selected = displayTracks.filter((trk, i) => multiSelectedKeys.has(getTrackKey(trk, i)));
     const { queueTracks } = buildQueueTracks(selected);
     await cmdAddTracksToQueue(queueTracks);
     multiSelectedKeys = new Set();
@@ -1403,7 +1408,7 @@
 
   async function handleBulkAddToPlaylist() {
     const trackIds = displayTracks
-      .filter(trk => multiSelectedKeys.has(getTrackKey(trk)) && !trk.isLocal)
+      .filter((trk, i) => multiSelectedKeys.has(getTrackKey(trk, i)) && !trk.isLocal)
       .map(trk => trk.id);
     if (trackIds.length > 0) onBulkAddToPlaylist?.(trackIds);
     multiSelectedKeys = new Set();
@@ -1411,7 +1416,7 @@
   }
 
   async function handleBulkRemoveFromPlaylist() {
-    const selected = displayTracks.filter(trk => multiSelectedKeys.has(getTrackKey(trk)));
+    const selected = displayTracks.filter((trk, i) => multiSelectedKeys.has(getTrackKey(trk, i)));
     const localTrackIds: number[] = [];
     const playlistTrackIds: number[] = [];
     const fallbackTrackIds: number[] = [];
@@ -1451,7 +1456,7 @@
     // Get indices of selected tracks (sorted)
     const selectedIndices: number[] = [];
     displayTracks.forEach((track, idx) => {
-      if (selectedTrackKeys.has(getTrackKey(track))) {
+      if (selectedTrackKeys.has(getTrackKey(track, idx))) {
         selectedIndices.push(idx);
       }
     });
@@ -1494,7 +1499,7 @@
     // Get indices of selected tracks (sorted descending for moving down)
     const selectedIndices: number[] = [];
     displayTracks.forEach((track, idx) => {
-      if (selectedTrackKeys.has(getTrackKey(track))) {
+      if (selectedTrackKeys.has(getTrackKey(track, idx))) {
         selectedIndices.push(idx);
       }
     });
@@ -2731,7 +2736,7 @@
             class:unavailable={!available}
             class:removed-from-qobuz={removedFromQobuz}
             class:custom-order-mode={isCustomOrderMode}
-            class:multi-selected={multiSelectMode && multiSelectedKeys.has(getTrackKey(track))}
+            class:multi-selected={multiSelectMode && multiSelectedKeys.has(getTrackKey(track, idx))}
             class:dragging={draggedTrackIdx === idx}
             class:drag-over={dragOverIdx === idx && draggedTrackIdx !== idx}
             style="transform: translateY({idx * TRACK_ROW_HEIGHT}px); height: {TRACK_ROW_HEIGHT}px;"
@@ -2744,33 +2749,14 @@
             ondragend={handleDragEnd}
             ondrop={(e) => handleDrop(e, idx)}
           >
-            {#if multiSelectMode && !isCustomOrderMode}
-              {@const trackKey = getTrackKey(track)}
-              <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
-              <label
-                class="track-checkbox"
-                onclick={(e: MouseEvent) => {
-                  e.stopPropagation();
-                  toggleMultiSelect(track, idx, e);
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={multiSelectedKeys.has(trackKey)}
-                  tabindex={-1}
-                  onclick={(e) => e.preventDefault()}
-                  aria-label={$t('actions.select')}
-                />
-              </label>
-            {/if}
             {#if isCustomOrderMode}
-              {@const trackKey = getTrackKey(track)}
+              {@const trackKey = getTrackKey(track, idx)}
               <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
               <label class="track-checkbox" onclick={(e: MouseEvent) => e.stopPropagation()}>
                 <input
                   type="checkbox"
                   checked={selectedTrackKeys.has(trackKey)}
-                  onchange={() => toggleTrackSelection(track)}
+                  onchange={() => toggleTrackSelection(track, idx)}
                   aria-label={$t('actions.select')}
                 />
               </label>
@@ -2818,8 +2804,11 @@
                 ? $t('player.trackUnavailable')
                 : (!available ? $t('offline.trackNotAvailable') : undefined)}
               isBlacklisted={trackBlacklisted}
-              dragTrackIds={multiSelectMode && multiSelectedKeys.has(getTrackKey(track))
-                ? displayTracks.filter(trk => multiSelectedKeys.has(getTrackKey(trk)) && !trk.isLocal).map(trk => trk.id)
+              selectable={multiSelectMode && !isCustomOrderMode}
+              selected={multiSelectedKeys.has(getTrackKey(track, idx))}
+              onToggleSelect={(e) => toggleMultiSelect(track, idx, e)}
+              dragTrackIds={multiSelectMode && multiSelectedKeys.has(getTrackKey(track, idx))
+                ? displayTracks.filter((trk, i) => multiSelectedKeys.has(getTrackKey(trk, i)) && !trk.isLocal).map(trk => trk.id)
                 : undefined}
               hideFavorite={track.isLocal || removedFromQobuz || trackBlacklisted}
               hideDownload={track.isLocal || removedFromQobuz || trackBlacklisted}
@@ -3579,7 +3568,7 @@
   }
 
   .track-row-wrapper.multi-selected :global(.track-row) {
-    background-color: color-mix(in srgb, var(--accent-primary) 12%, transparent);
+    background-color: color-mix(in srgb, var(--accent-primary) 22%, transparent);
   }
 
   /* Custom order mode */
