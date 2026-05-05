@@ -2325,10 +2325,10 @@
       "matchSystemChrome": "Coincidir con el cromado del sistema",
       "searchLocation": "Ubicación de búsqueda",
       "disabledHint": {
-        "windowControls": "Solo aplica cuando la barra QBZ está activa. El modo Plasma lo desactiva porque KDE lo provee.",
-        "matchSystemChrome": "Solo aplica cuando la barra QBZ está activa. El modo Plasma lo desactiva porque KDE lo provee.",
-        "searchLocation": "La ubicación de búsqueda no aplica cuando no hay barra. Cae al sidebar.",
-        "titlebarNav": "La navegación en la barra solo aplica en modos QBZ o Plasma."
+        "windowControls": "Solo aplica cuando la barra QBZ está activa. Los modos Sistema y Plasma lo desactivan porque el OS lo provee.",
+        "matchSystemChrome": "Solo aplica cuando la barra QBZ está activa. Los modos Sistema y Plasma lo desactivan porque el OS provee la decoración.",
+        "searchLocation": "La ubicación de búsqueda no aplica cuando no se muestra ninguna barra.",
+        "titlebarNav": "La navegación de la barra no aplica cuando no se muestra ninguna barra."
       },
       "sandboxCaveat": "El modo Plasma no está verificado en builds sandboxed (Flatpak/Snap). Si no aparece el cromado del sistema, cambia a modo Sistema."
     },

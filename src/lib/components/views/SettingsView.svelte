@@ -1039,7 +1039,7 @@
 
   // Applicability helpers (orthogonal toggles)
   const isQbzMode = $derived(titlebarMode === 'qbz');
-  const supportsTitlebarFeatures = $derived(titlebarMode === 'qbz' || titlebarMode === 'plasma');
+  const supportsTitlebarFeatures = $derived(titlebarMode !== 'hidden');
 
   // Desktop theme detection (Plasma / Klassy → adaptive preset visibility).
   // `null` until the first detect call returns. `isKlassy=true` means a

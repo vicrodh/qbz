@@ -177,11 +177,11 @@ import { getMode } from './titleBarStore';
 
 /**
  * Whether the titlebar nav should render.
- * In 'qbz' and 'plasma' modes, follows the user's per-item config.
- * In 'system' and 'hidden' modes, the titlebar is gone — nav not applicable.
+ * Only 'hidden' is N/A; qbz/plasma/system all honor user pref.
+ * In system mode the stripped strip carries the nav (same as plasma).
  */
 export function isTitlebarNavEffectivelyEnabled(): boolean {
   const mode = getMode();
-  if (mode !== 'qbz' && mode !== 'plasma') return false;
+  if (mode === 'hidden') return false;
   return isTitlebarNavEnabled();
 }

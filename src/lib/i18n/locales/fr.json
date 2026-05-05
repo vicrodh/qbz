@@ -2319,10 +2319,10 @@
       "matchSystemChrome": "Aligner sur le chrome du système",
       "searchLocation": "Emplacement de la recherche",
       "disabledHint": {
-        "windowControls": "Ne s'applique qu'avec la barre QBZ active. Le mode Plasma le désactive car KDE le fournit.",
-        "matchSystemChrome": "Ne s'applique qu'avec la barre QBZ active. Le mode Plasma le désactive car KDE le fournit.",
-        "searchLocation": "L'emplacement de la recherche ne s'applique pas sans barre de titre. Il bascule vers la barre latérale.",
-        "titlebarNav": "La navigation dans la barre de titre ne s'applique qu'en modes QBZ ou Plasma."
+        "windowControls": "Ne s'applique qu'avec la barre QBZ active. Les modes Système et Plasma désactivent ceci car le système d'exploitation le fournit.",
+        "matchSystemChrome": "Ne s'applique qu'avec la barre QBZ active. Les modes Système et Plasma désactivent ceci car le système d'exploitation fournit le chrome.",
+        "searchLocation": "L'emplacement de la recherche ne s'applique pas lorsqu'aucune barre n'est affichée.",
+        "titlebarNav": "La navigation de la barre ne s'applique pas lorsqu'aucune barre n'est affichée."
       },
       "sandboxCaveat": "Le mode Plasma n'est pas vérifié sur les builds sandboxés (Flatpak/Snap). Si le chrome système n'apparaît pas, basculez vers le mode Système."
     },

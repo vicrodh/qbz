@@ -92,32 +92,34 @@ export function getMode(): TitlebarMode {
  * Whether the custom TitleBar.svelte component should mount.
  * - macOS always uses native overlay → false.
  * - 'qbz' → true (full variant).
- * - 'plasma' → true ONLY if the stripped strip would carry content
- *   (search-in-titlebar OR at least one nav item). Otherwise the
- *   42px strip would render empty below the KWin SSD.
- * - 'system' and 'hidden' → false.
+ * - 'plasma' or 'system' → true ONLY if the stripped strip would carry
+ *   content (search-in-titlebar OR at least one nav item). Both render
+ *   the strip below their respective OS chrome (KWin SSD via Xwayland
+ *   for plasma, GTK CSD / WM SSD for system).
+ * - 'hidden' → false.
  */
 export function shouldShowTitleBar(): boolean {
   if (platform === 'macos') return false;
-  if (mode === 'system' || mode === 'hidden') return false;
+  if (mode === 'hidden') return false;
   if (mode === 'qbz') return true;
-  // mode === 'plasma' — only render the strip if it has effective content.
-  // (In plasma, the effective values for search location and titlebar nav
-  //  match the user prefs directly per the derived-state table.)
+  // mode === 'plasma' or 'system' — both render the stripped strip below
+  // their respective chrome (KWin SSD or GTK CSD), but only if the strip
+  // would have effective content.
   return getSearchBarLocation() === 'titlebar' || isTitlebarNavEnabled();
 }
 
 /**
  * Variant for the custom TitleBar component when mounted.
+ * 'qbz' is the full variant; everything else (plasma/system) is the
+ * stripped strip rendered below OS chrome.
  */
 export function getTitleBarVariant(): 'full' | 'stripped' {
-  return mode === 'plasma' ? 'stripped' : 'full';
+  return mode === 'qbz' ? 'full' : 'stripped';
 }
 
 export function getTitleBarHeight(): number {
-  if (platform === 'macos') return 0;
-  if (mode === 'system' || mode === 'hidden') return 0;
-  return mode === 'plasma' ? 42 : 44;
+  if (!shouldShowTitleBar()) return 0;
+  return mode === 'qbz' ? 44 : 42;
 }
 
 export function getShowWindowControls(): boolean {

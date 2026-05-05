@@ -2319,10 +2319,10 @@
       "matchSystemChrome": "Systemfensterrahmen anpassen",
       "searchLocation": "Suchposition",
       "disabledHint": {
-        "windowControls": "Gilt nur, wenn die QBZ-Titelleiste aktiv ist. Im Plasma-Modus wird dies deaktiviert, da KDE dies bereitstellt.",
-        "matchSystemChrome": "Gilt nur, wenn die QBZ-Titelleiste aktiv ist. Im Plasma-Modus wird dies deaktiviert, da KDE dies bereitstellt.",
-        "searchLocation": "Die Suchposition gilt nicht, wenn keine Titelleiste angezeigt wird. Fällt auf die Seitenleiste zurück.",
-        "titlebarNav": "Die Titelleisten-Navigation gilt nur im QBZ- oder Plasma-Modus."
+        "windowControls": "Gilt nur, wenn die QBZ-Titelleiste aktiv ist. Die System- und Plasma-Modi deaktivieren dies, da das Betriebssystem dies bereitstellt.",
+        "matchSystemChrome": "Gilt nur, wenn die QBZ-Titelleiste aktiv ist. Die System- und Plasma-Modi deaktivieren dies, da das Betriebssystem den Rahmen bereitstellt.",
+        "searchLocation": "Die Suchposition gilt nicht, wenn keine Titelleiste angezeigt wird.",
+        "titlebarNav": "Die Titelleisten-Navigation gilt nicht, wenn keine Titelleiste angezeigt wird."
       },
       "sandboxCaveat": "Der Plasma-Modus ist in Sandbox-Builds (Flatpak/Snap) nicht verifiziert. Wenn der System-Rahmen nicht erscheint, wechseln Sie zum System-Modus."
     },

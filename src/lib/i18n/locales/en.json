@@ -2325,10 +2325,10 @@
       "matchSystemChrome": "Match system window chrome",
       "searchLocation": "Search location",
       "disabledHint": {
-        "windowControls": "Only applies when QBZ titlebar is active. Plasma mode disables this because KDE provides it.",
-        "matchSystemChrome": "Only applies when QBZ titlebar is active. Plasma mode disables this because KDE provides it.",
-        "searchLocation": "Search location does not apply when no titlebar is shown. Falls back to the sidebar.",
-        "titlebarNav": "Titlebar navigation only applies in QBZ or Plasma modes."
+        "windowControls": "Only applies when QBZ titlebar is active. System and Plasma modes disable this because the OS provides it.",
+        "matchSystemChrome": "Only applies when QBZ titlebar is active. System and Plasma modes disable this because the OS provides chrome.",
+        "searchLocation": "Search location does not apply when no titlebar is shown.",
+        "titlebarNav": "Titlebar navigation does not apply when no titlebar is shown."
       },
       "sandboxCaveat": "Plasma mode is unverified in sandboxed builds (Flatpak/Snap). If the system chrome doesn't appear, switch to System mode."
     },
