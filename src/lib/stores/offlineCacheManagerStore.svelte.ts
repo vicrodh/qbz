@@ -199,11 +199,11 @@ class OfflineCacheManagerStore {
       );
       let flags = new Map<string, boolean>();
       if (albumIds.length > 0) {
-        const result = await invoke<Array<[string, boolean]>>(
+        const result = await invoke<Record<string, boolean>>(
           'v2_check_albums_fully_cached_batch',
           { albumIds },
         );
-        flags = new Map(result);
+        flags = new Map(Object.entries(result));
       }
       this.fullyCachedFlags = flags;
 
@@ -214,6 +214,9 @@ class OfflineCacheManagerStore {
       if (!this.selectedArtistKey && this.artists.length > 0) {
         this.selectedArtistKey = this.artists[0].artistKey;
       }
+    } catch (err) {
+      console.error('[offlineCacheManager] loadAll failed:', err);
+      throw err;
     } finally {
       this.loading = false;
     }
