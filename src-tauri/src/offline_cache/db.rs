@@ -381,7 +381,7 @@ impl OfflineCacheDb {
         self.conn()
             .execute(
                 "UPDATE cached_tracks
-                 SET status = 'pending', progress_percent = 0, error_message = NULL
+                 SET status = 'queued', progress_percent = 0, error_message = NULL
                  WHERE track_id = ?1",
                 [track_id as i64],
             )
@@ -743,7 +743,7 @@ mod maintenance_tests {
         db.reset_track_for_redownload(1).unwrap();
 
         let track = db.get_track(1).unwrap().unwrap();
-        assert!(matches!(track.status, OfflineCacheStatus::Pending));
+        assert!(matches!(track.status, OfflineCacheStatus::Queued));
         assert_eq!(track.progress_percent, 0);
         assert!(track.error_message.is_none());
     }
