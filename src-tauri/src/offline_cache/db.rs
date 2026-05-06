@@ -615,7 +615,8 @@ impl OfflineCacheDb {
             let rows = stmt
                 .query_map([album_id], |row| row.get::<_, i64>(0).map(|v| v as u64))
                 .map_err(|e| format!("Query failed: {}", e))?;
-            rows.filter_map(|r| r.ok()).collect()
+            rows.collect::<rusqlite::Result<Vec<u64>>>()
+                .map_err(|e| format!("Row decode failed: {}", e))?
         };
 
         let bytes: i64 = tx
