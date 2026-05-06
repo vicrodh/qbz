@@ -1148,6 +1148,9 @@ pub async fn v2_library_set_album_artwork(
         .ok_or_else(|| "Failed to cache artwork file".to_string())?;
     let guard = state.db.lock().await;
     let db = guard.as_ref().ok_or("No active session - please log in")?;
+    // User-initiated set-album-artwork command: writing one cover to all
+    // tracks in the group is the explicit user intent here.
+    #[allow(deprecated)]
     db.update_album_group_artwork(&album_group_key, &cached_path)
         .map_err(|e| e.to_string())?;
     Ok(cached_path)
@@ -2742,6 +2745,9 @@ pub async fn v2_library_fetch_missing_artwork(
             let db = guard__
                 .as_ref()
                 .ok_or("No active session - please log in")?;
+            // Backfill: only runs for albums with NO existing artwork, so there's
+            // nothing per-track to destroy. Group-level write is correct here.
+            #[allow(deprecated)]
             if db
                 .update_album_group_artwork(&group_key, &artwork_path)
                 .is_ok()
