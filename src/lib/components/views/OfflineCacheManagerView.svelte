@@ -12,7 +12,6 @@
     onGoToAlbum: (albumId: string) => void;
     onGoToFavorites: () => void;
   };
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { onBack, onGoToAlbum, onGoToFavorites }: Props = $props();
 
   const store = offlineCacheManagerStore;
@@ -186,6 +185,9 @@
     <div class="ocm-empty">
       <h2>{$t('offlineManager.empty.title')}</h2>
       <p>{$t('offlineManager.empty.body')}</p>
+      <button type="button" class="empty-cta" onclick={onGoToFavorites}>
+        {$t('offlineManager.empty.cta')}
+      </button>
     </div>
   {:else}
     <section class="ocm-stats">
@@ -406,6 +408,17 @@
   .ocm-empty { padding: 64px 24px; text-align: center; }
   .ocm-empty h2 { margin: 0 0 8px; font-size: 1.25rem; font-weight: 600; }
   .ocm-empty p { margin: 0; color: var(--text-muted); }
+  .empty-cta {
+    margin-top: 16px;
+    padding: 8px 16px;
+    background: var(--accent-primary);
+    border: none;
+    border-radius: 6px;
+    color: white;
+    font-size: 0.9rem;
+    cursor: pointer;
+  }
+  .empty-cta:hover { filter: brightness(1.1); }
   .ocm-body { display: flex; flex: 1; min-height: 0; }
   .ocm-rail {
     width: 260px;
