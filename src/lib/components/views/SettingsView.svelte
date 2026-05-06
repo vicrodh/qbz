@@ -16,6 +16,7 @@
   import LogsModal from '../LogsModal.svelte';
   import DiagnosticsPanel from '../DiagnosticsPanel.svelte';
   import { consumeSettingsIntent } from '$lib/stores/settingsIntentStore';
+  import { navigateTo } from '$lib/stores/navigationStore';
   import { platform } from '$lib/utils/platform';
   import VolumeSlider from '../VolumeSlider.svelte';
   import UpdateCheckResultModal from '../updates/UpdateCheckResultModal.svelte';
@@ -3565,13 +3566,8 @@
     }
   }
 
-  async function handleOpenCacheFolder() {
-    try {
-      await invoke('v2_open_offline_cache_folder');
-    } catch (err) {
-      console.error('Failed to open cache folder:', err);
-      showToast($t('toast.failedOpenCacheFolder'), 'error');
-    }
+  function handleManageOfflineCache() {
+    navigateTo('offline-manager');
   }
 
   async function handleClearCache() {
@@ -5287,7 +5283,7 @@
       </div>
       <button
         class="clear-btn"
-        onclick={handleOpenCacheFolder}
+        onclick={handleManageOfflineCache}
       >
         {$t('settings.offlineLibrary.openFolder')}
       </button>
