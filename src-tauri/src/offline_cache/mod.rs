@@ -34,6 +34,7 @@ pub use path_validator::{is_offline_root_available, validate_path, PathStatus};
 #[serde(rename_all = "lowercase")]
 pub enum OfflineCacheStatus {
     Queued,
+    Pending,
     Downloading,
     Ready,
     Failed,
@@ -43,6 +44,7 @@ impl OfflineCacheStatus {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Queued => "queued",
+            Self::Pending => "pending",
             Self::Downloading => "downloading",
             Self::Ready => "ready",
             Self::Failed => "failed",
@@ -52,6 +54,7 @@ impl OfflineCacheStatus {
     pub fn from_str(s: &str) -> Self {
         match s {
             "queued" => Self::Queued,
+            "pending" => Self::Pending,
             "downloading" => Self::Downloading,
             "ready" => Self::Ready,
             "failed" => Self::Failed,

@@ -7,6 +7,33 @@ use super::{
     CachedTrackInfo, OfflineCacheStats, OfflineCacheStatus, ReadyTrackForSync, TrackCacheInfo,
 };
 
+/// Maps a `cached_tracks` row (with the canonical 15-column SELECT used by
+/// `get_track`, `get_all_tracks`, and `get_album_tracks`) into a `CachedTrackInfo`.
+///
+/// SELECT must be:
+/// `track_id, title, artist, album, album_id, duration_secs, file_size_bytes,
+///  quality, bit_depth, sample_rate, status, progress_percent, error_message,
+///  created_at, last_accessed_at`
+fn row_to_cached_track_info(row: &rusqlite::Row) -> rusqlite::Result<CachedTrackInfo> {
+    Ok(CachedTrackInfo {
+        track_id: row.get::<_, i64>(0)? as u64,
+        title: row.get(1)?,
+        artist: row.get(2)?,
+        album: row.get(3)?,
+        album_id: row.get(4)?,
+        duration_secs: row.get::<_, i64>(5)? as u64,
+        file_size_bytes: row.get::<_, i64>(6)? as u64,
+        quality: row.get::<_, Option<String>>(7)?.unwrap_or_default(),
+        bit_depth: row.get::<_, Option<i64>>(8)?.map(|v| v as u32),
+        sample_rate: row.get(9)?,
+        status: OfflineCacheStatus::from_str(&row.get::<_, String>(10)?),
+        progress_percent: row.get::<_, i64>(11)? as u8,
+        error_message: row.get(12)?,
+        created_at: row.get(13)?,
+        last_accessed_at: row.get(14)?,
+    })
+}
+
 /// Database wrapper for cached tracks index
 pub struct OfflineCacheDb {
     conn: Connection,
@@ -301,25 +328,7 @@ impl OfflineCacheDb {
             "SELECT track_id, title, artist, album, album_id, duration_secs, file_size_bytes, quality, bit_depth, sample_rate, status, progress_percent, error_message, created_at, last_accessed_at
              FROM cached_tracks WHERE track_id = ?1",
             params![track_id as i64],
-            |row| {
-                Ok(CachedTrackInfo {
-                    track_id: row.get::<_, i64>(0)? as u64,
-                    title: row.get(1)?,
-                    artist: row.get(2)?,
-                    album: row.get(3)?,
-                    album_id: row.get(4)?,
-                    duration_secs: row.get::<_, i64>(5)? as u64,
-                    file_size_bytes: row.get::<_, i64>(6)? as u64,
-                    quality: row.get::<_, Option<String>>(7)?.unwrap_or_default(),
-                    bit_depth: row.get::<_, Option<i64>>(8)?.map(|v| v as u32),
-                    sample_rate: row.get(9)?,
-                    status: OfflineCacheStatus::from_str(&row.get::<_, String>(10)?),
-                    progress_percent: row.get::<_, i64>(11)? as u8,
-                    error_message: row.get(12)?,
-                    created_at: row.get(13)?,
-                    last_accessed_at: row.get(14)?,
-                })
-            },
+            row_to_cached_track_info,
         );
 
         match result {
@@ -337,25 +346,7 @@ impl OfflineCacheDb {
         ).map_err(|e| format!("Failed to prepare query: {}", e))?;
 
         let tracks = stmt
-            .query_map([], |row| {
-                Ok(CachedTrackInfo {
-                    track_id: row.get::<_, i64>(0)? as u64,
-                    title: row.get(1)?,
-                    artist: row.get(2)?,
-                    album: row.get(3)?,
-                    album_id: row.get(4)?,
-                    duration_secs: row.get::<_, i64>(5)? as u64,
-                    file_size_bytes: row.get::<_, i64>(6)? as u64,
-                    quality: row.get::<_, Option<String>>(7)?.unwrap_or_default(),
-                    bit_depth: row.get::<_, Option<i64>>(8)?.map(|v| v as u32),
-                    sample_rate: row.get(9)?,
-                    status: OfflineCacheStatus::from_str(&row.get::<_, String>(10)?),
-                    progress_percent: row.get::<_, i64>(11)? as u8,
-                    error_message: row.get(12)?,
-                    created_at: row.get(13)?,
-                    last_accessed_at: row.get(14)?,
-                })
-            })
+            .query_map([], row_to_cached_track_info)
             .map_err(|e| format!("Failed to query tracks: {}", e))?;
 
         let mut result = Vec::new();
@@ -364,6 +355,38 @@ impl OfflineCacheDb {
         }
 
         Ok(result)
+    }
+
+    /// Returns all cached track rows for a given album_id (any status).
+    pub fn get_album_tracks(&self, album_id: &str) -> Result<Vec<CachedTrackInfo>, String> {
+        let mut stmt = self
+            .conn()
+            .prepare(
+                "SELECT track_id, title, artist, album, album_id, duration_secs,
+                        file_size_bytes, quality, bit_depth, sample_rate, status,
+                        progress_percent, error_message, created_at, last_accessed_at
+                 FROM cached_tracks WHERE album_id = ?1",
+            )
+            .map_err(|e| format!("Prepare failed: {}", e))?;
+        let rows = stmt
+            .query_map([album_id], row_to_cached_track_info)
+            .map_err(|e| format!("Query failed: {}", e))?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(|e| format!("Row decode failed: {}", e))
+    }
+
+    /// Resets a track row to Pending state for re-download.
+    /// Clears progress_percent and error_message.
+    pub fn reset_track_for_redownload(&self, track_id: u64) -> Result<(), String> {
+        self.conn()
+            .execute(
+                "UPDATE cached_tracks
+                 SET status = 'pending', progress_percent = 0, error_message = NULL
+                 WHERE track_id = ?1",
+                [track_id as i64],
+            )
+            .map_err(|e| format!("Update failed: {}", e))?;
+        Ok(())
     }
 
     /// Delete a track from cache
@@ -698,5 +721,30 @@ mod maintenance_tests {
         let remaining = db.get_all_tracks().unwrap();
         assert_eq!(remaining.len(), 1);
         assert_eq!(remaining[0].track_id, 3);
+    }
+
+    #[test]
+    fn get_album_tracks_returns_only_matching_album() {
+        let (_tmp, db) = fresh_db();
+        db.insert_track(&sample_track(1, Some("alb1")), "/p/1").unwrap();
+        db.insert_track(&sample_track(2, Some("alb2")), "/p/2").unwrap();
+
+        let alb1 = db.get_album_tracks("alb1").unwrap();
+        assert_eq!(alb1.len(), 1);
+        assert_eq!(alb1[0].track_id, 1);
+    }
+
+    #[test]
+    fn reset_track_for_redownload_clears_progress_and_error() {
+        let (_tmp, db) = fresh_db();
+        db.insert_track(&sample_track(1, Some("alb1")), "/p/1").unwrap();
+        db.update_status(1, OfflineCacheStatus::Failed, Some("boom")).unwrap();
+
+        db.reset_track_for_redownload(1).unwrap();
+
+        let track = db.get_track(1).unwrap().unwrap();
+        assert!(matches!(track.status, OfflineCacheStatus::Pending));
+        assert_eq!(track.progress_percent, 0);
+        assert!(track.error_message.is_none());
     }
 }
