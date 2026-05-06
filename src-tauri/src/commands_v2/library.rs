@@ -2509,6 +2509,35 @@ pub async fn v2_library_get_albums(
     .map_err(|e| e.to_string())
 }
 
+/// V2 metadata-grouped albums for Local Library.
+#[tauri::command]
+pub async fn v2_library_get_albums_metadata(
+    include_hidden: Option<bool>,
+    exclude_network_folders: Option<bool>,
+    state: State<'_, LibraryState>,
+    download_settings_state: State<'_, DownloadSettingsState>,
+) -> Result<Vec<LocalAlbum>, String> {
+    let include_qobuz = download_settings_state
+        .lock()
+        .map_err(|e| format!("Failed to lock download settings: {}", e))?
+        .as_ref()
+        .and_then(|s| s.get_settings().ok())
+        .map(|s| s.show_in_library)
+        .unwrap_or(false);
+
+    let guard__ = state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
+
+    db.get_albums_metadata_grouped(
+        include_hidden.unwrap_or(false),
+        include_qobuz,
+        exclude_network_folders.unwrap_or(false),
+    )
+    .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub async fn v2_library_get_stats(
     state: State<'_, LibraryState>,
@@ -2855,6 +2884,23 @@ pub async fn v2_library_get_album_tracks(
         .as_ref()
         .ok_or("No active session - please log in")?;
     db.get_album_tracks(&albumGroupKey)
+        .map_err(|e| e.to_string())
+}
+
+/// V2 fetch of tracks for a metadata-grouped album.
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_library_get_album_tracks_metadata(
+    metadataKey: String,
+    state: State<'_, LibraryState>,
+) -> Result<Vec<crate::library::LocalTrack>, String> {
+    log::info!("Command: v2_library_get_album_tracks_metadata {}", metadataKey);
+
+    let guard__ = state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
+    db.get_album_tracks_metadata(&metadataKey)
         .map_err(|e| e.to_string())
 }
 

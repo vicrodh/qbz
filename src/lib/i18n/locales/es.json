@@ -890,7 +890,17 @@
     "albums": "Álbumes",
     "artists": "Artistas",
     "tracks": "Pistas",
-    "folders": "Carpetas de la Biblioteca",
+    "folders": "Carpetas",
+    "folderListTitle": "Carpetas de la Biblioteca",
+    "editTabs": {
+      "title": "Editar pestañas de Library",
+      "help": "Arrastra para reordenar. Activa o desactiva visibilidad.",
+      "save": "Guardar",
+      "cancel": "Cancelar",
+      "reset": "Restaurar predeterminado",
+      "showTab": "Mostrar pestaña",
+      "hideTab": "Ocultar pestaña"
+    },
     "noAlbums": "No hay álbumes en la biblioteca",
     "noArtists": "No hay artistas en la biblioteca",
     "noTracks": "No hay pistas en la biblioteca",

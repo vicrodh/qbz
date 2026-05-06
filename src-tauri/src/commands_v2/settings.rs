@@ -3,6 +3,7 @@ use tauri::State;
 use crate::audio::{AlsaPlugin, AudioBackendType, AudioDevice, BackendManager};
 use crate::cache::CacheStats;
 use crate::config::favorites_preferences::FavoritesPreferences;
+use crate::config::library_preferences::LibraryPreferences;
 use crate::config::playback_preferences::{
     AutoplayMode, PlaybackPreferences, PlaybackPreferencesState,
 };
@@ -188,6 +189,26 @@ pub fn v2_save_favorites_preferences(
     state: State<'_, crate::config::favorites_preferences::FavoritesPreferencesState>,
 ) -> Result<FavoritesPreferences, String> {
     crate::config::favorites_preferences::save_favorites_preferences(prefs, state)
+}
+
+#[tauri::command]
+pub fn v2_get_library_preferences(
+    state: State<'_, crate::config::library_preferences::LibraryPreferencesState>,
+) -> Result<LibraryPreferences, String> {
+    let guard = state
+        .store
+        .lock()
+        .map_err(|_| "Failed to lock library preferences store".to_string())?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
+    store.get_preferences()
+}
+
+#[tauri::command]
+pub fn v2_save_library_preferences(
+    prefs: LibraryPreferences,
+    state: State<'_, crate::config::library_preferences::LibraryPreferencesState>,
+) -> Result<LibraryPreferences, String> {
+    crate::config::library_preferences::save_library_preferences(prefs, state)
 }
 
 #[tauri::command]

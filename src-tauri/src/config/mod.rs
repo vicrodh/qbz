@@ -17,6 +17,7 @@ pub mod favorites_preferences;
 pub mod graphics_settings;
 pub mod image_cache_settings;
 pub mod legal_settings;
+pub mod library_preferences;
 pub mod playback_preferences;
 pub mod remote_control_settings;
 pub mod subscription_state;
@@ -41,6 +42,11 @@ pub use playback_preferences::{
 pub use favorites_preferences::{
     get_favorites_preferences, save_favorites_preferences, FavoritesPreferences,
     FavoritesPreferencesState,
+};
+
+pub use library_preferences::{
+    get_library_preferences, save_library_preferences, LibraryPreferences,
+    LibraryPreferencesState,
 };
 
 pub use subscription_state::{

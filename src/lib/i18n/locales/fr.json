@@ -890,7 +890,17 @@
     "albums": "Albums",
     "artists": "Artistes",
     "tracks": "Titres",
-    "folders": "Dossiers de la bibliothèque",
+    "folders": "Dossiers",
+    "folderListTitle": "Dossiers de la bibliothèque",
+    "editTabs": {
+      "title": "Modifier les onglets Library",
+      "help": "Glissez pour réordonner. Basculez la visibilité.",
+      "save": "Enregistrer",
+      "cancel": "Annuler",
+      "reset": "Réinitialiser",
+      "showTab": "Afficher l'onglet",
+      "hideTab": "Masquer l'onglet"
+    },
     "noAlbums": "Aucun album dans la bibliothèque",
     "noArtists": "Aucun artiste dans la bibliothèque",
     "noTracks": "Aucun titre dans la bibliothèque",

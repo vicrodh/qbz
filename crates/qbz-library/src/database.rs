@@ -97,6 +97,8 @@ impl LibraryDatabase {
             CREATE INDEX IF NOT EXISTS idx_tracks_album_artist ON local_tracks(album_artist);
             CREATE INDEX IF NOT EXISTS idx_tracks_file_path ON local_tracks(file_path);
             CREATE INDEX IF NOT EXISTS idx_tracks_title ON local_tracks(title);
+            CREATE INDEX IF NOT EXISTS idx_local_tracks_album_lookup
+                ON local_tracks(album, album_artist, artist);
 
             -- Playlist folders (local organization for Qobuz playlists)
             CREATE TABLE IF NOT EXISTS playlist_folders (
@@ -1388,6 +1390,7 @@ impl LibraryDatabase {
                     directory_path: row
                         .get::<_, Option<String>>(12)?
                         .unwrap_or_else(|| group_key.clone()),
+                    source_folders: None,
                     source: row
                         .get::<_, Option<String>>(13)?
                         .unwrap_or_else(|| "user".to_string()),
@@ -1417,6 +1420,174 @@ impl LibraryDatabase {
 
         let rows = stmt
             .query_map(params![group_key], |row| Self::row_to_track(row))
+            .map_err(|e| LibraryError::Database(e.to_string()))?;
+
+        let mut tracks = Vec::new();
+        for track in rows {
+            tracks.push(track.map_err(|e| LibraryError::Database(e.to_string()))?);
+        }
+        Ok(tracks)
+    }
+
+    /// Get all albums grouped by metadata (album + album_artist OR
+    /// artist), with fallback to folder grouping for tracks with no
+    /// usable album tag, and a single 'Unknown Album' bucket for total
+    /// orphans.
+    ///
+    /// Mirrors the shape of [`Self::get_albums_with_full_filter`] but
+    /// uses the metadata group key from
+    /// [`crate::album_grouping::metadata_group_key_sql_expression`].
+    /// Rows have `directory_path = ""` and `source_folders` populated
+    /// with the comma-separated list of contributing folder keys (so
+    /// the UI can show a tooltip when N folders > 1).
+    ///
+    /// `include_hidden` is currently ignored: the `album_settings.hidden`
+    /// flag targets the FOLDER key, which does not map cleanly onto
+    /// metadata-grouped rows. Revisit if user feedback asks for it.
+    pub fn get_albums_metadata_grouped(
+        &self,
+        include_hidden: bool,
+        include_qobuz_downloads: bool,
+        exclude_network_folders: bool,
+    ) -> Result<Vec<LocalAlbum>, LibraryError> {
+        let _ = include_hidden;
+
+        let source_filter = if include_qobuz_downloads {
+            ""
+        } else {
+            "AND (source IS NULL OR source != 'qobuz_download')"
+        };
+
+        let network_filter = if exclude_network_folders {
+            "AND NOT EXISTS (
+                SELECT 1 FROM library_folders nf
+                WHERE nf.is_network = 1
+                AND local_tracks.file_path LIKE nf.path || '%'
+            )"
+        } else {
+            ""
+        };
+
+        let group_key_expr = crate::album_grouping::metadata_group_key_sql_expression();
+
+        let query = format!(
+            r#"
+            WITH grouped AS (
+                SELECT
+                    {group_key} AS group_key,
+                    COALESCE(album_group_title, album, 'Unknown Album') AS title,
+                    COALESCE(album_artist, artist, 'Unknown Artist') AS artist,
+                    year,
+                    catalog_number,
+                    artwork_path,
+                    duration_secs,
+                    format,
+                    bit_depth,
+                    sample_rate,
+                    album_group_key AS source_folder,
+                    COALESCE(source, 'user') AS source
+                FROM local_tracks
+                WHERE 1=1 {source_filter} {network_filter}
+            )
+            SELECT
+                group_key,
+                CASE WHEN group_key = '__unknown_album__'
+                     THEN 'Unknown Album'
+                     ELSE MIN(title)
+                END AS title,
+                CASE WHEN COUNT(DISTINCT artist) > 1
+                     THEN 'Various Artists'
+                     ELSE MIN(artist)
+                END AS artist,
+                GROUP_CONCAT(DISTINCT artist) AS all_artists,
+                MIN(year) AS year,
+                MIN(catalog_number) AS catalog_number,
+                MAX(CASE WHEN artwork_path IS NOT NULL THEN artwork_path END) AS artwork,
+                COUNT(*) AS track_count,
+                SUM(duration_secs) AS total_duration,
+                MAX(format) AS format,
+                MAX(bit_depth) AS bit_depth,
+                MAX(sample_rate) AS sample_rate,
+                GROUP_CONCAT(DISTINCT source_folder) AS source_folders,
+                MAX(source) AS source
+            FROM grouped
+            GROUP BY group_key
+            ORDER BY (group_key = '__unknown_album__'), artist, title
+            "#,
+            group_key = group_key_expr,
+            source_filter = source_filter,
+            network_filter = network_filter,
+        );
+
+        let mut stmt = self
+            .conn
+            .prepare(&query)
+            .map_err(|e| LibraryError::Database(e.to_string()))?;
+
+        let rows = stmt
+            .query_map([], |row| {
+                let group_key: String = row.get(0)?;
+                let album: String = row.get(1)?;
+                let artist: String = row.get(2)?;
+                let all_artists: String =
+                    row.get::<_, Option<String>>(3)?.unwrap_or_default();
+                let artwork_path: Option<String> = row.get(6)?;
+                let source_folders: Option<String> = row.get(12)?;
+
+                Ok(LocalAlbum {
+                    id: group_key.clone(),
+                    title: album,
+                    artist,
+                    all_artists,
+                    year: row.get(4)?,
+                    catalog_number: row.get(5)?,
+                    artwork_path,
+                    track_count: row.get(7)?,
+                    total_duration_secs: row.get(8)?,
+                    format: Self::parse_format(
+                        &row.get::<_, Option<String>>(9)?.unwrap_or_default(),
+                    ),
+                    bit_depth: row.get(10)?,
+                    sample_rate: row.get::<_, Option<f64>>(11)?.unwrap_or(44100.0),
+                    directory_path: String::new(),
+                    source_folders,
+                    source: row
+                        .get::<_, Option<String>>(13)?
+                        .unwrap_or_else(|| "user".to_string()),
+                })
+            })
+            .map_err(|e| LibraryError::Database(e.to_string()))?;
+
+        let mut albums = Vec::new();
+        for album in rows {
+            albums.push(album.map_err(|e| LibraryError::Database(e.to_string()))?);
+        }
+        Ok(albums)
+    }
+
+    /// Get tracks for a metadata-grouped album. The `metadata_key`
+    /// matches what [`Self::get_albums_metadata_grouped`] returns for
+    /// the album's `id` field.
+    pub fn get_album_tracks_metadata(
+        &self,
+        metadata_key: &str,
+    ) -> Result<Vec<LocalTrack>, LibraryError> {
+        let group_key_expr = crate::album_grouping::metadata_group_key_sql_expression();
+        let sql = format!(
+            "SELECT {cols} FROM local_tracks
+             WHERE {group_key} = ?
+             ORDER BY disc_number, track_number, title",
+            cols = Self::TRACK_COLUMNS,
+            group_key = group_key_expr,
+        );
+
+        let mut stmt = self
+            .conn
+            .prepare(&sql)
+            .map_err(|e| LibraryError::Database(e.to_string()))?;
+
+        let rows = stmt
+            .query_map(params![metadata_key], |row| Self::row_to_track(row))
             .map_err(|e| LibraryError::Database(e.to_string()))?;
 
         let mut tracks = Vec::new();
@@ -4254,5 +4425,174 @@ impl LibraryDatabase {
 
         rows.collect::<Result<Vec<_>, _>>()
             .map_err(|e| LibraryError::Database(format!("Failed to collect formats: {}", e)))
+    }
+}
+
+#[cfg(test)]
+mod metadata_grouping_tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    fn fresh_db() -> (TempDir, LibraryDatabase) {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("library.db");
+        let db = LibraryDatabase::open(&path).unwrap();
+        (tmp, db)
+    }
+
+    fn insert_track_for_test(
+        db: &LibraryDatabase,
+        file_path: &str,
+        album: Option<&str>,
+        album_artist: Option<&str>,
+        artist: &str,
+        album_group_key: &str,
+    ) {
+        let mut t = LocalTrack::default();
+        t.file_path = file_path.to_string();
+        t.title = format!("Track at {}", file_path);
+        t.album = album.unwrap_or("").to_string();
+        t.album_artist = album_artist.map(String::from);
+        t.artist = artist.to_string();
+        t.album_group_key = album_group_key.to_string();
+        t.album_group_title = album.unwrap_or("").to_string();
+        db.insert_track(&t).unwrap();
+    }
+
+    #[test]
+    fn metadata_group_merges_tracks_across_folders_with_same_album() {
+        let (_tmp, db) = fresh_db();
+        // Two folders, same album metadata -> one metadata group.
+        insert_track_for_test(
+            &db,
+            "/m/Bjork/Vespertine/01.flac",
+            Some("Vespertine"),
+            Some("Bjork"),
+            "Bjork",
+            "/m/Bjork/Vespertine",
+        );
+        insert_track_for_test(
+            &db,
+            "/m/Bjork/Vespertine/02.flac",
+            Some("Vespertine"),
+            Some("Bjork"),
+            "Bjork",
+            "/m/Bjork/Vespertine",
+        );
+        insert_track_for_test(
+            &db,
+            "/m/mix/cd/track-from-vespertine.flac",
+            Some("Vespertine"),
+            Some("Bjork"),
+            "Bjork",
+            "/m/mix/cd",
+        );
+
+        let albums = db.get_albums_metadata_grouped(false, true, false).unwrap();
+        let vespertine = albums
+            .iter()
+            .find(|a| a.title == "Vespertine")
+            .expect("Vespertine group");
+        assert_eq!(vespertine.track_count, 3);
+    }
+
+    #[test]
+    fn metadata_group_falls_back_to_folder_when_album_missing() {
+        let (_tmp, db) = fresh_db();
+        // Empty album tag -> use folder grouping.
+        insert_track_for_test(&db, "/m/folder/01.flac", None, None, "A", "/m/folder");
+        insert_track_for_test(&db, "/m/folder/02.flac", None, None, "B", "/m/folder");
+
+        let albums = db.get_albums_metadata_grouped(false, true, false).unwrap();
+        assert_eq!(albums.len(), 1, "single folder fallback group");
+        assert_eq!(albums[0].track_count, 2);
+        assert_eq!(albums[0].artist, "Various Artists");
+    }
+
+    #[test]
+    fn metadata_group_orphan_bucket_when_no_album_no_folder() {
+        let (_tmp, db) = fresh_db();
+        // No album tag AND no folder key -> orphan bucket.
+        insert_track_for_test(&db, "/m/ghost/01.flac", None, None, "X", "");
+        insert_track_for_test(&db, "/m/ghost/02.flac", None, None, "Y", "");
+
+        let albums = db.get_albums_metadata_grouped(false, true, false).unwrap();
+        let unknown = albums
+            .iter()
+            .find(|a| a.title == "Unknown Album")
+            .expect("Unknown Album bucket");
+        assert_eq!(unknown.track_count, 2);
+    }
+
+    #[test]
+    fn metadata_group_va_detection() {
+        let (_tmp, db) = fresh_db();
+        // Same album, different track artists, album_artist set to VA.
+        insert_track_for_test(
+            &db,
+            "/m/comp/01.flac",
+            Some("Comp"),
+            Some("Various Artists"),
+            "A",
+            "/m/comp",
+        );
+        insert_track_for_test(
+            &db,
+            "/m/comp/02.flac",
+            Some("Comp"),
+            Some("Various Artists"),
+            "B",
+            "/m/comp",
+        );
+
+        let albums = db.get_albums_metadata_grouped(false, true, false).unwrap();
+        let comp = albums
+            .iter()
+            .find(|a| a.title == "Comp")
+            .expect("Comp album");
+        assert_eq!(comp.track_count, 2);
+        assert_eq!(comp.artist, "Various Artists");
+    }
+
+    #[test]
+    fn metadata_group_tracks_fetch_returns_all_in_group() {
+        let (_tmp, db) = fresh_db();
+        insert_track_for_test(
+            &db,
+            "/m/folderA/01.flac",
+            Some("Album X"),
+            Some("Artist Y"),
+            "Artist Y",
+            "/m/folderA",
+        );
+        insert_track_for_test(
+            &db,
+            "/m/folderB/02.flac",
+            Some("Album X"),
+            Some("Artist Y"),
+            "Artist Y",
+            "/m/folderB",
+        );
+        insert_track_for_test(
+            &db,
+            "/m/folderA/03.flac",
+            Some("Album X"),
+            Some("Artist Y"),
+            "Artist Y",
+            "/m/folderA",
+        );
+        // Different album in same folder set
+        insert_track_for_test(
+            &db,
+            "/m/folderA/04.flac",
+            Some("Album Z"),
+            Some("Artist Y"),
+            "Artist Y",
+            "/m/folderA",
+        );
+
+        let key = "Album X|Artist Y";
+        let tracks = db.get_album_tracks_metadata(key).unwrap();
+        assert_eq!(tracks.len(), 3);
     }
 }

@@ -28,6 +28,7 @@
 //! let db = LibraryDatabase::open(Path::new("library.db")).unwrap();
 //! ```
 
+pub mod album_grouping;
 mod cue_parser;
 mod database;
 mod errors;

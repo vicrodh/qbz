@@ -498,6 +498,11 @@ export interface FavoritesPreferences {
   tab_order: string[];
 }
 
+export type LibraryPreferences = {
+  tab_order: string[];
+  hidden_tabs: string[];
+};
+
 // ============ Discover API Types ============
 
 export interface DiscoverResponse {

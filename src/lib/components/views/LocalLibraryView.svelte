@@ -16,6 +16,8 @@
   import { cmdAddTracksToQueue, cmdAddTracksToQueueNext } from '$lib/services/commandRouter';
   import FolderSettingsModal from '../FolderSettingsModal.svelte';
   import LocalLibraryTagEditorModal from '../LocalLibraryTagEditorModal.svelte';
+  import LibraryEditModal from '../LibraryEditModal.svelte';
+  import type { LibraryPreferences } from '$lib/types';
   import ViewTransition from '../ViewTransition.svelte';
   import { t } from '$lib/i18n';
   import { getUserItem } from '$lib/utils/userStorage';
@@ -98,6 +100,15 @@
     bit_depth?: number;
     sample_rate: number;
     directory_path: string;
+    /**
+     * Comma-separated list of folder keys that contributed tracks to this
+     * album. Populated only by the metadata-grouped Albums query
+     * (`v2_library_get_albums_metadata`); `null`/`undefined` for folder-
+     * grouped rows from `v2_library_get_albums`. The Albums tab uses
+     * presence of this field to detect a "metadata row" and renders a
+     * tooltip when more than one folder contributed.
+     */
+    source_folders?: string | null;
     source?: string; // 'user' | 'qobuz_download' | 'plex'
     likely_single_file_album?: boolean;
   }
@@ -261,8 +272,67 @@
   }: Props = $props();
 
   // View state
-  type TabType = 'albums' | 'artists' | 'tracks';
-  let activeTab = $state<TabType>('albums');
+  type TabType = 'tracks' | 'folders' | 'albums' | 'artists';
+  let activeTab = $state<TabType>('tracks');
+
+  // Library tab preferences (persisted per-user via v2_*_library_preferences)
+  const DEFAULT_TAB_ORDER: TabType[] = ['tracks', 'folders', 'albums', 'artists'];
+  let libraryPreferences = $state<LibraryPreferences>({
+    tab_order: [...DEFAULT_TAB_ORDER],
+    hidden_tabs: [],
+  });
+  let isEditTabsModalOpen = $state(false);
+
+  function isKnownTab(tab: string): tab is TabType {
+    return (DEFAULT_TAB_ORDER as readonly string[]).includes(tab);
+  }
+
+  function sanitizeLibraryPreferences(prefs: LibraryPreferences): LibraryPreferences {
+    // Keep only known tabs; backfill any missing ones at the end so users
+    // with older preferences still surface tabs added in future releases.
+    const validOrder: TabType[] = (prefs.tab_order ?? []).filter(isKnownTab);
+    for (const tab of DEFAULT_TAB_ORDER) {
+      if (!validOrder.includes(tab)) validOrder.push(tab);
+    }
+    const validHidden: TabType[] = (prefs.hidden_tabs ?? []).filter(isKnownTab);
+    return { tab_order: validOrder, hidden_tabs: validHidden };
+  }
+
+  const visibleTabs = $derived(
+    libraryPreferences.tab_order.filter(
+      (tab): tab is TabType => isKnownTab(tab) && !libraryPreferences.hidden_tabs.includes(tab),
+    ),
+  );
+
+  async function loadLibraryPreferences() {
+    try {
+      const prefs = await invoke<LibraryPreferences>('v2_get_library_preferences');
+      libraryPreferences = sanitizeLibraryPreferences(prefs);
+      // If the active tab is no longer visible (e.g. user hid it on another
+      // device), fall back to the first visible tab.
+      const currentVisible = libraryPreferences.tab_order.filter(
+        (tab): tab is TabType =>
+          isKnownTab(tab) && !libraryPreferences.hidden_tabs.includes(tab),
+      );
+      if (!currentVisible.includes(activeTab)) {
+        activeTab = currentVisible[0] ?? 'tracks';
+      }
+    } catch (err) {
+      console.warn('[LocalLibrary] Failed to load preferences, using defaults:', err);
+    }
+  }
+
+  function handleLibraryPreferencesSaved(prefs: LibraryPreferences) {
+    libraryPreferences = sanitizeLibraryPreferences(prefs);
+    const currentVisible = libraryPreferences.tab_order.filter(
+      (tab): tab is TabType =>
+        isKnownTab(tab) && !libraryPreferences.hidden_tabs.includes(tab),
+    );
+    if (!currentVisible.includes(activeTab)) {
+      activeTab = currentVisible[0] ?? 'tracks';
+    }
+    isEditTabsModalOpen = false;
+  }
   let showSettings = $state(false);
   let showHiddenAlbums = $state(false);
   let albumSearch = $state('');
@@ -787,8 +857,8 @@
     if (activeTab === 'tracks' && tracks.length > 0) {
       return tracks.length;
     }
-    // When in albums view, calculate from filtered albums
-    if (activeTab === 'albums') {
+    // When in folders (album-by-folder) view, calculate from filtered albums
+    if (activeTab === 'folders') {
       return albums.reduce((sum, album) => sum + album.track_count, 0);
     }
     // When in artists view, calculate from filtered artists
@@ -1183,6 +1253,14 @@
   let selectedAlbum = $state<LocalAlbum | null>(null);
   let albumTracks = $state<LocalTrack[]>([]);
 
+  // Metadata-grouped Albums tab data — parallel to `albums` (folder-grouped).
+  // The selected album carries its own discriminator via `source_folders`,
+  // so `fetchAlbumTracks` knows which V2 command to call without needing a
+  // separate viewMode state on this view.
+  let metadataAlbums = $state<LocalAlbum[]>([]);
+  let metadataAlbumsLoading = $state(false);
+  let metadataAlbumsLoaded = $state(false);
+
   // Album-detail multi-select helpers — shift-click anchor + select-all
   // state derived against the open album's track list. selectedTrackIds
   // is the same Set the tracks tab uses, so selections compose cleanly
@@ -1313,6 +1391,8 @@
   });
 
   onMount(async () => {
+    // Load tab preferences first so the initial render uses the saved order.
+    await loadLibraryPreferences();
     await loadLibraryData();
     // Load folders (now safe in offline mode - uses library_get_folders instead)
     loadFolders(); // Load in background - doesn't block UI
@@ -1641,6 +1721,9 @@
     const background = options.background === true;
     const startedAt = performance.now();
     console.log('[LocalLibrary] loadLibraryData START, isOffline:', isOffline, 'background:', background);
+    // Library data was just refreshed (or is about to be) — drop the
+    // cached metadata-grouped Albums list so the next visit re-fetches.
+    metadataAlbumsLoaded = false;
     if (!background) {
       loading = true;
       error = null;
@@ -1720,6 +1803,23 @@
         console.log('[LocalLibrary] Setting loading = false');
         loading = false;
       }
+    }
+  }
+
+  async function loadMetadataAlbums() {
+    if (metadataAlbumsLoaded || metadataAlbumsLoading) return;
+    try {
+      metadataAlbumsLoading = true;
+      metadataAlbums = await invoke<LocalAlbum[]>('v2_library_get_albums_metadata', {
+        includeHidden: false,
+        excludeNetworkFolders: shouldExcludeNetworkFolders(),
+      });
+      metadataAlbumsLoaded = true;
+    } catch (err) {
+      console.error('[LocalLibrary] Failed to load metadata albums:', err);
+      metadataAlbums = [];
+    } finally {
+      metadataAlbumsLoading = false;
     }
   }
 
@@ -1902,6 +2002,8 @@
       loadArtists();
     } else if (tab === 'tracks' && tracks.length === 0) {
       loadTracks(trackSearch.trim());
+    } else if (tab === 'albums' && !metadataAlbumsLoaded) {
+      loadMetadataAlbums();
     }
   }
 
@@ -2042,6 +2144,7 @@
           await loadLibraryData();
           if (activeTab === 'artists') await loadArtists();
           if (activeTab === 'tracks') await loadTracks();
+          if (activeTab === 'albums') await loadMetadataAlbums();
         }
       } catch (err) {
         console.error('Failed to get scan progress:', err);
@@ -2148,6 +2251,8 @@
       albums = [];
       artists = [];
       tracks = [];
+      metadataAlbums = [];
+      metadataAlbumsLoaded = false;
     } catch (err) {
       console.error('Failed to clear library:', err);
       alert(`Failed to clear library: ${err}`);
@@ -2351,6 +2456,17 @@
         });
         const mappedTracks = plexTracks.map(mapPlexTrack);
         return await hydratePlexTrackQuality(mappedTracks);
+      }
+
+      // Detect a metadata-grouped album row: the metadata Albums query
+      // emits an empty `directory_path` and populates `source_folders`.
+      // Use `v2_library_get_album_tracks_metadata` for those; folder-
+      // grouped rows keep the original `v2_library_get_album_tracks`.
+      const isMetadataAlbum = album.source_folders != null;
+      if (isMetadataAlbum) {
+        return await invoke<LocalTrack[]>('v2_library_get_album_tracks_metadata', {
+          metadataKey: album.id
+        });
       }
 
       return await invoke<LocalTrack[]>('v2_library_get_album_tracks', {
@@ -3020,7 +3136,7 @@
       setTimeout(() => searchInputEl?.focus(), 50);
     } else {
       // Clear search when closing
-      if (activeTab === 'albums') {
+      if (activeTab === 'folders') {
         albumSearch = '';
         debouncedAlbumSearch = '';
         if (albumSearchTimer) clearTimeout(albumSearchTimer);
@@ -3036,20 +3152,20 @@
   }
 
   function getCurrentSearchValue(): string {
-    if (activeTab === 'albums') return albumSearch;
+    if (activeTab === 'folders') return albumSearch;
     if (activeTab === 'artists') return artistSearch;
     return trackSearch;
   }
 
   function getCurrentSearchPlaceholder(): string {
-    if (activeTab === 'albums') return 'Search albums or artists...';
+    if (activeTab === 'folders') return 'Search albums or artists...';
     if (activeTab === 'artists') return 'Search artists...';
     return 'Search tracks, albums, artists...';
   }
 
   function handleSearchInput(e: Event) {
     const value = (e.target as HTMLInputElement).value;
-    if (activeTab === 'albums') {
+    if (activeTab === 'folders') {
       albumSearch = value;
       scheduleAlbumSearch();
     } else if (activeTab === 'artists') {
@@ -3479,7 +3595,7 @@
 </script>
 
 <ViewTransition duration={200} distance={12} direction="down">
-<div class="library-view" class:virtualized-active={!selectedAlbum && ((activeTab === 'albums' && !showHiddenAlbums && albums.length > 0) || (activeTab === 'artists' && artists.length > 0) || (activeTab === 'tracks' && tracks.length > 0))}>
+<div class="library-view" class:virtualized-active={!selectedAlbum && ((activeTab === 'folders' && !showHiddenAlbums && albums.length > 0) || (activeTab === 'albums' && metadataAlbums.length > 0) || (activeTab === 'artists' && artists.length > 0) || (activeTab === 'tracks' && tracks.length > 0))}>
   {#if selectedAlbum}
     {@const filteredAlbumTracks = albumTrackSearch.trim()
       ? albumTracks.filter(track =>
@@ -3757,7 +3873,7 @@
     {#if showSettings}
       <div class="settings-panel">
         <div class="settings-header">
-          <h3>{$t('library.folders')}</h3>
+          <h3>{$t('library.folderListTitle')}</h3>
           <div class="folder-actions">
             <div class="folder-search">
               <Search size={14} />
@@ -3901,26 +4017,24 @@
     <div class="jump-nav">
       <div class="jump-nav-left">
         <div class="jump-links">
+          {#each visibleTabs as tab (tab)}
+            <button
+              type="button"
+              class="jump-link"
+              class:active={activeTab === tab}
+              onclick={() => handleTabChange(tab)}
+            >
+              {$t(`library.${tab}`)}
+            </button>
+          {/each}
           <button
-            class="jump-link"
-            class:active={activeTab === 'albums'}
-            onclick={() => handleTabChange('albums')}
+            type="button"
+            class="jump-link tab-edit-btn"
+            onclick={() => (isEditTabsModalOpen = true)}
+            aria-label={$t('library.editTabs.title')}
+            title={$t('library.editTabs.title')}
           >
-            {$t('library.albums')}
-          </button>
-          <button
-            class="jump-link"
-            class:active={activeTab === 'artists'}
-            onclick={() => handleTabChange('artists')}
-          >
-            {$t('library.artists')}
-          </button>
-          <button
-            class="jump-link"
-            class:active={activeTab === 'tracks'}
-            onclick={() => handleTabChange('tracks')}
-          >
-            {$t('library.tracks')}
+            <Settings size={14} />
           </button>
         </div>
       </div>
@@ -3966,7 +4080,7 @@
           <p class="error-detail">{error}</p>
           <button class="retry-btn" onclick={() => loadLibraryData()}>{$t('actions.retry')}</button>
         </div>
-      {:else if activeTab === 'albums'}
+      {:else if activeTab === 'folders'}
         {#key activeTab}
         <ViewTransition duration={200} distance={12} direction="up">
         {#if showHiddenAlbums}
@@ -4311,6 +4425,42 @@
           onAddToMixtape={handleAlbumBulkAddToMixtape}
           onClearSelection={() => { albumSelectMode = false; selectedAlbumIds = new Set(); }}
         />
+        </ViewTransition>
+        {/key}
+      {:else if activeTab === 'albums'}
+        {#key activeTab}
+        <ViewTransition duration={200} distance={12} direction="up">
+          {#if metadataAlbumsLoading && metadataAlbums.length === 0}
+            <div class="loading">
+              <div class="spinner"></div>
+              <p>{$t('library.loadingLibrary')}</p>
+            </div>
+          {:else if metadataAlbums.length === 0}
+            <div class="empty">
+              <Disc3 size={48} />
+              <p>{$t('library.noAlbumsInLibrary')}</p>
+              <p class="empty-hint">{$t('library.addFoldersHint')}</p>
+            </div>
+          {:else}
+            <div class="album-sections virtualized">
+              <div class="virtualized-container">
+                <VirtualizedAlbumList
+                  groups={[{ key: '', id: 'metadata-ungrouped', albums: metadataAlbums }]}
+                  viewMode={albumViewMode}
+                  showGroupHeaders={false}
+                  {getArtworkUrl}
+                  getQualityBadge={getAlbumQualityBadge}
+                  isHiRes={isAlbumHiRes}
+                  formatDuration={formatTotalDuration}
+                  onAlbumClick={handleAlbumClick}
+                  onAlbumPlay={handleAlbumPlayFromGrid}
+                  onAlbumQueueNext={handleAlbumQueueNextFromGrid}
+                  onAlbumQueueLater={handleAlbumQueueLaterFromGrid}
+                  showSourceBadge={true}
+                />
+              </div>
+            </div>
+          {/if}
         </ViewTransition>
         {/key}
       {:else if activeTab === 'artists'}
@@ -4754,6 +4904,14 @@
   onClose={() => { showFolderSettingsModal = false; editingFolder = null; }}
   onSave={handleFolderSettingsSave}
   onScanFolder={handleScanSingleFolder}
+/>
+
+<!-- Library Edit Tabs Modal -->
+<LibraryEditModal
+  isOpen={isEditTabsModalOpen}
+  initialPreferences={libraryPreferences}
+  onClose={() => (isEditTabsModalOpen = false)}
+  onSave={handleLibraryPreferencesSaved}
 />
 
 <style>
@@ -5310,6 +5468,18 @@
   .jump-link.active {
     color: var(--text-primary);
     border-bottom-color: var(--accent-primary);
+  }
+
+  .jump-link.tab-edit-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    padding: 4px 6px;
+  }
+
+  .jump-link.tab-edit-btn:hover {
+    color: var(--text-primary);
   }
 
   /* Page Search in Nav */

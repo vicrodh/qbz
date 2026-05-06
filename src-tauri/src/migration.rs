@@ -16,6 +16,7 @@ const DATA_DIR_DB_FILES: &[&str] = &[
     "subscription_state.db",
     "playback_preferences.db",
     "favorites_preferences.db",
+    "library_preferences.db",
     "download_settings.db",
     "audio_settings.db",
     "tray_settings.db",

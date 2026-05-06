@@ -704,6 +704,8 @@ pub fn run(qconnect_cli_override: Option<bool>) {
     let playback_prefs_state = config::playback_preferences::PlaybackPreferencesState::new_empty();
     let favorites_prefs_state =
         config::favorites_preferences::FavoritesPreferencesState::new_empty();
+    let library_prefs_state =
+        config::library_preferences::LibraryPreferencesState::new_empty();
     let favorites_cache_state = config::favorites_cache::FavoritesCacheState::new_empty();
     let tray_settings_state = config::tray_settings::TraySettingsState::new_empty();
     let remote_control_settings_state =
@@ -1352,6 +1354,7 @@ pub fn run(qconnect_cli_override: Option<bool>) {
         .manage(offline_state)
         .manage(playback_prefs_state)
         .manage(favorites_prefs_state)
+        .manage(library_prefs_state)
         .manage(favorites_cache_state)
         .manage(tray_settings_state)
         .manage(remote_control_settings_state)
@@ -1452,6 +1455,8 @@ pub fn run(qconnect_cli_override: Option<bool>) {
             commands_v2::v2_get_playback_preferences,
             commands_v2::v2_get_favorites_preferences,
             commands_v2::v2_save_favorites_preferences,
+            commands_v2::v2_get_library_preferences,
+            commands_v2::v2_save_library_preferences,
             commands_v2::v2_get_cache_stats,
             commands_v2::v2_get_available_backends,
             commands_v2::v2_get_devices_for_backend,
@@ -1630,6 +1635,7 @@ pub fn run(qconnect_cli_override: Option<bool>) {
             commands_v2::v2_library_get_cache_stats,
             commands_v2::v2_library_get_stats,
             commands_v2::v2_library_get_albums,
+            commands_v2::v2_library_get_albums_metadata,
             commands_v2::v2_library_get_folders,
             commands_v2::v2_library_get_folders_with_metadata,
             commands_v2::v2_library_add_folder,
@@ -1638,6 +1644,7 @@ pub fn run(qconnect_cli_override: Option<bool>) {
             commands_v2::v2_library_get_artists,
             commands_v2::v2_library_search,
             commands_v2::v2_library_get_album_tracks,
+            commands_v2::v2_library_get_album_tracks_metadata,
             commands_v2::v2_library_update_folder_path,
             commands_v2::v2_library_cache_artist_image,
             commands_v2::v2_library_set_custom_artist_image,

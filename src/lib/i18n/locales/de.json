@@ -890,7 +890,17 @@
     "albums": "Alben",
     "artists": "Künstler",
     "tracks": "Titel",
-    "folders": "Bibliotheksordner",
+    "folders": "Ordner",
+    "folderListTitle": "Bibliotheksordner",
+    "editTabs": {
+      "title": "Library-Tabs bearbeiten",
+      "help": "Zum Neuordnen ziehen. Sichtbarkeit umschalten.",
+      "save": "Speichern",
+      "cancel": "Abbrechen",
+      "reset": "Auf Standard zurücksetzen",
+      "showTab": "Tab anzeigen",
+      "hideTab": "Tab ausblenden"
+    },
     "noAlbums": "Keine Alben in der Bibliothek",
     "noArtists": "Keine Künstler in der Bibliothek",
     "noTracks": "Keine Titel in der Bibliothek",

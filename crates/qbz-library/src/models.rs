@@ -150,6 +150,13 @@ pub struct LocalAlbum {
     pub bit_depth: Option<u32>,
     pub sample_rate: f64, // Changed from u32 to f64 for decimal precision
     pub directory_path: String,
+    /// Comma-separated list of distinct folder keys that contributed
+    /// tracks to this album. Populated only by the metadata-grouped
+    /// Albums query (`get_albums_metadata_grouped`); `None` for folder-
+    /// grouped rows. The frontend uses this to render a tooltip when N
+    /// folders > 1.
+    #[serde(default)]
+    pub source_folders: Option<String>,
     /// Source of the album: "user" for local files, "qobuz_download" for offline cached
     #[serde(default = "default_source")]
     pub source: String,

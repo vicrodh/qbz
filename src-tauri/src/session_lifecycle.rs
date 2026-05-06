@@ -61,6 +61,8 @@ pub async fn activate_session(app: &tauri::AppHandle, user_id: u64) -> Result<()
         app.state::<crate::config::playback_preferences::PlaybackPreferencesState>();
     let favorites_prefs =
         app.state::<crate::config::favorites_preferences::FavoritesPreferencesState>();
+    let library_prefs =
+        app.state::<crate::config::library_preferences::LibraryPreferencesState>();
     let download_settings = app.state::<crate::config::download_settings::DownloadSettingsState>();
     let audio_settings = app.state::<crate::config::audio_settings::AudioSettingsState>();
     let tray_settings = app.state::<crate::config::tray_settings::TraySettingsState>();
@@ -114,6 +116,7 @@ pub async fn activate_session(app: &tauri::AppHandle, user_id: u64) -> Result<()
     favorites_cache.init_at(&data_dir)?;
     playback_prefs.init_at(&data_dir)?;
     favorites_prefs.init_at(&data_dir)?;
+    library_prefs.init_at(&data_dir)?;
     audio_settings.init_at(&data_dir)?;
 
     // Sync per-user audio settings to CoreBridge player immediately.
@@ -305,6 +308,8 @@ pub async fn deactivate_session(app: &tauri::AppHandle) -> Result<(), String> {
         app.state::<crate::config::playback_preferences::PlaybackPreferencesState>();
     let favorites_prefs =
         app.state::<crate::config::favorites_preferences::FavoritesPreferencesState>();
+    let library_prefs =
+        app.state::<crate::config::library_preferences::LibraryPreferencesState>();
     let download_settings = app.state::<crate::config::download_settings::DownloadSettingsState>();
     let audio_settings = app.state::<crate::config::audio_settings::AudioSettingsState>();
     let tray_settings = app.state::<crate::config::tray_settings::TraySettingsState>();
@@ -336,6 +341,7 @@ pub async fn deactivate_session(app: &tauri::AppHandle) -> Result<(), String> {
     favorites_cache.teardown()?;
     playback_prefs.teardown()?;
     favorites_prefs.teardown()?;
+    library_prefs.teardown()?;
     audio_settings.teardown()?;
     tray_settings.teardown()?;
     remote_control_settings.teardown()?;
@@ -428,6 +434,8 @@ pub async fn activate_offline_session(app: &tauri::AppHandle) -> Result<(), Stri
     let tray_settings = app.state::<crate::config::tray_settings::TraySettingsState>();
     let favorites_prefs =
         app.state::<crate::config::favorites_preferences::FavoritesPreferencesState>();
+    let library_prefs =
+        app.state::<crate::config::library_preferences::LibraryPreferencesState>();
 
     library.init_at(&data_dir).await?;
 
@@ -450,6 +458,7 @@ pub async fn activate_offline_session(app: &tauri::AppHandle) -> Result<(), Stri
     session_store.init_at(&data_dir)?;
     favorites_cache.init_at(&data_dir)?;
     favorites_prefs.init_at(&data_dir)?;
+    library_prefs.init_at(&data_dir)?;
     tray_settings.init_at(&data_dir)?;
 
     // Download settings — needed for "Show in Local Library" toggle

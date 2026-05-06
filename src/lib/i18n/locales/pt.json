@@ -890,7 +890,17 @@
     "albums": "Álbuns",
     "artists": "Artistas",
     "tracks": "Faixas",
-    "folders": "Pastas da Biblioteca",
+    "folders": "Pastas",
+    "folderListTitle": "Pastas da Biblioteca",
+    "editTabs": {
+      "title": "Editar abas da Library",
+      "help": "Arraste para reordenar. Alterne a visibilidade.",
+      "save": "Salvar",
+      "cancel": "Cancelar",
+      "reset": "Restaurar padrões",
+      "showTab": "Mostrar aba",
+      "hideTab": "Ocultar aba"
+    },
     "noAlbums": "Nenhum álbum na biblioteca",
     "noArtists": "Nenhum artista na biblioteca",
     "noTracks": "Nenhuma faixa na biblioteca",
