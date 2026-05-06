@@ -923,8 +923,13 @@ pub async fn v2_cache_track_for_offline(
     let file_path = cache_state.track_file_path(track_id, "flac");
     let file_path_str = file_path.to_string_lossy().to_string();
     {
+        let limit_bytes = *cache_state.limit_bytes.lock().await;
         let guard = cache_state.db.lock().await;
         let db = guard.as_ref().ok_or("No active session - please log in")?;
+        // Pre-flight: refuse new downloads when the cache is already at or
+        // above the configured limit (Fix #5d).
+        let cache_root = std::path::PathBuf::from(cache_state.get_cache_path());
+        crate::offline_cache::maintenance::check_cache_limit(db, &cache_root, limit_bytes)?;
         db.insert_track(&track_info, &file_path_str)?;
     }
 
@@ -995,8 +1000,14 @@ pub async fn v2_cache_tracks_batch_for_offline(
 
     // Single transactional batch insert
     {
+        let limit_bytes = *cache_state.limit_bytes.lock().await;
         let guard = cache_state.db.lock().await;
         let db = guard.as_ref().ok_or("No active session - please log in")?;
+        // Pre-flight: refuse new batch downloads when the cache is already at
+        // or above the configured limit (Fix #5d). One check covers the whole
+        // batch; this is intentionally simple and does not predict batch size.
+        let cache_root = std::path::PathBuf::from(cache_state.get_cache_path());
+        crate::offline_cache::maintenance::check_cache_limit(db, &cache_root, limit_bytes)?;
         let refs: Vec<(&crate::offline_cache::TrackCacheInfo, String)> = batch
             .iter()
             .map(|(info, path)| (info, path.clone()))

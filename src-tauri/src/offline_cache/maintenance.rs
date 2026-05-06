@@ -41,6 +41,39 @@ pub fn remove_album_cached_tracks(
     })
 }
 
+/// Pre-flight cache-limit check executed before queuing new downloads.
+///
+/// Returns `Ok(())` when:
+/// - `limit_bytes` is `None` (no limit configured); OR
+/// - the current `total_size_bytes` from the cache stats is strictly below the
+///   configured limit.
+///
+/// Returns `Err(message)` when the cache has already met or exceeded the
+/// configured limit. The message is suitable for surfacing to end users via a
+/// toast.
+///
+/// Intentionally simple: it does not predict the new track's size. Sufficient
+/// for v1 — the user gets feedback the moment they hit the limit and can free
+/// space or raise the limit through the offline cache manager.
+pub fn check_cache_limit(
+    db: &OfflineCacheDb,
+    offline_root: &Path,
+    limit_bytes: Option<u64>,
+) -> Result<(), String> {
+    let limit = match limit_bytes {
+        Some(value) => value,
+        None => return Ok(()),
+    };
+    let stats = db.get_stats(&offline_root.to_string_lossy(), Some(limit))?;
+    if stats.total_size_bytes >= limit {
+        return Err(
+            "Offline cache limit reached. Free space or raise the limit in the offline cache manager."
+                .to_string(),
+        );
+    }
+    Ok(())
+}
+
 /// Filters tracks targeted by re-download: skip in-flight Downloading,
 /// optionally restrict to Failed only.
 pub fn select_redownload_targets(
