@@ -517,6 +517,7 @@
     resetLaunchFlow,
   } from '$lib/services/updatesService';
   import type { AutoUpdateProgress } from '$lib/services/updatesService';
+  import { initDiscordRpc } from '$lib/services/discordRpcService';
   import UpdateProgressModal from '$lib/components/updates/UpdateProgressModal.svelte';
 
   // Offline state
@@ -4602,6 +4603,8 @@
   onMount(() => {
     // Bootstrap app (theme, mouse nav, Last.fm restore)
     const { cleanup: cleanupBootstrap } = bootstrapApp();
+
+    void initDiscordRpc();
 
     // Window-title preference: load from localStorage and subscribe so that
     // toggling the setting updates the OS title bar immediately.
