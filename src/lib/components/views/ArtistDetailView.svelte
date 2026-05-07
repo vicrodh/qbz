@@ -19,6 +19,12 @@
   import { openAddToMixtape } from '$lib/stores/addToMixtapeModalStore';
   import type { ArtistDetail, QobuzArtist, PageArtistTrack, PageArtistSimilarItem } from '$lib/types';
   import { applyShiftRange, isSelectAllShortcut } from '$lib/utils/multiSelect';
+  import { extractPalette, pickHeaderColor, type ArtworkPalette } from '$lib/utils/artworkPalette';
+  import {
+    subscribe as subscribeAppearance,
+    isAlbumHeaderGradientEnabled,
+  } from '$lib/stores/appearancePreferencesStore';
+  import { getCachedImageUrl } from '$lib/services/imageCacheService';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackMenu from '../TrackMenu.svelte';
   import BulkActionBar from '../BulkActionBar.svelte';
@@ -205,6 +211,36 @@
   let hasCustomImage = $state(false);
   let imageOverride = $state<string | null>(null);
   let customFullImage = $state<string | null>(null);
+
+  // Header gradient driven by extracted artwork palette (shared toggle with
+  // album detail under Settings > Appearance > Album header gradient).
+  let gradientEnabled = $state(isAlbumHeaderGradientEnabled());
+  let artworkPalette = $state<ArtworkPalette | null>(null);
+  let resolvedHeaderImageUrl = $state<string | null>(null);
+  let jumpNavSentinelEl: HTMLDivElement | null = $state(null);
+  let jumpNavStuck = $state(false);
+  $effect(() => {
+    const url = imageOverride ?? artist.image ?? null;
+    artworkPalette = null;
+    resolvedHeaderImageUrl = null;
+    if (!url || !gradientEnabled) return;
+    const stillCurrent = () => (imageOverride ?? artist.image ?? null) === url;
+    getCachedImageUrl(url).then((resolved) => {
+      if (stillCurrent()) resolvedHeaderImageUrl = resolved;
+    }).catch(() => {});
+    extractPalette(url).then((p) => {
+      if (stillCurrent()) artworkPalette = p;
+    });
+  });
+  const headerColor = $derived(gradientEnabled ? pickHeaderColor(artworkPalette) : null);
+  const headerStyle = $derived.by(() => {
+    if (!headerColor) return '';
+    const needsScrim = headerColor.luminance > 0.6;
+    const imageRule = resolvedHeaderImageUrl
+      ? `--art-image-url: url("${resolvedHeaderImageUrl.replace(/"/g, '\\"')}");`
+      : '';
+    return `--art-bg: ${headerColor.hex}; --art-scrim: ${needsScrim ? '0.55' : '0.3'}; ${imageRule}`;
+  });
   let topTracks = $state<Track[]>([]);
   let tracksLoading = $state(false);
   let isFavorite = $state(false);
@@ -269,6 +305,22 @@
     // Load custom image status
     loadCustomImageStatus();
 
+    // Subscribe to header gradient toggle
+    unsubscribeAppearance = subscribeAppearance(() => {
+      gradientEnabled = isAlbumHeaderGradientEnabled();
+    });
+
+    // Detect when the jump-nav becomes "stuck" so the bg can fade in only
+    // while it's pinned. A 1px sentinel right above it goes out of the
+    // viewport when the nav reaches the top.
+    if (jumpNavSentinelEl) {
+      jumpNavObserver = new IntersectionObserver(
+        ([entry]) => { jumpNavStuck = !entry.isIntersecting; },
+        { threshold: 0 }
+      );
+      jumpNavObserver.observe(jumpNavSentinelEl);
+    }
+
     // Restore scroll position
     requestAnimationFrame(() => {
       const saved = getSavedScrollPosition('artist', artist.id);
@@ -278,10 +330,15 @@
     });
   });
 
+  let unsubscribeAppearance: (() => void) | null = null;
+  let jumpNavObserver: IntersectionObserver | null = null;
+
   onDestroy(() => {
     unsubscribeSidebar?.();
     unsubscribeBlacklist?.();
     unsubscribeTrackFavorites?.();
+    unsubscribeAppearance?.();
+    jumpNavObserver?.disconnect();
     // Close the network sidebar when leaving artist view
     closeContentSidebar('network');
     clearPreviousContentSidebar();
@@ -1702,7 +1759,7 @@
   });
 </script>
 
-<div class="artist-detail" bind:this={artistDetailEl} onscroll={(e) => saveScrollPosition('artist', (e.target as HTMLElement).scrollTop, artist.id)}>
+<div class="artist-detail" class:has-art-bg={!!headerColor} style={headerStyle} bind:this={artistDetailEl} onscroll={(e) => saveScrollPosition('artist', (e.target as HTMLElement).scrollTop, artist.id)}>
   <!-- Back Navigation -->
   <button class="back-btn" onclick={onBack}>
     <ArrowLeft size={16} />
@@ -1977,7 +2034,8 @@
   {/if}
 
   {#if showJumpNav}
-    <div class="jump-nav">
+    <div bind:this={jumpNavSentinelEl} class="jump-nav-sentinel" aria-hidden="true"></div>
+    <div class="jump-nav" class:stuck={jumpNavStuck}>
       <div class="jump-nav-left">
         <div class="jump-label">{$t('artist.jumpTo')}</div>
         <div class="jump-links">
@@ -3099,6 +3157,84 @@
     position: relative;
   }
 
+  /* Artwork-derived backdrop. ::before renders the actual image heavily
+     blurred (Qobuz/Feishin-style) with a mask that fades it into the
+     theme bg toward the bottom; ::after lays a scrim on top for text
+     contrast on light artwork. The cost is one-shot — once the image
+     is rasterized into a layer the GPU just composites it. */
+  .artist-detail.has-art-bg::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    /* Visual extent ends around 380px once `scale(1.1)` is applied
+       (340 × 1.1 = 374), placing the fade comfortably above the
+       JUMP TO bar which starts ~y=410. */
+    height: 340px;
+    background-color: var(--art-bg, transparent);
+    background-image: var(--art-image-url, none);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    filter: blur(70px) saturate(1.3);
+    transform: scale(1.1);
+    transform-origin: center top;
+    z-index: 0;
+    pointer-events: none;
+    -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 55%, transparent 100%);
+            mask-image: linear-gradient(180deg, #000 0%, #000 55%, transparent 100%);
+    transition: background-color 320ms ease;
+    will-change: transform, filter;
+  }
+
+  .artist-detail.has-art-bg::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 340px;
+    background: linear-gradient(180deg, rgba(0, 0, 0, var(--art-scrim, 0.3)) 0%, rgba(0, 0, 0, 0) 80%);
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  .artist-detail > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Lift secondary text contrast over the colored backdrop. */
+  .artist-detail.has-art-bg .back-btn,
+  .artist-detail.has-art-bg .bio-text,
+  .artist-detail.has-art-bg .bio-toggle {
+    color: rgba(255, 255, 255, 0.78);
+  }
+
+  .artist-detail.has-art-bg .back-btn:hover,
+  .artist-detail.has-art-bg .bio-toggle:hover {
+    color: #fff;
+  }
+
+  /* Action buttons reactive to gradient backdrop. */
+  .artist-detail.has-art-bg :global(.action-btn-circle) {
+    color: rgba(255, 255, 255, 0.78);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+  }
+
+  .artist-detail.has-art-bg :global(.action-btn-circle:hover:not(:disabled)) {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.12);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.7);
+  }
+
+  .artist-detail.has-art-bg :global(.action-btn-circle.is-active) {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.18);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.6);
+  }
+
   .artist-body {
     display: flex;
     align-items: stretch;
@@ -3923,6 +4059,14 @@
     font-weight: 300;
   }
 
+  /* 1px sentinel above .jump-nav so an IntersectionObserver can detect
+     when the nav becomes pinned (sentinel out of viewport = stuck). */
+  .jump-nav-sentinel {
+    height: 1px;
+    margin: 0 -8px 0 -24px;
+    pointer-events: none;
+  }
+
   .jump-nav {
     position: sticky;
     /* `top: 0` pins to the scrollport's padding-box top. Now that
@@ -3936,13 +4080,20 @@
     align-items: center;
     gap: 10px;
     padding: 10px 24px;
-    background: var(--bg-primary);
-    border-bottom: 1px solid var(--alpha-6);
-    box-shadow: 0 4px 8px -4px rgba(0, 0, 0, 0.5);
+    background: transparent;
+    border-bottom: 1px solid transparent;
+    box-shadow: 0 4px 8px -4px rgba(0, 0, 0, 0);
     margin: 0 -8px 24px -24px;
     width: calc(100% + 32px);
     will-change: transform;
     transform: translateZ(0);
+    transition: background-color 220ms ease, border-color 220ms ease, box-shadow 220ms ease;
+  }
+
+  .jump-nav.stuck {
+    background: var(--bg-primary);
+    border-bottom-color: var(--alpha-6);
+    box-shadow: 0 4px 8px -4px rgba(0, 0, 0, 0.5);
   }
 
   .jump-nav-left {

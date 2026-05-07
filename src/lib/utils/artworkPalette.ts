@@ -1,4 +1,5 @@
 import { Vibrant } from 'node-vibrant/browser';
+import { getCachedImageUrl } from '$lib/services/imageCacheService';
 
 export interface ArtworkSwatch {
   hex: string;
@@ -47,7 +48,24 @@ export async function extractPalette(url: string | null | undefined): Promise<Ar
 
   const promise = (async () => {
     try {
-      const palette = await Vibrant.from(url).getPalette();
+      // Resolve through the local image cache so Vibrant works on a
+      // file:// / asset:// URL instead of going to the remote CDN.
+      // Qobuz CDN sends Access-Control-Allow-Origin: * for album covers
+      // but NOT for artist images, which taints the canvas Vibrant uses
+      // and makes pixel reads fail. Routing through the cache also
+      // primes the on-disk store for subsequent visits.
+      let resolvedUrl = url;
+      if (
+        url.startsWith('http://') ||
+        url.startsWith('https://')
+      ) {
+        try {
+          resolvedUrl = await getCachedImageUrl(url);
+        } catch {
+          resolvedUrl = url;
+        }
+      }
+      const palette = await Vibrant.from(resolvedUrl).getPalette();
       const all = [
         palette.Vibrant,
         palette.Muted,

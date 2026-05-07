@@ -41,6 +41,7 @@
     subscribe as subscribeAppearance,
     isAlbumHeaderGradientEnabled,
   } from '$lib/stores/appearancePreferencesStore';
+  import { getCachedImageUrl } from '$lib/services/imageCacheService';
 
   interface Track {
     id: number;
@@ -231,20 +232,28 @@
   // Header gradient driven by extracted artwork palette.
   let gradientEnabled = $state(isAlbumHeaderGradientEnabled());
   let artworkPalette = $state<ArtworkPalette | null>(null);
+  let resolvedHeaderImageUrl = $state<string | null>(null);
   $effect(() => {
     const url = coverOverride ?? album.artwork ?? null;
     artworkPalette = null;
+    resolvedHeaderImageUrl = null;
     if (!url || !gradientEnabled) return;
+    const stillCurrent = () => (coverOverride ?? album.artwork ?? null) === url;
+    getCachedImageUrl(url).then((resolved) => {
+      if (stillCurrent()) resolvedHeaderImageUrl = resolved;
+    }).catch(() => {});
     extractPalette(url).then((p) => {
-      const current = coverOverride ?? album.artwork ?? null;
-      if (current === url) artworkPalette = p;
+      if (stillCurrent()) artworkPalette = p;
     });
   });
   const headerColor = $derived(gradientEnabled ? pickHeaderColor(artworkPalette) : null);
   const headerStyle = $derived.by(() => {
     if (!headerColor) return '';
     const needsScrim = headerColor.luminance > 0.6;
-    return `--art-bg: ${headerColor.hex}; --art-scrim: ${needsScrim ? '0.35' : '0'};`;
+    const imageRule = resolvedHeaderImageUrl
+      ? `--art-image-url: url("${resolvedHeaderImageUrl.replace(/"/g, '\\"')}");`
+      : '';
+    return `--art-bg: ${headerColor.hex}; --art-scrim: ${needsScrim ? '0.55' : '0.3'}; ${imageRule}`;
   });
 
   // Multi-select
@@ -1093,19 +1102,44 @@
     position: relative;
   }
 
+  /* Artwork-derived backdrop. ::before renders the actual cover heavily
+     blurred (Qobuz/Feishin-style) with a mask that fades it into the
+     theme bg toward the bottom; ::after lays a scrim on top for text
+     contrast on light artwork. The cost is one-shot — once the image
+     is rasterized into a layer the GPU just composites it. */
   .album-detail.has-art-bg::before {
     content: '';
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
-    height: 320px;
-    background:
-      linear-gradient(180deg, rgba(0, 0, 0, var(--art-scrim, 0)) 0%, rgba(0, 0, 0, 0) 100%),
-      linear-gradient(180deg, var(--art-bg, transparent) 0%, var(--art-bg, transparent) 30%, transparent 100%);
+    height: 280px;
+    background-color: var(--art-bg, transparent);
+    background-image: var(--art-image-url, none);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    filter: blur(70px) saturate(1.3);
+    transform: scale(1.15);
+    transform-origin: center top;
     z-index: 0;
     pointer-events: none;
-    transition: background 320ms ease;
+    -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 55%, transparent 100%);
+            mask-image: linear-gradient(180deg, #000 0%, #000 55%, transparent 100%);
+    transition: background-color 320ms ease;
+    will-change: transform, filter;
+  }
+
+  .album-detail.has-art-bg::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 280px;
+    background: linear-gradient(180deg, rgba(0, 0, 0, var(--art-scrim, 0.3)) 0%, rgba(0, 0, 0, 0) 80%);
+    z-index: 0;
+    pointer-events: none;
   }
 
   .album-detail > * {
