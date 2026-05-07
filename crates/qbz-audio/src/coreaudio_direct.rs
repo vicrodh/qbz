@@ -234,6 +234,47 @@ pub fn set_hog_mode(device_id: AudioDeviceID, enabled: bool) -> Result<(), Strin
     Ok(())
 }
 
+/// Get a CoreAudio device's current hardware output volume as scalar 0.0..1.0.
+/// Tries master output first, then common stereo channel elements.
+#[cfg(target_os = "macos")]
+pub fn get_hardware_volume(device_id: AudioDeviceID) -> Result<f32, String> {
+    for element in [kAudioObjectPropertyElementMaster, 1, 2] {
+        let property_address = AudioObjectPropertyAddress {
+            mSelector: kAudioDevicePropertyVolumeScalar,
+            mScope: kAudioObjectPropertyScopeOutput,
+            mElement: element,
+        };
+
+        let has_property =
+            unsafe { AudioObjectHasProperty(device_id, NonNull::from(&property_address)) };
+        if !has_property {
+            continue;
+        }
+
+        let mut value = 0.0_f32;
+        let data_size = mem::size_of::<f32>() as u32;
+        let status = unsafe {
+            AudioObjectGetPropertyData(
+                device_id,
+                NonNull::from(&property_address),
+                0,
+                null(),
+                NonNull::from(&data_size),
+                NonNull::from(&mut value).cast(),
+            )
+        };
+
+        if status == 0 {
+            return Ok(value.clamp(0.0, 1.0));
+        }
+    }
+
+    Err(format!(
+        "CoreAudio device {} does not expose readable output hardware volume",
+        device_id
+    ))
+}
+
 /// Set a CoreAudio device's hardware output volume using scalar 0.0..1.0.
 /// Tries master output first, then common stereo channel elements.
 #[cfg(target_os = "macos")]
@@ -298,26 +339,59 @@ pub fn set_hardware_volume(device_id: AudioDeviceID, volume: f32) -> Result<(), 
 }
 
 /// RAII owner for CoreAudio Hog Mode.
+///
+/// Captures the device's hardware volume on acquire and restores it
+/// when released, so leaving Exclusive Mode returns the device to the
+/// volume the user had set before QBZ took over.
 #[cfg(target_os = "macos")]
 #[derive(Debug)]
 pub struct CoreAudioExclusiveGuard {
     device_id: AudioDeviceID,
     active: bool,
+    original_hardware_volume: Option<f32>,
 }
 
 #[cfg(target_os = "macos")]
 impl CoreAudioExclusiveGuard {
+    /// Acquire CoreAudio Hog Mode for the given device.
+    ///
+    /// The guard is constructed *before* the FFI call so that any
+    /// partial-acquire failure (e.g. CoreAudio transfers ownership to
+    /// us but the readback fails) still triggers `Drop`, which calls
+    /// `set_hog_mode(false)`. That release is a no-op when we don't
+    /// actually own the device, so it's safe in either outcome and
+    /// avoids leaving the device hogged on error.
     pub fn acquire(device_id: AudioDeviceID) -> Result<Self, String> {
-        set_hog_mode(device_id, true)?;
-        Ok(Self {
+        // Snapshot the current hardware volume before we touch anything,
+        // so the user's pre-Exclusive level can be restored on release.
+        // Devices without a readable volume property (knob-only DACs)
+        // simply don't get a snapshot — restoration is best-effort.
+        let original_hardware_volume = get_hardware_volume(device_id).ok();
+        let guard = Self {
             device_id,
             active: true,
-        })
+            original_hardware_volume,
+        };
+        set_hog_mode(device_id, true)?;
+        Ok(guard)
     }
 
     pub fn release(&mut self) -> Result<(), String> {
         if !self.active {
             return Ok(());
+        }
+
+        // Restore the hardware volume *before* releasing Hog Mode, while
+        // we still own the device. After release any other process can
+        // change the volume, so doing it before keeps our restoration
+        // authoritative.
+        if let Some(original) = self.original_hardware_volume.take() {
+            if let Err(e) = set_hardware_volume(self.device_id, original) {
+                log::warn!(
+                    "[CoreAudio] Failed to restore hardware volume on release: {}",
+                    e
+                );
+            }
         }
 
         set_hog_mode(self.device_id, false)?;

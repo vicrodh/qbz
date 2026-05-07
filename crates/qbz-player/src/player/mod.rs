@@ -451,47 +451,66 @@ fn create_output_stream_with_config(
     }
 }
 
-/// Output stream type - either rodio or ALSA Direct
+/// Output stream type - either rodio or ALSA Direct.
+///
+/// On macOS, the Rodio variant carries an optional `exclusive_guard`
+/// whose `Drop` releases CoreAudio Hog Mode and is otherwise inert —
+/// so exclusive and shared modes share a single code path.
 enum StreamType {
-    Rodio(MixerDeviceSink),
-    #[cfg(target_os = "macos")]
-    CoreAudio {
+    Rodio {
         sink: MixerDeviceSink,
-        _exclusive_guard: Option<qbz_audio::CoreAudioExclusiveGuard>,
+        /// Holds CoreAudio Hog Mode for the lifetime of the stream.
+        /// Load-bearing via `Drop`; reads happen through pattern matches
+        /// (e.g., `set_coreaudio_hardware_volume`).
+        #[cfg(target_os = "macos")]
+        exclusive_guard: Option<qbz_audio::CoreAudioExclusiveGuard>,
     },
     #[cfg(target_os = "linux")]
     AlsaDirect(Arc<qbz_audio::AlsaDirectStream>),
 }
 
 impl StreamType {
-    fn rodio_sink(&self) -> Option<&MixerDeviceSink> {
-        match self {
-            StreamType::Rodio(sink) => Some(sink),
+    /// Construct a shared-mode Rodio stream (no exclusive guard).
+    fn rodio(sink: MixerDeviceSink) -> Self {
+        StreamType::Rodio {
+            sink,
             #[cfg(target_os = "macos")]
-            StreamType::CoreAudio { sink, .. } => Some(sink),
-            #[cfg(target_os = "linux")]
-            StreamType::AlsaDirect(_) => None,
+            exclusive_guard: None,
         }
     }
 
+    /// Apply the volume to CoreAudio hardware if the device supports it.
+    ///
+    /// Returns `true` only when the hardware accepted the change so the
+    /// caller can pin the software stream to unity gain. Returns `false`
+    /// for shared mode and for knob-only DACs (no settable volume
+    /// property), letting the caller fall back to software volume.
     #[cfg(target_os = "macos")]
     fn set_coreaudio_hardware_volume(&self, volume: f32) -> bool {
         match self {
-            StreamType::CoreAudio {
-                _exclusive_guard: Some(guard),
+            StreamType::Rodio {
+                exclusive_guard: Some(guard),
                 ..
-            } => {
-                if let Err(e) = guard.set_hardware_volume(volume) {
-                    log::warn!("[CoreAudio] Hardware volume failed: {}", e);
+            } => match guard.set_hardware_volume(volume) {
+                Ok(()) => true,
+                Err(e) => {
+                    log::warn!(
+                        "[CoreAudio] Hardware volume failed; falling back to software: {}",
+                        e
+                    );
+                    false
                 }
-                true
-            }
+            },
             _ => false,
         }
     }
 }
 
-fn apply_engine_volume(stream_opt: &Option<StreamType>, engine: &PlaybackEngine, volume: f32) {
+fn apply_engine_volume(
+    #[cfg_attr(not(target_os = "macos"), allow(unused_variables))] stream_opt: &Option<StreamType>,
+    engine: &PlaybackEngine,
+    volume: f32,
+) {
     #[cfg(target_os = "macos")]
     if stream_opt
         .as_ref()
@@ -588,7 +607,7 @@ fn try_init_stream_with_backend(
 
     // Fallback to regular rodio stream (PipeWire, Pulse, ALSA via CPAL)
     match backend.create_output_stream_with_exclusive_guard(&config) {
-        Ok((mixer_sink, exclusive_guard)) => {
+        Ok((mixer_sink, _exclusive_guard)) => {
             log::info!(
                 "Stream created via {:?} backend at {}Hz",
                 backend_type,
@@ -597,15 +616,15 @@ fn try_init_stream_with_backend(
             state.set_bit_perfect_mode(Some(BitPerfectMode::Disabled));
             #[cfg(target_os = "macos")]
             let stream = if backend_type == AudioBackendType::SystemDefault {
-                StreamType::CoreAudio {
+                StreamType::Rodio {
                     sink: mixer_sink,
-                    _exclusive_guard: exclusive_guard,
+                    exclusive_guard: _exclusive_guard,
                 }
             } else {
-                StreamType::Rodio(mixer_sink)
+                StreamType::rodio(mixer_sink)
             };
             #[cfg(not(target_os = "macos"))]
-            let stream = StreamType::Rodio(mixer_sink);
+            let stream = StreamType::rodio(mixer_sink);
             Some(Ok(stream))
         }
         Err(e) => {
@@ -1048,6 +1067,22 @@ impl Player {
                                 return Some(stream_type);
                             }
                             Some(Err(e)) => {
+                                // On macOS, the backend path is the only one that
+                                // honors Exclusive Mode (CoreAudio Hog Mode). Falling
+                                // through to legacy CPAL here would silently create a
+                                // shared-mode stream while the UI still shows
+                                // Exclusive — surface the failure instead so the
+                                // user sees that audio is unavailable rather than
+                                // unknowingly playing in shared mode.
+                                #[cfg(target_os = "macos")]
+                                if settings.exclusive_mode {
+                                    log::error!(
+                                        "macOS Exclusive Mode init failed: {} — refusing to fall back to shared CPAL",
+                                        e
+                                    );
+                                    state.set_current_device(None);
+                                    return None;
+                                }
                                 log::warn!(
                                     "Backend system init failed: {}, falling back to legacy",
                                     e
@@ -1108,7 +1143,7 @@ impl Player {
                 {
                     Ok(mixer_sink) => {
                         log::info!("Audio output initialized successfully");
-                        Some(StreamType::Rodio(mixer_sink))
+                        Some(StreamType::rodio(mixer_sink))
                     }
                     Err(e) => {
                         log::error!(
@@ -1118,7 +1153,7 @@ impl Player {
                         match DeviceSinkBuilder::open_default_sink() {
                             Ok(mixer_sink) => {
                                 log::info!("Fallback to default audio output succeeded");
-                                Some(StreamType::Rodio(mixer_sink))
+                                Some(StreamType::rodio(mixer_sink))
                             }
                             Err(e2) => {
                                 log::error!("Failed to create default audio output: {}", e2);
@@ -1370,7 +1405,7 @@ impl Player {
                                                 channels,
                                                 dac_passthrough,
                                             )
-                                            .map(StreamType::Rodio)
+                                            .map(StreamType::rodio)
                                         }
                                     }
                                 } else {
@@ -1413,7 +1448,7 @@ impl Player {
                                         channels,
                                         dac_passthrough,
                                     )
-                                    .map(StreamType::Rodio)
+                                    .map(StreamType::rodio)
                                 };
 
                                 // Handle stream creation result
@@ -1497,8 +1532,7 @@ impl Player {
 
                             // Create PlaybackEngine from StreamType
                             let mut engine = match stream {
-                                stream if stream.rodio_sink().is_some() => {
-                                    let mixer_sink = stream.rodio_sink().expect("rodio sink");
+                                StreamType::Rodio { sink: mixer_sink, .. } => {
                                     match PlaybackEngine::new_rodio(&mixer_sink.mixer()) {
                                         Ok(e) => {
                                             *consecutive_sink_failures = 0;
@@ -1562,9 +1596,6 @@ impl Player {
                                         hardware_volume,
                                     )
                                 }
-                                _ => unreachable!(
-                                    "non-rodio stream handled by platform-specific arms"
-                                ),
                             };
 
                             let volume = thread_state.volume.load(Ordering::SeqCst) as f32 / 100.0;
@@ -1808,7 +1839,7 @@ impl Player {
                                                 channels,
                                                 dac_passthrough,
                                             )
-                                            .map(StreamType::Rodio)
+                                            .map(StreamType::rodio)
                                         }
                                     }
                                 } else {
@@ -1826,7 +1857,7 @@ impl Player {
                                         channels,
                                         dac_passthrough,
                                     )
-                                    .map(StreamType::Rodio)
+                                    .map(StreamType::rodio)
                                 };
 
                                 match stream_result {
@@ -1871,8 +1902,7 @@ impl Player {
 
                             // Create PlaybackEngine
                             let mut engine = match stream {
-                                stream if stream.rodio_sink().is_some() => {
-                                    let mixer_sink = stream.rodio_sink().expect("rodio sink");
+                                StreamType::Rodio { sink: mixer_sink, .. } => {
                                     match PlaybackEngine::new_rodio(&mixer_sink.mixer()) {
                                         Ok(e) => {
                                             *consecutive_sink_failures = 0;
@@ -1900,9 +1930,6 @@ impl Player {
                                         hardware_volume,
                                     )
                                 }
-                                _ => unreachable!(
-                                    "non-rodio stream handled by platform-specific arms"
-                                ),
                             };
 
                             let volume = thread_state.volume.load(Ordering::SeqCst) as f32 / 100.0;
@@ -2101,8 +2128,7 @@ impl Player {
                                 };
 
                                 let mut engine = match stream {
-                                    stream if stream.rodio_sink().is_some() => {
-                                        let mixer_sink = stream.rodio_sink().expect("rodio sink");
+                                    StreamType::Rodio { sink: mixer_sink, .. } => {
                                         match PlaybackEngine::new_rodio(&mixer_sink.mixer()) {
                                             Ok(e) => e,
                                             Err(e) => {
@@ -2126,9 +2152,6 @@ impl Player {
                                             hardware_volume,
                                         )
                                     }
-                                    _ => unreachable!(
-                                        "non-rodio stream handled by platform-specific arms"
-                                    ),
                                 };
 
                                 let volume =
@@ -2311,8 +2334,7 @@ impl Player {
                             }
 
                             let mut engine = match stream {
-                                stream if stream.rodio_sink().is_some() => {
-                                    let mixer_sink = stream.rodio_sink().expect("rodio sink");
+                                StreamType::Rodio { sink: mixer_sink, .. } => {
                                     match PlaybackEngine::new_rodio(&mixer_sink.mixer()) {
                                         Ok(e) => e,
                                         Err(e) => {
@@ -2336,9 +2358,6 @@ impl Player {
                                         hardware_volume,
                                     )
                                 }
-                                _ => unreachable!(
-                                    "non-rodio stream handled by platform-specific arms"
-                                ),
                             };
 
                             let volume = thread_state.volume.load(Ordering::SeqCst) as f32 / 100.0;
