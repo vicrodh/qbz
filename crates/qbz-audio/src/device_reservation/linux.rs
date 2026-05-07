@@ -120,7 +120,25 @@ impl DeviceReservation {
     /// nested-inside-Lifetime-B pattern landing in Task 5, prefer reusing an
     /// existing connection via the future `acquire_with_connection` overload.
     pub fn acquire(hw_device: &str, app_device_name: &str) -> Result<Self, ReservationError> {
-        let card = parse_card_index(hw_device)?;
+        // Parse failures must not propagate — the caller (AlsaDirectStream)
+        // will treat any Err as fatal and abort stream creation, regressing
+        // playback for devices we can't introspect. Names that don't target
+        // a single card (`default`, `pulse`) and any future plugin alias we
+        // can't decode degrade to a no-op guard so PCM open proceeds.
+        let card = match parse_card_index(hw_device) {
+            Ok(idx) => idx,
+            Err(e) => {
+                log::warn!(
+                    "[reservation] cannot determine ALSA card index for '{}': {}. \
+                     Proceeding without D-Bus reservation (degraded).",
+                    hw_device,
+                    e
+                );
+                return Ok(Self {
+                    state: ReservationState::Degraded,
+                });
+            }
+        };
         let bus_name = bus_name_for_card(card);
         let object_path = object_path_for_card(card);
 
@@ -399,29 +417,62 @@ fn request_release(proxy: &Proxy<'_>, priority: i32) -> Result<bool, Reservation
 
 /// Parse an ALSA device string and return the kernel card index.
 ///
-/// Accepts: `"hw:0"`, `"hw:0,0"`, `"hw:1,0"`, `"plughw:1,0"`,
-/// `"hw:CARD=DacMagic"`, `"hw:CARD=DacMagic,DEV=0"`.
+/// Accepts any plugin prefix (`hw:`, `plughw:`, `front:`, `surround*:`,
+/// `iec958:`, `hdmi:`, etc.) followed by either a positional numeric card
+/// index (`hw:1,0`) or a `CARD=<name>` argument in any position
+/// (`front:CARD=C20,DEV=0`, `hw:DEV=0,CARD=DacMagic`). The plugin prefix
+/// itself is irrelevant for our purpose: D-Bus reservation is per-card,
+/// not per-plugin alias.
+///
+/// Strings with no colon (`default`, `pulse`, etc.) and strings whose
+/// args contain neither a `CARD=` argument nor a numeric first arg are
+/// rejected as `InvalidDevice`. The caller (`acquire`) downgrades these
+/// to a degraded guard rather than propagating the error.
 pub(crate) fn parse_card_index(hw_device: &str) -> Result<u32, ReservationError> {
     let trimmed = hw_device.trim();
-    let after_prefix = trimmed
-        .strip_prefix("hw:")
-        .or_else(|| trimmed.strip_prefix("plughw:"))
-        .ok_or_else(|| ReservationError::InvalidDevice(hw_device.to_string()))?;
 
-    let card_part = after_prefix.split(',').next().unwrap_or("");
-    let card_part = card_part.trim();
+    // Find the first colon. Everything before is the plugin name (hw,
+    // plughw, front, surround*, iec958, hdmi, etc.); we only care about
+    // the args after it. Strings with no colon are not plugin-prefixed
+    // device names and cannot identify a card.
+    let args = match trimmed.find(':') {
+        Some(idx) => trimmed[idx + 1..].trim(),
+        None => return Err(ReservationError::InvalidDevice(hw_device.to_string())),
+    };
 
-    if card_part.is_empty() {
+    if args.is_empty() {
         return Err(ReservationError::InvalidDevice(hw_device.to_string()));
     }
 
-    if let Some(name) = card_part.strip_prefix("CARD=") {
-        resolve_card_index_by_name(name)
-    } else {
-        card_part
-            .parse::<u32>()
-            .map_err(|_| ReservationError::InvalidDevice(hw_device.to_string()))
+    // Args are comma-separated. Look for `CARD=<name>` in any position;
+    // if none, fall back to the first arg parsed as a numeric card index.
+    let mut card_name: Option<&str> = None;
+    let mut first_arg: Option<&str> = None;
+
+    for (i, arg) in args.split(',').enumerate() {
+        let arg = arg.trim();
+        if let Some(name) = arg.strip_prefix("CARD=") {
+            card_name = Some(name);
+        }
+        if i == 0 {
+            first_arg = Some(arg);
+        }
     }
+
+    if let Some(name) = card_name {
+        if name.is_empty() {
+            return Err(ReservationError::InvalidDevice(hw_device.to_string()));
+        }
+        return resolve_card_index_by_name(name);
+    }
+
+    if let Some(arg) = first_arg {
+        if let Ok(n) = arg.parse::<u32>() {
+            return Ok(n);
+        }
+    }
+
+    Err(ReservationError::InvalidDevice(hw_device.to_string()))
 }
 
 /// Resolve a symbolic ALSA card name (e.g., `"DacMagic"`) to its kernel index
@@ -500,6 +551,75 @@ mod tests {
             object_path_for_card(0),
             "/org/freedesktop/ReserveDevice1/Audio0"
         );
+    }
+
+    #[test]
+    fn parse_card_index_accepts_any_plugin_prefix() {
+        // The plugin prefix is irrelevant; what matters is whether we can
+        // extract a card identifier from the args. Use positional numeric
+        // first args so the assertions don't depend on real ALSA cards
+        // being present on the test host.
+        assert_eq!(parse_card_index("front:0,0").unwrap(), 0);
+        assert_eq!(parse_card_index("plughw:1,0").unwrap(), 1);
+        assert_eq!(parse_card_index("surround51:2,0").unwrap(), 2);
+        assert_eq!(parse_card_index("iec958:3,0").unwrap(), 3);
+        assert_eq!(parse_card_index("hdmi:4,0").unwrap(), 4);
+    }
+
+    #[test]
+    fn parse_card_index_rejects_card_alias_strings() {
+        // Strings with no colon cannot identify a plugin+card pair. They
+        // graceful-degrade in acquire() rather than block stream creation.
+        assert!(matches!(
+            parse_card_index("default"),
+            Err(ReservationError::InvalidDevice(_))
+        ));
+        assert!(matches!(
+            parse_card_index("pulse"),
+            Err(ReservationError::InvalidDevice(_))
+        ));
+        assert!(matches!(
+            parse_card_index(""),
+            Err(ReservationError::InvalidDevice(_))
+        ));
+    }
+
+    #[test]
+    fn parse_card_index_rejects_empty_args() {
+        // Plugin prefix with a colon but no args is unparseable.
+        assert!(matches!(
+            parse_card_index("hw:"),
+            Err(ReservationError::InvalidDevice(_))
+        ));
+        assert!(matches!(
+            parse_card_index("front:"),
+            Err(ReservationError::InvalidDevice(_))
+        ));
+    }
+
+    #[test]
+    fn parse_card_index_card_in_any_position() {
+        // CARD= can appear at any position. The user's actual device
+        // string is `front:CARD=C20,DEV=0` (CARD= first); the parser
+        // must also handle CARD= second or as the only arg. Full
+        // resolution requires a real ALSA card on the host, so we just
+        // verify the parser does not panic and returns Ok or
+        // InvalidDevice (never DbusError or AlsaError unless ALSA
+        // enumeration itself fails).
+        for s in [
+            "front:DEV=0,CARD=C20",
+            "hw:CARD=DacMagic",
+            "plughw:CARD=DacMagic,DEV=0",
+            "front:CARD=C20,DEV=0",
+        ] {
+            match parse_card_index(s) {
+                Ok(_) | Err(ReservationError::InvalidDevice(_)) => {}
+                Err(other) => panic!(
+                    "unexpected error variant for {:?}: {:?}",
+                    s, other
+                ),
+            }
+        }
     }
 
     #[test]
