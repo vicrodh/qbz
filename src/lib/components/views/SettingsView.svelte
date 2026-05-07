@@ -966,10 +966,26 @@
   );
 
   // Smart toggle states - auto-disable incompatible features
-  let exclusiveModeDisabled = $derived(selectedBackend === 'PipeWire' || selectedBackend === 'Auto' || selectedBackend === 'PulseAudio');
-  let exclusiveModeTooltipOverride = $derived(
-    exclusiveModeDisabled
-      ? 'Exclusive mode is only available with ALSA Direct backend. PipeWire and PulseAudio are multiplexed audio servers and cannot provide true exclusive access.'
+  let selectedBackendInfo = $derived(availableBackends.find(b => b.name === selectedBackend) ?? null);
+  let selectedBackendSupportsExclusive = $derived(
+    selectedBackend === 'ALSA Direct'
+      || (platform === 'macos' && selectedBackendInfo?.backend_type === 'SystemDefault')
+  );
+  let exclusiveModeDisabled = $derived(!selectedBackendSupportsExclusive);
+  let exclusiveModeTooltipOverrideKey = $derived(
+    !exclusiveModeDisabled
+      ? (platform === 'macos'
+        ? 'settings.audio.exclusiveModeMacosDesc'
+        : null)
+      : platform === 'macos'
+        ? 'settings.audio.exclusiveModeMacosAvailable'
+      : (selectedBackend === 'PipeWire' || selectedBackend === 'PulseAudio')
+        ? 'settings.audio.exclusiveModeUnavailableMultiplexed'
+        : 'settings.audio.exclusiveModeUnavailableGeneric'
+  );
+  let exclusiveModeHelpOverrideKey = $derived(
+    platform === 'macos'
+      ? 'settings.audio.exclusiveModeMacosHelp'
       : null
   );
   let dacPassthroughDisabled = $derived(selectedBackend !== 'PipeWire');
@@ -2738,7 +2754,7 @@
     exclusive_mode: boolean;
     dac_passthrough: boolean;
     preferred_sample_rate: number | null;
-    backend_type: 'PipeWire' | 'Alsa' | 'Pulse' | null;
+    backend_type: 'PipeWire' | 'Alsa' | 'Pulse' | 'SystemDefault' | null;
     alsa_plugin: 'Hw' | 'PlugHw' | 'Pcm' | null;
     alsa_hardware_volume: boolean;
     stream_first_track: boolean;
@@ -2754,7 +2770,7 @@
   }
 
   interface BackendInfo {
-    backend_type: 'PipeWire' | 'Alsa' | 'Pulse';
+    backend_type: 'PipeWire' | 'Alsa' | 'Pulse' | 'SystemDefault';
     name: string;
     description: string;
     is_available: boolean;
@@ -2838,7 +2854,7 @@
     }
   }
 
-  async function loadBackendDevices(backendType: 'PipeWire' | 'Alsa' | 'Pulse') {
+  async function loadBackendDevices(backendType: BackendInfo['backend_type']) {
     isLoadingDevices = true;
     try {
       const devices = await invoke<AudioDevice[]>('v2_get_devices_for_backend', { backendType });
@@ -3137,12 +3153,15 @@
       }
     }
 
-    // Exclusive mode only works with ALSA Direct
-    if (backendName !== 'ALSA Direct') {
+    const backendSupportsExclusive = backendName === 'ALSA Direct'
+      || (platform === 'macos' && backend?.backend_type === 'SystemDefault');
+
+    // Exclusive mode works with ALSA Direct and macOS System Audio.
+    if (!backendSupportsExclusive) {
       if (exclusiveMode) {
         exclusiveMode = false;
         await invoke('v2_set_audio_exclusive_mode', { enabled: false });
-        console.log('[Audio] Disabled exclusive mode (only compatible with ALSA Direct)');
+        console.log('[Audio] Disabled exclusive mode (only compatible with ALSA Direct or macOS System Audio)');
       }
     }
 
@@ -4279,8 +4298,8 @@
     {/if}
     <div class="setting-row">
       <div class="setting-info">
-        <span class="setting-label">{$t('settings.audio.exclusiveMode')} <span class="help-tip" title={$t('settings.audio.exclusiveModeHelp')}>(?)</span></span>
-        <span class="setting-desc">{exclusiveModeTooltipOverride ?? $t('settings.audio.exclusiveModeDesc')}</span>
+        <span class="setting-label">{$t('settings.audio.exclusiveMode')} <span class="help-tip" title={exclusiveModeHelpOverrideKey ? $t(exclusiveModeHelpOverrideKey) : $t('settings.audio.exclusiveModeHelp')}>(?)</span></span>
+        <span class="setting-desc">{exclusiveModeTooltipOverrideKey ? $t(exclusiveModeTooltipOverrideKey) : $t('settings.audio.exclusiveModeDesc')}</span>
       </div>
       <Toggle enabled={exclusiveMode} onchange={handleExclusiveModeChange} disabled={exclusiveModeDisabled} />
     </div>
