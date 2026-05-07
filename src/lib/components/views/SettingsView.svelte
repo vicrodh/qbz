@@ -38,6 +38,10 @@
     setSystemNotificationsEnabled,
     loadSystemNotificationsPreference
   } from '$lib/services/playbackService';
+  import {
+    isDiscordRpcEnabled,
+    setDiscordRpcEnabled
+  } from '$lib/services/discordRpcService';
   import { getIsPlaying } from '$lib/stores/playerStore';
   import { setLocale, locale, t } from '$lib/i18n';
   import { get } from 'svelte/store';
@@ -1390,6 +1394,9 @@
   // MusicBrainz integration state
   let musicbrainzEnabled = $state(true);
 
+  // Discord Rich Presence integration state
+  let discordRpcEnabled = $state(false);
+
   // ListenBrainz integration state
   let listenbrainzConnected = $state(false);
   let listenbrainzUsername = $state('');
@@ -1652,6 +1659,9 @@
 
     // Load ListenBrainz state
     loadListenBrainzState();
+
+    // Load Discord Rich Presence state
+    loadDiscordRpcState();
 
     // Load remote control status
     loadRemoteControlStatus();
@@ -1937,6 +1947,20 @@
       musicbrainzEnabled = enabled;
     } catch (err) {
       console.error('Failed to update MusicBrainz setting:', err);
+    }
+  }
+
+  // Discord Rich Presence
+  function loadDiscordRpcState() {
+    discordRpcEnabled = isDiscordRpcEnabled();
+  }
+
+  async function handleDiscordRpcToggle(value: boolean) {
+    discordRpcEnabled = value;
+    try {
+      await setDiscordRpcEnabled(value);
+    } catch (err) {
+      console.error('Failed to update Discord RPC setting:', err);
     }
   }
 
@@ -5563,6 +5587,28 @@
       <Toggle enabled={musicbrainzEnabled} onchange={handleMusicBrainzChange} />
     </div>
 
+    <!-- Discord Rich Presence Integration -->
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.integrations.discordRpc.label')}</span>
+        <small class="setting-note">
+          {$t('settings.integrations.discordRpc.description')}
+        </small>
+      </div>
+      <Toggle enabled={discordRpcEnabled} onchange={handleDiscordRpcToggle} />
+    </div>
+
+    <div class="setting-row discord-rpc-override-row">
+      <details class="discord-rpc-override">
+        <summary>{$t('settings.integrations.discordRpc.overrideHeader')}</summary>
+        <div class="discord-rpc-override-body">
+          <p>{$t('settings.integrations.discordRpc.flatpakNote')}</p>
+          <pre><code>flatpak override --user --filesystem=xdg-run/discord-ipc-0 com.blitzfc.qbz</code></pre>
+          <p>{$t('settings.integrations.discordRpc.snapNote')}</p>
+        </div>
+      </details>
+    </div>
+
     <div class="setting-row">
       <div class="setting-info">
         <span class="setting-label">{$t('settings.integrations.plexConnection')}</span>
@@ -6913,6 +6959,69 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
 
   .env-var-row span {
     color: var(--text-muted);
+  }
+
+  .setting-row.discord-rpc-override-row {
+    height: auto;
+    align-items: flex-start;
+    padding: 8px 0;
+  }
+
+  .discord-rpc-override {
+    width: 100%;
+  }
+
+  .discord-rpc-override > summary {
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 13px;
+    list-style: none;
+    user-select: none;
+  }
+
+  .discord-rpc-override > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .discord-rpc-override > summary::before {
+    content: '▸ ';
+    display: inline-block;
+    width: 14px;
+    color: var(--text-muted);
+  }
+
+  .discord-rpc-override[open] > summary::before {
+    content: '▾ ';
+  }
+
+  .discord-rpc-override-body {
+    margin-top: 8px;
+    padding-left: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .discord-rpc-override-body p {
+    margin: 0;
+  }
+
+  .discord-rpc-override-body pre {
+    margin: 0;
+    padding: 8px 10px;
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+    overflow-x: auto;
+  }
+
+  .discord-rpc-override-body pre code {
+    font-family: var(--font-mono, monospace);
+    font-size: 11px;
+    color: var(--text-primary);
+    background: transparent;
+    padding: 0;
   }
 
   .setting-row {

@@ -18,6 +18,9 @@ finish-args:
   # Native PipeWire access
   - --filesystem=xdg-run/pipewire-0:ro
 
+  # Discord IPC socket for Rich Presence (#336)
+  - --filesystem=xdg-run/discord-ipc-0
+
   # User music library
   - --filesystem=xdg-music
 

@@ -38,6 +38,7 @@ pub mod cast;
 pub mod config;
 pub mod credentials;
 pub mod discogs;
+pub mod discord_rpc;
 pub mod flatpak;
 #[cfg(target_os = "linux")]
 pub mod idle_inhibit;
@@ -1376,6 +1377,7 @@ pub fn run(qconnect_cli_override: Option<bool>) {
         .manage(listenbrainz_v2_state)
         .manage(musicbrainz_v2_state)
         .manage(lastfm_v2_state)
+        .manage(discord_rpc::DiscordRpcState::default())
         .invoke_handler(tauri::generate_handler![
             commands_v2::runtime_get_status,
             commands_v2::runtime_bootstrap,
@@ -1949,6 +1951,9 @@ pub fn run(qconnect_cli_override: Option<bool>) {
             commands_v2::v2_collection_shuffle_tracks,
             commands_v2::v2_skip_to_next_item,
             commands_v2::v2_skip_to_previous_item,
+            discord_rpc::v2_discord_rpc_set_enabled,
+            discord_rpc::v2_discord_rpc_update,
+            discord_rpc::v2_discord_rpc_clear,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

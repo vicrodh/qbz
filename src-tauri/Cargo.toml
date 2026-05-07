@@ -97,6 +97,9 @@ rand = "0.10"
 # Fuzzy string similarity (for track-mix dedup)
 strsim = "0.11"
 
+# Discord Rich Presence (#336)
+discord-rich-presence = "0.2.4"
+
 # Audio playback
 rodio = { version = "0.22", features = ["symphonia-all"] }
 symphonia = { version = "0.5", features = ["all"] }

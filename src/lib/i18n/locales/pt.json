@@ -2420,6 +2420,13 @@
     },
     "integrations": {
       "title": "Integrações",
+      "discordRpc": {
+        "label": "Mostrar atividade no Discord",
+        "description": "Ao reproduzir música no QBZ, mostra a faixa atual no seu status do Discord. Desativado por padrão.",
+        "overrideHeader": "Se a atividade não aparecer no Discord (instalações em sandbox)",
+        "flatpakNote": "Flatpak: execute este comando uma vez e reinicie o QBZ.",
+        "snapNote": "Snap: sem suporte. Instale o .deb, .rpm ou .AppImage do GitHub Releases."
+      },
       "lastfm": "Last.fm",
       "spotify": "Spotify",
       "tidal": "Tidal",
