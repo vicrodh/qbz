@@ -9,6 +9,10 @@
     bitDepth?: number;
     samplingRate?: number;
     format?: string;
+    /** Strip the contained pill chrome (background, border, padding,
+     *  min-width, fixed height) so the badge renders as just
+     *  [icon][text-block] for inline use above lists/toolbars. */
+    bare?: boolean;
   }
 
   let {
@@ -16,6 +20,7 @@
     bitDepth,
     samplingRate,
     format,
+    bare = false,
   }: Props = $props();
 
   const tier = $derived.by(() => {
@@ -85,6 +90,7 @@
 
 <div
   class="quality-badge"
+  class:bare
   title={`${tierLabel}: ${displayText}`}
 >
   <div class="icon-container">
@@ -119,6 +125,16 @@
     border: 1px solid var(--alpha-10);
     box-sizing: border-box;
     cursor: help;
+  }
+
+  /* Bare mode: drop the contained pill chrome so the badge can sit
+     inline above a tracklist toolbar without competing visually. */
+  .quality-badge.bare {
+    background: none;
+    border: none;
+    padding: 0;
+    min-width: 0;
+    height: auto;
   }
 
   .icon-container {
