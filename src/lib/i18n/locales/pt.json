@@ -892,7 +892,18 @@
     "albums": "Álbuns",
     "artists": "Artistas",
     "tracks": "Faixas",
-    "folders": "Pastas",
+    "folders": {
+      "label": "Pastas",
+      "tree": {
+        "modeLabel": "Árvore",
+        "flatLabel": "Plano",
+        "selectAFolder": "Selecione uma pasta para ver o conteúdo.",
+        "treeFolderTracks": "{count, plural, one {# faixa} other {# faixas}}",
+        "treeLoading": "Carregando…",
+        "treeEmpty": "Esta pasta está vazia.",
+        "playAllRecursive": "Reproduzir todas as faixas desta pasta"
+      }
+    },
     "folderListTitle": "Pastas da Biblioteca",
     "editTabs": {
       "title": "Editar abas da Library",

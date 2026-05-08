@@ -892,7 +892,18 @@
     "albums": "Albums",
     "artists": "Artists",
     "tracks": "Tracks",
-    "folders": "Folders",
+    "folders": {
+      "label": "Folders",
+      "tree": {
+        "modeLabel": "Tree",
+        "flatLabel": "Flat",
+        "selectAFolder": "Select a folder to view its content.",
+        "treeFolderTracks": "{count, plural, one {# track} other {# tracks}}",
+        "treeLoading": "Loading…",
+        "treeEmpty": "This folder is empty.",
+        "playAllRecursive": "Play all tracks in this folder"
+      }
+    },
     "explicit": "Explicit",
     "folderListTitle": "Library Folders",
     "editTabs": {

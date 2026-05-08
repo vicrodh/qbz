@@ -892,7 +892,18 @@
     "albums": "Alben",
     "artists": "Künstler",
     "tracks": "Titel",
-    "folders": "Ordner",
+    "folders": {
+      "label": "Ordner",
+      "tree": {
+        "modeLabel": "Baum",
+        "flatLabel": "Flach",
+        "selectAFolder": "Wähle einen Ordner aus, um seinen Inhalt anzuzeigen.",
+        "treeFolderTracks": "{count, plural, one {# Titel} other {# Titel}}",
+        "treeLoading": "Lädt…",
+        "treeEmpty": "Dieser Ordner ist leer.",
+        "playAllRecursive": "Alle Titel in diesem Ordner abspielen"
+      }
+    },
     "folderListTitle": "Bibliotheksordner",
     "editTabs": {
       "title": "Library-Tabs bearbeiten",

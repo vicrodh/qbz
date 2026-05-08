@@ -892,7 +892,18 @@
     "albums": "Álbumes",
     "artists": "Artistas",
     "tracks": "Pistas",
-    "folders": "Carpetas",
+    "folders": {
+      "label": "Carpetas",
+      "tree": {
+        "modeLabel": "Árbol",
+        "flatLabel": "Plano",
+        "selectAFolder": "Selecciona una carpeta para ver su contenido.",
+        "treeFolderTracks": "{count, plural, one {# pista} other {# pistas}}",
+        "treeLoading": "Cargando…",
+        "treeEmpty": "Esta carpeta está vacía.",
+        "playAllRecursive": "Reproducir todas las pistas de esta carpeta"
+      }
+    },
     "folderListTitle": "Carpetas de la Biblioteca",
     "editTabs": {
       "title": "Editar pestañas de Library",

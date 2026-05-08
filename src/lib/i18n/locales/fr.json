@@ -892,7 +892,18 @@
     "albums": "Albums",
     "artists": "Artistes",
     "tracks": "Titres",
-    "folders": "Dossiers",
+    "folders": {
+      "label": "Dossiers",
+      "tree": {
+        "modeLabel": "Arbre",
+        "flatLabel": "Plat",
+        "selectAFolder": "Sélectionnez un dossier pour afficher son contenu.",
+        "treeFolderTracks": "{count, plural, one {# titre} other {# titres}}",
+        "treeLoading": "Chargement…",
+        "treeEmpty": "Ce dossier est vide.",
+        "playAllRecursive": "Lire tous les titres de ce dossier"
+      }
+    },
     "folderListTitle": "Dossiers de la bibliothèque",
     "editTabs": {
       "title": "Modifier les onglets Library",
