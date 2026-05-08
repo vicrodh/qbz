@@ -3,6 +3,9 @@
   import { t } from '$lib/i18n';
   import { ChevronRight, ChevronDown, Folder, FileMusic, Play } from 'lucide-svelte';
   import type { SvelteSet } from 'svelte/reactivity';
+  // Svelte 5 deprecates `<svelte:self>` in favor of self-imports
+  // (https://svelte.dev/e/svelte_self_deprecated). Self-import is the
+  // recommended replacement; behavior is equivalent.
   import Self from './LocalLibraryFolderTree.svelte';
 
   type FolderEntry = {
@@ -104,8 +107,10 @@
   class:folder={isFolder}
   class:track={!isFolder}
   style:padding-left="{depth * 16 + 8}px"
-  role="button"
+  role="treeitem"
   tabindex="0"
+  aria-selected={isSelected}
+  aria-expanded={isFolder ? isExpanded : undefined}
   onclick={handleRowClick}
   onkeydown={handleRowKey}
 >
@@ -295,7 +300,8 @@
     border-radius: 50%;
     padding: 0;
   }
-  .folder-tree-row:hover .play-btn {
+  .folder-tree-row:hover .play-btn,
+  .folder-tree-row:focus-within .play-btn {
     display: inline-flex;
   }
 
