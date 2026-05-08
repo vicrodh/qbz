@@ -38,6 +38,12 @@ pub struct LibraryPreferences {
     pub hidden_tabs: Vec<String>,
     #[serde(default)]
     pub folders_view_mode: FoldersViewMode,
+    /// Width (in CSS pixels) of the tree-mode left sidebar in the Folders
+    /// tab. `None` means "use the frontend default" (currently 432px).
+    /// Persisted on drag-end so the choice survives restarts. Bounds are
+    /// enforced on the frontend (min 200px, max 40% of content area).
+    #[serde(default)]
+    pub folders_tree_sidebar_width: Option<u32>,
 }
 
 impl Default for LibraryPreferences {
@@ -55,6 +61,7 @@ impl Default for LibraryPreferences {
             ],
             hidden_tabs: vec![],
             folders_view_mode: FoldersViewMode::Flat,
+            folders_tree_sidebar_width: None,
         }
     }
 }
@@ -91,6 +98,10 @@ impl LibraryPreferencesStore {
             "ALTER TABLE library_preferences ADD COLUMN folders_view_mode TEXT DEFAULT 'flat'",
             [],
         );
+        let _ = conn.execute(
+            "ALTER TABLE library_preferences ADD COLUMN folders_tree_sidebar_width INTEGER DEFAULT NULL",
+            [],
+        );
 
         Ok(Self { conn })
     }
@@ -110,7 +121,7 @@ impl LibraryPreferencesStore {
         let mut stmt = self
             .conn
             .prepare(
-                "SELECT tab_order, hidden_tabs, folders_view_mode \
+                "SELECT tab_order, hidden_tabs, folders_view_mode, folders_tree_sidebar_width \
                  FROM library_preferences WHERE id = 1",
             )
             .map_err(|e| format!("Failed to prepare select: {}", e))?;
@@ -119,6 +130,7 @@ impl LibraryPreferencesStore {
             let tab_order_str: String = row.get(0)?;
             let hidden_tabs_str: String = row.get(1)?;
             let folders_view_mode_str: Option<String> = row.get(2)?;
+            let folders_tree_sidebar_width: Option<i64> = row.get(3)?;
 
             let tab_order: Vec<String> = serde_json::from_str(&tab_order_str)
                 .unwrap_or_else(|_| LibraryPreferences::default().tab_order);
@@ -127,11 +139,17 @@ impl LibraryPreferencesStore {
             let folders_view_mode = folders_view_mode_str
                 .map(|s| FoldersViewMode::from_str(&s))
                 .unwrap_or_default();
+            // Stored as INTEGER in SQLite; clamp to non-negative on read.
+            // Frontend re-clamps against the live max anyway.
+            let folders_tree_sidebar_width = folders_tree_sidebar_width
+                .filter(|v| *v > 0)
+                .map(|v| v as u32);
 
             Ok(LibraryPreferences {
                 tab_order,
                 hidden_tabs,
                 folders_view_mode,
+                folders_tree_sidebar_width,
             })
         });
 
@@ -154,16 +172,38 @@ impl LibraryPreferencesStore {
         self.conn
             .execute(
                 "INSERT OR REPLACE INTO library_preferences \
-                 (id, tab_order, hidden_tabs, folders_view_mode) \
-                 VALUES (1, ?1, ?2, ?3)",
+                 (id, tab_order, hidden_tabs, folders_view_mode, folders_tree_sidebar_width) \
+                 VALUES (1, ?1, ?2, ?3, ?4)",
                 params![
                     tab_order_str,
                     hidden_tabs_str,
-                    prefs.folders_view_mode.as_str()
+                    prefs.folders_view_mode.as_str(),
+                    prefs.folders_tree_sidebar_width.map(|v| v as i64),
                 ],
             )
             .map_err(|e| format!("Failed to save library preferences: {}", e))?;
         Ok(prefs)
+    }
+
+    pub fn set_folders_tree_sidebar_width(&self, width: u32) -> Result<(), String> {
+        // Same upsert pattern as `set_folders_view_mode`: try the cheap
+        // UPDATE first; if no row exists yet, fall back to inserting a
+        // default row carrying just the new width.
+        let updated = self
+            .conn
+            .execute(
+                "UPDATE library_preferences SET folders_tree_sidebar_width = ?1 WHERE id = 1",
+                params![width as i64],
+            )
+            .map_err(|e| format!("Failed to set folders_tree_sidebar_width: {}", e))?;
+
+        if updated == 0 {
+            let mut prefs = LibraryPreferences::default();
+            prefs.folders_tree_sidebar_width = Some(width);
+            self.save_preferences(prefs)?;
+        }
+
+        Ok(())
     }
 
     pub fn set_folders_view_mode(&self, mode: FoldersViewMode) -> Result<(), String> {
@@ -349,5 +389,53 @@ mod tests {
 
         let loaded = store.get_preferences().expect("load");
         assert_eq!(loaded.folders_view_mode, FoldersViewMode::Tree);
+    }
+
+    #[test]
+    fn fresh_store_returns_none_folders_tree_sidebar_width() {
+        let (_dir, store) = fresh_store();
+        let prefs = store.get_preferences().expect("get prefs");
+        assert_eq!(prefs.folders_tree_sidebar_width, None);
+    }
+
+    #[test]
+    fn set_folders_tree_sidebar_width_persists_on_empty_table() {
+        let (_dir, store) = fresh_store();
+        store
+            .set_folders_tree_sidebar_width(512)
+            .expect("set width");
+        let prefs = store.get_preferences().expect("get prefs");
+        assert_eq!(prefs.folders_tree_sidebar_width, Some(512));
+    }
+
+    #[test]
+    fn set_folders_tree_sidebar_width_updates_existing_row() {
+        let (_dir, store) = fresh_store();
+
+        let mut seeded = LibraryPreferences::default();
+        seeded.tab_order = vec!["tracks".into(), "folders".into()];
+        store.save_preferences(seeded).expect("save seed");
+
+        store
+            .set_folders_tree_sidebar_width(640)
+            .expect("set width");
+        let after = store.get_preferences().expect("get prefs");
+        assert_eq!(after.folders_tree_sidebar_width, Some(640));
+        assert_eq!(
+            after.tab_order,
+            vec!["tracks".to_string(), "folders".to_string()]
+        );
+    }
+
+    #[test]
+    fn legacy_json_without_sidebar_width_defaults_to_none() {
+        let legacy = r#"{
+            "tab_order": ["tracks", "folders", "albums", "artists"],
+            "hidden_tabs": [],
+            "folders_view_mode": "tree"
+        }"#;
+        let prefs: LibraryPreferences =
+            serde_json::from_str(legacy).expect("parse legacy json");
+        assert_eq!(prefs.folders_tree_sidebar_width, None);
     }
 }
