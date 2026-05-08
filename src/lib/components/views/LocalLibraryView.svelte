@@ -56,8 +56,8 @@
   import { replacePlaybackQueue } from '$lib/services/queuePlaybackService';
   import LocalLibraryFolderTree from '$lib/components/LocalLibraryFolderTree.svelte';
   import LocalLibraryFolderDetail from '$lib/components/LocalLibraryFolderDetail.svelte';
-  import type { FolderEntry } from '$lib/types/folderTree';
-  import { SvelteSet } from 'svelte/reactivity';
+  import type { FolderEntry, FolderTreeEntry } from '$lib/types/folderTree';
+  import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 
   // Backend types matching Rust models
   interface LocalTrack {
@@ -943,14 +943,22 @@
   });
 
   function selectedLocalTracks(): LocalTrack[] {
-    // Union of library-wide tracks and current album tracks so selection works
-    // from both the tracks tab and the album detail view.
+    // Union of library-wide tracks, current album tracks, and tree-mode
+    // recursive selections so bulk actions work regardless of which
+    // surface populated the selection. `treeSelectedTracksById` is the
+    // fallback for tracks that live outside `tracks` / `albumTracks`
+    // (rare in practice — `tracks` covers the whole user library).
     const byId = new Map<number, LocalTrack>();
     for (const trk of tracks) {
       if (selectedTrackIds.has(trk.id)) byId.set(trk.id, trk);
     }
     for (const trk of albumTracks) {
       if (selectedTrackIds.has(trk.id) && !byId.has(trk.id)) byId.set(trk.id, trk);
+    }
+    for (const id of selectedTrackIds) {
+      if (byId.has(id)) continue;
+      const trk = treeSelectedTracksById.get(id);
+      if (trk) byId.set(id, trk);
     }
     return [...byId.values()];
   }
@@ -991,6 +999,10 @@
     if (trackSelectMode || selectedTrackIds.size > 0) {
       trackSelectMode = false;
       selectedTrackIds = new Set();
+    }
+    if (treeSelectMode || treeSelectedTracksById.size > 0) {
+      treeSelectMode = false;
+      treeSelectedTracksById = new SvelteMap();
     }
     if (albumSelectMode || selectedAlbumIds.size > 0) {
       albumSelectMode = false;
@@ -1612,6 +1624,163 @@
     void selectedAlbum?.id;
     untrack(() => resetMultiSelect());
   });
+
+  // ───────── Folders tab tree-mode multi-select ─────────
+  // The tree-mode select toggle drives a separate flag from the flat-mode
+  // tracks-tab `trackSelectMode` so the user can move between tabs without
+  // the modes bleeding into each other. The underlying selection set is
+  // shared (`selectedTrackIds`) so the BulkActionBar invocation stays
+  // unchanged.
+  let treeSelectMode = $state(false);
+  // file_path lookup keyed by track id, used by `countSelectedUnder` to
+  // resolve folder-row selection state without re-fetching descendants
+  // on every render. Populated from `tracks` / `albumTracks` (effects
+  // below) and from recursive folder fetches on toggle.
+  let trackPathById = $state(new SvelteMap<number, string>());
+  // Full LocalTrack records for tree-mode-selected tracks that may NOT
+  // live in `tracks` or `albumTracks` (defensive — `tracks` covers the
+  // whole user library so this is usually empty). `selectedLocalTracks`
+  // falls back here when an id isn't found in the primary lists.
+  let treeSelectedTracksById = $state(new SvelteMap<number, LocalTrack>());
+
+  // Keep `trackPathById` populated from the in-memory track lists so the
+  // partial-state computation can resolve any track ID the user already
+  // sees in the UI. Recursive folder fetches add additional entries on
+  // top of this; deletions are not necessary because the cache lookups
+  // are bounded by `selectedTrackIds` membership at call time.
+  $effect(() => {
+    for (const trk of tracks) {
+      trackPathById.set(trk.id, trk.file_path);
+    }
+  });
+  $effect(() => {
+    for (const trk of albumTracks) {
+      trackPathById.set(trk.id, trk.file_path);
+    }
+  });
+
+  function toggleTreeSelectMode() {
+    treeSelectMode = !treeSelectMode;
+    if (!treeSelectMode) {
+      selectedTrackIds = new Set();
+      treeSelectedTracksById = new SvelteMap();
+    }
+  }
+
+  // Returns the count of selected track IDs whose file_path lives under
+  // the given folder. O(|selection|) — selection is small in practice.
+  function countSelectedUnder(folderPath: string): number {
+    if (selectedTrackIds.size === 0) return 0;
+    const prefix = folderPath + '/';
+    let count = 0;
+    for (const id of selectedTrackIds) {
+      const path = trackPathById.get(id);
+      if (path && path.startsWith(prefix)) count += 1;
+    }
+    return count;
+  }
+
+  function getFolderSelectionState(
+    entry: FolderTreeEntry,
+  ): 'none' | 'partial' | 'all' {
+    if (entry.kind !== 'folder') return 'none';
+    const total = entry.track_count_under;
+    if (total === 0) return 'none';
+    const selected = countSelectedUnder(entry.path);
+    if (selected === 0) return 'none';
+    if (selected >= total) return 'all';
+    return 'partial';
+  }
+
+  // Path-based track-row state for the tree component, which only knows
+  // file_path (no track id). Walks `trackPathById` once to produce the
+  // boolean. Cheap because the cache is bounded by the visible library.
+  function isTrackPathSelected(trackPath: string): boolean {
+    for (const id of selectedTrackIds) {
+      if (trackPathById.get(id) === trackPath) return true;
+    }
+    return false;
+  }
+
+  async function toggleTreeFolderSelection(
+    folderPath: string,
+    currentState: 'none' | 'partial' | 'all',
+  ) {
+    if (!folderPath) return;
+    try {
+      const fetched = await invoke<LocalTrack[]>(
+        'v2_library_list_folder_tracks_recursive',
+        { folderPath },
+      );
+      const next = new Set(selectedTrackIds);
+      // 'all' means user wants to deselect every descendant. 'none' and
+      // 'partial' both treat the click as a "select all" intent (the
+      // standard UX for ticking a partial-state checkbox).
+      if (currentState === 'all') {
+        for (const trk of fetched) {
+          next.delete(trk.id);
+          treeSelectedTracksById.delete(trk.id);
+        }
+      } else {
+        for (const trk of fetched) {
+          next.add(trk.id);
+          trackPathById.set(trk.id, trk.file_path);
+          treeSelectedTracksById.set(trk.id, trk);
+        }
+      }
+      selectedTrackIds = next;
+    } catch (err) {
+      console.error('[LocalLibrary] toggleTreeFolderSelection failed:', err);
+      showToast($t('toast.failedSelectFolderTracks'), 'error');
+    }
+  }
+
+  async function toggleTreeTrackSelection(trackPath: string) {
+    // Resolve trackPath → track id by walking the path cache. The cache
+    // is normally populated from the global `tracks` array (whole user
+    // library), so the first pass hits.
+    let resolvedId: number | null = null;
+    for (const [id, path] of trackPathById) {
+      if (path === trackPath) {
+        resolvedId = id;
+        break;
+      }
+    }
+    if (resolvedId === null) {
+      // Cache miss — fetch the parent folder's recursive listing to
+      // populate the cache, then retry. Defensive fallback.
+      const lastSlash = trackPath.lastIndexOf('/');
+      if (lastSlash <= 0) return;
+      const parent = trackPath.substring(0, lastSlash);
+      try {
+        const fetched = await invoke<LocalTrack[]>(
+          'v2_library_list_folder_tracks_recursive',
+          { folderPath: parent },
+        );
+        for (const trk of fetched) {
+          trackPathById.set(trk.id, trk.file_path);
+          if (trk.file_path === trackPath) {
+            resolvedId = trk.id;
+            // Also cache the full record so bulk-actions can resolve it.
+            treeSelectedTracksById.set(trk.id, trk);
+          }
+        }
+      } catch (err) {
+        console.error('[LocalLibrary] toggleTreeTrackSelection lookup failed:', err);
+        return;
+      }
+    }
+    if (resolvedId === null) return;
+    const id = resolvedId;
+    const next = new Set(selectedTrackIds);
+    if (next.has(id)) {
+      next.delete(id);
+      treeSelectedTracksById.delete(id);
+    } else {
+      next.add(id);
+    }
+    selectedTrackIds = next;
+  }
 
   // Qobuz artist images cache (artist name -> image URL)
   let artistImages = $state<Map<string, string>>(new Map());
@@ -4685,6 +4854,18 @@
                folder matches an album_group_key), the new FolderDetail
                component (otherwise), or an empty-state hint. -->
           <div class="folders-tree-container">
+            <div class="folders-tree-controls">
+              <button
+                type="button"
+                class="control-btn icon-only"
+                class:active={treeSelectMode}
+                onclick={toggleTreeSelectMode}
+                title={treeSelectMode ? $t('actions.cancelSelection') : $t('actions.select')}
+                aria-pressed={treeSelectMode}
+              >
+                <SquareCheckBig size={16} />
+              </button>
+            </div>
             <div class="folders-tree-two-column-layout">
               <div class="folder-tree-column">
                 <div class="folder-tree-scroll">
@@ -4704,6 +4885,12 @@
                         onSelect={handleFolderTreeSelect}
                         onToggleExpand={toggleFolderExpand}
                         onPlayRecursive={handlePlayRecursive}
+                        selectionMode={treeSelectMode}
+                        {selectedTrackIds}
+                        {getFolderSelectionState}
+                        {isTrackPathSelected}
+                        onToggleFolderSelection={toggleTreeFolderSelection}
+                        onToggleTrackSelection={toggleTreeTrackSelection}
                       />
                     {/each}
                   {/if}
@@ -4739,6 +4926,15 @@
               </div>
             </div>
           </div>
+          {#if treeSelectMode}
+            <BulkActionBar
+              count={selectedTrackIds.size}
+              onPlayNext={handleBulkPlayNext}
+              onPlayLater={handleBulkPlayLater}
+              onAddToPlaylist={handleBulkAddToPlaylist}
+              onClearSelection={() => { selectedTrackIds = new Set(); treeSelectedTracksById = new SvelteMap(); }}
+            />
+          {/if}
         {:else}
         {#if showHiddenAlbums}
           <!-- Hidden Albums View -->
@@ -7456,6 +7652,14 @@
     flex-direction: column;
     height: calc(100vh - 320px);
     min-height: 400px;
+  }
+
+  .folders-tree-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0 8px 0;
+    flex-shrink: 0;
   }
 
   .folders-tree-two-column-layout {

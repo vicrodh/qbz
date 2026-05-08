@@ -2809,6 +2809,7 @@
     "failedLoadMoreAlbums": "Failed to load more albums",
     "failedAddToQueue": "Failed to add to queue",
     "failedPlayTrack": "Failed to play track",
+    "failedSelectFolderTracks": "Failed to select folder tracks",
     "queueCleared": "Queue cleared",
     "queueEmpty": "Queue is empty",
     "queueEnded": "Queue ended",

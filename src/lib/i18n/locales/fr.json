@@ -2802,6 +2802,7 @@
     "failedLoadMoreAlbums": "Échec du chargement d'autres albums",
     "failedAddToQueue": "Échec de l'ajout à la file d'attente",
     "failedPlayTrack": "Échec de la lecture du titre",
+    "failedSelectFolderTracks": "Échec de la sélection des titres du dossier",
     "queueCleared": "File d'attente effacée",
     "queueEmpty": "La file d'attente est vide",
     "queueEnded": "Fin de la file d'attente",

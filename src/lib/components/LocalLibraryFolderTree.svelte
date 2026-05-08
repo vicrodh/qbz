@@ -31,6 +31,26 @@
     onSelect: (path: string) => void;
     onToggleExpand: (path: string) => void;
     onPlayRecursive: (path: string) => void;
+    /**
+     * When true, render a leading checkbox on folder + track rows. The
+     * folder checkbox state is derived from `getFolderSelectionState`
+     * (none / partial / all); clicking calls `onToggleFolderSelection`.
+     * Track-kind rows render their own checkbox bound to the parent's
+     * `selectedTrackIds` set; clicking calls `onToggleTrackSelection`.
+     */
+    selectionMode?: boolean;
+    /**
+     * Reference to the parent's reactive `selectedTrackIds` Set. Read
+     * by the folder-row checkbox's $derived state so the indeterminate
+     * / all / none computation updates when the parent reassigns the
+     * set. The child does not mutate it — mutations happen via the
+     * parent-supplied callbacks.
+     */
+    selectedTrackIds?: Set<number> | null;
+    getFolderSelectionState?: (entry: FolderTreeEntry) => 'none' | 'partial' | 'all';
+    isTrackPathSelected?: (trackPath: string) => boolean;
+    onToggleFolderSelection?: (folderPath: string, currentState: 'none' | 'partial' | 'all') => void;
+    onToggleTrackSelection?: (trackPath: string) => void;
   }
 
   let {
@@ -43,6 +63,12 @@
     onSelect,
     onToggleExpand,
     onPlayRecursive,
+    selectionMode = false,
+    selectedTrackIds = null,
+    getFolderSelectionState,
+    isTrackPathSelected,
+    onToggleFolderSelection,
+    onToggleTrackSelection,
   }: Props = $props();
 
   const isFolder = $derived(node.kind === 'folder');
@@ -124,6 +150,52 @@
       after: segment.substring(idx + query.length),
     };
   }
+
+  // Folder-row selection state. Computed via the parent's helper which
+  // walks selectedTrackIds for paths starting with `${node.path}/`. The
+  // 'partial' state needs to map to the DOM `indeterminate` property
+  // (no HTML attribute equivalent), set via the bind:this ref below.
+  // We read `selectedTrackIds` here so Svelte tracks the prop ref —
+  // the parent reassigns the set on every mutation, which propagates a
+  // new identity here and re-runs the $derived. The actual computation
+  // happens in the parent-supplied callback.
+  const folderSelectionState = $derived.by((): 'none' | 'partial' | 'all' => {
+    void selectedTrackIds;
+    if (!selectionMode || !isFolder || !getFolderSelectionState) return 'none';
+    return getFolderSelectionState(node);
+  });
+
+  let folderCheckboxRef: HTMLInputElement | null = $state(null);
+
+  $effect(() => {
+    if (folderCheckboxRef) {
+      folderCheckboxRef.indeterminate = folderSelectionState === 'partial';
+    }
+  });
+
+  function handleFolderCheckboxClick(e: MouseEvent) {
+    e.stopPropagation();
+    if (isFolder && onToggleFolderSelection) {
+      onToggleFolderSelection(node.path, folderSelectionState);
+    }
+  }
+
+  function handleTrackCheckboxClick(e: MouseEvent) {
+    e.stopPropagation();
+    if (!isFolder && onToggleTrackSelection) {
+      onToggleTrackSelection(node.path);
+    }
+  }
+
+  // Track-row checked state. Reads `selectedTrackIds` so the derivation
+  // re-runs when the parent reassigns the set; the actual lookup goes
+  // through the parent-supplied `isTrackPathSelected` callback because
+  // the tree only knows file_path, not track id.
+  const trackChecked = $derived.by((): boolean => {
+    void selectedTrackIds;
+    if (!selectionMode || isFolder || !isTrackPathSelected) return false;
+    return isTrackPathSelected(node.path);
+  });
 </script>
 
 <div
@@ -139,6 +211,25 @@
   onclick={handleRowClick}
   onkeydown={handleRowKey}
 >
+  {#if selectionMode && isFolder}
+    <input
+      bind:this={folderCheckboxRef}
+      type="checkbox"
+      class="row-checkbox"
+      checked={folderSelectionState === 'all'}
+      onclick={handleFolderCheckboxClick}
+      aria-label={$t('actions.select')}
+    />
+  {:else if selectionMode && !isFolder}
+    <input
+      type="checkbox"
+      class="row-checkbox"
+      checked={trackChecked}
+      onclick={handleTrackCheckboxClick}
+      aria-label={$t('actions.select')}
+    />
+  {/if}
+
   {#if isFolder}
     <button
       type="button"
@@ -232,6 +323,12 @@
             {onSelect}
             {onToggleExpand}
             {onPlayRecursive}
+            {selectionMode}
+            {selectedTrackIds}
+            {getFolderSelectionState}
+            {isTrackPathSelected}
+            {onToggleFolderSelection}
+            {onToggleTrackSelection}
           />
         {/if}
       {/each}
@@ -284,6 +381,15 @@
   .chevron-spacer {
     width: 16px;
     flex-shrink: 0;
+  }
+
+  .row-checkbox {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    margin: 0;
+    cursor: pointer;
+    accent-color: var(--accent-primary);
   }
 
   .row-thumb {

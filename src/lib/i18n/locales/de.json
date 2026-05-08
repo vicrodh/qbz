@@ -2802,6 +2802,7 @@
     "failedLoadMoreAlbums": "Weitere Alben konnten nicht geladen werden",
     "failedAddToQueue": "Hinzufügen zur Warteschlange fehlgeschlagen",
     "failedPlayTrack": "Abspielen des Titels fehlgeschlagen",
+    "failedSelectFolderTracks": "Auswahl der Ordnertitel fehlgeschlagen",
     "queueCleared": "Warteschlange geleert",
     "queueEmpty": "Warteschlange ist leer",
     "queueEnded": "Warteschlange beendet",

@@ -2802,6 +2802,7 @@
     "failedLoadMoreAlbums": "Falha ao carregar mais álbuns",
     "failedAddToQueue": "Falha ao adicionar à fila",
     "failedPlayTrack": "Falha ao reproduzir faixa",
+    "failedSelectFolderTracks": "Falha ao selecionar as faixas da pasta",
     "queueCleared": "Fila limpa",
     "queueEmpty": "A fila está vazia",
     "queueEnded": "Fila encerrada",

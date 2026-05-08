@@ -2808,6 +2808,7 @@
     "failedLoadMoreAlbums": "Error al cargar más álbumes",
     "failedAddToQueue": "Error al agregar a la cola",
     "failedPlayTrack": "Error al reproducir pista",
+    "failedSelectFolderTracks": "Error al seleccionar las pistas de la carpeta",
     "queueCleared": "Cola limpiada",
     "queueEmpty": "La cola está vacía",
     "queueEnded": "Cola terminada",
