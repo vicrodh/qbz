@@ -728,10 +728,16 @@
   // Top-level scan-root entries fed into the tree as the first depth.
   // Lazily seeded once we read `folders` (the registered scan roots) —
   // each scan root becomes a top-level <LocalLibraryFolderTree> node.
-  // We keep `track_count_under = 0` for the top-level row because we
-  // don't have a precomputed recursive-count per scan root yet; the
-  // child-level rows from `v2_library_list_folder_children` carry their
-  // own counts. Documented as Task 7 trade-off (option (b) in brief).
+  // The recursive descendant count is fetched per-root via
+  // `v2_library_count_folder_tracks` and cached in `scanRootCounts`
+  // (see the $effect below). The child-level rows from
+  // `v2_library_list_folder_children` carry their own counts.
+  let scanRootCounts = $state(new SvelteMap<string, number>());
+  // Tracks the last `excludeNetworkFolders` value the count cache was
+  // populated under; flipping it invalidates the cache so the rail
+  // doesn't display stale counts after the offline toggle changes.
+  let lastTreeCountExcludeFilter = $state<boolean | null>(null);
+
   const treeScanRoots = $derived.by<FolderEntry[]>(() => {
     return folders
       .filter((sr) => sr.enabled !== false)
@@ -745,7 +751,7 @@
           kind: 'folder' as const,
           path,
           segment: sr.alias && sr.alias.length > 0 ? sr.alias : fallback || path,
-          track_count_under: 0,
+          track_count_under: scanRootCounts.get(path) ?? 0,
           artwork: null,
         };
       });
@@ -876,6 +882,40 @@
       return;
     }
     scheduleFolderTreeSearch(albumSearch);
+  });
+
+  // Fetch recursive descendant counts for every enabled scan-root row in
+  // the tree rail. The count primitive (`v2_library_count_folder_tracks`)
+  // mirrors the listing primitives' source + network filters byte-for-
+  // byte, so the cached count agrees with what the rail visibility,
+  // `LocalLibraryFolderDetail`, and recursive playback would see.
+  // Cache invalidates whenever the exclude-network toggle flips.
+  $effect(() => {
+    if (activeTab !== 'folders' || foldersViewMode !== 'tree') return;
+    const exclude = shouldExcludeNetworkFolders();
+    if (lastTreeCountExcludeFilter !== exclude) {
+      scanRootCounts.clear();
+      lastTreeCountExcludeFilter = exclude;
+    }
+    for (const root of folders) {
+      if (root.enabled === false) continue;
+      if (scanRootCounts.has(root.path)) continue;
+      const path = root.path;
+      invoke<number>('v2_library_count_folder_tracks', {
+        folderPath: path,
+        excludeNetworkFolders: exclude,
+      })
+        .then((count) => {
+          // Guard against a stale resolution after the user flipped the
+          // exclude toggle while the request was in flight.
+          if (lastTreeCountExcludeFilter === exclude) {
+            scanRootCounts.set(path, count);
+          }
+        })
+        .catch((err) => {
+          console.error('[LocalLibrary] count_folder_tracks failed:', err);
+        });
+    }
   });
 
   // Multi-select (tracks tab) — mirrors FavoritesView pattern
@@ -4890,7 +4930,6 @@
                         searchQuery={treeSearchQuery}
                         onSelect={handleFolderTreeSelect}
                         onToggleExpand={toggleFolderExpand}
-                        onPlayRecursive={handlePlayRecursive}
                         selectionMode={treeSelectMode}
                         {selectedTrackIds}
                         {getFolderSelectionState}

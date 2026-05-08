@@ -1,7 +1,7 @@
 <script lang="ts">
   import { invoke, convertFileSrc } from '@tauri-apps/api/core';
   import { t } from '$lib/i18n';
-  import { ChevronRight, ChevronDown, Folder, FileMusic, Play } from 'lucide-svelte';
+  import { ChevronRight, ChevronDown, Folder, FileMusic } from 'lucide-svelte';
   import type { SvelteSet } from 'svelte/reactivity';
   import type { FolderTreeEntry } from '$lib/types/folderTree';
   // Svelte 5 deprecates `<svelte:self>` in favor of self-imports
@@ -30,7 +30,6 @@
     searchQuery?: string;
     onSelect: (path: string) => void;
     onToggleExpand: (path: string) => void;
-    onPlayRecursive: (path: string) => void;
     /**
      * When true, render a leading checkbox on folder + track rows. The
      * folder checkbox state is derived from `getFolderSelectionState`
@@ -71,7 +70,6 @@
     searchQuery = '',
     onSelect,
     onToggleExpand,
-    onPlayRecursive,
     selectionMode = false,
     selectedTrackIds = null,
     getFolderSelectionState,
@@ -135,11 +133,6 @@
       e.preventDefault();
       handleRowClick();
     }
-  }
-
-  function handlePlayClick(e: MouseEvent) {
-    e.stopPropagation();
-    if (isFolder) onPlayRecursive(node.path);
   }
 
   // Compute the highlight slice for the current row's segment. Returns
@@ -291,18 +284,6 @@
       </span>
     {/if}
   </div>
-
-  {#if isFolder}
-    <button
-      type="button"
-      class="play-btn"
-      onclick={handlePlayClick}
-      aria-label={$t('library.foldersTree.playAllRecursive')}
-      title={$t('library.foldersTree.playAllRecursive')}
-    >
-      <Play size={12} fill="currentColor" />
-    </button>
-  {/if}
 </div>
 
 {#if isFolder && isExpanded}
@@ -335,7 +316,6 @@
             {searchQuery}
             {onSelect}
             {onToggleExpand}
-            {onPlayRecursive}
             {selectionMode}
             {selectedTrackIds}
             {getFolderSelectionState}
@@ -451,25 +431,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  .play-btn {
-    display: none;
-    align-items: center;
-    justify-content: center;
-    width: 20px;
-    height: 20px;
-    flex-shrink: 0;
-    border: none;
-    background: var(--accent-primary);
-    color: var(--btn-primary-text, white);
-    cursor: pointer;
-    border-radius: 50%;
-    padding: 0;
-  }
-  .folder-tree-row:hover .play-btn,
-  .folder-tree-row:focus-within .play-btn {
-    display: inline-flex;
   }
 
   .folder-tree-loading,
