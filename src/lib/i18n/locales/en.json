@@ -1513,6 +1513,22 @@
     "removeFromQueue": "Remove from Queue",
     "saveQueue": "Save as Playlist",
     "searchQueue": "Search in queue...",
+    "sleepTimer": {
+      "title": "Sleep Timer",
+      "tooltipIdle": "Sleep Timer",
+      "tooltipActive": "Sleep timer · {remaining} left",
+      "stopAfter": "Stop playback after:",
+      "activeLabel": "Stops in",
+      "set": "Set Timer",
+      "edit": "Edit",
+      "cancel": "Cancel Timer",
+      "customMinutes": "Minutes",
+      "preset": {
+        "minutes": "{minutes} min",
+        "hours": "{hours} hr",
+        "custom": "Custom…"
+      }
+    },
     "noTracksMatch": "No tracks match \"{query}\"",
     "noTrackPlaying": "No track playing",
     "castToDevice": "Cast to device",

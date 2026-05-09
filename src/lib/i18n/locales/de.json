@@ -1511,6 +1511,22 @@
     "removeFromQueue": "Aus Warteschlange entfernen",
     "saveQueue": "Als Playlist speichern",
     "searchQueue": "In Warteschlange suchen...",
+    "sleepTimer": {
+      "title": "Sleep-Timer",
+      "tooltipIdle": "Sleep-Timer",
+      "tooltipActive": "Sleep-Timer · noch {remaining}",
+      "stopAfter": "Wiedergabe stoppen nach:",
+      "activeLabel": "Stoppt in",
+      "set": "Timer starten",
+      "edit": "Bearbeiten",
+      "cancel": "Timer abbrechen",
+      "customMinutes": "Minuten",
+      "preset": {
+        "minutes": "{minutes} Min",
+        "hours": "{hours} Std",
+        "custom": "Benutzerdefiniert…"
+      }
+    },
     "noTracksMatch": "Keine Titel entsprechen \"{query}\"",
     "noTrackPlaying": "Kein Titel wird abgespielt",
     "castToDevice": "An Gerät übertragen",

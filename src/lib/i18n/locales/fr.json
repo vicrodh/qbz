@@ -1511,6 +1511,22 @@
     "removeFromQueue": "Retirer de la file d'attente",
     "saveQueue": "Enregistrer en tant que playlist",
     "searchQueue": "Rechercher dans la file d'attente...",
+    "sleepTimer": {
+      "title": "Minuterie de veille",
+      "tooltipIdle": "Minuterie de veille",
+      "tooltipActive": "Minuterie · {remaining} restants",
+      "stopAfter": "Arrêter la lecture après :",
+      "activeLabel": "Arrêt dans",
+      "set": "Démarrer",
+      "edit": "Modifier",
+      "cancel": "Annuler",
+      "customMinutes": "Minutes",
+      "preset": {
+        "minutes": "{minutes} min",
+        "hours": "{hours} h",
+        "custom": "Personnalisé…"
+      }
+    },
     "noTracksMatch": "Aucun titre ne correspond à « {query} »",
     "noTrackPlaying": "Aucun titre en cours de lecture",
     "castToDevice": "Caster vers un appareil",

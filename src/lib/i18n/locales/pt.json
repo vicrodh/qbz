@@ -1511,6 +1511,22 @@
     "removeFromQueue": "Remover da Fila",
     "saveQueue": "Salvar como Playlist",
     "searchQueue": "Buscar na fila...",
+    "sleepTimer": {
+      "title": "Temporizador",
+      "tooltipIdle": "Temporizador de pausa",
+      "tooltipActive": "Temporizador · {remaining} restantes",
+      "stopAfter": "Parar reprodução após:",
+      "activeLabel": "Para em",
+      "set": "Ativar",
+      "edit": "Editar",
+      "cancel": "Cancelar temporizador",
+      "customMinutes": "Minutos",
+      "preset": {
+        "minutes": "{minutes} min",
+        "hours": "{hours} h",
+        "custom": "Personalizado…"
+      }
+    },
     "noTracksMatch": "Nenhuma faixa corresponde a \"{query}\"",
     "noTrackPlaying": "Nenhuma faixa em reprodução",
     "castToDevice": "Transmitir para dispositivo",

@@ -1511,6 +1511,22 @@
     "removeFromQueue": "Quitar de la Cola",
     "saveQueue": "Guardar como Lista",
     "searchQueue": "Buscar en la cola...",
+    "sleepTimer": {
+      "title": "Temporizador",
+      "tooltipIdle": "Temporizador de pausa",
+      "tooltipActive": "Temporizador · queda {remaining}",
+      "stopAfter": "Detener reproducción tras:",
+      "activeLabel": "Se detiene en",
+      "set": "Activar",
+      "edit": "Editar",
+      "cancel": "Cancelar temporizador",
+      "customMinutes": "Minutos",
+      "preset": {
+        "minutes": "{minutes} min",
+        "hours": "{hours} h",
+        "custom": "Personalizado…"
+      }
+    },
     "noTracksMatch": "Ninguna pista coincide con \"{query}\"",
     "noTrackPlaying": "Sin pista en reproducción",
     "castToDevice": "Transmitir a dispositivo",
