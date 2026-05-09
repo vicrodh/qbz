@@ -10,6 +10,10 @@
   let isVisible = $state(false);
 </script>
 
+<!-- The tooltip wrapper is a purely visual hit area; the inner popover
+     carries the actual tooltip semantics. The linter doesn't recognise
+     this pattern, hence the local ignore. -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   class="tooltip-container"
   onmouseenter={() => (isVisible = true)}

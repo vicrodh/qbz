@@ -635,10 +635,6 @@
     padding-right: 8px;
   }
 
-  .track-item {
-    /* No background */
-  }
-
   .track-divider {
     height: 1px;
     background: rgba(255, 255, 255, 0.06);

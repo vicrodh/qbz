@@ -132,7 +132,6 @@
     padding: 2px;
     overflow: hidden;
     -webkit-app-region: no-drag;
-    app-region: no-drag;
     transition: box-shadow 180ms ease, opacity 140ms ease, transform 140ms ease;
   }
 

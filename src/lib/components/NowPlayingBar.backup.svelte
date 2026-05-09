@@ -388,10 +388,6 @@
     margin-top: 2px;
   }
 
-  .quality-text {
-    font-size: 11px;
-    color: #666666;
-  }
 
   /* Controls */
   .controls-section {

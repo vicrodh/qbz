@@ -1068,10 +1068,6 @@
     }
   }
 
-  .seekbar:hover .seekbar-track {
-    /* keep both layers stable on hover */
-  }
-
   /* ===== Controls Row ===== */
   .controls-row {
     flex: 1;

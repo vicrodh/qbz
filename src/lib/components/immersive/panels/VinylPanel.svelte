@@ -298,6 +298,11 @@
   });
 </script>
 
+<!-- Purely decorative tilt-on-mousemove effect over a vinyl artwork
+     visualisation; nothing here is interactive in the assistive-tech
+     sense, so the linter rule about ARIA roles on event-wired divs
+     doesn't apply. -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   class="vinyl-panel"
   bind:this={containerRef}

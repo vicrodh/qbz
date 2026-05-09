@@ -310,7 +310,6 @@
     user-select: none;
     -webkit-user-select: none;
     -webkit-app-region: drag;
-    app-region: drag;
   }
 
   /* Full variant: keeps the default chrome (drag, dblclick, controls). */
@@ -327,7 +326,6 @@
     border-radius: 0;
     box-shadow: none;
     -webkit-app-region: no-drag;
-    app-region: no-drag;
   }
 
   /* 3-zone layout: left and right zones are equal width, center is fixed */
@@ -375,7 +373,6 @@
     transition: background-color 150ms ease, border-color 150ms ease;
     flex-shrink: 0;
     -webkit-app-region: no-drag;
-    app-region: no-drag;
     color: var(--text-muted);
   }
 
@@ -402,7 +399,6 @@
     padding: 0;
     min-width: 0;
     -webkit-app-region: no-drag;
-    app-region: no-drag;
   }
 
   .titlebar-search-input::placeholder {
@@ -424,7 +420,6 @@
     flex-shrink: 0;
     transition: background-color 150ms ease, color 150ms ease;
     -webkit-app-region: no-drag;
-    app-region: no-drag;
   }
 
   .titlebar-search-clear:hover {
@@ -439,7 +434,6 @@
     align-items: stretch;
     height: 100%;
     -webkit-app-region: no-drag;
-    app-region: no-drag;
     flex-shrink: 0;
   }
 
@@ -488,7 +482,6 @@
     cursor: pointer;
     transition: background-color 150ms ease, color 150ms ease;
     -webkit-app-region: no-drag;
-    app-region: no-drag;
   }
 
   /* --- Rectangular --- */

@@ -587,7 +587,6 @@
     opacity: 0;
     pointer-events: none;
     -webkit-app-region: no-drag;
-    app-region: no-drag;
     transition: opacity 120ms ease;
     z-index: 12;
   }
@@ -607,7 +606,6 @@
     opacity: 0;
     pointer-events: none;
     -webkit-app-region: no-drag;
-    app-region: no-drag;
     transition: opacity 120ms ease;
     z-index: 14;
   }

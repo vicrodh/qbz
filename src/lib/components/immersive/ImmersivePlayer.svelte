@@ -872,7 +872,6 @@
     height: 32px;
     z-index: 15; /* Above content (1-5), below header controls (20) */
     -webkit-app-region: drag;
-    app-region: drag;
   }
 
   /* macOS: overlay titlebar needs drag region above all UI (matches homepage pattern) */

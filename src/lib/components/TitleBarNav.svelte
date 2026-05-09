@@ -461,7 +461,6 @@
     gap: 6px;
     height: 100%;
     -webkit-app-region: no-drag;
-    app-region: no-drag;
     flex-shrink: 0;
   }
 
@@ -499,7 +498,6 @@
     transition: background-color 150ms ease, opacity 150ms ease;
     white-space: nowrap;
     -webkit-app-region: no-drag;
-    app-region: no-drag;
   }
 
   .nav-btn:hover {
