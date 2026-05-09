@@ -5755,11 +5755,7 @@
     class:match-chrome={matchSystemChrome && showTitleBar && windowTransparent}
     style="--chrome-radius: {chromeRadiusPx}px;"
   >
-    <!-- macOS: when the user hides the qbz strip (mode='hidden'), the OS
-         still draws traffic lights via TitleBarStyle::Overlay on top of
-         the sidebar. This invisible band gives the window something to
-         drag and reserves the same vertical real estate the strip would
-         have. -->
+    <!-- macOS: drag region for window movement (overlay title bar has no native drag area) -->
     {#if !showTitleBar && platform === 'macos'}
       <div class="macos-drag-region" data-tauri-drag-region></div>
     {/if}
@@ -7204,21 +7200,20 @@
     height: calc(100vh - var(--player-bar-height, 104px));
   }
 
-  /* macOS hidden mode: pad main content to clear native overlay traffic
-     lights. Only fires when the qbz strip isn't mounted. */
-  :global(html.macos) .app.no-titlebar .main-content {
+  /* macOS: pad main content to clear native overlay title bar */
+  :global(html.macos) .main-content {
     padding-top: 16px;
     height: calc(100vh - 104px - 16px);
   }
 
-  :global(html.macos) .app.no-titlebar .main-content :global(.home-view) {
+  /* macOS: home view handles its own spacing */
+  :global(html.macos) .main-content :global(.home-view) {
     margin-top: -16px;
   }
 
-  /* macOS hidden mode: invisible drag region for window movement, mirrors
-     the band the qbz strip would otherwise occupy. */
+  /* macOS: invisible drag region for window movement (overlay title bar) */
   :global(html.macos) .macos-drag-region {
-    height: 32px;
+    height: 28px;
     width: 100%;
     position: absolute;
     top: 0;
