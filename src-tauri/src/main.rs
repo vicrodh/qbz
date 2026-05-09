@@ -321,13 +321,6 @@ fn main() {
         let force_dmabuf = std::env::var("QBZ_FORCE_DMABUF").as_deref() == Ok("1");
         let disable_dmabuf = std::env::var("QBZ_DISABLE_DMABUF").as_deref() == Ok("1");
 
-        // Read titlebar mode from window settings store (lightweight read-only).
-        let titlebar_wants_xwayland = qbz_nix_lib::config::window_settings::WindowSettingsStore::new_readonly()
-            .ok()
-            .and_then(|store| store.get_settings().ok())
-            .map(|s| s.titlebar_mode.wants_xwayland())
-            .unwrap_or(false);
-
         // Force X11: persistent setting from DB, env var overrides (crash recovery)
         let force_x11_db = graphics_db.as_ref().map(|s| s.force_x11).unwrap_or(false);
         let force_x11 = match std::env::var("QBZ_FORCE_X11").as_deref() {
@@ -394,13 +387,8 @@ fn main() {
         }
 
         // --- GDK backend selection ---
-        if (force_x11 || titlebar_wants_xwayland) && is_wayland {
+        if force_x11 && is_wayland {
             qbz_nix_lib::logging::log_startup("[QBZ] Forcing X11 backend on Wayland session");
-            if titlebar_wants_xwayland && !force_x11 {
-                qbz_nix_lib::logging::log_startup(
-                    "[QBZ] X11 backend forced by Plasma titlebar mode",
-                );
-            }
             std::env::set_var("GDK_BACKEND", "x11");
 
             // GDK_SCALE is integer-only and only meaningful on X11/XWayland

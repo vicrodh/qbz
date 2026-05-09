@@ -4,14 +4,8 @@
   import { invoke } from '@tauri-apps/api/core';
   import { onMount } from 'svelte';
   import { t } from '$lib/i18n';
-  import { platform } from '$lib/utils/platform';
   import type { ButtonColorSet } from '$lib/stores/windowControlsStore';
   import type { Snippet } from 'svelte';
-  import {
-    getTitleBarVariant,
-    getEffectiveShowWindowControls,
-    subscribe as subscribeTitleBar,
-  } from '$lib/stores/titleBarStore';
 
   interface TraySettings {
     enable_tray: boolean;
@@ -55,17 +49,6 @@
   let minimizeToTray = $state(false);
   let appWindow: ReturnType<typeof getCurrentWindow>;
   let searchInputEl = $state<HTMLInputElement | null>(null);
-
-  let variant = $state<'full' | 'stripped'>(getTitleBarVariant());
-  let effectiveShowControls = $state(getEffectiveShowWindowControls());
-
-  $effect(() => {
-    const unsub = subscribeTitleBar(() => {
-      variant = getTitleBarVariant();
-      effectiveShowControls = getEffectiveShowWindowControls();
-    });
-    return unsub;
-  });
 
   onMount(() => {
     let unlisten: (() => void) | undefined;
@@ -238,20 +221,16 @@
   class:has-search={searchInTitlebar}
   class:has-nav={!!navSnippet}
   class:controls-left={controlsPosition === 'left'}
-  class:variant-full={variant === 'full'}
-  class:variant-stripped={variant === 'stripped'}
-  class:macos={platform === 'macos'}
-  {...variant === 'full' ? { 'data-tauri-drag-region': '' } : {}}
 >
   <!-- Left zone -->
   <div class="zone zone-left">
-    {#if effectiveShowControls && controlsPosition === 'left'}
+    {#if showWindowControls && controlsPosition === 'left'}
       {@render windowControls('left')}
     {/if}
     {#if navSnippet && navPosition === 'left'}
       {@render navSnippet()}
     {/if}
-    <div class="drag-region" {...variant === 'full' ? { 'data-tauri-drag-region': '' } : {}}></div>
+    <div class="drag-region" data-tauri-drag-region></div>
   </div>
 
   <!-- Center zone (search, always centered) -->
@@ -285,17 +264,17 @@
         {/if}
       </div>
     {:else}
-      <div class="drag-region" {...variant === 'full' ? { 'data-tauri-drag-region': '' } : {}}></div>
+      <div class="drag-region" data-tauri-drag-region></div>
     {/if}
   </div>
 
   <!-- Right zone -->
   <div class="zone zone-right">
-    <div class="drag-region" {...variant === 'full' ? { 'data-tauri-drag-region': '' } : {}}></div>
+    <div class="drag-region" data-tauri-drag-region></div>
     {#if navSnippet && navPosition === 'right'}
       {@render navSnippet()}
     {/if}
-    {#if effectiveShowControls && controlsPosition === 'right'}
+    {#if showWindowControls && controlsPosition === 'right'}
       {@render windowControls('right')}
     {/if}
   </div>
@@ -312,30 +291,7 @@
     user-select: none;
     -webkit-user-select: none;
     -webkit-app-region: drag;
-  }
-
-  /* Full variant: keeps the default chrome (drag, dblclick, controls). */
-  .titlebar.variant-full {
-    height: 44px;
-    min-height: 44px;
-  }
-
-  /* Stripped variant: KWin SSD owns chrome. No drag, no dblclick, no controls,
-     no rounded chrome of our own — just the strip below the SSD with search/nav. */
-  .titlebar.variant-stripped {
-    height: 42px;
-    min-height: 42px;
-    border-radius: 0;
-    box-shadow: none;
-    -webkit-app-region: no-drag;
-  }
-
-  /* macOS: TitleBarStyle::Overlay paints the traffic lights at the top-left of
-     the window, on top of our content. Reserve ~84px on the left zone so the
-     lights don't collide with nav/search. The reserved area stays a drag
-     region (it's part of zone-left). */
-  .titlebar.macos .zone-left {
-    padding-left: 84px;
+    app-region: drag;
   }
 
   /* 3-zone layout: left and right zones are equal width, center is fixed */
@@ -383,6 +339,7 @@
     transition: background-color 150ms ease, border-color 150ms ease;
     flex-shrink: 0;
     -webkit-app-region: no-drag;
+    app-region: no-drag;
     color: var(--text-muted);
   }
 
@@ -409,6 +366,7 @@
     padding: 0;
     min-width: 0;
     -webkit-app-region: no-drag;
+    app-region: no-drag;
   }
 
   .titlebar-search-input::placeholder {
@@ -430,6 +388,7 @@
     flex-shrink: 0;
     transition: background-color 150ms ease, color 150ms ease;
     -webkit-app-region: no-drag;
+    app-region: no-drag;
   }
 
   .titlebar-search-clear:hover {
@@ -444,6 +403,7 @@
     align-items: stretch;
     height: 100%;
     -webkit-app-region: no-drag;
+    app-region: no-drag;
     flex-shrink: 0;
   }
 
@@ -492,6 +452,7 @@
     cursor: pointer;
     transition: background-color 150ms ease, color 150ms ease;
     -webkit-app-region: no-drag;
+    app-region: no-drag;
   }
 
   /* --- Rectangular --- */

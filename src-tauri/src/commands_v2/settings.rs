@@ -10,7 +10,6 @@ use crate::config::playback_preferences::{
 use crate::config::tray_settings::TraySettings;
 use crate::config::tray_settings::TraySettingsState;
 use crate::config::window_settings::WindowSettingsState;
-use crate::config::window_settings::{available_titlebar_modes, is_sandboxed, TitlebarMode};
 use crate::core_bridge::CoreBridgeState;
 use crate::AppState;
 
@@ -24,32 +23,11 @@ pub async fn v2_set_api_locale(locale: String, state: State<'_, AppState>) -> Re
 }
 
 #[tauri::command]
-pub fn v2_get_titlebar_mode(
-    state: State<'_, WindowSettingsState>,
-) -> Result<TitlebarMode, String> {
-    state.get_titlebar_mode()
-}
-
-#[tauri::command]
-pub fn v2_set_titlebar_mode(
-    mode: TitlebarMode,
+pub fn v2_set_use_system_titlebar(
+    value: bool,
     state: State<'_, WindowSettingsState>,
 ) -> Result<(), String> {
-    state.set_titlebar_mode(mode)
-}
-
-#[derive(serde::Serialize)]
-pub struct TitlebarModeAvailability {
-    pub modes: Vec<TitlebarMode>,
-    pub sandboxed: bool,
-}
-
-#[tauri::command]
-pub fn v2_available_titlebar_modes() -> TitlebarModeAvailability {
-    TitlebarModeAvailability {
-        modes: available_titlebar_modes(),
-        sandboxed: is_sandboxed(),
-    }
+    state.set_use_system_titlebar(value)
 }
 
 #[tauri::command]

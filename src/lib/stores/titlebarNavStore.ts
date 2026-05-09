@@ -172,16 +172,3 @@ export function setTitlebarNavConfig(newConfig: Partial<TitlebarNavConfig>): voi
   persist();
   notifyListeners();
 }
-
-import { getMode } from './titleBarStore';
-
-/**
- * Whether the titlebar nav should render.
- * Only 'hidden' is N/A; qbz/plasma/system all honor user pref.
- * In system mode the stripped strip carries the nav (same as plasma).
- */
-export function isTitlebarNavEffectivelyEnabled(): boolean {
-  const mode = getMode();
-  if (mode === 'hidden') return false;
-  return isTitlebarNavEnabled();
-}

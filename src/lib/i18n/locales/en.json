@@ -2462,26 +2462,6 @@
         }
       }
     },
-    "titlebar": {
-      "label": "Window titlebar",
-      "mode": {
-        "label": "Titlebar mode",
-        "qbz": "QBZ titlebar (default)",
-        "system": "System titlebar",
-        "plasma": "Plasma titlebar (KDE Wayland)",
-        "hidden": "No titlebar (tiling WM)"
-      },
-      "showWindowControls": "Show window controls (min/max/close)",
-      "matchSystemChrome": "Match system window chrome",
-      "searchLocation": "Search location",
-      "disabledHint": {
-        "windowControls": "Only applies when QBZ titlebar is active. System and Plasma modes disable this because the OS provides it.",
-        "matchSystemChrome": "Only applies when QBZ titlebar is active. System and Plasma modes disable this because the OS provides chrome.",
-        "searchLocation": "Search location does not apply when no titlebar is shown.",
-        "titlebarNav": "Titlebar navigation does not apply when no titlebar is shown."
-      },
-      "sandboxCaveat": "Plasma mode is unverified in sandboxed builds (Flatpak/Snap). If the system chrome doesn't appear, switch to System mode."
-    },
     "library": {
       "title": "Library",
       "fetchArtistImages": "Fetch Qobuz™ Artist Images",

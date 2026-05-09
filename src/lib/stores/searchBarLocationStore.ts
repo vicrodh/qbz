@@ -74,17 +74,3 @@ export function setSearchBarLocation(value: SearchBarLocation): void {
 export function toggleSearchBarLocation(): void {
   setSearchBarLocation(location === 'sidebar' ? 'titlebar' : 'sidebar');
 }
-
-import { getMode } from './titleBarStore';
-
-/**
- * Effective search-bar location after applying mode rules.
- * Only 'hidden' forces sidebar; qbz/plasma/system all honor user pref.
- * In system mode the stripped strip mounts when the user wants
- * search-in-titlebar (same content rule as plasma).
- */
-export function getEffectiveSearchBarLocation(): SearchBarLocation {
-  const mode = getMode();
-  if (mode === 'hidden') return 'sidebar';
-  return getSearchBarLocation();
-}

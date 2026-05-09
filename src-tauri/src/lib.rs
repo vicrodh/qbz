@@ -542,15 +542,10 @@ fn should_use_main_window_transparency() -> bool {
 
     // Opt-in via persisted settings: "match system window chrome" wants
     // rounded corners, which need a transparent window so the webview
-    // background stops painting white outside the radius. Only honor this
-    // when the titlebar mode is Qbz — in System/Plasma/Hidden modes the
-    // chrome is owned by the platform compositor or a separate widget,
-    // and a transparent window leaks through KDE/system chrome.
+    // background stops painting white outside the radius.
     if let Ok(store) = config::window_settings::WindowSettingsStore::new() {
         if let Ok(settings) = store.get_settings() {
-            if settings.titlebar_mode == config::window_settings::TitlebarMode::Qbz
-                && settings.match_system_window_chrome
-            {
+            if settings.match_system_window_chrome {
                 return true;
             }
         }
@@ -711,15 +706,14 @@ pub fn run(qconnect_cli_override: Option<bool>) {
     let window_settings = config::window_settings::WindowSettingsStore::new()
         .and_then(|store| store.get_settings())
         .unwrap_or_default();
-    let titlebar_mode = window_settings.titlebar_mode;
     log::info!(
-        "Window settings: titlebar_mode={:?}, decorations={}, size={}x{}, maximized={}",
-        titlebar_mode,
-        titlebar_mode.wants_decorations(),
+        "Window settings: use_system_titlebar={}, size={}x{}, maximized={}",
+        window_settings.use_system_titlebar,
         window_settings.window_width as u32,
         window_settings.window_height as u32,
         window_settings.is_maximized,
     );
+    let use_system_titlebar = window_settings.use_system_titlebar;
     let mut saved_win_width = window_settings.window_width;
     let mut saved_win_height = window_settings.window_height;
     let saved_win_maximized = window_settings.is_maximized;
@@ -950,9 +944,8 @@ pub fn run(qconnect_cli_override: Option<bool>) {
         .manage(user_data_paths)
         .setup(move |app| {
             log::info!(
-                "Creating main window (mode={:?}, decorations={})",
-                titlebar_mode,
-                titlebar_mode.wants_decorations()
+                "Creating main window (decorations={})",
+                use_system_titlebar
             );
             let main_window_transparent = should_use_main_window_transparency();
             MAIN_WINDOW_TRANSPARENT.store(main_window_transparent, std::sync::atomic::Ordering::SeqCst);
@@ -1008,7 +1001,7 @@ pub fn run(qconnect_cli_override: Option<bool>) {
             .title("QBZ")
             .inner_size(saved_win_width, saved_win_height)
             .min_inner_size(800.0, 600.0)
-            .decorations(if cfg!(target_os = "macos") { true } else { titlebar_mode.wants_decorations() })
+            .decorations(if cfg!(target_os = "macos") { true } else { use_system_titlebar })
             .transparent(main_window_transparent)
             .resizable(true)
             .zoom_hotkeys_enabled(true);
@@ -1569,9 +1562,7 @@ pub fn run(qconnect_cli_override: Option<bool>) {
             updates::has_snap_welcome_been_shown,
             config::favorites_cache::is_track_favorite,
             commands_v2::v2_set_api_locale,
-            commands_v2::v2_get_titlebar_mode,
-            commands_v2::v2_set_titlebar_mode,
-            commands_v2::v2_available_titlebar_modes,
+            commands_v2::v2_set_use_system_titlebar,
             commands_v2::v2_set_match_system_window_chrome,
             commands_v2::v2_main_window_is_transparent,
             commands_v2::v2_set_enable_tray,

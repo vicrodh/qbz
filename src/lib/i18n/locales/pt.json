@@ -2456,26 +2456,6 @@
         }
       }
     },
-    "titlebar": {
-      "label": "Barra de título",
-      "mode": {
-        "label": "Modo da barra de título",
-        "qbz": "Barra QBZ (padrão)",
-        "system": "Barra do sistema",
-        "plasma": "Barra Plasma (KDE Wayland)",
-        "hidden": "Sem barra (WM em mosaico)"
-      },
-      "showWindowControls": "Mostrar controles de janela (min/máx/fechar)",
-      "matchSystemChrome": "Combinar com o cromado do sistema",
-      "searchLocation": "Localização da pesquisa",
-      "disabledHint": {
-        "windowControls": "Apenas se aplica quando a barra QBZ está ativa. Os modos Sistema e Plasma desativam isto porque o SO o fornece.",
-        "matchSystemChrome": "Apenas se aplica quando a barra QBZ está ativa. Os modos Sistema e Plasma desativam isto porque o SO fornece o cromado.",
-        "searchLocation": "A localização da pesquisa não se aplica quando nenhuma barra é mostrada.",
-        "titlebarNav": "A navegação da barra não se aplica quando nenhuma barra é mostrada."
-      },
-      "sandboxCaveat": "O modo Plasma não está verificado em builds sandboxed (Flatpak/Snap). Se o cromado do sistema não aparecer, mude para o modo Sistema."
-    },
     "library": {
       "title": "Biblioteca",
       "fetchArtistImages": "Buscar Imagens de Artistas do Qobuz™",

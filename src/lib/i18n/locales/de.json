@@ -2456,26 +2456,6 @@
         "queue": "Warteschlange"
       }
     },
-    "titlebar": {
-      "label": "Fenstertitelleiste",
-      "mode": {
-        "label": "Titelleisten-Modus",
-        "qbz": "QBZ-Titelleiste (Standard)",
-        "system": "System-Titelleiste",
-        "plasma": "Plasma-Titelleiste (KDE Wayland)",
-        "hidden": "Keine Titelleiste (Tiling WM)"
-      },
-      "showWindowControls": "Fensterschaltflächen anzeigen (Min/Max/Schließen)",
-      "matchSystemChrome": "Systemfensterrahmen anpassen",
-      "searchLocation": "Suchposition",
-      "disabledHint": {
-        "windowControls": "Gilt nur, wenn die QBZ-Titelleiste aktiv ist. Die System- und Plasma-Modi deaktivieren dies, da das Betriebssystem dies bereitstellt.",
-        "matchSystemChrome": "Gilt nur, wenn die QBZ-Titelleiste aktiv ist. Die System- und Plasma-Modi deaktivieren dies, da das Betriebssystem den Rahmen bereitstellt.",
-        "searchLocation": "Die Suchposition gilt nicht, wenn keine Titelleiste angezeigt wird.",
-        "titlebarNav": "Die Titelleisten-Navigation gilt nicht, wenn keine Titelleiste angezeigt wird."
-      },
-      "sandboxCaveat": "Der Plasma-Modus ist in Sandbox-Builds (Flatpak/Snap) nicht verifiziert. Wenn der System-Rahmen nicht erscheint, wechseln Sie zum System-Modus."
-    },
     "library": {
       "title": "Bibliothek",
       "fetchArtistImages": "Qobuz™-Künstlerbilder abrufen",
