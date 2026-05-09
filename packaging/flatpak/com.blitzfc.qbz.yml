@@ -18,8 +18,19 @@ finish-args:
   # Native PipeWire access
   - --filesystem=xdg-run/pipewire-0:ro
 
-  # Discord IPC socket for Rich Presence (#336)
+  # Discord IPC socket for Rich Presence (#336).
+  # - The static path covers Discord installed natively (deb / rpm / AUR
+  #   builds), which write the socket directly under $XDG_RUNTIME_DIR.
+  # - The :create permission on the Discord-Flatpak app dir lets us read
+  #   the socket created by Discord-via-Flathub AND lay down our own
+  #   $XDG_RUNTIME_DIR/discord-ipc-{0..9} symlinks pointing at it. The
+  #   crate `discord-rich-presence` only knows the static path; the
+  #   symlinks are what bridge the two sandboxes. See discord_rpc.rs:
+  #   prepare_flatpak_discord_socket_links — called only after the user
+  #   opts in via the settings toggle, so users who never enable Discord
+  #   RPC never touch this dir.
   - --filesystem=xdg-run/discord-ipc-0
+  - --filesystem=xdg-run/app/com.discordapp.Discord:create
 
   # User music library
   - --filesystem=xdg-music

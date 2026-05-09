@@ -13,6 +13,64 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use discord_rich_presence::{activity, DiscordIpc, DiscordIpcClient};
 use tauri::State;
 
+/// Bridge our Flatpak sandbox to the Discord-Flatpak IPC socket.
+///
+/// The `discord-rich-presence` crate searches `$XDG_RUNTIME_DIR/discord-ipc-N`
+/// for `N=0..9`. Native Discord (deb / rpm / AUR) writes its socket directly
+/// to that path, so the search succeeds out of the box. Discord installed via
+/// Flathub writes to `$XDG_RUNTIME_DIR/app/com.discordapp.Discord/discord-ipc-N`
+/// because each Flatpak app gets its own runtime subdirectory; the crate's
+/// default search misses it, and Rich Presence appears broken even though
+/// Discord is running.
+///
+/// Other Flathub apps work around this with a startup wrapper script that
+/// unconditionally symlinks every iteration into `$XDG_RUNTIME_DIR` for every
+/// user. That conflicts with QBZ's external-service-integration posture: all
+/// optional integrations are opt-in (Last.fm, ListenBrainz, MusicBrainz, Plex,
+/// Discord here). Running the wrapper for every Flatpak instance — including
+/// users who never enabled Discord RPC — silently turns the integration into
+/// opt-out at the sandbox layer.
+///
+/// We make the symlinks here instead, lazily, the first time the user
+/// actually connects to Discord. If the user never toggles Discord RPC on,
+/// these links are never created and the sandbox stays untouched. The links
+/// live for the lifetime of the Flatpak instance (`$XDG_RUNTIME_DIR` is
+/// scoped per-instance) so there's no cross-session pollution either.
+///
+/// Returns silently on every failure path — missing env var, non-Flatpak
+/// process, ENOENT on the source dir, EEXIST on the link target, etc. Any
+/// caller mistake fails over to the crate's default behavior, which is the
+/// same fallback the non-Flatpak code path already accepts.
+fn prepare_flatpak_discord_socket_links() {
+    if std::env::var_os("FLATPAK_ID").is_none() {
+        return;
+    }
+    let Some(runtime_dir) = std::env::var_os("XDG_RUNTIME_DIR") else {
+        return;
+    };
+    let runtime_dir = std::path::PathBuf::from(runtime_dir);
+
+    // discord-rich-presence iterates 0..=9; only bother creating a link when
+    // the slot in $XDG_RUNTIME_DIR is currently empty AND the corresponding
+    // path inside the Discord-Flatpak app dir exists. Either condition
+    // failing is normal (Discord not running, slot already taken by native
+    // Discord, etc.) and silently skipped.
+    for i in 0..=9 {
+        let link_target = runtime_dir.join(format!("discord-ipc-{}", i));
+        if link_target.exists() || link_target.symlink_metadata().is_ok() {
+            continue;
+        }
+        let source = runtime_dir
+            .join("app")
+            .join("com.discordapp.Discord")
+            .join(format!("discord-ipc-{}", i));
+        if !source.exists() {
+            continue;
+        }
+        let _ = std::os::unix::fs::symlink(&source, &link_target);
+    }
+}
+
 /// Public Discord Application ID for QBZ. Public identifier, not a secret.
 const DISCORD_APP_ID: &str = "1501835855587708988";
 const QBZ_HOMEPAGE: &str = "https://qbz.lol";
@@ -69,6 +127,9 @@ pub fn v2_discord_rpc_update(
     let mut guard = state.client.lock().map_err(|e| e.to_string())?;
 
     if guard.is_none() {
+        // Bridge the Flatpak sandbox to Discord's IPC socket if we're
+        // running under Flatpak. No-op outside that context.
+        prepare_flatpak_discord_socket_links();
         if let Ok(mut client) = DiscordIpcClient::new(DISCORD_APP_ID) {
             if client.connect().is_ok() {
                 *guard = Some(client);
