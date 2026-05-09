@@ -4711,7 +4711,9 @@
         />
       </div>
     {/if}
-    <!-- Title bar mode: hidden on macOS (always uses native overlay title bar) -->
+    <!-- Title bar mode: Linux-only. macOS stays pinned at 'qbz' since the
+         other modes ('system', 'plasma', 'hidden') describe Linux WM
+         behaviors that don't apply on Darwin. -->
     {#if platform !== 'macos'}
     <div class="setting-row">
       <div class="setting-info">
@@ -4746,8 +4748,9 @@
       </span>
     </div>
     {/if}
-    <!-- Title bar customization: hidden on macOS (uses native overlay title bar) -->
-    {#if platform !== 'macos'}
+    <!-- Search-in-titlebar and nav-in-titlebar: now available on macOS too,
+         since the qbz strip mounts there and can host them next to the
+         native traffic lights. -->
     <div class="setting-row" class:disabled-section={!supportsTitlebarFeatures}>
       <div class="setting-info">
         <span class="setting-label">{$t('settings.appearance.searchInTitleBar')}</span>
@@ -4840,6 +4843,10 @@
       />
     </div>
     {/if}
+    <!-- Window-controls customization: still Linux-only. macOS draws native
+         traffic lights via TitleBarStyle::Overlay, so position/style/size/
+         color settings would have no effect. -->
+    {#if platform !== 'macos'}
     <div class="setting-row" class:disabled-section={!isQbzMode}>
       <div class="setting-info">
         <span class="setting-label">{$t('settings.appearance.windowControlsPosition')}</span>
