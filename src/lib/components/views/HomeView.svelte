@@ -956,50 +956,7 @@
 </script>
 
 <div class="home-view" bind:this={homeViewEl} onscroll={handleHomeScroll}>
-  {#if isScrolled}
-    <div class="sticky-header">
-      <div class="sticky-tabs">
-        <button
-          class="home-tab compact"
-          class:active={activeTab === 'home'}
-          onclick={() => switchTab('home')}
-        >
-          <House size={13} />
-        </button>
-        <button
-          class="home-tab compact"
-          class:active={activeTab === 'editorPicks'}
-          onclick={() => switchTab('editorPicks')}
-        >
-          {$t('home.tabEditorPicks')}
-        </button>
-        <button
-          class="home-tab compact"
-          class:active={activeTab === 'forYou'}
-          onclick={() => switchTab('forYou')}
-        >
-          {$t('home.tabForYou')}
-        </button>
-      </div>
-      <div class="sticky-actions">
-        {#if activeTab === 'home'}
-          <button class="settings-btn" onclick={() => isSettingsModalOpen = true} title={$t('home.customizeHome')}>
-            <img
-              src="/home-gear.svg"
-              alt="Settings"
-              class="settings-icon"
-              width="18"
-              height="18"
-              style="width:18px;height:18px;filter:invert(1) opacity(0.8);"
-            />
-          </button>
-        {/if}
-        <GenreFilterButton onFilterChange={handleGenreFilterChange} context="home" variant="default" />
-      </div>
-    </div>
-  {/if}
-
-  <!-- Header with greeting + centered tabs + actions -->
+  <!-- Header with greeting + centered tabs + actions (becomes sticky on scroll) -->
   <div class="home-header" class:scrolled={isScrolled}>
     <div class="header-left">
       {#if homeSettings.greeting.enabled}
@@ -2152,13 +2109,8 @@
     position: relative;
   }
 
-  /* Sticky header gets no extra margin from section spacing */
-  .home-view > :global(.sticky-header) {
-    margin-top: 0 !important;
-  }
-
   /* Add spacing between sections - using :global to affect child components */
-  .home-view > :global(*:not(:first-child):not(.sticky-header)) {
+  .home-view > :global(*:not(:first-child)) {
     margin-top: 30px !important;
   }
 
@@ -2257,45 +2209,6 @@
     50% { opacity: 0.7; }
   }
 
-  /* ---- Sticky compact header ---- */
-  .sticky-header {
-    position: sticky;
-    top: 0;
-    z-index: 50;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    padding: 10px 24px;
-    background: var(--bg-primary);
-    border-bottom: 1px solid var(--alpha-6);
-    box-shadow: 0 4px 8px -4px rgba(0, 0, 0, 0.5);
-    margin: 0 -8px 0 -18px;
-    width: calc(100% + 26px);
-  }
-
-  .sticky-tabs {
-    display: flex;
-    align-items: center;
-    background: var(--bg-tertiary);
-    border-radius: 6px;
-    padding: 3px;
-    gap: 2px;
-  }
-
-  .sticky-actions {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    position: absolute;
-    right: 8px;
-  }
-
-  .home-tab.compact {
-    padding: 5px 12px;
-    font-size: 12px;
-  }
-
   .greeting {
     font-size: 24px;
     font-weight: 600;
@@ -2309,10 +2222,31 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding-top: 24px;
-    margin-bottom: 24px;
+    padding: 24px 8px 24px 18px;
+    margin: 0 -8px 0 -18px;
+    width: calc(100% + 26px);
+    box-sizing: border-box;
     gap: 16px;
-    position: relative;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: transparent;
+    border-bottom: 1px solid transparent;
+    box-shadow: 0 4px 8px -4px rgba(0, 0, 0, 0);
+    transition:
+      padding-top 180ms ease,
+      padding-bottom 180ms ease,
+      background-color 180ms ease,
+      border-color 180ms ease,
+      box-shadow 180ms ease;
+  }
+
+  .home-header.scrolled {
+    padding-top: 12px;
+    padding-bottom: 12px;
+    background: var(--bg-primary);
+    border-bottom-color: var(--alpha-6);
+    box-shadow: 0 4px 8px -4px rgba(0, 0, 0, 0.5);
   }
 
   .home-header.scrolled .greeting {
@@ -2321,7 +2255,7 @@
 
   .header-left {
     position: absolute;
-    left: 0;
+    left: 18px;
     display: flex;
     align-items: center;
   }
@@ -2370,7 +2304,7 @@
     gap: 8px;
     flex-shrink: 0;
     position: absolute;
-    right: 0;
+    right: 8px;
   }
 
 
