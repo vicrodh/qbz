@@ -862,6 +862,20 @@ pub async fn v2_library_play_track(
             .player()
             .play_data(audio_data, track_id as u64)
             .map_err(|e| format!("Failed to play ephemeral track: {}", e))?;
+        // CUE-derived tracks share a single audio file (e.g. one big
+        // FLAC for the whole album); per-track playback works by
+        // seeking into the right offset after handing the data to the
+        // player. Mirrors the regular local-file branch below.
+        if let Some(start_secs) = track.cue_start_secs {
+            let start_pos = start_secs as u64;
+            if start_pos > 0 {
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                bridge
+                    .player()
+                    .seek(start_pos)
+                    .map_err(|e| format!("Failed to seek into CUE track: {}", e))?;
+            }
+        }
         return Ok(());
     }
 

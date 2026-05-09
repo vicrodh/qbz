@@ -23,11 +23,13 @@
 //! previous session. The state vanishes on app exit by virtue of being
 //! in-memory — nothing persists, no migration, no cleanup logic needed.
 
-use std::collections::HashMap;
-use std::path::Path;
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use qbz_library::{LibraryError, LibraryScanner, LocalTrack, MetadataExtractor};
+use qbz_library::{
+    cue_to_tracks, CueParser, LibraryError, LibraryScanner, LocalTrack, MetadataExtractor,
+};
 use serde::Serialize;
 
 /// Floor for synthetic ephemeral track ids. Any id at or above this
@@ -126,12 +128,223 @@ impl EphemeralLibraryState {
         let mut inner = self.inner.lock().map_err(|_| EphemeralError::Lock)?;
         inner.reset();
 
+        // Cache directory for artwork thumbnails. Same one the regular
+        // index uses, so ephemeral artwork piggy-backs on the existing
+        // thumbnail pipeline (and gets evicted by the same housekeeping).
+        let artwork_cache = crate::library::get_artwork_cache_dir();
+
+        // Two artwork caches keyed at different granularities. The bigger
+        // win is the album-level cache: embedded covers are usually
+        // identical across every track of an album, so doing extract_artwork
+        // (Probe::open + thumbnail encode) 155 times for a 155-track album
+        // is wasted I/O. The folder-level cache is a smaller secondary
+        // saver for find_folder_artwork (cover.jpg lookup) when albums
+        // share the same parent directory.
+        let mut album_artwork_cache: HashMap<String, Option<String>> = HashMap::new();
+        let mut folder_artwork_cache: HashMap<PathBuf, Option<String>> = HashMap::new();
+
+        // Audio files referenced by CUE sheets. We index those audio files
+        // through the CUE path (one logical "album" file gets exploded
+        // into N virtual tracks) and skip them in the regular audio loop
+        // below — otherwise the user would see both the CUE-derived
+        // tracks and a single-row entry for the underlying FLAC/WAV.
+        let mut cue_referenced_audio: HashSet<PathBuf> = HashSet::new();
+
+        for cue_path in &scan.cue_files {
+            match CueParser::parse(cue_path) {
+                Ok(mut cue) => {
+                    let audio_path_raw = Path::new(&cue.audio_file).to_path_buf();
+                    let canonical = std::fs::canonicalize(&audio_path_raw)
+                        .unwrap_or_else(|_| audio_path_raw.clone());
+                    if !canonical.exists() {
+                        log::warn!(
+                            "[ephemeral] CUE references missing audio: {} -> {}",
+                            cue_path.display(),
+                            audio_path_raw.display()
+                        );
+                        skipped_files += 1;
+                        continue;
+                    }
+                    cue.audio_file = canonical.to_string_lossy().to_string();
+
+                    // The decoder behind play_data is Symphonia, which
+                    // covers FLAC / MP3 / M4A (AAC + ALAC) / ALAC /
+                    // WAV / AIFF out of the box (`features = ["all"]`).
+                    // APE (Monkey's Audio) and raw BIN (CD-DA dumps
+                    // without headers) aren't in that list: playback
+                    // either errors out or produces white noise as
+                    // Symphonia mis-probes the stream. Skip CUE files
+                    // that point at those — better an empty pane than
+                    // a track row that explodes on click.
+                    let ext_lower = canonical
+                        .extension()
+                        .and_then(|e| e.to_str())
+                        .map(|s| s.to_lowercase());
+                    let playable_via_cue = matches!(
+                        ext_lower.as_deref(),
+                        Some("flac" | "mp3" | "m4a" | "alac" | "wav" | "aiff" | "aif")
+                    );
+                    if !playable_via_cue {
+                        log::warn!(
+                            "[ephemeral] CUE references unsupported audio format ({:?}) — skipping: {}",
+                            ext_lower,
+                            canonical.display()
+                        );
+                        skipped_files += 1;
+                        continue;
+                    }
+
+                    let properties = match MetadataExtractor::extract_properties(&canonical) {
+                        Ok(p) => p,
+                        Err(e) => {
+                            log::warn!(
+                                "[ephemeral] failed to read audio properties for {}: {}",
+                                canonical.display(),
+                                e
+                            );
+                            skipped_files += 1;
+                            continue;
+                        }
+                    };
+                    let format = MetadataExtractor::detect_format(&canonical);
+
+                    let mut cue_tracks =
+                        cue_to_tracks(&cue, properties.duration_secs, format, &properties);
+                    if cue_tracks.is_empty() {
+                        log::warn!(
+                            "[ephemeral] CUE produced no tracks: {}",
+                            cue_path.display()
+                        );
+                        skipped_files += 1;
+                        continue;
+                    }
+
+                    // CUE = single album: resolve cover once, share across
+                    // every CUE-derived track. Use a key derived from the
+                    // CUE path so the cache survives even when the
+                    // album_group_key field is empty (rare but possible
+                    // for CUE files without explicit TITLE/PERFORMER).
+                    let album_key = if !cue_tracks[0].album_group_key.is_empty() {
+                        cue_tracks[0].album_group_key.clone()
+                    } else {
+                        format!("cue:{}", cue.file_path)
+                    };
+                    let artwork = if let Some(cached) = album_artwork_cache.get(&album_key) {
+                        cached.clone()
+                    } else {
+                        let mut found =
+                            MetadataExtractor::extract_artwork(&canonical, &artwork_cache);
+                        if found.is_none() {
+                            if let Some(folder_art) = MetadataExtractor::find_folder_artwork(
+                                &canonical,
+                                cue.title.as_deref(),
+                            ) {
+                                found = MetadataExtractor::cache_artwork_file(
+                                    Path::new(&folder_art),
+                                    &artwork_cache,
+                                );
+                            }
+                        }
+                        album_artwork_cache.insert(album_key, found.clone());
+                        found
+                    };
+
+                    for mut track in cue_tracks.drain(..) {
+                        track.id = inner.next_id;
+                        inner.next_id += 1;
+                        track.source = Some("ephemeral".to_string());
+                        track.artwork_path = artwork.clone();
+                        inner.tracks.insert(track.id, track.clone());
+                        tracks_out.push(track);
+                    }
+                    cue_referenced_audio.insert(canonical);
+                }
+                Err(e) => {
+                    log::warn!(
+                        "[ephemeral] failed to parse CUE {}: {}",
+                        cue_path.display(),
+                        e
+                    );
+                    skipped_files += 1;
+                }
+            }
+        }
+
         for audio_file in &scan.audio_files {
+            // Skip audio files that were already exploded into tracks via
+            // a CUE sheet — listing them again as a single row would
+            // duplicate the album and confuse playback (the CUE-derived
+            // track ids are the canonical ones).
+            let canonical_audio = std::fs::canonicalize(audio_file)
+                .unwrap_or_else(|_| audio_file.clone());
+            if cue_referenced_audio.contains(&canonical_audio) {
+                continue;
+            }
+
+            // The scanner accepts APE because the regular library tracks
+            // them for tag/metadata purposes, but Symphonia can't decode
+            // Monkey's Audio. In ephemeral mode there is no value in
+            // surfacing rows that explode on click — skip them so the
+            // pane only shows tracks the user can actually play.
+            let ext_lower = audio_file
+                .extension()
+                .and_then(|e| e.to_str())
+                .map(|s| s.to_lowercase());
+            if matches!(ext_lower.as_deref(), Some("ape")) {
+                log::info!(
+                    "[ephemeral] skipping APE (no Symphonia decoder): {}",
+                    audio_file.display()
+                );
+                skipped_files += 1;
+                continue;
+            }
             match MetadataExtractor::extract(audio_file) {
                 Ok(mut track) => {
                     track.id = inner.next_id;
                     inner.next_id += 1;
                     track.source = Some("ephemeral".to_string());
+
+                    let album_key = if !track.album_group_key.is_empty() {
+                        track.album_group_key.clone()
+                    } else {
+                        format!(
+                            "{}|||{}",
+                            track.album,
+                            track.album_artist.as_deref().unwrap_or(&track.artist)
+                        )
+                    };
+
+                    let artwork = if let Some(cached) = album_artwork_cache.get(&album_key) {
+                        cached.clone()
+                    } else {
+                        let mut found =
+                            MetadataExtractor::extract_artwork(audio_file, &artwork_cache);
+                        if found.is_none() {
+                            let folder_key = audio_file
+                                .parent()
+                                .map(|p| p.to_path_buf())
+                                .unwrap_or_else(|| audio_file.to_path_buf());
+                            let folder_art = folder_artwork_cache
+                                .entry(folder_key)
+                                .or_insert_with(|| {
+                                    MetadataExtractor::find_folder_artwork(
+                                        audio_file,
+                                        Some(track.album.as_str()),
+                                    )
+                                })
+                                .clone();
+                            if let Some(folder_art) = folder_art {
+                                found = MetadataExtractor::cache_artwork_file(
+                                    std::path::Path::new(&folder_art),
+                                    &artwork_cache,
+                                );
+                            }
+                        }
+                        album_artwork_cache.insert(album_key, found.clone());
+                        found
+                    };
+                    track.artwork_path = artwork;
+
                     inner.tracks.insert(track.id, track.clone());
                     tracks_out.push(track);
                 }

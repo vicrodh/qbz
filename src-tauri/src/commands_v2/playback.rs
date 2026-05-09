@@ -459,6 +459,7 @@ pub async fn v2_play_next_gapless(
     offline_cache: State<'_, OfflineCacheState>,
     app_state: State<'_, AppState>,
     library_state: State<'_, LibraryState>,
+    ephemeral_state: State<'_, crate::ephemeral_library::EphemeralLibraryState>,
     app_handle: tauri::AppHandle,
 ) -> Result<bool, RuntimeError> {
     log::info!("[V2] Command: play_next_gapless for track {}", track_id);
@@ -476,6 +477,56 @@ pub async fn v2_play_next_gapless(
             track_id
         );
         return Ok(false);
+    }
+
+    // Ephemeral path: track ids in the high range come from
+    // EphemeralLibraryState, not the DB. The downstream library/cache
+    // tiers all key off DB row ids and would silently fail the lookup,
+    // making gapless impossible. Resolve through the ephemeral cache
+    // and feed the file directly. CUE-derived ephemeral tracks share
+    // an audio file across virtual tracks and require a seek that the
+    // gapless engine doesn't perform — those return false here so the
+    // regular non-gapless next-track path takes over (which DOES seek).
+    if track_id >= crate::ephemeral_library::EPHEMERAL_ID_FLOOR as u64 {
+        let track_id_i64 = track_id as i64;
+        match ephemeral_state.get_track(track_id_i64) {
+            Some(track) => {
+                if track.cue_start_secs.is_some() {
+                    log::info!(
+                        "[V2/GAPLESS] Ephemeral track {} is CUE-derived; skipping gapless prefetch",
+                        track_id
+                    );
+                    return Ok(false);
+                }
+                let file_path = std::path::Path::new(&track.file_path);
+                if !file_path.exists() {
+                    log::warn!(
+                        "[V2/GAPLESS] Ephemeral file vanished: {}",
+                        track.file_path
+                    );
+                    return Ok(false);
+                }
+                let audio_data = std::fs::read(file_path).map_err(|e| {
+                    RuntimeError::Internal(format!("Failed to read ephemeral file: {}", e))
+                })?;
+                log::info!(
+                    "[V2/GAPLESS] Track {} from EPHEMERAL ({} bytes)",
+                    track_id,
+                    audio_data.len()
+                );
+                player
+                    .play_next(audio_data, track_id)
+                    .map_err(RuntimeError::Internal)?;
+                return Ok(true);
+            }
+            None => {
+                log::info!(
+                    "[V2/GAPLESS] Ephemeral track {} no longer in cache (session cleared?)",
+                    track_id
+                );
+                return Ok(false);
+            }
+        }
     }
 
     // Tier order: L1 memory → L2 disk → offline cache → local library.
