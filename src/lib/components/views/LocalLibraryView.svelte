@@ -827,6 +827,19 @@
   let artistImageFetchAborted = false; // Flag to abort fetching
   let trackSearch = $state('');
   let tracksHydrationRequestId = 0;
+  // Viewport-driven Plex quality hydration (Tracks tab).
+  // The Tracks tab can hold 16K+ rows; hydrating every Plex track up front
+  // floods the Plex server and freezes the app. Instead we hydrate only the
+  // rows currently visible in the virtualized list, and merge the result
+  // into a reactive override map that the renderer consults — avoiding a
+  // full-array reassignment of `tracks` (which would trigger a second pass
+  // through the grouping/sort pipeline on every hydration completion).
+  type PlexQualityOverride = { format?: string; bitDepth?: number; sampleRate?: number };
+  const plexQualityOverrides = new SvelteMap<string, PlexQualityOverride>();
+  const queuedPlexHydration = new Set<string>();
+  let pendingPlexHydration: LocalTrack[] = [];
+  let plexHydrationDebounce: ReturnType<typeof setTimeout> | null = null;
+  const PLEX_VISIBLE_HYDRATION_DEBOUNCE_MS = 150;
   let searchOpen = $state(false);
   let searchInputEl = $state<HTMLInputElement | undefined>(undefined);
   type TrackGroupMode = 'album' | 'artist' | 'name';
@@ -2867,7 +2880,19 @@
 
   async function loadTracks(query = '') {
     console.log('[LocalLibrary] loadTracks START, query:', query);
-    const requestId = ++tracksHydrationRequestId;
+    // Bumping the request id invalidates any in-flight viewport hydration
+    // batches keyed off the previous query. The actual hydration happens
+    // viewport-driven via onVisibleTracksChange — we no longer front-load
+    // the full Plex catalog, which used to flood the server and trigger a
+    // second reactive pass through groupTracks on every completion.
+    ++tracksHydrationRequestId;
+    queuedPlexHydration.clear();
+    pendingPlexHydration = [];
+    if (plexHydrationDebounce) {
+      clearTimeout(plexHydrationDebounce);
+      plexHydrationDebounce = null;
+    }
+    plexQualityOverrides.clear();
     loading = true;
     try {
       console.log('[LocalLibrary] Calling library_search + plex_cache_search_tracks');
@@ -2887,23 +2912,74 @@
       const mappedPlexTracks = plexTracksRaw.map(mapPlexTrack);
       tracks = [...localTracks, ...mappedPlexTracks];
       console.log('[LocalLibrary] Received tracks:', tracks.length, 'local:', localTracks.length, 'plex:', plexTracksRaw.length);
-
-      // Hydrate Plex quality in the background; don't block rendering track lists.
-      // Guard with requestId to avoid stale updates after a newer search.
-      void hydratePlexTrackQuality(mappedPlexTracks)
-        .then((hydratedPlexTracks) => {
-          if (requestId !== tracksHydrationRequestId) return;
-          tracks = [...localTracks, ...hydratedPlexTracks];
-        })
-        .catch((error) => {
-          console.warn('[LocalLibrary] Background Plex quality hydration failed:', error);
-        });
     } catch (err) {
       console.error('[LocalLibrary] Failed to load tracks:', err);
       error = String(err);
     } finally {
       console.log('[LocalLibrary] loadTracks COMPLETE');
       loading = false;
+    }
+  }
+
+  function onVisibleTracksChange(visible: LocalTrack[]) {
+    if (visible.length === 0) return;
+    let queuedAny = false;
+    for (const track of visible) {
+      if (track.source !== 'plex') continue;
+      if (plexQualityOverrides.has(track.file_path)) continue;
+      if (queuedPlexHydration.has(track.file_path)) continue;
+      if (!isLikelyFallbackPlexQuality(track)) continue;
+      queuedPlexHydration.add(track.file_path);
+      pendingPlexHydration.push(track);
+      queuedAny = true;
+    }
+    if (!queuedAny || plexHydrationDebounce) return;
+    const requestId = tracksHydrationRequestId;
+    plexHydrationDebounce = setTimeout(() => {
+      plexHydrationDebounce = null;
+      if (requestId !== tracksHydrationRequestId) return;
+      const batch = pendingPlexHydration;
+      pendingPlexHydration = [];
+      void hydrateVisiblePlexTracks(batch, requestId);
+    }, PLEX_VISIBLE_HYDRATION_DEBOUNCE_MS);
+  }
+
+  async function hydrateVisiblePlexTracks(batch: LocalTrack[], requestId: number) {
+    const baseUrl = getUserItem('qbz-plex-poc-base-url') || '';
+    const token = getUserItem('qbz-plex-poc-token') || '';
+    if (!baseUrl || !token || batch.length === 0) return;
+
+    const updates: PlexTrackQualityUpdate[] = [];
+    for (let i = 0; i < batch.length; i += PLEX_HYDRATION_BATCH_SIZE) {
+      if (requestId !== tracksHydrationRequestId) return;
+      const chunk = batch.slice(i, i + PLEX_HYDRATION_BATCH_SIZE);
+      await Promise.all(
+        chunk.map(async (track) => {
+          const metadata = await fetchPlexTrackMetadataWithTimeout(baseUrl, token, track.file_path);
+          if (!metadata) {
+            // Allow a future retry if the row stays visible.
+            queuedPlexHydration.delete(track.file_path);
+            return;
+          }
+          plexQualityOverrides.set(track.file_path, {
+            format: (metadata.container ?? metadata.codec ?? '').toLowerCase() || undefined,
+            bitDepth: metadata.bitDepth ?? undefined,
+            sampleRate: metadata.samplingRateHz ?? undefined
+          });
+          updates.push({
+            ratingKey: track.file_path,
+            container: metadata.container ?? metadata.codec,
+            samplingRateHz: metadata.samplingRateHz,
+            bitDepth: metadata.bitDepth
+          });
+        })
+      );
+    }
+
+    if (updates.length > 0) {
+      invoke<number>('v2_plex_cache_update_track_quality', { updates }).catch((error) => {
+        console.warn('[LocalLibrary] Failed to persist Plex track quality updates:', error);
+      });
     }
   }
 
@@ -3855,10 +3931,21 @@
   }
 
   function getQualityBadge(track: LocalTrack): string {
-    const format = track.format.toUpperCase();
-    const bitDepth = track.bit_depth && track.bit_depth > 0 ? String(track.bit_depth) : '--';
-    const sampleRate = track.sample_rate > 0
-      ? Number((track.sample_rate / 1000).toFixed(1)).toString()
+    let rawFormat = track.format;
+    let bitDepthRaw = track.bit_depth;
+    let sampleRateRaw = track.sample_rate;
+    if (track.source === 'plex') {
+      const override = plexQualityOverrides.get(track.file_path);
+      if (override) {
+        if (override.format) rawFormat = override.format;
+        if (override.bitDepth != null) bitDepthRaw = override.bitDepth;
+        if (override.sampleRate != null) sampleRateRaw = override.sampleRate;
+      }
+    }
+    const format = rawFormat.toUpperCase();
+    const bitDepth = bitDepthRaw && bitDepthRaw > 0 ? String(bitDepthRaw) : '--';
+    const sampleRate = sampleRateRaw > 0
+      ? Number((sampleRateRaw / 1000).toFixed(1)).toString()
       : '--';
 
     // Format: "FLAC 24/96" style that audiophiles love
@@ -5908,6 +5995,7 @@
                 selectedIds={selectedTrackIds}
                 onToggleSelect={toggleTrackSelect}
                 onToggleSelectRange={addTracksToSelection}
+                onVisibleTracksChange={onVisibleTracksChange}
               />
             </div>
           </div>

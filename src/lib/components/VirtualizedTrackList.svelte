@@ -79,6 +79,13 @@
      * add every id to its selection set.
      */
     onToggleSelectRange?: (trackIds: number[]) => void;
+    /**
+     * Fires whenever the visible track window changes. Used by
+     * callers that want to lazy-hydrate per-row data (e.g. Plex
+     * streaming-quality metadata) only for rows the user can
+     * actually see, instead of front-loading the full library.
+     */
+    onVisibleTracksChange?: (tracks: Track[]) => void;
   }
 
   let {
@@ -129,6 +136,7 @@
     selectedIds,
     onToggleSelect,
     onToggleSelectRange,
+    onVisibleTracksChange,
   }: Props = $props();
 
   // Flat ordered list of track IDs in the exact order virtualItems
@@ -304,6 +312,17 @@
     const endIdx = Math.min(virtualItems.length - 1, lastVisible + BUFFER_ITEMS);
 
     return virtualItems.slice(startIdx, endIdx + 1);
+  });
+
+  // Notify parent of the current visible track window so it can lazy-hydrate
+  // off-row data (Plex quality metadata, etc) only for what the user sees.
+  $effect(() => {
+    if (!onVisibleTracksChange) return;
+    const tracks: Track[] = [];
+    for (const item of visibleItems) {
+      if (item.type === 'track') tracks.push(item.track);
+    }
+    onVisibleTracksChange(tracks);
   });
 
   // Group ID to scroll position map
