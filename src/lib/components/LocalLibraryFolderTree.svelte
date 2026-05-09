@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { invoke, convertFileSrc } from '@tauri-apps/api/core';
+  import { invoke } from '@tauri-apps/api/core';
   import { t } from '$lib/i18n';
   import { ChevronRight, ChevronDown, Folder, FileMusic } from 'lucide-svelte';
   import type { SvelteSet } from 'svelte/reactivity';
@@ -83,9 +83,6 @@
   const isExpanded = $derived(isFolder && expandedPaths.has(node.path));
   const isSelected = $derived(node.path === selectedPath);
   const trackCount = $derived(node.kind === 'folder' ? node.track_count_under : 0);
-  const artworkUrl = $derived(
-    node.kind === 'folder' && node.artwork ? convertFileSrc(node.artwork) : null
-  );
 
   let children = $state<FolderTreeEntry[] | null>(null);
   let loading = $state(false);
@@ -209,7 +206,7 @@
   class:selected={isSelected}
   class:folder={isFolder}
   class:track={!isFolder}
-  style:padding-left="{depth * 16 + 8}px"
+  style:padding-left="{depth * 12 + 6}px"
   role="treeitem"
   tabindex="0"
   aria-selected={isSelected}
@@ -244,64 +241,58 @@
       aria-label={isExpanded ? 'Collapse' : 'Expand'}
     >
       {#if isExpanded}
-        <ChevronDown size={14} />
+        <ChevronDown size={12} />
       {:else}
-        <ChevronRight size={14} />
+        <ChevronRight size={12} />
       {/if}
     </button>
   {:else}
     <span class="chevron-spacer"></span>
   {/if}
 
-  {#if isFolder && artworkUrl}
-    <img class="row-thumb" src={artworkUrl} alt="" loading="lazy" decoding="async" />
-  {:else if isFolder}
+  {#if isFolder}
     <span class="row-icon folder-icon">
-      <Folder size={16} />
+      <Folder size={14} />
     </span>
   {:else}
     <span class="row-icon track-icon">
-      <FileMusic size={16} />
+      <FileMusic size={14} />
     </span>
   {/if}
 
-  <div class="row-meta">
-    <span class="row-name" title={node.segment}>
-      {#if searchQuery}
-        {@const highlight = getSegmentHighlight(node.segment, searchQuery)}
-        {#if highlight}
-          {highlight.before}<mark class="row-name-highlight">{highlight.match}</mark>{highlight.after}
-        {:else}
-          {node.segment}
-        {/if}
+  <span class="row-name" title={node.segment}>
+    {#if searchQuery}
+      {@const highlight = getSegmentHighlight(node.segment, searchQuery)}
+      {#if highlight}
+        {highlight.before}<mark class="row-name-highlight">{highlight.match}</mark>{highlight.after}
       {:else}
         {node.segment}
       {/if}
-    </span>
-    {#if isFolder}
-      <span class="row-subtitle">
-        {$t('library.foldersTree.treeFolderTracks', { values: { count: trackCount } })}
-      </span>
+    {:else}
+      {node.segment}
     {/if}
-  </div>
+    {#if isFolder && trackCount > 0}
+      <span class="row-count-inline">({trackCount})</span>
+    {/if}
+  </span>
 </div>
 
 {#if isFolder && isExpanded}
   {#if loading}
-    <div class="folder-tree-loading" style:padding-left="{(depth + 1) * 16 + 8}px">
+    <div class="folder-tree-loading" style:padding-left="{(depth + 1) * 12 + 6}px">
       {$t('library.foldersTree.treeLoading')}
     </div>
   {:else if loadError}
     <div
       class="folder-tree-error"
-      style:padding-left="{(depth + 1) * 16 + 8}px"
+      style:padding-left="{(depth + 1) * 12 + 6}px"
       title={loadError}
     >
       {loadError}
     </div>
   {:else if children}
     {#if children.length === 0}
-      <div class="folder-tree-empty" style:padding-left="{(depth + 1) * 16 + 8}px">
+      <div class="folder-tree-empty" style:padding-left="{(depth + 1) * 12 + 6}px">
         {$t('library.foldersTree.treeEmpty')}
       </div>
     {:else}
@@ -334,10 +325,11 @@
   .folder-tree-row {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 4px 8px;
+    gap: 6px;
+    padding: 3px 6px;
+    min-height: 22px;
     cursor: pointer;
-    border-radius: 4px;
+    border-radius: 3px;
     user-select: none;
     color: var(--text-primary);
     transition: background 100ms ease;
@@ -358,8 +350,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 16px;
-    height: 16px;
+    width: 14px;
+    height: 14px;
     flex-shrink: 0;
     border: none;
     background: transparent;
@@ -373,31 +365,28 @@
     color: var(--text-primary);
   }
   .chevron-spacer {
-    width: 16px;
+    width: 14px;
     flex-shrink: 0;
   }
 
   .row-checkbox {
-    width: 14px;
-    height: 14px;
+    width: 13px;
+    height: 13px;
     flex-shrink: 0;
     margin: 0;
     cursor: pointer;
     accent-color: var(--accent-primary);
+    transform: scale(0.9);
+    transform-origin: center;
   }
 
-  .row-thumb {
-    width: 24px;
-    height: 24px;
-    border-radius: 3px;
-    object-fit: cover;
-    flex-shrink: 0;
-  }
   .row-icon {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+    width: 14px;
+    height: 14px;
   }
   .row-icon.folder-icon {
     color: var(--accent-primary, var(--text-secondary));
@@ -406,14 +395,11 @@
     color: var(--text-muted);
   }
 
-  .row-meta {
-    display: flex;
-    flex-direction: column;
+  .row-name {
     flex: 1;
     min-width: 0;
-  }
-  .row-name {
-    font-size: 13px;
+    font-size: 0.78rem;
+    line-height: 1.3;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -425,19 +411,19 @@
     padding: 0 1px;
     border-radius: 2px;
   }
-  .row-subtitle {
-    font-size: 11px;
-    color: var(--text-muted);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  .row-count-inline {
+    margin-left: 6px;
+    font-size: 0.7rem;
+    color: var(--text-tertiary, var(--text-muted, #888));
+    opacity: 0.7;
+    font-weight: normal;
   }
 
   .folder-tree-loading,
   .folder-tree-empty,
   .folder-tree-error {
-    padding: 4px 8px;
-    font-size: 12px;
+    padding: 3px 6px;
+    font-size: 0.72rem;
     color: var(--text-muted);
   }
   .folder-tree-error {
