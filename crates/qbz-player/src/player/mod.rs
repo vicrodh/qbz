@@ -504,6 +504,16 @@ impl StreamType {
             _ => false,
         }
     }
+
+    /// Actual output stream rate. On macOS shared mode this is the rate that
+    /// must match CoreAudio's current nominal device rate; decoded track rates
+    /// may differ and are resampled by Rodio.
+    #[cfg(target_os = "macos")]
+    fn output_sample_rate(&self) -> u32 {
+        match self {
+            StreamType::Rodio { sink, .. } => sink.config().sample_rate().get(),
+        }
+    }
 }
 
 fn apply_engine_volume(
@@ -522,6 +532,50 @@ fn apply_engine_volume(
     }
 
     engine.set_volume(volume);
+}
+
+#[cfg(target_os = "macos")]
+fn uses_coreaudio_system_default(settings: &AudioSettings) -> bool {
+    settings
+        .backend_type
+        .unwrap_or(AudioBackendType::SystemDefault)
+        == AudioBackendType::SystemDefault
+}
+
+#[cfg(target_os = "macos")]
+fn coreaudio_nominal_rate(settings: &AudioSettings) -> Option<u32> {
+    if !uses_coreaudio_system_default(settings) {
+        return None;
+    }
+
+    let device_id =
+        qbz_audio::coreaudio_direct::resolve_output_device_id(settings.output_device.as_deref())
+            .inspect_err(|e| {
+                log::warn!(
+                    "[CoreAudio] Failed to resolve output device for rate check: {}",
+                    e
+                )
+            })
+            .ok()?;
+
+    qbz_audio::coreaudio_direct::get_nominal_sample_rate(device_id)
+        .inspect_err(|e| log::warn!("[CoreAudio] Failed to query nominal rate: {}", e))
+        .ok()
+}
+
+#[cfg(target_os = "macos")]
+fn coreaudio_shared_rate_mismatch(
+    settings: &AudioSettings,
+    stream_opt: &Option<StreamType>,
+) -> Option<(u32, u32)> {
+    if settings.exclusive_mode || !uses_coreaudio_system_default(settings) {
+        return None;
+    }
+
+    let stream_rate = stream_opt.as_ref().map(StreamType::output_sample_rate)?;
+    let nominal_rate = coreaudio_nominal_rate(settings)?;
+
+    (stream_rate != nominal_rate).then_some((stream_rate, nominal_rate))
 }
 
 /// Try to create output stream using the backend system (if configured)
@@ -608,10 +662,12 @@ fn try_init_stream_with_backend(
     // Fallback to regular rodio stream (PipeWire, Pulse, ALSA via CPAL)
     match backend.create_output_stream_with_exclusive_guard(&config) {
         Ok((mixer_sink, _exclusive_guard)) => {
+            let output_sample_rate = mixer_sink.config().sample_rate().get();
             log::info!(
-                "Stream created via {:?} backend at {}Hz",
+                "Stream created via {:?} backend (requested {}Hz, output {}Hz)",
                 backend_type,
-                sample_rate
+                sample_rate,
+                output_sample_rate
             );
             state.set_bit_perfect_mode(Some(BitPerfectMode::Disabled));
             #[cfg(target_os = "macos")]
@@ -1068,16 +1124,20 @@ impl Player {
                             }
                             Some(Err(e)) => {
                                 // On macOS, the backend path is the only one that
-                                // honors Exclusive Mode (CoreAudio Hog Mode). Falling
-                                // through to legacy CPAL here would silently create a
-                                // shared-mode stream while the UI still shows
-                                // Exclusive — surface the failure instead so the
-                                // user sees that audio is unavailable rather than
-                                // unknowingly playing in shared mode.
+                                // understands CoreAudio ownership and nominal-rate
+                                // validation. Falling through to legacy CPAL can
+                                // create a stream at a stale/source rate; in
+                                // shared mode that can produce wrong-speed audio,
+                                // and in Exclusive Mode it would silently drop Hog
+                                // Mode. Surface the failure instead.
                                 #[cfg(target_os = "macos")]
-                                if settings.exclusive_mode {
+                                if settings
+                                    .backend_type
+                                    .unwrap_or(AudioBackendType::SystemDefault)
+                                    == AudioBackendType::SystemDefault
+                                {
                                     log::error!(
-                                        "macOS Exclusive Mode init failed: {} — refusing to fall back to shared CPAL",
+                                        "macOS CoreAudio init failed: {} — refusing unsafe legacy CPAL fallback",
                                         e
                                     );
                                     state.set_current_device(None);
@@ -1248,7 +1308,8 @@ impl Player {
                             let format_changed = *current_sample_rate != Some(sample_rate)
                                 || *current_channels != Some(channels);
 
-                            // Check if using ALSA Direct backend
+                            // Check if using a backend where the output stream's
+                            // format/rate must be actively managed.
                             let using_alsa_direct = thread_settings
                                 .lock()
                                 .ok()
@@ -1265,15 +1326,42 @@ impl Player {
                                         && s.exclusive_mode
                                 })
                                 .unwrap_or(false);
+                            #[cfg(target_os = "macos")]
+                            let coreaudio_shared_rate_mismatch = thread_settings
+                                .lock()
+                                .ok()
+                                .and_then(|s| {
+                                    coreaudio_shared_rate_mismatch(&s, stream_opt).map(
+                                        |(stream_rate, nominal_rate)| {
+                                            log::warn!(
+                                                "[CoreAudio] Shared-mode output rate changed: stream {}Hz, device nominal {}Hz. Recreating stream to avoid wrong-speed playback.",
+                                                stream_rate,
+                                                nominal_rate
+                                            );
+                                            (stream_rate, nominal_rate)
+                                        },
+                                    )
+                                });
+                            #[cfg(not(target_os = "macos"))]
+                            let coreaudio_shared_rate_mismatch: Option<(u32, u32)> = None;
 
                             let needs_new_stream = stream_opt.is_none()
                                 || (dac_passthrough && format_changed)
                                 || (using_alsa_direct && format_changed)
-                                || (using_coreaudio_exclusive && format_changed);
+                                || (using_coreaudio_exclusive && format_changed)
+                                || coreaudio_shared_rate_mismatch.is_some();
 
                             if needs_new_stream {
                                 if stream_opt.is_some() {
-                                    if (dac_passthrough
+                                    if let Some((stream_rate, nominal_rate)) =
+                                        coreaudio_shared_rate_mismatch
+                                    {
+                                        log::info!(
+                                            "CoreAudio shared output rate changed from {}Hz to {}Hz - recreating audio stream",
+                                            stream_rate,
+                                            nominal_rate
+                                        );
+                                    } else if (dac_passthrough
                                         || using_alsa_direct
                                         || using_coreaudio_exclusive)
                                         && format_changed
@@ -1455,8 +1543,6 @@ impl Player {
                                 match stream_result {
                                     Ok(stream) => {
                                         *stream_opt = Some(stream);
-                                        *current_sample_rate = Some(sample_rate);
-                                        *current_channels = Some(channels);
                                         thread_state.set_stream_error(false);
 
                                         // Set current device name from settings (for backend system)
@@ -1508,6 +1594,13 @@ impl Player {
                                 channels
                             );
                             }
+
+                            // Track the decoded source format separately from
+                            // the OS output stream rate. In shared mode the
+                            // stream can stay at the CoreAudio nominal rate
+                            // while each track has its own decoded rate.
+                            *current_sample_rate = Some(sample_rate);
+                            *current_channels = Some(channels);
 
                             let Some(ref stream) = *stream_opt else {
                                 log::error!("Audio thread: no audio device available");
@@ -1741,15 +1834,42 @@ impl Player {
                                         && s.exclusive_mode
                                 })
                                 .unwrap_or(false);
+                            #[cfg(target_os = "macos")]
+                            let coreaudio_shared_rate_mismatch = thread_settings
+                                .lock()
+                                .ok()
+                                .and_then(|s| {
+                                    coreaudio_shared_rate_mismatch(&s, stream_opt).map(
+                                        |(stream_rate, nominal_rate)| {
+                                            log::warn!(
+                                                "[CoreAudio] Streaming shared-mode output rate changed: stream {}Hz, device nominal {}Hz. Recreating stream to avoid wrong-speed playback.",
+                                                stream_rate,
+                                                nominal_rate
+                                            );
+                                            (stream_rate, nominal_rate)
+                                        },
+                                    )
+                                });
+                            #[cfg(not(target_os = "macos"))]
+                            let coreaudio_shared_rate_mismatch: Option<(u32, u32)> = None;
 
                             let needs_new_stream = stream_opt.is_none()
                                 || (dac_passthrough && format_changed)
                                 || (using_alsa_direct && format_changed)
-                                || (using_coreaudio_exclusive && format_changed);
+                                || (using_coreaudio_exclusive && format_changed)
+                                || coreaudio_shared_rate_mismatch.is_some();
 
                             if needs_new_stream {
                                 if stream_opt.is_some() {
-                                    if (dac_passthrough
+                                    if let Some((stream_rate, nominal_rate)) =
+                                        coreaudio_shared_rate_mismatch
+                                    {
+                                        log::info!(
+                                            "Streaming: CoreAudio shared output rate changed from {}Hz to {}Hz - recreating audio stream",
+                                            stream_rate,
+                                            nominal_rate
+                                        );
+                                    } else if (dac_passthrough
                                         || using_alsa_direct
                                         || using_coreaudio_exclusive)
                                         && format_changed
@@ -1863,8 +1983,6 @@ impl Player {
                                 match stream_result {
                                     Ok(stream) => {
                                         *stream_opt = Some(stream);
-                                        *current_sample_rate = Some(sample_rate);
-                                        *current_channels = Some(channels);
                                         thread_state.set_stream_error(false);
                                         log::info!(
                                             "Streaming audio stream ready at {}Hz",
@@ -1883,6 +2001,11 @@ impl Player {
                                     }
                                 }
                             }
+
+                            // Keep decoded source format current even when
+                            // macOS shared mode reuses the same output stream.
+                            *current_sample_rate = Some(sample_rate);
+                            *current_channels = Some(channels);
 
                             let Some(ref stream) = *stream_opt else {
                                 log::error!(
