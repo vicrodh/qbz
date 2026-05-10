@@ -69,6 +69,17 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="1.2.12" date="2026-05-09">
+      <description>
+        <p>Hotfix: rolls back the broken titlebar-mode-selector that left v1.2.11 with no visible window chrome on Linux. Restores v1.2.10 title bar behavior (System / Custom / Hidden). All other v1.2.11 features remain.</p>
+        <ul>
+          <li>Revert titlebar-mode-selector and PR #406 (Linux titlebar draggable + macOS QBZ strip)</li>
+          <li>macOS QoL (PR #408 by @Vudgekek): native .icns app icon and tray icon variant support with auto dark-mode detection</li>
+          <li>Sticky home tab header animation fix (PR #407 by @afonsojramos) preserved</li>
+          <li>All v1.2.11 features remain: macOS CoreAudio Exclusive Mode, Linux DAC reservation, Discord Rich Presence, Sleep Timer, Offline Cache Manager, Local Library folder-tree and ephemeral playback, metadata-grouped Albums, QConnect startup persistence, album/artist detail polish</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.2.11" date="2026-05-09">
       <description>
         <p>Exclusive Hardening: bit-perfect playback gets reinforced on both ends — macOS gains a real CoreAudio Exclusive Mode (community PR by @Vudgekek) and Linux now reserves the DAC via the standard ReserveDevice1 D-Bus protocol while ALSA Direct is engaged.</p>
