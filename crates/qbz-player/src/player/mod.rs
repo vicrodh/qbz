@@ -654,11 +654,14 @@ fn evaluate_stream_recreate(
 
     drop(settings_guard);
 
-    let needs_new_stream = stream_opt.is_none()
-        || (dac_passthrough && format_changed)
-        || (using_alsa_direct && format_changed)
-        || (using_coreaudio_exclusive && format_changed)
-        || coreaudio_shared_rate_mismatch.is_some();
+    let needs_new_stream = compute_needs_new_stream(
+        stream_opt.is_some(),
+        format_changed,
+        dac_passthrough,
+        using_alsa_direct,
+        using_coreaudio_exclusive,
+        coreaudio_shared_rate_mismatch.is_some(),
+    );
 
     StreamRecreateDecision {
         needs_new_stream,
@@ -668,6 +671,25 @@ fn evaluate_stream_recreate(
         using_coreaudio_exclusive,
         coreaudio_shared_rate_mismatch,
     }
+}
+
+/// Pure decision rule for whether the output stream must be rebuilt.
+///
+/// Split out so the truth table can be unit-tested without faking a real
+/// `MixerDeviceSink` or `AudioSettings` mutex.
+fn compute_needs_new_stream(
+    has_stream: bool,
+    format_changed: bool,
+    dac_passthrough: bool,
+    using_alsa_direct: bool,
+    using_coreaudio_exclusive: bool,
+    coreaudio_shared_rate_mismatch: bool,
+) -> bool {
+    !has_stream
+        || (dac_passthrough && format_changed)
+        || (using_alsa_direct && format_changed)
+        || (using_coreaudio_exclusive && format_changed)
+        || coreaudio_shared_rate_mismatch
 }
 
 /// Try to create output stream using the backend system (if configured)
@@ -3442,4 +3464,81 @@ pub struct PlaybackState {
     pub duration: u64,
     pub track_id: u64,
     pub volume: f32,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::compute_needs_new_stream;
+
+    #[test]
+    fn no_stream_always_needs_new() {
+        // Without an existing stream there is nothing to reuse — every
+        // other flag is irrelevant.
+        assert!(compute_needs_new_stream(
+            false, false, false, false, false, false
+        ));
+    }
+
+    #[test]
+    fn unchanged_format_on_default_backend_reuses_stream() {
+        // Default rodio backend resamples internally, so an unchanged
+        // decoded format on an existing stream needs no rebuild.
+        assert!(!compute_needs_new_stream(
+            true, false, false, false, false, false
+        ));
+    }
+
+    #[test]
+    fn format_change_alone_does_not_force_rebuild_on_default_backend() {
+        // Rodio handles sample-rate conversion; a format change without a
+        // bit-perfect backend does not require a new stream.
+        assert!(!compute_needs_new_stream(
+            true, true, false, false, false, false
+        ));
+    }
+
+    #[test]
+    fn format_change_with_dac_passthrough_rebuilds() {
+        assert!(compute_needs_new_stream(
+            true, true, true, false, false, false
+        ));
+    }
+
+    #[test]
+    fn format_change_with_alsa_direct_rebuilds() {
+        assert!(compute_needs_new_stream(
+            true, true, false, true, false, false
+        ));
+    }
+
+    #[test]
+    fn format_change_with_coreaudio_exclusive_rebuilds() {
+        assert!(compute_needs_new_stream(
+            true, true, false, false, true, false
+        ));
+    }
+
+    #[test]
+    fn bit_perfect_backends_without_format_change_reuse_stream() {
+        // Bit-perfect flags only force a rebuild *together with* a format
+        // change. On their own they should not.
+        assert!(!compute_needs_new_stream(
+            true, false, true, false, false, false
+        ));
+        assert!(!compute_needs_new_stream(
+            true, false, false, true, false, false
+        ));
+        assert!(!compute_needs_new_stream(
+            true, false, false, false, true, false
+        ));
+    }
+
+    #[test]
+    fn coreaudio_shared_rate_mismatch_rebuilds_regardless_of_format_change() {
+        // The CoreAudio shared-mode rate-drift case has nothing to do with
+        // track format; it must rebuild whenever detected.
+        assert!(compute_needs_new_stream(
+            true, false, false, false, false, true
+        ));
+    }
 }
