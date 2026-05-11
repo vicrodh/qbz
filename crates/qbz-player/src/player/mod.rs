@@ -1228,8 +1228,8 @@ impl Player {
             // Initialize audio device lazily on first playback to avoid idle CPU usage.
             let mut current_device_name = device_name.clone();
             let mut stream_opt: Option<StreamType> = None;
-            let mut current_sample_rate: Option<u32> = None;
-            let mut current_channels: Option<u16> = None;
+            let mut current_track_sample_rate: Option<u32> = None;
+            let mut current_track_channels: Option<u16> = None;
 
             #[allow(dead_code)]
             const MAX_INIT_RETRIES: u32 = 5;
@@ -1269,8 +1269,8 @@ impl Player {
                  current_device_name: &mut Option<String>,
                  consecutive_sink_failures: &mut u32,
                  pause_suspend_deadline: &mut Option<Instant>,
-                 current_sample_rate: &mut Option<u32>,
-                 current_channels: &mut Option<u16>,
+                 current_track_sample_rate: &mut Option<u32>,
+                 current_track_channels: &mut Option<u16>,
                  current_normalization_gain: &mut Option<f32>,
                  current_gain_atomic: &mut Option<Arc<AtomicU32>>,
                  gapless_pending: &mut Option<GaplessPending>,
@@ -1305,8 +1305,8 @@ impl Player {
 
                             // Check if we need to recreate the stream
                             // Recreate on format change if DAC passthrough OR ALSA Direct is enabled (both require bit-perfect)
-                            let format_changed = *current_sample_rate != Some(sample_rate)
-                                || *current_channels != Some(channels);
+                            let format_changed = *current_track_sample_rate != Some(sample_rate)
+                                || *current_track_channels != Some(channels);
 
                             // Check if using a backend where the output stream's
                             // format/rate must be actively managed.
@@ -1375,8 +1375,8 @@ impl Player {
                                         };
                                         log::info!(
                                         "Sample rate/channels changed from {:?}Hz/{:?}ch to {}Hz/{}ch - recreating audio stream ({})",
-                                        *current_sample_rate,
-                                        *current_channels,
+                                        *current_track_sample_rate,
+                                        *current_track_channels,
                                         sample_rate,
                                         channels,
                                         mode
@@ -1588,8 +1588,8 @@ impl Player {
                                 // Format changed but DAC passthrough is disabled - reuse existing stream
                                 log::info!(
                                 "Audio format changed from {:?}Hz/{:?}ch to {}Hz/{}ch - reusing audio stream (DAC passthrough disabled, gapless enabled)",
-                                *current_sample_rate,
-                                *current_channels,
+                                *current_track_sample_rate,
+                                *current_track_channels,
                                 sample_rate,
                                 channels
                             );
@@ -1599,8 +1599,8 @@ impl Player {
                             // the OS output stream rate. In shared mode the
                             // stream can stay at the CoreAudio nominal rate
                             // while each track has its own decoded rate.
-                            *current_sample_rate = Some(sample_rate);
-                            *current_channels = Some(channels);
+                            *current_track_sample_rate = Some(sample_rate);
+                            *current_track_channels = Some(channels);
 
                             let Some(ref stream) = *stream_opt else {
                                 log::error!("Audio thread: no audio device available");
@@ -1651,8 +1651,8 @@ impl Player {
                                                 std::thread::sleep(Duration::from_millis(200));
 
                                                 // Use last known sample rate/channels to maintain DAC passthrough
-                                                let sr = current_sample_rate.unwrap_or(48000);
-                                                let ch = current_channels.unwrap_or(2);
+                                                let sr = current_track_sample_rate.unwrap_or(48000);
+                                                let ch = current_track_channels.unwrap_or(2);
                                                 *stream_opt = init_device(
                                                     current_device_name,
                                                     &thread_state,
@@ -1815,8 +1815,8 @@ impl Player {
                                 .unwrap_or(false);
 
                             // Check if we need to recreate the stream
-                            let format_changed = *current_sample_rate != Some(sample_rate)
-                                || *current_channels != Some(channels);
+                            let format_changed = *current_track_sample_rate != Some(sample_rate)
+                                || *current_track_channels != Some(channels);
 
                             let using_alsa_direct = thread_settings
                                 .lock()
@@ -2004,8 +2004,8 @@ impl Player {
 
                             // Keep decoded source format current even when
                             // macOS shared mode reuses the same output stream.
-                            *current_sample_rate = Some(sample_rate);
-                            *current_channels = Some(channels);
+                            *current_track_sample_rate = Some(sample_rate);
+                            *current_track_channels = Some(channels);
 
                             let Some(ref stream) = *stream_opt else {
                                 log::error!(
@@ -2232,8 +2232,8 @@ impl Player {
 
                                 if stream_opt.is_none() {
                                     // Use last known sample rate/channels to maintain DAC passthrough
-                                    let sr = current_sample_rate.unwrap_or(48000);
-                                    let ch = current_channels.unwrap_or(2);
+                                    let sr = current_track_sample_rate.unwrap_or(48000);
+                                    let ch = current_track_channels.unwrap_or(2);
                                     log::info!(
                                         "Resume: reinitializing stream at {}Hz/{}ch",
                                         sr,
@@ -2619,8 +2619,8 @@ impl Player {
 
                             *current_device_name = new_device;
                             // Use last known sample rate/channels to maintain DAC passthrough
-                            let sr = current_sample_rate.unwrap_or(48000);
-                            let ch = current_channels.unwrap_or(2);
+                            let sr = current_track_sample_rate.unwrap_or(48000);
+                            let ch = current_track_channels.unwrap_or(2);
                             log::info!("ReinitDevice: reinitializing at {}Hz/{}ch", sr, ch);
                             *stream_opt = init_device(current_device_name, &thread_state, sr, ch);
 
@@ -2660,7 +2660,7 @@ impl Player {
 
                             // Verify format compatibility (same sample rate and channels)
                             if let (Some(cur_sr), Some(cur_ch)) =
-                                (*current_sample_rate, *current_channels)
+                                (*current_track_sample_rate, *current_track_channels)
                             {
                                 if sample_rate != cur_sr || channels != cur_ch {
                                     log::info!(
@@ -2776,8 +2776,8 @@ impl Player {
                             &mut current_device_name,
                             &mut consecutive_sink_failures,
                             &mut pause_suspend_deadline,
-                            &mut current_sample_rate,
-                            &mut current_channels,
+                            &mut current_track_sample_rate,
+                            &mut current_track_channels,
                             &mut current_normalization_gain,
                             &mut current_gain_atomic,
                             &mut gapless_pending,
@@ -3022,8 +3022,8 @@ impl Player {
                                     &mut current_device_name,
                                     &mut consecutive_sink_failures,
                                     &mut pause_suspend_deadline,
-                                    &mut current_sample_rate,
-                                    &mut current_channels,
+                                    &mut current_track_sample_rate,
+                                    &mut current_track_channels,
                                     &mut current_normalization_gain,
                                     &mut current_gain_atomic,
                                     &mut gapless_pending,
@@ -3050,8 +3050,8 @@ impl Player {
                             &mut current_device_name,
                             &mut consecutive_sink_failures,
                             &mut pause_suspend_deadline,
-                            &mut current_sample_rate,
-                            &mut current_channels,
+                            &mut current_track_sample_rate,
+                            &mut current_track_channels,
                             &mut current_normalization_gain,
                             &mut current_gain_atomic,
                             &mut gapless_pending,
