@@ -86,6 +86,17 @@ export function getUnavailableTrackIds(): Set<number> {
 }
 
 /**
+ * Combined check: a track counts as removed-from-Qobuz when either the API
+ * marks it unstreamable or playback hit a TrackUnavailable error this session
+ * (cached in the store). Consumer views pass the result to TrackRow's
+ * `isUnavailable` prop. Subscribe to the store separately for reactivity.
+ */
+export function isTrackRemovedFromQobuz(track: { id: number; streamable?: boolean }): boolean {
+  if (track.streamable === false) return true;
+  return isTrackUnavailable(track.id);
+}
+
+/**
  * Subscribe to changes in unavailable tracks
  */
 export function subscribe(fn: Subscriber): () => void {

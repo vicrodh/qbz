@@ -31,6 +31,10 @@
     toggleAlbumFavorite
   } from '$lib/stores/albumFavoritesStore';
   import { isBlacklisted as isArtistBlacklisted } from '$lib/stores/artistBlacklistStore';
+  import {
+    isTrackRemovedFromQobuz,
+    subscribe as subscribeUnavailable
+  } from '$lib/stores/unavailableTracksStore';
   import ImageLightbox from '../ImageLightbox.svelte';
   import BookletViewer from '../BookletViewer.svelte';
   import type { QobuzGoody } from '$lib/types';
@@ -59,6 +63,8 @@
     samplingRate?: number;
     isrc?: string;
     parental_warning?: boolean;
+    /** API streamable flag — false when the track has been removed from Qobuz. */
+    streamable?: boolean;
   }
 
   interface ArtistAlbum {
@@ -203,6 +209,15 @@
 
   let isFavorite = $state(false);
   let isFavoriteLoading = $state(false);
+  // Counter incremented when the unavailable-tracks store mutates so reactive
+  // reads in {@const} blocks re-evaluate.
+  let unavailableVersion = $state(0);
+  // Reading `unavailableVersion` here registers the dependency so the {@const}
+  // calling this re-evaluates when the store changes.
+  function checkTrackUnavailable(track: { id: number; streamable?: boolean }): boolean {
+    void unavailableVersion;
+    return isTrackRemovedFromQobuz(track);
+  }
   let lightboxOpen = $state(false);
   let bookletOpen = $state(false);
   let descriptionExpanded = $state(false);
@@ -563,9 +578,14 @@
       gradientEnabled = isAlbumHeaderGradientEnabled();
     });
 
+    const unsubscribeUnavailable = subscribeUnavailable(() => {
+      unavailableVersion++;
+    });
+
     return () => {
       unsubscribe?.();
       unsubscribeAppearance();
+      unsubscribeUnavailable();
     };
   });
 
@@ -866,6 +886,7 @@
         {@const isTrackDownloaded = downloadInfo.status === 'ready'}
         {@const trackArtistId = track.artistId ?? album.artistId}
         {@const trackBlacklisted = trackArtistId ? isArtistBlacklisted(trackArtistId) : false}
+        {@const trackUnavailable = checkTrackUnavailable(track)}
         <TrackRow
           trackId={track.id}
           number={track.number}
@@ -877,6 +898,8 @@
           isPlaying={isPlaybackActive && activeTrackId === track.id}
           isActiveTrack={activeTrackId === track.id}
           isBlacklisted={trackBlacklisted}
+          isUnavailable={trackUnavailable}
+          unavailableTooltip={trackUnavailable ? $t('player.trackUnavailable') : undefined}
           selectable={multiSelectMode}
           selected={multiSelectedIds.has(track.id)}
           dragTrackIds={multiSelectMode && multiSelectedIds.has(track.id) ? [...multiSelectedIds] : undefined}

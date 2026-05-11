@@ -1,8 +1,13 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
+  import { t } from '$lib/i18n';
   import TrackRow from './TrackRow.svelte';
   import type { OfflineCacheStatus } from '$lib/stores/offlineCacheState';
   import { isBlacklisted as isArtistBlacklisted } from '$lib/stores/artistBlacklistStore';
+  import {
+    isTrackRemovedFromQobuz,
+    subscribe as subscribeUnavailable
+  } from '$lib/stores/unavailableTracksStore';
   import { restoreScrollOnBackForward } from '$lib/utils/scrollRestore';
   import { formatTrackTitle } from '$lib/utils/trackTitle';
 
@@ -341,6 +346,19 @@
   }
 
   let resizeObserver: ResizeObserver | null = null;
+  // Counter incremented when the unavailable-tracks store mutates so reactive
+  // reads in {@const} blocks re-evaluate. Skipped for `isLocal` lists since
+  // local files don't carry the streamable concept.
+  let unavailableVersion = $state(0);
+  let unsubscribeUnavailable: (() => void) | null = null;
+  // Reading `unavailableVersion` here registers the dependency so the {@const}
+  // calling this re-evaluates when the store changes. Local lists short-circuit
+  // to false since streamable doesn't apply to local files.
+  function checkTrackUnavailable(track: { id: number; streamable?: boolean }): boolean {
+    if (isLocal) return false;
+    void unavailableVersion;
+    return isTrackRemovedFromQobuz(track);
+  }
 
   onMount(() => {
     if (containerEl) {
@@ -355,10 +373,17 @@
     }
 
     restoreScrollOnBackForward(containerEl, (v) => scrollTop = v);
+
+    if (!isLocal) {
+      unsubscribeUnavailable = subscribeUnavailable(() => {
+        unavailableVersion++;
+      });
+    }
   });
 
   onDestroy(() => {
     resizeObserver?.disconnect();
+    unsubscribeUnavailable?.();
   });
 
   // Public method to scroll to a group
@@ -404,6 +429,7 @@
           {@const downloadInfo = getOfflineCacheStatus?.(trackId) ?? { status: 'none' as const, progress: 0 }}
           {@const isTrackDownloaded = downloadInfo.status === 'ready'}
           {@const trackBlacklisted = !isLocal && artistId ? isArtistBlacklisted(artistId) : false}
+          {@const trackUnavailable = checkTrackUnavailable(item.track)}
           <TrackRow
             trackId={trackId}
             number={getTrackNumber(item.track, item.index)}
@@ -418,6 +444,8 @@
             isPlaying={isPlaybackActive && activeTrackId === trackId}
             isActiveTrack={activeTrackId === trackId}
             isBlacklisted={trackBlacklisted}
+            isUnavailable={trackUnavailable}
+            unavailableTooltip={trackUnavailable ? $t('player.trackUnavailable') : undefined}
             selectable={selectable}
             selected={selectedIds?.has(trackId) ?? false}
             dragTrackIds={selectable && selectedIds?.has(trackId) && selectedIds.size > 1 ? [...selectedIds] : undefined}

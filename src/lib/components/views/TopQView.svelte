@@ -14,6 +14,10 @@
   import { showToast } from '$lib/stores/toastStore';
   import { setPlaybackContext } from '$lib/stores/playbackContextStore';
   import { isBlacklisted as isArtistBlacklisted } from '$lib/stores/artistBlacklistStore';
+  import {
+    isTrackRemovedFromQobuz,
+    subscribe as subscribeUnavailable
+  } from '$lib/stores/unavailableTracksStore';
   import { getUserItem, setUserItem } from '$lib/utils/userStorage';
   import { applyShiftRange, isSelectAllShortcut } from '$lib/utils/multiSelect';
   import type { OfflineCacheStatus } from '$lib/stores/offlineCacheState';
@@ -532,16 +536,29 @@
     return `${mins} min`;
   });
 
+  // Unavailable-tracks reactivity: bumped on store mutations so {@const}
+  // reads in the track list re-evaluate the dim state.
+  let unavailableVersion = $state(0);
+  let unsubscribeUnavailable: (() => void) | null = null;
+  function checkTrackUnavailable(track: { id: number; streamable?: boolean }): boolean {
+    void unavailableVersion;
+    return isTrackRemovedFromQobuz(track);
+  }
+
   onMount(() => {
     if (autoRunDone) return;
     autoRunDone = true;
     void generateTopQ('read-write');
     document.addEventListener('click', handleGlobalClick);
+    unsubscribeUnavailable = subscribeUnavailable(() => {
+      unavailableVersion++;
+    });
   });
 
   onDestroy(() => {
     dismissAlgoTooltip();
     document.removeEventListener('click', handleGlobalClick);
+    unsubscribeUnavailable?.();
   });
 </script>
 
@@ -659,6 +676,7 @@
 
         {#each filteredTracks as track, index}
           {@const trackBlacklisted = track.performer?.id ? isArtistBlacklisted(track.performer.id) : false}
+          {@const trackUnavailable = checkTrackUnavailable(track)}
           {@const cacheStatus = getTrackOfflineCacheStatus?.(track.id) ?? { status: 'none' as const, progress: 0 }}
           {@const isTrackDownloaded = cacheStatus.status === 'ready'}
           {@const displayTrack = toDisplayTrack(track)}
@@ -675,6 +693,8 @@
             isPlaying={isPlaybackActive && activeTrackId === track.id}
             isActiveTrack={activeTrackId === track.id}
             isBlacklisted={trackBlacklisted}
+            isUnavailable={trackUnavailable}
+            unavailableTooltip={trackUnavailable ? $t('player.trackUnavailable') : undefined}
             selectable={multiSelectMode}
             selected={multiSelectedIds.has(track.id)}
             dragTrackIds={multiSelectMode && multiSelectedIds.has(track.id) ? [...multiSelectedIds] : undefined}
