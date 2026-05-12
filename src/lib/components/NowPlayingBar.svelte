@@ -928,7 +928,6 @@
     right: 0;
     height: 104px;
     background: var(--bg-secondary);
-    backdrop-filter: blur(20px);
     border-top: 1px solid var(--border-subtle);
     z-index: 2001;
     display: flex;
