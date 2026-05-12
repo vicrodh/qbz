@@ -123,7 +123,13 @@
     if (prevBlockTime > 0) {
       const dt = now - prevBlockTime;
       const dp = progress - prevBlockProgress;
-      if (dt >= 50 && dt <= 1500) {
+      // Floor of 5ms: previously was 50ms (calibrated for setInterval ticks
+      // at 80–200ms), which silently rejected every rAF-rate update — so
+      // measuredBlockMs stayed pinned at the seed value (~89ms for a 2.5s
+      // line) and the transition was always 89ms long even when ticks were
+      // arriving every 16ms. With the floor lowered, the EMA settles to
+      // the real notification interval and the playhead lag drops ~10x.
+      if (dt >= 5 && dt <= 1500) {
         measuredBlockMs = Math.round(measuredBlockMs * 0.3 + dt * 0.7);
       }
       // Forward-only progress deltas (backward = seek, not a tick we'd predict)
