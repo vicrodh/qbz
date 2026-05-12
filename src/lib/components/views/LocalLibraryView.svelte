@@ -3025,11 +3025,22 @@
     return enabled && baseUrl.length > 0 && token.length > 0;
   }
 
-  function buildPlexArtworkUrl(path: string): string {
+  /**
+   * Build a Plex artwork URL. When `size` is provided, wraps the path
+   * in `/photo/:/transcode` so the Plex server returns a resized image
+   * (server-side downscale) — critical for thumbnail contexts where
+   * the original artwork is typically 1000x1000+ and blowing through
+   * decode + memory budget otherwise. When `size` is omitted, returns
+   * the original full-resolution path (used by AlbumDetailView).
+   */
+  function buildPlexArtworkUrl(path: string, size?: number): string {
     const baseUrl = getUserItem('qbz-plex-poc-base-url') || '';
     const token = getUserItem('qbz-plex-poc-token') || '';
     if (!baseUrl || !token) return path;
     const base = baseUrl.replace(/\/+$/, '');
+    if (size && size > 0) {
+      return `${base}/photo/:/transcode?url=${encodeURIComponent(path)}&width=${size}&height=${size}&minSize=1&X-Plex-Token=${encodeURIComponent(token)}`;
+    }
     const separator = path.includes('?') ? '&' : '?';
     return `${base}${path}${separator}X-Plex-Token=${encodeURIComponent(token)}`;
   }
@@ -4608,7 +4619,7 @@
   function getArtworkUrl(path?: string): string {
     if (!path) return '';
     if (/^https?:\/\//i.test(path)) return path;
-    if (path.startsWith('/library/')) return buildPlexArtworkUrl(path);
+    if (path.startsWith('/library/')) return buildPlexArtworkUrl(path, 220);
 
     // For grid/list views, prefer thumbnails
     const cachedThumb = thumbnailUrlCache.get(path);
