@@ -8,7 +8,12 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
-import type { QobuzAlbum, DiscoverResponse, DiscoverAlbum } from '$lib/types';
+import type {
+  QobuzAlbum,
+  DiscoverResponse,
+  DiscoverAlbum,
+  DiscoverPlaylist,
+} from '$lib/types';
 import { getQobuzImageForSize } from '$lib/adapters/qobuzAdapters';
 
 // Wire format from src-tauri/src/api/models.rs `SearchResultsPage<T>`.
@@ -73,6 +78,20 @@ export async function fetchReleaseWatch(limit = 8): Promise<DiscoveryAlbumCard[]
   }
 }
 
+export interface DiscoveryPlaylistCard {
+  playlistId: number;
+  name: string;
+  image?: string;
+}
+
+function discoverPlaylistToCard(playlist: DiscoverPlaylist): DiscoveryPlaylistCard {
+  return {
+    playlistId: playlist.id,
+    name: playlist.name,
+    image: playlist.image?.rectangle || playlist.image?.covers?.[0],
+  };
+}
+
 /**
  * Editorial album sections — one round-trip returns five containers
  * (new releases, press accolades, most streamed, qobuzissimes, album of
@@ -85,6 +104,7 @@ export interface DiscoverIndexSections {
   mostStreamed: DiscoveryAlbumCard[];
   qobuzissimes: DiscoveryAlbumCard[];
   editorPicks: DiscoveryAlbumCard[];
+  playlists: DiscoveryPlaylistCard[];
 }
 
 export async function fetchDiscoverIndex(
@@ -97,6 +117,7 @@ export async function fetchDiscoverIndex(
     mostStreamed: [],
     qobuzissimes: [],
     editorPicks: [],
+    playlists: [],
   };
   try {
     const apiGenreIds = genreIds.length > 0 ? genreIds : null;
@@ -104,18 +125,135 @@ export async function fetchDiscoverIndex(
       genreIds: apiGenreIds,
     });
     const c = response.containers;
-    const take = (items: DiscoverAlbum[] | undefined): DiscoveryAlbumCard[] =>
+    const takeAlbums = (items: DiscoverAlbum[] | undefined): DiscoveryAlbumCard[] =>
       (items ?? []).slice(0, perSection).map(discoverAlbumToCard);
+    const takePlaylists = (items: DiscoverPlaylist[] | undefined): DiscoveryPlaylistCard[] =>
+      (items ?? []).slice(0, perSection).map(discoverPlaylistToCard);
 
     return {
-      newReleases: take(c.new_releases?.data?.items),
-      pressAwards: take(c.press_awards?.data?.items),
-      mostStreamed: take(c.most_streamed?.data?.items),
-      qobuzissimes: take(c.qobuzissims?.data?.items),
-      editorPicks: take(c.album_of_the_week?.data?.items),
+      newReleases: takeAlbums(c.new_releases?.data?.items),
+      pressAwards: takeAlbums(c.press_awards?.data?.items),
+      mostStreamed: takeAlbums(c.most_streamed?.data?.items),
+      qobuzissimes: takeAlbums(c.qobuzissims?.data?.items),
+      editorPicks: takeAlbums(c.album_of_the_week?.data?.items),
+      playlists: takePlaylists(c.playlists?.data?.items),
     };
   } catch (err) {
     console.error('[discovery-v2] fetchDiscoverIndex failed', err);
+    return empty;
+  }
+}
+
+/**
+ * Personalized home sections — recently played, continue listening,
+ * top artists, favorite albums. One round-trip; the V2 command returns
+ * already-resolved minimal metadata shapes (`AlbumCardMeta`,
+ * `TrackDisplayMeta`, `ArtistCardMeta`) so no additional invokes are
+ * needed.
+ */
+export interface DiscoveryTrackCard {
+  trackId: number;
+  title: string;
+  artist: string;
+  album: string;
+  albumId?: string;
+  artistId?: number;
+  artwork?: string;
+}
+
+export interface DiscoveryArtistTile {
+  artistId: number;
+  name: string;
+  image?: string;
+}
+
+export interface HomeResolvedSections {
+  recentlyPlayedAlbums: DiscoveryAlbumCard[];
+  continueListening: DiscoveryTrackCard[];
+  topArtists: DiscoveryArtistTile[];
+  favoriteAlbums: DiscoveryAlbumCard[];
+}
+
+// Backend-resolved shapes (camelCase per Rust `serde(rename_all)`).
+interface RecoAlbumCardMeta {
+  id: string;
+  artwork: string;
+  title: string;
+  artist: string;
+  artistId?: number;
+}
+
+interface RecoTrackDisplayMeta {
+  id: number;
+  title: string;
+  artist: string;
+  album: string;
+  albumArt: string;
+  albumId?: string;
+  artistId?: number;
+}
+
+interface RecoArtistCardMeta {
+  id: number;
+  name: string;
+  image?: string;
+}
+
+interface HomeResolvedWire {
+  recentlyPlayedAlbums: RecoAlbumCardMeta[];
+  continueListeningTracks: RecoTrackDisplayMeta[];
+  topArtists: RecoArtistCardMeta[];
+  favoriteAlbums: RecoAlbumCardMeta[];
+}
+
+export async function fetchHomeResolved(
+  perSection = 8
+): Promise<HomeResolvedSections> {
+  const empty: HomeResolvedSections = {
+    recentlyPlayedAlbums: [],
+    continueListening: [],
+    topArtists: [],
+    favoriteAlbums: [],
+  };
+  try {
+    const resp = await invoke<HomeResolvedWire>('v2_reco_get_home_resolved', {
+      limitRecentAlbums: perSection,
+      limitContinueTracks: perSection,
+      limitTopArtists: perSection,
+      limitFavorites: perSection,
+    });
+    return {
+      recentlyPlayedAlbums: resp.recentlyPlayedAlbums.slice(0, perSection).map((a) => ({
+        albumId: a.id,
+        title: a.title,
+        artist: a.artist,
+        artistId: a.artistId,
+        artwork: a.artwork || undefined,
+      })),
+      continueListening: resp.continueListeningTracks.slice(0, perSection).map((track) => ({
+        trackId: track.id,
+        title: track.title,
+        artist: track.artist,
+        album: track.album,
+        albumId: track.albumId,
+        artistId: track.artistId,
+        artwork: track.albumArt || undefined,
+      })),
+      topArtists: resp.topArtists.slice(0, perSection).map((a) => ({
+        artistId: a.id,
+        name: a.name,
+        image: a.image || undefined,
+      })),
+      favoriteAlbums: resp.favoriteAlbums.slice(0, perSection).map((a) => ({
+        albumId: a.id,
+        title: a.title,
+        artist: a.artist,
+        artistId: a.artistId,
+        artwork: a.artwork || undefined,
+      })),
+    };
+  } catch (err) {
+    console.error('[discovery-v2] fetchHomeResolved failed', err);
     return empty;
   }
 }

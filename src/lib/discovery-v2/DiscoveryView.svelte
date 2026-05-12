@@ -6,10 +6,17 @@
   import {
     fetchReleaseWatch,
     fetchDiscoverIndex,
+    fetchHomeResolved,
     type DiscoveryAlbumCard,
+    type DiscoveryTrackCard,
+    type DiscoveryArtistTile,
+    type DiscoveryPlaylistCard,
   } from './data';
   import DiscoverySection from './DiscoverySection.svelte';
   import AlbumCardLite from './AlbumCardLite.svelte';
+  import TrackCardLite from './TrackCardLite.svelte';
+  import ArtistTileLite from './ArtistTileLite.svelte';
+  import PlaylistCardLite from './PlaylistCardLite.svelte';
 
   /**
    * Discovery V2 — clean-room rebuild of the home view.
@@ -87,12 +94,18 @@
     onAlbumClick,
     onAlbumPlay,
     onArtistClick,
+    onTrackPlay,
+    onTrackGoToAlbum,
+    onTrackGoToArtist,
+    onPlaylistClick,
+    onPlaylistPlay,
     onNavigateNewReleases,
     onNavigateReleaseWatch,
     onNavigateTopAlbums,
     onNavigatePressAccolades,
     onNavigateQobuzissimes,
     onNavigateAlbumsOfTheWeek,
+    onNavigateQobuzPlaylists,
     activeTrackId,
     isPlaybackActive,
   }: Props = $props();
@@ -123,14 +136,22 @@
   let mostStreamed = $state<DiscoveryAlbumCard[]>([]);
   let qobuzissimes = $state<DiscoveryAlbumCard[]>([]);
   let editorPicks = $state<DiscoveryAlbumCard[]>([]);
+  let qobuzPlaylists = $state<DiscoveryPlaylistCard[]>([]);
+  let recentlyPlayedAlbums = $state<DiscoveryAlbumCard[]>([]);
+  let continueListening = $state<DiscoveryTrackCard[]>([]);
+  let topArtists = $state<DiscoveryArtistTile[]>([]);
+  let favoriteAlbums = $state<DiscoveryAlbumCard[]>([]);
 
   onMount(async () => {
-    // Two parallel fetches — release-watch is a separate endpoint from
-    // discover-index. The browser awaits both via Promise.all so neither
-    // blocks the other.
-    const [watch, index] = await Promise.all([
+    // Three parallel fetches:
+    //  - release-watch (followed-artists radar)
+    //  - discover-index (5 editorial album sections + playlists)
+    //  - home-resolved (4 personalized sections from local reco DB)
+    // Each is independent so they race without blocking.
+    const [watch, index, resolved] = await Promise.all([
       fetchReleaseWatch(8),
       fetchDiscoverIndex(8),
+      fetchHomeResolved(8),
     ]);
     releaseWatch = watch;
     newReleases = index.newReleases;
@@ -138,6 +159,11 @@
     mostStreamed = index.mostStreamed;
     qobuzissimes = index.qobuzissimes;
     editorPicks = index.editorPicks;
+    qobuzPlaylists = index.playlists;
+    recentlyPlayedAlbums = resolved.recentlyPlayedAlbums;
+    continueListening = resolved.continueListening;
+    topArtists = resolved.topArtists;
+    favoriteAlbums = resolved.favoriteAlbums;
   });
 
   // `activeTrackId` and `isPlaybackActive` are destructured but not yet read
@@ -182,6 +208,42 @@
   {/snippet}
 
   <div class="scroll-area">
+    {#if recentlyPlayedAlbums.length > 0}
+      <DiscoverySection title={$t('home.recentlyPlayed')}>
+        {#snippet children()}{@render albumGrid(recentlyPlayedAlbums)}{/snippet}
+      </DiscoverySection>
+    {/if}
+
+    {#if continueListening.length > 0}
+      <DiscoverySection title={$t('home.continueListening')}>
+        {#snippet children()}
+          {#each continueListening as track (track.trackId)}
+            <TrackCardLite
+              trackId={track.trackId}
+              title={track.title}
+              artist={track.artist}
+              artwork={track.artwork}
+              onPlay={() => onTrackPlay?.({
+                id: track.trackId,
+                title: track.title,
+                artist: track.artist,
+                album: track.album,
+                albumId: track.albumId,
+                artistId: track.artistId,
+                albumArt: track.artwork,
+              } as DisplayTrack)}
+              onAlbumClick={track.albumId
+                ? () => onTrackGoToAlbum?.(track.albumId!)
+                : undefined}
+              onArtistClick={track.artistId !== undefined
+                ? () => onTrackGoToArtist?.(track.artistId!)
+                : undefined}
+            />
+          {/each}
+        {/snippet}
+      </DiscoverySection>
+    {/if}
+
     {#if releaseWatch.length > 0}
       <DiscoverySection
         title={$t('home.releaseWatch')}
@@ -236,7 +298,47 @@
       </DiscoverySection>
     {/if}
 
-    {#if releaseWatch.length === 0 && newReleases.length === 0}
+    {#if qobuzPlaylists.length > 0}
+      <DiscoverySection
+        title={$t('home.qobuzPlaylists')}
+        onSeeAll={onNavigateQobuzPlaylists}
+      >
+        {#snippet children()}
+          {#each qobuzPlaylists as playlist (playlist.playlistId)}
+            <PlaylistCardLite
+              playlistId={playlist.playlistId}
+              name={playlist.name}
+              image={playlist.image}
+              onClick={() => onPlaylistClick?.(playlist.playlistId)}
+              onPlay={() => onPlaylistPlay?.(playlist.playlistId)}
+            />
+          {/each}
+        {/snippet}
+      </DiscoverySection>
+    {/if}
+
+    {#if topArtists.length > 0}
+      <DiscoverySection title={$t('home.yourTopArtists')}>
+        {#snippet children()}
+          {#each topArtists as artist (artist.artistId)}
+            <ArtistTileLite
+              artistId={artist.artistId}
+              name={artist.name}
+              image={artist.image}
+              onClick={() => onArtistClick?.(artist.artistId)}
+            />
+          {/each}
+        {/snippet}
+      </DiscoverySection>
+    {/if}
+
+    {#if favoriteAlbums.length > 0}
+      <DiscoverySection title={$t('home.favoriteAlbums')}>
+        {#snippet children()}{@render albumGrid(favoriteAlbums)}{/snippet}
+      </DiscoverySection>
+    {/if}
+
+    {#if releaseWatch.length === 0 && newReleases.length === 0 && recentlyPlayedAlbums.length === 0}
       <p class="placeholder">{$t('discovery.comingSoon')}</p>
     {/if}
   </div>
