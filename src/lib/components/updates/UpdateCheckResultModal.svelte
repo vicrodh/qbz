@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Modal from '../Modal.svelte';
+  import Modal from '$lib/discovery-v2/ModalLite.svelte';
   import type { UpdateCheckStatus } from '$lib/stores/updatesStore';
   import { t } from '$lib/i18n';
 

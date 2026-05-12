@@ -4,7 +4,7 @@
   import { resolveArtistImage } from '$lib/stores/customArtistImageStore';
   import { cachedSrc } from '$lib/actions/cachedImage';
   import { Search, Disc3, Music, MicVocal, User, X, ChevronLeft, ChevronRight, Crown, Heart, Play, Ellipsis, ListPlus } from 'lucide-svelte';
-  import AlbumCard from '../AlbumCard.svelte';
+  import AlbumCard from '$lib/discovery-v2/AlbumCardLite.svelte';
   import SearchPlaylistCard from '../SearchPlaylistCard.svelte';
   import ViewTransition from '../ViewTransition.svelte';
   import TrackMenu from '../TrackMenu.svelte';
@@ -697,6 +697,15 @@
     return album.image?.small || album.image?.thumbnail || album.image?.large || '';
   }
 
+  /** Helper to bind an album's artistId into a no-arg callback for
+   *  AlbumCardLite's `onArtistClick: () => void`. Returns undefined
+   *  when there's no artistId or no parent handler, so the artist
+   *  link doesn't render. */
+  function makeArtistClickHandler(artistId: number | undefined): (() => void) | undefined {
+    if (artistId === undefined || !onArtistClick) return undefined;
+    return () => onArtistClick(artistId);
+  }
+
   function getTrackArtwork(track: Track): string {
     return track.album?.image?.small || track.album?.image?.thumbnail || track.album?.image?.large || '';
   }
@@ -858,7 +867,13 @@
   }
 
   // --- Albums tab virtualization ---
-  const ALBUM_CARD_WIDTH = 210;
+  // Width/height match the AlbumCardLite dimensions (cover 220px +
+  // info area ~90px). Before the 2026-05-12 migration to AlbumCardLite
+  // the cards were 210px wide; that stale value let `albumGridCols`
+  // over-compute the column count, the last card per row wrap-around
+  // to a visual second line inside the same virtual-scroll-item and
+  // visually overlapped the next virtual row.
+  const ALBUM_CARD_WIDTH = 220;
   const ALBUM_CARD_HEIGHT = 310;
   const ALBUM_GAP_X = 22;
   const ALBUM_GAP_Y = 24;
@@ -1620,24 +1635,20 @@
                           artwork={getAlbumArtwork(album)}
                           title={album.title}
                           artist={album.artist?.name || 'Unknown Artist'}
-                          artistId={album.artist?.id}
-                          onArtistClick={onArtistClick}
                           genre={getGenreLabel(album)}
-                          releaseDate={album.release_date_original}
-                          size="large"
+                          releaseYear={Number(album.release_date_original?.slice(0, 4)) || undefined}
                           quality={getQualityLabel(album)}
+                          isAlbumFullyDownloaded={isAlbumDownloaded(album.id)}
+                          onArtistClick={makeArtistClickHandler(album.artist?.id)}
                           onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                           onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
                           onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
-                          onAddAlbumToPlaylist={onAddAlbumToPlaylist ? () => onAddAlbumToPlaylist(album.id) : undefined}
+                          onAddToPlaylist={onAddAlbumToPlaylist ? () => onAddAlbumToPlaylist(album.id) : undefined}
                           onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
                           onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
                           onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
-                          isAlbumFullyDownloaded={isAlbumDownloaded(album.id)}
-                          onOpenContainingFolder={onOpenAlbumFolder ? () => onOpenAlbumFolder(album.id) : undefined}
                           onReDownloadAlbum={onReDownloadAlbum ? () => onReDownloadAlbum(album.id) : undefined}
-                          {downloadStateVersion}
-                          onclick={() => { onAlbumClick?.(album.id); loadAlbumDownloadStatus(album.id); }}
+                          onClick={() => { onAlbumClick?.(album.id); loadAlbumDownloadStatus(album.id); }}
                         />
                       </div>
                     {/if}
@@ -1827,21 +1838,19 @@
                         title={album.title}
                         artist={album.artist?.name || 'Unknown Artist'}
                         genre={getGenreLabel(album)}
-                        releaseDate={album.release_date_original}
-                        size="large"
+                        releaseYear={Number(album.release_date_original?.slice(0, 4)) || undefined}
                         quality={getQualityLabel(album)}
+                        isAlbumFullyDownloaded={isAlbumDownloaded(album.id)}
+                        onArtistClick={makeArtistClickHandler(album.artist?.id)}
                         onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                         onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
                         onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
-                        onAddAlbumToPlaylist={onAddAlbumToPlaylist ? () => onAddAlbumToPlaylist(album.id) : undefined}
+                        onAddToPlaylist={onAddAlbumToPlaylist ? () => onAddAlbumToPlaylist(album.id) : undefined}
                         onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
                         onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
                         onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
-                        isAlbumFullyDownloaded={isAlbumDownloaded(album.id)}
-                        onOpenContainingFolder={onOpenAlbumFolder ? () => onOpenAlbumFolder(album.id) : undefined}
                         onReDownloadAlbum={onReDownloadAlbum ? () => onReDownloadAlbum(album.id) : undefined}
-                        {downloadStateVersion}
-                        onclick={() => { onAlbumClick?.(album.id); loadAlbumDownloadStatus(album.id); }}
+                        onClick={() => { onAlbumClick?.(album.id); loadAlbumDownloadStatus(album.id); }}
                       />
                     {/each}
                   </div>
@@ -2369,6 +2378,13 @@
     display: flex;
     flex-wrap: wrap;
     gap: 24px 22px;
+    /* Cards have heterogeneous heights (Hi-Res badge optional). With
+       the default `align-items: stretch` the wrappers stretch to the
+       tallest card in each row, which under SW compositing can make
+       absolutely-positioned children paint at unexpected Y positions.
+       Pinning top alignment keeps every card's cover top-aligned at
+       the row start. */
+    align-items: flex-start;
   }
 
   .artists-grid-row {
@@ -3010,7 +3026,11 @@
   }
 
   .album-card-wrapper {
-    min-width: 160px;
+    /* AlbumCardLite is a fixed 220px wide. Pinning the wrapper to the
+       same width prevents flex from stretching it (which let some
+       cards' covers visually overlap their neighbours in the row
+       above when row heights were uneven). */
+    width: 220px;
     flex-shrink: 0;
   }
 

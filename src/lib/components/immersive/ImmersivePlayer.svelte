@@ -2,7 +2,7 @@
   import { startActiveLineUpdates, setProgressTrackingEnabled } from '$lib/stores/lyricsStore';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { t } from '$lib/i18n';
-  import Modal from '$lib/components/Modal.svelte';
+  import Modal from '$lib/discovery-v2/ModalLite.svelte';
   import ImmersiveBackground from './ImmersiveBackground.svelte';
   import ImmersiveArtwork from './ImmersiveArtwork.svelte';
   import ImmersiveHeader, { type ImmersiveTab, type FocusTab, type ViewMode } from './ImmersiveHeader.svelte';

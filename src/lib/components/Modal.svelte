@@ -83,8 +83,13 @@
   .modal-overlay {
     position: fixed;
     inset: 0;
+    /* Opaque-enough scrim (rgba 0.7) carries the dim. The previous
+       backdrop-filter: blur(4px) made the first-paint of every modal
+       a full-viewport blur computation — expensive at 4K under software
+       compositing and unnecessary visually given the dark scrim. P1 from
+       the 2026-05-11 architecture review and aligns with project policy
+       on no blur in modals. */
     background: rgba(0, 0, 0, 0.7);
-    backdrop-filter: blur(4px);
     display: flex;
     align-items: center;
     justify-content: center;

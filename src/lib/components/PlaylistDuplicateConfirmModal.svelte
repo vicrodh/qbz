@@ -1,6 +1,6 @@
 <script lang="ts">
   import { t } from '$lib/i18n';
-  import Modal from './Modal.svelte';
+  import Modal from '$lib/discovery-v2/ModalLite.svelte';
   import type { PlaylistDuplicateResult } from '$lib/types/index';
 
   interface Props {

@@ -5,7 +5,7 @@
     Search, X, Download, Check, LoaderCircle, Music, Disc3, ShoppingBag,
     ChevronDown, LayoutGrid, List
   } from 'lucide-svelte';
-  import AlbumCard from '../AlbumCard.svelte';
+  import AlbumCard from '$lib/discovery-v2/AlbumCardLibraryLite.svelte';
   import { formatQuality } from '$lib/adapters/qobuzAdapters';
   import { getPurchasesByType, getPurchaseIds, searchPurchases, getDownloadedTrackIds, getFormats } from '$lib/services/purchases';
   import { allTrackStatuses, startTrackDownload, type TrackDownloadStatus } from '$lib/stores/purchaseDownloadStore';
@@ -859,10 +859,7 @@
                     title={album.title}
                     artist={album.artist.name}
                     quality={formatQualityLabel(album.maximum_bit_depth, album.maximum_sampling_rate)}
-                    releaseDate={formatPurchaseDate(album.purchased_at)}
-                    onclick={() => album.downloadable && onAlbumClick?.(album.id)}
-                    showFavorite={false}
-                    showGenre={false}
+                    onClick={() => album.downloadable && onAlbumClick?.(album.id)}
                   />
                   {#if !album.downloadable}
                     <div class="unavailable-overlay">

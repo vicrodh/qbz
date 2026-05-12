@@ -33,7 +33,9 @@
   import { applyShiftRange, isSelectAllShortcut } from '$lib/utils/multiSelect';
   import { downloadSettingsVersion } from '$lib/stores/downloadSettingsStore';
   import { showToast, dismissBuffering } from '$lib/stores/toastStore';
-  import AlbumCard from '../AlbumCard.svelte';
+  import AlbumCard from '$lib/discovery-v2/AlbumCardLibraryLite.svelte';
+  import AlbumGridPool from '$lib/discovery-v2/AlbumGridPool.svelte';
+  import { LocalAlbumsChunkedStore } from '$lib/discovery-v2/localAlbumsChunkedStore.svelte';
   import VirtualizedAlbumList from '../VirtualizedAlbumList.svelte';
   import VirtualizedArtistGrid from '../VirtualizedArtistGrid.svelte';
   import VirtualizedArtistList from '../VirtualizedArtistList.svelte';
@@ -994,7 +996,11 @@
   let showHiddenAlbums = $state(false);
   let albumSearch = $state('');
   let folderSearch = $state('');
-  let albumViewMode = $state<'grid' | 'list'>('grid');
+  // Default to list view per 2026-05-12 user call: list mode runs
+  // acceptably under SW compositing and is the safer default. Users
+  // can toggle to grid via the controls; persistence is in-session
+  // only.
+  let albumViewMode = $state<'grid' | 'list'>('list');
   type AlbumGroupMode = 'alpha' | 'artist';
   let albumGroupMode = $state<AlbumGroupMode>('alpha');
   let albumGroupingEnabled = $state(false);
@@ -1275,6 +1281,14 @@
   let metadataAlbums = $state<LocalAlbum[]>([]);
   let metadataAlbumsLoading = $state(false);
   let metadataAlbumsLoaded = $state(false);
+
+  /** Chunked album store — backs the Plex-style recycling-grid pool on
+   *  the Albums tab when grouping is off and no quality filters are
+   *  active. Hydrated via `$effect` that mirrors search/sort/filter
+   *  state into `setParams`. Other paths (grouped grid, list mode,
+   *  quality-filtered) continue to read from `metadataAlbums` via the
+   *  legacy `VirtualizedAlbumList`. */
+  const metadataAlbumsChunked = new LocalAlbumsChunkedStore();
   let hiddenAlbums = $state<LocalAlbum[]>([]);
   let artists = $state<LocalArtist[]>([]);
   let tracks = $state<LocalTrack[]>([]);
@@ -2339,6 +2353,30 @@
   // Same pipeline for the metadata-grouped Albums tab
   let filteredAndGroupedMetadataAlbums = $derived.by(() => buildFilteredAndGroupedAlbums(metadataAlbums));
 
+  /** Push search/sort/filter state into the chunked store whenever any
+   *  of them change. The store no-ops if the params are unchanged, so
+   *  this is safe to run every reactive tick. We only feed the store
+   *  while the Albums tab is the active view — chunk 0 + total count
+   *  is one round-trip to the backend, cheap but not free. */
+  $effect(() => {
+    if (activeTab !== 'albums') return;
+    if (albumViewMode !== 'grid') return;
+    if (albumGroupingEnabled) return;
+    if (hasActiveFilters) return;
+    // Plex now consolidated in the backend via ATTACH + UNION when
+    // `include_plex` is passed. Users with Plex-dominant libraries
+    // get the chunked-store benefit too.
+    const mappedSortBy: 'artist' | 'title' | 'year' =
+      sortBy === 'title' || sortBy === 'year' ? sortBy : 'artist';
+    void metadataAlbumsChunked.setParams({
+      search: debouncedAlbumSearch,
+      sortBy: mappedSortBy,
+      sortDir: sortDirection,
+      excludeNetworkFolders: shouldExcludeNetworkFolders(),
+      includePlex: isPlexLibraryEnabled(),
+    });
+  });
+
   // Albums for the selected artist (used in artist view two-column layout)
   // Includes multi-artist albums where the selected artist appears
   let selectedArtistAlbums = $derived.by(() => {
@@ -2987,11 +3025,22 @@
     return enabled && baseUrl.length > 0 && token.length > 0;
   }
 
-  function buildPlexArtworkUrl(path: string): string {
+  /**
+   * Build a Plex artwork URL. When `size` is provided, wraps the path
+   * in `/photo/:/transcode` so the Plex server returns a resized image
+   * (server-side downscale) — critical for thumbnail contexts where
+   * the original artwork is typically 1000x1000+ and blowing through
+   * decode + memory budget otherwise. When `size` is omitted, returns
+   * the original full-resolution path (used by AlbumDetailView).
+   */
+  function buildPlexArtworkUrl(path: string, size?: number): string {
     const baseUrl = getUserItem('qbz-plex-poc-base-url') || '';
     const token = getUserItem('qbz-plex-poc-token') || '';
     if (!baseUrl || !token) return path;
     const base = baseUrl.replace(/\/+$/, '');
+    if (size && size > 0) {
+      return `${base}/photo/:/transcode?url=${encodeURIComponent(path)}&width=${size}&height=${size}&minSize=1&X-Plex-Token=${encodeURIComponent(token)}`;
+    }
     const separator = path.includes('?') ? '&' : '?';
     return `${base}${path}${separator}X-Plex-Token=${encodeURIComponent(token)}`;
   }
@@ -4570,7 +4619,7 @@
   function getArtworkUrl(path?: string): string {
     if (!path) return '';
     if (/^https?:\/\//i.test(path)) return path;
-    if (path.startsWith('/library/')) return buildPlexArtworkUrl(path);
+    if (path.startsWith('/library/')) return buildPlexArtworkUrl(path, 220);
 
     // For grid/list views, prefer thumbnails
     const cachedThumb = thumbnailUrlCache.get(path);
@@ -6411,25 +6460,75 @@
             {:else}
               <div class="album-sections virtualized">
                 <div class="virtualized-container">
-                  <VirtualizedAlbumList
-                    groups={groupedMetadataAlbums}
-                    viewMode={albumViewMode}
-                    showGroupHeaders={albumGroupingEnabled}
-                    {getArtworkUrl}
-                    getQualityBadge={getAlbumQualityBadge}
-                    isHiRes={isAlbumHiRes}
-                    formatDuration={formatTotalDuration}
-                    onAlbumClick={handleAlbumClick}
-                    onAlbumPlay={handleAlbumPlayFromGrid}
-                    onAlbumQueueNext={handleAlbumQueueNextFromGrid}
-                    onAlbumQueueLater={handleAlbumQueueLaterFromGrid}
-                    scrollToGroupId={virtualizedScrollTarget}
-                    showSourceBadge={true}
-                    selectable={albumSelectMode}
-                    selectedAlbumIds={selectedAlbumIds}
-                    onAlbumToggleSelect={toggleAlbumSelect}
-                    onAlbumToggleSelectRange={addAlbumsToSelection}
-                  />
+                  {#if albumViewMode === 'grid' && !albumGroupingEnabled && !hasActiveFilters}
+                    <!-- Chunked path: on-demand fetch via Tauri command
+                         per chunk, recycling-pool render. The pool
+                         binds to the chunked store's reactive
+                         `total` + `version`. Falls back to the legacy
+                         path below when grouping or quality filters
+                         are on (those don't have backend support yet). -->
+                    {#snippet renderMetadataAlbumCell(album: LocalAlbum, _idx: number)}
+                      <AlbumCard
+                        albumId={album.id}
+                        year={album.year}
+                        trackCount={album.track_count}
+                        artwork={getArtworkUrl(album.artwork_path)}
+                        title={album.title}
+                        artist={album.artist}
+                        quality={getAlbumQualityBadge(album)}
+                        onPlay={() => handleAlbumPlayFromGrid(album)}
+                        onPlayNext={() => handleAlbumQueueNextFromGrid(album)}
+                        onPlayLater={() => handleAlbumQueueLaterFromGrid(album)}
+                        onClick={() => handleAlbumClick(album)}
+                        sourceBadge={album.source === 'plex' ? 'plex' : album.source === 'qobuz_purchase' ? 'qobuz_purchase' : album.source === 'qobuz_download' ? 'qobuz_download' : 'user'}
+                        selectable={albumSelectMode}
+                        selected={selectedAlbumIds.has(album.id)}
+                        onToggleSelect={() => toggleAlbumSelect(album)}
+                      />
+                    {/snippet}
+                    {#snippet renderMetadataAlbumPlaceholder(_idx: number)}
+                      <!-- Static skeleton: 210x210 cover block + 14px
+                           title bar + 12px artist bar + 14px quality
+                           pill. No shimmer, no animation — the shape
+                           alone signals "loading" without paint per
+                           frame. Matches the loaded card dimensions
+                           so layout doesn't shift on rebind. -->
+                      <div class="album-skeleton" aria-hidden="true">
+                        <div class="album-skeleton-cover"></div>
+                        <div class="album-skeleton-line album-skeleton-title"></div>
+                        <div class="album-skeleton-line album-skeleton-artist"></div>
+                        <div class="album-skeleton-line album-skeleton-quality"></div>
+                      </div>
+                    {/snippet}
+                    <AlbumGridPool
+                      totalCount={metadataAlbumsChunked.total}
+                      getItem={(i) => metadataAlbumsChunked.getAlbum(i) as LocalAlbum | null}
+                      onNeedIndex={(i) => metadataAlbumsChunked.requestIndex(i)}
+                      dataVersion={metadataAlbumsChunked.version}
+                      renderCell={renderMetadataAlbumCell}
+                      renderPlaceholder={renderMetadataAlbumPlaceholder}
+                    />
+                  {:else}
+                    <VirtualizedAlbumList
+                      groups={groupedMetadataAlbums}
+                      viewMode={albumViewMode}
+                      showGroupHeaders={albumGroupingEnabled}
+                      {getArtworkUrl}
+                      getQualityBadge={getAlbumQualityBadge}
+                      isHiRes={isAlbumHiRes}
+                      formatDuration={formatTotalDuration}
+                      onAlbumClick={handleAlbumClick}
+                      onAlbumPlay={handleAlbumPlayFromGrid}
+                      onAlbumQueueNext={handleAlbumQueueNextFromGrid}
+                      onAlbumQueueLater={handleAlbumQueueLaterFromGrid}
+                      scrollToGroupId={virtualizedScrollTarget}
+                      showSourceBadge={true}
+                      selectable={albumSelectMode}
+                      selectedAlbumIds={selectedAlbumIds}
+                      onAlbumToggleSelect={toggleAlbumSelect}
+                      onAlbumToggleSelectRange={addAlbumsToSelection}
+                    />
+                  {/if}
                 </div>
               </div>
             {/if}
@@ -6536,13 +6635,10 @@
                         title={album.title}
                         artist={album.artist}
                         quality={getAlbumQualityBadge(album)}
-                        size="large"
-                        showFavorite={false}
-                        showGenre={false}
                         onPlay={() => handleAlbumPlayFromGrid(album)}
                         onPlayNext={() => handleAlbumQueueNextFromGrid(album)}
                         onPlayLater={() => handleAlbumQueueLaterFromGrid(album)}
-                        onclick={() => handleAlbumClick(album)}
+                        onClick={() => handleAlbumClick(album)}
                         sourceBadge={album.source === 'plex' ? 'plex' : album.source === 'qobuz_purchase' ? 'qobuz_purchase' : album.source === 'qobuz_download' ? 'qobuz_download' : 'user'}
                       />
                     {/each}
@@ -7896,6 +7992,30 @@
     margin-top: 8px;
   }
 
+  /* Skeleton placeholder for chunked-album grid slots whose data is
+     still in flight. Static blocks only — no shimmer, no animation;
+     the shape signals "loading" without paint per frame. */
+  .album-skeleton {
+    width: 210px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .album-skeleton-cover {
+    width: 210px;
+    height: 210px;
+    border-radius: 8px;
+    background: var(--bg-tertiary);
+  }
+  .album-skeleton-line {
+    height: 12px;
+    border-radius: 3px;
+    background: var(--bg-tertiary);
+  }
+  .album-skeleton-title { width: 80%; height: 14px; margin-top: 2px; }
+  .album-skeleton-artist { width: 60%; }
+  .album-skeleton-quality { width: 90px; height: 14px; border-radius: 4px; margin-top: 2px; }
+
   /* Album Grid */
   .album-sections {
     display: flex;
@@ -7905,7 +8025,13 @@
 
   .album-sections.virtualized {
     flex: 1;
-    height: calc(100vh - 280px); /* Adjust based on header/controls height */
+    /* `100vh - 280` over-extended past the NowPlayingBar (104px tall
+       at the bottom) once we forced the scrollbar always visible —
+       the bar ran to viewport-bottom instead of ending at the player.
+       Bumped subtraction to 360 to clear the player + controls
+       above the grid; the min-height keeps the area reasonable on
+       small windows. */
+    height: calc(100vh - 360px);
     min-height: 400px;
   }
 

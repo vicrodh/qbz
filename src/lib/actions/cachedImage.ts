@@ -9,14 +9,22 @@
  */
 
 import { getCachedImageUrl, getResolvedIfCached } from '$lib/services/imageCacheService';
+import { isHardwareAccelEnabled } from '$lib/runtime/graphicsState';
 
 export function cachedSrc(node: HTMLImageElement, url: string | undefined) {
   let currentUrl = url;
 
-  // Force own compositing layer to prevent WebKitGTK 2.50+ texture
-  // eviction during repaints (causes placeholder flash on hover/scroll)
-  node.style.willChange = 'transform';
-  node.style.transform = 'translateZ(0)';
+  // WebKitGTK 2.50+ evicts <img> textures from its compositor cache during
+  // rapid repaints (hover, scroll) which manifests as a flash of the
+  // placeholder background. Forcing the image into its own compositor
+  // layer prevents the eviction. We only apply this under hardware
+  // acceleration: under software compositing each "layer" is just an
+  // extra CPU framebuffer, which makes the cure worse than the disease
+  // for big card grids (confirmed 2026-05-12 perf session). See ADR-004.
+  if (isHardwareAccelEnabled()) {
+    node.style.willChange = 'transform';
+    node.style.transform = 'translateZ(0)';
+  }
 
   // Sync cache hit? Set the src immediately, no opacity dance. This is
   // the common path when preloadImages has already primed the map

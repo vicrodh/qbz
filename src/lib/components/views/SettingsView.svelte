@@ -111,6 +111,7 @@
     getMatchSystemWindowChrome,
     setMatchSystemWindowChrome,
   } from '$lib/stores/windowChromeStore';
+  import { isHardwareAccelEnabled } from '$lib/runtime/graphicsState';
   import {
     subscribe as subscribeSearchBarLocation,
     getSearchBarLocation,
@@ -4828,14 +4829,17 @@
       <div class="setting-info">
         <span class="setting-label">{$t('settings.appearance.matchSystemChrome')}</span>
         <span class="setting-desc">{$t('settings.appearance.matchSystemChromeDesc')}</span>
+        {#if !isHardwareAccelEnabled()}
+          <small class="setting-note">{$t('settings.appearance.matchSystemChromeCpuOverride')}</small>
+        {/if}
       </div>
       <Toggle
-        enabled={matchSystemWindowChromeState}
+        enabled={matchSystemWindowChromeState && isHardwareAccelEnabled()}
         onchange={(v) => {
           setMatchSystemWindowChrome(v);
           showToast($t('settings.appearance.matchSystemChromeRestart'), 'info');
         }}
-        disabled={hideTitleBar || useSystemTitleBar}
+        disabled={hideTitleBar || useSystemTitleBar || !isHardwareAccelEnabled()}
       />
     </div>
     {/if}

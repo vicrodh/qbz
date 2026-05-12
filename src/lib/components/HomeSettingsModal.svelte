@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { ChevronUp, ChevronDown, RotateCcw } from 'lucide-svelte';
-  import Modal from './Modal.svelte';
+  import Modal from '$lib/discovery-v2/ModalLite.svelte';
   import {
     getSettings,
     subscribe,

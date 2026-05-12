@@ -1498,12 +1498,21 @@
   // is a library-relative URI like /library/metadata/123/thumb/…,
   // which only resolves when combined with the configured base URL +
   // X-Plex-Token. Matches LocalLibraryView's buildPlexArtworkUrl.
-  function buildPlexArtworkUrl(path: string): string {
+  /**
+   * Build a Plex artwork URL. When `size` is provided, wraps the path
+   * in `/photo/:/transcode` so Plex returns a server-side resized
+   * image (critical for thumbnail rows; the original is typically
+   * 1000x1000+). Without `size`, returns the original full-res URL.
+   */
+  function buildPlexArtworkUrl(path: string, size?: number): string {
     if (path.startsWith('http://') || path.startsWith('https://')) return path;
     const baseUrl = getUserItem('qbz-plex-poc-base-url') || '';
     const token = getUserItem('qbz-plex-poc-token') || '';
     if (!baseUrl || !token) return path;
     const base = baseUrl.replace(/\/+$/, '');
+    if (size && size > 0) {
+      return `${base}/photo/:/transcode?url=${encodeURIComponent(path)}&width=${size}&height=${size}&minSize=1&X-Plex-Token=${encodeURIComponent(token)}`;
+    }
     const separator = path.includes('?') ? '&' : '?';
     return `${base}${path}${separator}X-Plex-Token=${encodeURIComponent(token)}`;
   }
@@ -1527,7 +1536,7 @@
       title: track.title,
       artist: track.artist,
       album: track.album,
-      albumArt: track.artwork_path ? buildPlexArtworkUrl(track.artwork_path) : undefined,
+      albumArt: track.artwork_path ? buildPlexArtworkUrl(track.artwork_path, 220) : undefined,
       duration: formatDuration(track.duration_secs),
       durationSeconds: track.duration_secs,
       hires: (track.bit_depth && track.bit_depth >= 24) || track.sample_rate > 48000,

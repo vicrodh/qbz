@@ -1,6 +1,6 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
-  import Modal from './Modal.svelte';
+  import Modal from '$lib/discovery-v2/ModalLite.svelte';
   import { GripVertical, Eye, EyeOff } from 'lucide-svelte';
   import { t } from '$lib/i18n';
   import type { LibraryPreferences } from '../types';

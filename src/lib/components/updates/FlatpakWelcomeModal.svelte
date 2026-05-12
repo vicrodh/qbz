@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Modal from '../Modal.svelte';
+  import Modal from '$lib/discovery-v2/ModalLite.svelte';
   import { Package } from 'lucide-svelte';
   import { t } from '$lib/i18n';
 

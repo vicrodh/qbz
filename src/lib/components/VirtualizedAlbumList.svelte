@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { Disc3 } from 'lucide-svelte';
-  import AlbumCard from './AlbumCard.svelte';
+  import AlbumCard from '$lib/discovery-v2/AlbumCardLibraryLite.svelte';
   import { restoreScrollOnBackForward } from '$lib/utils/scrollRestore';
 
   // Types
@@ -113,9 +113,9 @@
   // Constants
   const HEADER_HEIGHT = 44; // px
   const LIST_ROW_HEIGHT = 76; // px (52px art + padding + gap)
-  const GRID_ROW_HEIGHT = 320; // px (210px artwork + 8px margin + ~64px info + 24px gap + buffer)
-  const GRID_MIN_CARD_WIDTH = 210; // px - matches AlbumCard size="large"
-  const GRID_GAP = 22; // px (horizontal gap between cards)
+  const GRID_ROW_HEIGHT = 330; // px (220px artwork + 8px margin + ~64px info + 32px gap + buffer)
+  const GRID_MIN_CARD_WIDTH = 220; // px - matches Discovery V2 AlbumCardLite for visual consistency across Home + Library
+  const GRID_GAP = 32; // px (horizontal gap between cards — matches Discovery V2)
   const BUFFER_ITEMS = 5; // Extra items to render above/below viewport
   const BOTTOM_PADDING = 100; // px - extra space at bottom for player bar
 
@@ -368,13 +368,10 @@
                 title={album.title}
                 artist={album.artist}
                 quality={getQualityBadge(album)}
-                size="large"
-                showFavorite={false}
-                showGenre={false}
                 onPlay={() => onAlbumPlay(album)}
                 onPlayNext={() => onAlbumQueueNext(album)}
                 onPlayLater={() => onAlbumQueueLater(album)}
-                onclick={() => onAlbumClick(album)}
+                onClick={() => onAlbumClick(album)}
                 sourceBadge={showSourceBadge ? (album.source === 'plex' ? 'plex' : album.source === 'qobuz_purchase' ? 'qobuz_purchase' : album.source === 'qobuz_download' ? 'qobuz_download' : 'user') : undefined}
                 selectable={selectable}
                 selected={selectedAlbumIds.has(album.id)}
@@ -391,9 +388,30 @@
 <style>
   .virtual-container {
     height: 100%;
-    overflow-y: auto;
+    overflow-y: scroll;
     overflow-x: hidden;
     position: relative;
+    /* Force the scrollbar visible (some WebKitGTK builds default to
+       overlay scrollbars that only paint on active hover). Standard
+       `scrollbar-*` + pseudo-elements for cross-config safety.
+       Values match the global app.css scrollbar styling. */
+    scrollbar-width: thin;
+    scrollbar-color: var(--bg-tertiary) transparent;
+  }
+
+  .virtual-container::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .virtual-container::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .virtual-container::-webkit-scrollbar-thumb {
+    background: var(--bg-tertiary);
+    border-radius: 9999px;
+  }
+  .virtual-container::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
   }
 
   .virtual-content {
@@ -527,7 +545,7 @@
   /* Album Grid Row (Grid Mode) */
   .album-grid-row {
     display: flex;
-    gap: 22px;
+    gap: 32px;
     padding: 0;
   }
 

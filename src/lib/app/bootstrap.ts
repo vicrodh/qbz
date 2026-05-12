@@ -16,6 +16,7 @@ import { getNextZoomLevel } from '$lib/utils/zoom';
 import { getUserItem } from '$lib/utils/userStorage';
 import { getZoom, setZoom } from '$lib/stores/zoomStore';
 import { restoreAutoThemeVars } from '$lib/stores/autoThemeStore';
+import { bootstrapGraphicsState } from '$lib/runtime/graphicsState';
 
 // ============ Theme Management ============
 
@@ -75,10 +76,59 @@ function handleZoomWheel(event: WheelEvent): void {
   void applyZoomLevel(nextZoom);
 }
 
+/**
+ * Zoom-on-Ctrl-wheel handling.
+ *
+ * Previously this registered a non-passive, capture-phase `wheel` listener
+ * on `window` for the lifetime of the app. The non-passive flag (required
+ * so `preventDefault` actually stops the WebView's native Ctrl+wheel zoom)
+ * also tells the browser "wait for my handler before applying scroll" —
+ * which kills the native fast-path for *every* wheel event in the app,
+ * not just zoom-modified ones. The user perceived this as choppy mouse-wheel
+ * scrolling vs perfectly-smooth scrollbar-drag scrolling.
+ *
+ * New approach: the wheel listener only exists while Ctrl/Meta is held.
+ * Keydown registers it, keyup (or window blur) unregisters it. Net:
+ *   - 99% of normal scrolling: no wheel listener at all, browser fast-path
+ *   - During zoom (Ctrl held): non-passive listener active, preventDefault
+ *     still blocks native zoom and our `applyZoomLevel` runs
+ */
+const ZOOM_WHEEL_OPTIONS: AddEventListenerOptions = { passive: false, capture: true };
+let zoomWheelActive = false;
+
+function registerZoomWheel(): void {
+  if (zoomWheelActive) return;
+  zoomWheelActive = true;
+  window.addEventListener('wheel', handleZoomWheel, ZOOM_WHEEL_OPTIONS);
+}
+
+function unregisterZoomWheel(): void {
+  if (!zoomWheelActive) return;
+  zoomWheelActive = false;
+  window.removeEventListener('wheel', handleZoomWheel, ZOOM_WHEEL_OPTIONS);
+}
+
+function handleZoomKeyDown(e: KeyboardEvent): void {
+  if (e.ctrlKey || e.metaKey) registerZoomWheel();
+}
+
+function handleZoomKeyUp(e: KeyboardEvent): void {
+  // After any keyup, if neither modifier is held anymore, drop the listener.
+  if (!e.ctrlKey && !e.metaKey) unregisterZoomWheel();
+}
+
 export function setupZoomControls(): () => void {
-  const options: AddEventListenerOptions = { passive: false, capture: true };
-  window.addEventListener('wheel', handleZoomWheel, options);
-  return () => window.removeEventListener('wheel', handleZoomWheel, options);
+  window.addEventListener('keydown', handleZoomKeyDown);
+  window.addEventListener('keyup', handleZoomKeyUp);
+  // Releases the listener if the user alt-tabs with Ctrl held — otherwise
+  // the keyup never fires and we stay in the slow path.
+  window.addEventListener('blur', unregisterZoomWheel);
+  return () => {
+    window.removeEventListener('keydown', handleZoomKeyDown);
+    window.removeEventListener('keyup', handleZoomKeyUp);
+    window.removeEventListener('blur', unregisterZoomWheel);
+    unregisterZoomWheel();
+  };
 }
 
 // ============ Last.fm Session ============
@@ -145,6 +195,11 @@ export function bootstrapApp(): BootstrapResult {
   // Load notification preferences
   loadToastsPreference();
   loadSystemNotificationsPreference();
+
+  // Prime the runtime graphics-state cache so hot paths like `cachedSrc`
+  // can read it sync. Fire-and-forget; falls back to "HW accel ON"
+  // defaults if it errors out (see ADR-004).
+  void bootstrapGraphicsState();
 
   // Setup mouse navigation
   const cleanupMouse = setupMouseNavigation();

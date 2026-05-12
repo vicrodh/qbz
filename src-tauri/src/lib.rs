@@ -540,6 +540,31 @@ fn should_use_main_window_transparency() -> bool {
         return false;
     }
 
+    // Hardware-acceleration gate. A transparent main window forces GTK
+    // to re-paint the client-side decoration chrome (rounded corners +
+    // subtle edge) on every frame. Under GPU compositing the cost is
+    // imperceptible; under SW compositing it becomes the dominant frame-
+    // budget cost — modals, the splash spinner, and anything else that
+    // animates visibly drop frames. Force opaque whenever HW accel is
+    // off, regardless of the user's "match system window chrome"
+    // preference. The preference itself is preserved in the DB and
+    // reactivates automatically the next time HW accel is on.
+    //
+    // Resolution mirrors main.rs: env var QBZ_HARDWARE_ACCEL (0/1)
+    // overrides the DB; otherwise read the DB; otherwise assume on.
+    let hw_accel_enabled = match std::env::var("QBZ_HARDWARE_ACCEL").as_deref() {
+        Ok("0") => false,
+        Ok("1") => true,
+        _ => config::graphics_settings::GraphicsSettingsStore::new_readonly()
+            .ok()
+            .and_then(|s| s.get_settings().ok())
+            .map(|gs| gs.hardware_acceleration)
+            .unwrap_or(true),
+    };
+    if !hw_accel_enabled {
+        return false;
+    }
+
     // Opt-in via persisted settings: "match system window chrome" wants
     // rounded corners, which need a transparent window so the webview
     // background stops painting white outside the radius.
@@ -1763,6 +1788,7 @@ pub fn run(qconnect_cli_override: Option<bool>) {
             commands_v2::v2_library_get_stats,
             commands_v2::v2_library_get_albums,
             commands_v2::v2_library_get_albums_metadata,
+            commands_v2::v2_library_get_albums_page,
             commands_v2::v2_library_get_folders,
             commands_v2::v2_library_get_folders_with_metadata,
             commands_v2::v2_library_count_folder_tracks,

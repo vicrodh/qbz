@@ -2580,6 +2580,63 @@ pub async fn v2_library_get_albums_metadata(
     .map_err(|e| e.to_string())
 }
 
+/// V2 paginated metadata-grouped albums for Local Library. Backs the
+/// recycling-grid pool + chunked store on the frontend: caller asks for
+/// `[offset, offset+limit)` and receives that page plus the total count
+/// of albums matching the same filter (drives scrollbar pre-allocation).
+///
+/// When `include_plex` is true and the `plex_cache.db` cache file
+/// exists in the user's data dir, the result is the UNION of local and
+/// plex sources — sort, filter, and pagination apply to both at once.
+#[tauri::command]
+pub async fn v2_library_get_albums_page(
+    offset: u64,
+    limit: u64,
+    search: Option<String>,
+    sort_by: Option<String>,
+    sort_dir: Option<String>,
+    exclude_network_folders: Option<bool>,
+    include_plex: Option<bool>,
+    state: State<'_, LibraryState>,
+    download_settings_state: State<'_, DownloadSettingsState>,
+) -> Result<qbz_library::AlbumsMetadataPage, String> {
+    let include_qobuz = download_settings_state
+        .lock()
+        .map_err(|e| format!("Failed to lock download settings: {}", e))?
+        .as_ref()
+        .and_then(|s| s.get_settings().ok())
+        .map(|s| s.show_in_library)
+        .unwrap_or(false);
+
+    // Resolve the plex_cache.db path the same way `plex/mod.rs`
+    // does (`dirs::data_dir() + qbz/plex_cache.db`). The qbz-library
+    // crate doesn't know about Plex — passing `None` here keeps the
+    // local-only behavior; passing the path lets the SQL ATTACH + UNION
+    // light up.
+    let plex_path: Option<std::path::PathBuf> = if include_plex.unwrap_or(false) {
+        dirs::data_dir().map(|d| d.join("qbz").join("plex_cache.db"))
+    } else {
+        None
+    };
+
+    let guard__ = state.db.lock().await;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
+
+    db.get_albums_metadata_page(
+        offset,
+        limit,
+        search.as_deref(),
+        sort_by.as_deref().unwrap_or("artist"),
+        sort_dir.as_deref().unwrap_or("asc"),
+        include_qobuz,
+        exclude_network_folders.unwrap_or(false),
+        plex_path.as_deref(),
+    )
+    .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub async fn v2_library_get_stats(
     state: State<'_, LibraryState>,

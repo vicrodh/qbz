@@ -2,7 +2,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import { t } from '$lib/i18n';
   import { Link2 } from 'lucide-svelte';
-  import Modal from './Modal.svelte';
+  import Modal from '$lib/discovery-v2/ModalLite.svelte';
 
   interface ResolvedLink {
     type: 'OpenAlbum' | 'OpenTrack' | 'OpenArtist' | 'OpenPlaylist';

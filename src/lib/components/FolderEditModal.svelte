@@ -1,6 +1,6 @@
 <script lang="ts">
   import { open } from '@tauri-apps/plugin-dialog';
-  import Modal from './Modal.svelte';
+  import Modal from '$lib/discovery-v2/ModalLite.svelte';
   import { Heart, Star, Music, Folder, Disc, Library, Headphones, Upload, Eye, EyeOff } from 'lucide-svelte';
   import { t } from '$lib/i18n';
   import type { PlaylistFolder } from '$lib/stores/playlistFoldersStore';

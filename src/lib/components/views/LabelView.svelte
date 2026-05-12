@@ -8,7 +8,7 @@
   import BulkActionBar from '../BulkActionBar.svelte';
   import { openAddToMixtape } from '$lib/stores/addToMixtapeModalStore';
   import { t } from '$lib/i18n';
-  import AlbumCard from '../AlbumCard.svelte';
+  import AlbumCard from '$lib/discovery-v2/AlbumCardLite.svelte';
   import HorizontalScrollRow from '../HorizontalScrollRow.svelte';
   import QobuzPlaylistCard from '../QobuzPlaylistCard.svelte';
   import TrackMenu from '../TrackMenu.svelte';
@@ -699,6 +699,13 @@
     await Promise.all(albumList.map(album => loadAlbumOfflineCacheStatus(album.id)));
   }
 
+  /** Bind an album's artistId into a no-arg callback for
+   *  AlbumCardLite's `onArtistClick: () => void`. */
+  function makeArtistClickHandler(artistId: number | undefined): (() => void) | undefined {
+    if (artistId === undefined || !onArtistClick) return undefined;
+    return () => onArtistClick(artistId);
+  }
+
   function isAlbumDownloaded(albumId: string): boolean {
     void downloadStateVersion;
     return albumOfflineCacheStatuses.get(albumId) || false;
@@ -1164,22 +1171,18 @@
                 artwork={album.image?.small || album.image?.thumbnail || ''}
                 title={album.title}
                 artist={album.artist?.name || ''}
-                artistId={album.artist?.id}
-                onArtistClick={onArtistClick}
-                releaseDate={album.release_date_original}
-                size="large"
-                onclick={() => onAlbumClick?.(album.id)}
+                releaseYear={Number(album.release_date_original?.slice(0, 4)) || undefined}
+                isAlbumFullyDownloaded={isAlbumDownloaded(album.id)}
+                onArtistClick={makeArtistClickHandler(album.artist?.id)}
+                onClick={() => onAlbumClick?.(album.id)}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                 onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
                 onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
-                onAddAlbumToPlaylist={onAddAlbumToPlaylist ? () => onAddAlbumToPlaylist(album.id) : undefined}
+                onAddToPlaylist={onAddAlbumToPlaylist ? () => onAddAlbumToPlaylist(album.id) : undefined}
                 onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
                 onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
                 onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
-                isAlbumFullyDownloaded={isAlbumDownloaded(album.id)}
-                onOpenContainingFolder={onOpenAlbumFolder ? () => onOpenAlbumFolder(album.id) : undefined}
                 onReDownloadAlbum={onReDownloadAlbum ? () => onReDownloadAlbum(album.id) : undefined}
-                {downloadStateVersion}
               />
             {/each}
             <div class="spacer"></div>
@@ -1199,18 +1202,15 @@
                 artwork={album.image?.small || album.image?.thumbnail || ''}
                 title={album.title}
                 artist={album.artist?.name || ''}
-                artistId={album.artist?.id}
-                onArtistClick={onArtistClick}
-                releaseDate={album.release_date_original}
-                size="large"
-                onclick={() => onAlbumClick?.(album.id)}
+                releaseYear={Number(album.release_date_original?.slice(0, 4)) || undefined}
+                onArtistClick={makeArtistClickHandler(album.artist?.id)}
+                onClick={() => onAlbumClick?.(album.id)}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                 onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
                 onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
-                onAddAlbumToPlaylist={onAddAlbumToPlaylist ? () => onAddAlbumToPlaylist(album.id) : undefined}
+                onAddToPlaylist={onAddAlbumToPlaylist ? () => onAddAlbumToPlaylist(album.id) : undefined}
                 onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
                 onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
-                {downloadStateVersion}
               />
             {/each}
             <div class="spacer"></div>

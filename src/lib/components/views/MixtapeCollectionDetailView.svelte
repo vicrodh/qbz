@@ -996,11 +996,21 @@
 
   let resolvedById = $state<Record<string, ResolvedItem>>({});
 
-  function buildPlexArtworkUrl(path: string): string | null {
+  /**
+   * Build a Plex artwork URL. When `size` is provided, wraps the path
+   * in `/photo/:/transcode` so the Plex server returns a resized image
+   * (server-side downscale). Without `size`, returns the original
+   * full-res path. Mixtape items render at thumbnail-sized rows so
+   * 220px is plenty.
+   */
+  function buildPlexArtworkUrl(path: string, size?: number): string | null {
     const baseUrl = (getUserItem('qbz-plex-poc-base-url') || '').trim();
     const token = (getUserItem('qbz-plex-poc-token') || '').trim();
     if (!baseUrl || !token) return null;
     const base = baseUrl.replace(/\/+$/, '');
+    if (size && size > 0) {
+      return `${base}/photo/:/transcode?url=${encodeURIComponent(path)}&width=${size}&height=${size}&minSize=1&X-Plex-Token=${encodeURIComponent(token)}`;
+    }
     const separator = path.includes('?') ? '&' : '?';
     return `${base}${path}${separator}X-Plex-Token=${encodeURIComponent(token)}`;
   }
@@ -1070,7 +1080,7 @@
         next[key] = {
           kind: 'plex',
           artworkUrl: plexHit.artworkPath
-            ? buildPlexArtworkUrl(plexHit.artworkPath)
+            ? buildPlexArtworkUrl(plexHit.artworkPath, 220)
             : null,
           bitDepth: plexHit.bitDepth ?? null,
           sampleRateKhz: plexHit.sampleRate ? plexHit.sampleRate / 1000 : null,

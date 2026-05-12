@@ -1879,6 +1879,400 @@ impl LibraryDatabase {
         Ok(albums)
     }
 
+    /// Paginated, sort/filter-aware slice of metadata-grouped local
+    /// albums. Designed to back the chunked-store + recycling-grid pool
+    /// on the frontend: caller asks for `[offset, offset+limit)` and
+    /// receives those rows plus the total count of rows matching the
+    /// same filter (via `COUNT(*) OVER ()`).
+    ///
+    /// Sort: one of `"artist"` (default), `"title"`, `"year"`, paired
+    /// with direction `"asc"` (default) or `"desc"`. Unknown values
+    /// fall back to artist-ascending. Albums with no `year` always sink
+    /// to the bottom for the year sort.
+    ///
+    /// Search: a non-empty `search` becomes a `LIKE '%pattern%'` match
+    /// applied after aggregation against the album's title or artist
+    /// (mirrors the legacy in-memory `matchesAlbumSearchFast`).
+    ///
+    /// Source consolidation: when `plex_cache_path` is provided and
+    /// points to an existing file, the function `ATTACH`es that
+    /// database and unions plex_cache_tracks (aggregated by album_key)
+    /// with the local aggregation. Sort, filter, and pagination apply
+    /// to the union as a single result set, so a Plex-dominant library
+    /// behaves identically to a local-dominant one.
+    pub fn get_albums_metadata_page(
+        &self,
+        offset: u64,
+        limit: u64,
+        search: Option<&str>,
+        sort_by: &str,
+        sort_dir: &str,
+        include_qobuz_downloads: bool,
+        exclude_network_folders: bool,
+        plex_cache_path: Option<&std::path::Path>,
+    ) -> Result<crate::models::AlbumsMetadataPage, LibraryError> {
+        // Best-effort ATTACH of the Plex cache so the union below can
+        // see `plex_cache.plex_cache_tracks`. DETACH first defensively
+        // so a stale attachment from a previous call (or another
+        // connection user) doesn't fail the new one. Failure to
+        // attach is non-fatal — we fall back to local-only.
+        let plex_attached = if let Some(path) = plex_cache_path {
+            if path.exists() {
+                let _ = self.conn.execute("DETACH DATABASE plex_cache", []);
+                let path_str = path.to_string_lossy().replace('\'', "''");
+                self.conn
+                    .execute(
+                        &format!("ATTACH DATABASE '{}' AS plex_cache", path_str),
+                        [],
+                    )
+                    .is_ok()
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+        let result = self.get_albums_metadata_page_inner(
+            offset,
+            limit,
+            search,
+            sort_by,
+            sort_dir,
+            include_qobuz_downloads,
+            exclude_network_folders,
+            plex_attached,
+        );
+        if plex_attached {
+            let _ = self.conn.execute("DETACH DATABASE plex_cache", []);
+        }
+        result
+    }
+
+    fn get_albums_metadata_page_inner(
+        &self,
+        offset: u64,
+        limit: u64,
+        search: Option<&str>,
+        sort_by: &str,
+        sort_dir: &str,
+        include_qobuz_downloads: bool,
+        exclude_network_folders: bool,
+        plex_attached: bool,
+    ) -> Result<crate::models::AlbumsMetadataPage, LibraryError> {
+        let source_filter = if include_qobuz_downloads {
+            ""
+        } else {
+            "AND (source IS NULL OR source != 'qobuz_download')"
+        };
+
+        let network_filter = if exclude_network_folders {
+            "AND NOT EXISTS (
+                SELECT 1 FROM library_folders nf
+                WHERE nf.is_network = 1
+                AND local_tracks.file_path LIKE nf.path || '%'
+            )"
+        } else {
+            ""
+        };
+
+        // ORDER BY clause is built from a validated allowlist so user
+        // input never reaches the SQL string directly. The unknown-album
+        // sentinel always sorts last regardless of mode.
+        let order_clause = match (sort_by, sort_dir) {
+            ("title", "asc") => "(group_key = '__unknown_album__'), title COLLATE NOCASE",
+            ("title", "desc") => "(group_key = '__unknown_album__'), title COLLATE NOCASE DESC",
+            ("year", "asc") => "(group_key = '__unknown_album__'), year IS NULL, year ASC, title COLLATE NOCASE",
+            ("year", "desc") => "(group_key = '__unknown_album__'), year IS NULL, year DESC, title COLLATE NOCASE",
+            ("artist", "desc") => "(group_key = '__unknown_album__'), artist COLLATE NOCASE DESC, title COLLATE NOCASE",
+            // Default = artist asc
+            _ => "(group_key = '__unknown_album__'), artist COLLATE NOCASE, title COLLATE NOCASE",
+        };
+
+        let group_key_expr = crate::album_grouping::metadata_group_key_sql_expression();
+
+        let search_pattern = search.unwrap_or("").trim();
+        let has_search: i64 = if search_pattern.is_empty() { 0 } else { 1 };
+        let search_like = format!("%{}%", search_pattern);
+
+        // When Plex is attached, the plex_aggregated CTE is appended
+        // and the filtered set is built from the UNION of local + plex.
+        // Both CTEs produce the same column shape so the UNION ALL is
+        // straightforward; types are normalised via CAST in the plex
+        // arm (plex stores duration_ms / sampling_rate_hz as INTEGER
+        // while local uses REAL for sample_rate and seconds-INTEGER
+        // for duration).
+        let plex_cte = if plex_attached {
+            r#",
+            plex_aggregated AS (
+                SELECT
+                    -- `album_key` is populated by plex/mod.rs::plex_album_key()
+                    -- which already returns `"plex:<hash>"`. Only the
+                    -- rating_key fallback needs the prefix added.
+                    COALESCE(album_key, 'plex:' || rating_key) AS group_key,
+                    COALESCE(album, 'Unknown Album') AS title,
+                    CASE WHEN COUNT(DISTINCT artist) > 1
+                         THEN 'Various Artists'
+                         ELSE COALESCE(MIN(artist), 'Unknown Artist')
+                    END AS artist,
+                    GROUP_CONCAT(DISTINCT artist) AS all_artists,
+                    MIN(year) AS year,
+                    CAST(NULL AS TEXT) AS catalog_number,
+                    MAX(CASE WHEN artwork_path IS NOT NULL THEN artwork_path END) AS artwork,
+                    COUNT(*) AS track_count,
+                    CAST(SUM(COALESCE(duration_ms, 0)) / 1000 AS INTEGER) AS total_duration,
+                    MAX(codec) AS format,
+                    MAX(bit_depth) AS bit_depth,
+                    CAST(MAX(sampling_rate_hz) AS REAL) AS sample_rate,
+                    CAST(NULL AS TEXT) AS source_folders,
+                    'plex' AS source
+                FROM plex_cache.plex_cache_tracks
+                GROUP BY COALESCE(album_key, 'plex:' || rating_key)
+            )"#
+        } else {
+            ""
+        };
+
+        let unioned_clause = if plex_attached {
+            "SELECT * FROM aggregated UNION ALL SELECT * FROM plex_aggregated"
+        } else {
+            "SELECT * FROM aggregated"
+        };
+
+        let query = format!(
+            r#"
+            WITH grouped AS (
+                SELECT
+                    {group_key} AS group_key,
+                    COALESCE(album_group_title, album, 'Unknown Album') AS title,
+                    COALESCE(album_artist, artist, 'Unknown Artist') AS artist,
+                    year,
+                    catalog_number,
+                    artwork_path,
+                    duration_secs,
+                    format,
+                    bit_depth,
+                    sample_rate,
+                    album_group_key AS source_folder,
+                    COALESCE(source, 'user') AS source,
+                    artist AS track_artist
+                FROM local_tracks
+                WHERE 1=1 {source_filter} {network_filter}
+            ),
+            aggregated AS (
+                SELECT
+                    group_key,
+                    CASE WHEN group_key = '__unknown_album__'
+                         THEN 'Unknown Album'
+                         ELSE MIN(title)
+                    END AS title,
+                    CASE WHEN COUNT(DISTINCT track_artist) > 1
+                         THEN 'Various Artists'
+                         ELSE MIN(artist)
+                    END AS artist,
+                    GROUP_CONCAT(DISTINCT track_artist) AS all_artists,
+                    MIN(year) AS year,
+                    MIN(catalog_number) AS catalog_number,
+                    MAX(CASE WHEN artwork_path IS NOT NULL THEN artwork_path END) AS artwork,
+                    COUNT(*) AS track_count,
+                    SUM(duration_secs) AS total_duration,
+                    MAX(format) AS format,
+                    MAX(bit_depth) AS bit_depth,
+                    MAX(sample_rate) AS sample_rate,
+                    GROUP_CONCAT(DISTINCT source_folder) AS source_folders,
+                    MAX(source) AS source
+                FROM grouped
+                GROUP BY group_key
+            ){plex_cte},
+            filtered AS (
+                SELECT * FROM ({unioned_clause})
+                WHERE ?1 = 0 OR (title LIKE ?2 OR artist LIKE ?2)
+            )
+            SELECT
+                group_key, title, artist, all_artists, year, catalog_number,
+                artwork, track_count, total_duration, format, bit_depth,
+                sample_rate, source_folders, source,
+                COUNT(*) OVER () AS total
+            FROM filtered
+            ORDER BY {order_clause}
+            LIMIT ?3 OFFSET ?4
+            "#,
+            group_key = group_key_expr,
+            source_filter = source_filter,
+            network_filter = network_filter,
+            plex_cte = plex_cte,
+            unioned_clause = unioned_clause,
+            order_clause = order_clause,
+        );
+
+        let mut stmt = self
+            .conn
+            .prepare(&query)
+            .map_err(|e| LibraryError::Database(e.to_string()))?;
+
+        let rows = stmt
+            .query_map(
+                rusqlite::params![has_search, search_like, limit as i64, offset as i64],
+                |row| {
+                    let group_key: String = row.get(0)?;
+                    let title: String = row.get(1)?;
+                    let artist: String = row.get(2)?;
+                    let all_artists: String =
+                        row.get::<_, Option<String>>(3)?.unwrap_or_default();
+                    let artwork_path: Option<String> = row.get(6)?;
+                    let source_folders: Option<String> = row.get(12)?;
+                    let total: u64 = row.get::<_, i64>(14)? as u64;
+
+                    Ok((
+                        LocalAlbum {
+                            id: group_key,
+                            title,
+                            artist,
+                            all_artists,
+                            year: row.get(4)?,
+                            catalog_number: row.get(5)?,
+                            artwork_path,
+                            track_count: row.get(7)?,
+                            total_duration_secs: row.get(8)?,
+                            format: Self::parse_format(
+                                &row.get::<_, Option<String>>(9)?.unwrap_or_default(),
+                            ),
+                            bit_depth: row.get(10)?,
+                            sample_rate: row.get::<_, Option<f64>>(11)?.unwrap_or(44100.0),
+                            directory_path: String::new(),
+                            source_folders,
+                            source: row
+                                .get::<_, Option<String>>(13)?
+                                .unwrap_or_else(|| "user".to_string()),
+                        },
+                        total,
+                    ))
+                },
+            )
+            .map_err(|e| LibraryError::Database(e.to_string()))?;
+
+        let mut albums = Vec::new();
+        let mut total: u64 = 0;
+        for row_result in rows {
+            let (album, t) = row_result.map_err(|e| LibraryError::Database(e.to_string()))?;
+            total = t;
+            albums.push(album);
+        }
+
+        // Empty page (offset past the end or filter matches nothing).
+        // The window-function trick gives us total only on returned
+        // rows, so when there are none we have to ask separately.
+        if albums.is_empty() {
+            total = self.count_albums_metadata_for_page(
+                search,
+                include_qobuz_downloads,
+                exclude_network_folders,
+                plex_attached,
+            )?;
+        }
+
+        Ok(crate::models::AlbumsMetadataPage { albums, total })
+    }
+
+    /// Companion to `get_albums_metadata_page` — total count of albums
+    /// matching the same filter. Used when the page is empty (so the
+    /// window-function-derived total isn't available) or when the
+    /// frontend wants to know the count before requesting any page.
+    /// Honours the same Plex attachment state as the caller used.
+    fn count_albums_metadata_for_page(
+        &self,
+        search: Option<&str>,
+        include_qobuz_downloads: bool,
+        exclude_network_folders: bool,
+        plex_attached: bool,
+    ) -> Result<u64, LibraryError> {
+        let source_filter = if include_qobuz_downloads {
+            ""
+        } else {
+            "AND (source IS NULL OR source != 'qobuz_download')"
+        };
+        let network_filter = if exclude_network_folders {
+            "AND NOT EXISTS (
+                SELECT 1 FROM library_folders nf
+                WHERE nf.is_network = 1
+                AND local_tracks.file_path LIKE nf.path || '%'
+            )"
+        } else {
+            ""
+        };
+        let group_key_expr = crate::album_grouping::metadata_group_key_sql_expression();
+        let search_pattern = search.unwrap_or("").trim();
+        let has_search: i64 = if search_pattern.is_empty() { 0 } else { 1 };
+        let search_like = format!("%{}%", search_pattern);
+
+        let plex_cte = if plex_attached {
+            r#",
+            plex_aggregated AS (
+                SELECT
+                    -- `album_key` is populated by plex/mod.rs::plex_album_key()
+                    -- which already returns `"plex:<hash>"`. Only the
+                    -- rating_key fallback needs the prefix added.
+                    COALESCE(album_key, 'plex:' || rating_key) AS group_key,
+                    COALESCE(album, 'Unknown Album') AS title,
+                    COALESCE(MIN(artist), 'Unknown Artist') AS artist
+                FROM plex_cache.plex_cache_tracks
+                GROUP BY COALESCE(album_key, 'plex:' || rating_key)
+            )"#
+        } else {
+            ""
+        };
+        let unioned_clause = if plex_attached {
+            "SELECT * FROM aggregated UNION ALL SELECT * FROM plex_aggregated"
+        } else {
+            "SELECT * FROM aggregated"
+        };
+
+        let query = format!(
+            r#"
+            WITH grouped AS (
+                SELECT
+                    {group_key} AS group_key,
+                    COALESCE(album_group_title, album, 'Unknown Album') AS title,
+                    COALESCE(album_artist, artist, 'Unknown Artist') AS artist,
+                    artist AS track_artist
+                FROM local_tracks
+                WHERE 1=1 {source_filter} {network_filter}
+            ),
+            aggregated AS (
+                SELECT
+                    group_key,
+                    CASE WHEN group_key = '__unknown_album__'
+                         THEN 'Unknown Album'
+                         ELSE MIN(title)
+                    END AS title,
+                    CASE WHEN COUNT(DISTINCT track_artist) > 1
+                         THEN 'Various Artists'
+                         ELSE MIN(artist)
+                    END AS artist
+                FROM grouped
+                GROUP BY group_key
+            ){plex_cte}
+            SELECT COUNT(*)
+            FROM ({unioned_clause})
+            WHERE ?1 = 0 OR (title LIKE ?2 OR artist LIKE ?2)
+            "#,
+            group_key = group_key_expr,
+            source_filter = source_filter,
+            network_filter = network_filter,
+            plex_cte = plex_cte,
+            unioned_clause = unioned_clause,
+        );
+
+        let total: i64 = self
+            .conn
+            .query_row(
+                &query,
+                rusqlite::params![has_search, search_like],
+                |row| row.get(0),
+            )
+            .map_err(|e| LibraryError::Database(e.to_string()))?;
+        Ok(total as u64)
+    }
+
     /// Get tracks for a metadata-grouped album. The `metadata_key`
     /// matches what [`Self::get_albums_metadata_grouped`] returns for
     /// the album's `id` field.

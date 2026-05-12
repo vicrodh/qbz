@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
-  import Modal from '../Modal.svelte';
+  import Modal from '$lib/discovery-v2/ModalLite.svelte';
   import { t } from '$lib/i18n';
   import type { ReleaseInfo } from '$lib/stores/updatesStore';
   import {

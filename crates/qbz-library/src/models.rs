@@ -131,6 +131,15 @@ pub struct PlaylistLocalTrack {
     pub playlist_position: i32,
 }
 
+/// One page of metadata-grouped local albums plus the total count of
+/// albums matching the same filter (for scrollbar pre-allocation on the
+/// frontend). Returned by `Database::get_albums_metadata_page`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AlbumsMetadataPage {
+    pub albums: Vec<LocalAlbum>,
+    pub total: u64,
+}
+
 /// An album aggregated from local tracks
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LocalAlbum {

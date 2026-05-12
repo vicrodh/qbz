@@ -2,7 +2,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import { writeText } from '@tauri-apps/plugin-clipboard-manager';
   import { Bug, Circle, Copy, Pause, Play, Power, Square, Trash2, Volume2, VolumeX } from 'lucide-svelte';
-  import Modal from '$lib/components/Modal.svelte';
+  import Modal from '$lib/discovery-v2/ModalLite.svelte';
   import { t } from '$lib/i18n';
   import { showToast } from '$lib/stores/toastStore';
   import type {

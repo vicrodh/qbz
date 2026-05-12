@@ -9,7 +9,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import { t } from '$lib/i18n';
   import { ArrowLeft, Heart, LoaderCircle, ArrowRight } from 'lucide-svelte';
-  import AlbumCard from '../AlbumCard.svelte';
+  import AlbumCard from '$lib/discovery-v2/AlbumCardLite.svelte';
   import HorizontalScrollRow from '../HorizontalScrollRow.svelte';
   import type { AwardPageData, QobuzAlbum } from '$lib/types';
   import { formatQuality, getQobuzImage } from '$lib/adapters/qobuzAdapters';
@@ -94,6 +94,13 @@
 
   let otherAwards = $state<OtherAward[]>([]);
   let failedOtherImages = $state<Set<string>>(new Set());
+
+  /** Bind an album's artistId into a no-arg callback for
+   *  AlbumCardLite's `onArtistClick: () => void`. */
+  function makeArtistClickHandler(artistId: number | undefined): (() => void) | undefined {
+    if (artistId === undefined || !onArtistClick) return undefined;
+    return () => onArtistClick(artistId);
+  }
 
   /** Adapts a QobuzAlbum (shape returned by /award/getAlbums) into
    * what AlbumCard consumes. */
@@ -308,24 +315,20 @@
             artwork={album.artwork}
             title={album.title}
             artist={album.artist}
-            artistId={album.artistId}
-            onArtistClick={onArtistClick}
             genre={album.genre}
-            releaseDate={album.releaseDate}
-            size="large"
+            releaseYear={Number(album.releaseDate?.slice(0, 4)) || undefined}
             quality={album.quality}
+            isAlbumFullyDownloaded={isAlbumDownloaded?.(album.id) ?? false}
+            onArtistClick={makeArtistClickHandler(album.artistId)}
+            onClick={() => onAlbumClick?.(album.id)}
             onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
             onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
             onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
-            onAddAlbumToPlaylist={onAddAlbumToPlaylist ? () => onAddAlbumToPlaylist(album.id) : undefined}
+            onAddToPlaylist={onAddAlbumToPlaylist ? () => onAddAlbumToPlaylist(album.id) : undefined}
             onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
             onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
             onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
-            isAlbumFullyDownloaded={isAlbumDownloaded?.(album.id) ?? false}
-            onOpenContainingFolder={onOpenAlbumFolder ? () => onOpenAlbumFolder(album.id) : undefined}
             onReDownloadAlbum={onReDownloadAlbum ? () => onReDownloadAlbum(album.id) : undefined}
-            {downloadStateVersion}
-            onclick={() => onAlbumClick?.(album.id)}
           />
         {/each}
       </div>

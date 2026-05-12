@@ -318,14 +318,16 @@
     background: var(--bg-tertiary);
   }
 
-  /* Blurred background - simulates dominant color */
+  /* Background image fills letterbox space behind contain-fitted main image.
+     Originally rendered with blur(30px) saturate(1.5) to simulate dominant
+     color — the filter was a per-frame paint cost under software compositing
+     so it was dropped. Square playlist art (the common case) is fully
+     covered by .artwork-main, leaving this layer invisible. */
   .artwork-bg {
     position: absolute;
-    inset: -20px;
+    inset: 0;
     background-size: cover;
     background-position: center;
-    filter: blur(30px) saturate(1.5);
-    transform: scale(1.2);
     z-index: 0;
   }
 

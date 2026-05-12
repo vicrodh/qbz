@@ -5,7 +5,7 @@
   import { ask } from '@tauri-apps/plugin-dialog';
   import { invoke } from '@tauri-apps/api/core';
   import Dropdown from '$lib/components/Dropdown.svelte';
-  import Modal from '$lib/components/Modal.svelte';
+  import Modal from '$lib/discovery-v2/ModalLite.svelte';
   import { offlineCacheManagerStore } from '$lib/stores/offlineCacheManagerStore.svelte';
   import { showToast } from '$lib/stores/toastStore';
 

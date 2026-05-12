@@ -117,12 +117,21 @@ impl GraphicsSettingsStore {
         conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")
             .map_err(|e| format!("Failed to enable WAL for graphics settings database: {}", e))?;
 
+        // Default hardware_acceleration = 1. Earlier QBZ versions defaulted
+        // to 0 "for maximum compatibility", but WebKitGTK without GPU
+        // compositing is severely degraded (multi-second component mounts
+        // on 4K / tiled windows; observed 2026-05-12 perf session). The
+        // mitigation logic in main.rs already auto-detects NVIDIA-only
+        // Wayland configs and disables compositing for them; for every
+        // other config the GPU path is the better default. Users who
+        // explicitly toggle off in Settings keep their preference (the
+        // INSERT OR IGNORE below only seeds a row that doesn't exist).
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS graphics_settings (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
-                hardware_acceleration INTEGER NOT NULL DEFAULT 0
+                hardware_acceleration INTEGER NOT NULL DEFAULT 1
             );
-            INSERT OR IGNORE INTO graphics_settings (id, hardware_acceleration) VALUES (1, 0);",
+            INSERT OR IGNORE INTO graphics_settings (id, hardware_acceleration) VALUES (1, 1);",
         )
         .map_err(|e| format!("Failed to create graphics settings table: {}", e))?;
 

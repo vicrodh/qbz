@@ -3,7 +3,7 @@
   import { t } from '$lib/i18n';
   import { LoaderCircle } from 'lucide-svelte';
   import { showToast } from '$lib/stores/toastStore';
-  import Modal from './Modal.svelte';
+  import Modal from '$lib/discovery-v2/ModalLite.svelte';
   import Dropdown from './Dropdown.svelte';
   import { buildSizeOptions } from './trackMixModal.helpers';
 
