@@ -691,7 +691,13 @@
   },
   "discovery": {
     "comingSoon": "Discovery V2 — under construction",
-    "seeAll": "See all"
+    "seeAll": "See all",
+    "customize": "Customize home",
+    "perfWarning": "Each enabled section adds to the work done on every scroll. Turn on what you actually use; leave the rest off.",
+    "enabledCount": "{count} of {total} sections enabled",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "resetDefaults": "Reset to defaults"
   },
   "home": {
     "title": "Home",

@@ -691,7 +691,13 @@
   },
   "discovery": {
     "comingSoon": "Discovery V2 — em construção",
-    "seeAll": "Ver tudo"
+    "seeAll": "Ver tudo",
+    "customize": "Personalizar início",
+    "perfWarning": "Cada seção ativa aumenta o trabalho a cada rolagem. Ative o que realmente usar; deixe o resto desligado.",
+    "enabledCount": "{count} de {total} seções ativas",
+    "moveUp": "Subir",
+    "moveDown": "Descer",
+    "resetDefaults": "Restaurar padrão"
   },
   "home": {
     "title": "Início",

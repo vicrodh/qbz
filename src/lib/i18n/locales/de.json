@@ -691,7 +691,13 @@
   },
   "discovery": {
     "comingSoon": "Discovery V2 — in Arbeit",
-    "seeAll": "Alle anzeigen"
+    "seeAll": "Alle anzeigen",
+    "customize": "Startseite anpassen",
+    "perfWarning": "Jeder aktive Bereich erhöht die Arbeit bei jedem Scrollvorgang. Aktiviere nur, was du wirklich nutzt.",
+    "enabledCount": "{count} von {total} Bereichen aktiv",
+    "moveUp": "Nach oben",
+    "moveDown": "Nach unten",
+    "resetDefaults": "Auf Standard zurücksetzen"
   },
   "home": {
     "title": "Start",

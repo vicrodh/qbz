@@ -36,7 +36,9 @@
   let containerEl: HTMLDivElement | undefined = $state();
   let page = $state(0);
   let itemsPerPage = $state(1);
-  const gap = 16;
+  /** Inter-card horizontal gap inside .row. Kept in JS for the
+   *  itemsPerPage math; the matching CSS lives in .row's `gap` rule below. */
+  const gap = 32;
 
   // Drag-to-paginate. We commit a page change on pointerup if the cursor
   // moved past PAGE_COMMIT_PX. The OS-native click that would otherwise
@@ -170,7 +172,7 @@
      no transform, no scroll. Only `itemsPerPage` cards are mounted at any
      moment; chevrons swap which slice is rendered. */
   .section {
-    margin-bottom: 32px;
+    margin-bottom: 48px;
   }
 
   .head {
@@ -246,7 +248,7 @@
 
   .row {
     display: flex;
-    gap: 16px;
+    gap: 32px;
     user-select: none;
     -webkit-user-select: none;
   }

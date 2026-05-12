@@ -20,6 +20,8 @@
   import GenreFilterButton from '$lib/components/GenreFilterButton.svelte';
   import { getSelectedGenreIds } from '$lib/stores/genreFilterStore';
   import { sectionPrefs } from './sectionPrefs';
+  import DiscoverySettingsModal from './DiscoverySettingsModal.svelte';
+  import { Settings } from 'lucide-svelte';
 
   /**
    * Discovery V2 — clean-room rebuild of the home view.
@@ -181,6 +183,9 @@
     void loadAll();
   }
 
+  // Discovery settings modal (toggle/reorder sections).
+  let settingsOpen = $state(false);
+
   // `activeTrackId` + `isPlaybackActive` drive the playing indicator on
   // TrackCardLite within Continue Listening (the only section where the
   // card carries a trackId-level identity). Album/playlist cards stay
@@ -209,8 +214,19 @@
         variant="default"
         align="right"
       />
+      <button
+        type="button"
+        class="settings-btn"
+        aria-label={$t('discovery.customize')}
+        title={$t('discovery.customize')}
+        onclick={() => (settingsOpen = true)}
+      >
+        <Settings size={18} />
+      </button>
     </div>
   </div>
+
+  <DiscoverySettingsModal isOpen={settingsOpen} onClose={() => (settingsOpen = false)} />
 
   {#snippet albumCard(album: DiscoveryAlbumCard)}
     <AlbumCardLite
@@ -418,6 +434,26 @@
   .genre-slot {
     display: flex;
     align-items: center;
+    gap: 6px;
+  }
+
+  .settings-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 4px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+  }
+
+  .settings-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
   }
 
   .scroll-area {

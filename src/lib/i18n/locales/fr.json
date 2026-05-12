@@ -691,7 +691,13 @@
   },
   "discovery": {
     "comingSoon": "Discovery V2 — en construction",
-    "seeAll": "Tout voir"
+    "seeAll": "Tout voir",
+    "customize": "Personnaliser l'accueil",
+    "perfWarning": "Chaque section activée alourdit le travail à chaque défilement. Activez celles que vous utilisez vraiment ; laissez les autres désactivées.",
+    "enabledCount": "{count} sur {total} sections activées",
+    "moveUp": "Monter",
+    "moveDown": "Descendre",
+    "resetDefaults": "Restaurer les valeurs par défaut"
   },
   "home": {
     "title": "Accueil",
