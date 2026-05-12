@@ -299,39 +299,29 @@
     pointer-events: none;
   }
 
-  /* Hover indicator. The first attempt used `box-shadow: inset` on
-     `.cover-wrap` but the absolutely-positioned `<img>` painted on
-     top of it, hiding the shadow under the artwork. The pseudo-
-     element approach below paints AFTER the image (DOM order +
-     stacking) so the ring stays visible:
-
-       .cover-wrap::after — transparent border by default,
-       `inset: 0` so it tracks the cover edges, `border-radius` to
-       follow the cover's rounded corners, `pointer-events: none`
-       so it doesn't enter hit-testing. On `.card:hover` the border
-       flips to the accent colour. Title also shifts to accent as a
-       second cue. */
+  /* Hover scrim. Restored 2026-05-12 after the Plex thumbnail-size
+     fix (commit 9f417999) — that change cut Plex artwork from
+     1000x1000 raw JPEGs to 220x220 server-side transcoded thumbnails,
+     ~30x less decode + memory per card. With that win, the scrim's
+     opacity transition is no longer the dominant per-frame cost it
+     was when 50 cards × 4MB raw rasters were sitting in memory. */
   .cover-wrap::after {
     content: '';
     position: absolute;
     inset: 0;
-    border: 3px solid transparent;
-    border-radius: 8px;
+    background: rgba(10, 10, 10, 0.85);
+    opacity: 0;
+    transition: opacity 150ms ease;
     pointer-events: none;
-    box-sizing: border-box;
-    /* The cover img sits at z-index: 1 (set below). The pseudo's
-       implicit auto z-index would put it BELOW the img, hiding the
-       border ring under the artwork on hover. z-index: 2 lifts it
-       above the img so the accent border is actually visible. */
+    /* Cover img sits at z-index: 1, so the scrim needs z-index: 2 to
+       paint above the artwork and below the action buttons (which
+       are inside `.overlay` at z-index: 2 already; siblings stack
+       in DOM order so buttons declared after stay on top). */
     z-index: 2;
   }
 
   .card:hover .cover-wrap::after {
-    border-color: var(--accent-primary);
-  }
-
-  .card:hover .title {
-    color: var(--accent-primary);
+    opacity: 1;
   }
 
   .cover-placeholder {
@@ -365,7 +355,7 @@
     position: absolute;
     top: 8px;
     left: 8px;
-    z-index: 3;
+    z-index: 4;
     width: 22px;
     height: 22px;
     border-radius: 50%;
@@ -404,10 +394,19 @@
   /* Buttons sit close to the bottom edge of the cover (12px clearance).
      Flex `flex-end` + `padding-bottom` rather than absolute positioning
      so no transform is needed on the child. */
+  /* z-index layering inside `.cover-wrap` (a stacking context due to
+     position: relative + children with z-index):
+       1  cover img
+       2  scrim (cover-wrap::after)
+       3  overlay (action buttons)
+       4  select-checkbox + source-badge-slot
+     The scrim and overlay sharing z-index 2 with the scrim being the
+     pseudo (always last in DOM order) made the scrim paint OVER the
+     buttons. Bumping the overlay to 3 puts buttons cleanly above. */
   .overlay {
     position: absolute;
     inset: 0;
-    z-index: 2;
+    z-index: 3;
     display: flex;
     align-items: flex-end;
     justify-content: center;
@@ -415,23 +414,23 @@
     pointer-events: none;
   }
 
+  /* Buttons hidden by default, shown when the scrim fades in. */
   .action-buttons {
     display: flex;
     align-items: center;
     gap: 12px;
-    /* Re-enable hit-testing for the buttons themselves — the cover-
-       wrap is `pointer-events: none` to keep hit-testing cheap, so
-       this opt-in puts the buttons back in the hit path. */
+    opacity: 0;
+    transition: opacity 150ms ease;
+    pointer-events: none;
+  }
+
+  .card:hover .action-buttons {
+    opacity: 1;
     pointer-events: auto;
   }
 
-  /* White-outline circles over the artwork — same visual language as
-     AlbumCardLite on Home, but always visible (no hover transition).
-     Contrast on light artwork comes from a static box-shadow under
-     each button + a small drop-shadow on the icon. The shadow is a
-     one-time paint cost when the slot mounts/recycles; vs the old
-     transitioning overlay that re-painted on every hover-state
-     change, this is essentially free during scroll. */
+  /* White-outline circles, transparent fill — the scrim provides
+     contrast. Same visual language as AlbumCardLite on Home. */
   .overlay-btn {
     width: 36px;
     height: 36px;
@@ -444,11 +443,10 @@
     justify-content: center;
     cursor: pointer;
     padding: 0;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
   }
 
-  .overlay-btn :global(svg) {
-    filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.7));
+  .overlay-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
   }
 
   .overlay-btn.primary {
@@ -457,18 +455,13 @@
     background: #fff;
     color: #000;
     border-color: #fff;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
-  }
-
-  .overlay-btn.primary :global(svg) {
-    filter: none;
   }
 
   .source-badge-slot {
     position: absolute;
     bottom: 6px;
     right: 6px;
-    z-index: 3;
+    z-index: 4;
   }
 
   .info {

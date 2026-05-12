@@ -2005,7 +2005,10 @@ impl LibraryDatabase {
             r#",
             plex_aggregated AS (
                 SELECT
-                    'plex:' || COALESCE(album_key, rating_key) AS group_key,
+                    -- `album_key` is populated by plex/mod.rs::plex_album_key()
+                    -- which already returns `"plex:<hash>"`. Only the
+                    -- rating_key fallback needs the prefix added.
+                    COALESCE(album_key, 'plex:' || rating_key) AS group_key,
                     COALESCE(album, 'Unknown Album') AS title,
                     CASE WHEN COUNT(DISTINCT artist) > 1
                          THEN 'Various Artists'
@@ -2023,7 +2026,7 @@ impl LibraryDatabase {
                     CAST(NULL AS TEXT) AS source_folders,
                     'plex' AS source
                 FROM plex_cache.plex_cache_tracks
-                GROUP BY COALESCE(album_key, rating_key)
+                GROUP BY COALESCE(album_key, 'plex:' || rating_key)
             )"#
         } else {
             ""
@@ -2205,11 +2208,14 @@ impl LibraryDatabase {
             r#",
             plex_aggregated AS (
                 SELECT
-                    'plex:' || COALESCE(album_key, rating_key) AS group_key,
+                    -- `album_key` is populated by plex/mod.rs::plex_album_key()
+                    -- which already returns `"plex:<hash>"`. Only the
+                    -- rating_key fallback needs the prefix added.
+                    COALESCE(album_key, 'plex:' || rating_key) AS group_key,
                     COALESCE(album, 'Unknown Album') AS title,
                     COALESCE(MIN(artist), 'Unknown Artist') AS artist
                 FROM plex_cache.plex_cache_tracks
-                GROUP BY COALESCE(album_key, rating_key)
+                GROUP BY COALESCE(album_key, 'plex:' || rating_key)
             )"#
         } else {
             ""
