@@ -283,16 +283,25 @@
     />
   {/snippet}
 
-  {#snippet albumRow(album: DiscoveryAlbumCard)}
+  {#snippet albumRow(album: DiscoveryAlbumCard, index: number)}
     <AlbumRowLite
       albumId={album.albumId}
       title={album.title}
       artist={album.artist}
       artwork={album.artwork}
+      quality={album.quality}
+      rank={index + 1}
       onClick={() => onAlbumClick?.(album.albumId)}
+      onPlay={() => onAlbumPlay?.(album.albumId)}
       onArtistClick={album.artistId !== undefined
         ? () => onArtistClick?.(album.artistId!)
         : undefined}
+      onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext?.(album.albumId) : undefined}
+      onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater?.(album.albumId) : undefined}
+      onAddToPlaylist={onAddAlbumToPlaylist ? () => onAddAlbumToPlaylist?.(album.albumId) : undefined}
+      onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz?.(album.albumId) : undefined}
+      onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink?.(album.albumId) : undefined}
+      onDownload={onAlbumDownload ? () => onAlbumDownload?.(album.albumId) : undefined}
     />
   {/snippet}
 

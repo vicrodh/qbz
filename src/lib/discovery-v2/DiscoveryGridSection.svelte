@@ -14,7 +14,9 @@
     /** Number of rows per page. itemsPerPage = columns * rows. */
     rows?: number;
     onSeeAll?: () => void;
-    renderItem: Snippet<[T]>;
+    /** Receives `(item, globalIndex)` where globalIndex = page * itemsPerPage
+     *  + local index. Snippets that ignore the second arg work too. */
+    renderItem: Snippet<[T, number]>;
   }
 
   let {
@@ -143,7 +145,7 @@
         in:fade={{ duration: 120 }}
       >
         {#each visibleItems as item, idx (idx)}
-          {@render renderItem(item)}
+          {@render renderItem(item, page * itemsPerPage + idx)}
         {/each}
       </div>
     {/key}
