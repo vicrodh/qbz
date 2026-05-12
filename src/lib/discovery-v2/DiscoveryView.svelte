@@ -259,7 +259,7 @@
     </div>
   </div>
 
-  <DiscoverySettingsModal isOpen={settingsOpen} onClose={() => (settingsOpen = false)} />
+  <DiscoverySettingsModal isOpen={settingsOpen} onClose={() => (settingsOpen = false)} tab={homeTab} />
 
   {#snippet albumCard(album: DiscoveryAlbumCard)}
     <AlbumCardLite
@@ -355,10 +355,7 @@
   {/snippet}
 
   <div class="scroll-area">
-    {#if homeTab !== 'home'}
-      <p class="placeholder">{$t('discovery.comingSoon')}</p>
-    {:else}
-    {#each $sectionPrefs as pref (pref.id)}
+    {#each $sectionPrefs[homeTab] as pref (pref.id)}
       {#if pref.enabled}
         {#if pref.id === 'newReleases' && newReleases.length > 0}
           <DiscoverySection
@@ -447,7 +444,6 @@
 
     {#if releaseWatch.length === 0 && newReleases.length === 0 && recentlyPlayedAlbums.length === 0}
       <p class="placeholder">{$t('discovery.comingSoon')}</p>
-    {/if}
     {/if}
   </div>
 </div>

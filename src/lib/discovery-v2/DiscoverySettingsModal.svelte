@@ -8,14 +8,18 @@
     moveSection,
     resetToDefaults,
     type DiscoverySectionId,
+    type DiscoveryTab,
   } from './sectionPrefs';
 
   interface Props {
     isOpen: boolean;
     onClose: () => void;
+    /** Which tab's section prefs this modal edits. The gear button in
+     *  the toolbar always passes the currently-active tab. */
+    tab: DiscoveryTab;
   }
 
-  let { isOpen, onClose }: Props = $props();
+  let { isOpen, onClose, tab }: Props = $props();
 
   /** Maps each section id to the existing i18n key for its display label.
    *  All keys already exist in the five locale files. */
@@ -34,8 +38,9 @@
     favoriteAlbums: 'home.favoriteAlbums',
   };
 
-  const enabledCount = $derived($sectionPrefs.filter((p) => p.enabled).length);
-  const totalCount = $derived($sectionPrefs.length);
+  const tabPrefs = $derived($sectionPrefs[tab]);
+  const enabledCount = $derived(tabPrefs.filter((p) => p.enabled).length);
+  const totalCount = $derived(tabPrefs.length);
 </script>
 
 <Modal {isOpen} {onClose} title={$t('discovery.customize')} maxWidth="520px">
@@ -50,13 +55,13 @@
     </p>
 
     <ul class="list">
-      {#each $sectionPrefs as pref, idx (pref.id)}
+      {#each tabPrefs as pref, idx (pref.id)}
         <li class="row">
           <label class="check">
             <input
               type="checkbox"
               checked={pref.enabled}
-              onchange={() => toggleSection(pref.id)}
+              onchange={() => toggleSection(tab, pref.id)}
             />
             <span class="label">{$t(labelKeys[pref.id])}</span>
           </label>
@@ -66,7 +71,7 @@
               class="move-btn"
               aria-label={$t('discovery.moveUp')}
               disabled={idx === 0}
-              onclick={() => moveSection(pref.id, -1)}
+              onclick={() => moveSection(tab, pref.id, -1)}
             >
               <ChevronUp size={16} />
             </button>
@@ -74,8 +79,8 @@
               type="button"
               class="move-btn"
               aria-label={$t('discovery.moveDown')}
-              disabled={idx === $sectionPrefs.length - 1}
-              onclick={() => moveSection(pref.id, 1)}
+              disabled={idx === tabPrefs.length - 1}
+              onclick={() => moveSection(tab, pref.id, 1)}
             >
               <ChevronDown size={16} />
             </button>
@@ -86,7 +91,7 @@
   {/snippet}
 
   {#snippet footer()}
-    <button type="button" class="reset-btn" onclick={resetToDefaults}>
+    <button type="button" class="reset-btn" onclick={() => resetToDefaults(tab)}>
       <RotateCcw size={14} />
       {$t('discovery.resetDefaults')}
     </button>
