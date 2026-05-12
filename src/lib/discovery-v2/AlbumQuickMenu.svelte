@@ -8,6 +8,8 @@
     User,
     Share2,
     Download,
+    Plus,
+    Link as LinkIcon,
   } from 'lucide-svelte';
   import {
     openMenu as openGlobalMenu,
@@ -23,9 +25,11 @@
     onClose: () => void;
     onPlayNext?: () => void;
     onPlayLater?: () => void;
+    onAddToPlaylist?: () => void;
     onGoToAlbum?: () => void;
     onGoToArtist?: () => void;
     onShareQobuz?: () => void;
+    onShareSonglink?: () => void;
     onDownload?: () => void;
   }
 
@@ -35,9 +39,11 @@
     onClose,
     onPlayNext,
     onPlayLater,
+    onAddToPlaylist,
     onGoToAlbum,
     onGoToArtist,
     onShareQobuz,
+    onShareSonglink,
     onDownload,
   }: Props = $props();
 
@@ -113,9 +119,11 @@
   const items = $derived([
     onPlayNext ? { labelKey: 'actions.playNext', icon: ListPlus, run: () => fire(onPlayNext) } : null,
     onPlayLater ? { labelKey: 'actions.playLater', icon: ListEnd, run: () => fire(onPlayLater) } : null,
+    onAddToPlaylist ? { labelKey: 'actions.addToPlaylist', icon: Plus, run: () => fire(onAddToPlaylist) } : null,
     onGoToAlbum ? { labelKey: 'actions.goToAlbum', icon: Disc, run: () => fire(onGoToAlbum) } : null,
     onGoToArtist ? { labelKey: 'actions.goToArtist', icon: User, run: () => fire(onGoToArtist) } : null,
-    onShareQobuz ? { labelKey: 'actions.share', icon: Share2, run: () => fire(onShareQobuz) } : null,
+    onShareQobuz ? { labelKey: 'actions.shareQobuz', icon: Share2, run: () => fire(onShareQobuz) } : null,
+    onShareSonglink ? { labelKey: 'actions.shareSonglink', icon: LinkIcon, run: () => fire(onShareSonglink) } : null,
     onDownload ? { labelKey: 'actions.download', icon: Download, run: () => fire(onDownload) } : null,
   ].filter((item): item is NonNullable<typeof item> => item !== null));
 </script>

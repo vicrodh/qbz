@@ -22,7 +22,9 @@
     onFavorite?: () => void;
     onPlayNext?: () => void;
     onPlayLater?: () => void;
+    onAddToPlaylist?: () => void;
     onShareQobuz?: () => void;
+    onShareSonglink?: () => void;
     onDownload?: () => void;
   }
 
@@ -43,7 +45,9 @@
     onFavorite,
     onPlayNext,
     onPlayLater,
+    onAddToPlaylist,
     onShareQobuz,
+    onShareSonglink,
     onDownload,
   }: Props = $props();
 
@@ -149,9 +153,11 @@
   onClose={() => (menuOpen = false)}
   onPlayNext={onPlayNext ? () => onPlayNext?.() : undefined}
   onPlayLater={onPlayLater ? () => onPlayLater?.() : undefined}
+  onAddToPlaylist={onAddToPlaylist ? () => onAddToPlaylist?.() : undefined}
   onGoToAlbum={onClick ? () => onClick?.() : undefined}
   onGoToArtist={onArtistClick ? () => onArtistClick?.() : undefined}
   onShareQobuz={onShareQobuz ? () => onShareQobuz?.() : undefined}
+  onShareSonglink={onShareSonglink ? () => onShareSonglink?.() : undefined}
   onDownload={onDownload ? () => onDownload?.() : undefined}
 />
 

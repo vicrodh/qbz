@@ -108,7 +108,9 @@
     onAlbumPlayNext,
     onAlbumPlayLater,
     onAlbumShareQobuz,
+    onAlbumShareSonglink,
     onAlbumDownload,
+    onAddAlbumToPlaylist,
     onArtistClick,
     onTrackPlay,
     onTrackGoToAlbum,
@@ -274,7 +276,9 @@
         : undefined}
       onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext?.(album.albumId) : undefined}
       onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater?.(album.albumId) : undefined}
+      onAddToPlaylist={onAddAlbumToPlaylist ? () => onAddAlbumToPlaylist?.(album.albumId) : undefined}
       onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz?.(album.albumId) : undefined}
+      onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink?.(album.albumId) : undefined}
       onDownload={onAlbumDownload ? () => onAlbumDownload?.(album.albumId) : undefined}
     />
   {/snippet}
