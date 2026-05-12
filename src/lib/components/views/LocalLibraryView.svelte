@@ -6472,12 +6472,27 @@
                         onToggleSelect={() => toggleAlbumSelect(album)}
                       />
                     {/snippet}
+                    {#snippet renderMetadataAlbumPlaceholder(_idx: number)}
+                      <!-- Static skeleton: 210x210 cover block + 14px
+                           title bar + 12px artist bar + 14px quality
+                           pill. No shimmer, no animation — the shape
+                           alone signals "loading" without paint per
+                           frame. Matches the loaded card dimensions
+                           so layout doesn't shift on rebind. -->
+                      <div class="album-skeleton" aria-hidden="true">
+                        <div class="album-skeleton-cover"></div>
+                        <div class="album-skeleton-line album-skeleton-title"></div>
+                        <div class="album-skeleton-line album-skeleton-artist"></div>
+                        <div class="album-skeleton-line album-skeleton-quality"></div>
+                      </div>
+                    {/snippet}
                     <AlbumGridPool
                       totalCount={metadataAlbumsChunked.total}
                       getItem={(i) => metadataAlbumsChunked.getAlbum(i) as LocalAlbum | null}
                       onNeedIndex={(i) => metadataAlbumsChunked.requestIndex(i)}
                       dataVersion={metadataAlbumsChunked.version}
                       renderCell={renderMetadataAlbumCell}
+                      renderPlaceholder={renderMetadataAlbumPlaceholder}
                     />
                   {:else}
                     <VirtualizedAlbumList
@@ -7962,6 +7977,30 @@
     font-size: 13px;
     margin-top: 8px;
   }
+
+  /* Skeleton placeholder for chunked-album grid slots whose data is
+     still in flight. Static blocks only — no shimmer, no animation;
+     the shape signals "loading" without paint per frame. */
+  .album-skeleton {
+    width: 210px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .album-skeleton-cover {
+    width: 210px;
+    height: 210px;
+    border-radius: 8px;
+    background: var(--bg-tertiary);
+  }
+  .album-skeleton-line {
+    height: 12px;
+    border-radius: 3px;
+    background: var(--bg-tertiary);
+  }
+  .album-skeleton-title { width: 80%; height: 14px; margin-top: 2px; }
+  .album-skeleton-artist { width: 60%; }
+  .album-skeleton-quality { width: 90px; height: 14px; border-radius: 4px; margin-top: 2px; }
 
   /* Album Grid */
   .album-sections {

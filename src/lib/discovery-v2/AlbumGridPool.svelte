@@ -94,8 +94,12 @@
   const totalHeight = $derived(totalRows * rowStep + bottomPadding);
 
   /** Buffer rows above + below the viewport so a fast scroll doesn't
-   *  paint into blank slots before the bindings update. */
-  const bufferRows = 3;
+   *  paint into blank slots before the bindings update. Lower means
+   *  fewer cards mounted per frame (cheaper paint/layout) but more
+   *  chance the user sees a slot rebind during continuous scroll.
+   *  Two rows balances the two; under SW comp the per-card cost is
+   *  the dominant frame budget, so trimming buffer is a direct win. */
+  const bufferRows = 2;
 
   /** Rows that fit on screen at once (rounded up). */
   const visibleRows = $derived(
