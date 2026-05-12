@@ -7,7 +7,7 @@
   import { onMount, tick } from 'svelte';
   import { t } from '$lib/i18n';
   import { Play, Disc3, MicVocal, Music, Search, X, LayoutGrid, List, ChevronDown, ListMusic, PenLine, CloudDownload, Shuffle, Ellipsis, PanelLeftClose, LoaderCircle, ArrowLeft, SquareCheckBig } from 'lucide-svelte';
-  import AlbumCard from '../AlbumCard.svelte';
+  import AlbumCard from '$lib/discovery-v2/AlbumCardLite.svelte';
   import TrackRow from '../TrackRow.svelte';
   import QualityBadge from '../QualityBadge.svelte';
   import VirtualizedTrackList from '../VirtualizedTrackList.svelte';
@@ -201,6 +201,13 @@
   type TabType = 'tracks' | 'albums' | 'artists' | 'labels' | 'playlists';
   let activeTab = $state<TabType>('tracks');
   let preferencesLoaded = $state(false);
+
+  /** Bind an album's artistId into a no-arg callback for
+   *  AlbumCardLite's `onArtistClick: () => void`. */
+  function makeArtistClickHandler(artistId: number | undefined): (() => void) | undefined {
+    if (artistId === undefined || !onArtistClick) return undefined;
+    return () => onArtistClick(artistId);
+  }
 
   function getTabTranslationKey(tab: TabType): string {
     return `favorites.tabLabels.${tab}`;
@@ -1966,12 +1973,11 @@
                           artwork={getQobuzImage(album.image)}
                           title={album.title}
                           artist={album.artist.name}
-                          artistId={album.artist.id}
-                          onArtistClick={onArtistClick}
                           genre={album.genre?.name}
-                          releaseDate={album.release_date_original}
+                          releaseYear={Number(album.release_date_original?.slice(0, 4)) || undefined}
                           quality={formatQuality(album.hires_streamable, album.maximum_bit_depth, album.maximum_sampling_rate)}
-                          onclick={() => onAlbumClick?.(album.id)}
+                          onArtistClick={makeArtistClickHandler(album.artist.id)}
+                          onClick={() => onAlbumClick?.(album.id)}
                           onPlay={() => onAlbumPlay?.(album.id)}
                           onPlayNext={() => onAlbumPlayNext?.(album.id)}
                           onPlayLater={() => onAlbumPlayLater?.(album.id)}
@@ -2020,12 +2026,11 @@
                           artwork={getQobuzImage(album.image)}
                           title={album.title}
                           artist={album.artist.name}
-                          artistId={album.artist.id}
-                          onArtistClick={onArtistClick}
                           genre={album.genre?.name}
-                          releaseDate={album.release_date_original}
+                          releaseYear={Number(album.release_date_original?.slice(0, 4)) || undefined}
                           quality={formatQuality(album.hires_streamable, album.maximum_bit_depth, album.maximum_sampling_rate)}
-                          onclick={() => onAlbumClick?.(album.id)}
+                          onArtistClick={makeArtistClickHandler(album.artist.id)}
+                          onClick={() => onAlbumClick?.(album.id)}
                           onPlay={() => onAlbumPlay?.(album.id)}
                           onPlayNext={() => onAlbumPlayNext?.(album.id)}
                           onPlayLater={() => onAlbumPlayLater?.(album.id)}
@@ -2074,12 +2079,11 @@
                           artwork={getQobuzImage(album.image)}
                           title={album.title}
                           artist={album.artist.name}
-                          artistId={album.artist.id}
-                          onArtistClick={onArtistClick}
                           genre={album.genre?.name}
-                          releaseDate={album.release_date_original}
+                          releaseYear={Number(album.release_date_original?.slice(0, 4)) || undefined}
                           quality={formatQuality(album.hires_streamable, album.maximum_bit_depth, album.maximum_sampling_rate)}
-                          onclick={() => onAlbumClick?.(album.id)}
+                          onArtistClick={makeArtistClickHandler(album.artist.id)}
+                          onClick={() => onAlbumClick?.(album.id)}
                           onPlay={() => onAlbumPlay?.(album.id)}
                           onPlayNext={() => onAlbumPlayNext?.(album.id)}
                           onPlayLater={() => onAlbumPlayLater?.(album.id)}
