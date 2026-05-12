@@ -366,13 +366,9 @@
      Theme-aware colours guarantee contrast on any cover art (dark or
      light) without needing the artwork-pixel sample work the legacy
      AlbumCard did. */
-  /* Buttons sit near the bottom of the cover (44px clearance above the
-     edge) to match the Y placement of AlbumCardLite on the Home view.
-     Using flex `flex-end` + `padding-bottom` instead of
-     `position: absolute; bottom: 44px; transform: translateX(-50%)`
-     avoids creating any transform on the child — the static transform
-     was tolerable under HW comp but `flex` is cleaner under SW
-     compositing where every layer-hint costs paint. */
+  /* Buttons sit close to the bottom edge of the cover (12px clearance).
+     Flex `flex-end` + `padding-bottom` rather than absolute positioning
+     so no transform is needed on the child. */
   .overlay {
     position: absolute;
     inset: 0;
@@ -380,7 +376,7 @@
     display: flex;
     align-items: flex-end;
     justify-content: center;
-    padding-bottom: 44px;
+    padding-bottom: 12px;
     pointer-events: none;
   }
 
@@ -394,29 +390,43 @@
     pointer-events: auto;
   }
 
-  /* Theme-coloured buttons: opaque solid background from the active
-     theme guarantees contrast against any artwork. No gradient, no
-     transparency over the cover, no hover transition. */
+  /* White-outline circles over the artwork — same visual language as
+     AlbumCardLite on Home, but always visible (no hover transition).
+     Contrast on light artwork comes from a static box-shadow under
+     each button + a small drop-shadow on the icon. The shadow is a
+     one-time paint cost when the slot mounts/recycles; vs the old
+     transitioning overlay that re-painted on every hover-state
+     change, this is essentially free during scroll. */
   .overlay-btn {
     width: 36px;
     height: 36px;
     border-radius: 50%;
-    border: 1px solid var(--bg-tertiary);
-    background: var(--bg-primary);
-    color: var(--text-primary);
+    border: 1.5px solid rgba(255, 255, 255, 0.95);
+    background: transparent;
+    color: #fff;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
     padding: 0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+  }
+
+  .overlay-btn :global(svg) {
+    filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.7));
   }
 
   .overlay-btn.primary {
     width: 44px;
     height: 44px;
-    background: var(--accent-primary);
-    color: #fff;
-    border-color: var(--accent-primary);
+    background: #fff;
+    color: #000;
+    border-color: #fff;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+  }
+
+  .overlay-btn.primary :global(svg) {
+    filter: none;
   }
 
   .source-badge-slot {
