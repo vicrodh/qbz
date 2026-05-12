@@ -13,11 +13,6 @@ import { getCachedImageUrl, getResolvedIfCached } from '$lib/services/imageCache
 export function cachedSrc(node: HTMLImageElement, url: string | undefined) {
   let currentUrl = url;
 
-  // Force own compositing layer to prevent WebKitGTK 2.50+ texture
-  // eviction during repaints (causes placeholder flash on hover/scroll)
-  node.style.willChange = 'transform';
-  node.style.transform = 'translateZ(0)';
-
   // Sync cache hit? Set the src immediately, no opacity dance. This is
   // the common path when preloadImages has already primed the map
   // (collection detail views do this on mount), and it's what removes
