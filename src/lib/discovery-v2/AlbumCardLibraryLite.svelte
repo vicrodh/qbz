@@ -271,12 +271,11 @@
     border: none;
     padding: 0;
     text-align: left;
-    /* No `content-visibility: auto` here: the parent VirtualizedAlbumList
-       already skips offscreen rows via binary-searched visibleItems.
-       Stacking content-visibility on every card added a per-card
-       intersection check that WebKit SW evaluates each scroll frame
-       without buying anything — the cards inside a visible row are by
-       definition in-viewport. */
+    /* The card is the one hit target the cover-wrap lets through to.
+       Click here = navigate to album / toggle select. The decorative
+       children inside `.cover-wrap` are `pointer-events: none`; only
+       the action buttons re-enable themselves. */
+    pointer-events: auto;
   }
 
   .cover-wrap {
@@ -286,6 +285,18 @@
     border-radius: 8px;
     overflow: hidden;
     background: var(--bg-tertiary);
+    /* Hit-test reduction under SW compositing: the cover-wrap and its
+       decorative children (placeholder, image, source badge) all opt
+       out of pointer events. Mouse moves over them fall through to
+       `.card` (which carries `role="button"` and the click handler).
+       The action buttons re-enable pointer events on themselves so
+       their click still works. Reason: every pointermove during a
+       mouse-wheel scroll triggers hit-testing across every visible
+       hit target, and with ~50 cards × 5 nested elements per card
+       the cascade was visible as hover-delay + scroll lag. With this
+       opt-out the hit surface drops to just `.card` outers + the
+       buttons themselves. */
+    pointer-events: none;
   }
 
   .cover-placeholder {
@@ -343,17 +354,18 @@
     border-radius: 10px;
   }
 
-  /* No full-cover scrim. Earlier versions had a 210x210
-     `rgba(0,0,0,0.85)` overlay with `opacity 0 → 1` on hover; that
-     was the single biggest scroll-time paint cost on WebKitGTK under
-     software compositing — every pointer-traversal of a card during
-     mouse-wheel scroll triggered a paint of the full overlay area.
-     Per the 2026-05-12 user call ("para localLibrary podría aceptar
-     quitarle el overlay y solo dejar los botones, que al final son
-     funcionalidad"), the buttons float directly on the artwork on
-     hover. Each button carries its own dark backdrop so they stay
-     readable on light covers; that's a 44x44 rect per button instead
-     of a 210x210 rect per card. */
+  /* Always-visible action buttons. Earlier versions used opacity 0 → 1
+     on `.card:hover` so the artwork stayed clean when idle; under
+     software compositing the hit-testing required for `:hover`
+     evaluation became the dominant frame cost during mouse-wheel
+     scroll (the cursor traverses cards as they pass under it,
+     triggering pointermove on every card boundary). Removing the
+     hover state takes the entire `:hover` cascade out of the loop —
+     buttons are statically painted on each card mount and never
+     touched again until clicked.
+     Theme-aware colours guarantee contrast on any cover art (dark or
+     light) without needing the artwork-pixel sample work the legacy
+     AlbumCard did. */
   .overlay {
     position: absolute;
     inset: 0;
@@ -368,23 +380,22 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    opacity: 0;
-    transition: opacity 120ms ease;
-  }
-
-  .card:hover .action-buttons {
-    opacity: 1;
+    /* Re-enable hit-testing for the buttons themselves — the cover-
+       wrap is `pointer-events: none` to keep hit-testing cheap, so
+       this opt-in puts the buttons back in the hit path. */
     pointer-events: auto;
   }
 
+  /* Theme-coloured buttons: opaque solid background from the active
+     theme guarantees contrast against any artwork. No gradient, no
+     transparency over the cover, no hover transition. */
   .overlay-btn {
     width: 36px;
     height: 36px;
     border-radius: 50%;
-    border: 1.5px solid rgba(255, 255, 255, 0.95);
-    /* Per-button backdrop replaces the full-cover scrim. */
-    background: rgba(0, 0, 0, 0.55);
-    color: #fff;
+    border: 1px solid var(--bg-tertiary);
+    background: var(--bg-primary);
+    color: var(--text-primary);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -392,16 +403,12 @@
     padding: 0;
   }
 
-  .overlay-btn:hover {
-    background-color: rgba(0, 0, 0, 0.8);
-  }
-
   .overlay-btn.primary {
     width: 44px;
     height: 44px;
-    background: #fff;
-    color: #000;
-    border-color: #fff;
+    background: var(--accent-primary);
+    color: #fff;
+    border-color: var(--accent-primary);
   }
 
   .source-badge-slot {
