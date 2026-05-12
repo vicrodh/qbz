@@ -108,6 +108,7 @@
     onNavigateQobuzissimes,
     onNavigateAlbumsOfTheWeek,
     onNavigateQobuzPlaylists,
+    onNavigateIdealDiscography,
     activeTrackId,
     isPlaybackActive,
   }: Props = $props();
@@ -138,6 +139,7 @@
   let mostStreamed = $state<DiscoveryAlbumCard[]>([]);
   let qobuzissimes = $state<DiscoveryAlbumCard[]>([]);
   let editorPicks = $state<DiscoveryAlbumCard[]>([]);
+  let idealDiscography = $state<DiscoveryAlbumCard[]>([]);
   let qobuzPlaylists = $state<DiscoveryPlaylistCard[]>([]);
   let recentlyPlayedAlbums = $state<DiscoveryAlbumCard[]>([]);
   let continueListening = $state<DiscoveryTrackCard[]>([]);
@@ -162,6 +164,7 @@
     mostStreamed = index.mostStreamed;
     qobuzissimes = index.qobuzissimes;
     editorPicks = index.editorPicks;
+    idealDiscography = index.idealDiscography;
     qobuzPlaylists = index.playlists;
     recentlyPlayedAlbums = resolved.recentlyPlayedAlbums;
     continueListening = resolved.continueListening;
@@ -310,6 +313,15 @@
         items={mostStreamed}
         renderItem={albumCard}
         onSeeAll={onNavigateTopAlbums}
+      />
+    {/if}
+
+    {#if idealDiscography.length > 0}
+      <DiscoverySection
+        title={$t('discover.idealDiscography')}
+        items={idealDiscography}
+        renderItem={albumCard}
+        onSeeAll={onNavigateIdealDiscography}
       />
     {/if}
 

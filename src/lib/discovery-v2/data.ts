@@ -104,6 +104,7 @@ export interface DiscoverIndexSections {
   mostStreamed: DiscoveryAlbumCard[];
   qobuzissimes: DiscoveryAlbumCard[];
   editorPicks: DiscoveryAlbumCard[];
+  idealDiscography: DiscoveryAlbumCard[];
   playlists: DiscoveryPlaylistCard[];
 }
 
@@ -117,6 +118,7 @@ export async function fetchDiscoverIndex(
     mostStreamed: [],
     qobuzissimes: [],
     editorPicks: [],
+    idealDiscography: [],
     playlists: [],
   };
   try {
@@ -136,6 +138,7 @@ export async function fetchDiscoverIndex(
       mostStreamed: takeAlbums(c.most_streamed?.data?.items),
       qobuzissimes: takeAlbums(c.qobuzissims?.data?.items),
       editorPicks: takeAlbums(c.album_of_the_week?.data?.items),
+      idealDiscography: takeAlbums(c.ideal_discography?.data?.items),
       playlists: takePlaylists(c.playlists?.data?.items),
     };
   } catch (err) {
