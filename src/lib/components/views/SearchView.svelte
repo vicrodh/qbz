@@ -4,7 +4,7 @@
   import { resolveArtistImage } from '$lib/stores/customArtistImageStore';
   import { cachedSrc } from '$lib/actions/cachedImage';
   import { Search, Disc3, Music, MicVocal, User, X, ChevronLeft, ChevronRight, Crown, Heart, Play, Ellipsis, ListPlus } from 'lucide-svelte';
-  import AlbumCard from '../AlbumCard.svelte';
+  import AlbumCard from '$lib/discovery-v2/AlbumCardLite.svelte';
   import SearchPlaylistCard from '../SearchPlaylistCard.svelte';
   import ViewTransition from '../ViewTransition.svelte';
   import TrackMenu from '../TrackMenu.svelte';
@@ -695,6 +695,15 @@
 
   function getAlbumArtwork(album: Album): string {
     return album.image?.small || album.image?.thumbnail || album.image?.large || '';
+  }
+
+  /** Helper to bind an album's artistId into a no-arg callback for
+   *  AlbumCardLite's `onArtistClick: () => void`. Returns undefined
+   *  when there's no artistId or no parent handler, so the artist
+   *  link doesn't render. */
+  function makeArtistClickHandler(artistId: number | undefined): (() => void) | undefined {
+    if (artistId === undefined || !onArtistClick) return undefined;
+    return () => onArtistClick(artistId);
   }
 
   function getTrackArtwork(track: Track): string {
@@ -1620,24 +1629,20 @@
                           artwork={getAlbumArtwork(album)}
                           title={album.title}
                           artist={album.artist?.name || 'Unknown Artist'}
-                          artistId={album.artist?.id}
-                          onArtistClick={onArtistClick}
                           genre={getGenreLabel(album)}
-                          releaseDate={album.release_date_original}
-                          size="large"
+                          releaseYear={Number(album.release_date_original?.slice(0, 4)) || undefined}
                           quality={getQualityLabel(album)}
+                          isAlbumFullyDownloaded={isAlbumDownloaded(album.id)}
+                          onArtistClick={makeArtistClickHandler(album.artist?.id)}
                           onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                           onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
                           onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
-                          onAddAlbumToPlaylist={onAddAlbumToPlaylist ? () => onAddAlbumToPlaylist(album.id) : undefined}
+                          onAddToPlaylist={onAddAlbumToPlaylist ? () => onAddAlbumToPlaylist(album.id) : undefined}
                           onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
                           onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
                           onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
-                          isAlbumFullyDownloaded={isAlbumDownloaded(album.id)}
-                          onOpenContainingFolder={onOpenAlbumFolder ? () => onOpenAlbumFolder(album.id) : undefined}
                           onReDownloadAlbum={onReDownloadAlbum ? () => onReDownloadAlbum(album.id) : undefined}
-                          {downloadStateVersion}
-                          onclick={() => { onAlbumClick?.(album.id); loadAlbumDownloadStatus(album.id); }}
+                          onClick={() => { onAlbumClick?.(album.id); loadAlbumDownloadStatus(album.id); }}
                         />
                       </div>
                     {/if}
@@ -1827,21 +1832,19 @@
                         title={album.title}
                         artist={album.artist?.name || 'Unknown Artist'}
                         genre={getGenreLabel(album)}
-                        releaseDate={album.release_date_original}
-                        size="large"
+                        releaseYear={Number(album.release_date_original?.slice(0, 4)) || undefined}
                         quality={getQualityLabel(album)}
+                        isAlbumFullyDownloaded={isAlbumDownloaded(album.id)}
+                        onArtistClick={makeArtistClickHandler(album.artist?.id)}
                         onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                         onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
                         onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
-                        onAddAlbumToPlaylist={onAddAlbumToPlaylist ? () => onAddAlbumToPlaylist(album.id) : undefined}
+                        onAddToPlaylist={onAddAlbumToPlaylist ? () => onAddAlbumToPlaylist(album.id) : undefined}
                         onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
                         onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
                         onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
-                        isAlbumFullyDownloaded={isAlbumDownloaded(album.id)}
-                        onOpenContainingFolder={onOpenAlbumFolder ? () => onOpenAlbumFolder(album.id) : undefined}
                         onReDownloadAlbum={onReDownloadAlbum ? () => onReDownloadAlbum(album.id) : undefined}
-                        {downloadStateVersion}
-                        onclick={() => { onAlbumClick?.(album.id); loadAlbumDownloadStatus(album.id); }}
+                        onClick={() => { onAlbumClick?.(album.id); loadAlbumDownloadStatus(album.id); }}
                       />
                     {/each}
                   </div>
