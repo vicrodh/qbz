@@ -16,7 +16,7 @@
   import { openAddToMixtape } from '$lib/stores/addToMixtapeModalStore';
   import { formatTrackTitle } from '$lib/utils/trackTitle';
   import { cachedSrc } from '$lib/actions/cachedImage';
-  import AlbumCard from '../AlbumCard.svelte';
+  import AlbumCard from '$lib/discovery-v2/AlbumCardLite.svelte';
   import TrackRow from '../TrackRow.svelte';
   import AlbumMenu from '../AlbumMenu.svelte';
   import BulkActionBar from '../BulkActionBar.svelte';
@@ -1027,20 +1027,18 @@
                 artwork={relatedAlbum.artwork}
                 title={relatedAlbum.title}
                 artist={album.artist}
-                artistId={album.artistId}
-                onArtistClick={onTrackGoToArtist}
                 genre={relatedAlbum.genre}
-                releaseDate={relatedAlbum.releaseDate}
-                size="large"
+                releaseYear={Number(relatedAlbum.releaseDate?.slice(0, 4)) || undefined}
                 quality={relatedAlbum.quality}
-                onclick={() => onRelatedAlbumClick?.(relatedAlbum.id)}
+                isAlbumFullyDownloaded={isRelatedAlbumDownloaded(relatedAlbum.id)}
+                onArtistClick={album.artistId && onTrackGoToArtist ? () => onTrackGoToArtist(album.artistId!) : undefined}
+                onClick={() => onRelatedAlbumClick?.(relatedAlbum.id)}
                 onPlay={onRelatedAlbumPlay ? () => onRelatedAlbumPlay(relatedAlbum.id) : undefined}
                 onPlayNext={onRelatedAlbumPlayNext ? () => onRelatedAlbumPlayNext(relatedAlbum.id) : undefined}
                 onPlayLater={onRelatedAlbumPlayLater ? () => onRelatedAlbumPlayLater(relatedAlbum.id) : undefined}
                 onDownload={onRelatedAlbumDownload ? () => onRelatedAlbumDownload(relatedAlbum.id) : undefined}
                 onShareQobuz={onRelatedAlbumShareQobuz ? () => onRelatedAlbumShareQobuz(relatedAlbum.id) : undefined}
                 onShareSonglink={onRelatedAlbumShareSonglink ? () => onRelatedAlbumShareSonglink(relatedAlbum.id) : undefined}
-                isAlbumFullyDownloaded={isRelatedAlbumDownloaded(relatedAlbum.id)}
               />
             </div>
           {/each}
