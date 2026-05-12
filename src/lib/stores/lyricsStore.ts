@@ -254,7 +254,13 @@ function calculateLineProgress(lines: LyricsLine[], index: number, currentTimeMs
   const lineDuration = boundMs - currentLine.timeMs;
   if (lineDuration <= 0) return 0;
 
-  return Math.min(1, (currentTimeMs - currentLine.timeMs) / lineDuration);
+  const ratio = (currentTimeMs - currentLine.timeMs) / lineDuration;
+  // Snap to 1 once we're effectively done — guards against any audio-time
+  // reporting quirk that would otherwise keep the ratio at e.g. 0.998
+  // forever and leave the karaoke gradient with a stuck 0.2% tail.
+  if (ratio >= 0.99) return 1;
+  if (ratio <= 0) return 0;
+  return ratio;
 }
 
 /**
