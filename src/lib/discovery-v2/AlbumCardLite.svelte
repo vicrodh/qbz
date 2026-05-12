@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Play } from 'lucide-svelte';
+  import { Play, Heart, MoreHorizontal } from 'lucide-svelte';
   import { t } from '$lib/i18n';
   import { cachedSrc } from '$lib/actions/cachedImage';
   import type { AlbumRibbon } from './data';
@@ -12,9 +12,12 @@
     quality?: string;
     ribbon?: AlbumRibbon;
     isPlaying?: boolean;
+    isFavorite?: boolean;
     onClick?: () => void;
     onArtistClick?: () => void;
     onPlay?: () => void;
+    onFavorite?: () => void;
+    onMenu?: (event: MouseEvent) => void;
   }
 
   let {
@@ -25,19 +28,32 @@
     quality,
     ribbon,
     isPlaying = false,
+    isFavorite = false,
     onClick,
     onArtistClick,
     onPlay,
+    onFavorite,
+    onMenu,
   }: Props = $props();
 
   function handleCardClick(e: MouseEvent) {
-    if ((e.target as HTMLElement).closest('.play-btn, .artist-link')) return;
+    if ((e.target as HTMLElement).closest('.overlay-btn, .artist-link')) return;
     onClick?.();
   }
 
   function handlePlay(e: MouseEvent) {
     e.stopPropagation();
     onPlay?.();
+  }
+
+  function handleFavorite(e: MouseEvent) {
+    e.stopPropagation();
+    onFavorite?.();
+  }
+
+  function handleMenu(e: MouseEvent) {
+    e.stopPropagation();
+    onMenu?.(e);
   }
 
   function handleArtist(e: MouseEvent) {
@@ -64,14 +80,33 @@
     {#if ribbon}
       <div class="ribbon ribbon-{ribbon.kind}" title={ribbon.label}>{ribbon.label}</div>
     {/if}
-    <button
-      class="play-btn"
-      type="button"
-      aria-label={$t('actions.play')}
-      onclick={handlePlay}
-    >
-      <Play size={16} fill="currentColor" />
-    </button>
+    <div class="actions">
+      <button
+        class="overlay-btn overlay-btn-primary"
+        type="button"
+        aria-label={$t('actions.play')}
+        onclick={handlePlay}
+      >
+        <Play size={18} fill="currentColor" />
+      </button>
+      <button
+        class="overlay-btn"
+        class:is-favorite={isFavorite}
+        type="button"
+        aria-label={$t('actions.toggleFavorite')}
+        onclick={handleFavorite}
+      >
+        <Heart size={16} fill={isFavorite ? 'currentColor' : 'none'} />
+      </button>
+      <button
+        class="overlay-btn"
+        type="button"
+        aria-label={$t('actions.moreActions')}
+        onclick={handleMenu}
+      >
+        <MoreHorizontal size={16} />
+      </button>
+    </div>
   </div>
   <div class="title">{title}</div>
   {#if onArtistClick}
@@ -109,20 +144,15 @@
     overflow: hidden;
   }
 
-  /* Cheap hover overlay: single ::after pseudo-element with a gradient
-     from transparent to dark, opacity 0 → 1 on hover. No blur, no filter,
-     no transform on parent — just an opacity transition on a static
-     gradient. Compositor-friendly under software rendering. */
+  /* Qobuz-style hover overlay: solid dark scrim covers the whole cover,
+     opacity 0 → 1 on card hover. Single `::after`, no blur, no filter,
+     no transform on parent. Pure opacity transition. The action buttons
+     ride on top via a separate `.actions` container with its own opacity. */
   .cover-wrap::after {
     content: '';
     position: absolute;
     inset: 0;
-    background: linear-gradient(
-      180deg,
-      rgba(0, 0, 0, 0) 0%,
-      rgba(0, 0, 0, 0) 50%,
-      rgba(0, 0, 0, 0.55) 100%
-    );
+    background: rgba(0, 0, 0, 0.6);
     opacity: 0;
     transition: opacity 150ms ease;
     pointer-events: none;
@@ -144,34 +174,70 @@
     height: 100%;
   }
 
-  /* Play button. Static at rest, slight scale + brighter background on
-     card hover. Transform-only animation (no layout reflow, no paint of
-     surrounding cards). z-index: 1 so it sits above the gradient overlay. */
-  .play-btn {
+  /* Action buttons centered on the cover; visible only on hover. The
+     container sits above the dark scrim (z-index: 1). Opacity 0 at rest,
+     opacity 1 on card hover. Same 150ms timing as the scrim so they
+     reveal together. */
+  .actions {
     position: absolute;
-    bottom: 8px;
-    right: 8px;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    opacity: 0;
+    transition: opacity 150ms ease;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .card:hover .actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* Per-button styling. Outline-only circles like the Qobuz player, with
+     accent fill for the primary play. Subtle hover scale on each — no
+     layout reflow, transform-only. */
+  .overlay-btn {
     width: 36px;
     height: 36px;
     border-radius: 50%;
-    border: none;
-    background: var(--accent-primary);
-    color: var(--btn-primary-text, #000);
+    border: 1.5px solid rgba(255, 255, 255, 0.9);
+    background: transparent;
+    color: #fff;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
     padding: 0;
-    z-index: 1;
-    transition: transform 150ms ease;
+    transition: background-color 120ms ease, transform 120ms ease,
+      color 120ms ease, border-color 120ms ease;
   }
 
-  .card:hover .play-btn {
-    transform: scale(1.12);
+  .overlay-btn:hover {
+    background-color: rgba(255, 255, 255, 0.15);
+    transform: scale(1.08);
   }
 
-  .play-btn:hover {
-    transform: scale(1.18);
+  .overlay-btn-primary {
+    width: 44px;
+    height: 44px;
+    background: #fff;
+    color: #000;
+    border-color: #fff;
+  }
+
+  .overlay-btn-primary:hover {
+    background: #fff;
+    color: #000;
+    transform: scale(1.08);
+  }
+
+  .overlay-btn.is-favorite {
+    color: var(--accent-primary);
+    border-color: var(--accent-primary);
   }
 
   .title {

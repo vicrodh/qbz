@@ -24,6 +24,11 @@
   import { sectionPrefs } from './sectionPrefs';
   import DiscoverySettingsModal from './DiscoverySettingsModal.svelte';
   import { Settings } from 'lucide-svelte';
+  import {
+    isAlbumFavorite,
+    toggleAlbumFavorite,
+    subscribe as subscribeAlbumFavs,
+  } from '$lib/stores/albumFavoritesStore';
 
   /**
    * Discovery V2 — clean-room rebuild of the home view.
@@ -188,6 +193,22 @@
   // Discovery settings modal (toggle/reorder sections).
   let settingsOpen = $state(false);
 
+  // Album favorites — subscribe so card `isFavorite` reads stay reactive.
+  // The store's `isAlbumFavorite(id)` is a sync getter; we bump a $state
+  // counter on each subscribe notification so {@const reads in the
+  // album-card snippet re-evaluate.
+  let favoritesVersion = $state(0);
+  onMount(() => {
+    const unsub = subscribeAlbumFavs(() => {
+      favoritesVersion++;
+    });
+    return unsub;
+  });
+  function isFav(albumId: string): boolean {
+    void favoritesVersion;
+    return isAlbumFavorite(albumId);
+  }
+
   // `activeTrackId` + `isPlaybackActive` drive the playing indicator on
   // TrackCardLite within Continue Listening (the only section where the
   // card carries a trackId-level identity). Album/playlist cards stay
@@ -238,8 +259,10 @@
       artwork={album.artwork}
       quality={album.quality}
       ribbon={album.ribbon}
+      isFavorite={isFav(album.albumId)}
       onClick={() => onAlbumClick?.(album.albumId)}
       onPlay={() => onAlbumPlay?.(album.albumId)}
+      onFavorite={() => { void toggleAlbumFavorite(album.albumId); }}
       onArtistClick={album.artistId !== undefined
         ? () => onArtistClick?.(album.artistId!)
         : undefined}
