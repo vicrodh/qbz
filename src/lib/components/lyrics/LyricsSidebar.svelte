@@ -7,6 +7,8 @@
 
   interface LyricsLine {
     text: string;
+    timeMs?: number;
+    endMs?: number;
   }
 
   interface Props {

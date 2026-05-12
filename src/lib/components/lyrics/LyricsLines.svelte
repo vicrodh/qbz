@@ -10,6 +10,7 @@
   interface LyricsLine {
     text: string;
     timeMs?: number; // Optional timing for synced lyrics
+    endMs?: number; // Optional end-of-vocal marker (LRC gap markers)
   }
 
   interface Props {
@@ -46,18 +47,19 @@
     uppercase = false
   }: Props = $props();
 
-  // Calculate line duration for CSS animation (immersive mode only)
+  // Sung duration for a line. Uses endMs (LRC gap marker → end of vocal)
+  // when available, otherwise next line's start, otherwise a 5s default.
   function getLineDuration(index: number): number {
     if (!isSynced || index < 0 || index >= lines.length) return 3000;
 
     const currentLine = lines[index];
     const nextLine = lines[index + 1];
 
-    if (!currentLine?.timeMs) return 3000; // Default 3 seconds
-    if (!nextLine?.timeMs) return 5000; // Last line, assume 5 seconds
+    if (!currentLine?.timeMs) return 3000;
+    const bound = currentLine.endMs ?? nextLine?.timeMs;
+    if (!bound) return 5000;
 
-    const duration = nextLine.timeMs - currentLine.timeMs;
-    // Clamp between 1-10 seconds
+    const duration = bound - currentLine.timeMs;
     return Math.max(1000, Math.min(10000, duration));
   }
 

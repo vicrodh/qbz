@@ -25,6 +25,10 @@ export interface LyricsPayload {
 export interface LyricsLine {
   timeMs: number;
   text: string;
+  // Optional end-of-vocal timestamp. Set from an empty-text LRC marker
+  // following this line, when present. Lets us cap progress to the actual
+  // sung portion and hold at 1.0 through an instrumental gap.
+  endMs?: number;
 }
 
 export interface ParsedLyrics {
@@ -125,7 +129,11 @@ export function getLyricsState(): LyricsState {
  * Supports: [mm:ss.xx], [mm:ss.xxx], [mm:ss]
  */
 function parseLRC(lrc: string): LyricsLine[] {
-  const lines: LyricsLine[] = [];
+  // Two-pass: first collect every timestamp (incl. empty-text "gap" markers
+  // like [02:34.00] used to mark end-of-vocal before an instrumental break),
+  // then emit only the text-bearing lines with each one's endMs derived from
+  // the following timestamp (whether text or gap).
+  const stamps: { timeMs: number; text: string }[] = [];
   const regex = /\[(\d{1,2}):(\d{2})(?:[.:](\d{2,3}))?\](.*)/g;
 
   let match;
@@ -134,15 +142,44 @@ function parseLRC(lrc: string): LyricsLine[] {
     const seconds = Number.parseInt(match[2], 10);
     const ms = match[3] ? Number.parseInt(match[3].padEnd(3, '0'), 10) : 0;
     const text = match[4].trim();
-
-    if (text) {
-      const timeMs = (minutes * 60 + seconds) * 1000 + ms;
-      lines.push({ timeMs, text });
-    }
+    const timeMs = (minutes * 60 + seconds) * 1000 + ms;
+    stamps.push({ timeMs, text });
   }
 
-  // Sort by time
-  lines.sort((a, b) => a.timeMs - b.timeMs);
+  stamps.sort((a, b) => a.timeMs - b.timeMs);
+
+  // Cap any single line's sung duration. Anything beyond this is almost
+  // certainly an instrumental gap the LRC didn't mark — capping prevents
+  // the karaoke gradient from creeping across silence.
+  const MAX_SUNG_MS = 8000;
+
+  const lines: LyricsLine[] = [];
+  for (let i = 0; i < stamps.length; i++) {
+    const stamp = stamps[i];
+    if (!stamp.text) continue; // gap marker — never displayed, only bounds previous line
+    const nextStamp = stamps[i + 1];
+    const cap = stamp.timeMs + MAX_SUNG_MS;
+    const endMs = nextStamp ? Math.min(nextStamp.timeMs, cap) : undefined;
+    lines.push({ timeMs: stamp.timeMs, text: stamp.text, endMs });
+  }
+
+  // Last line has no following stamp; the previous default of 5s was
+  // visibly slow on songs that end with a short vocal phrase followed by
+  // an instrumental coda. Estimate from the median of preceding lines'
+  // sung durations — a more song-appropriate fallback.
+  if (lines.length >= 2 && lines[lines.length - 1].endMs === undefined) {
+    const durations: number[] = [];
+    for (let i = 0; i < lines.length - 1; i++) {
+      const d = (lines[i].endMs ?? lines[i + 1].timeMs) - lines[i].timeMs;
+      if (d > 0) durations.push(d);
+    }
+    if (durations.length > 0) {
+      durations.sort((a, b) => a - b);
+      const median = durations[Math.floor(durations.length / 2)];
+      const last = lines[lines.length - 1];
+      last.endMs = last.timeMs + Math.min(median, MAX_SUNG_MS);
+    }
+  }
 
   return lines;
 }
@@ -210,13 +247,11 @@ function calculateLineProgress(lines: LyricsLine[], index: number, currentTimeMs
   const currentLine = lines[index];
   const nextLine = lines[index + 1];
 
-  if (!nextLine) {
-    // Last line - assume 5 seconds duration
-    const duration = 5000;
-    return Math.min(1, (currentTimeMs - currentLine.timeMs) / duration);
-  }
-
-  const lineDuration = nextLine.timeMs - currentLine.timeMs;
+  // Prefer endMs (sung-portion boundary from LRC gap marker) over next
+  // line's start, so we hit 1.0 when the singer actually stops, and hold
+  // there through any instrumental gap before the next line.
+  const boundMs = currentLine.endMs ?? nextLine?.timeMs ?? currentLine.timeMs + 5000;
+  const lineDuration = boundMs - currentLine.timeMs;
   if (lineDuration <= 0) return 0;
 
   return Math.min(1, (currentTimeMs - currentLine.timeMs) / lineDuration);

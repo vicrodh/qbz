@@ -6653,7 +6653,7 @@
       <LyricsSidebar
         title={currentTrack?.title}
         artist={currentTrack?.artist}
-        lines={lyricsLines.map(l => ({ text: l.text }))}
+        lines={lyricsLines.map(l => ({ text: l.text, timeMs: l.timeMs, endMs: l.endMs }))}
         activeIndex={lyricsActiveIndex}
         activeProgress={lyricsActiveProgress}
         isSynced={lyricsIsSynced}
