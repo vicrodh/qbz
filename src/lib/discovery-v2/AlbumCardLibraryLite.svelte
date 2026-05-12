@@ -319,6 +319,11 @@
     border-radius: 8px;
     pointer-events: none;
     box-sizing: border-box;
+    /* The cover img sits at z-index: 1 (set below). The pseudo's
+       implicit auto z-index would put it BELOW the img, hiding the
+       border ring under the artwork on hover. z-index: 2 lifts it
+       above the img so the accent border is actually visible. */
+    z-index: 2;
   }
 
   .card:hover .cover-wrap::after {

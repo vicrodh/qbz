@@ -215,23 +215,26 @@
     /* Belt-and-suspenders: the standard `scrollbar-*` properties +
        the `::-webkit-scrollbar*` pseudo-elements below. Some
        WebKitGTK builds honour one but not the other depending on
-       overlay-scrollbar settings, so we set both. */
-    scrollbar-width: auto;
-    scrollbar-color: var(--text-muted) var(--bg-secondary);
+       overlay-scrollbar settings, so we set both. Values match the
+       global app.css scrollbar styling so the bar reads as part of
+       the app and not a one-off. */
+    scrollbar-width: thin;
+    scrollbar-color: var(--bg-tertiary) transparent;
   }
 
   .grid-pool::-webkit-scrollbar {
-    width: 10px;
+    width: 8px;
+    height: 8px;
   }
   .grid-pool::-webkit-scrollbar-track {
-    background: var(--bg-secondary);
+    background: transparent;
   }
   .grid-pool::-webkit-scrollbar-thumb {
-    background: var(--text-muted);
-    border-radius: 5px;
+    background: var(--bg-tertiary);
+    border-radius: 9999px;
   }
   .grid-pool::-webkit-scrollbar-thumb:hover {
-    background: var(--text-primary);
+    background: var(--text-muted);
   }
 
   .grid-spacer {

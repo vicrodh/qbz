@@ -8014,7 +8014,13 @@
 
   .album-sections.virtualized {
     flex: 1;
-    height: calc(100vh - 280px); /* Adjust based on header/controls height */
+    /* `100vh - 280` over-extended past the NowPlayingBar (104px tall
+       at the bottom) once we forced the scrollbar always visible —
+       the bar ran to viewport-bottom instead of ending at the player.
+       Bumped subtraction to 360 to clear the player + controls
+       above the grid; the min-height keeps the area reasonable on
+       small windows. */
+    height: calc(100vh - 360px);
     min-height: 400px;
   }
 

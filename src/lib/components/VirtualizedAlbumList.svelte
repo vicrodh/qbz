@@ -393,23 +393,25 @@
     position: relative;
     /* Force the scrollbar visible (some WebKitGTK builds default to
        overlay scrollbars that only paint on active hover). Standard
-       `scrollbar-*` + pseudo-elements for cross-config safety. */
-    scrollbar-width: auto;
-    scrollbar-color: var(--text-muted) var(--bg-secondary);
+       `scrollbar-*` + pseudo-elements for cross-config safety.
+       Values match the global app.css scrollbar styling. */
+    scrollbar-width: thin;
+    scrollbar-color: var(--bg-tertiary) transparent;
   }
 
   .virtual-container::-webkit-scrollbar {
-    width: 10px;
+    width: 8px;
+    height: 8px;
   }
   .virtual-container::-webkit-scrollbar-track {
-    background: var(--bg-secondary);
+    background: transparent;
   }
   .virtual-container::-webkit-scrollbar-thumb {
-    background: var(--text-muted);
-    border-radius: 5px;
+    background: var(--bg-tertiary);
+    border-radius: 9999px;
   }
   .virtual-container::-webkit-scrollbar-thumb:hover {
-    background: var(--text-primary);
+    background: var(--text-muted);
   }
 
   .virtual-content {
