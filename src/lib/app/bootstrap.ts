@@ -16,6 +16,7 @@ import { getNextZoomLevel } from '$lib/utils/zoom';
 import { getUserItem } from '$lib/utils/userStorage';
 import { getZoom, setZoom } from '$lib/stores/zoomStore';
 import { restoreAutoThemeVars } from '$lib/stores/autoThemeStore';
+import { bootstrapGraphicsState } from '$lib/runtime/graphicsState';
 
 // ============ Theme Management ============
 
@@ -194,6 +195,11 @@ export function bootstrapApp(): BootstrapResult {
   // Load notification preferences
   loadToastsPreference();
   loadSystemNotificationsPreference();
+
+  // Prime the runtime graphics-state cache so hot paths like `cachedSrc`
+  // can read it sync. Fire-and-forget; falls back to "HW accel ON"
+  // defaults if it errors out (see ADR-004).
+  void bootstrapGraphicsState();
 
   // Setup mouse navigation
   const cleanupMouse = setupMouseNavigation();
