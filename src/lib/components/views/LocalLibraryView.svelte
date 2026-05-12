@@ -34,6 +34,7 @@
   import { downloadSettingsVersion } from '$lib/stores/downloadSettingsStore';
   import { showToast, dismissBuffering } from '$lib/stores/toastStore';
   import AlbumCard from '$lib/discovery-v2/AlbumCardLibraryLite.svelte';
+  import AlbumGridPool from '$lib/discovery-v2/AlbumGridPool.svelte';
   import VirtualizedAlbumList from '../VirtualizedAlbumList.svelte';
   import VirtualizedArtistGrid from '../VirtualizedArtistGrid.svelte';
   import VirtualizedArtistList from '../VirtualizedArtistList.svelte';
@@ -6411,25 +6412,56 @@
             {:else}
               <div class="album-sections virtualized">
                 <div class="virtualized-container">
-                  <VirtualizedAlbumList
-                    groups={groupedMetadataAlbums}
-                    viewMode={albumViewMode}
-                    showGroupHeaders={albumGroupingEnabled}
-                    {getArtworkUrl}
-                    getQualityBadge={getAlbumQualityBadge}
-                    isHiRes={isAlbumHiRes}
-                    formatDuration={formatTotalDuration}
-                    onAlbumClick={handleAlbumClick}
-                    onAlbumPlay={handleAlbumPlayFromGrid}
-                    onAlbumQueueNext={handleAlbumQueueNextFromGrid}
-                    onAlbumQueueLater={handleAlbumQueueLaterFromGrid}
-                    scrollToGroupId={virtualizedScrollTarget}
-                    showSourceBadge={true}
-                    selectable={albumSelectMode}
-                    selectedAlbumIds={selectedAlbumIds}
-                    onAlbumToggleSelect={toggleAlbumSelect}
-                    onAlbumToggleSelectRange={addAlbumsToSelection}
-                  />
+                  {#if albumViewMode === 'grid' && !albumGroupingEnabled}
+                    <!-- Recycling pool: 80-ish stable slots, scrolled-to
+                         indices update bindings in place. Headers aren't
+                         supported here yet, so we fall back to the
+                         legacy virtualizer when grouping is enabled. -->
+                    {#snippet renderMetadataAlbumCell(album: LocalAlbum, _idx: number)}
+                      <AlbumCard
+                        albumId={album.id}
+                        year={album.year}
+                        trackCount={album.track_count}
+                        artwork={getArtworkUrl(album.artwork_path)}
+                        title={album.title}
+                        artist={album.artist}
+                        quality={getAlbumQualityBadge(album)}
+                        onPlay={() => handleAlbumPlayFromGrid(album)}
+                        onPlayNext={() => handleAlbumQueueNextFromGrid(album)}
+                        onPlayLater={() => handleAlbumQueueLaterFromGrid(album)}
+                        onClick={() => handleAlbumClick(album)}
+                        sourceBadge={album.source === 'plex' ? 'plex' : album.source === 'qobuz_purchase' ? 'qobuz_purchase' : album.source === 'qobuz_download' ? 'qobuz_download' : 'user'}
+                        selectable={albumSelectMode}
+                        selected={selectedAlbumIds.has(album.id)}
+                        onToggleSelect={() => toggleAlbumSelect(album)}
+                      />
+                    {/snippet}
+                    <AlbumGridPool
+                      totalCount={filteredMetadataAlbums.length}
+                      getItem={(i) => filteredMetadataAlbums[i] ?? null}
+                      renderCell={renderMetadataAlbumCell}
+                    />
+                  {:else}
+                    <VirtualizedAlbumList
+                      groups={groupedMetadataAlbums}
+                      viewMode={albumViewMode}
+                      showGroupHeaders={albumGroupingEnabled}
+                      {getArtworkUrl}
+                      getQualityBadge={getAlbumQualityBadge}
+                      isHiRes={isAlbumHiRes}
+                      formatDuration={formatTotalDuration}
+                      onAlbumClick={handleAlbumClick}
+                      onAlbumPlay={handleAlbumPlayFromGrid}
+                      onAlbumQueueNext={handleAlbumQueueNextFromGrid}
+                      onAlbumQueueLater={handleAlbumQueueLaterFromGrid}
+                      scrollToGroupId={virtualizedScrollTarget}
+                      showSourceBadge={true}
+                      selectable={albumSelectMode}
+                      selectedAlbumIds={selectedAlbumIds}
+                      onAlbumToggleSelect={toggleAlbumSelect}
+                      onAlbumToggleSelectRange={addAlbumsToSelection}
+                    />
+                  {/if}
                 </div>
               </div>
             {/if}

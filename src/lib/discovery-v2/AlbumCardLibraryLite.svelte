@@ -81,6 +81,20 @@
   let menuOpen = $state(false);
   let menuAnchor = $state<{ x: number; y: number } | null>(null);
 
+  /**
+   * Reset transient internal state when the slot recycles to a
+   * different album. The pool reuses this component instance as scroll
+   * advances; without this reset, a menu that was open on the previous
+   * album would stay open on the new one, and a failed-image flag
+   * would stick. The image-cache action's own `update` handles the
+   * cover-URL swap; this reset covers state we own here. */
+  $effect(() => {
+    void albumId;
+    menuOpen = false;
+    menuAnchor = null;
+    imageError = false;
+  });
+
   function handleImageError() {
     imageError = true;
   }
@@ -168,9 +182,13 @@
     <div class="cover-placeholder"><Disc3 size={48} /></div>
 
     {#if !imageError && coverSrc}
+      <!-- src is intentionally not bound here: cachedSrc owns the
+           attribute. Setting both `src=` and `use:cachedSrc=` makes the
+           WebView fire a fetch on the raw URL in parallel with the
+           cache check, double-loading every cover during a big library
+           scroll. Legacy AlbumCard followed the same pattern. -->
       <img
         class="cover"
-        src={coverSrc}
         use:cachedSrc={coverSrc}
         alt={title}
         loading="lazy"
@@ -253,11 +271,12 @@
     border: none;
     padding: 0;
     text-align: left;
-    /* Skip paint/render for offscreen cards. Important for libraries
-       with thousands of albums — without this every scroll forces every
-       card under the viewport to repaint. */
-    content-visibility: auto;
-    contain-intrinsic-size: 210px 320px;
+    /* No `content-visibility: auto` here: the parent VirtualizedAlbumList
+       already skips offscreen rows via binary-searched visibleItems.
+       Stacking content-visibility on every card added a per-card
+       intersection check that WebKit SW evaluates each scroll frame
+       without buying anything — the cards inside a visible row are by
+       definition in-viewport. */
   }
 
   .cover-wrap {
