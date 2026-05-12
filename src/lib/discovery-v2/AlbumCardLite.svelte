@@ -17,6 +17,11 @@
     releaseYear?: number;
     isPlaying?: boolean;
     isFavorite?: boolean;
+    /** Album is already cached offline. When true, the kebab menu
+     *  shows "Refresh offline copy" (`onReDownloadAlbum`) instead of
+     *  "Make available offline" (`onDownload`). The flag drives only
+     *  the menu copy/action; visual state of the card is unaffected. */
+    isAlbumFullyDownloaded?: boolean;
     onClick?: () => void;
     onArtistClick?: () => void;
     onPlay?: () => void;
@@ -27,6 +32,7 @@
     onShareQobuz?: () => void;
     onShareSonglink?: () => void;
     onDownload?: () => void;
+    onReDownloadAlbum?: () => void;
   }
 
   let {
@@ -41,6 +47,7 @@
     releaseYear,
     isPlaying = false,
     isFavorite = false,
+    isAlbumFullyDownloaded = false,
     onClick,
     onArtistClick,
     onPlay,
@@ -51,6 +58,7 @@
     onShareQobuz,
     onShareSonglink,
     onDownload,
+    onReDownloadAlbum,
   }: Props = $props();
 
   // Quick-menu state. Position carries the click coordinates so the
@@ -161,6 +169,8 @@
   onShareQobuz={onShareQobuz ? () => onShareQobuz?.() : undefined}
   onShareSonglink={onShareSonglink ? () => onShareSonglink?.() : undefined}
   onDownload={onDownload ? () => onDownload?.() : undefined}
+  onReDownloadAlbum={onReDownloadAlbum ? () => onReDownloadAlbum?.() : undefined}
+  {isAlbumFullyDownloaded}
 />
 
 <style>
