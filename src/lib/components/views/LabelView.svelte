@@ -142,6 +142,26 @@
   let visibleTracksCount = $state(5);
   let showTracksContextMenu = $state(false);
 
+  // Close the popular-tracks context menu on clicks outside its trigger or panel.
+  $effect(() => {
+    if (!showTracksContextMenu) return;
+
+    function handleClickOutside(event: MouseEvent) {
+      const target = event.target as HTMLElement | null;
+      if (!target) return;
+      if (target.closest('.action-btn-circle') || target.closest('.context-menu')) return;
+      showTracksContextMenu = false;
+    }
+
+    setTimeout(() => {
+      document.addEventListener('click', handleClickOutside);
+    }, 0);
+
+    return () => {
+      document.removeEventListener('click', handleClickOutside);
+    };
+  });
+
   // Description expand
   let descriptionExpanded = $state(false);
   let labelDescription = $state<string | null>(null);
@@ -955,7 +975,6 @@
                 <Ellipsis size={18} />
               </button>
               {#if showTracksContextMenu}
-                <div class="context-menu-backdrop" onclick={() => showTracksContextMenu = false} role="presentation"></div>
                 <div class="context-menu">
                   <button class="context-menu-item" onclick={() => { handlePlayAllTracksNext(); showTracksContextMenu = false; }}>
                     {$t('player.playNext')}
@@ -1529,7 +1548,6 @@
 
   /* Context menu */
   .context-menu-wrapper { position: relative; }
-  .context-menu-backdrop { position: fixed; inset: 0; z-index: 99; }
   .context-menu {
     position: absolute; top: 100%; right: 0; margin-top: 8px;
     min-width: 160px; background-color: var(--bg-tertiary);
