@@ -537,6 +537,21 @@ impl AudioBackend for CpalDefaultBackend {
             .open_stream()
             .map_err(|e| format!("Failed to create output stream: {}", e))?;
 
+        #[cfg(target_os = "macos")]
+        if !config.exclusive_mode {
+            if let Some(nominal_rate) =
+                Self::current_macos_nominal_rate(effective_device_id.map(|name| name.as_str()))
+            {
+                let output_rate = mixer_sink.config().sample_rate().get();
+                if output_rate != nominal_rate {
+                    return Err(format!(
+                        "CoreAudio shared stream opened at {}Hz while device nominal rate is {}Hz",
+                        output_rate, nominal_rate
+                    ));
+                }
+            }
+        }
+
         Ok(mixer_sink)
     }
 
@@ -589,6 +604,17 @@ impl AudioBackend for CpalDefaultBackend {
 
 #[cfg(target_os = "macos")]
 impl CpalDefaultBackend {
+    fn current_macos_nominal_rate(effective_device_name: Option<&str>) -> Option<u32> {
+        use crate::coreaudio_direct;
+
+        let device_id = match effective_device_name {
+            Some(name) => coreaudio_direct::find_device_by_name(name).ok().flatten(),
+            None => coreaudio_direct::get_default_output_device().ok(),
+        }?;
+
+        coreaudio_direct::get_nominal_sample_rate(device_id).ok()
+    }
+
     /// In macOS shared mode, CPAL's default config can briefly report a stale
     /// sample rate after CoreAudio changes the device's nominal rate. If we
     /// trust the stale rate, playback can run at the wrong speed until the
@@ -598,13 +624,7 @@ impl CpalDefaultBackend {
         device: &rodio::cpal::Device,
         effective_device_name: Option<&str>,
     ) -> Option<rodio::cpal::SupportedStreamConfig> {
-        use crate::coreaudio_direct;
-
-        let device_id = match effective_device_name {
-            Some(name) => coreaudio_direct::find_device_by_name(name).ok().flatten(),
-            None => coreaudio_direct::get_default_output_device().ok(),
-        }?;
-        let nominal_rate = coreaudio_direct::get_nominal_sample_rate(device_id).ok()?;
+        let nominal_rate = Self::current_macos_nominal_rate(effective_device_name)?;
         let default_config = device.default_output_config().ok()?;
         let default_rate = default_config.sample_rate();
         if nominal_rate == default_rate {
