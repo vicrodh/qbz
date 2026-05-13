@@ -1789,7 +1789,17 @@ impl LibraryDatabase {
             WITH grouped AS (
                 SELECT
                     {group_key} AS group_key,
-                    COALESCE(album_group_title, album, 'Unknown Album') AS title,
+                    -- Prefer `album` (metadata tag) over
+                    -- `album_group_title` (scan-time snapshot, which
+                    -- falls back to folder name if metadata is
+                    -- missing). Fixes #411 — when album metadata is
+                    -- valid, the folder name was winning because
+                    -- COALESCE returned `album_group_title` first.
+                    COALESCE(
+                        NULLIF(NULLIF(TRIM(album), ''), 'Unknown Album'),
+                        album_group_title,
+                        'Unknown Album'
+                    ) AS title,
                     COALESCE(album_artist, artist, 'Unknown Artist') AS artist,
                     year,
                     catalog_number,
@@ -2043,7 +2053,17 @@ impl LibraryDatabase {
             WITH grouped AS (
                 SELECT
                     {group_key} AS group_key,
-                    COALESCE(album_group_title, album, 'Unknown Album') AS title,
+                    -- Prefer `album` (metadata tag) over
+                    -- `album_group_title` (scan-time snapshot, which
+                    -- falls back to folder name if metadata is
+                    -- missing). Fixes #411 — when album metadata is
+                    -- valid, the folder name was winning because
+                    -- COALESCE returned `album_group_title` first.
+                    COALESCE(
+                        NULLIF(NULLIF(TRIM(album), ''), 'Unknown Album'),
+                        album_group_title,
+                        'Unknown Album'
+                    ) AS title,
                     COALESCE(album_artist, artist, 'Unknown Artist') AS artist,
                     year,
                     catalog_number,
@@ -2231,7 +2251,17 @@ impl LibraryDatabase {
             WITH grouped AS (
                 SELECT
                     {group_key} AS group_key,
-                    COALESCE(album_group_title, album, 'Unknown Album') AS title,
+                    -- Prefer `album` (metadata tag) over
+                    -- `album_group_title` (scan-time snapshot, which
+                    -- falls back to folder name if metadata is
+                    -- missing). Fixes #411 — when album metadata is
+                    -- valid, the folder name was winning because
+                    -- COALESCE returned `album_group_title` first.
+                    COALESCE(
+                        NULLIF(NULLIF(TRIM(album), ''), 'Unknown Album'),
+                        album_group_title,
+                        'Unknown Album'
+                    ) AS title,
                     COALESCE(album_artist, artist, 'Unknown Artist') AS artist,
                     artist AS track_artist
                 FROM local_tracks
