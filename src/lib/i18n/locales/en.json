@@ -2947,6 +2947,7 @@
     "findingSimilarArtists": "Finding similar artists...",
     "awardUnavailable": "Award detail not available for this entry.",
     "audioDeviceMissing": "Output device '{device}' is no longer available. Using system default.",
+    "audioInitFailed": "Audio output could not start: {reason}",
     "mixTrimmed": "Added {actual} songs to your queue (you asked for {requested}; some merged or capped per album)."
   },
   "topMixes": {

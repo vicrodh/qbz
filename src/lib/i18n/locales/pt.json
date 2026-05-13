@@ -2941,6 +2941,7 @@
     "findingSimilarArtists": "Encontrando artistas semelhantes...",
     "awardUnavailable": "Detalhe não disponível para este prêmio.",
     "audioDeviceMissing": "Dispositivo '{device}' não está mais disponível. Usando o padrão do sistema.",
+    "audioInitFailed": "Não foi possível iniciar a saída de áudio: {reason}",
     "mixTrimmed": "{actual} músicas adicionadas à fila (pediste {requested}; algumas foram fundidas ou limitadas por álbum)."
   },
   "topMixes": {
