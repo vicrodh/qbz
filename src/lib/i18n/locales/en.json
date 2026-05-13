@@ -2378,6 +2378,20 @@
         "perfDegraded": "QBZ detected performance issues with the immersive view. Some effects have been temporarily disabled. You can re-enable them from Settings > Appearance.",
         "perfDontShowAgain": "Don't show this again"
       },
+      "immersivePanels": {
+        "title": "Immersive Panels",
+        "summary": "Enable or disable individual immersive view panels",
+        "desc": "Disabled panels are hidden from the visualizer menu so you don't land on them by mistake.",
+        "cpuWarning": "Hardware acceleration is off. Panels marked GPU rely on shaders or 3D compositing and will be slow on your setup. They are disabled by default — only re-enable them if you know your machine can handle it.",
+        "heavyTooltip": "Requires GPU compositing for usable performance",
+        "warningModal": {
+          "title": "Hardware acceleration is off",
+          "body": "QBZ detected that your system is running without GPU compositing. Some immersive panels — Album Reactive, the three Neon variants, and Transient Pulse — rely on shaders or 3D effects that are not viable in software rendering. They have been hidden by default so you don't land on them by accident.",
+          "hint": "If you want to enable hardware acceleration, check Settings → Appearance → Composition. If you know your setup can handle GPU effects, you can re-enable individual panels from Settings → Appearance → Immersive Panels.",
+          "dontShowAgain": "Don't show this again",
+          "acknowledge": "Got it"
+        }
+      },
       "immersiveFps": {
         "title": "Animation Frame Rate",
         "summary": "Per-animation FPS control for immersive mode",

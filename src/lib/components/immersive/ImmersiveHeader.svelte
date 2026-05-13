@@ -2,6 +2,7 @@
   import { Disc3, Disc, MicVocal, ListMusic, Music2, Info, Radio, Maximize, Minimize, ChevronDown, X, Square, Copy, Minus, Image, Activity, AudioWaveform, CircleDot, Crosshair, Zap, HeartPulse, Move } from 'lucide-svelte';
   import { t } from '$lib/i18n';
   import { getCurrentWindow } from '@tauri-apps/api/window';
+  import { immersivePanelsStore, type ImmersivePanelId } from '$lib/stores/immersivePanelsStore';
 
   export type ImmersiveTab = 'lyrics' | 'trackInfo' | 'suggestions' | 'queue';
   export type FocusTab = 'coverflow' | 'static' | 'visualizer' | 'neon-flow' | 'tunnel-flow' | 'comet-flow' | 'oscilloscope' | 'spectral-ribbon' | 'energy-bands' | 'lissajous' | 'transient-pulse' | 'album-reactive' | 'linebed' | 'lyrics-focus' | 'queue-focus';
@@ -143,6 +144,18 @@
     { id: 'linebed', labelKey: 'settings.appearance.immersiveFps.panels.linebed', icon: AudioWaveform },
   ];
 
+  // Filter the visualizer dropdown and Neon submenu by per-panel enable
+  // state from `immersivePanelsStore`. A panel the user has turned off
+  // (or that CPU mode defaults to off for) never appears here.
+  const enabledPanels = $derived($immersivePanelsStore);
+  const visibleVizOptions = $derived(
+    vizOptions.filter(opt => enabledPanels[opt.id as ImmersivePanelId] !== false)
+  );
+  const neonLaserEnabled = $derived(enabledPanels['neon-flow'] !== false);
+  const neonTunnelEnabled = $derived(enabledPanels['tunnel-flow'] !== false);
+  const neonCometEnabled = $derived(enabledPanels['comet-flow'] !== false);
+  const neonSubmenuVisible = $derived(neonLaserEnabled || neonTunnelEnabled || neonCometEnabled);
+
   const isVisualizerActive = $derived(VISUALIZER_TABS.includes(activeFocusTab));
   const activeVizOption = $derived(vizOptions.find(opt => opt.id === activeFocusTab));
   const activeVizLabelKey = $derived(
@@ -203,7 +216,11 @@
           class:active={isVisualizerActive}
           onclick={() => {
             if (!isVisualizerActive) {
-              onFocusTabChange('spectral-ribbon');
+              // Land on the first enabled visualizer instead of hardcoded
+              // spectral-ribbon — otherwise users who disabled it would
+              // hit a blank panel.
+              const fallback = visibleVizOptions[0]?.id ?? 'spectral-ribbon';
+              onFocusTabChange(fallback as FocusTab);
             } else {
               isVizDropdownOpen = !isVizDropdownOpen;
             }
@@ -229,7 +246,7 @@
 
         {#if isVizDropdownOpen}
           <div class="viz-dropdown">
-            {#each vizOptions as opt (opt.id)}
+            {#each visibleVizOptions as opt (opt.id)}
               <button
                 class="viz-dropdown-item"
                 class:active={activeFocusTab === opt.id}
@@ -240,51 +257,59 @@
               </button>
             {/each}
 
-            <div
-              class="viz-dropdown-submenu-wrapper"
-              onmouseenter={() => (isNeonSubmenuOpen = true)}
-              onmouseleave={() => (isNeonSubmenuOpen = false)}
-              role="group"
-            >
-              <button
-                class="viz-dropdown-item"
-                class:active={activeFocusTab === 'neon-flow' || activeFocusTab === 'tunnel-flow' || activeFocusTab === 'comet-flow'}
-                onclick={() => (isNeonSubmenuOpen = !isNeonSubmenuOpen)}
+            {#if neonSubmenuVisible}
+              <div
+                class="viz-dropdown-submenu-wrapper"
+                onmouseenter={() => (isNeonSubmenuOpen = true)}
+                onmouseleave={() => (isNeonSubmenuOpen = false)}
+                role="group"
               >
-                <img src="/bulb.svg" alt="" class="viz-img-icon" aria-hidden="true" />
-                <span>{$t('settings.appearance.immersiveViews.neon')}</span>
-                <ChevronDown size={12} class="submenu-chevron" />
-              </button>
+                <button
+                  class="viz-dropdown-item"
+                  class:active={activeFocusTab === 'neon-flow' || activeFocusTab === 'tunnel-flow' || activeFocusTab === 'comet-flow'}
+                  onclick={() => (isNeonSubmenuOpen = !isNeonSubmenuOpen)}
+                >
+                  <img src="/bulb.svg" alt="" class="viz-img-icon" aria-hidden="true" />
+                  <span>{$t('settings.appearance.immersiveViews.neon')}</span>
+                  <ChevronDown size={12} class="submenu-chevron" />
+                </button>
 
-              {#if isNeonSubmenuOpen}
-                <div class="viz-submenu">
-                  <button
-                    class="viz-dropdown-item"
-                    class:active={activeFocusTab === 'neon-flow'}
-                    onclick={() => selectVisualizerTab('neon-flow')}
-                  >
-                    <img src="/laser.svg" alt="" class="viz-img-icon" aria-hidden="true" />
-                    <span>{$t('settings.appearance.immersiveFps.panels.neon-laser')}</span>
-                  </button>
-                  <button
-                    class="viz-dropdown-item"
-                    class:active={activeFocusTab === 'tunnel-flow'}
-                    onclick={() => selectVisualizerTab('tunnel-flow')}
-                  >
-                    <img src="/cube-svgrepo-com.svg" alt="" class="viz-img-icon" aria-hidden="true" />
-                    <span>{$t('settings.appearance.immersiveFps.panels.tunnel-flow')}</span>
-                  </button>
-                  <button
-                    class="viz-dropdown-item"
-                    class:active={activeFocusTab === 'comet-flow'}
-                    onclick={() => selectVisualizerTab('comet-flow')}
-                  >
-                    <Disc size={14} />
-                    <span>{$t('settings.appearance.immersiveFps.panels.comet-flow')}</span>
-                  </button>
-                </div>
-              {/if}
-            </div>
+                {#if isNeonSubmenuOpen}
+                  <div class="viz-submenu">
+                    {#if neonLaserEnabled}
+                      <button
+                        class="viz-dropdown-item"
+                        class:active={activeFocusTab === 'neon-flow'}
+                        onclick={() => selectVisualizerTab('neon-flow')}
+                      >
+                        <img src="/laser.svg" alt="" class="viz-img-icon" aria-hidden="true" />
+                        <span>{$t('settings.appearance.immersiveFps.panels.neon-laser')}</span>
+                      </button>
+                    {/if}
+                    {#if neonTunnelEnabled}
+                      <button
+                        class="viz-dropdown-item"
+                        class:active={activeFocusTab === 'tunnel-flow'}
+                        onclick={() => selectVisualizerTab('tunnel-flow')}
+                      >
+                        <img src="/cube-svgrepo-com.svg" alt="" class="viz-img-icon" aria-hidden="true" />
+                        <span>{$t('settings.appearance.immersiveFps.panels.tunnel-flow')}</span>
+                      </button>
+                    {/if}
+                    {#if neonCometEnabled}
+                      <button
+                        class="viz-dropdown-item"
+                        class:active={activeFocusTab === 'comet-flow'}
+                        onclick={() => selectVisualizerTab('comet-flow')}
+                      >
+                        <Disc size={14} />
+                        <span>{$t('settings.appearance.immersiveFps.panels.comet-flow')}</span>
+                      </button>
+                    {/if}
+                  </div>
+                {/if}
+              </div>
+            {/if}
           </div>
         {/if}
       </div>
@@ -464,6 +489,13 @@
     -webkit-app-region: no-drag;
   }
 
+  /* CPU mode: opaque tabs bar so its alpha layer doesn't force the
+     compositor to recompose against the animated panel behind on
+     every visualizer frame. */
+  :global(html.no-hwaccel) .tabs {
+    background: #000;
+  }
+
   .tab {
     display: flex;
     align-items: center;
@@ -510,6 +542,12 @@
     border-radius: 10px;
     backdrop-filter: blur(16px);
     min-width: 140px;
+  }
+
+  :global(html.no-hwaccel) .viz-dropdown,
+  :global(html.no-hwaccel) .viz-submenu {
+    background: #000;
+    backdrop-filter: none;
   }
 
   .viz-dropdown {

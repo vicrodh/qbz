@@ -2372,6 +2372,20 @@
         "perfDegraded": "QBZ hat Leistungsprobleme mit der immersiven Ansicht erkannt. Einige Effekte wurden vorübergehend deaktiviert. Du kannst sie unter Einstellungen > Darstellung wieder aktivieren.",
         "perfDontShowAgain": "Nicht mehr anzeigen"
       },
+      "immersivePanels": {
+        "title": "Immersive Panels",
+        "summary": "Einzelne Panels der immersiven Ansicht ein- oder ausschalten",
+        "desc": "Deaktivierte Panels werden im Visualizer-Menü ausgeblendet, damit du nicht versehentlich auf ihnen landest.",
+        "cpuWarning": "Hardwarebeschleunigung ist aus. Mit GPU markierte Panels nutzen Shader oder 3D-Compositing und werden auf deinem System langsam laufen. Sie sind deshalb standardmäßig deaktiviert — aktiviere sie nur, wenn du weißt, dass dein Rechner sie verträgt.",
+        "heavyTooltip": "Erfordert GPU-Compositing für nutzbare Performance",
+        "warningModal": {
+          "title": "Hardwarebeschleunigung ist aus",
+          "body": "QBZ hat erkannt, dass dein System ohne GPU-Compositing läuft. Einige immersive Panels — Album Reactive, die drei Neon-Varianten und Transient Pulse — verlassen sich auf Shader oder 3D-Effekte, die bei Software-Rendering nicht tragbar sind. Sie wurden standardmäßig versteckt, damit du nicht zufällig auf ihnen landest.",
+          "hint": "Wenn du Hardwarebeschleunigung aktivieren möchtest, schau in Einstellungen → Darstellung → Compositing. Wenn du sicher bist, dass dein Setup GPU-Effekte verträgt, kannst du einzelne Panels in Einstellungen → Darstellung → Immersive Panels wieder aktivieren.",
+          "dontShowAgain": "Nicht mehr anzeigen",
+          "acknowledge": "Verstanden"
+        }
+      },
       "immersiveFps": {
         "title": "Animationsbildrate",
         "summary": "FPS-Steuerung pro Animation im Immersiv-Modus",

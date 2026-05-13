@@ -358,6 +358,27 @@
       color 250ms ease-out;
   }
 
+  /* CPU mode: the blanket `transition: none !important` in
+     ImmersivePlayer nukes the line-change transitions when these lyrics
+     are rendered in immersive split mode. Restore the cheap ones —
+     opacity, color and transform are compositor-only (basically free
+     under software compositing). We deliberately skip `font-size`
+     because that one forces a full re-layout per animation frame, which
+     IS expensive in CPU mode. The `!important` is required to beat the
+     equally-important blanket rule. */
+  :global(html.no-hwaccel .immersive-player .lyrics-line) {
+    transition:
+      opacity 200ms ease-out,
+      color 200ms ease-out !important;
+  }
+
+  :global(html.no-hwaccel .immersive-player .lyrics-line.active) {
+    transition:
+      opacity 200ms ease-out,
+      transform 200ms ease-out,
+      color 250ms ease-out !important;
+  }
+
   .lyrics-lines.center .lyrics-line {
     transform-origin: center center;
   }

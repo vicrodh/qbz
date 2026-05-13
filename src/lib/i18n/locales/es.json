@@ -2378,6 +2378,20 @@
         "perfDegraded": "QBZ detectó problemas de rendimiento con la vista inmersiva. Se han desactivado temporalmente algunos efectos. Puedes reactivarlos desde Configuración > Apariencia.",
         "perfDontShowAgain": "No mostrar de nuevo"
       },
+      "immersivePanels": {
+        "title": "Paneles inmersivos",
+        "summary": "Activa o desactiva paneles individuales de la vista inmersiva",
+        "desc": "Los paneles desactivados se ocultan del menú del visualizador para que no caigas en ellos por error.",
+        "cpuWarning": "La aceleración por hardware está apagada. Los paneles marcados con GPU usan shaders o composición 3D y serán lentos en tu equipo. Por eso vienen desactivados por defecto — actívalos solo si sabes que tu máquina los aguanta.",
+        "heavyTooltip": "Requiere composición por GPU para rendir bien",
+        "warningModal": {
+          "title": "La aceleración por hardware está apagada",
+          "body": "QBZ detectó que tu sistema está corriendo sin composición por GPU. Algunos paneles inmersivos — Album Reactive, las tres variantes de Neon, y Transient Pulse — dependen de shaders o efectos 3D que no son viables en renderizado por software. Vienen ocultos por default para que no caigas en ellos sin querer.",
+          "hint": "Si quieres habilitar la aceleración por hardware, revisa Configuración → Apariencia → Composición. Si sabes que tu equipo aguanta efectos por GPU, puedes reactivar paneles individuales desde Configuración → Apariencia → Paneles inmersivos.",
+          "dontShowAgain": "No mostrar de nuevo",
+          "acknowledge": "Entendido"
+        }
+      },
       "immersiveFps": {
         "title": "Tasa de cuadros",
         "summary": "Control de FPS por animacion en modo inmersivo",

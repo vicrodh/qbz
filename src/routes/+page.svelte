@@ -477,6 +477,8 @@
   // Overlays
   import QueuePanel from '$lib/components/QueuePanel.svelte';
   import { ImmersivePlayer } from '$lib/components/immersive';
+  import CpuModeWarningModal from '$lib/components/CpuModeWarningModal.svelte';
+  import { isHardwareAccelEnabled } from '$lib/runtime/graphicsState';
   import PlaylistModal from '$lib/components/PlaylistModal.svelte';
   import PlaylistImportModal from '$lib/components/PlaylistImportModal.svelte';
   import FolderEditModal from '$lib/components/FolderEditModal.svelte';
@@ -983,6 +985,35 @@
   let isFullScreenOpen = $state(false);
   let isFocusModeOpen = $state(false);
   let isCastPickerOpen = $state(false);
+
+  // First-time CPU-mode warning for the immersive view. Fires once per
+  // user when they enter immersive with hardware acceleration off; the
+  // user can opt out forever via the "don't show again" checkbox.
+  const CPU_WARNING_FLAG_KEY = 'qbz-cpu-mode-warning-shown-v1';
+  let cpuModeWarningOpen = $state(false);
+  let cpuModeWarningArmed = true;
+
+  $effect(() => {
+    const immersiveOpen = isFullScreenOpen || isFocusModeOpen;
+    if (!immersiveOpen || !cpuModeWarningArmed) return;
+    if (isHardwareAccelEnabled()) return;
+    if (getUserItem(CPU_WARNING_FLAG_KEY) === 'true') return;
+    cpuModeWarningOpen = true;
+    // Disarm so re-renders of this effect during a single immersive
+    // session don't re-trigger the modal mid-flight.
+    cpuModeWarningArmed = false;
+  });
+
+  function handleCpuWarningClose(dontShowAgain: boolean) {
+    cpuModeWarningOpen = false;
+    if (dontShowAgain) {
+      setUserItem(CPU_WARNING_FLAG_KEY, 'true');
+    } else {
+      // User left the checkbox off — re-arm so it shows again next time
+      // they open immersive in this session.
+      cpuModeWarningArmed = true;
+    }
+  }
 
   // Cast State
   let isCastConnected = $state(false);
@@ -6887,6 +6918,11 @@
         explicit={currentTrack?.parental_warning === true}
       />
     {/if}
+
+    <CpuModeWarningModal
+      isOpen={cpuModeWarningOpen}
+      onClose={handleCpuWarningClose}
+    />
 
     <!-- Toast -->
     {#if toast}

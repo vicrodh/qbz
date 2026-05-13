@@ -439,6 +439,17 @@
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   }
 
+  /* CPU mode: 40px backdrop-filter blur on a full-width bar is the
+     single most expensive surface in immersive mode under software
+     compositing. Drop the filter and make the bar fully opaque so
+     it doesn't force per-frame recomposition against the animated
+     visualizer canvas behind it. */
+  :global(html.no-hwaccel) .player-bar {
+    background: #000;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
   .controls-row {
     display: flex;
     align-items: center;
@@ -648,6 +659,12 @@
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
     z-index: 50;
     animation: menuFadeIn 150ms ease-out;
+  }
+
+  :global(html.no-hwaccel) .window-menu {
+    background: #000;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 
   @keyframes menuFadeIn {

@@ -2372,6 +2372,20 @@
         "perfDegraded": "QBZ a détecté des problèmes de performance avec la vue immersive. Certains effets ont été temporairement désactivés. Vous pouvez les réactiver depuis Paramètres > Apparence.",
         "perfDontShowAgain": "Ne plus afficher"
       },
+      "immersivePanels": {
+        "title": "Panneaux immersifs",
+        "summary": "Activez ou désactivez individuellement les panneaux de la vue immersive",
+        "desc": "Les panneaux désactivés sont masqués du menu du visualiseur pour éviter d'y arriver par erreur.",
+        "cpuWarning": "L'accélération matérielle est désactivée. Les panneaux marqués GPU utilisent des shaders ou du compositing 3D et seront lents sur votre configuration. Ils sont désactivés par défaut — réactivez-les seulement si vous savez que votre machine les supporte.",
+        "heavyTooltip": "Nécessite le compositing GPU pour des performances utilisables",
+        "warningModal": {
+          "title": "L'accélération matérielle est désactivée",
+          "body": "QBZ a détecté que votre système fonctionne sans compositing GPU. Certains panneaux immersifs — Album Reactive, les trois variantes Neon et Transient Pulse — reposent sur des shaders ou des effets 3D qui ne sont pas viables en rendu logiciel. Ils sont masqués par défaut pour éviter d'y arriver par accident.",
+          "hint": "Pour activer l'accélération matérielle, consultez Paramètres → Apparence → Compositing. Si vous savez que votre configuration supporte les effets GPU, vous pouvez réactiver les panneaux individuellement depuis Paramètres → Apparence → Panneaux immersifs.",
+          "dontShowAgain": "Ne plus afficher",
+          "acknowledge": "Compris"
+        }
+      },
       "immersiveFps": {
         "title": "Fréquence d'affichage",
         "summary": "Contrôle la fréquence d'affichage des animations en mode immersif",

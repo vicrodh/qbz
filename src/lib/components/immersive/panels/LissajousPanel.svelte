@@ -3,8 +3,15 @@
   import { t } from 'svelte-i18n';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import { invoke } from '@tauri-apps/api/core';
-  import QualityBadge from '$lib/components/QualityBadge.svelte';
+  import QualityBadgeStatic from '$lib/components/QualityBadgeStatic.svelte';
   import { getPanelFrameInterval } from '$lib/immersive/fpsConfig';
+  import { isHardwareAccelEnabled } from '$lib/runtime/graphicsState';
+
+  // CPU mode: skip `shadowBlur`, shorten the trail (8 → 3 frames),
+  // drop the per-pixel dot cloud, and pin canvas dpr to 1. Each of
+  // these is a multiplicative win on Skia/Cairo software backends.
+  const LOW_PROFILE = !isHardwareAccelEnabled();
+  const ACTIVE_TRAIL_LENGTH = LOW_PROFILE ? 3 : 8;
 
   interface Props {
     enabled?: boolean;
@@ -154,7 +161,7 @@
     lastRenderTime = timestamp;
 
     const rect = canvasRef.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = LOW_PROFILE ? 1 : (window.devicePixelRatio || 1);
     const width = rect.width;
     const height = rect.height;
 
@@ -174,11 +181,11 @@
     const centerY = height / 2;
     const scale = Math.min(width, height) * 0.38;
 
-    // Draw trail (older frames, fading)
-    for (let frame = 0; frame < TRAIL_LENGTH; frame++) {
+    // Draw trail (older frames, fading) — shortened in CPU mode
+    for (let frame = 0; frame < ACTIVE_TRAIL_LENGTH; frame++) {
       const bufIdx = (trailIndex + frame) % TRAIL_LENGTH;
       const buf = trailBuffers[bufIdx];
-      const age = (TRAIL_LENGTH - frame) / TRAIL_LENGTH;
+      const age = (ACTIVE_TRAIL_LENGTH - frame) / ACTIVE_TRAIL_LENGTH;
       const alpha = age * 0.08;
 
       ctx.beginPath();
@@ -195,27 +202,55 @@
     }
 
     // Draw current frame (bright)
-    ctx.beginPath();
-    ctx.strokeStyle = `rgba(${plotColor.r}, ${plotColor.g}, ${plotColor.b}, 0.9)`;
-    ctx.lineWidth = 1.5;
-    ctx.shadowColor = `rgba(${plotColor.r}, ${plotColor.g}, ${plotColor.b}, 0.5)`;
-    ctx.shadowBlur = 6;
+    if (LOW_PROFILE) {
+      // Fake the shadowBlur glow with a fat semi-transparent underlay
+      // stroke + thin opaque stroke on top. Same visual weight, zero
+      // per-pixel blur cost.
+      ctx.beginPath();
+      ctx.strokeStyle = `rgba(${plotColor.r}, ${plotColor.g}, ${plotColor.b}, 0.3)`;
+      ctx.lineWidth = 4;
+      for (let i = 0; i < WAVEFORM_POINTS; i++) {
+        const x = centerX + leftChannel[i] * scale;
+        const y = centerY - rightChannel[i] * scale;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
 
-    for (let i = 0; i < WAVEFORM_POINTS; i++) {
-      const x = centerX + leftChannel[i] * scale;
-      const y = centerY - rightChannel[i] * scale;
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    }
-    ctx.stroke();
-    ctx.shadowBlur = 0;
+      ctx.beginPath();
+      ctx.strokeStyle = `rgba(${plotColor.r}, ${plotColor.g}, ${plotColor.b}, 0.9)`;
+      ctx.lineWidth = 1.5;
+      for (let i = 0; i < WAVEFORM_POINTS; i++) {
+        const x = centerX + leftChannel[i] * scale;
+        const y = centerY - rightChannel[i] * scale;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    } else {
+      ctx.beginPath();
+      ctx.strokeStyle = `rgba(${plotColor.r}, ${plotColor.g}, ${plotColor.b}, 0.9)`;
+      ctx.lineWidth = 1.5;
+      ctx.shadowColor = `rgba(${plotColor.r}, ${plotColor.g}, ${plotColor.b}, 0.5)`;
+      ctx.shadowBlur = 6;
 
-    // Draw point cloud dots for extra density
-    ctx.fillStyle = `rgba(${plotColor.r}, ${plotColor.g}, ${plotColor.b}, 0.6)`;
-    for (let i = 0; i < WAVEFORM_POINTS; i += 3) {
-      const x = centerX + leftChannel[i] * scale;
-      const y = centerY - rightChannel[i] * scale;
-      ctx.fillRect(x - 0.5, y - 0.5, 1, 1);
+      for (let i = 0; i < WAVEFORM_POINTS; i++) {
+        const x = centerX + leftChannel[i] * scale;
+        const y = centerY - rightChannel[i] * scale;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      // Draw point cloud dots for extra density (skipped in CPU mode —
+      // 85 fillRect calls per frame are not free on software)
+      ctx.fillStyle = `rgba(${plotColor.r}, ${plotColor.g}, ${plotColor.b}, 0.6)`;
+      for (let i = 0; i < WAVEFORM_POINTS; i += 3) {
+        const x = centerX + leftChannel[i] * scale;
+        const y = centerY - rightChannel[i] * scale;
+        ctx.fillRect(x - 0.5, y - 0.5, 1, 1);
+      }
     }
 
     // Crosshair guides
@@ -289,7 +324,7 @@
         <span class="track-album">{album}</span>
       {/if}
       <span class="track-artist">{artist}</span>
-      <QualityBadge {quality} {bitDepth} {samplingRate} {originalBitDepth} {originalSamplingRate} {format} compact />
+      <QualityBadgeStatic {quality} {bitDepth} {samplingRate} {format} />
     </div>
     {#if artwork}
       <div class="artwork-thumb">
@@ -323,6 +358,14 @@
     opacity: 0.08;
     filter: blur(60px) saturate(0.5);
     pointer-events: none;
+  }
+
+  /* CPU mode: hide the watermark entirely. At 8% opacity through a
+     60px blur it adds almost nothing visually, but the canvas above
+     clears with alpha-blend each frame, forcing the compositor to
+     recompose against this blurred surface every redraw. */
+  :global(html.no-hwaccel) .watermark-bg {
+    display: none;
   }
 
   .watermark-img {

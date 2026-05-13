@@ -3,7 +3,7 @@
   import { t } from 'svelte-i18n';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import { invoke } from '@tauri-apps/api/core';
-  import QualityBadge from '$lib/components/QualityBadge.svelte';
+  import QualityBadgeStatic from '$lib/components/QualityBadgeStatic.svelte';
   import { getPanelFrameInterval } from '$lib/immersive/fpsConfig';
 
   interface Props {
@@ -209,7 +209,7 @@
       <p class="track-album">{album}</p>
     {/if}
     <div class="quality-badge-wrapper">
-      <QualityBadge {quality} {bitDepth} {samplingRate} {originalBitDepth} {originalSamplingRate} {format} />
+      <QualityBadgeStatic {quality} {bitDepth} {samplingRate} {format} />
     </div>
   </div>
 </div>

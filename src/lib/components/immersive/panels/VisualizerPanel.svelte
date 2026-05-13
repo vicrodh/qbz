@@ -3,8 +3,16 @@
   import { t } from 'svelte-i18n';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import { invoke } from '@tauri-apps/api/core';
-  import QualityBadge from '$lib/components/QualityBadge.svelte';
+  import QualityBadgeStatic from '$lib/components/QualityBadgeStatic.svelte';
   import { getPanelFrameInterval } from '$lib/immersive/fpsConfig';
+  import { isHardwareAccelEnabled } from '$lib/runtime/graphicsState';
+
+  // CPU mode collapses the ~2800 `fillRect` cubelet path into ~28 solid
+  // bars with a single pre-computed linear gradient. The backend FFT is
+  // already cheap (4096-point at 30Hz on a dedicated thread); the cost
+  // that matters under software compositing is draw-call count and
+  // per-call `fillStyle` string parsing.
+  const LOW_PROFILE = !isHardwareAccelEnabled();
 
   interface Props {
     enabled?: boolean;
@@ -167,7 +175,7 @@
     lastRenderTime = timestamp;
 
     const rect = canvasRef.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = LOW_PROFILE ? 1 : (window.devicePixelRatio || 1);
     const width = rect.width;
     const height = rect.height;
 
@@ -189,36 +197,59 @@
     const barGap = 4;
     const totalBarWidth = width / visualBars;
     const barWidth = totalBarWidth - barGap;
-    const cubeHeight = 6;
+    // CPU mode: taller cubes ⇒ half the count per bar, half the fillRect
+    // calls overall, while keeping the chunky stepped look. We also drop
+    // the per-cube gradient entirely — a single primary-coloured fillStyle
+    // applied once per frame eliminates ~2800 string parses that used to
+    // happen on the cubelet hot path.
+    const cubeHeight = LOW_PROFILE ? 14 : 6;
     const cubeGap = 2;
     const maxBarHeight = height * 0.7;
     const baseY = height * 0.85;
-    const centerX = width / 2;
 
-    // Draw bars from edges inward (mirrored, bass at edges)
-    for (let i = 0; i < ACTIVE_BINS; i++) {
-      const sourceIdx = ACTIVE_BIN_INDICES[i];
-      const amplitude = frequencyData[sourceIdx];
-      const barHeight = amplitude * maxBarHeight;
-      const numCubes = Math.floor(barHeight / (cubeHeight + cubeGap));
+    if (LOW_PROFILE) {
+      // One fillStyle for the whole frame; the gradient was the only
+      // reason to change colour per cubelet.
+      ctx.fillStyle = `rgb(${colorPrimary.r}, ${colorPrimary.g}, ${colorPrimary.b})`;
 
-      // Left side (from left edge toward center)
-      const xLeft = i * totalBarWidth + barGap / 2;
-      // Right side (from right edge toward center)
-      const xRight = width - (i + 1) * totalBarWidth + barGap / 2;
+      for (let i = 0; i < ACTIVE_BINS; i++) {
+        const sourceIdx = ACTIVE_BIN_INDICES[i];
+        const amplitude = frequencyData[sourceIdx];
+        const barHeight = amplitude * maxBarHeight;
+        const numCubes = Math.floor(barHeight / (cubeHeight + cubeGap));
 
-      for (let j = 0; j < numCubes; j++) {
-        const cubeY = baseY - (j + 1) * (cubeHeight + cubeGap);
-        const gradientRatio = Math.min(j / 20, 1); // Normalized 0-1
+        const xLeft = i * totalBarWidth + barGap / 2;
+        const xRight = width - (i + 1) * totalBarWidth + barGap / 2;
 
-        // Interpolate between primary (bottom) and secondary (top)
-        const r = Math.floor(colorPrimary.r + gradientRatio * (colorSecondary.r - colorPrimary.r));
-        const g = Math.floor(colorPrimary.g + gradientRatio * (colorSecondary.g - colorPrimary.g));
-        const b = Math.floor(colorPrimary.b + gradientRatio * (colorSecondary.b - colorPrimary.b));
+        for (let j = 0; j < numCubes; j++) {
+          const cubeY = baseY - (j + 1) * (cubeHeight + cubeGap);
+          ctx.fillRect(xLeft, cubeY, barWidth, cubeHeight);
+          ctx.fillRect(xRight, cubeY, barWidth, cubeHeight);
+        }
+      }
+    } else {
+      // GPU path: per-cubelet gradient, original look.
+      for (let i = 0; i < ACTIVE_BINS; i++) {
+        const sourceIdx = ACTIVE_BIN_INDICES[i];
+        const amplitude = frequencyData[sourceIdx];
+        const barHeight = amplitude * maxBarHeight;
+        const numCubes = Math.floor(barHeight / (cubeHeight + cubeGap));
 
-        ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
-        ctx.fillRect(xLeft, cubeY, barWidth, cubeHeight);
-        ctx.fillRect(xRight, cubeY, barWidth, cubeHeight);
+        const xLeft = i * totalBarWidth + barGap / 2;
+        const xRight = width - (i + 1) * totalBarWidth + barGap / 2;
+
+        for (let j = 0; j < numCubes; j++) {
+          const cubeY = baseY - (j + 1) * (cubeHeight + cubeGap);
+          const gradientRatio = Math.min(j / 20, 1);
+
+          const r = Math.floor(colorPrimary.r + gradientRatio * (colorSecondary.r - colorPrimary.r));
+          const g = Math.floor(colorPrimary.g + gradientRatio * (colorSecondary.g - colorPrimary.g));
+          const b = Math.floor(colorPrimary.b + gradientRatio * (colorSecondary.b - colorPrimary.b));
+
+          ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+          ctx.fillRect(xLeft, cubeY, barWidth, cubeHeight);
+          ctx.fillRect(xRight, cubeY, barWidth, cubeHeight);
+        }
       }
     }
 
@@ -284,7 +315,7 @@
         <p class="track-album">{album}</p>
       {/if}
       <div class="quality-badge-wrapper">
-        <QualityBadge {quality} {bitDepth} {samplingRate} {originalBitDepth} {originalSamplingRate} {format} />
+        <QualityBadgeStatic {quality} {bitDepth} {samplingRate} {format} />
       </div>
     </div>
   </div>
@@ -334,6 +365,18 @@
     box-shadow:
       0 8px 32px rgba(0, 0, 0, 0.5),
       0 20px 60px rgba(0, 0, 0, 0.3);
+  }
+
+  /* CPU mode: a 60px-blur box-shadow on a 360px element extends a 60px
+     halo on every side that gets alpha-recomposited against the canvas
+     beneath on every visualizer frame. Drop both shadows and the
+     text-shadows below — flat panel on software. */
+  :global(html.no-hwaccel) .artwork-container {
+    box-shadow: none;
+  }
+
+  :global(html.no-hwaccel) .track-title {
+    text-shadow: none;
   }
 
   .artwork {

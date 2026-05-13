@@ -25,7 +25,7 @@
   import AlbumReactivePanel from './panels/AlbumReactivePanel.svelte';
   import LinebedPanel from './panels/LinebedPanel.svelte';
   import LyricsFocusPanel from './panels/LyricsFocusPanel.svelte';
-  import QualityBadge from '$lib/components/QualityBadge.svelte';
+  import QualityBadgeStatic from '$lib/components/QualityBadgeStatic.svelte';
   import { getUserItem, setUserItem } from '$lib/utils/userStorage';
 
   interface LyricsLine {
@@ -721,7 +721,7 @@
               <p class="split-track-album">{album}</p>
             {/if}
             <div class="split-quality-badge">
-              <QualityBadge {quality} {bitDepth} {samplingRate} {originalBitDepth} {originalSamplingRate} {format} />
+              <QualityBadgeStatic {quality} {bitDepth} {samplingRate} {format} />
             </div>
           </div>
         </div>
@@ -864,6 +864,29 @@
     overflow: hidden;
   }
 
+  /* CPU mode: nuke every CSS transition, keyframe animation, drop shadow
+     and text shadow inside the immersive chrome AND every panel —
+     header tabs, visualizer dropdown, Neon submenu, window-controls
+     expansion, player bar fade/slide, window menu fade-in, the
+     immersive-player fadeIn itself, the artwork halo on the visualizer
+     and static panels, the cover wrappers in Coverflow, the now-playing
+     thumbs on Lissajous / Oscilloscope / EnergyBands, every text-shadow
+     on track titles and labels. Box-shadows with large blur radii
+     (some up to 60px) extend a halo around every element and force the
+     compositor to alpha-recomposite that halo against the canvas
+     beneath on each visualizer frame — confirmed game-changer when
+     stripped, per user testing on the Spectrum visualizer. The
+     visualizer canvases inside have their own LOW_PROFILE flag and
+     don't rely on CSS for any of this, so this doesn't touch their
+     behaviour. */
+  :global(html.no-hwaccel .immersive-player),
+  :global(html.no-hwaccel .immersive-player *) {
+    transition: none !important;
+    animation: none !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
   .immersive-drag-region {
     position: absolute;
     top: 0;
@@ -894,6 +917,12 @@
     border-color: rgba(255, 255, 255, 0.1);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
+  }
+
+  :global(html.no-hwaccel) .immersive-player :global(.quality-badge) {
+    background: #000;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 
   /* Split mode layout */

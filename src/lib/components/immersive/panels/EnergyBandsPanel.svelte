@@ -3,8 +3,15 @@
   import { t } from 'svelte-i18n';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import { invoke } from '@tauri-apps/api/core';
-  import QualityBadge from '$lib/components/QualityBadge.svelte';
+  import QualityBadgeStatic from '$lib/components/QualityBadgeStatic.svelte';
   import { getPanelFrameInterval } from '$lib/immersive/fpsConfig';
+  import { isHardwareAccelEnabled } from '$lib/runtime/graphicsState';
+
+  // CPU mode: the per-band `shadowBlur` (scales with energy up to ~20px)
+  // is the dominant cost — 5 rings × energy-driven blur radius squared,
+  // every frame. Replaced with a fat semi-transparent underlay arc per
+  // band. Also pin dpr to 1.
+  const LOW_PROFILE = !isHardwareAccelEnabled();
 
   interface Props {
     enabled?: boolean;
@@ -153,7 +160,7 @@
     lastRenderTime = timestamp;
 
     const rect = canvasRef.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = LOW_PROFILE ? 1 : (window.devicePixelRatio || 1);
     const width = rect.width;
     const height = rect.height;
 
@@ -180,18 +187,36 @@
 
       const color = bandColors[i];
       const alpha = 0.15 + energy * 0.6;
-      const glowSize = 4 + energy * 16;
+      const ringWidth = 2 + energy * 3;
 
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, pulseRadius, 0, Math.PI * 2);
-      ctx.closePath();
+      if (LOW_PROFILE) {
+        // Fat semi-transparent halo arc + thin opaque ring on top —
+        // approximates the shadowBlur glow without the per-pixel cost.
+        const haloWidth = ringWidth + 4 + energy * 8;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, pulseRadius, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${alpha * 0.35})`;
+        ctx.lineWidth = haloWidth;
+        ctx.stroke();
 
-      ctx.strokeStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${alpha})`;
-      ctx.lineWidth = 2 + energy * 3;
-      ctx.shadowColor = `rgba(${color.r}, ${color.g}, ${color.b}, ${alpha * 0.8})`;
-      ctx.shadowBlur = glowSize;
-      ctx.stroke();
-      ctx.shadowBlur = 0;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, pulseRadius, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${alpha})`;
+        ctx.lineWidth = ringWidth;
+        ctx.stroke();
+      } else {
+        const glowSize = 4 + energy * 16;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, pulseRadius, 0, Math.PI * 2);
+        ctx.closePath();
+
+        ctx.strokeStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${alpha})`;
+        ctx.lineWidth = ringWidth;
+        ctx.shadowColor = `rgba(${color.r}, ${color.g}, ${color.b}, ${alpha * 0.8})`;
+        ctx.shadowBlur = glowSize;
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+      }
     }
 
     // Ambient center glow based on total energy
@@ -265,7 +290,7 @@
         <span class="track-album">{album}</span>
       {/if}
       <span class="track-artist">{artist}</span>
-      <QualityBadge {quality} {bitDepth} {samplingRate} {originalBitDepth} {originalSamplingRate} {format} compact />
+      <QualityBadgeStatic {quality} {bitDepth} {samplingRate} {format} />
     </div>
     {#if artwork}
       <div class="artwork-thumb">

@@ -3,7 +3,7 @@
   import { t } from '$lib/i18n';
   import ProgressBar from './shared/ProgressBar.svelte';
   import VolumeSlider from './shared/VolumeSlider.svelte';
-  import QualityBadge from '../QualityBadge.svelte';
+  import QualityBadgeStatic from '../QualityBadgeStatic.svelte';
 
   interface Props {
     visible?: boolean;
@@ -147,7 +147,7 @@
 
     {#if quality}
       <div class="quality-wrapper">
-        <QualityBadge {quality} {bitDepth} {samplingRate} />
+        <QualityBadgeStatic {quality} {bitDepth} {samplingRate} />
       </div>
     {/if}
   </div>

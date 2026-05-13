@@ -1,7 +1,7 @@
 <script lang="ts">
   import { t } from 'svelte-i18n';
   import { formatTrackTitle } from '$lib/utils/trackTitle';
-  import QualityBadge from '$lib/components/QualityBadge.svelte';
+  import QualityBadgeStatic from '$lib/components/QualityBadgeStatic.svelte';
   import { cachedSrc } from '$lib/actions/cachedImage';
 
   interface QueueTrack {
@@ -132,7 +132,7 @@
       <p class="track-album">{album}</p>
     {/if}
     <div class="quality-badge-wrapper">
-      <QualityBadge {quality} {bitDepth} {samplingRate} {originalBitDepth} {originalSamplingRate} {format} />
+      <QualityBadgeStatic {quality} {bitDepth} {samplingRate} {format} />
     </div>
   </div>
 </div>
@@ -171,6 +171,62 @@
     padding: 0;
     cursor: pointer;
     transition: transform 500ms cubic-bezier(0.4, 0, 0.2, 1), opacity 500ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* CPU-mode: snap the 4 side covers instead of animating their
+     rotateY+translateX+scale together for 500ms. The center cover
+     keeps its transition because the .center class rule wins by
+     specificity. Eliminates the dominant per-frame cost during
+     track navigation in software compositing. */
+  :global(html.no-hwaccel) .coverflow-item {
+    transition: none;
+  }
+
+  :global(html.no-hwaccel) .coverflow-item.center {
+    transition: transform 500ms cubic-bezier(0.4, 0, 0.2, 1), opacity 500ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Also drop the box-shadow transition on hover — the immersive
+     panel rarely sees mouse hover, and a shadow animation under
+     software compositing forces a full repaint of the cover bounds. */
+  :global(html.no-hwaccel) .cover-wrapper {
+    transition: none;
+  }
+
+  /* CPU mode: neutralize the side-cover hover effect entirely. The
+     base hover rule snaps `scale(1.05)` plus a translate/rotate nudge,
+     which forces a re-rasterization of each cover with a different
+     perspective matrix — cheap on GPU, expensive under software
+     compositing. We re-apply each position class's base transform
+     on `:hover` so the hover is a visual no-op, while the button
+     stays clickable for navigation. Also drop the side covers'
+     `opacity: 0.85/0.55` to 1 so they don't pay alpha-compositing
+     cost on every repaint of the panel behind. */
+  :global(html.no-hwaccel) .coverflow-item.left-1,
+  :global(html.no-hwaccel) .coverflow-item.left-2,
+  :global(html.no-hwaccel) .coverflow-item.right-1,
+  :global(html.no-hwaccel) .coverflow-item.right-2 {
+    opacity: 1;
+  }
+
+  :global(html.no-hwaccel) .coverflow-item.left-1:not(:disabled):hover {
+    transform: translateX(-200px) rotateY(45deg) scale(0.82);
+  }
+
+  :global(html.no-hwaccel) .coverflow-item.left-2:not(:disabled):hover {
+    transform: translateX(-340px) rotateY(55deg) scale(0.65);
+  }
+
+  :global(html.no-hwaccel) .coverflow-item.right-1:not(:disabled):hover {
+    transform: translateX(200px) rotateY(-45deg) scale(0.82);
+  }
+
+  :global(html.no-hwaccel) .coverflow-item.right-2:not(:disabled):hover {
+    transform: translateX(340px) rotateY(-55deg) scale(0.65);
+  }
+
+  :global(html.no-hwaccel) .coverflow-item:not(:disabled):hover .cover-wrapper {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
   }
 
   .coverflow-item:disabled {
@@ -311,6 +367,16 @@
   @keyframes equalize {
     0%, 100% { transform: scaleY(0.3); }
     50% { transform: scaleY(1); }
+  }
+
+  /* Restore the 4-bar equalizer animation in CPU mode. The blanket
+     `animation: none !important` in ImmersivePlayer kills every
+     animation under software compositing, but this one is 4 elements
+     of 3px width × ~14px height running a discrete `scaleY` transform
+     — effectively free even on llvmpipe. The `!important` here is
+     required to beat the equally-important blanket rule. */
+  :global(html.no-hwaccel .equalizer .bar) {
+    animation: equalize 0.8s ease-in-out infinite !important;
   }
 
   .track-title-row {

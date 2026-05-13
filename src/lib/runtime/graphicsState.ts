@@ -43,6 +43,14 @@ export async function bootstrapGraphicsState(): Promise<void> {
     console.warn('[graphicsState] bootstrap failed, using HW-accel-ON defaults', err);
     cached = null;
   }
+
+  // Apply a global `html.no-hwaccel` class so CSS-only "lite" rules
+  // can gate themselves without each component re-reading the cache.
+  // Canvas-based panels read `isHardwareAccelEnabled()` directly.
+  const lowProfile = !!cached && !cached.hardware_accel_enabled;
+  if (typeof document !== 'undefined' && lowProfile) {
+    document.documentElement.classList.add('no-hwaccel');
+  }
 }
 
 /**

@@ -16,7 +16,8 @@ import { getNextZoomLevel } from '$lib/utils/zoom';
 import { getUserItem } from '$lib/utils/userStorage';
 import { getZoom, setZoom } from '$lib/stores/zoomStore';
 import { restoreAutoThemeVars } from '$lib/stores/autoThemeStore';
-import { bootstrapGraphicsState } from '$lib/runtime/graphicsState';
+import { bootstrapGraphicsState, isHardwareAccelEnabled } from '$lib/runtime/graphicsState';
+import { applyCpuModeDefaultsIfNeeded } from '$lib/stores/immersivePanelsStore';
 
 // ============ Theme Management ============
 
@@ -198,8 +199,14 @@ export function bootstrapApp(): BootstrapResult {
 
   // Prime the runtime graphics-state cache so hot paths like `cachedSrc`
   // can read it sync. Fire-and-forget; falls back to "HW accel ON"
-  // defaults if it errors out (see ADR-004).
-  void bootstrapGraphicsState();
+  // defaults if it errors out (see ADR-004). Once the cache is loaded,
+  // re-apply CPU-mode defaults to the immersive panels store — the
+  // store's module-load init may have run before this resolved and
+  // defaulted to GPU mode, which would leave heavy panels enabled by
+  // mistake on first launch for CPU-bound users.
+  void bootstrapGraphicsState().then(() => {
+    applyCpuModeDefaultsIfNeeded(!isHardwareAccelEnabled());
+  });
 
   // Setup mouse navigation
   const cleanupMouse = setupMouseNavigation();

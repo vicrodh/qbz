@@ -163,6 +163,13 @@
     display: flex;
     flex-direction: column;
     line-height: 1.2;
+    /* Force start-aligned text regardless of the parent's `text-align`.
+       The badge is used inside containers that center their content
+       (VisualizerPanel, StaticPanel, etc.) — without this override, the
+       inherited `text-align: center` would centre `Hi-Res` and the
+       quality string within the text column, leaving them visually
+       off relative to the badge icon. */
+    text-align: start;
   }
 
   .tier-label {

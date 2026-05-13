@@ -118,6 +118,13 @@
   } from '$lib/stores/windowChromeStore';
   import { isHardwareAccelEnabled } from '$lib/runtime/graphicsState';
   import {
+    immersivePanelsStore,
+    setPanelEnabled,
+    ALL_IMMERSIVE_PANELS,
+    HEAVY_PANELS,
+    type ImmersivePanelId,
+  } from '$lib/stores/immersivePanelsStore';
+  import {
     subscribe as subscribeSearchBarLocation,
     getSearchBarLocation,
     setSearchBarLocation,
@@ -1317,6 +1324,10 @@
   ] as const;
 
   let immersiveFpsCollapsed = $state(true);
+  let immersivePanelsCollapsed = $state(true);
+
+  const HEAVY_PANEL_SET = new Set<ImmersivePanelId>(HEAVY_PANELS);
+  const lowProfileMode = !isHardwareAccelEnabled();
   let panelFpsValues: Record<string, string> = $state(
     Object.fromEntries(FPS_PANEL_IDS.map(id => [id, getUserItem(`${FPS_KEY_PREFIX}${id}`) || '15']))
   );
@@ -5279,6 +5290,42 @@
     </div>
 
     <div class="collapsible-section composition-subsection">
+      <button class="section-title-btn" onclick={() => immersivePanelsCollapsed = !immersivePanelsCollapsed}>
+        <div class="section-title-row">
+          <span class="section-title composition-title">{$t('settings.appearance.immersivePanels.title')}</span>
+          {#if immersivePanelsCollapsed}
+            <ChevronDown size={16} />
+          {:else}
+            <ChevronUp size={16} />
+          {/if}
+        </div>
+        <span class="section-summary">{$t('settings.appearance.immersivePanels.summary')}</span>
+      </button>
+      {#if !immersivePanelsCollapsed}
+        <p class="section-note">{$t('settings.appearance.immersivePanels.desc')}</p>
+        {#if lowProfileMode}
+          <p class="section-note section-note-warn">{$t('settings.appearance.immersivePanels.cpuWarning')}</p>
+        {/if}
+        {#each ALL_IMMERSIVE_PANELS as panelId}
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-label">
+                {$t(`settings.appearance.immersiveFps.panels.${panelId}`)}
+                {#if lowProfileMode && HEAVY_PANEL_SET.has(panelId)}
+                  <span class="heavy-badge" title={$t('settings.appearance.immersivePanels.heavyTooltip')}>GPU</span>
+                {/if}
+              </span>
+            </div>
+            <Toggle
+              enabled={$immersivePanelsStore[panelId] !== false}
+              onchange={(v) => setPanelEnabled(panelId, v)}
+            />
+          </div>
+        {/each}
+      {/if}
+    </div>
+
+    <div class="collapsible-section composition-subsection">
       <button class="section-title-btn" onclick={() => immersiveFpsCollapsed = !immersiveFpsCollapsed}>
         <div class="section-title-row">
           <span class="section-title composition-title">{$t('settings.appearance.immersiveFps.title')}</span>
@@ -6784,6 +6831,31 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
     font-size: 12px;
     color: var(--text-muted);
     line-height: 1.4;
+  }
+
+  .section-note-warn {
+    color: var(--warning, #f59e0b);
+    border-left: 3px solid var(--warning, #f59e0b);
+    padding: 6px 10px;
+    background: var(--alpha-05, rgba(255, 255, 255, 0.04));
+    border-radius: 4px;
+    margin-bottom: 16px;
+  }
+
+  /* Badge next to a panel name in Immersive Panels list, marking
+     it as requiring GPU compositing. Only rendered when the user
+     is running without HW accel. */
+  .heavy-badge {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 1px 6px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--warning, #f59e0b);
+    border: 1px solid var(--warning, #f59e0b);
+    border-radius: 4px;
+    vertical-align: middle;
   }
 
   /* Compact Account Section */

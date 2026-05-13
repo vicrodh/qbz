@@ -3,8 +3,17 @@
   import { t } from 'svelte-i18n';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import { invoke } from '@tauri-apps/api/core';
-  import QualityBadge from '$lib/components/QualityBadge.svelte';
+  import QualityBadgeStatic from '$lib/components/QualityBadgeStatic.svelte';
   import { getPanelFrameInterval } from '$lib/immersive/fpsConfig';
+  import { isHardwareAccelEnabled } from '$lib/runtime/graphicsState';
+
+  // Captured once at module load — HW accel state is determined at app
+  // boot and does not change at runtime. When false, we skip per-stroke
+  // `shadowBlur` (the dominant cost on Skia/Cairo software backends, where
+  // each stroke pays an O(pixels * radius^2) blur pass) and force the
+  // canvas to render at devicePixelRatio = 1 to keep the pixel budget
+  // sane on HiDPI displays.
+  const LOW_PROFILE = !isHardwareAccelEnabled();
 
   interface Props {
     enabled?: boolean;
@@ -150,6 +159,35 @@
     if (!ctx) return;
 
     const colorStr = `rgb(${color.r}, ${color.g}, ${color.b})`;
+
+    if (LOW_PROFILE) {
+      // CPU path: fake the glow with a single fat semi-transparent
+      // underlay stroke followed by the thin opaque stroke. Zero
+      // shadowBlur cost, comparable visual weight.
+      ctx.beginPath();
+      ctx.strokeStyle = `rgba(${color.r}, ${color.g}, ${color.b}, 0.35)`;
+      ctx.lineWidth = 5;
+      for (let i = 0; i < WAVEFORM_POINTS; i++) {
+        const x = (i / (WAVEFORM_POINTS - 1)) * width;
+        const y = yCenter + channelData[i] * amplitude;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.strokeStyle = colorStr;
+      ctx.lineWidth = 2;
+      for (let i = 0; i < WAVEFORM_POINTS; i++) {
+        const x = (i / (WAVEFORM_POINTS - 1)) * width;
+        const y = yCenter + channelData[i] * amplitude;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      return;
+    }
+
     const glowStr = `rgba(${color.r}, ${color.g}, ${color.b}, 0.4)`;
 
     ctx.beginPath();
@@ -183,7 +221,7 @@
     lastRenderTime = timestamp;
 
     const rect = canvasRef.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = LOW_PROFILE ? 1 : (window.devicePixelRatio || 1);
     const width = rect.width;
     const height = rect.height;
 
@@ -280,7 +318,7 @@
         <span class="track-album">{album}</span>
       {/if}
       <span class="track-artist">{artist}</span>
-      <QualityBadge {quality} {bitDepth} {samplingRate} {originalBitDepth} {originalSamplingRate} {format} compact />
+      <QualityBadgeStatic {quality} {bitDepth} {samplingRate} {format} />
     </div>
     {#if artwork}
       <div class="artwork-thumb">

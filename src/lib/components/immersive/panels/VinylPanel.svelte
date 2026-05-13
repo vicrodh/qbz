@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { t } from 'svelte-i18n';
-  import QualityBadge from '$lib/components/QualityBadge.svelte';
+  import QualityBadgeStatic from '$lib/components/QualityBadgeStatic.svelte';
 
   interface Props {
     artwork: string;
@@ -335,7 +335,7 @@
       <p class="track-album">{album}</p>
     {/if}
     <div class="quality-badge-wrapper">
-      <QualityBadge {quality} {bitDepth} {samplingRate} {originalBitDepth} {originalSamplingRate} {format} />
+      <QualityBadgeStatic {quality} {bitDepth} {samplingRate} {format} />
     </div>
   </div>
 </div>

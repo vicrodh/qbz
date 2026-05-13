@@ -90,6 +90,29 @@
     }
   }
 
+  /* CPU mode: blanket animation kill in ImmersivePlayer also nuked the
+     line-change transition, which left lyrics feeling dead between
+     lines. Restore a stripped variant — same opacity + transform path
+     (both compositor-only, basically free) but no `filter: blur(4px)`
+     because that one IS expensive in software (per-pixel blur over
+     500ms of animation = 15 frames of full-text-block blur passes).
+     The `!important` is required to beat the equally-important blanket
+     rule. */
+  @keyframes fadeInUpLite {
+    0% {
+      opacity: 0;
+      transform: translateY(40px) scale(0.95);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  :global(html.no-hwaccel .lyrics-line) {
+    animation: fadeInUpLite 500ms cubic-bezier(0.22, 1, 0.36, 1) forwards !important;
+  }
+
   .line-text {
     font-size: clamp(28px, 5vw, 56px);
     font-weight: 700;
