@@ -1386,7 +1386,7 @@
 
 <ViewTransition duration={200} distance={12} direction="down">
 <div class="favorites-view" class:no-outer-scroll={(activeTab === 'tracks' && !loading && filteredTracks.length > 0) || (activeTab === 'albums' && !loading && filteredAlbums.length > 0) || (activeTab === 'artists' && !loading && filteredArtists.length > 0)} bind:this={scrollContainer} onscroll={handleFavoritesScroll}>
-  <div class="top-bar">
+  <div class="top-bar" data-tauri-drag-region="deep">
     {#if onBack}
       <button class="back-btn" onclick={onBack}>
         <ArrowLeft size={16} />
@@ -1398,10 +1398,10 @@
     </button>
   </div>
   <!-- Header -->
-  <div class="header">
+  <div class="header" data-tauri-drag-region="deep">
     <h1>{$t('favorites.title')}</h1>
     {#if activeTab === 'tracks' && !loading && filteredTracks.length > 0}
-      <div class="header-actions">
+      <div class="header-actions" data-tauri-drag-region="false">
         <button class="action-btn-circle" onclick={handlePlayAllTracks} title={$t('actions.playAll')}>
           <Play size={18} fill="currentColor" color="currentColor" />
         </button>
@@ -1431,20 +1431,20 @@
       </div>
     {/if}
     {#if activeTab === 'albums' && !loading && filteredAlbums.length > 0}
-      <div class="header-actions">
+      <div class="header-actions" data-tauri-drag-region="false">
         <button class="action-btn-circle" onclick={handleRandomAlbum} title={$t('favorites.randomAlbum')}>
           <Shuffle size={18} />
         </button>
       </div>
     {/if}
     {#if activeTab === 'artists' && !loading && filteredArtists.length > 0}
-      <div class="header-actions">
+      <div class="header-actions" data-tauri-drag-region="false">
         <button class="action-btn-circle" onclick={handleRandomArtist} title={$t('favorites.randomArtist')}>
           <Shuffle size={18} />
         </button>
       </div>
     {/if}
-    <div class="header-search">
+    <div class="header-search" data-tauri-drag-region="false">
       {#if !searchExpanded}
         <button class="search-icon-btn" onclick={() => searchExpanded = true} title={$t('nav.search')}>
           <Search size={16} />
@@ -1470,8 +1470,8 @@
   </div>
 
   <!-- Navigation Bar (Artist-style) -->
-  <div class="favorites-nav">
-    <div class="nav-left">
+  <div class="favorites-nav" data-tauri-drag-region="deep">
+    <div class="nav-left" data-tauri-drag-region="false">
       {#each favoritesPreferences.tab_order as tab}
         {@const Icon = getTabIcon(tab as TabType)}
         <button
@@ -1484,7 +1484,7 @@
         </button>
       {/each}
     </div>
-    <div class="nav-right">
+    <div class="nav-right" data-tauri-drag-region="false">
       <span class="results-count">
         {#if activeTab === 'tracks'}
           {filteredTracks.length}{trackSearch ? ` / ${favoriteTracks.length}` : ''} {$t('favorites.tracks').toLowerCase()}

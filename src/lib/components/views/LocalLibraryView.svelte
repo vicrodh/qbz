@@ -5694,7 +5694,7 @@
     </div>
   {:else}
     <!-- Main Library View -->
-    <div class="header">
+    <div class="header" data-tauri-drag-region="deep">
       <div class="header-content">
         <h1>{$t('library.title')}</h1>
         {#if stats}
@@ -5707,7 +5707,7 @@
           <p class="subtitle">{$t('library.yourCollection')}</p>
         {/if}
       </div>
-      <div class="header-actions">
+      <div class="header-actions" data-tauri-drag-region="false">
         {#if hasPlexConfig()}
           <button
             class="icon-btn plex-sync-btn"
@@ -8140,7 +8140,6 @@
     font-size: 13px;
     color: var(--text-secondary);
     cursor: pointer;
-    user-select: none;
   }
 
   .select-all-checkbox input[type='checkbox'] {
@@ -9240,9 +9239,6 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    /* Block selection bleed on the handle itself; the global override
-       on <body> during drag handles the rest of the page. */
-    user-select: none;
   }
 
   .tree-sidebar-resize-handle:hover,

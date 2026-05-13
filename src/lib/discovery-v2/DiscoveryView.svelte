@@ -364,8 +364,8 @@
 </script>
 
 <div class="discovery">
-  <div class="toolbar">
-    <div class="tabs">
+  <div class="toolbar" data-tauri-drag-region>
+    <div class="tabs" data-tauri-drag-region="false">
       {#each tabs as tab (tab.id)}
         <button
           class="tab"
@@ -377,7 +377,7 @@
         </button>
       {/each}
     </div>
-    <div class="genre-slot">
+    <div class="genre-slot" data-tauri-drag-region="false">
       <GenreFilterButton
         onFilterChange={handleGenreFilterChange}
         context="home"
