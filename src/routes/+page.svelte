@@ -5401,6 +5401,7 @@
     let unlistenQconnectDiagnostic: UnlistenFn | null = null;
     let unlistenQconnectRendererReportDebug: UnlistenFn | null = null;
     let unlistenAudioDeviceMissing: UnlistenFn | null = null;
+    let unlistenAudioInitFailed: UnlistenFn | null = null;
 
     (async () => {
       const unlisten1 = await listen('tray:play_pause', () => {
@@ -5632,6 +5633,23 @@
       });
       if (disposed) { unlistenDeviceMissing(); return; }
       unlistenAudioDeviceMissing = unlistenDeviceMissing;
+
+      // Backend audio init failed (e.g. macOS CoreAudio rate mismatch after
+      // the retry exhausted, Hog Mode already held by another app, device
+      // disconnected mid-init). The fallback to legacy CPAL is intentionally
+      // refused on macOS — silent wrong-speed audio is worse than no audio —
+      // so the user sees no playback. Surface the cause as a toast instead
+      // of leaving them guessing at the silence.
+      const unlistenInitFailed = await listen<{ message: string }>('audio:init-failed', (event) => {
+        const reason = event.payload?.message ?? '';
+        showToast(
+          $t('toast.audioInitFailed', { values: { reason } }),
+          'error',
+          8000
+        );
+      });
+      if (disposed) { unlistenInitFailed(); return; }
+      unlistenAudioInitFailed = unlistenInitFailed;
     })();
 
     return () => {
@@ -5651,6 +5669,7 @@
       unlistenQconnectDiagnostic?.();
       unlistenQconnectRendererReportDebug?.();
       unlistenAudioDeviceMissing?.();
+      unlistenAudioInitFailed?.();
       unsubscribeWindowTitle();
       // Save session before cleanup
       saveSessionBeforeClose();

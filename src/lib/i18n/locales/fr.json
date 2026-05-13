@@ -2982,6 +2982,7 @@
     "findingSimilarArtists": "Trouver des artistes similaires...",
     "awardUnavailable": "Détail non disponible pour cette récompense.",
     "audioDeviceMissing": "Le périphérique '{device}' n'est plus disponible. Utilisation du périphérique par défaut.",
+    "audioInitFailed": "Impossible de démarrer la sortie audio : {reason}",
     "mixTrimmed": "{actual} chansons ajoutées à la file (tu en as demandé {requested} ; certaines fusionnées ou limitées par album)."
   },
   "topMixes": {

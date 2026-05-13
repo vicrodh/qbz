@@ -1244,6 +1244,31 @@ pub fn run(qconnect_cli_override: Option<bool>) {
                 let mut last_track_id: u64 = 0;
 
                 loop {
+                    // Surface backend init failures from the V2 player to
+                    // the frontend exactly once. record_stream_error stores
+                    // the user-readable message; take_stream_error_message
+                    // drains it so we never re-emit the same toast on
+                    // subsequent ticks. Only the V2 (qbz-player) path
+                    // populates this — the legacy player's init failures
+                    // continue to surface via existing channels.
+                    let init_error: Option<String> = v2_player_state
+                        .read()
+                        .await
+                        .as_ref()
+                        .and_then(qbz_player::SharedState::take_stream_error_message);
+                    if let Some(message) = init_error {
+                        #[derive(serde::Serialize, Clone)]
+                        struct AudioInitFailedPayload {
+                            message: String,
+                        }
+                        if let Err(e) = app_handle.emit(
+                            "audio:init-failed",
+                            AudioInitFailedPayload { message },
+                        ) {
+                            log::warn!("Failed to emit audio:init-failed event: {}", e);
+                        }
+                    }
+
                     // Check V2 player state first (takes priority if active)
                     // V2 player is accessed via async lock, but we only need a clone
                     let v2_state_opt: Option<qbz_player::SharedState> =
