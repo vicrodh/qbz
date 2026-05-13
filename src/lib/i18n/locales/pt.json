@@ -2283,6 +2283,8 @@
       "uiScale": "Escala da Interface",
       "sidebarPlaylistCollage": "Mostrar colagens de capas das playlists na barra lateral",
       "sidebarPlaylistCollageDesc": "Renderiza uma miniatura 2×2 das capas das faixas ao lado de cada playlist. Desative em máquinas modestas para poupar as imagens extras.",
+      "localLibraryTrackArtwork": "Mostrar capa do álbum na lista de faixas da Biblioteca local",
+      "localLibraryTrackArtworkDesc": "Exibe a miniatura da capa do álbum ao lado de cada faixa nas visualizações de Faixas e Pastas. Desligado por padrão — bibliotecas grandes pagam um custo de decodificação de imagem por linha.",
       "inAppToasts": "Notificações internas do app",
       "systemNotifications": "Notificações do Sistema",
       "windowTitleShow": "Mostrar faixa no título",

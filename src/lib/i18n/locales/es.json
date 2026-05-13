@@ -2283,6 +2283,8 @@
       "uiScale": "Escala de UI",
       "sidebarPlaylistCollage": "Mostrar collage de portadas en playlists del sidebar",
       "sidebarPlaylistCollageDesc": "Muestra una miniatura 2×2 con portadas de las pistas junto a cada playlist. Desactívalo en equipos con recursos limitados para omitir las imágenes extra.",
+      "localLibraryTrackArtwork": "Mostrar carátula del album en la lista de pistas de Local Library",
+      "localLibraryTrackArtworkDesc": "Muestra la miniatura de la portada del album junto a cada pista en las vistas de Pistas y Carpetas. Apagado por defecto — bibliotecas grandes pagan un costo por fila al decodificar cada imagen.",
       "inAppToasts": "Notificaciones en App",
       "systemNotifications": "Notificaciones del Sistema",
       "windowTitleShow": "Mostrar pista en título de ventana",

@@ -2283,6 +2283,8 @@
       "uiScale": "Échelle de l'interface",
       "sidebarPlaylistCollage": "Afficher les collages de pochettes des playlists dans la barre latérale",
       "sidebarPlaylistCollageDesc": "Affiche une miniature 2×2 des pochettes de pistes à côté de chaque playlist. À désactiver sur les machines peu puissantes pour éviter les images supplémentaires.",
+      "localLibraryTrackArtwork": "Afficher la pochette dans la liste des pistes de la Bibliothèque locale",
+      "localLibraryTrackArtworkDesc": "Affiche la miniature de la pochette à côté de chaque piste dans les vues Pistes et Dossiers. Désactivé par défaut — les grandes bibliothèques paient un coût de décodage d'image par ligne.",
       "inAppToasts": "Notifications toast intégrées",
       "systemNotifications": "Notifications système",
       "windowTitleShow": "Afficher la piste dans le titre",

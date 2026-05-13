@@ -2283,6 +2283,8 @@
       "uiScale": "UI-Skalierung",
       "sidebarPlaylistCollage": "Playlist-Cover-Collagen in der Seitenleiste anzeigen",
       "sidebarPlaylistCollageDesc": "Zeigt eine 2×2-Miniaturansicht der Titel-Cover neben jeder Playlist. Auf leistungsschwachen Geräten deaktivieren, um zusätzliche Bilder zu überspringen.",
+      "localLibraryTrackArtwork": "Album-Cover in Local-Library-Titelliste anzeigen",
+      "localLibraryTrackArtworkDesc": "Zeigt die Cover-Miniatur neben jedem Titel in den Titel- und Ordneransichten. Standardmäßig aus — große Bibliotheken zahlen pro Zeile einen Bild-Decode-Aufwand.",
       "inAppToasts": "In-App-Benachrichtigungen",
       "systemNotifications": "Systembenachrichtigungen",
       "windowTitleShow": "Titel im Fenstertitel anzeigen",

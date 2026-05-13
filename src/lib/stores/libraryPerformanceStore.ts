@@ -40,6 +40,14 @@ export interface LibraryPerformanceSettings {
    * Useful for testing or user preference.
    */
   forcePerformanceMode: boolean;
+
+  /**
+   * Show album artwork next to each track in Local Library track /
+   * folder list views. OFF by default because large libraries
+   * (10k+ tracks) pay a per-row image-decode cost and the user
+   * shouldn't opt into that without knowing. See issue #412.
+   */
+  showTrackArtwork: boolean;
 }
 
 const STORAGE_KEY = 'qbz-library-performance';
@@ -51,6 +59,7 @@ const DEFAULT_SETTINGS: LibraryPerformanceSettings = {
   albumSearchDebounceMs: 150,
   performanceModeThreshold: 500,
   forcePerformanceMode: false,
+  showTrackArtwork: false,
 };
 
 // State
@@ -126,6 +135,14 @@ export function isVirtualizationEnabled(): boolean {
  */
 export function isThumbnailsEnabled(): boolean {
   return settings.thumbnailsEnabled;
+}
+
+/**
+ * Check if album artwork is shown alongside each track row in the
+ * Local Library list views (issue #412). Off by default.
+ */
+export function isTrackArtworkEnabled(): boolean {
+  return settings.showTrackArtwork;
 }
 
 /**

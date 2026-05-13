@@ -42,6 +42,7 @@
   import VirtualizedTrackList from '../VirtualizedTrackList.svelte';
   import {
     isVirtualizationEnabled,
+    isTrackArtworkEnabled,
     shouldUsePerformanceMode,
     subscribe as subscribePerformance
   } from '$lib/stores/libraryPerformanceStore';
@@ -1231,6 +1232,10 @@
 
   // Performance mode state
   let useVirtualization = $state(isVirtualizationEnabled());
+  // Issue #412 — opt-in album cover thumbs in the tracks/folder list
+  // views. Default OFF: a 16k-track library renders 16k decoded
+  // images otherwise. Subscribed below alongside `useVirtualization`.
+  let showTrackArtwork = $state(isTrackArtworkEnabled());
   let virtualizedScrollTarget = $state<string | undefined>(undefined);
 
   // Artist view state
@@ -2873,6 +2878,7 @@
     unsubscribePerformance = subscribePerformance(() => {
       const itemCount = Math.max(albums.length, tracks.length);
       useVirtualization = isVirtualizationEnabled() && shouldUsePerformanceMode(itemCount);
+      showTrackArtwork = isTrackArtworkEnabled();
     });
 
     // Subscribe to navigation changes for back/forward support
@@ -6783,6 +6789,8 @@
                 onToggleSelect={toggleTrackSelect}
                 onToggleSelectRange={addTracksToSelection}
                 onVisibleTracksChange={onVisibleTracksChange}
+                showArtwork={showTrackArtwork}
+                getArtworkUrl={(track) => getArtworkUrl(track.artwork_path)}
               />
             </div>
           </div>
