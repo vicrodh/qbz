@@ -1005,17 +1005,19 @@
   type AlbumGroupMode = 'alpha' | 'artist';
   let albumGroupMode = $state<AlbumGroupMode>('alpha');
   let albumGroupingEnabled = $state(false);
-  let showGroupMenu = $state(false);
+
+  // Mutually-exclusive toolbar dropdown state. Only one menu is open at a time.
+  type OpenMenu = 'group' | 'filter' | 'sort' | 'trackGroup' | null;
+  let openMenu = $state<OpenMenu>(null);
 
   // Quality/Format filter with checkboxes (AND between sections, OR within section)
-  let showFilterPanel = $state(false);
   let filterPanelRef: HTMLDivElement | null = $state(null);
   let filterPanelTimeout: ReturnType<typeof setTimeout> | null = null;
 
   function startFilterPanelTimer() {
     clearFilterPanelTimer();
     filterPanelTimeout = setTimeout(() => {
-      showFilterPanel = false;
+      if (openMenu === 'filter') openMenu = null;
     }, 3000);
   }
 
@@ -1027,21 +1029,21 @@
   }
 
   function handleFilterPanelActivity() {
-    if (showFilterPanel) {
+    if (openMenu === 'filter') {
       startFilterPanelTimer();
     }
   }
 
   function handleClickOutsideFilterPanel(event: MouseEvent) {
-    if (showFilterPanel && filterPanelRef && !filterPanelRef.contains(event.target as Node)) {
-      showFilterPanel = false;
+    if (openMenu === 'filter' && filterPanelRef && !filterPanelRef.contains(event.target as Node)) {
+      openMenu = null;
       clearFilterPanelTimer();
     }
   }
 
   // Effect to manage filter panel auto-close
   $effect(() => {
-    if (showFilterPanel) {
+    if (openMenu === 'filter') {
       startFilterPanelTimer();
       document.addEventListener('click', handleClickOutsideFilterPanel, true);
     } else {
@@ -1056,11 +1058,11 @@
 
   // Effect to close sort menu on click outside
   $effect(() => {
-    if (showSortMenu) {
+    if (openMenu === 'sort') {
       const handleClickOutside = (event: MouseEvent) => {
         const target = event.target as HTMLElement;
         if (!target.closest('.sort-btn') && !target.closest('.sort-menu')) {
-          showSortMenu = false;
+          if (openMenu === 'sort') openMenu = null;
         }
       };
       document.addEventListener('click', handleClickOutside, true);
@@ -1174,7 +1176,6 @@
   type SortDirection = 'asc' | 'desc';
   let sortBy = $state<SortBy>('title');
   let sortDirection = $state<SortDirection>('asc');
-  let showSortMenu = $state(false);
 
   const sortOptions: { value: SortBy; label: string }[] = [
     { value: 'title', label: 'Album Name' },
@@ -1198,7 +1199,7 @@
       sortBy = value;
       sortDirection = 'asc';
     }
-    showSortMenu = false;
+    openMenu = null;
   }
 
   function sortAlbums(items: LocalAlbum[]): LocalAlbum[] {
@@ -1242,7 +1243,6 @@
   let artistSearch = $state('');
   let artistViewMode = $state<'grid' | 'list'>('grid');
   let artistGroupingEnabled = $state(true); // Enable alpha grouping by default
-  let showArtistGroupMenu = $state(false);
   // Selected artist for the two-column layout
   let selectedArtistName = $state<string | null>(null);
   // Reference to the artist list scroll container
@@ -1269,7 +1269,6 @@
   type TrackGroupMode = 'album' | 'artist' | 'name';
   let trackGroupMode = $state<TrackGroupMode>('album');
   let trackGroupingEnabled = $state(false);
-  let showTrackGroupMenu = $state(false);
   let trackSearchTimer: ReturnType<typeof setTimeout> | null = null;
   // Reference to virtualized track list for programmatic scrolling
   let virtualizedTrackListRef = $state<{ scrollToGroup: (groupId: string) => void } | undefined>(undefined);
@@ -5304,7 +5303,7 @@
       <div class="dropdown-container">
         <button
           class="control-btn"
-          onclick={() => (showGroupMenu = !showGroupMenu)}
+          onclick={() => (openMenu = openMenu === 'group' ? null : 'group')}
           title="Group albums"
         >
           <span>{!albumGroupingEnabled
@@ -5313,26 +5312,26 @@
               ? $t('purchases.group.alpha')
               : $t('purchases.group.artist')}</span>
         </button>
-        {#if showGroupMenu}
+        {#if openMenu === 'group'}
           <div class="dropdown-menu">
             <button
               class="dropdown-item"
               class:selected={!albumGroupingEnabled}
-              onclick={() => { albumGroupingEnabled = false; showGroupMenu = false; }}
+              onclick={() => { albumGroupingEnabled = false; openMenu = null; }}
             >
               {$t('purchases.group.optionOff')}
             </button>
             <button
               class="dropdown-item"
               class:selected={albumGroupingEnabled && albumGroupMode === 'alpha'}
-              onclick={() => { albumGroupMode = 'alpha'; albumGroupingEnabled = true; showGroupMenu = false; }}
+              onclick={() => { albumGroupMode = 'alpha'; albumGroupingEnabled = true; openMenu = null; }}
             >
               {$t('purchases.group.optionAlpha')}
             </button>
             <button
               class="dropdown-item"
               class:selected={albumGroupingEnabled && albumGroupMode === 'artist'}
-              onclick={() => { albumGroupMode = 'artist'; albumGroupingEnabled = true; showGroupMenu = false; }}
+              onclick={() => { albumGroupMode = 'artist'; albumGroupingEnabled = true; openMenu = null; }}
             >
               {$t('purchases.group.optionArtist')}
             </button>
@@ -5345,7 +5344,7 @@
         <button
           class="control-btn icon-only"
           class:active={hasActiveFilters}
-          onclick={() => (showFilterPanel = !showFilterPanel)}
+          onclick={() => (openMenu = openMenu === 'filter' ? null : 'filter')}
           title="Filter by quality/format"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
@@ -5355,7 +5354,7 @@
             <span class="filter-badge">{activeFilterCount}</span>
           {/if}
         </button>
-        {#if showFilterPanel}
+        {#if openMenu === 'filter'}
           <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
           <div
             class="filter-panel"
@@ -5466,12 +5465,12 @@
       <div class="dropdown-container">
         <button
           class="control-btn icon-only"
-          onclick={() => (showSortMenu = !showSortMenu)}
+          onclick={() => (openMenu = openMenu === 'sort' ? null : 'sort')}
           title="Sort albums"
         >
           <ArrowUpDown size={14} />
         </button>
-        {#if showSortMenu}
+        {#if openMenu === 'sort'}
           <div class="sort-menu">
             {#each sortOptions as option}
               <button
@@ -6744,7 +6743,7 @@
             <div class="dropdown-container">
               <button
                 class="control-btn"
-                onclick={() => (showTrackGroupMenu = !showTrackGroupMenu)}
+                onclick={() => (openMenu = openMenu === 'trackGroup' ? null : 'trackGroup')}
                 title="Group tracks"
               >
                 <span>
@@ -6757,33 +6756,33 @@
                         : $t('purchases.group.name')}
                 </span>
               </button>
-              {#if showTrackGroupMenu}
+              {#if openMenu === 'trackGroup'}
                 <div class="dropdown-menu">
                   <button
                     class="dropdown-item"
                     class:selected={!trackGroupingEnabled}
-                    onclick={() => { trackGroupingEnabled = false; showTrackGroupMenu = false; }}
+                    onclick={() => { trackGroupingEnabled = false; openMenu = null; }}
                   >
                     {$t('purchases.group.optionOff')}
                   </button>
                   <button
                     class="dropdown-item"
                     class:selected={trackGroupingEnabled && trackGroupMode === 'album'}
-                    onclick={() => { trackGroupMode = 'album'; trackGroupingEnabled = true; showTrackGroupMenu = false; }}
+                    onclick={() => { trackGroupMode = 'album'; trackGroupingEnabled = true; openMenu = null; }}
                   >
                     {$t('purchases.group.optionAlbum')}
                   </button>
                   <button
                     class="dropdown-item"
                     class:selected={trackGroupingEnabled && trackGroupMode === 'artist'}
-                    onclick={() => { trackGroupMode = 'artist'; trackGroupingEnabled = true; showTrackGroupMenu = false; }}
+                    onclick={() => { trackGroupMode = 'artist'; trackGroupingEnabled = true; openMenu = null; }}
                   >
                     {$t('purchases.group.optionArtist')}
                   </button>
                   <button
                     class="dropdown-item"
                     class:selected={trackGroupingEnabled && trackGroupMode === 'name'}
-                    onclick={() => { trackGroupMode = 'name'; trackGroupingEnabled = true; showTrackGroupMenu = false; }}
+                    onclick={() => { trackGroupMode = 'name'; trackGroupingEnabled = true; openMenu = null; }}
                   >
                     {$t('purchases.group.optionAlpha')}
                   </button>

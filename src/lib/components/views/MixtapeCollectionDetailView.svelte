@@ -395,9 +395,30 @@
 
   let sortBy = $state<SortBy>('position');
   let sortDir = $state<SortDir>('asc');
-  let showSortMenu = $state(false);
   let typeFilter = $state<TypeFilter>('all');
-  let showFilterMenu = $state(false);
+
+  // Mutually-exclusive toolbar dropdown state. Only one menu is open at a time.
+  type OpenMenu = 'sort' | 'filter' | null;
+  let openMenu = $state<OpenMenu>(null);
+
+  $effect(() => {
+    if (openMenu === null) return;
+
+    function handleClickOutside(event: MouseEvent) {
+      const target = event.target as HTMLElement | null;
+      if (!target) return;
+      if (target.closest('.control-btn') || target.closest('.control-menu')) return;
+      openMenu = null;
+    }
+
+    setTimeout(() => {
+      document.addEventListener('click', handleClickOutside);
+    }, 0);
+
+    return () => {
+      document.removeEventListener('click', handleClickOutside);
+    };
+  });
 
   // Source filter — multi-select, maps to the resolved item kind (qobuz /
   // plex / local, see resolveItems). Empty set means "all pass" (no filter).
@@ -467,7 +488,7 @@
       sortBy = value;
       sortDir = 'asc';
     }
-    showSortMenu = false;
+    openMenu = null;
   }
 
   const sortOptions: { value: SortBy; label: string }[] = $derived([
@@ -1552,15 +1573,14 @@
           <button
             type="button"
             class="control-btn"
-            onclick={() => { showSortMenu = !showSortMenu; showFilterMenu = false; }}
+            onclick={() => (openMenu = openMenu === 'sort' ? null : 'sort')}
             title={$t('collectionDetail.sort') || 'Sort'}
           >
             <ArrowUpDown size={14} />
             <span>{sortOptions.find((o) => o.value === sortBy)?.label}</span>
             <span class="sort-indicator">{sortDir === 'asc' ? '↑' : '↓'}</span>
           </button>
-          {#if showSortMenu}
-            <div class="control-backdrop" onclick={() => (showSortMenu = false)} role="presentation"></div>
+          {#if openMenu === 'sort'}
             <div class="control-menu">
               {#each sortOptions as option}
                 <button
@@ -1584,7 +1604,7 @@
             type="button"
             class="control-btn"
             class:active={typeFilter !== 'all' || sourceFilter.size > 0}
-            onclick={() => { showFilterMenu = !showFilterMenu; showSortMenu = false; }}
+            onclick={() => (openMenu = openMenu === 'filter' ? null : 'filter')}
             title={$t('collectionDetail.filter') || 'Filter'}
           >
             <Filter size={14} />
@@ -1593,8 +1613,7 @@
               <span class="filter-count">{(sourceFilter.size) + (typeFilter !== 'all' ? 1 : 0)}</span>
             {/if}
           </button>
-          {#if showFilterMenu}
-            <div class="control-backdrop" onclick={() => (showFilterMenu = false)} role="presentation"></div>
+          {#if openMenu === 'filter'}
             <div class="control-menu wide">
               <div class="filter-section-label">{$t('collectionDetail.colType') || $t('discographyBuilder.colType')}</div>
               {#each typeFilterOptions as option}
@@ -2451,11 +2470,6 @@
   .sort-indicator {
     color: var(--text-muted);
     font-size: 11px;
-  }
-  .control-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 100;
   }
   .control-menu {
     position: absolute;
