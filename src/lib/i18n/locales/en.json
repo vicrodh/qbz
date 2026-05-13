@@ -2283,6 +2283,8 @@
       "uiScale": "UI Scale",
       "sidebarPlaylistCollage": "Show playlist cover collages in sidebar",
       "sidebarPlaylistCollageDesc": "Render a 2×2 thumbnail of track covers next to each playlist. Disable on low-end machines to skip the extra images.",
+      "localLibraryTrackArtwork": "Show album artwork in Local Library track list",
+      "localLibraryTrackArtworkDesc": "Display the album cover thumbnail next to each track in the Tracks and Folders views. Off by default — large libraries pay a per-row image-decode cost.",
       "inAppToasts": "In-app toasts notifications",
       "systemNotifications": "System Notifications",
       "windowTitleShow": "Show track in window title",

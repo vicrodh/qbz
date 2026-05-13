@@ -93,6 +93,11 @@
     setAlbumHeaderGradient,
   } from '$lib/stores/appearancePreferencesStore';
   import {
+    isTrackArtworkEnabled,
+    updateSetting as updateLibraryPerformanceSetting,
+    subscribe as subscribeLibraryPerformance,
+  } from '$lib/stores/libraryPerformanceStore';
+  import {
     enableVerboseCapture,
     disableVerboseCapture,
     isVerboseCaptureEnabled
@@ -1071,6 +1076,14 @@
   // Appearance settings
   let theme = $state('Dark');
   let albumHeaderGradient = $state(isAlbumHeaderGradientEnabled());
+
+  // Issue #412 — opt-in album cover thumbs in Local Library tracks/
+  // folder list views. Default OFF; large libraries take a real perf
+  // hit when 10k+ rows each render a decoded image.
+  let showTrackArtwork = $state(isTrackArtworkEnabled());
+  subscribeLibraryPerformance(() => {
+    showTrackArtwork = isTrackArtworkEnabled();
+  });
 
   function handleAlbumHeaderGradientToggle(enabled: boolean) {
     setAlbumHeaderGradient(enabled);
@@ -4774,6 +4787,19 @@
         <small class="setting-note">{$t('settings.appearance.sidebarPlaylistCollageDesc')}</small>
       </div>
       <Toggle enabled={sidebarPlaylistCollage} onchange={(v) => { sidebarPlaylistCollage = v; setShowPlaylistCollage(v); }} />
+    </div>
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.appearance.localLibraryTrackArtwork')}</span>
+        <small class="setting-note">{$t('settings.appearance.localLibraryTrackArtworkDesc')}</small>
+      </div>
+      <Toggle
+        enabled={showTrackArtwork}
+        onchange={(v) => {
+          showTrackArtwork = v;
+          updateLibraryPerformanceSetting('showTrackArtwork', v);
+        }}
+      />
     </div>
     <div class="setting-row">
       <span class="setting-label">{$t('settings.appearance.inAppToasts')}</span>
