@@ -1799,6 +1799,7 @@
   function toggleTrackSelectMode() {
     trackSelectMode = !trackSelectMode;
     if (!trackSelectMode) selectedTrackIds = new Set();
+    else clearOtherSelectionContexts('tracks');
   }
 
   function toggleTrackSelect(id: number) {
@@ -1965,6 +1966,7 @@
   function toggleAlbumSelectMode() {
     albumSelectMode = !albumSelectMode;
     if (!albumSelectMode) selectedAlbumIds = new Set();
+    else clearOtherSelectionContexts('albums');
   }
 
   function toggleAlbumSelect(album: LocalAlbum) {
@@ -2636,8 +2638,53 @@
     if (!treeSelectMode) {
       selectedTrackIds = new Set();
       treeSelectedTracksById = new SvelteMap();
+    } else {
+      clearOtherSelectionContexts('tree');
     }
   }
+
+  /**
+   * Mutual exclusion between the three selection contexts in this view:
+   *
+   *   - `tracks`  — flat tracks-tab multi-select (trackSelectMode)
+   *   - `albums`  — albums-tab multi-select (albumSelectMode)
+   *   - `tree`    — folder-tree multi-select (treeSelectMode)
+   *
+   * The bulk-action bar in the footer is a single sink that doesn't know
+   * which context filled it, so allowing two contexts to be active at the
+   * same time confuses the user about what a bulk action will operate on.
+   * Whenever the user enters a new context, this function clears the
+   * other two — explicit, no `$effect` reactivity, no infinite loops.
+   *
+   * Pure light-switch behaviour: tap "select" in tracks while tree
+   * select is on, and tree just turns off — no warning toast, no
+   * disabled state, no extra UI noise. The user already understands
+   * how a toggle works.
+   */
+  function clearOtherSelectionContexts(entering: 'tracks' | 'albums' | 'tree' | 'folder-album') {
+    // Turn off any parent mode flag that isn't the one being entered.
+    // The 'folder-album' value covers the child component's local
+    // selection mode (LocalLibraryFolderAlbumView). Its own state lives
+    // inside the child; the child reacts to a `parentSelectionActive`
+    // prop becoming true by clearing its local selection. Here we just
+    // ensure all parent contexts go off when the child enters select.
+    if (entering !== 'tracks' && trackSelectMode) trackSelectMode = false;
+    if (entering !== 'albums' && albumSelectMode) albumSelectMode = false;
+    if (entering !== 'tree' && treeSelectMode) treeSelectMode = false;
+
+    // `selectedTrackIds` is shared between tracks-tab and tree contexts,
+    // so it ALWAYS gets cleared on a context switch — the entering
+    // context starts fresh and the BulkActionBar count reflects only
+    // the new accumulation. The albums set is tab-local and only needs
+    // clearing when leaving albums.
+    if (selectedTrackIds.size > 0) selectedTrackIds = new Set();
+    if (entering !== 'albums' && selectedAlbumIds.size > 0) selectedAlbumIds = new Set();
+    if (entering !== 'tree') {
+      if (selectedFolders.size > 0) selectedFolders = new Set();
+      if (treeSelectedTracksById.size > 0) treeSelectedTracksById = new SvelteMap();
+    }
+  }
+
 
   // Returns the count of selected track IDs whose file_path lives under
   // the given folder. O(|selection|) — selection is small in practice.
@@ -6310,6 +6357,8 @@
                     {getFullArtworkUrl}
                     {buildAlbumSections}
                     {normalizeArtistName}
+                    parentSelectionActive={trackSelectMode || albumSelectMode || treeSelectMode}
+                    onSelectionEntered={() => clearOtherSelectionContexts('folder-album')}
                   />
                 {:else if selectedFolderPath}
                   <LocalLibraryFolderDetail

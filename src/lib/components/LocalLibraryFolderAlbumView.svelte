@@ -18,6 +18,7 @@
   import TrackRow from './TrackRow.svelte';
   import ImageLightbox from './ImageLightbox.svelte';
   import { formatTrackTitle } from '$lib/utils/trackTitle';
+  import { applyShiftRange, isSelectAllShortcut } from '$lib/utils/multiSelect';
 
   interface LocalTrack {
     id: number;
@@ -118,6 +119,20 @@
     getFullArtworkUrl: (path?: string) => string;
     buildAlbumSections: (tracks: LocalTrack[]) => AlbumSection[];
     normalizeArtistName: (name: string) => string;
+    /**
+     * One of the parent's selection contexts (tracks tab, albums tab,
+     * folder tree) is currently active. When this flips to `true` while
+     * this view has its own local selection mode on, the local
+     * selection is cleared — light-switch mutex across the parent/child
+     * boundary so two selections can never be live at the same time.
+     */
+    parentSelectionActive?: boolean;
+    /**
+     * Called when the user toggles ON this view's local selection mode.
+     * Parent uses it to clear its own selection contexts so the
+     * footer's BulkActionBar reflects a single source of truth.
+     */
+    onSelectionEntered?: () => void;
   }
 
   let {
@@ -147,6 +162,8 @@
     getFullArtworkUrl,
     buildAlbumSections,
     normalizeArtistName,
+    parentSelectionActive = false,
+    onSelectionEntered,
   }: Props = $props();
 
   let trackSearchQuery = $state('');
@@ -191,19 +208,101 @@
 
   function toggleSelectionMode() {
     selectionMode = !selectionMode;
-    if (!selectionMode) selectedTrackIds = new Set();
+    if (!selectionMode) {
+      selectedTrackIds = new Set();
+      selectionAnchorId = null;
+    } else {
+      // Notify parent so it can clear its own selection contexts —
+      // light-switch mutex with the parent (tracks-tab / albums-tab /
+      // folder-tree). The parent's `clearOtherSelectionContexts`
+      // handles the cross-context teardown.
+      onSelectionEntered?.();
+    }
   }
 
-  function toggleTrackSelection(trackId: number) {
+  // Inbound half of the cross-component mutex: when the parent enters
+  // any of its own selection contexts, our local selection turns off.
+  // No infinite loop because the toggle above only fires
+  // `onSelectionEntered` on the ENTRY transition (false -> true).
+  $effect(() => {
+    if (parentSelectionActive && selectionMode) {
+      selectionMode = false;
+      selectedTrackIds = new Set();
+      selectionAnchorId = null;
+    }
+  });
+
+  // Anchor for shift-click range selection. Set by every plain
+  // (non-shift) click and consumed by the next shift-click. Reset
+  // whenever selection mode is exited so a future re-entry starts
+  // from a fresh anchor.
+  let selectionAnchorId: number | null = null;
+
+  /**
+   * Toggle a single track in the selection, with optional shift-range
+   * extension. When `shift` is true and an anchor exists, every track
+   * between the anchor and `trackId` (inclusive, in current visual
+   * order) is added to the selection — matches the tracks-tab behaviour
+   * in `LocalLibraryView`. Without shift, this is a plain toggle and
+   * the clicked track becomes the new anchor.
+   */
+  function toggleTrackSelection(trackId: number, shift: boolean = false) {
+    if (shift && selectionAnchorId !== null && selectionAnchorId !== trackId) {
+      const ids = tracks.map((trk) => trk.id);
+      const lastIndex = ids.indexOf(selectionAnchorId);
+      const currentIndex = ids.indexOf(trackId);
+      if (lastIndex !== -1 && currentIndex !== -1) {
+        selectedTrackIds = applyShiftRange({
+          current: selectedTrackIds,
+          ids,
+          lastIndex,
+          currentIndex,
+        });
+        return;
+      }
+    }
     const next = new Set(selectedTrackIds);
     if (next.has(trackId)) next.delete(trackId);
     else next.add(trackId);
     selectedTrackIds = next;
+    selectionAnchorId = trackId;
   }
 
   function clearSelection() {
     selectedTrackIds = new Set();
+    selectionAnchorId = null;
   }
+
+  // Tri-state for the "Select All" checkbox at the top of the track
+  // list — 'none' / 'partial' / 'all' based on how many of the
+  // currently visible album tracks are in the selection set.
+  const selectAllState = $derived(
+    tracks.length === 0 ? 'none' as const
+    : selectedTrackIds.size === 0 ? 'none' as const
+    : tracks.every((trk) => selectedTrackIds.has(trk.id)) ? 'all' as const
+    : 'partial' as const
+  );
+
+  function toggleSelectAll() {
+    if (selectAllState === 'all') {
+      selectedTrackIds = new Set();
+    } else {
+      selectedTrackIds = new Set(tracks.map((trk) => trk.id));
+    }
+  }
+
+  // Ctrl/Cmd+A while selection mode is active selects every visible
+  // track. No-op when focus is in a text input.
+  $effect(() => {
+    if (!selectionMode) return;
+    const handler = (e: KeyboardEvent) => {
+      if (!isSelectAllShortcut(e)) return;
+      e.preventDefault();
+      selectedTrackIds = new Set(tracks.map((trk) => trk.id));
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  });
 
   /** Resolve the selected IDs back to the full LocalTrack objects so we
    *  can split local vs Plex rows for the playlist add path. */
@@ -381,6 +480,17 @@
         >
           <SquareCheckBig size={18} />
         </button>
+        {#if selectionMode}
+          <label class="folder-album-select-all" title={$t('actions.selectAll')}>
+            <input
+              type="checkbox"
+              checked={selectAllState === 'all'}
+              indeterminate={selectAllState === 'partial'}
+              onchange={toggleSelectAll}
+            />
+            <span>{$t('actions.selectAll')}</span>
+          </label>
+        {/if}
         <button
           type="button"
           class="action-btn-circle"
@@ -504,7 +614,7 @@
           hideFavorite={true}
           selectable={selectionMode}
           selected={selectedTrackIds.has(track.id)}
-          onToggleSelect={() => toggleTrackSelection(track.id)}
+          onToggleSelect={(e) => toggleTrackSelection(track.id, e.shiftKey)}
           onArtistClick={track.artist && track.artist !== album.artist && onArtistClick
             ? () => onArtistClick?.(track.artist)
             : undefined}
@@ -911,5 +1021,27 @@
   .cover-context-item:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  /* Select-all checkbox shown next to the selection-mode toggle in the
+     folder album header. Matches the visual rhythm of the other inline
+     toolbar items — small, sits beside the round action buttons rather
+     than competing with them. */
+  .folder-album-select-all {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 8px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .folder-album-select-all input[type='checkbox'] {
+    width: 14px;
+    height: 14px;
+    accent-color: var(--accent-primary);
+    cursor: pointer;
   }
 </style>
