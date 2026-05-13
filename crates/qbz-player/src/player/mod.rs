@@ -956,6 +956,13 @@ impl SharedState {
         }
     }
 
+    /// Clearing (`error = false`) also drops any pending
+    /// `stream_error_message`. This is intentional: if init recovers before
+    /// the Tauri polling loop drains the message, we'd rather swallow the
+    /// toast than surface a notification for a transient failure the user
+    /// never perceived. The trade-off is that a fast record→clear→drain
+    /// sequence loses the message — accepted because a recovered error is
+    /// not a user-actionable event.
     pub fn set_stream_error(&self, error: bool) {
         self.stream_error.store(error, Ordering::SeqCst);
         if !error {
