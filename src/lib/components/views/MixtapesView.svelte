@@ -132,7 +132,7 @@
       <span>{$t('actions.back')}</span>
     </button>
   {/if}
-  <header class="view-header">
+  <header class="view-header" data-tauri-drag-region="deep">
     <h1>{$t('mixtapes.nav')}</h1>
     <button
       type="button"

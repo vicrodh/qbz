@@ -1391,7 +1391,7 @@
     </div>
   {:else}
     <!-- Header -->
-    <header class="detail-header">
+    <header class="detail-header" data-tauri-drag-region="deep">
       {#if onBack}
         <button class="back-btn" onclick={() => onBack()}>
           <ArrowLeft size={16} />

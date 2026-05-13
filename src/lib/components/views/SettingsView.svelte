@@ -4181,7 +4181,7 @@
   {/if}
 
   <!-- Header -->
-  <div class="header">
+  <div class="header" data-tauri-drag-region="deep">
     {#if onBack}
       <button class="back-btn" onclick={onBack}>
         <ArrowLeft size={16} />
@@ -7157,7 +7157,6 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
     color: var(--text-secondary);
     font-size: 13px;
     list-style: none;
-    user-select: none;
   }
 
   .discord-rpc-override > summary::-webkit-details-marker {

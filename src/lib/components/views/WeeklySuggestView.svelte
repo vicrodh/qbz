@@ -512,7 +512,7 @@
     </button>
   </div>
 
-  <div class="playlist-header">
+  <div class="playlist-header" data-tauri-drag-region="deep">
     <div class="artwork-container">
       <div class="artwork artwork-weekly"></div>
     </div>
@@ -589,7 +589,7 @@
     <div class="empty">{$t('qobuzMixes.result.empty')}</div>
   {:else if result}
     <div class="track-list">
-      <div class="track-list-header">
+      <div class="track-list-header" data-tauri-drag-region="deep">
         {#if multiSelectMode}
           <div class="col-select-all">
             <input

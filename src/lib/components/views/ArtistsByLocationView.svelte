@@ -422,7 +422,7 @@
 <div class="scene-view">
   {#if !loading}
     <!-- Back button (always visible) -->
-    <div class="top-bar">
+    <div class="top-bar" data-tauri-drag-region="deep">
       <button class="back-btn" onclick={onBack}>
         <ArrowLeft size={16} />
         <span>{$t('actions.back')}</span>
@@ -431,7 +431,7 @@
 
     <!-- Compact sticky header (appears when hero scrolls out) -->
     {#if heroScrolledPast}
-      <div class="compact-header">
+      <div class="compact-header" data-tauri-drag-region="deep">
         {#if flagUrl}
           <img src={flagUrl} alt="" class="compact-flag" />
         {/if}

@@ -156,9 +156,9 @@
       <span>{$t('actions.back')}</span>
     </button>
   {/if}
-  <header class="view-header">
+  <header class="view-header" data-tauri-drag-region="deep">
     <h1>{$t('collections.nav')}</h1>
-    <div class="header-actions">
+    <div class="header-actions" data-tauri-drag-region="false">
       <button
         type="button"
         class="primary-cta"

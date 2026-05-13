@@ -484,7 +484,7 @@
 
 <div class="purchases-view">
   <!-- Header -->
-  <div class="header">
+  <div class="header" data-tauri-drag-region="deep">
     <div class="header-icon">
       <ShoppingBag size={32} color="var(--accent-primary)" />
     </div>
@@ -503,8 +503,8 @@
   {/if}
 
   <!-- Sticky Navigation Bar -->
-  <div class="purchases-nav">
-    <div class="nav-left">
+  <div class="purchases-nav" data-tauri-drag-region="deep">
+    <div class="nav-left" data-tauri-drag-region="false">
       <button
         class="nav-link"
         class:active={activeTab === 'albums'}

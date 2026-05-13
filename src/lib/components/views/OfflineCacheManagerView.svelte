@@ -212,7 +212,7 @@
 </script>
 
 <div class="offline-cache-manager">
-  <header class="ocm-header">
+  <header class="ocm-header" data-tauri-drag-region="deep">
     <button type="button" class="back-btn" onclick={onBack} aria-label={$t('actions.back')}>
       <ArrowLeft size={18} />
     </button>

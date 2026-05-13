@@ -890,14 +890,14 @@
     <span>{$t('actions.back')}</span>
   </button>
   <!-- Header -->
-  <div class="header">
+  <div class="header" data-tauri-drag-region="deep">
     <h1>{$t('playlistManager.heading')}</h1>
   </div>
 
   <!-- Breadcrumb Navigation (when inside a folder, only in folder mode and not tree) -->
   {#if folderMode && viewMode !== 'tree' && currentFolderId && currentFolder}
     {@const breadcrumbFolder = currentFolder}
-    <div class="breadcrumb">
+    <div class="breadcrumb" data-tauri-drag-region="deep">
       <button class="breadcrumb-item" onclick={navigateToRoot}>
         {$t('playlist.allPlaylists')}
       </button>

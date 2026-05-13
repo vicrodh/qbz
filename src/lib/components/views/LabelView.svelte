@@ -842,7 +842,7 @@
   });
 </script>
 
-<div class="label-detail-view" bind:this={labelDetailEl}>
+<div class="label-detail-view" bind:this={labelDetailEl} data-tauri-drag-region>
   {#if loading}
     <div class="loading-state">
       <div class="spinner"></div>
@@ -862,7 +862,7 @@
     </button>
 
     <!-- Header -->
-    <header class="label-header section-anchor" bind:this={headerSection}>
+    <header class="label-header section-anchor" bind:this={headerSection} data-tauri-drag-region="deep">
       <div class="label-image-wrapper">
         {#if getLabelImage(pageData)}
           <img

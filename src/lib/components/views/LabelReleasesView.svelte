@@ -345,7 +345,7 @@
 
 <div class="label-view" onscroll={handleScroll}>
   <!-- Back button -->
-  <div class="top-bar">
+  <div class="top-bar" data-tauri-drag-region="deep">
     <button class="back-btn" onclick={onBack}>
       <ArrowLeft size={16} />
       <span>{$t('actions.back')}</span>
@@ -353,7 +353,7 @@
   </div>
 
   <!-- Header -->
-  <header class="label-header">
+  <header class="label-header" data-tauri-drag-region="deep">
     <div class="label-image-wrapper">
       {#if getLabelImage()}
         <img src={getLabelImage()} alt={label?.name || labelName} class="label-image" loading="lazy" decoding="async" />

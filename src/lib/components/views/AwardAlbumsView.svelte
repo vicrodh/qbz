@@ -163,8 +163,8 @@
 </script>
 
 <div class="award-albums-view">
-  <div class="top-bar">
-    <div class="top-bar-left">
+  <div class="top-bar" data-tauri-drag-region="deep">
+    <div class="top-bar-left" data-tauri-drag-region="false">
       <button class="back-btn" onclick={onBack} title={$t('actions.back')}>
         <ChevronLeft size={20} />
       </button>
@@ -173,7 +173,7 @@
         <h1 class="page-title">{$t('award.section.releases')}</h1>
       </div>
     </div>
-    <div class="top-bar-right">
+    <div class="top-bar-right" data-tauri-drag-region="false">
       <div class="search-wrapper">
         <Search size={16} />
         <input

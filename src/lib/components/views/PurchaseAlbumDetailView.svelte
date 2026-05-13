@@ -218,7 +218,7 @@
 </script>
 
 <ViewTransition duration={200} distance={12} direction="up">
-<div class="purchase-album-detail">
+<div class="purchase-album-detail" data-tauri-drag-region>
   <!-- Back Navigation -->
   <button class="back-btn" onclick={onBack}>
     <ArrowLeft size={16} />
@@ -235,7 +235,7 @@
     </div>
   {:else if album}
     <!-- Album Header -->
-    <div class="album-header">
+    <div class="album-header" data-tauri-drag-region="deep">
       <div class="artwork" class:unavailable={!album.downloadable}>
         <img src={getQobuzImage(album.image)} alt={album.title} />
         {#if !album.downloadable}

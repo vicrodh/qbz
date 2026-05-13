@@ -159,7 +159,7 @@
 </script>
 
 <div class="release-watch">
-  <div class="top-bar">
+  <div class="top-bar" data-tauri-drag-region="deep">
     <button class="back-btn" onclick={onBack} title={$t('actions.back')}>
       <ChevronLeft size={20} />
     </button>
@@ -169,7 +169,7 @@
     </div>
   </div>
 
-  <div class="tabs">
+  <div class="tabs" data-tauri-drag-region="deep">
     {#each tabs as tab}
       {@const Icon = tab.icon}
       <button

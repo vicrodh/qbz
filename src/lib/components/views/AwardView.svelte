@@ -227,13 +227,13 @@
   const heroImage = $derived(page?.image || page?.magazine?.image || '');
 </script>
 
-<div class="award-detail-view">
+<div class="award-detail-view" data-tauri-drag-region>
   <button class="back-btn" onclick={onBack}>
     <ArrowLeft size={16} />
     <span>{$t('actions.back')}</span>
   </button>
 
-  <header class="award-header">
+  <header class="award-header" data-tauri-drag-region="deep">
     <div class="award-image-wrapper">
       {#if heroImage && !heroImageFailed}
         <img

@@ -1136,9 +1136,9 @@
   {/if}
 
   <!-- Sticky Header Container -->
-  <div class="sticky-header" class:scrolled={isScrolled}>
+  <div class="sticky-header" class:scrolled={isScrolled} data-tauri-drag-region="deep">
     {#if !searchInTitlebar}
-      <div class="search-input-container" class:compact={isScrolled}>
+      <div class="search-input-container" class:compact={isScrolled} data-tauri-drag-region="false">
         <Search size={isScrolled ? 18 : 20} class="search-icon" />
         <input
           type="text"
@@ -1157,7 +1157,7 @@
     {/if}
 
     <!-- Tabs and Filters Row -->
-    <div class="tabs-row">
+    <div class="tabs-row" data-tauri-drag-region="false">
     <div class="tabs">
       <button
         class="tab"

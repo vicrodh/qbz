@@ -91,7 +91,7 @@
 
 <div class="musician-page">
   <!-- Header -->
-  <header class="page-header">
+  <header class="page-header" data-tauri-drag-region="deep">
     <button class="back-btn" onclick={onBack} title={ $t('actions.back') }>
       <ArrowLeft size={20} />
     </button>

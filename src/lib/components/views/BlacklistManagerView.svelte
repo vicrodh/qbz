@@ -105,7 +105,7 @@
 
 <ViewTransition duration={200} distance={12} direction="down">
 <div class="blacklist-manager">
- <div class="top-bar">
+ <div class="top-bar" data-tauri-drag-region="deep">
     <button class="back-btn" onclick={onBack}>
       <ArrowLeft size={16} />
       <span>{$t('actions.back')}</span>
