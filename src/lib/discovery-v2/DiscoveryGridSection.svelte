@@ -251,7 +251,5 @@
   .grid {
     display: grid;
     gap: 8px 16px;
-    user-select: none;
-    -webkit-user-select: none;
   }
 </style>

@@ -74,7 +74,6 @@
     align-items: center;
     gap: 8px;
     cursor: pointer;
-    user-select: none;
     color: var(--text-secondary, var(--text-muted));
     font-size: 13px;
   }

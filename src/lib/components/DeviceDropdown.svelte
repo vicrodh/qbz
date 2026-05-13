@@ -490,7 +490,6 @@
     letter-spacing: 0.5px;
     color: var(--text-muted);
     pointer-events: none;
-    user-select: none;
   }
 
   .option {

@@ -305,7 +305,6 @@
     color: var(--color-success, #22c55e);
     font-variant-numeric: tabular-nums;
     line-height: 1;
-    user-select: none;
     pointer-events: none;
   }
 

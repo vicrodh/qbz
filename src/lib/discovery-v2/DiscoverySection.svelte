@@ -249,7 +249,5 @@
   .row {
     display: flex;
     gap: 32px;
-    user-select: none;
-    -webkit-user-select: none;
   }
 </style>

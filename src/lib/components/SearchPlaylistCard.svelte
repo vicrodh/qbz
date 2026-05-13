@@ -242,7 +242,6 @@
   .playlist-card {
     width: 162px;
     cursor: pointer;
-    user-select: none;
   }
 
   .artwork-container {

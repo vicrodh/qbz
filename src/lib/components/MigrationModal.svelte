@@ -294,7 +294,6 @@
     cursor: pointer;
     font-weight: 500;
     color: var(--text-primary);
-    user-select: none;
   }
 
   .error-list {

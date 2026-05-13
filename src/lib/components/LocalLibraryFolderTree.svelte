@@ -326,7 +326,6 @@
     min-height: 22px;
     cursor: pointer;
     border-radius: 3px;
-    user-select: none;
     color: var(--text-primary);
     transition: background 100ms ease;
     /* Extend to natural content width when names are long; fill the
