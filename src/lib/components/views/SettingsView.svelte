@@ -389,7 +389,6 @@
   let gdkScale = $state('');
   let gdkDpiScale = $state('');
   let gskRenderer = $state('');
-  let compositionCollapsed = $state(true);
   // Graphics startup status (for showing degraded mode warning)
   let graphicsUsingFallback = $state(false);
   let graphicsIsWayland = $state(false);
@@ -425,8 +424,8 @@
       gdkDpiScale: '',
       gskRenderer: '',
       backgroundMode: 'full',
-      labelKey: 'settings.appearance.composition.profiles.nativeWaylandLabel',
-      descKey: 'settings.appearance.composition.profiles.nativeWaylandDesc',
+      labelKey: 'settings.graphics.profiles.nativeWaylandLabel',
+      descKey: 'settings.graphics.profiles.nativeWaylandDesc',
     },
     {
       id: 'x11Balanced',
@@ -435,8 +434,8 @@
       gdkDpiScale: '1.1',
       gskRenderer: '',
       backgroundMode: 'full',
-      labelKey: 'settings.appearance.composition.profiles.x11BalancedLabel',
-      descKey: 'settings.appearance.composition.profiles.x11BalancedDesc',
+      labelKey: 'settings.graphics.profiles.x11BalancedLabel',
+      descKey: 'settings.graphics.profiles.x11BalancedDesc',
     },
     {
       id: 'x11Performance',
@@ -445,8 +444,8 @@
       gdkDpiScale: '1',
       gskRenderer: '',
       backgroundMode: 'off',
-      labelKey: 'settings.appearance.composition.profiles.x11PerformanceLabel',
-      descKey: 'settings.appearance.composition.profiles.x11PerformanceDesc',
+      labelKey: 'settings.graphics.profiles.x11PerformanceLabel',
+      descKey: 'settings.graphics.profiles.x11PerformanceDesc',
     },
     {
       id: 'maxPerformance',
@@ -455,8 +454,8 @@
       gdkDpiScale: '',
       gskRenderer: 'cairo',
       backgroundMode: 'off',
-      labelKey: 'settings.appearance.composition.profiles.maxPerformanceLabel',
-      descKey: 'settings.appearance.composition.profiles.maxPerformanceDesc',
+      labelKey: 'settings.graphics.profiles.maxPerformanceLabel',
+      descKey: 'settings.graphics.profiles.maxPerformanceDesc',
     },
   ];
 
@@ -476,6 +475,18 @@
   // Navigation section definitions (dynamic: includes sandbox sections when detected)
   const navSectionDefs = $derived.by(() => {
     const sections = [...navSectionIds];
+    // Linux-only: GPU infrastructure (HW accel, DMA-BUF, GSK/GDK, X11 vs
+    // Wayland, env-var overrides). macOS/Windows don't expose these knobs
+    // so the section would just be empty on those platforms.
+    if (platform === 'linux') {
+      const appearanceIdx = sections.findIndex((s) => s.id === 'appearance');
+      if (appearanceIdx !== -1) {
+        sections.splice(appearanceIdx + 1, 0, {
+          id: 'graphics',
+          labelKey: 'settings.graphics.title',
+        });
+      }
+    }
     if (isFlatpak) sections.push({ id: 'flatpak', labelKey: 'nav.flatpak' });
     if (isSnap) sections.push({ id: 'snap', labelKey: 'nav.snap' });
     return sections;
@@ -4026,7 +4037,7 @@
       setImmersiveConfig({ backgroundMode: profile.backgroundMode, disableBlurBackground: profile.backgroundMode === 'off' });
 
       showToast(
-        $t('settings.appearance.composition.profiles.applied', { values: { profile: $t(profile.labelKey) } }),
+        $t('settings.graphics.profiles.applied', { values: { profile: $t(profile.labelKey) } }),
         'info'
       );
       showToast($t('settings.developer.restartRequired'), 'info');
@@ -4057,15 +4068,15 @@
 
   function getGskRendererOptions(): string[] {
     return GSK_RENDERER_KEYS.map(key => {
-      if (key === '') return $t('settings.appearance.composition.gskRendererAuto');
-      if (key === 'cairo') return $t('settings.appearance.composition.gskRendererCairo');
+      if (key === '') return $t('settings.graphics.gskRendererAuto');
+      if (key === 'cairo') return $t('settings.graphics.gskRendererCairo');
       return key.toUpperCase();
     });
   }
 
   function getGskRendererDisplayValue(): string {
-    if (!gskRenderer) return $t('settings.appearance.composition.gskRendererAuto');
-    if (gskRenderer === 'cairo') return $t('settings.appearance.composition.gskRendererCairo');
+    if (!gskRenderer) return $t('settings.graphics.gskRendererAuto');
+    if (gskRenderer === 'cairo') return $t('settings.graphics.gskRendererCairo');
     return gskRenderer.toUpperCase();
   }
 
@@ -5123,160 +5134,6 @@
       />
     </div>
 
-    <!-- Composition subsection (collapsible, Linux-only: GDK/GSK/X11/Wayland/DMA-BUF) -->
-    {#if platform === 'linux'}
-    <div class="collapsible-section composition-subsection">
-      <button class="section-title-btn" onclick={() => compositionCollapsed = !compositionCollapsed}>
-        <div class="section-title-row">
-          <span class="section-title composition-title">{$t('settings.appearance.composition.title')}</span>
-          {#if compositionCollapsed}
-            <ChevronDown size={16} />
-          {:else}
-            <ChevronUp size={16} />
-          {/if}
-        </div>
-        <span class="section-summary">{$t('settings.appearance.composition.summary')}</span>
-      </button>
-      {#if !compositionCollapsed}
-        <p class="section-note">{$t('settings.appearance.composition.helpText')}</p>
-
-        {#if graphicsUsingFallback}
-          <div class="composition-warning fallback-warning">
-            <TriangleAlert size={14} />
-            <div>
-              <span class="fallback-title">{$t('settings.appearance.composition.fallbackWarning')}</span>
-              <span class="fallback-desc">{$t('settings.appearance.composition.fallbackDesc')}</span>
-              <code class="recovery-cmd">qbz --reset-graphics</code>
-            </div>
-          </div>
-        {/if}
-
-        <div class="composition-warning">
-          <TriangleAlert size={14} />
-          <div>
-            <span>{$t('settings.appearance.composition.recoveryNote')}</span>
-            <code class="recovery-cmd">{$t('settings.appearance.composition.recoveryCmd')}</code>
-          </div>
-        </div>
-
-        <div class="composition-profile-section">
-          <span class="composition-profile-title">{$t('settings.appearance.composition.profiles.title')}</span>
-          <p class="section-note">{$t('settings.appearance.composition.profiles.helpText')}</p>
-          <div class="composition-profile-grid">
-            {#each compositionProfiles as profile (profile.id)}
-              <button
-                class="composition-profile-card"
-                class:active={activeCompositionProfileId === profile.id}
-                type="button"
-                onclick={() => applyCompositionProfile(profile.id)}
-              >
-                <span class="profile-label">{$t(profile.labelKey)}</span>
-                <span class="profile-desc">{$t(profile.descKey)}</span>
-              </button>
-            {/each}
-          </div>
-        </div>
-
-        <div class="setting-row">
-          <div class="setting-info">
-            <span class="setting-label">{$t('settings.appearance.composition.hardwareAcceleration')}</span>
-            <span class="setting-desc">{$t('settings.appearance.composition.hardwareAccelerationDesc')}</span>
-          </div>
-          <Toggle enabled={hardwareAcceleration} onchange={(v) => handleHardwareAccelerationChange(v)} />
-        </div>
-
-        <div class="setting-row">
-          <div class="setting-info">
-            <span class="setting-label">{$t('settings.appearance.composition.forceDmabuf')}</span>
-            <span class="setting-desc">{$t('settings.appearance.composition.forceDmabufDesc')}</span>
-          </div>
-          <Toggle enabled={forceDmabuf} onchange={(v) => handleForceDmabufChange(v)} />
-        </div>
-
-        <div class="setting-row">
-          <div class="setting-info">
-            <span class="setting-label">{$t('settings.appearance.composition.forceX11')}</span>
-            <span class="setting-desc">{$t('settings.appearance.composition.forceX11Desc')}</span>
-          </div>
-          <Toggle enabled={forceX11} onchange={(v) => handleForceX11Change(v)} />
-        </div>
-
-        {#if forceX11}
-          <div class="setting-row">
-            <div class="setting-info">
-              <span class="setting-label">{$t('settings.appearance.composition.gdkScale')}</span>
-              <span class="setting-desc">{$t('settings.appearance.composition.gdkScaleDesc')}</span>
-            </div>
-            <input
-              class="composition-input"
-              type="text"
-              placeholder="auto"
-              bind:value={gdkScale}
-              onblur={handleGdkScaleChange}
-            />
-          </div>
-        {/if}
-
-        <div class="setting-row">
-          <div class="setting-info">
-            <span class="setting-label">{$t('settings.appearance.composition.gdkDpiScale')}</span>
-            <span class="setting-desc">{$t('settings.appearance.composition.gdkDpiScaleDesc')}</span>
-          </div>
-          <input
-            class="composition-input"
-            type="text"
-            placeholder="auto"
-            bind:value={gdkDpiScale}
-            onblur={handleGdkDpiScaleChange}
-          />
-        </div>
-
-        <div class="setting-row">
-          <div class="setting-info">
-            <span class="setting-label">{$t('settings.appearance.composition.gskRenderer')}</span>
-            <span class="setting-desc">{$t('settings.appearance.composition.gskRendererDesc')}</span>
-          </div>
-          <Dropdown
-            value={getGskRendererDisplayValue()}
-            options={getGskRendererOptions()}
-            onchange={handleGskRendererChange}
-          />
-        </div>
-
-        <div class="composition-env-section">
-          <span class="composition-env-title">{$t('settings.appearance.composition.envVarsTitle')}</span>
-          <p class="section-note">{$t('settings.appearance.composition.envVarsDesc')}</p>
-          <div class="env-vars-list">
-            <div class="env-var-row">
-              <code>QBZ_HARDWARE_ACCEL=0</code>
-              <span>{$t('settings.appearance.composition.envVarHwAccel0')}</span>
-            </div>
-            <div class="env-var-row">
-              <code>QBZ_HARDWARE_ACCEL=1</code>
-              <span>{$t('settings.appearance.composition.envVarHwAccel1')}</span>
-            </div>
-            <div class="env-var-row">
-              <code>QBZ_FORCE_X11=1</code>
-              <span>{$t('settings.appearance.composition.envVarForceX11')}</span>
-            </div>
-            <div class="env-var-row">
-              <code>QBZ_SOFTWARE_RENDER=1</code>
-              <span>{$t('settings.appearance.composition.envVarSoftwareRender')}</span>
-            </div>
-            <div class="env-var-row">
-              <code>QBZ_FORCE_DMABUF=1</code>
-              <span>{$t('settings.appearance.composition.envVarForceDmabuf')}</span>
-            </div>
-            <div class="env-var-row">
-              <code>QBZ_DISABLE_DMABUF=1</code>
-              <span>{$t('settings.appearance.composition.envVarDisableDmabuf')}</span>
-            </div>
-          </div>
-        </div>
-      {/if}
-    </div>
-    {/if}
-
     <div class="setting-row">
       <div class="setting-info">
         <span class="setting-label">{$t('settings.appearance.immersive.backgroundMode')}</span>
@@ -5350,6 +5207,148 @@
           </div>
         {/each}
       {/if}
+    </div>
+  </section>
+  {/if}
+
+  <!-- Graphics Section (Linux-only: GDK/GSK/X11/Wayland/DMA-BUF) -->
+  {#if activeSection === 'graphics' && platform === 'linux'}
+  <section class="section">
+    <h3 class="section-title">{$t('settings.graphics.title')}</h3>
+    <p class="section-note">{$t('settings.graphics.helpText')}</p>
+
+    {#if graphicsUsingFallback}
+      <div class="composition-warning fallback-warning">
+        <TriangleAlert size={14} />
+        <div>
+          <span class="fallback-title">{$t('settings.graphics.fallbackWarning')}</span>
+          <span class="fallback-desc">{$t('settings.graphics.fallbackDesc')}</span>
+          <code class="recovery-cmd">qbz --reset-graphics</code>
+        </div>
+      </div>
+    {/if}
+
+    <div class="composition-warning">
+      <TriangleAlert size={14} />
+      <div>
+        <span>{$t('settings.graphics.recoveryNote')}</span>
+        <code class="recovery-cmd">{$t('settings.graphics.recoveryCmd')}</code>
+      </div>
+    </div>
+
+    <div class="composition-profile-section">
+      <span class="composition-profile-title">{$t('settings.graphics.profiles.title')}</span>
+      <p class="section-note">{$t('settings.graphics.profiles.helpText')}</p>
+      <div class="composition-profile-grid">
+        {#each compositionProfiles as profile (profile.id)}
+          <button
+            class="composition-profile-card"
+            class:active={activeCompositionProfileId === profile.id}
+            type="button"
+            onclick={() => applyCompositionProfile(profile.id)}
+          >
+            <span class="profile-label">{$t(profile.labelKey)}</span>
+            <span class="profile-desc">{$t(profile.descKey)}</span>
+          </button>
+        {/each}
+      </div>
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.graphics.hardwareAcceleration')}</span>
+        <span class="setting-desc">{$t('settings.graphics.hardwareAccelerationDesc')}</span>
+      </div>
+      <Toggle enabled={hardwareAcceleration} onchange={(v) => handleHardwareAccelerationChange(v)} />
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.graphics.forceDmabuf')}</span>
+        <span class="setting-desc">{$t('settings.graphics.forceDmabufDesc')}</span>
+      </div>
+      <Toggle enabled={forceDmabuf} onchange={(v) => handleForceDmabufChange(v)} />
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.graphics.forceX11')}</span>
+        <span class="setting-desc">{$t('settings.graphics.forceX11Desc')}</span>
+      </div>
+      <Toggle enabled={forceX11} onchange={(v) => handleForceX11Change(v)} />
+    </div>
+
+    {#if forceX11}
+      <div class="setting-row">
+        <div class="setting-info">
+          <span class="setting-label">{$t('settings.graphics.gdkScale')}</span>
+          <span class="setting-desc">{$t('settings.graphics.gdkScaleDesc')}</span>
+        </div>
+        <input
+          class="composition-input"
+          type="text"
+          placeholder="auto"
+          bind:value={gdkScale}
+          onblur={handleGdkScaleChange}
+        />
+      </div>
+    {/if}
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.graphics.gdkDpiScale')}</span>
+        <span class="setting-desc">{$t('settings.graphics.gdkDpiScaleDesc')}</span>
+      </div>
+      <input
+        class="composition-input"
+        type="text"
+        placeholder="auto"
+        bind:value={gdkDpiScale}
+        onblur={handleGdkDpiScaleChange}
+      />
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.graphics.gskRenderer')}</span>
+        <span class="setting-desc">{$t('settings.graphics.gskRendererDesc')}</span>
+      </div>
+      <Dropdown
+        value={getGskRendererDisplayValue()}
+        options={getGskRendererOptions()}
+        onchange={handleGskRendererChange}
+      />
+    </div>
+
+    <div class="composition-env-section">
+      <span class="composition-env-title">{$t('settings.graphics.envVarsTitle')}</span>
+      <p class="section-note">{$t('settings.graphics.envVarsDesc')}</p>
+      <div class="env-vars-list">
+        <div class="env-var-row">
+          <code>QBZ_HARDWARE_ACCEL=0</code>
+          <span>{$t('settings.graphics.envVarHwAccel0')}</span>
+        </div>
+        <div class="env-var-row">
+          <code>QBZ_HARDWARE_ACCEL=1</code>
+          <span>{$t('settings.graphics.envVarHwAccel1')}</span>
+        </div>
+        <div class="env-var-row">
+          <code>QBZ_FORCE_X11=1</code>
+          <span>{$t('settings.graphics.envVarForceX11')}</span>
+        </div>
+        <div class="env-var-row">
+          <code>QBZ_SOFTWARE_RENDER=1</code>
+          <span>{$t('settings.graphics.envVarSoftwareRender')}</span>
+        </div>
+        <div class="env-var-row">
+          <code>QBZ_FORCE_DMABUF=1</code>
+          <span>{$t('settings.graphics.envVarForceDmabuf')}</span>
+        </div>
+        <div class="env-var-row">
+          <code>QBZ_DISABLE_DMABUF=1</code>
+          <span>{$t('settings.graphics.envVarDisableDmabuf')}</span>
+        </div>
+      </div>
     </div>
   </section>
   {/if}
