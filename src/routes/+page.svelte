@@ -4176,11 +4176,24 @@
         await syncQueueState();
       }
 
-      if (sessionPersistEnabled && !qconnectRuntimeActive) {
+      if (sessionPersistEnabled) {
         const session = await loadSessionState();
 
-        // Restore queue + track (visual only — paused at 0:00)
-        if (session && session.queue_tracks.length > 0) {
+        // Last-page restore is unrelated to the queue and runs unconditionally
+        // — having QConnect connecting at startup shouldn't change which UI
+        // view the user lands on.
+        if (session) {
+          restoreLastView(session);
+        }
+
+        // Queue + track visual restore. Wrapped in a closure so the flicker
+        // guard below can defer it without duplicating the body. When
+        // QConnect is bootstrapping, we wait up to 1s for the remote queue
+        // to land — the QueueUpdated listener cancels this timer if it
+        // does, so the user sees the remote queue directly instead of
+        // flashing the local one and then swapping.
+        const performQueueRestore = async () => {
+          if (!session || session.queue_tracks.length === 0) return;
           console.log('[Session] Restoring previous session...');
 
           const tracks: BackendQueueTrack[] = session.queue_tracks.map(trk => ({
@@ -4282,14 +4295,25 @@
           }
 
           console.log('[Session] Session restored successfully');
-        }
+        };
 
-        // Restore last page (opt-in via settings)
-        if (session) {
-          restoreLastView(session);
+        if (qconnectRuntimeActive) {
+          // QConnect is bootstrapping at launch. Hold back the local
+          // restore for 1s — if the remote queue snapshot arrives first
+          // (QueueUpdated event in the QConnect listener cancels this
+          // timer), the user sees only the remote state and we skip the
+          // flicker. If 1s elapses without a remote snapshot, fall back
+          // to the local restore so the user isn't stuck looking at
+          // "No track playing" indefinitely.
+          console.log('[Session] Deferring local restore (waiting for QConnect snapshot)');
+          sessionRestoreFlickerGuard = setTimeout(() => {
+            sessionRestoreFlickerGuard = null;
+            console.log('[Session] QConnect snapshot timeout, applying local restore');
+            void performQueueRestore();
+          }, 1000);
+        } else {
+          await performQueueRestore();
         }
-      } else if (qconnectRuntimeActive) {
-        console.log('[Session] Skipping local session restore while Qobuz Connect remote mode is active');
       }
     } catch (err) {
       console.error('[Session] Failed to restore session:', err);
@@ -4583,6 +4607,15 @@
       console.warn('[WindowTitle] setTitle threw:', err);
     }
   });
+
+  // Timer that holds back the local session restore for ~1s when Qobuz
+  // Connect is bootstrapping at launch. If the remote queue arrives first
+  // (QueueUpdated event), the listener cancels the timer and we skip the
+  // local restore — avoids the visual flicker of swapping from the last
+  // local queue to the remote one. If QConnect doesn't respond in time,
+  // the timer fires and the local restore proceeds. See onMount QConnect
+  // event listener (~line 5577) for the cancellation site.
+  let sessionRestoreFlickerGuard: ReturnType<typeof setTimeout> | null = null;
 
   // Debounced full session save (coalesces rapid state changes into a single save)
   let sessionSaveDebounce: ReturnType<typeof setTimeout> | null = null;
@@ -5574,7 +5607,22 @@
             'RendererCommandApplied' in payload ||
             'PendingActionCompleted' in payload;
           if (needsQueueSync) {
+            // The remote snapshot arrived. Cancel the startup flicker
+            // guard if it is still pending — we want the QConnect state
+            // to win, not the local restore (issue #315). If the timer
+            // already fired or wasn't set, this is a no-op.
+            if (sessionRestoreFlickerGuard !== null) {
+              clearTimeout(sessionRestoreFlickerGuard);
+              sessionRestoreFlickerGuard = null;
+              console.log('[Session] QConnect snapshot arrived, skipping deferred local restore');
+            }
             syncQueueState();
+            // Persist the QConnect-driven queue change so the local
+            // snapshot mirrors remote state. Covers the case where the
+            // remote keeps the same current_track but reorders/replaces
+            // upcoming tracks — the track-change effect wouldn't fire
+            // (issue #315 acceptance: local snapshot updated to match).
+            debouncedFullSessionSave();
           }
 
           const needsQconnectSnapshotRefresh =
@@ -5717,6 +5765,10 @@
       unsubscribePlayer();
       unsubscribeQueue();
       unregisterQueueMutationObserver();
+      if (sessionRestoreFlickerGuard !== null) {
+        clearTimeout(sessionRestoreFlickerGuard);
+        sessionRestoreFlickerGuard = null;
+      }
       unsubscribeLyrics();
       unsubscribeContentSidebar();
       unsubscribeCast();
