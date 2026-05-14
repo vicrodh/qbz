@@ -9,3 +9,5 @@ repository.workspace = true
 serde = { workspace = true }
 tokio = { workspace = true }
 log = { workspace = true }
+rusqlite = { version = "0.31", features = ["bundled"] }
+dirs = "6"

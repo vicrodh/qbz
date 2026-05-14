@@ -2907,7 +2907,9 @@ checksum = "b5a041e753da8b807c9255f28de81879c78c876392ff2469cde94799b2896b9d"
 name = "qbz-app"
 version = "0.1.0"
 dependencies = [
+ "dirs",
  "log",
+ "rusqlite",
  "serde",
  "tokio",
 ]
