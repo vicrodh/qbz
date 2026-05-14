@@ -130,10 +130,11 @@ pub fn v2_discord_rpc_update(
         // Bridge the Flatpak sandbox to Discord's IPC socket if we're
         // running under Flatpak. No-op outside that context.
         prepare_flatpak_discord_socket_links();
-        if let Ok(mut client) = DiscordIpcClient::new(DISCORD_APP_ID) {
-            if client.connect().is_ok() {
-                *guard = Some(client);
-            }
+        // discord-rich-presence 1.0+: DiscordIpcClient::new is infallible
+        // (returns Self directly); failures show up at connect() time.
+        let mut client = DiscordIpcClient::new(DISCORD_APP_ID);
+        if client.connect().is_ok() {
+            *guard = Some(client);
         }
     }
 
