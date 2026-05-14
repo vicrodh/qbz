@@ -48,6 +48,15 @@
   let unlisten: UnlistenFn | null = null;
   let isInitialized = false;
 
+  // Live height of the track-meta column (3 text lines + quality badge).
+  // The artwork thumb sizes off this so it visually matches the column,
+  // which CSS-only flex stretch + aspect-ratio couldn't deliver reliably
+  // (aspect-ratio interacts poorly with align-self: stretch on items
+  // whose natural width is auto). 98% of this gives a small breathing
+  // gutter that reads as deliberate.
+  let metaHeight = $state(0);
+  const artworkSize = $derived(Math.max(0, Math.floor(metaHeight * 0.98)));
+
   const INPUT_BANDS = 512;
   const VISUAL_BANDS = 256;
   const NUM_LINES = 200;
@@ -423,7 +432,7 @@
   <canvas bind:this={canvasRef} class="linebed-canvas"></canvas>
 
   <div class="bottom-info">
-    <div class="track-meta">
+    <div class="track-meta" bind:clientHeight={metaHeight}>
       <span class="track-title">{trackTitle}</span>
       {#if explicit}
         <span class="explicit-badge" title="{ $t('library.explicit') }"></span>
@@ -434,8 +443,12 @@
       <span class="track-artist">{artist}</span>
       <QualityBadgeStatic {quality} {bitDepth} {samplingRate} {format} />
     </div>
-    {#if artwork}
-      <div class="artwork-thumb">
+    {#if artwork && artworkSize > 0}
+      <div
+        class="artwork-thumb"
+        style:width="{artworkSize}px"
+        style:height="{artworkSize}px"
+      >
         <img src={artwork} alt={trackTitle} />
       </div>
     {/if}
@@ -470,11 +483,11 @@
     bottom: 24px;
     z-index: 10;
     display: flex;
-    /* Stretch so the artwork thumb matches the height of the track-meta
-       column (title + album + artist + quality badge). The artwork's
-       intrinsic dimensions are no longer fixed — it scales to fill the
-       column height with a 1px top/bottom margin (~98% of the column). */
-    align-items: stretch;
+    /* center keeps the artwork vertically centered against the
+       track-meta column (3 lines + badge). The artwork's width/height
+       are set inline from the live measured column height, so flex
+       just needs to position it — no stretch shenanigans. */
+    align-items: center;
     gap: 12px;
   }
 
@@ -515,16 +528,11 @@
     text-overflow: ellipsis;
   }
 
-  /* The thumb stretches to the height of the track-meta column (3
-     text lines + quality badge) via the parent's align-items: stretch.
-     aspect-ratio: 1 keeps it square (width derives from the stretched
-     height). margin-block: 1px gives the 2px gap that reads as a
-     deliberate breathing room around the column instead of a flush
-     edge match. */
+  /* width / height come from inline style (computed as 98% of the
+     measured track-meta column height in the script). The .thumb
+     itself just carries the chrome (rounded corners, drop shadow). */
   .artwork-thumb {
-    align-self: stretch;
-    aspect-ratio: 1;
-    margin-block: 1px;
+    flex-shrink: 0;
     border-radius: 6px;
     overflow: hidden;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
