@@ -37,6 +37,7 @@
   import AlbumGridPool from '$lib/discovery-v2/AlbumGridPool.svelte';
   import { LocalAlbumsChunkedStore } from '$lib/discovery-v2/localAlbumsChunkedStore.svelte';
   import VirtualizedAlbumList from '../VirtualizedAlbumList.svelte';
+  import SourceBadge from '../SourceBadge.svelte';
   import VirtualizedArtistGrid from '../VirtualizedArtistGrid.svelte';
   import VirtualizedArtistList from '../VirtualizedArtistList.svelte';
   import VirtualizedTrackList from '../VirtualizedTrackList.svelte';
@@ -5626,6 +5627,15 @@
               <span class="spec-item">{formatBitDepth(firstTrack.bit_depth)}</span>
               <span class="spec-item">{formatSampleRate(firstTrack.sample_rate)}</span>
               <span class="spec-item">{firstTrack.channels === 2 ? $t('quality.stereo') : firstTrack.channels === 1 ? $t('quality.mono') : `${firstTrack.channels}ch`}</span>
+              <SourceBadge
+                value={selectedAlbum.source === 'plex'
+                  ? 'plex'
+                  : selectedAlbum.source === 'qobuz_purchase'
+                    ? 'qobuz_purchase'
+                    : selectedAlbum.source === 'qobuz_download'
+                      ? 'qobuz_download'
+                      : 'user'}
+              />
             </div>
           {/if}
           {#if selectedAlbum.likely_single_file_album}
@@ -6532,6 +6542,9 @@
                         title={album.title}
                         artist={album.artist}
                         quality={getAlbumQualityBadge(album)}
+                        format={album.format}
+                        bitDepth={album.bit_depth}
+                        samplingRate={album.sample_rate ? album.sample_rate / 1000 : undefined}
                         onPlay={() => handleAlbumPlayFromGrid(album)}
                         onPlayNext={() => handleAlbumQueueNextFromGrid(album)}
                         onPlayLater={() => handleAlbumQueueLaterFromGrid(album)}
@@ -6691,6 +6704,9 @@
                         title={album.title}
                         artist={album.artist}
                         quality={getAlbumQualityBadge(album)}
+                        format={album.format}
+                        bitDepth={album.bit_depth}
+                        samplingRate={album.sample_rate ? album.sample_rate / 1000 : undefined}
                         onPlay={() => handleAlbumPlayFromGrid(album)}
                         onPlayNext={() => handleAlbumQueueNextFromGrid(album)}
                         onPlayLater={() => handleAlbumQueueLaterFromGrid(album)}

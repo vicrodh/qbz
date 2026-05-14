@@ -2,6 +2,9 @@
   import { onMount, onDestroy } from 'svelte';
   import { Disc3 } from 'lucide-svelte';
   import AlbumCard from '$lib/discovery-v2/AlbumCardLibraryLite.svelte';
+  import QualityBadgeStatic from '$lib/components/QualityBadgeStatic.svelte';
+  import SourceBadge from '$lib/components/SourceBadge.svelte';
+  import type { SourceBadgeValue } from '$lib/components/SourceBadge.svelte';
   import { restoreScrollOnBackForward } from '$lib/utils/scrollRestore';
 
   // Types
@@ -76,6 +79,23 @@
     onAlbumToggleSelect,
     onAlbumToggleSelectRange,
   }: Props = $props();
+
+  // Maps the `album.source` string from the local-library / Plex cache
+  // model onto the typed enum SourceBadge expects. Mirrors the inline
+  // ternary chain that LocalLibraryView uses at its own AlbumCard call
+  // sites — kept here as a function so both list-mode and grid-mode
+  // rows resolve the badge the same way.
+  // Card sourceBadge prop is narrower than the full SourceBadgeValue
+  // (no qobuz_streaming) — the Local Library never produces a
+  // streaming row. We expose a narrowed return type so call sites
+  // that feed the AlbumCard pass type-check.
+  type LibrarySourceBadge = 'user' | 'qobuz_download' | 'qobuz_purchase' | 'plex';
+  function resolveSourceBadge(source: string | undefined): LibrarySourceBadge {
+    if (source === 'plex') return 'plex';
+    if (source === 'qobuz_purchase') return 'qobuz_purchase';
+    if (source === 'qobuz_download') return 'qobuz_download';
+    return 'user';
+  }
 
   // Shift-click range support. We keep a flat id list in the exact
   // order the album cards are rendered, plus the anchor of the last
@@ -351,9 +371,15 @@
               </div>
             </div>
             <div class="album-row-quality">
-              <span class="quality-badge" class:hires={isHiRes(item.album)}>
-                {getQualityBadge(item.album)}
-              </span>
+              <QualityBadgeStatic
+                quality={getQualityBadge(item.album)}
+                format={item.album.format}
+                bitDepth={item.album.bit_depth}
+                samplingRate={item.album.sample_rate ? item.album.sample_rate / 1000 : undefined}
+              />
+              {#if showSourceBadge}
+                <SourceBadge value={resolveSourceBadge(item.album.source)} />
+              {/if}
             </div>
           </div>
         {:else if item.type === 'row'}
@@ -368,11 +394,14 @@
                 title={album.title}
                 artist={album.artist}
                 quality={getQualityBadge(album)}
+                format={album.format}
+                bitDepth={album.bit_depth}
+                samplingRate={album.sample_rate ? album.sample_rate / 1000 : undefined}
                 onPlay={() => onAlbumPlay(album)}
                 onPlayNext={() => onAlbumQueueNext(album)}
                 onPlayLater={() => onAlbumQueueLater(album)}
                 onClick={() => onAlbumClick(album)}
-                sourceBadge={showSourceBadge ? (album.source === 'plex' ? 'plex' : album.source === 'qobuz_purchase' ? 'qobuz_purchase' : album.source === 'qobuz_download' ? 'qobuz_download' : 'user') : undefined}
+                sourceBadge={showSourceBadge ? resolveSourceBadge(album.source) : undefined}
                 selectable={selectable}
                 selected={selectedAlbumIds.has(album.id)}
                 onToggleSelect={(e) => handleAlbumToggleSelect(album, e)}
@@ -522,24 +551,9 @@
 
   .album-row-quality {
     flex-shrink: 0;
-  }
-
-  .quality-badge {
-    font-size: 10px;
-    font-weight: 600;
-    padding: 4px 8px;
-    border-radius: 6px;
-    background: var(--alpha-10);
-    color: var(--alpha-85);
-    border: 1px solid var(--alpha-15);
-    min-width: 90px;
-    text-align: center;
-  }
-
-  .quality-badge.hires {
-    background: linear-gradient(135deg, #fbbf24 0%, #b8860b 100%);
-    color: #1a1a1a;
-    border-color: transparent;
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
 
   /* Album Grid Row (Grid Mode) */

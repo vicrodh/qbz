@@ -6,6 +6,7 @@
   import { resolveAlbumCover } from '$lib/stores/customAlbumCoverStore';
   import { openAddToMixtape } from '$lib/stores/addToMixtapeModalStore';
   import SourceBadge from '$lib/components/SourceBadge.svelte';
+  import QualityBadgeStatic from '$lib/components/QualityBadgeStatic.svelte';
   import AlbumQuickMenu from './AlbumQuickMenu.svelte';
 
   interface Props {
@@ -13,7 +14,14 @@
     title: string;
     artist: string;
     artwork?: string;
+    /** Pre-built display string (e.g. "FLAC 16/44.1"). Kept for callers
+     *  that don't have separate format/depth/rate fields. When the
+     *  structured fields below are also passed, the iconOnly badge
+     *  takes over and `quality` only feeds the hover tooltip fallback. */
     quality?: string;
+    format?: string;
+    bitDepth?: number;
+    samplingRate?: number;
     /** Local-library / purchases source identifier; mounts SourceBadge
      *  bottom-right of the cover. */
     sourceBadge?: 'user' | 'qobuz_download' | 'qobuz_purchase' | 'plex';
@@ -41,6 +49,9 @@
     artist,
     artwork,
     quality,
+    format,
+    bitDepth,
+    samplingRate,
     sourceBadge,
     year,
     trackCount,
@@ -239,11 +250,21 @@
   </div>
 
   <div class="info">
-    <div class="title" title={title}>{title}</div>
-    <div class="artist" title={artist}>{artist}</div>
-    {#if quality}
-      <div class="quality-pill" title={quality}>{quality}</div>
-    {/if}
+    <div class="meta-row">
+      <div class="text-stack">
+        <div class="title" title={title}>{title}</div>
+        <div class="artist" title={artist}>{artist}</div>
+      </div>
+      {#if format || bitDepth != null || samplingRate != null || quality}
+        <QualityBadgeStatic
+          iconOnly
+          {quality}
+          {format}
+          {bitDepth}
+          {samplingRate}
+        />
+      {/if}
+    </div>
   </div>
 </div>
 
@@ -466,6 +487,22 @@
 
   .info {
     width: 100%;
+  }
+
+  /* Meta row stacks title + artist on the left and the icon-only quality
+     badge on the right, centered vertically against the two-line text
+     stack. Same pattern as Discovery V2 AlbumCardLite — keeps the visual
+     rhythm consistent between Home grids and Library grids. */
+  .meta-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .text-stack {
+    flex: 1;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     gap: 2px;
@@ -488,35 +525,5 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  /* Quality pill: always shown when caller passes a quality string.
-     Library users care about format/bit-depth on every album, not just
-     Hi-Res ones — different from the Discovery V2 variant which gates
-     the pill on `isHiRes`. */
-  .quality-pill {
-    align-self: flex-start;
-    margin-top: 2px;
-    font-family: 'LINE Seed JP', var(--font-sans);
-    font-size: 10px;
-    font-weight: 100;
-    color: var(--alpha-85);
-    background: var(--alpha-10);
-    border: 1px solid var(--alpha-15);
-    border-radius: 4px;
-    padding: 3px 6px;
-    min-width: 90px;
-    text-align: center;
-    box-sizing: border-box;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    max-width: 100%;
-  }
-
-  :global([data-theme='light']) .quality-pill {
-    color: rgba(40, 42, 54, 0.85) !important;
-    background: #ffffff !important;
-    border: 1px solid rgba(40, 42, 54, 0.95) !important;
   }
 </style>
