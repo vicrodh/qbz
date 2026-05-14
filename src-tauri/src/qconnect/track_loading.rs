@@ -131,6 +131,7 @@ async fn stream_remote_track_into_player(
             stream_info.content_length,
             stream_info.speed_mbps,
             duration_secs,
+            0, // QConnect tracks always start from 0; resume is local-only
         )
         .map_err(|err| format!("start streaming remote track {track_id}: {err}"))?;
 

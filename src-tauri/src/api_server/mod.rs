@@ -652,6 +652,7 @@ async fn play_queue_track(ctx: &ApiContext, track: QueueTrack) -> Result<QueueTr
         None,
         None,
         Some(track.duration_secs),
+        None, // start_position_secs: remote-driven play always starts at 0
         bridge,
         offline_cache,
         audio_settings,
@@ -884,6 +885,7 @@ async fn play_queue_index(
                 None,
                 None,
                 Some(t.duration_secs),
+                None, // start_position_secs: remote-driven play always starts at 0
                 bridge,
                 offline_cache,
                 audio_settings,
@@ -1059,6 +1061,7 @@ async fn play_album(
                 None,
                 None,
                 Some(first_track.duration_secs),
+                None, // start_position_secs: remote-driven play always starts at 0
                 bridge,
                 offline_cache,
                 audio_settings,

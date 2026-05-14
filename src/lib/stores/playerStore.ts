@@ -441,6 +441,16 @@ export function setQueueEnded(ended: boolean): void {
  */
 export function setPendingSessionRestore(trackId: number, positionSecs?: number): void {
   pendingSessionRestore = { trackId, positionSecs };
+  // Pre-position the seekbar at the saved offset so the visual state
+  // reflects "paused at X" from the moment the app opens, instead of
+  // sitting at 0:00 until the user hits play. The backend hasn't
+  // loaded the track yet, but currentTime is the source for the
+  // seekbar render — when togglePlay eventually fires it'll already be
+  // anchored to the same position the backend resumes at.
+  if (positionSecs && positionSecs > 0) {
+    currentTime = positionSecs;
+    notifyListeners();
+  }
   console.log(
     '[Player] Set pending session restore:',
     trackId,
@@ -531,30 +541,43 @@ export async function togglePlay(): Promise<void> {
           if (result.bit_depth && result.bit_depth > 0) {
             currentTrack.bitDepth = result.bit_depth;
           }
+          // Plex loads via Symphonia just like a local file — Seek
+          // works once the engine is up.
+          if (restorePosition > 1) {
+            pendingSeekPosition = restorePosition;
+            void flushPendingSeek();
+          }
         } else if (currentTrack.isLocal || currentTrack.id < 0) {
-          // Local filesystem track
+          // Local filesystem track. Apply the user's saved playback
+          // position (#317 opt-in) via the seek path — local tracks
+          // load full audio data into the player, so Seek works as soon
+          // as the engine is up.
           const localTrackId = Math.abs(currentTrack.id);
           await invoke('v2_library_play_track', { trackId: localTrackId });
+          if (restorePosition > 1) {
+            pendingSeekPosition = restorePosition;
+            void flushPendingSeek();
+          }
         } else {
-          // Qobuz track - use v2_play_track. Pass duration so the
+          // Qobuz track — use v2_play_track. Pass duration so the
           // streaming backend's current_position() doesn't clamp to 0
           // (the value flows into thread_state.duration and seekbar
-          // progress is capped by .min(duration)).
+          // progress is capped by .min(duration)). For session resume,
+          // hand the restore offset directly to v2_play_track via
+          // startPositionSecs (#315 extension): the streaming path
+          // waits for enough buffer to cover the offset and pre-skips
+          // decoder output before engaging audio, instead of the
+          // play-then-seek dance that silently dropped the seek
+          // because the audio thread's Seek handler bails when there
+          // is no `current_audio_data` (streaming uses
+          // `current_streaming_source` instead).
           await cmdPlayTrack(
             currentTrack.id,
             getStreamingQuality(),
             currentTrack.duration ? Math.round(currentTrack.duration) : null,
+            null,
+            restorePosition > 1 ? restorePosition : null,
           );
-        }
-
-        // Apply the user's saved playback position (#317 opt-in).
-        // Queue via the existing pendingSeekPosition / flushPendingSeek
-        // path so the seek runs against an already-loaded stream and
-        // honors the in-flight guard. If the position is at or near 0,
-        // skip — the load already starts there.
-        if (restorePosition > 1) {
-          pendingSeekPosition = restorePosition;
-          void flushPendingSeek();
         }
 
       } else {

@@ -68,6 +68,13 @@ enum AudioCommand {
         sample_rate: u32,
         channels: u16,
         duration_secs: u64,
+        /// Resume offset in seconds (#315). When > 0, the audio thread
+        /// waits for enough buffer to cover the offset and pre-skips
+        /// decoder output up to that point before engaging audio.
+        start_position_secs: u64,
+        /// Total content length in bytes. Combined with `duration_secs`
+        /// to estimate bytes-per-second when sizing the resume buffer.
+        content_length: u64,
     },
     /// Pause playback
     Pause,
@@ -1943,13 +1950,16 @@ impl Player {
                             sample_rate,
                             channels,
                             duration_secs,
+                            start_position_secs,
+                            content_length,
                         } => {
                             log::info!(
-                            "Audio thread: starting streaming playback for track {} ({}Hz, {} channels, {}s)",
+                            "Audio thread: starting streaming playback for track {} ({}Hz, {} channels, {}s, start={}s)",
                             track_id,
                             sample_rate,
                             channels,
-                            duration_secs
+                            duration_secs,
+                            start_position_secs
                         );
                             *pause_suspend_deadline = None;
 
@@ -2171,12 +2181,44 @@ impl Player {
                             let volume = thread_state.volume.load(Ordering::SeqCst) as f32 / 100.0;
                             apply_engine_volume(&stream_opt, &engine, volume);
 
-                            // Wait for minimum buffer before starting playback
+                            // Wait for minimum buffer before starting playback.
+                            // When start_position_secs > 0 (session resume),
+                            // also wait for enough buffer to cover the resume
+                            // offset plus an 8s headroom — the eager pre-skip
+                            // below decodes-and-discards up to the offset and
+                            // needs the bytes available without blocking the
+                            // audio device on the first pull.
                             log::info!("Streaming: waiting for initial buffer...");
                             let start_wait = Instant::now();
-                            let max_wait = Duration::from_secs(30);
+                            let max_wait = Duration::from_secs(60);
 
-                            while !source.has_min_buffer() && start_wait.elapsed() < max_wait {
+                            let bytes_per_sec_estimate: u64 = if duration_secs > 0
+                                && content_length > 0
+                            {
+                                content_length / duration_secs
+                            } else {
+                                200_000
+                            };
+                            let resume_buffer_target: u64 = if start_position_secs > 0 {
+                                bytes_per_sec_estimate
+                                    .saturating_mul(start_position_secs.saturating_add(8))
+                            } else {
+                                0
+                            };
+
+                            let buffer_sufficient = |src: &Arc<BufferedMediaSource>| -> bool {
+                                if !src.has_min_buffer() {
+                                    return false;
+                                }
+                                if resume_buffer_target == 0 {
+                                    return true;
+                                }
+                                (src.buffer_size() as u64) >= resume_buffer_target
+                            };
+
+                            while !buffer_sufficient(&source)
+                                && start_wait.elapsed() < max_wait
+                            {
                                 std::thread::sleep(Duration::from_millis(50));
                             }
 
@@ -2184,11 +2226,20 @@ impl Player {
                                 log::error!("Streaming: timeout waiting for initial buffer");
                                 return;
                             }
+                            if resume_buffer_target > 0
+                                && (source.buffer_size() as u64) < resume_buffer_target
+                            {
+                                log::warn!(
+                                    "Streaming: timed out waiting for resume buffer (got {} bytes, wanted {}); pre-skip may underrun briefly",
+                                    source.buffer_size(),
+                                    resume_buffer_target
+                                );
+                            }
 
                             let buffer_wait_ms = start_wait.elapsed().as_millis();
                             log::info!(
-                            "Streaming: initial buffer ready in {}ms, creating incremental decoder...",
-                            buffer_wait_ms
+                            "Streaming: buffer ready in {}ms ({} bytes, target {}), creating incremental decoder...",
+                            buffer_wait_ms, source.buffer_size(), resume_buffer_target
                         );
 
                             // Create incremental streaming source - this starts playback IMMEDIATELY
@@ -2266,8 +2317,40 @@ impl Player {
                             thread_state.set_normalization_gain(normalization);
 
                             // Box the incremental source to match the expected type
-                            let source_to_play: Box<dyn Source<Item = f32> + Send> =
+                            let mut source_to_play: Box<dyn Source<Item = f32> + Send> =
                                 Box::new(incremental_source);
+
+                            // Eager pre-skip for session resume. Decode and
+                            // discard samples here so the engine's first pull
+                            // doesn't have to do the work synchronously, which
+                            // would underrun the audio device for multi-second
+                            // offsets. The buffer wait above guarantees
+                            // there's enough downloaded data to feed this loop.
+                            if start_position_secs > 0 {
+                                let target_samples: u64 = (start_position_secs)
+                                    .saturating_mul(actual_sr as u64)
+                                    .saturating_mul(actual_ch as u64);
+                                let skip_start = Instant::now();
+                                let mut skipped: u64 = 0;
+                                while skipped < target_samples {
+                                    if source_to_play.next().is_none() {
+                                        log::warn!(
+                                            "Resume: source ended before reaching {}s (pre-skipped {} samples)",
+                                            start_position_secs,
+                                            skipped
+                                        );
+                                        break;
+                                    }
+                                    skipped += 1;
+                                }
+                                log::info!(
+                                    "Resume: pre-skipped {} samples ({}s) in {}ms",
+                                    skipped,
+                                    start_position_secs,
+                                    skip_start.elapsed().as_millis()
+                                );
+                            }
+
                             // Wrap source with diagnostic, normalization, and visualizer
                             let source_to_play = wrap_source(
                                 source_to_play,
@@ -2282,16 +2365,19 @@ impl Player {
                             }
 
                             thread_state.is_playing.store(true, Ordering::SeqCst);
-                            thread_state.position.store(0, Ordering::SeqCst);
+                            thread_state
+                                .position
+                                .store(start_position_secs, Ordering::SeqCst);
                             thread_state
                                 .current_track_id
                                 .store(track_id, Ordering::SeqCst);
-                            thread_state.start_playback_timer(0);
+                            thread_state.start_playback_timer(start_position_secs);
 
                             *current_engine = Some(engine);
                             log::info!(
-                            "Audio thread: streaming playback STARTED in {}ms (incremental decode active)",
-                            start_wait.elapsed().as_millis()
+                            "Audio thread: streaming playback STARTED in {}ms at {}s (incremental decode active)",
+                            start_wait.elapsed().as_millis(),
+                            start_position_secs
                         );
                         }
                         AudioCommand::Pause => {
@@ -3301,8 +3387,11 @@ impl Player {
             })
     }
 
-    /// Play from streaming source (starts playback before full download)
-    /// Returns the BufferWriter so caller can push data as it downloads
+    /// Play from streaming source (starts playback before full download).
+    /// Returns the BufferWriter so caller can push data as it downloads.
+    /// `start_position_secs` > 0 turns this into a session-resume play
+    /// (#315): the audio thread waits for enough buffer to cover the
+    /// offset and pre-skips decoder output up to that point.
     pub fn play_streaming(
         &self,
         track_id: u64,
@@ -3311,14 +3400,16 @@ impl Player {
         content_length: u64,
         buffer_seconds: u8,
         duration_secs: u64,
+        start_position_secs: u64,
     ) -> Result<BufferWriter, String> {
         log::info!(
-            "Player: Starting streaming playback for track {} ({}Hz, {}ch, {} bytes total, {}s)",
+            "Player: Starting streaming playback for track {} ({}Hz, {}ch, {} bytes total, {}s, start={}s)",
             track_id,
             sample_rate,
             channels,
             content_length,
-            duration_secs
+            duration_secs,
+            start_position_secs
         );
 
         // Use StreamingConfig::from_seconds for proper buffer sizing
@@ -3334,6 +3425,8 @@ impl Player {
                 sample_rate,
                 channels,
                 duration_secs,
+                start_position_secs,
+                content_length,
             })
             .map_err(|e| {
                 log::error!("Player: Failed to send streaming command: {}", e);
@@ -3344,8 +3437,8 @@ impl Player {
         Ok(writer)
     }
 
-    /// Play from streaming source with dynamic buffer based on measured speed
-    /// Returns the BufferWriter so caller can push data as it downloads
+    /// Play from streaming source with dynamic buffer based on measured speed.
+    /// `start_position_secs` > 0 signals session resume (see `play_streaming`).
     pub fn play_streaming_dynamic(
         &self,
         track_id: u64,
@@ -3355,16 +3448,18 @@ impl Player {
         content_length: u64,
         speed_mbps: f64,
         duration_secs: u64,
+        start_position_secs: u64,
     ) -> Result<BufferWriter, String> {
         log::info!(
-            "Player: Starting dynamic streaming for track {} ({}Hz, {}ch, {}-bit, {:.2} MB, {:.1} MB/s, {}s)",
+            "Player: Starting dynamic streaming for track {} ({}Hz, {}ch, {}-bit, {:.2} MB, {:.1} MB/s, {}s, start={}s)",
             track_id,
             sample_rate,
             channels,
             bit_depth,
             content_length as f64 / (1024.0 * 1024.0),
             speed_mbps,
-            duration_secs
+            duration_secs,
+            start_position_secs
         );
 
         // Update shared state with actual stream quality
@@ -3383,6 +3478,8 @@ impl Player {
                 sample_rate,
                 channels,
                 duration_secs,
+                start_position_secs,
+                content_length,
             })
             .map_err(|e| {
                 log::error!("Player: Failed to send streaming command: {}", e);

@@ -887,12 +887,18 @@ pub struct V2PlayTrackResult {
 /// 3. Downloads audio
 /// 4. Plays via CoreBridge.player() (qbz-player crate)
 /// 5. Caches for future playback
+// `start_position_secs` (#315): when > 0, the streaming path waits for
+// enough buffer to cover this offset and pre-skips decoder output up to
+// that point, then engages audio. Avoids the play-then-seek race that
+// silently dropped the saved position on first-track session restore.
+// 0 / None = start from beginning.
 #[tauri::command]
 pub async fn v2_play_track(
     track_id: u64,
     quality: Option<String>,
     force_lowest_quality: Option<bool>,
     duration_secs: Option<u64>,
+    start_position_secs: Option<u64>,
     bridge: State<'_, CoreBridgeState>,
     offline_cache: State<'_, OfflineCacheState>,
     audio_settings: State<'_, AudioSettingsState>,
@@ -901,6 +907,7 @@ pub async fn v2_play_track(
     app_handle: tauri::AppHandle,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<V2PlayTrackResult, RuntimeError> {
+    let start_position_secs = start_position_secs.unwrap_or(0);
     // Runtime contract: require CoreBridge auth for V2 playback
     runtime
         .manager()
@@ -1294,6 +1301,7 @@ pub async fn v2_play_track(
                     total_flac_size,
                     speed_mbps,
                     duration_secs.unwrap_or(0),
+                    start_position_secs,
                 )
                 .map_err(RuntimeError::Internal)?;
 
@@ -1528,6 +1536,7 @@ pub async fn v2_play_track(
                 stream_info.content_length,
                 stream_info.speed_mbps,
                 duration_secs.unwrap_or(0),
+                start_position_secs,
             )
             .map_err(RuntimeError::Internal)?;
 
