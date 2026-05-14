@@ -25,6 +25,7 @@ updater = ["dep:tauri-plugin-updater", "dep:tauri-plugin-process"]
 
 [dependencies]
 # QBZ Crates (extracted core functionality)
+qbz-app = { path = "../crates/qbz-app" }
 qbz-models = { path = "../crates/qbz-models" }
 qbz-audio = { path = "../crates/qbz-audio" }
 qbz-player = { path = "../crates/qbz-player" }

@@ -5024,6 +5024,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b5a041e753da8b807c9255f28de81879c78c876392ff2469cde94799b2896b9d"
 
 [[package]]
+name = "qbz-app"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "serde",
+ "tokio",
+]
+
+[[package]]
 name = "qbz-audio"
 version = "0.1.0"
 dependencies = [
@@ -5179,6 +5188,7 @@ dependencies = [
  "mupdf",
  "notify-rust",
  "open",
+ "qbz-app",
  "qbz-audio",
  "qbz-cache",
  "qbz-cast",
