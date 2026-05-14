@@ -98,7 +98,7 @@ rand = "0.10"
 strsim = "0.11"
 
 # Discord Rich Presence (#336)
-discord-rich-presence = "0.2.4"
+discord-rich-presence = "1.1.0"
 
 # Audio playback
 rodio = { version = "0.22", features = ["symphonia-all"] }
