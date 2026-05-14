@@ -435,8 +435,10 @@
       <QualityBadgeStatic {quality} {bitDepth} {samplingRate} {format} />
     </div>
     {#if artwork}
-      <div class="artwork-thumb">
-        <img src={artwork} alt={trackTitle} />
+      <div class="artwork-wrap">
+        <div class="artwork-thumb">
+          <img src={artwork} alt={trackTitle} />
+        </div>
       </div>
     {/if}
   </div>
@@ -470,7 +472,11 @@
     bottom: 24px;
     z-index: 10;
     display: flex;
-    align-items: center;
+    /* Stretch so the artwork thumb matches the height of the track-meta
+       column (title + album + artist + quality badge). The artwork's
+       intrinsic dimensions are no longer fixed — it scales to fill the
+       column height with a 1px top/bottom margin (~98% of the column). */
+    align-items: stretch;
     gap: 12px;
   }
 
@@ -511,13 +517,23 @@
     text-overflow: ellipsis;
   }
 
+  /* Stretches to match the height of the track-meta column (3 text
+     lines + quality badge), giving the inner .artwork-thumb a parent
+     against which to size as a percentage. flex-shrink: 0 prevents
+     the wrapper from collapsing if the row runs out of horizontal
+     room. */
+  .artwork-wrap {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
   .artwork-thumb {
-    width: 72px;
-    height: 72px;
+    height: 98%;
+    aspect-ratio: 1;
     border-radius: 6px;
     overflow: hidden;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
-    flex-shrink: 0;
   }
 
   .artwork-thumb img {
@@ -541,11 +557,6 @@
     .bottom-info {
       right: 16px;
       bottom: 16px;
-    }
-
-    .artwork-thumb {
-      width: 56px;
-      height: 56px;
     }
   }
 </style>
