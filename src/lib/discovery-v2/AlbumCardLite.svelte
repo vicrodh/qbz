@@ -4,6 +4,7 @@
   import { cachedSrc } from '$lib/actions/cachedImage';
   import type { AlbumRibbon } from './data';
   import AlbumQuickMenu from './AlbumQuickMenu.svelte';
+  import QualityBadgeStatic from '$lib/components/QualityBadgeStatic.svelte';
 
   interface Props {
     albumId: string;
@@ -12,6 +13,11 @@
     artwork?: string;
     quality?: string;
     isHiRes?: boolean;
+    /** Exact stored values so the quality-badge tooltip is accurate
+     *  ("Hi-Res: 24-bit / 96 kHz" instead of falling back to the
+     *  generic defaults derived from the quality string). */
+    bitDepth?: number;
+    samplingRate?: number;
     ribbon?: AlbumRibbon;
     genre?: string;
     releaseYear?: number;
@@ -42,6 +48,8 @@
     artwork,
     quality,
     isHiRes = false,
+    bitDepth,
+    samplingRate,
     ribbon,
     genre,
     releaseYear,
@@ -146,15 +154,17 @@
       </button>
     </div>
   </div>
-  <div class="title">{title}</div>
-  {#if onArtistClick}
-    <button class="artist-link" type="button" onclick={handleArtist}>{artist}</button>
-  {:else}
-    <div class="artist">{artist}</div>
-  {/if}
-  {#if isHiRes && quality}
-    <div class="quality quality-hires" title={quality}>Hi-Res</div>
-  {/if}
+  <div class="meta-row">
+    <div class="text-stack">
+      <div class="title">{title}</div>
+      {#if onArtistClick}
+        <button class="artist-link" type="button" onclick={handleArtist}>{artist}</button>
+      {:else}
+        <div class="artist">{artist}</div>
+      {/if}
+    </div>
+    <QualityBadgeStatic iconOnly {quality} {bitDepth} {samplingRate} />
+  </div>
 </div>
 
 <AlbumQuickMenu
@@ -349,6 +359,27 @@
     border-color: var(--accent-primary);
   }
 
+  /* Meta row hosts the two-line text stack (title + artist) on the
+     left and the quality badge on the right. The badge is centered
+     vertically across both lines, matching the height of the combined
+     text stack. The card's parent gap (4px) applies once between the
+     cover and this row, so the badge inherits the same separation
+     from the album art that the text does. */
+  .meta-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .text-stack {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
   .title {
     font-size: 14px;
     font-weight: 500;
@@ -422,23 +453,4 @@
     text-shadow: 0 1px 0 rgba(255, 255, 255, 0.15);
   }
 
-  /* Hi-Res badge. Only renders when isHiRes; CD-quality albums leave the
-     space empty, matching the Qobuz web pattern (no badge clutter). The
-     full quality string ("24bit/96kHz") is exposed via title attribute. */
-  .quality-hires {
-    margin-top: 4px;
-    font-family: 'LINE Seed JP', var(--font-sans);
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    color: #1f1407;
-    background: linear-gradient(135deg, #f5c042 0%, #d49511 100%);
-    border-radius: 3px;
-    padding: 3px 6px;
-    align-self: flex-start;
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
 </style>

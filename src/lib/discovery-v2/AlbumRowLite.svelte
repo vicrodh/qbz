@@ -9,8 +9,6 @@
     title: string;
     artist: string;
     artwork?: string;
-    quality?: string;
-    isHiRes?: boolean;
     /** 1-based rank shown on the left at rest; swaps to a play button on hover. */
     rank?: number;
     onClick?: () => void;
@@ -29,8 +27,6 @@
     title,
     artist,
     artwork,
-    quality,
-    isHiRes = false,
     rank,
     onClick,
     onArtistClick,
@@ -112,9 +108,6 @@
       <div class="artist">{artist}</div>
     {/if}
   </div>
-  {#if isHiRes && quality}
-    <div class="quality quality-hires" title={quality}>Hi-Res</div>
-  {/if}
   <button
     class="menu-btn"
     type="button"
@@ -254,19 +247,6 @@
     text-align: left;
     cursor: pointer;
     font-family: inherit;
-  }
-
-  .quality-hires {
-    flex: 0 0 auto;
-    font-family: 'LINE Seed JP', var(--font-sans);
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    color: #1f1407;
-    background: linear-gradient(135deg, #f5c042 0%, #d49511 100%);
-    border-radius: 3px;
-    padding: 2px 6px;
-    white-space: nowrap;
   }
 
   .menu-btn {

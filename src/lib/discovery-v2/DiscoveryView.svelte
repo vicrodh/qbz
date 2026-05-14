@@ -405,6 +405,9 @@
       artist={album.artist}
       artwork={album.artwork}
       quality={album.quality}
+      isHiRes={album.isHiRes}
+      bitDepth={album.bitDepth}
+      samplingRate={album.samplingRate}
       ribbon={album.ribbon}
       genre={album.genre}
       releaseYear={album.releaseYear}
@@ -430,7 +433,6 @@
       title={album.title}
       artist={album.artist}
       artwork={album.artwork}
-      quality={album.quality}
       rank={index + 1}
       onClick={() => onAlbumClick?.(album.albumId)}
       onPlay={() => onAlbumPlay?.(album.albumId)}

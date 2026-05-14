@@ -13,6 +13,13 @@
      *  min-width, fixed height) so the badge renders as just
      *  [icon][text-block] for inline use above lists/toolbars. */
     bare?: boolean;
+    /** Render only the icon, mimicking Qobuz's title-row HiRes mark:
+     *  - HiRes  → the brand SVG logo alone, no surrounding rectangle.
+     *  - Non-HiRes → the format icon centered in a small framed square
+     *    matching the HiRes logo's outer dimensions.
+     *  Tooltip stays identical to the full badge so hover still surfaces
+     *  the tier label + bitrate string. */
+    iconOnly?: boolean;
   }
 
   let {
@@ -21,6 +28,7 @@
     samplingRate,
     format,
     bare = false,
+    iconOnly = false,
   }: Props = $props();
 
   const tier = $derived.by(() => {
@@ -88,6 +96,21 @@
   const isHiRes = $derived(tier === 'max' || tier === 'hires');
 </script>
 
+{#if iconOnly}
+  <div
+    class="quality-badge icon-only"
+    class:icon-only-framed={!isHiRes}
+    title={`${tierLabel}: ${displayText}`}
+  >
+    <img
+      src={iconPath}
+      alt={tierLabel}
+      class="badge-icon"
+      class:hires={isHiRes}
+      class:icon-only-framed-img={!isHiRes}
+    />
+  </div>
+{:else}
 <div
   class="quality-badge"
   class:bare
@@ -107,6 +130,7 @@
     <span class="quality-info">{displayText}</span>
   </div>
 </div>
+{/if}
 
 <style>
   /* Styles copied 1:1 from QualityBadge.svelte full mode so the two render
@@ -186,5 +210,52 @@
     font-size: 9px;
     font-weight: 100;
     color: #999999;
+  }
+
+  /* Icon-only mode: just the format mark, sized to sit on a title row
+     next to album / track names. The HiRes brand SVG renders bare (its
+     own rounded rectangle is part of the artwork); non-HiRes icons sit
+     inside a small framed square of identical outer dimensions so the
+     two visual states line up under each other in a grid. */
+  .quality-badge.icon-only {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    background: none;
+    border: none;
+    height: auto;
+    min-width: 0;
+    flex-shrink: 0;
+  }
+
+  /* Both badges are 32px tall — that's the visual height of two text
+     lines (title 14px + artist 13px, both line-height 1.3, plus the
+     2px gap between them). Width differs: the HiRes brand mark keeps
+     its native ~3:2 aspect (~48px wide so the "Hi·Res / AUDIO" stack
+     reads cleanly); the non-HiRes framed icon is square (32×32) so a
+     single icon sits centered in a tidy box. The two badges never
+     appear side-by-side in the same row, so the different widths
+     don't compete. */
+  .quality-badge.icon-only .badge-icon.hires {
+    width: 46px;
+    height: 30px;
+    object-fit: contain;
+    filter: drop-shadow(0 0 0.4px rgba(0, 0, 0, 0.7));
+  }
+
+  .quality-badge.icon-only-framed {
+    width: 30px;
+    height: 30px;
+    background: var(--alpha-8, rgba(255, 255, 255, 0.06));
+    border: 1px solid var(--alpha-12, rgba(255, 255, 255, 0.1));
+    border-radius: 3px;
+    box-sizing: border-box;
+  }
+
+  .badge-icon.icon-only-framed-img {
+    width: 16px;
+    height: 16px;
+    filter: invert(1) brightness(0.7);
   }
 </style>

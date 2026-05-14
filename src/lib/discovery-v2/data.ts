@@ -44,10 +44,15 @@ export interface DiscoveryAlbumCard {
   artistId?: number;
   artwork?: string;
   quality?: string;
-  /** True when the album is > 16-bit; gates the yellow Hi-Res badge. The
-   *  Qobuz web player only renders the badge for Hi-Res albums and leaves
-   *  CD-quality ones uncluttered. */
+  /** True when the album is > 16-bit. Drives the title-row badge: HiRes
+   *  shows the Qobuz brand logo bare; non-HiRes shows the format icon in
+   *  a small framed square of matching dimensions. */
   isHiRes?: boolean;
+  /** Exact stored bit depth, fed to QualityBadgeStatic so the hover
+   *  tooltip ("Hi-Res: 24-bit / 96 kHz") matches reality instead of
+   *  falling back to the parser's defaults from the quality string. */
+  bitDepth?: number;
+  samplingRate?: number;
   ribbon?: AlbumRibbon;
   genre?: string;
   releaseYear?: number;
@@ -95,6 +100,8 @@ function qobuzAlbumToCard(album: QobuzAlbum): DiscoveryAlbumCard {
     artwork: getQobuzImageForSize(album.image, 'small'),
     quality: formatQuality(hires, album.maximum_bit_depth, album.maximum_sampling_rate),
     isHiRes: hires,
+    bitDepth: album.maximum_bit_depth,
+    samplingRate: album.maximum_sampling_rate,
     ribbon: pickAlbumRibbon(album.awards),
     genre: album.genre?.name,
     releaseYear: parseYear(album.release_date_original),
@@ -115,6 +122,8 @@ function discoverAlbumToCard(album: DiscoverAlbum): DiscoveryAlbumCard {
       album.audio_info?.maximum_sampling_rate
     ),
     isHiRes: hires,
+    bitDepth: album.audio_info?.maximum_bit_depth,
+    samplingRate: album.audio_info?.maximum_sampling_rate,
     ribbon: pickAlbumRibbon(album.awards),
     genre: album.genre?.name,
     releaseYear: parseYear(album.dates?.original),
@@ -421,6 +430,8 @@ export async function fetchSimilarAlbums(
         artwork: a.image?.small || a.image?.large || a.image?.thumbnail,
         quality: formatQuality(a.hires, a.maximum_bit_depth, a.maximum_sampling_rate),
         isHiRes: a.hires,
+        bitDepth: a.maximum_bit_depth,
+        samplingRate: a.maximum_sampling_rate,
         genre: a.genre?.name,
         releaseYear: parseYear(a.release_date_original),
       })),
@@ -471,6 +482,8 @@ export async function fetchEssentialsByGenre(
         artwork: a.image?.small || a.image?.large || a.image?.thumbnail,
         quality: formatQuality(a.hires, a.maximum_bit_depth, a.maximum_sampling_rate),
         isHiRes: a.hires,
+        bitDepth: a.maximum_bit_depth,
+        samplingRate: a.maximum_sampling_rate,
         genre: a.genre?.name,
         releaseYear: parseYear(a.release_date_original),
       })),
@@ -580,6 +593,8 @@ export async function fetchArtistSpotlight(
             rel.audio_info?.maximum_sampling_rate
           ),
           isHiRes: hires,
+          bitDepth: rel.audio_info?.maximum_bit_depth,
+          samplingRate: rel.audio_info?.maximum_sampling_rate,
           genre: rel.genre?.name,
           releaseYear: parseYear(rel.dates?.original),
         });

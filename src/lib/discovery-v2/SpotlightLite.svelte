@@ -219,6 +219,8 @@
                 artwork={item.album.artwork}
                 quality={item.album.quality}
                 isHiRes={item.album.isHiRes}
+                bitDepth={item.album.bitDepth}
+                samplingRate={item.album.samplingRate}
                 ribbon={item.album.ribbon}
                 genre={item.album.genre}
                 releaseYear={item.album.releaseYear}
