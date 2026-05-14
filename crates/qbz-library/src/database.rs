@@ -2030,8 +2030,37 @@ impl LibraryDatabase {
                     MAX(CASE WHEN artwork_path IS NOT NULL THEN artwork_path END) AS artwork,
                     COUNT(*) AS track_count,
                     CAST(SUM(COALESCE(duration_ms, 0)) / 1000 AS INTEGER) AS total_duration,
-                    MAX(codec) AS format,
-                    MAX(bit_depth) AS bit_depth,
+                    -- Plex stream-level `codec` is often missing when the
+                    -- server hasn't fully analyzed a track. The `container`
+                    -- field is populated for the same media and usually
+                    -- carries the same value ("flac", "mp3", etc.), so it
+                    -- works as a fallback. Without it, any album where
+                    -- Plex didn't expose codec on every track ends up
+                    -- labeled "Unknown" in the UI even though the file
+                    -- format is known via container. Local CTE is not
+                    -- affected — local indexing always writes a non-null
+                    -- format string.
+                    COALESCE(MAX(codec), MAX(container)) AS format,
+                    -- Plex frequently omits bitDepth from its Media/Stream
+                    -- XML for older releases; the aggregated row inherits
+                    -- the gap as NULL. When the format ends up lossless
+                    -- and sample rate sits at CD range (<= 48 kHz),
+                    -- default to 16 — that's the universal CD-Audio /
+                    -- redbook assumption that virtually every lossless
+                    -- album at that rate matches. Higher rates leave the
+                    -- field NULL (could be 24, could be 32) and the UI
+                    -- falls back to its "--" placeholder; the per-track
+                    -- view shows the real value when the user clicks in.
+                    COALESCE(
+                        MAX(bit_depth),
+                        CASE
+                            WHEN LOWER(COALESCE(MAX(codec), MAX(container))) IN
+                                 ('flac', 'alac', 'wav', 'aiff', 'ape')
+                                 AND MAX(sampling_rate_hz) <= 48000
+                            THEN 16
+                            ELSE NULL
+                        END
+                    ) AS bit_depth,
                     CAST(MAX(sampling_rate_hz) AS REAL) AS sample_rate,
                     CAST(NULL AS TEXT) AS source_folders,
                     'plex' AS source
