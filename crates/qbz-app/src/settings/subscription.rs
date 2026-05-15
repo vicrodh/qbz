@@ -2,7 +2,7 @@
 //!
 //! Tracks when a user was first observed without a valid subscription. If the
 //! invalid state persists for more than the grace period, offline downloads are
-//! purged by the Tauri-side session lifecycle.
+//! purged by the host-side session lifecycle.
 
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
