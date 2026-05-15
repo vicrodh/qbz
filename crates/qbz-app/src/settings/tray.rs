@@ -2,7 +2,7 @@
 //!
 //! This module owns persisted tray preferences only. Runtime tray creation,
 //! icon updates, window hiding/showing, and emitted events remain in the
-//! Tauri layer.
+//! host application layer.
 
 use log::info;
 use rusqlite::{params, Connection};
