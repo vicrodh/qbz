@@ -251,6 +251,14 @@ pub struct Album {
     #[serde(default)]
     pub image: ImageSet,
     pub release_date_original: Option<String>,
+    /// Date the album becomes available for streaming (ISO YYYY-MM-DD).
+    /// When in the future, the album is upcoming and cannot be fetched
+    /// via `get_album` yet — Release Watch uses this to gate clicks.
+    pub release_date_stream: Option<String>,
+    /// Whether the album is currently streamable. False for upcoming
+    /// releases, regional restrictions, or label takedowns.
+    #[serde(default)]
+    pub streamable: Option<bool>,
     pub label: Option<Label>,
     pub genre: Option<Genre>,
     pub tracks_count: Option<u32>,
