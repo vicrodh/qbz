@@ -331,10 +331,10 @@
           const needleTitle = item.title.toLowerCase().trim();
           const needleArtist = (item.subtitle ?? '').toLowerCase().trim();
           const match = albums.find((a) => {
-            const t = a.title.toLowerCase().trim();
+            const title = a.title.toLowerCase().trim();
             const ar = a.artist.toLowerCase().trim();
             const allAr = (a.all_artists ?? '').toLowerCase();
-            if (t !== needleTitle) return false;
+            if (title !== needleTitle) return false;
             if (!needleArtist) return true;
             return ar === needleArtist || allAr.includes(needleArtist);
           });
