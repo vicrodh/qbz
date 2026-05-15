@@ -1563,6 +1563,18 @@ textarea,
   -webkit-user-select: text;
 }
 
+/* Semantic literal-text elements stay selectable everywhere. Covers the
+   HiFi Wizard command/path blocks, recovery commands, environment-variable
+   hints, log viewers, keyboard-shortcut chips, and any other place where
+   users need to copy text verbatim from settings, diagnostics, or modals. */
+pre,
+code,
+kbd,
+samp {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 /* Escape hatch: add class="selectable" to any element whose text users
    should be able to copy (error messages, tokens, release notes, etc.). */
 .selectable,

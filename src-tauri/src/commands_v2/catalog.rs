@@ -299,16 +299,49 @@ pub async fn v2_get_release_watch(
     results
         .items
         .retain(|album| !blacklist_state.is_blacklisted(album.artist.id));
-    let filtered_count = original_count - results.items.len();
-    if filtered_count > 0 {
+    let blacklist_filtered = original_count - results.items.len();
+    if blacklist_filtered > 0 {
         log::debug!(
             "[V2/Blacklist] Filtered {} albums from release watch",
-            filtered_count
+            blacklist_filtered
         );
-        results.total = results.total.saturating_sub(filtered_count as u32);
+    }
+
+    let before_unreleased = results.items.len();
+    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    results.items.retain(|album| is_album_available(album, &today));
+    let unreleased_filtered = before_unreleased - results.items.len();
+    if unreleased_filtered > 0 {
+        log::debug!(
+            "[V2/ReleaseWatch] Filtered {} unreleased/unstreamable albums",
+            unreleased_filtered
+        );
+    }
+
+    let total_filtered = blacklist_filtered + unreleased_filtered;
+    if total_filtered > 0 {
+        results.total = results.total.saturating_sub(total_filtered as u32);
     }
 
     Ok(results)
+}
+
+/// Whether an album from Release Watch is actually available to fetch.
+///
+/// Drops albums that are either marked non-streamable (regional / takedown)
+/// or whose stream availability date is in the future. Upcoming releases
+/// 404 on `get_album`, so they should never reach the UI grid in the first
+/// place.
+fn is_album_available(album: &Album, today_iso: &str) -> bool {
+    if matches!(album.streamable, Some(false)) {
+        return false;
+    }
+    if let Some(stream_date) = album.release_date_stream.as_deref() {
+        if stream_date > today_iso {
+            return false;
+        }
+    }
+    true
 }
 
 /// Get artist page (V2 - uses QbzCore)

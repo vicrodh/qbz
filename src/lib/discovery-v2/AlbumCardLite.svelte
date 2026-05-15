@@ -155,7 +155,7 @@
     </div>
   </div>
   <div class="meta-row">
-    <div class="text-stack">
+    <div class="text-stack" title={`${title} — ${artist}`}>
       <div class="title">{title}</div>
       {#if onArtistClick}
         <button class="artist-link" type="button" onclick={handleArtist}>{artist}</button>
