@@ -1,3 +1,4 @@
+pub mod graphics_autoconfig;
 pub mod graphics_detection;
 pub mod runtime;
 pub mod settings;

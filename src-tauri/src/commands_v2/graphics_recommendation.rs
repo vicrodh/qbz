@@ -4,8 +4,9 @@
 //! tool); this module is just the Tauri surface that the Graphics tab uses
 //! to render the "Detected / Recommended" banner.
 
-use crate::autoconfig_graphics::{
-    compute_recommendation, detect_environment, write_recommendation, Environment, Recommendation,
+use crate::autoconfig_graphics::write_recommendation;
+use qbz_app::graphics_autoconfig::{
+    compute_recommendation, detect_environment, Environment, Recommendation,
 };
 use serde::Serialize;
 

@@ -157,7 +157,7 @@ pub fn v2_get_runtime_diagnostics(
         runtime_is_vm: gfx_status.is_vm,
         runtime_hw_accel_enabled: gfx_status.hardware_accel_enabled,
         runtime_force_x11_active: gfx_status.force_x11_active,
-        runtime_gpu_name: crate::autoconfig_graphics::detect_gpu_name(
+        runtime_gpu_name: qbz_app::graphics_autoconfig::detect_gpu_name(
             gfx_status.has_nvidia,
             gfx_status.has_amd,
             gfx_status.has_intel,
