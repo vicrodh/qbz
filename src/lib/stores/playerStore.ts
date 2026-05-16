@@ -559,25 +559,39 @@ export async function togglePlay(): Promise<void> {
             void flushPendingSeek();
           }
         } else {
-          // Qobuz track — use v2_play_track. Pass duration so the
+          // Qobuz track session restore (#315 within-track resume).
+          // Play from the start: v2_play_track serves a cache hit
+          // instantly or streams from byte 0. Pass duration so the
           // streaming backend's current_position() doesn't clamp to 0
           // (the value flows into thread_state.duration and seekbar
-          // progress is capped by .min(duration)). For session resume,
-          // hand the restore offset directly to v2_play_track via
-          // startPositionSecs (#315 extension): the streaming path
-          // waits for enough buffer to cover the offset and pre-skips
-          // decoder output before engaging audio, instead of the
-          // play-then-seek dance that silently dropped the seek
-          // because the audio thread's Seek handler bails when there
-          // is no `current_audio_data` (streaming uses
-          // `current_streaming_source` instead).
-          await cmdPlayTrack(
+          // progress is capped by .min(duration)).
+          //
+          // Resume the saved offset ONLY on a cache hit (format_id ===
+          // null): the audio is then a full in-memory buffer
+          // (current_audio_data) so the Seek handler lands, exactly
+          // like a local file. On a cache miss the track streams via
+          // CMAF — seeking mid-track would block on the buffer filling
+          // sequentially from byte 0, far too slow to feel like a
+          // feature, so we deliberately start fresh from 0:00.
+          const result = (await cmdPlayTrack(
             currentTrack.id,
             getStreamingQuality(),
             currentTrack.duration ? Math.round(currentTrack.duration) : null,
             null,
-            restorePosition > 1 ? restorePosition : null,
-          );
+            null,
+          )) as { format_id?: number | null } | null | undefined;
+          const servedFromCache = result != null && result.format_id === null;
+          if (restorePosition > 1 && servedFromCache) {
+            pendingSeekPosition = restorePosition;
+            void flushPendingSeek();
+          } else if (restorePosition > 1) {
+            // Cache miss — undo the seekbar pre-anchor (setPendingSessionRestore
+            // pre-set currentTime to the saved offset) so the bar matches
+            // the actual start at 0:00 instead of flashing the saved time.
+            currentTime = 0;
+            anchorPosition(0);
+            notifyListeners();
+          }
         }
 
       } else {
