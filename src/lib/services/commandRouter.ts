@@ -116,10 +116,10 @@ export async function cmdPlayTrack(
     // start_position_secs). duration_secs is required on the streaming
     // path — without it the backend stores duration=0 and
     // current_position() clamps to 0, freezing the seekbar (seen on
-    // session-restore first play). start_position_secs > 0 turns the
-    // call into a session-resume play (#315): backend buffers enough
-    // bytes to cover the offset and pre-skips decoder output before
-    // engaging audio, avoiding the play-then-seek race.
+    // session-restore first play). start_position_secs is still accepted
+    // by the backend but the frontend no longer uses it: session resume
+    // now seeks to the saved offset only on a cache hit, where the audio
+    // is fully in memory and Seek lands (see playerStore togglePlay).
     return invoke('v2_play_track', {
       trackId,
       quality: quality ?? null,

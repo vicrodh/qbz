@@ -1661,7 +1661,6 @@ pub fn run(qconnect_cli_override: Option<bool>) {
             commands_v2::v2_set_preferred_gpu,
             commands_v2::v2_set_nvidia_compat_mode,
             commands_v2::v2_get_graphics_recommendation,
-            commands_v2::v2_apply_graphics_recommendation,
             commands_v2::v2_enumerate_gpus,
             commands_v2::v2_mark_boot_succeeded,
             commands_v2::v2_get_crash_flags,

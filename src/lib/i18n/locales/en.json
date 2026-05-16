@@ -2798,6 +2798,9 @@
       "hardwareAccelerationDesc": "Enable GPU rendering. Disabling forces software rendering (CPU only). Turn off if you experience crashes or visual artifacts.",
       "forceDmabuf": "Force DMA-BUF Renderer",
       "forceDmabufDesc": "Force DMA-BUF buffer sharing with compositor. May improve performance but can crash on some systems (especially NVIDIA + Wayland).",
+      "forceDmabufDescSafe": "Enables DMA-BUF buffer sharing with the compositor for smoother rendering. Safe on your hardware. Restart required.",
+      "forceDmabufDescHybrid": "Your integrated GPU handles rendering, so DMA-BUF is safe to enable here. Improves rendering smoothness. Restart required.",
+      "forceDmabufDescNvidiaOnly": "Not recommended on NVIDIA-only systems — DMA-BUF can cause rendering instability. Restart required.",
       "forceX11": "Force X11 backend (Wayland)",
       "forceX11Desc": "Use XWayland instead of native Wayland. Recommended for NVIDIA GPUs that crash on Wayland.",
       "gdkScale": "Display scale (XWayland)",
@@ -2832,8 +2835,6 @@
       "recommendation": {
         "title": "Recommended for your system",
         "detected": "Detected",
-        "apply": "Apply",
-        "applied": "Configuration applied. Restart QBZ to take effect.",
         "dismiss": "Dismiss",
         "redetect": "Detect recommended settings",
         "noChanges": "Settings already match the recommendation for this system."
@@ -2845,6 +2846,7 @@
         "auto": "Auto (system default)",
         "autoWithTarget": "Auto ({name})",
         "integrated": "Integrated — {name}",
+        "recommendedSuffix": "(recommended)",
         "discrete": "Discrete — {name}",
         "software": "Software (CPU, llvmpipe)"
       },

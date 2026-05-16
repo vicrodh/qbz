@@ -2792,6 +2792,9 @@
       "hardwareAccelerationDesc": "GPU-Rendering aktivieren. Deaktivieren erzwingt Software-Rendering (nur CPU). Deaktivieren bei Abstuerzen oder visuellen Artefakten.",
       "forceDmabuf": "DMA-BUF-Renderer erzwingen",
       "forceDmabufDesc": "DMA-BUF-Pufferfreigabe mit dem Compositor erzwingen. Kann die Leistung verbessern, aber auf manchen Systemen abstuerzen (besonders NVIDIA + Wayland).",
+      "forceDmabufDescSafe": "Aktiviert die DMA-BUF-Pufferfreigabe mit dem Compositor für flüssigeres Rendering. Auf deiner Hardware unbedenklich. Neustart erforderlich.",
+      "forceDmabufDescHybrid": "Deine integrierte GPU übernimmt das Rendering, daher ist DMA-BUF hier unbedenklich. Verbessert die Render-Flüssigkeit. Neustart erforderlich.",
+      "forceDmabufDescNvidiaOnly": "Auf reinen NVIDIA-Systemen nicht empfohlen — DMA-BUF kann Rendering-Instabilität verursachen. Neustart erforderlich.",
       "forceX11": "X11-Backend erzwingen (Wayland)",
       "forceX11Desc": "XWayland statt nativem Wayland verwenden. Empfohlen fuer NVIDIA-GPUs mit Wayland-Abstuerzen.",
       "gdkScale": "Anzeigeskalierung (XWayland)",
@@ -2826,8 +2829,6 @@
       "recommendation": {
         "title": "Empfohlen für dein System",
         "detected": "Erkannt",
-        "apply": "Übernehmen",
-        "applied": "Konfiguration übernommen. QBZ neu starten, damit es wirksam wird.",
         "dismiss": "Verwerfen",
         "redetect": "Empfohlene Einstellungen erkennen",
         "noChanges": "Die Einstellungen entsprechen bereits der Empfehlung für dieses System."
@@ -2839,6 +2840,7 @@
         "auto": "Automatisch (System-Standard)",
         "autoWithTarget": "Automatisch ({name})",
         "integrated": "Integriert — {name}",
+        "recommendedSuffix": "(empfohlen)",
         "discrete": "Dediziert — {name}",
         "software": "Software (CPU, llvmpipe)"
       },

@@ -200,69 +200,52 @@ pub fn compute_recommendation(env: &Environment) -> Recommendation {
     }
 
     let is_wayland = env.display_server == "Wayland";
-    let desktop_lower = env.desktop.to_lowercase();
-    let is_gnome = desktop_lower.contains("gnome");
     let has_hybrid_igpu = env.gpu_nvidia && (env.gpu_intel || env.gpu_amd);
 
     // Hybrid laptops (NVIDIA dGPU + Intel/AMD iGPU). WebKit composes via
     // the iGPU through EGL/GLX defaults - the NVIDIA card sits idle for
-    // PRIME render offload. Forcing GSK_RENDERER=gl here was hurting
-    // performance because the GL renderer biases toward the dGPU stack
-    // even when the iGPU is the actual paint target. Auto (None) lets
-    // GTK4 pick NGL/Vulkan as appropriate for the iGPU. DMA-BUF stays
-    // disabled - that one is fragile on any NVIDIA-touching setup.
+    // PRIME render offload. Auto (None) lets GTK4 pick NGL/Vulkan as
+    // appropriate for the iGPU. DMA-BUF is safe here: the compositing
+    // path runs on the stable iGPU stack, not the NVIDIA driver, so the
+    // instability that affects NVIDIA-only systems does not apply. The
+    // user must still pick the iGPU explicitly in the rendering GPU
+    // selector - leaving it on Auto can resolve to the NVIDIA card.
     if has_hybrid_igpu {
         let igpu_label = if env.gpu_intel { "Intel" } else { "AMD" };
         rationale.push(format!(
             "NVIDIA + {} hybrid: iGPU handles WebKit compositing, leaving GSK at Auto",
             igpu_label
         ));
+        rationale.push(format!(
+            "Select the {} integrated GPU explicitly in the rendering GPU selector instead of Auto",
+            igpu_label
+        ));
         return Recommendation {
             hardware_acceleration: true,
             force_x11: false,
             gsk_renderer: None,
-            disable_dmabuf: true,
+            disable_dmabuf: false,
             disable_blur_background: false,
             rationale,
         };
     }
 
-    // NVIDIA + Wayland + GNOME: known stutter combo
-    if env.gpu_nvidia && is_wayland && is_gnome {
-        rationale.push("NVIDIA + Wayland + GNOME: using GL renderer, DMA-BUF off".to_string());
-        rationale.push("This combination has known compositing issues".to_string());
-        return Recommendation {
-            hardware_acceleration: true,
-            force_x11: false,
-            gsk_renderer: Some("gl".to_string()),
-            disable_dmabuf: true,
-            disable_blur_background: false,
-            rationale,
-        };
-    }
-
-    // NVIDIA + Wayland (non-GNOME)
-    if env.gpu_nvidia && is_wayland {
-        rationale.push("NVIDIA + Wayland: using GL renderer, DMA-BUF off".to_string());
-        return Recommendation {
-            hardware_acceleration: true,
-            force_x11: false,
-            gsk_renderer: Some("gl".to_string()),
-            disable_dmabuf: true,
-            disable_blur_background: false,
-            rationale,
-        };
-    }
-
-    // NVIDIA + X11
+    // NVIDIA-only (no iGPU to offload WebKit compositing to). WebKitGTK
+    // on the proprietary NVIDIA driver has long-standing compositing
+    // stutter that XWayland does not solve. Rather than recommend
+    // hardware acceleration that visibly stutters, fall back to CPU
+    // rendering: trimmed but smooth. DMA-BUF stays off - there is no
+    // stable GPU compositing path on this configuration.
     if env.gpu_nvidia {
-        rationale.push("NVIDIA + X11: full hardware acceleration, DMA-BUF off".to_string());
+        rationale.push("NVIDIA-only system: using CPU rendering for a smooth UI".to_string());
+        rationale
+            .push("WebKit GPU compositing on the NVIDIA driver has unresolved stutter".to_string());
         return Recommendation {
-            hardware_acceleration: true,
+            hardware_acceleration: false,
             force_x11: false,
-            gsk_renderer: Some("gl".to_string()),
+            gsk_renderer: Some("cairo".to_string()),
             disable_dmabuf: true,
-            disable_blur_background: false,
+            disable_blur_background: true,
             rationale,
         };
     }
@@ -361,7 +344,7 @@ mod tests {
     }
 
     #[test]
-    fn nvidia_hybrid_leaves_renderer_auto_and_disables_dmabuf() {
+    fn nvidia_hybrid_leaves_renderer_auto_and_allows_dmabuf() {
         let mut environment = env("Wayland");
         environment.gpu_nvidia = true;
         environment.gpu_intel = true;
@@ -370,30 +353,40 @@ mod tests {
 
         assert!(recommendation.hardware_acceleration);
         assert_eq!(recommendation.gsk_renderer, None);
-        assert!(recommendation.disable_dmabuf);
+        // DMA-BUF is safe on hybrid: the iGPU does the compositing.
+        assert!(!recommendation.disable_dmabuf);
+        // The user is told to pick the iGPU explicitly, not leave Auto.
+        assert!(recommendation
+            .rationale
+            .iter()
+            .any(|line| line.contains("integrated GPU")));
     }
 
     #[test]
-    fn nvidia_wayland_gnome_uses_gl_and_disables_dmabuf() {
+    fn nvidia_only_wayland_uses_cpu_rendering() {
         let mut environment = env("Wayland");
         environment.gpu_nvidia = true;
-        environment.desktop = "GNOME".to_string();
 
         let recommendation = compute_recommendation(&environment);
 
-        assert_eq!(recommendation.gsk_renderer.as_deref(), Some("gl"));
+        assert!(!recommendation.hardware_acceleration);
+        assert_eq!(recommendation.gsk_renderer.as_deref(), Some("cairo"));
         assert!(recommendation.disable_dmabuf);
+        assert!(recommendation.disable_blur_background);
     }
 
     #[test]
-    fn nvidia_x11_uses_gl_and_disables_dmabuf() {
+    fn nvidia_only_x11_uses_cpu_rendering() {
         let mut environment = env("X11");
         environment.gpu_nvidia = true;
 
         let recommendation = compute_recommendation(&environment);
 
-        assert_eq!(recommendation.gsk_renderer.as_deref(), Some("gl"));
+        // X11/XWayland does not rescue NVIDIA-only: CPU rendering either way.
+        assert!(!recommendation.hardware_acceleration);
+        assert_eq!(recommendation.gsk_renderer.as_deref(), Some("cairo"));
         assert!(recommendation.disable_dmabuf);
+        assert!(!recommendation.force_x11);
     }
 
     #[test]

@@ -2792,6 +2792,9 @@
       "hardwareAccelerationDesc": "Ativar renderização por GPU. Desativar força renderização por software (apenas CPU). Desative se tiver travamentos ou artefatos visuais.",
       "forceDmabuf": "Forçar Renderizador DMA-BUF",
       "forceDmabufDesc": "Forçar compartilhamento de buffer DMA-BUF com o compositor. Pode melhorar o desempenho, mas pode travar em alguns sistemas (especialmente NVIDIA + Wayland).",
+      "forceDmabufDescSafe": "Ativa o compartilhamento de buffers DMA-BUF com o compositor para uma renderização mais fluida. Seguro no seu hardware. Reinício necessário.",
+      "forceDmabufDescHybrid": "Sua GPU integrada faz a renderização, então é seguro ativar o DMA-BUF aqui. Melhora a fluidez da renderização. Reinício necessário.",
+      "forceDmabufDescNvidiaOnly": "Não recomendado em sistemas apenas com NVIDIA — o DMA-BUF pode causar instabilidade de renderização. Reinício necessário.",
       "forceX11": "Forçar backend X11 (Wayland)",
       "forceX11Desc": "Usar XWayland em vez do Wayland nativo. Recomendado para GPUs NVIDIA que travam no Wayland.",
       "gdkScale": "Escala de exibição (XWayland)",
@@ -2826,8 +2829,6 @@
       "recommendation": {
         "title": "Recomendado para o seu sistema",
         "detected": "Detectado",
-        "apply": "Aplicar",
-        "applied": "Configuracao aplicada. Reinicie o QBZ para que tenha efeito.",
         "dismiss": "Descartar",
         "redetect": "Detectar configuracoes recomendadas",
         "noChanges": "As configuracoes ja correspondem a recomendacao para este sistema."
@@ -2839,6 +2840,7 @@
         "auto": "Auto (padrao do sistema)",
         "autoWithTarget": "Auto ({name})",
         "integrated": "Integrada — {name}",
+        "recommendedSuffix": "(recomendada)",
         "discrete": "Dedicada — {name}",
         "software": "Software (CPU, llvmpipe)"
       },

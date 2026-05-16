@@ -4,7 +4,6 @@
 //! tool); this module is just the Tauri surface that the Graphics tab uses
 //! to render the "Detected / Recommended" banner.
 
-use crate::autoconfig_graphics::write_recommendation;
 use qbz_app::graphics_autoconfig::{
     compute_recommendation, detect_environment, Environment, Recommendation,
 };
@@ -31,21 +30,6 @@ pub fn v2_get_graphics_recommendation() -> GraphicsRecommendationPayload {
     GraphicsRecommendationPayload {
         environment,
         recommendation,
-    }
-}
-
-/// Write the current recommendation to the persistence layer.
-/// `force_dmabuf` is derived from `disable_dmabuf` per the 1.2.13
-/// opt-in semantics (see `write_recommendation` in autoconfig_graphics).
-/// Returns the list of per-field errors so the UI can surface them.
-/// Empty `Ok(Vec)` means "everything written, restart required".
-#[tauri::command]
-pub fn v2_apply_graphics_recommendation() -> Result<Vec<String>, Vec<String>> {
-    let environment = detect_environment();
-    let recommendation = compute_recommendation(&environment);
-    match write_recommendation(&recommendation) {
-        Ok(()) => Ok(Vec::new()),
-        Err(errors) => Err(errors),
     }
 }
 

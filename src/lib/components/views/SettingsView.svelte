@@ -440,10 +440,10 @@
 
   // Graphics recommendation surfaced in the Graphics tab. Populated on
   // mount via v2_get_graphics_recommendation (matrix lives in
-  // autoconfig_graphics.rs). The banner fires only when at least one
-  // recommended value differs from the currently persisted setting; the
-  // "Apply" button writes the entire recommendation via
-  // v2_apply_graphics_recommendation.
+  // autoconfig_graphics.rs). The banner is advisory-only: it fires when
+  // at least one recommended value differs from the currently persisted
+  // setting and tells the user what to change. There is no Apply button
+  // by design - the user toggles the real settings manually.
   type GraphicsRecommendation = {
     environment: {
       display_server: string;
@@ -4248,6 +4248,11 @@
   }
 
   const preferredGpuOptions = $derived.by(() => {
+    // On a hybrid NVIDIA + iGPU host, the iGPU is the recommended pick:
+    // WebKit composites there and the NVIDIA card stays idle. Mark it so
+    // the user does not leave the dropdown on the ambiguous Auto.
+    const env = graphicsRecommendation?.environment;
+    const igpuRecommended = !!env && env.gpu_nvidia && (env.gpu_intel || env.gpu_amd);
     const autoTarget = autoResolvedGpuId
       ? detectedGpus.find((g) => g.id === autoResolvedGpuId)
       : null;
@@ -4262,7 +4267,13 @@
     for (const g of detectedGpus) {
       if (!g.is_usable) continue;
       if (g.kind === 'integrated' && !hasIntegrated) {
-        opts.push({ value: 'integrated', label: $t('settings.graphics.gpu.integrated', { values: { name: g.name } }) });
+        const integratedLabel = $t('settings.graphics.gpu.integrated', { values: { name: g.name } });
+        opts.push({
+          value: 'integrated',
+          label: igpuRecommended
+            ? `${integratedLabel} ${$t('settings.graphics.gpu.recommendedSuffix')}`
+            : integratedLabel,
+        });
         hasIntegrated = true;
       }
       if (g.kind === 'discrete' && !hasDiscrete) {
@@ -4310,32 +4321,21 @@
     return recommendationSignature(graphicsRecommendation) !== dismissedRecommendationSignature;
   });
 
-  async function handleApplyGraphicsRecommendation() {
-    try {
-      const errors = await invoke<string[]>('v2_apply_graphics_recommendation');
-      if (errors && errors.length > 0) {
-        console.error('Failed to apply some graphics settings:', errors);
-        showToast(errors.join('; '), 'error');
-        return;
-      }
-      // Refresh local state from DB so the toggles snap to the new values
-      const gs = await invoke<any>('v2_get_graphics_settings');
-      forceX11 = gs.force_x11;
-      gskRenderer = gs.gsk_renderer || '';
-      hardwareAcceleration = gs.hardware_acceleration;
-      const ds = await invoke<any>('v2_get_developer_settings');
-      forceDmabuf = ds.force_dmabuf;
-      // Banner will hide naturally because diff is now false. Clear the
-      // dismiss flag too so the next environment change re-evaluates
-      // cleanly without a stale signature blocking the new banner.
-      dismissedRecommendationSignature = null;
-      removeUserItem(RECOMMENDATION_DISMISS_KEY);
-      showToast($t('settings.graphics.recommendation.applied'), 'success');
-    } catch (err) {
-      console.error('Failed to apply graphics recommendation:', err);
-      showToast(String(err), 'error');
+  // DMA-BUF help text is GPU-aware. The instability warning only
+  // applies to NVIDIA-only systems; non-NVIDIA and hybrid setups (the
+  // iGPU composites) can enable it safely. Returns an i18n key so $t()
+  // stays in the template, not inside $derived (CSS-extraction rule).
+  const forceDmabufDescKey = $derived.by(() => {
+    const env = graphicsRecommendation?.environment;
+    if (!env) return 'settings.graphics.forceDmabufDesc';
+    if (env.gpu_nvidia && (env.gpu_intel || env.gpu_amd)) {
+      return 'settings.graphics.forceDmabufDescHybrid';
     }
-  }
+    if (env.gpu_nvidia) {
+      return 'settings.graphics.forceDmabufDescNvidiaOnly';
+    }
+    return 'settings.graphics.forceDmabufDescSafe';
+  });
 
   function handleDismissRecommendation() {
     if (!graphicsRecommendation) return;
@@ -5547,9 +5547,6 @@
           {/if}
         </div>
         <div class="recommendation-actions">
-          <button class="primary-btn" onclick={handleApplyGraphicsRecommendation}>
-            {$t('settings.graphics.recommendation.apply')}
-          </button>
           <button class="secondary-btn" onclick={handleDismissRecommendation}>
             {$t('settings.graphics.recommendation.dismiss')}
           </button>
@@ -5663,7 +5660,7 @@
     <div class="setting-row">
       <div class="setting-info">
         <span class="setting-label">{$t('settings.graphics.forceDmabuf')}</span>
-        <span class="setting-desc">{$t('settings.graphics.forceDmabufDesc')}</span>
+        <span class="setting-desc">{$t(forceDmabufDescKey)}</span>
       </div>
       <Toggle enabled={forceDmabuf} onchange={(v) => handleForceDmabufChange(v)} />
     </div>
@@ -7579,21 +7576,6 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
 
   .link-btn:hover {
     filter: brightness(1.15);
-  }
-
-  .primary-btn {
-    background: var(--accent-primary, #7c3aed);
-    color: var(--btn-primary-text, #fff);
-    border: 1px solid transparent;
-    border-radius: 6px;
-    padding: 6px 14px;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-  }
-
-  .primary-btn:hover {
-    filter: brightness(1.1);
   }
 
   .secondary-btn {

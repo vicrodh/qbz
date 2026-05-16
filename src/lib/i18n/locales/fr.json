@@ -2792,6 +2792,9 @@
       "hardwareAccelerationDesc": "Activer le rendu GPU. Désactiver force le rendu logiciel (CPU uniquement). Désactiver en cas de crashes ou d'artéfacts visuels.",
       "forceDmabuf": "Forcer le rendu DMA-BUF",
       "forceDmabufDesc": "Forcer le partage de tampons DMA-BUF avec le compositeur. Peut améliorer les performances mais peut planter sur certains systèmes (en particulier NVIDIA + Wayland).",
+      "forceDmabufDescSafe": "Active le partage de tampons DMA-BUF avec le compositeur pour un rendu plus fluide. Sans risque sur votre matériel. Redémarrage requis.",
+      "forceDmabufDescHybrid": "Votre GPU intégré gère le rendu, donc DMA-BUF peut être activé ici sans risque. Améliore la fluidité du rendu. Redémarrage requis.",
+      "forceDmabufDescNvidiaOnly": "Déconseillé sur les systèmes NVIDIA uniquement — DMA-BUF peut provoquer une instabilité du rendu. Redémarrage requis.",
       "forceX11": "Forcer le backend X11 (Wayland)",
       "forceX11Desc": "Utiliser XWayland au lieu du Wayland natif. Recommandé pour les GPU NVIDIA avec des crashes sous Wayland.",
       "gdkScale": "Échelle d'affichage (XWayland)",
@@ -2826,8 +2829,6 @@
       "recommendation": {
         "title": "Recommandé pour votre système",
         "detected": "Détecté",
-        "apply": "Appliquer",
-        "applied": "Configuration appliquée. Redémarrez QBZ pour qu'elle prenne effet.",
         "dismiss": "Ignorer",
         "redetect": "Détecter les paramètres recommandés",
         "noChanges": "Les paramètres correspondent déjà à la recommandation pour ce système."
@@ -2839,6 +2840,7 @@
         "auto": "Auto (par défaut)",
         "autoWithTarget": "Auto ({name})",
         "integrated": "Intégré — {name}",
+        "recommendedSuffix": "(recommandé)",
         "discrete": "Dédié — {name}",
         "software": "Logiciel (CPU, llvmpipe)"
       },

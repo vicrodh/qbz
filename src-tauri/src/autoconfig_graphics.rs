@@ -106,17 +106,17 @@ fn apply_recommendation(rec: &Recommendation) {
     }
 }
 
-/// Apply the recommendation to the persistence layer. Shared between the CLI
-/// prompt (`apply_recommendation`) and the V2 command surface. Returns the
-/// list of write errors so the caller can surface them appropriately (stderr
-/// for CLI, frontend toast for the Settings UI).
+/// Apply the recommendation to the persistence layer. Used by the CLI prompt
+/// (`apply_recommendation`); the Settings UI is advisory-only and no longer
+/// writes the recommendation. Returns the list of write errors so the caller
+/// can surface them on stderr.
 ///
 /// DMA-BUF semantics after the 1.2.13 opt-in flip:
 ///   - `rec.disable_dmabuf = true`  -> force_dmabuf = false (matches default;
 ///     runtime keeps DMA-BUF off).
 ///   - `rec.disable_dmabuf = false` -> force_dmabuf = true  (user opts in via
 ///     this recommendation; runtime turns DMA-BUF on).
-pub fn write_recommendation(rec: &Recommendation) -> Result<(), Vec<String>> {
+fn write_recommendation(rec: &Recommendation) -> Result<(), Vec<String>> {
     let mut errors = Vec::new();
 
     match GraphicsSettingsStore::new() {
