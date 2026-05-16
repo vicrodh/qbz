@@ -1,5 +1,6 @@
 pub mod download;
 pub mod favorites;
+pub mod image_cache;
 pub mod legal;
 pub mod library;
 pub mod playback;
