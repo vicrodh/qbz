@@ -98,27 +98,7 @@ pub struct V2SearchAllResults {
 /// Used by runtime_bootstrap (once at startup) and v2_reinit_audio_device
 /// to ensure the Player has fresh settings from the database.
 pub(crate) fn convert_to_qbz_audio_settings(settings: &AudioSettings) -> qbz_audio::AudioSettings {
-    qbz_audio::AudioSettings {
-        output_device: settings.output_device.clone(),
-        exclusive_mode: settings.exclusive_mode,
-        dac_passthrough: settings.dac_passthrough,
-        preferred_sample_rate: settings.preferred_sample_rate,
-        limit_quality_to_device: settings.limit_quality_to_device,
-        device_max_sample_rate: settings.device_max_sample_rate,
-        device_sample_rate_limits: settings.device_sample_rate_limits.clone(),
-        backend_type: settings.backend_type.clone(),
-        alsa_plugin: settings.alsa_plugin.clone(),
-        alsa_hardware_volume: settings.alsa_hardware_volume,
-        stream_first_track: settings.stream_first_track,
-        stream_buffer_seconds: settings.stream_buffer_seconds,
-        streaming_only: settings.streaming_only,
-        normalization_enabled: settings.normalization_enabled,
-        normalization_target_lufs: settings.normalization_target_lufs,
-        gapless_enabled: settings.gapless_enabled,
-        pw_force_bitperfect: settings.pw_force_bitperfect,
-        skip_sink_switch: settings.skip_sink_switch,
-        allow_quality_fallback: settings.allow_quality_fallback,
-    }
+    settings.clone()
 }
 
 /// Reload audio settings from the per-user store into the CoreBridge player.
