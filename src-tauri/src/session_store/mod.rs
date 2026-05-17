@@ -105,8 +105,15 @@ impl SessionStore {
         let conn = Connection::open(&db_path)
             .map_err(|e| format!("Failed to open session database: {}", e))?;
 
-        // Enable WAL mode for better concurrent access
-        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")
+        // WAL mode for non-blocking reads/writes (ADR-002). synchronous=FULL,
+        // not NORMAL: in WAL mode NORMAL only fsyncs at a checkpoint, so a
+        // committed session survives an app restart (the WAL frames are still
+        // in the OS page cache) but is LOST on a hard reboot — the page cache
+        // is wiped and the frames were never fsync'd. FULL fsyncs every
+        // commit; the session DB is written infrequently so the cost is
+        // negligible. Without this, "restore session" silently breaks across
+        // reboots (issue #440).
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;")
             .map_err(|e| format!("Failed to set WAL mode: {}", e))?;
 
         // Create tables
