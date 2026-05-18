@@ -16,9 +16,17 @@ use tokio::net::TcpListener;
 
 const OAUTH_TIMEOUT: Duration = Duration::from_secs(180);
 
+/// Result of a successful login.
+pub struct LoginOutcome {
+    pub user_id: u64,
+    pub display_name: String,
+}
+
 /// Run the full system-browser OAuth login. Returns the authenticated
-/// user id on success.
-pub async fn login_via_system_browser<A>(runtime: &Arc<AppRuntime<A>>) -> Result<u64, String>
+/// user on success.
+pub async fn login_via_system_browser<A>(
+    runtime: &Arc<AppRuntime<A>>,
+) -> Result<LoginOutcome, String>
 where
     A: FrontendAdapter + Send + Sync + 'static,
 {
@@ -68,6 +76,7 @@ where
             .map_err(|e| e.to_string())?
     };
     let user_id = session.user_id;
+    let display_name = session.display_name.clone();
 
     // Emit LoggedIn through the core (idempotent set_session).
     core.set_session(session).await.map_err(|e| e.to_string())?;
@@ -76,7 +85,10 @@ where
     runtime.activate(user_id).await?;
 
     log::info!("[qbz-slint] login complete for user {user_id}");
-    Ok(user_id)
+    Ok(LoginOutcome {
+        user_id,
+        display_name,
+    })
 }
 
 /// Accept connections until one carries the OAuth code, replying with a

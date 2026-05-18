@@ -1,0 +1,26 @@
+// Shared UI state — structs and globals the Rust controllers populate.
+//
+// The Rust side builds these models on a worker thread, then sets them
+// on the global from the Slint event loop (see src/home.rs, src/main.rs).
+
+export struct AlbumCardItem {
+    id: string,
+    title: string,
+    artist: string,
+    quality: string,
+    ribbon: string,
+    ribbon-kind: string,   // "press" | "qobuzissime" | "albumOfTheWeek" | ""
+    artwork-url: string,
+}
+
+export struct DiscoverSection {
+    title: string,
+    albums: [AlbumCardItem],
+}
+
+// Discover / Home screen state.
+export global HomeState {
+    in property <string> greeting: "";
+    in property <[DiscoverSection]> sections: [];
+    in property <bool> loading: false;
+}

@@ -1,0 +1,107 @@
+// Album card for the Discover sections.
+//
+// Mirrors the Svelte AlbumCardLite: 220px column, square artwork with a
+// bottom-left award ribbon, single-line title, artist, and a compact
+// quality badge. Artwork image loading lands in the artwork-pipeline
+// increment; for now the artwork area is the same elevated placeholder
+// the real card shows before its image resolves.
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Typography } from "../foundation/typography.slint";
+import { Radius } from "../foundation/radius.slint";
+import { Spacing } from "../foundation/spacing.slint";
+import { AlbumCardItem } from "../state.slint";
+
+export component AlbumCard inherits Rectangle {
+    in property <AlbumCardItem> album;
+
+    width: 220px;
+    height: 282px;
+
+    VerticalLayout {
+        spacing: Spacing.xs;
+
+        // --- Artwork ------------------------------------------------------
+        Rectangle {
+            width: 220px;
+            height: 220px;
+            border-radius: Radius.sm;
+            background: Theme.surface-elevated;
+            clip: true;
+
+            if root.album.ribbon != "": Rectangle {
+                x: 0px;
+                y: parent.height - self.height - 8px;
+                height: 20px;
+                background: root.album.ribbon-kind == "press"
+                    ? #d49511
+                    : #000000e0;
+                border-top-right-radius: 3px;
+                border-bottom-right-radius: 3px;
+
+                // Left accent stripe (not on the gold press ribbon).
+                Rectangle {
+                    x: 0px;
+                    width: root.album.ribbon-kind == "press" ? 0px : 3px;
+                    background: root.album.ribbon-kind == "qobuzissime"
+                        ? #8b5cf6
+                        : #eab308;
+                }
+                HorizontalLayout {
+                    padding-left: 10px;
+                    padding-right: 10px;
+                    Text {
+                        text: root.album.ribbon;
+                        color: root.album.ribbon-kind == "press"
+                            ? #1f1407
+                            : #ffffff;
+                        font-size: 10px;
+                        font-weight: Typography.semibold;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                }
+            }
+        }
+
+        // --- Title --------------------------------------------------------
+        Text {
+            text: root.album.title;
+            color: Theme.text-primary;
+            font-size: Typography.body;
+            font-weight: Typography.medium;
+            overflow: elide;
+        }
+
+        // --- Artist + quality --------------------------------------------
+        HorizontalLayout {
+            spacing: Spacing.sm;
+
+            Text {
+                text: root.album.artist;
+                color: Theme.text-muted;
+                font-size: Typography.link;
+                vertical-alignment: center;
+                overflow: elide;
+                horizontal-stretch: 1;
+            }
+
+            if root.album.quality != "": Rectangle {
+                background: Theme.surface-elevated;
+                border-radius: 3px;
+                HorizontalLayout {
+                    padding-left: 6px;
+                    padding-right: 6px;
+                    padding-top: 3px;
+                    padding-bottom: 3px;
+                    Text {
+                        text: root.album.quality;
+                        color: Theme.text-secondary;
+                        font-size: 9px;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+    }
+}

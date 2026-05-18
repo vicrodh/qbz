@@ -1,0 +1,86 @@
+// Discover — Home view: greeting, tab pill, and the discover sections.
+//
+// Section data is supplied by the Rust home controller through the
+// HomeState global. The Editor's Picks / For You tabs are visual only
+// for now; switching their data is a later increment.
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Typography } from "../foundation/typography.slint";
+import { HomeState } from "../state.slint";
+import { SectionRow } from "SectionRow.slint";
+import { ScrollView } from "std-widgets.slint";
+
+component Tab inherits Rectangle {
+    in property <string> label;
+    in property <bool> active: false;
+    callback clicked();
+
+    border-radius: 4px;
+    background: root.active ? Theme.surface-main
+        : ta.has-hover ? Theme.surface-hover : transparent;
+
+    HorizontalLayout {
+        padding-left: 14px;
+        padding-right: 14px;
+        padding-top: 6px;
+        padding-bottom: 6px;
+        Text {
+            text: root.label;
+            color: root.active ? Theme.text-primary : Theme.text-muted;
+            font-size: 13px;
+            font-weight: Typography.medium;
+        }
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+export component HomeView inherits Rectangle {
+    background: Theme.surface-main;
+
+    ScrollView {
+        VerticalLayout {
+            padding: 32px;
+            spacing: 28px;
+            alignment: start;
+
+            Text {
+                text: HomeState.greeting;
+                visible: HomeState.greeting != "";
+                color: Theme.text-primary;
+                font-size: 26px;
+                font-weight: Typography.semibold;
+            }
+
+            HorizontalLayout {
+                alignment: start;
+                Rectangle {
+                    background: Theme.surface-elevated;
+                    border-radius: 6px;
+                    HorizontalLayout {
+                        padding: 3px;
+                        spacing: 4px;
+                        Tab { label: @tr("Home"); active: true; }
+                        Tab { label: @tr("Editor's Picks"); }
+                        Tab { label: @tr("For You"); }
+                    }
+                }
+            }
+
+            if HomeState.loading && HomeState.sections.length == 0: Text {
+                text: @tr("Loading your music...");
+                color: Theme.text-muted;
+                font-size: 14px;
+            }
+
+            for section in HomeState.sections: SectionRow {
+                section: section;
+            }
+        }
+    }
+}

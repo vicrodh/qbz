@@ -8,15 +8,16 @@
 //! tree is compiled from `ui/app.slint` by `build.rs`; `include_modules!`
 //! pulls in the generated Rust bindings.
 //!
-//! Status: foundation tokens, login screen, app shell, and functional
-//! system-browser OAuth — sign-in runs the real Qobuz OAuth flow and
-//! activates a real per-user session.
+//! Status: foundation tokens, login screen, app shell, functional
+//! system-browser OAuth, and a real Discover / Home view fed by the
+//! Qobuz discover index.
 
 slint::include_modules!();
 
 mod adapter;
 mod auth;
 mod commands;
+mod home;
 
 use std::sync::Arc;
 
@@ -50,7 +51,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 
-    // Sign in via the system browser → real OAuth → app shell.
+    // Sign in via the system browser → real OAuth → Discover/Home.
     // "Sign in via Browser" and "Use your system browser instead" are the
     // same flow in the MVP (the in-app webview path is intentionally absent).
     let on_browser_login = {
@@ -61,12 +62,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let runtime = runtime.clone();
             let weak = weak.clone();
             handle.spawn(async move {
-                match auth::login_via_system_browser(&runtime).await {
-                    Ok(user_id) => {
-                        log::info!("[qbz-slint] authenticated as user {user_id}");
-                        let _ = weak.upgrade_in_event_loop(|w| w.set_screen(AppScreen::Shell));
+                let outcome = match auth::login_via_system_browser(&runtime).await {
+                    Ok(outcome) => outcome,
+                    Err(e) => {
+                        log::error!("[qbz-slint] sign-in failed: {e}");
+                        return;
                     }
-                    Err(e) => log::error!("[qbz-slint] sign-in failed: {e}"),
+                };
+                log::info!("[qbz-slint] authenticated as user {}", outcome.user_id);
+
+                let greeting = home::greeting(&outcome.display_name);
+                let _ = weak.upgrade_in_event_loop(move |w| {
+                    let state = w.global::<HomeState>();
+                    state.set_greeting(greeting.into());
+                    state.set_loading(true);
+                    w.set_screen(AppScreen::Shell);
+                });
+
+                match home::load_home(&runtime).await {
+                    Ok(sections) => {
+                        let _ = weak.upgrade_in_event_loop(move |w| {
+                            home::apply_sections(&w, sections);
+                            w.global::<HomeState>().set_loading(false);
+                        });
+                    }
+                    Err(e) => {
+                        log::error!("[qbz-slint] discover load failed: {e}");
+                        let _ = weak.upgrade_in_event_loop(|w| {
+                            w.global::<HomeState>().set_loading(false);
+                        });
+                    }
                 }
             });
         }

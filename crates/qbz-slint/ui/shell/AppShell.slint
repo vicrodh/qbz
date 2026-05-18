@@ -6,11 +6,10 @@
 
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Layout } from "../foundation/layout.slint";
-import { Spacing } from "../foundation/spacing.slint";
-import { Typography } from "../foundation/typography.slint";
 import { Sidebar } from "Sidebar.slint";
 import { HeaderBar } from "HeaderBar.slint";
 import { PlayerBar } from "PlayerBar.slint";
+import { HomeView } from "../discover/HomeView.slint";
 
 export component AppShell inherits Rectangle {
     background: Theme.surface-main;
@@ -29,34 +28,12 @@ export component AppShell inherits Rectangle {
             spacing: 0px;
 
             Sidebar { }
-
-            // Content region — placeholder until the Discover/Home view.
             Rectangle {
+                width: Layout.hairline;
+                background: Theme.border-subtle;
+            }
+            HomeView {
                 horizontal-stretch: 1;
-                background: Theme.surface-main;
-
-                VerticalLayout {
-                    alignment: center;
-                    HorizontalLayout {
-                        alignment: center;
-                        VerticalLayout {
-                            spacing: Spacing.sm;
-                            Text {
-                                text: "Discover — Home";
-                                color: Theme.text-primary;
-                                font-size: 22px;
-                                font-weight: Typography.semibold;
-                                horizontal-alignment: center;
-                            }
-                            Text {
-                                text: "Content view lands in the next increment";
-                                color: Theme.text-muted;
-                                font-size: Typography.body;
-                                horizontal-alignment: center;
-                            }
-                        }
-                    }
-                }
             }
         }
 

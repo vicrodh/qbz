@@ -1,0 +1,34 @@
+// One Discover section — a title and a horizontally scrollable row of
+// album cards.
+//
+// The Svelte original paginates by slice; the MVP uses a horizontal
+// scroll, which is simpler and behaviorally equivalent for browsing.
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Typography } from "../foundation/typography.slint";
+import { DiscoverSection } from "../state.slint";
+import { AlbumCard } from "AlbumCard.slint";
+import { ScrollView } from "std-widgets.slint";
+
+export component SectionRow inherits VerticalLayout {
+    in property <DiscoverSection> section;
+
+    spacing: 12px;
+
+    Text {
+        text: root.section.title;
+        color: Theme.text-primary;
+        font-size: 18px;
+        font-weight: Typography.semibold;
+    }
+
+    ScrollView {
+        height: 290px;
+        HorizontalLayout {
+            spacing: 32px;
+            for album in root.section.albums: AlbumCard {
+                album: album;
+            }
+        }
+    }
+}
