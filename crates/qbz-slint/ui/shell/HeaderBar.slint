@@ -1,5 +1,9 @@
-// Top header bar — primary navigation tabs, a window-centered search
-// field, and the user element with its dropdown menu.
+// Top header bar — three equal sections: navigation tabs (left), the
+// search field (center, so it lands at the window center), and the user
+// element with its dropdown menu (right).
+//
+// Responsive: below the first breakpoint the tabs drop their icons;
+// below the second the search field narrows to 70%.
 
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Spacing } from "../foundation/spacing.slint";
@@ -10,22 +14,34 @@ import { SessionState } from "../state.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 
 component NavTab inherits Rectangle {
+    in property <image> icon;
     in property <string> label;
     in property <bool> active: false;
+    in property <bool> show-icon: true;
     callback clicked();
 
-    height: 32px;
+    height: 30px;
     border-radius: Radius.sm;
     background: root.active ? Theme.surface-elevated
         : ta.has-hover ? Theme.surface-hover : transparent;
 
     HorizontalLayout {
-        padding-left: Spacing.md;
-        padding-right: Spacing.md;
+        padding-left: root.show-icon ? 9px : 11px;
+        padding-right: 11px;
+        spacing: 6px;
+        if root.show-icon: VerticalLayout {
+            alignment: center;
+            QbzIcon {
+                source: root.icon;
+                width: 14px;
+                height: 14px;
+                tint: root.active ? Theme.text-primary : Theme.text-secondary;
+            }
+        }
         Text {
             text: root.label;
             color: root.active ? Theme.text-primary : Theme.text-secondary;
-            font-size: Typography.body;
+            font-size: 12px;
             font-weight: root.active ? Typography.semibold : Typography.regular;
             vertical-alignment: center;
         }
@@ -84,92 +100,125 @@ export component HeaderBar inherits Rectangle {
     height: Layout.header-height;
     background: Theme.surface-card;
 
-    // --- Nav tabs (left) -------------------------------------------------
-    VerticalLayout {
-        x: Spacing.md;
-        height: parent.height;
-        alignment: center;
-        HorizontalLayout {
-            spacing: Spacing.xs;
-            NavTab { label: "Discover"; active: true; }
-            NavTab { label: "Library"; }
-            NavTab { label: "Local Library"; }
-            NavTab { label: "My QBZ"; }
-        }
-    }
+    // Responsive breakpoints.
+    property <bool> show-tab-icons: root.width >= 1140px;
+    property <length> search-width: root.width < 960px ? 224px : 320px;
 
-    // --- Search field, centered to the header width ----------------------
-    Rectangle {
-        width: 320px;
-        height: 32px;
-        x: (parent.width - self.width) / 2;
-        y: (parent.height - self.height) / 2;
-        border-radius: 6px;
-        border-width: 1px;
-        border-color: Theme.border-subtle;
-        background: Theme.surface-elevated;
-
-        HorizontalLayout {
-            padding-left: 10px;
-            padding-right: 10px;
-            spacing: 7px;
-            VerticalLayout {
-                alignment: center;
-                QbzIcon {
-                    source: @image-url("../assets/icons/search.svg");
-                    width: 14px;
-                    height: 14px;
-                    tint: Theme.text-muted;
+    HorizontalLayout {
+        // --- Tabs (left third) -------------------------------------------
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            HorizontalLayout {
+                padding-left: Spacing.md;
+                spacing: Spacing.xs;
+                alignment: start;
+                NavTab {
+                    icon: @image-url("../assets/icons/compass.svg");
+                    label: "Discover";
+                    active: true;
+                    show-icon: root.show-tab-icons;
+                }
+                NavTab {
+                    icon: @image-url("../assets/icons/library-big.svg");
+                    label: "Library";
+                    show-icon: root.show-tab-icons;
+                }
+                NavTab {
+                    icon: @image-url("../assets/icons/hard-drive.svg");
+                    label: "Local Library";
+                    show-icon: root.show-tab-icons;
+                }
+                NavTab {
+                    icon: @image-url("../assets/icons/cassette-tape.svg");
+                    label: "My QBZ";
+                    show-icon: root.show-tab-icons;
                 }
             }
-            Text {
-                text: @tr("Search");
-                color: Theme.text-muted;
-                font-size: 13px;
-                vertical-alignment: center;
-                horizontal-stretch: 1;
-            }
-        }
-    }
-
-    // --- User element + dropdown (right) ---------------------------------
-    user-area := TouchArea {
-        width: user-row.preferred-width + 16px;
-        height: 36px;
-        x: parent.width - self.width - Spacing.md;
-        y: (parent.height - self.height) / 2;
-        mouse-cursor: pointer;
-        clicked => {
-            menu.show();
         }
 
-        Rectangle {
-            width: 100%;
-            height: 100%;
-            border-radius: Radius.sm;
-            background: user-area.has-hover ? Theme.surface-hover : transparent;
-        }
-        user-row := HorizontalLayout {
-            x: 8px;
-            height: parent.height;
-            spacing: 8px;
-            VerticalLayout {
+        // --- Search (center third) ---------------------------------------
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            HorizontalLayout {
                 alignment: center;
-                Text {
-                    text: SessionState.user-name == ""
-                        ? @tr("Guest")
-                        : SessionState.user-name;
-                    color: Theme.text-primary;
-                    font-size: Typography.body;
+                Rectangle {
+                    width: root.search-width;
+                    height: 32px;
+                    border-radius: 6px;
+                    border-width: 1px;
+                    border-color: Theme.border-subtle;
+                    background: Theme.surface-elevated;
+                    HorizontalLayout {
+                        padding-left: 10px;
+                        padding-right: 10px;
+                        spacing: 7px;
+                        VerticalLayout {
+                            alignment: center;
+                            QbzIcon {
+                                source: @image-url("../assets/icons/search.svg");
+                                width: 14px;
+                                height: 14px;
+                                tint: Theme.text-muted;
+                            }
+                        }
+                        Text {
+                            text: @tr("Search");
+                            color: Theme.text-muted;
+                            font-size: 13px;
+                            vertical-alignment: center;
+                            horizontal-stretch: 1;
+                        }
+                    }
                 }
             }
-            VerticalLayout {
-                alignment: center;
-                Image {
-                    source: @image-url("../assets/qbz-logo.png");
-                    width: 28px;
-                    height: 28px;
-                    image-fit: contain;
+        }
+
+        // --- User element (right third) ----------------------------------
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            HorizontalLayout {
+                padding-right: Spacing.md;
+                alignment: end;
+                user-area := TouchArea {
+                    width: user-row.preferred-width + 16px;
+                    height: 36px;
+                    mouse-cursor: pointer;
+                    clicked => {
+                        menu.show();
+                    }
+                    Rectangle {
+                        width: 100%;
+                        height: 100%;
+                        border-radius: Radius.sm;
+                        background: user-area.has-hover ? Theme.surface-hover : transparent;
+                    }
+                    user-row := HorizontalLayout {
+                        x: 8px;
+                        height: parent.height;
+                        spacing: 9px;
+                        VerticalLayout {
+                            alignment: center;
+                            Text {
+                                text: SessionState.user-name == ""
+                                    ? @tr("Guest")
+                                    : SessionState.user-name;
+                                color: Theme.text-primary;
+                                font-size: Typography.body;
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            QbzIcon {
+                                source: @image-url("../assets/icons/menu.svg");
+                                width: 18px;
+                                height: 18px;
+                                tint: Theme.text-secondary;
+                            }
+                        }
+                    }
                 }
             }
         }
