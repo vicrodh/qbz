@@ -1,0 +1,14 @@
+// Monochrome Lucide icon.
+//
+// Slint's `@image-url` needs a literal path, so the caller supplies the
+// `source` (an `@image-url` of an SVG in ui/assets/icons/) and a `tint`
+// theme color; QbzIcon applies `colorize` and a contain fit.
+
+import { Theme } from "../foundation/semantic-colors.slint";
+
+export component QbzIcon inherits Image {
+    in property <color> tint: Theme.text-secondary;
+
+    colorize: root.tint;
+    image-fit: contain;
+}
