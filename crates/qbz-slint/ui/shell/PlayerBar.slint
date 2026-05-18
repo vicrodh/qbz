@@ -1,18 +1,18 @@
 // Bottom now-playing / transport bar.
 //
-// Shell-frame increment: controls are laid out and hover-reactive but
-// not yet wired to playback. Real playback state arrives in a later
-// milestone.
+// Controls are laid out and hover-reactive but not yet wired to
+// playback. Real playback state arrives in a later milestone.
 
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Spacing } from "../foundation/spacing.slint";
 import { Typography } from "../foundation/typography.slint";
 import { Layout } from "../foundation/layout.slint";
 import { Radius } from "../foundation/radius.slint";
+import { QbzIcon } from "../primitives/QbzIcon.slint";
 
-component GlyphButton inherits Rectangle {
-    in property <string> glyph;
-    in property <length> glyph-size: 18px;
+component IconButton inherits Rectangle {
+    in property <image> icon;
+    in property <length> icon-size: 18px;
     callback clicked();
 
     width: 34px;
@@ -20,12 +20,13 @@ component GlyphButton inherits Rectangle {
     border-radius: Radius.sm;
     background: ta.has-hover ? Theme.surface-hover : transparent;
 
-    Text {
-        text: root.glyph;
-        font-size: root.glyph-size;
-        color: ta.has-hover ? Theme.text-primary : Theme.text-secondary;
-        horizontal-alignment: center;
-        vertical-alignment: center;
+    QbzIcon {
+        source: root.icon;
+        width: root.icon-size;
+        height: root.icon-size;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        tint: ta.has-hover ? Theme.text-primary : Theme.text-secondary;
     }
 
     ta := TouchArea {
@@ -38,7 +39,7 @@ component GlyphButton inherits Rectangle {
 
 export component PlayerBar inherits Rectangle {
     height: Layout.player-bar-height;
-    background: Theme.surface-main;
+    background: Theme.surface-card;
 
     VerticalLayout {
         spacing: 0px;
@@ -65,11 +66,14 @@ export component PlayerBar inherits Rectangle {
                 alignment: center;
                 HorizontalLayout {
                     spacing: 2px;
-                    GlyphButton { glyph: "⇄"; }
-                    GlyphButton { glyph: "⏮"; }
-                    GlyphButton { glyph: "▶"; glyph-size: 22px; }
-                    GlyphButton { glyph: "⏭"; }
-                    GlyphButton { glyph: "↻"; }
+                    IconButton { icon: @image-url("../assets/icons/shuffle.svg"); }
+                    IconButton { icon: @image-url("../assets/icons/skip-back.svg"); }
+                    IconButton {
+                        icon: @image-url("../assets/icons/play.svg");
+                        icon-size: 22px;
+                    }
+                    IconButton { icon: @image-url("../assets/icons/skip-forward.svg"); }
+                    IconButton { icon: @image-url("../assets/icons/repeat.svg"); }
                 }
             }
 
@@ -94,7 +98,7 @@ export component PlayerBar inherits Rectangle {
                             font-size: Typography.body;
                         }
                         Text {
-                            text: "QBZ Slint POC";
+                            text: "QBZ MVP";
                             color: Theme.text-muted;
                             font-size: 12px;
                         }
@@ -108,8 +112,9 @@ export component PlayerBar inherits Rectangle {
                 HorizontalLayout {
                     alignment: end;
                     spacing: Spacing.sm;
-                    GlyphButton { glyph: "♡"; }
-                    GlyphButton { glyph: "⤢"; }
+                    IconButton { icon: @image-url("../assets/icons/heart.svg"); }
+                    IconButton { icon: @image-url("../assets/icons/maximize-2.svg"); }
+                    IconButton { icon: @image-url("../assets/icons/volume-2.svg"); }
                     VerticalLayout {
                         alignment: center;
                         Rectangle {

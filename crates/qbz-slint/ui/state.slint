@@ -51,3 +51,8 @@ export global AlbumState {
 export global NavState {
     in-out property <bool> showing-album: false;
 }
+
+// Authenticated user, for the header user element.
+export global SessionState {
+    in property <string> user-name: "";
+}

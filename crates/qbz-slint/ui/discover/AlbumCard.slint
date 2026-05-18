@@ -11,13 +11,14 @@ import { Typography } from "../foundation/typography.slint";
 import { Radius } from "../foundation/radius.slint";
 import { Spacing } from "../foundation/spacing.slint";
 import { AlbumCardItem } from "../state.slint";
+import { QbzIcon } from "../primitives/QbzIcon.slint";
 
 // Circular hover-overlay action button.
 component OverlayButton inherits Rectangle {
-    in property <string> glyph;
+    in property <image> icon;
     in property <bool> primary: false;
     in property <length> diameter: 36px;
-    in property <length> glyph-size: 16px;
+    in property <length> icon-size: 16px;
 
     width: root.diameter;
     height: root.diameter;
@@ -26,12 +27,13 @@ component OverlayButton inherits Rectangle {
     border-width: root.primary ? 0px : 1.5px;
     border-color: #ffffffe6;
 
-    Text {
-        text: root.glyph;
-        color: root.primary ? #000000 : #ffffff;
-        font-size: root.glyph-size;
-        horizontal-alignment: center;
-        vertical-alignment: center;
+    QbzIcon {
+        source: root.icon;
+        width: root.icon-size;
+        height: root.icon-size;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        tint: root.primary ? #000000 : #ffffff;
     }
 }
 
@@ -109,17 +111,17 @@ export component AlbumCard inherits Rectangle {
 
                 VerticalLayout {
                     alignment: center;
-                    OverlayButton { glyph: "♡"; }
+                    OverlayButton { icon: @image-url("../assets/icons/heart.svg"); }
                 }
                 OverlayButton {
-                    glyph: "▶";
+                    icon: @image-url("../assets/icons/play.svg");
                     primary: true;
                     diameter: 44px;
-                    glyph-size: 17px;
+                    icon-size: 18px;
                 }
                 VerticalLayout {
                     alignment: center;
-                    OverlayButton { glyph: "⋯"; glyph-size: 18px; }
+                    OverlayButton { icon: @image-url("../assets/icons/ellipsis.svg"); }
                 }
             }
 

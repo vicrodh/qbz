@@ -13,13 +13,22 @@ import { AlbumPageView } from "../album/AlbumPageView.slint";
 
 export component AppShell inherits Rectangle {
     callback open-album(string);
+    callback logout();
+    callback close-app();
 
     background: Theme.surface-main;
 
     VerticalLayout {
         spacing: 0px;
 
-        HeaderBar { }
+        HeaderBar {
+            logout => {
+                root.logout();
+            }
+            close-app => {
+                root.close-app();
+            }
+        }
         Rectangle {
             height: Layout.hairline;
             background: Theme.border-subtle;

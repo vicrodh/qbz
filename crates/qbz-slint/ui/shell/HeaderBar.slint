@@ -1,11 +1,13 @@
-// Top header bar — primary navigation tabs and the search field.
+// Top header bar — primary navigation tabs, a window-centered search
+// field, and the user element with its dropdown menu.
 
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Spacing } from "../foundation/spacing.slint";
 import { Typography } from "../foundation/typography.slint";
 import { Layout } from "../foundation/layout.slint";
 import { Radius } from "../foundation/radius.slint";
-import { LineEdit } from "std-widgets.slint";
+import { SessionState } from "../state.slint";
+import { QbzIcon } from "../primitives/QbzIcon.slint";
 
 component NavTab inherits Rectangle {
     in property <string> label;
@@ -37,35 +39,196 @@ component NavTab inherits Rectangle {
     }
 }
 
-export component HeaderBar inherits Rectangle {
-    height: Layout.header-height;
-    background: Theme.surface-main;
+component MenuItem inherits Rectangle {
+    in property <image> icon;
+    in property <string> label;
+    callback clicked();
+
+    height: 34px;
+    background: ta.has-hover ? Theme.surface-hover : transparent;
 
     HorizontalLayout {
-        padding-left: Spacing.md;
-        padding-right: Spacing.md;
-        spacing: Spacing.xs;
-
+        padding-left: 12px;
+        padding-right: 18px;
+        spacing: 10px;
         VerticalLayout {
             alignment: center;
-            HorizontalLayout {
-                spacing: Spacing.xs;
-                NavTab { label: "Discover"; active: true; }
-                NavTab { label: "Library"; }
-                NavTab { label: "Local Library"; }
-                NavTab { label: "My QBZ"; }
+            QbzIcon {
+                source: root.icon;
+                width: 15px;
+                height: 15px;
+                tint: Theme.text-secondary;
             }
         }
-
-        VerticalLayout {
-            alignment: center;
+        Text {
+            text: root.label;
+            color: Theme.text-secondary;
+            font-size: 13px;
+            vertical-alignment: center;
             horizontal-stretch: 1;
-            HorizontalLayout {
+        }
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+export component HeaderBar inherits Rectangle {
+    callback logout();
+    callback close-app();
+
+    height: Layout.header-height;
+    background: Theme.surface-card;
+
+    // --- Nav tabs (left) -------------------------------------------------
+    VerticalLayout {
+        x: Spacing.md;
+        height: parent.height;
+        alignment: center;
+        HorizontalLayout {
+            spacing: Spacing.xs;
+            NavTab { label: "Discover"; active: true; }
+            NavTab { label: "Library"; }
+            NavTab { label: "Local Library"; }
+            NavTab { label: "My QBZ"; }
+        }
+    }
+
+    // --- Search field, centered to the header width ----------------------
+    Rectangle {
+        width: 320px;
+        height: 32px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        border-radius: 6px;
+        border-width: 1px;
+        border-color: Theme.border-subtle;
+        background: Theme.surface-elevated;
+
+        HorizontalLayout {
+            padding-left: 10px;
+            padding-right: 10px;
+            spacing: 7px;
+            VerticalLayout {
                 alignment: center;
+                QbzIcon {
+                    source: @image-url("../assets/icons/search.svg");
+                    width: 14px;
+                    height: 14px;
+                    tint: Theme.text-muted;
+                }
+            }
+            Text {
+                text: @tr("Search");
+                color: Theme.text-muted;
+                font-size: 13px;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+        }
+    }
+
+    // --- User element + dropdown (right) ---------------------------------
+    user-area := TouchArea {
+        width: user-row.preferred-width + 16px;
+        height: 36px;
+        x: parent.width - self.width - Spacing.md;
+        y: (parent.height - self.height) / 2;
+        mouse-cursor: pointer;
+        clicked => {
+            menu.show();
+        }
+
+        Rectangle {
+            width: 100%;
+            height: 100%;
+            border-radius: Radius.sm;
+            background: user-area.has-hover ? Theme.surface-hover : transparent;
+        }
+        user-row := HorizontalLayout {
+            x: 8px;
+            height: parent.height;
+            spacing: 8px;
+            VerticalLayout {
+                alignment: center;
+                Text {
+                    text: SessionState.user-name == ""
+                        ? @tr("Guest")
+                        : SessionState.user-name;
+                    color: Theme.text-primary;
+                    font-size: Typography.body;
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                Image {
+                    source: @image-url("../assets/qbz-logo.png");
+                    width: 28px;
+                    height: 28px;
+                    image-fit: contain;
+                }
+            }
+        }
+    }
+
+    menu := PopupWindow {
+        x: parent.width - 234px - Spacing.md;
+        y: Layout.header-height - 4px;
+        width: 234px;
+        height: 254px;
+
+        Rectangle {
+            background: Theme.surface-elevated;
+            border-radius: Radius.md;
+            border-width: 1px;
+            border-color: Theme.border-subtle;
+            drop-shadow-blur: 24px;
+            drop-shadow-color: Theme.card-shadow;
+            drop-shadow-offset-y: 6px;
+
+            VerticalLayout {
+                padding-top: 6px;
+                padding-bottom: 6px;
+                MenuItem {
+                    icon: @image-url("../assets/icons/settings.svg");
+                    label: @tr("Settings");
+                }
+                MenuItem {
+                    icon: @image-url("../assets/icons/keyboard.svg");
+                    label: @tr("Keyboard Shortcuts");
+                }
+                MenuItem {
+                    icon: @image-url("../assets/icons/book-open.svg");
+                    label: @tr("Documentation");
+                }
+                MenuItem {
+                    icon: @image-url("../assets/icons/bug.svg");
+                    label: @tr("Report an Issue");
+                }
+                MenuItem {
+                    icon: @image-url("../assets/icons/info.svg");
+                    label: @tr("About");
+                }
                 Rectangle {
-                    width: 360px;
-                    search := LineEdit {
-                        placeholder-text: "Search";
+                    height: 1px;
+                    background: Theme.border-subtle;
+                }
+                MenuItem {
+                    icon: @image-url("../assets/icons/log-out.svg");
+                    label: @tr("Log Out");
+                    clicked => {
+                        root.logout();
+                    }
+                }
+                MenuItem {
+                    icon: @image-url("../assets/icons/x.svg");
+                    label: @tr("Close");
+                    clicked => {
+                        root.close-app();
                     }
                 }
             }

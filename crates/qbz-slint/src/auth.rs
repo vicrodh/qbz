@@ -17,8 +17,10 @@ use tokio::net::TcpListener;
 const OAUTH_TIMEOUT: Duration = Duration::from_secs(180);
 
 /// Run the full system-browser OAuth login. Returns the authenticated
-/// user id on success.
-pub async fn login_via_system_browser<A>(runtime: &Arc<AppRuntime<A>>) -> Result<u64, String>
+/// `(user_id, display_name)` on success.
+pub async fn login_via_system_browser<A>(
+    runtime: &Arc<AppRuntime<A>>,
+) -> Result<(u64, String), String>
 where
     A: FrontendAdapter + Send + Sync + 'static,
 {
@@ -68,6 +70,7 @@ where
             .map_err(|e| e.to_string())?
     };
     let user_id = session.user_id;
+    let display_name = session.display_name.clone();
     let token = session.user_auth_token.clone();
 
     // Emit LoggedIn through the core (idempotent set_session).
@@ -82,16 +85,18 @@ where
     }
 
     log::info!("[qbz-slint] login complete for user {user_id}");
-    Ok(user_id)
+    Ok((user_id, display_name))
 }
 
 /// Restore a previously saved session from the encrypted token store
 /// (keyring + AES-256-GCM file — the same store the Tauri app uses).
 ///
-/// Returns `Ok(Some(user_id))` when a saved token is valid and the session
-/// is activated, `Ok(None)` when there is no token. A token that exists
-/// but is rejected by Qobuz is cleared and treated as `None`.
-pub async fn restore_saved_session<A>(runtime: &Arc<AppRuntime<A>>) -> Result<Option<u64>, String>
+/// Returns `Ok(Some((user_id, display_name)))` when a saved token is valid
+/// and the session is activated, `Ok(None)` when there is no token. A token
+/// that exists but is rejected by Qobuz is cleared and treated as `None`.
+pub async fn restore_saved_session<A>(
+    runtime: &Arc<AppRuntime<A>>,
+) -> Result<Option<(u64, String)>, String>
 where
     A: FrontendAdapter + Send + Sync + 'static,
 {
@@ -112,10 +117,11 @@ where
     match core.login_with_token(&token).await {
         Ok(session) => {
             let user_id = session.user_id;
+            let display_name = session.display_name.clone();
             core.set_session(session).await.map_err(|e| e.to_string())?;
             runtime.activate(user_id).await?;
             log::info!("[qbz-slint] restored saved session for user {user_id}");
-            Ok(Some(user_id))
+            Ok(Some((user_id, display_name)))
         }
         Err(e) => {
             log::warn!("[qbz-slint] saved token rejected, clearing: {e}");
@@ -123,6 +129,19 @@ where
             Ok(None)
         }
     }
+}
+
+/// Log out: clear the saved token, deactivate the per-user session, and
+/// drop the Qobuz client session.
+pub async fn logout<A>(runtime: &Arc<AppRuntime<A>>) -> Result<(), String>
+where
+    A: FrontendAdapter + Send + Sync + 'static,
+{
+    let _ = qbz_credentials::clear_oauth_token();
+    let _ = runtime.core().logout().await;
+    runtime.deactivate().await?;
+    log::info!("[qbz-slint] logged out");
+    Ok(())
 }
 
 /// Accept connections until one carries the OAuth code, replying with a

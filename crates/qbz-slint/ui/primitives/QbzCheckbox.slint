@@ -1,6 +1,7 @@
 // Small square checkbox primitive matching the QBZ dark theme.
 
 import { Theme } from "../foundation/semantic-colors.slint";
+import { QbzIcon } from "QbzIcon.slint";
 
 export component QbzCheckbox inherits Rectangle {
     in-out property <bool> checked: false;
@@ -13,14 +14,14 @@ export component QbzCheckbox inherits Rectangle {
     border-width: root.checked ? 0px : 1.5px;
     border-color: Theme.text-muted;
 
-    Text {
-        text: "✓";
+    QbzIcon {
+        source: @image-url("../assets/icons/check.svg");
         visible: root.checked;
-        color: Theme.accent-text;
-        font-size: 13px;
-        font-weight: 700;
-        horizontal-alignment: center;
-        vertical-alignment: center;
+        width: 12px;
+        height: 12px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        tint: Theme.accent-text;
     }
 
     TouchArea {

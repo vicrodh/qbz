@@ -9,9 +9,10 @@ import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
 import { DiscoverSection } from "../state.slint";
 import { AlbumCard } from "AlbumCard.slint";
+import { QbzIcon } from "../primitives/QbzIcon.slint";
 
 component NavButton inherits Rectangle {
-    in property <string> glyph;
+    in property <image> icon;
     in property <bool> enabled: true;
     callback clicked();
 
@@ -23,12 +24,13 @@ component NavButton inherits Rectangle {
         ? Theme.surface-hover
         : Theme.surface-elevated;
 
-    Text {
-        text: root.glyph;
-        color: root.enabled ? Theme.text-primary : Theme.text-muted;
-        font-size: 16px;
-        horizontal-alignment: center;
-        vertical-alignment: center;
+    QbzIcon {
+        source: root.icon;
+        width: 15px;
+        height: 15px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        tint: root.enabled ? Theme.text-primary : Theme.text-muted;
     }
 
     ta := TouchArea {
@@ -77,7 +79,7 @@ export component Carousel inherits VerticalLayout {
             VerticalLayout {
                 alignment: center;
                 NavButton {
-                    glyph: "‹";
+                    icon: @image-url("../assets/icons/chevron-left.svg");
                     enabled: root.current-page > 0;
                     clicked => {
                         root.page = root.current-page - 1;
@@ -87,7 +89,7 @@ export component Carousel inherits VerticalLayout {
             VerticalLayout {
                 alignment: center;
                 NavButton {
-                    glyph: "›";
+                    icon: @image-url("../assets/icons/chevron-right.svg");
                     enabled: root.current-page < root.page-count - 1;
                     clicked => {
                         root.page = root.current-page + 1;

@@ -10,10 +10,11 @@ import { Typography } from "../foundation/typography.slint";
 import { Radius } from "../foundation/radius.slint";
 import { Spacing } from "../foundation/spacing.slint";
 import { AlbumState, AlbumTrackItem, NavState } from "../state.slint";
+import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { ScrollView } from "std-widgets.slint";
 
 component CircleAction inherits Rectangle {
-    in property <string> glyph;
+    in property <image> icon;
     in property <bool> primary: false;
     in property <length> diameter: 40px;
     callback clicked();
@@ -25,12 +26,13 @@ component CircleAction inherits Rectangle {
         ? (ta.has-hover ? Theme.accent-hover : Theme.accent)
         : (ta.has-hover ? Theme.surface-hover : Theme.surface-elevated);
 
-    Text {
-        text: root.glyph;
-        color: root.primary ? Theme.accent-text : Theme.text-secondary;
-        font-size: 16px;
-        horizontal-alignment: center;
-        vertical-alignment: center;
+    QbzIcon {
+        source: root.icon;
+        width: 17px;
+        height: 17px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        tint: root.primary ? Theme.accent-text : Theme.text-secondary;
     }
 
     ta := TouchArea {
@@ -133,6 +135,7 @@ export component AlbumPageView inherits Rectangle {
     background: Theme.surface-main;
 
     ScrollView {
+        horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
         VerticalLayout {
             padding-left: 24px;
             padding-right: 24px;
@@ -151,11 +154,14 @@ export component AlbumPageView inherits Rectangle {
                 }
                 back-row := HorizontalLayout {
                     spacing: 6px;
-                    Text {
-                        text: "‹";
-                        color: back.has-hover ? Theme.text-secondary : Theme.text-muted;
-                        font-size: 18px;
-                        vertical-alignment: center;
+                    VerticalLayout {
+                        alignment: center;
+                        QbzIcon {
+                            source: @image-url("../assets/icons/arrow-left.svg");
+                            width: 16px;
+                            height: 16px;
+                            tint: back.has-hover ? Theme.text-secondary : Theme.text-muted;
+                        }
                     }
                     Text {
                         text: @tr("Back");
@@ -222,18 +228,22 @@ export component AlbumPageView inherits Rectangle {
                     HorizontalLayout {
                         alignment: start;
                         spacing: 12px;
-                        CircleAction { glyph: "▶"; primary: true; diameter: 44px; }
-                        VerticalLayout {
-                            alignment: center;
-                            CircleAction { glyph: "⇄"; }
+                        CircleAction {
+                            icon: @image-url("../assets/icons/play.svg");
+                            primary: true;
+                            diameter: 44px;
                         }
                         VerticalLayout {
                             alignment: center;
-                            CircleAction { glyph: "♡"; }
+                            CircleAction { icon: @image-url("../assets/icons/shuffle.svg"); }
                         }
                         VerticalLayout {
                             alignment: center;
-                            CircleAction { glyph: "⋯"; }
+                            CircleAction { icon: @image-url("../assets/icons/heart.svg"); }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            CircleAction { icon: @image-url("../assets/icons/ellipsis.svg"); }
                         }
                     }
                 }

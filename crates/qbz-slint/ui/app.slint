@@ -10,7 +10,7 @@ import { LoginScreen } from "login/LoginScreen.slint";
 import { AppShell } from "shell/AppShell.slint";
 
 // Re-export the state globals so the Rust layer can populate them.
-export { HomeState, AlbumState, NavState } from "state.slint";
+export { HomeState, AlbumState, NavState, SessionState } from "state.slint";
 
 // Which top-level screen is shown. The app starts on `splash` while it
 // restores a saved session, then resolves to `shell` or `login`.
@@ -32,6 +32,8 @@ export component AppWindow inherits Window {
     callback start-offline();
     callback open-tos();
     callback open-album(string);
+    callback logout();
+    callback close-app();
 
     if root.screen == AppScreen.splash: SplashScreen { }
 
@@ -53,6 +55,12 @@ export component AppWindow inherits Window {
     if root.screen == AppScreen.shell: AppShell {
         open-album(id) => {
             root.open-album(id);
+        }
+        logout => {
+            root.logout();
+        }
+        close-app => {
+            root.close-app();
         }
     }
 }

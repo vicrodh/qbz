@@ -10,6 +10,7 @@ import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
 import { HomeState } from "../state.slint";
 import { Carousel } from "Carousel.slint";
+import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { ScrollView } from "std-widgets.slint";
 
 component Tab inherits Rectangle {
@@ -50,8 +51,18 @@ component GenreButton inherits Rectangle {
     background: ta.has-hover ? Theme.surface-hover : Theme.surface-elevated;
 
     HorizontalLayout {
-        padding-left: 14px;
+        padding-left: 12px;
         padding-right: 14px;
+        spacing: 7px;
+        VerticalLayout {
+            alignment: center;
+            QbzIcon {
+                source: @image-url("../assets/icons/list-filter.svg");
+                width: 14px;
+                height: 14px;
+                tint: Theme.text-secondary;
+            }
+        }
         Text {
             text: @tr("Filter by genre");
             color: Theme.text-secondary;
@@ -76,12 +87,13 @@ component GearButton inherits Rectangle {
     border-radius: 4px;
     background: ta.has-hover ? Theme.surface-hover : transparent;
 
-    Text {
-        text: "⚙";
-        color: ta.has-hover ? Theme.text-primary : Theme.text-muted;
-        font-size: 17px;
-        horizontal-alignment: center;
-        vertical-alignment: center;
+    QbzIcon {
+        source: @image-url("../assets/icons/settings.svg");
+        width: 18px;
+        height: 18px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        tint: ta.has-hover ? Theme.text-primary : Theme.text-muted;
     }
 
     ta := TouchArea {
@@ -144,6 +156,7 @@ export component HomeView inherits Rectangle {
         // --- Scrollable sections -----------------------------------------
         ScrollView {
             vertical-stretch: 1;
+            horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
             VerticalLayout {
                 padding: 32px;
                 spacing: 28px;

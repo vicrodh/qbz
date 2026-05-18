@@ -1,13 +1,13 @@
-// Left navigation sidebar — playlists list plus the user card.
+// Left navigation sidebar — the playlists list.
 //
 // The playlist list is empty until real playlist data is wired (the
-// sidebar is a later milestone). No placeholder/fixture rows.
+// sidebar is a later milestone). The user element now lives in the
+// header, not at the bottom of the sidebar.
 
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Spacing } from "../foundation/spacing.slint";
-import { Typography } from "../foundation/typography.slint";
 import { Layout } from "../foundation/layout.slint";
-import { Radius } from "../foundation/radius.slint";
+import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { ScrollView } from "std-widgets.slint";
 
 export component Sidebar inherits Rectangle {
@@ -29,65 +29,24 @@ export component Sidebar inherits Rectangle {
                 vertical-alignment: center;
                 horizontal-stretch: 1;
             }
-            Text {
-                text: "+";
-                color: Theme.text-muted;
-                font-size: 18px;
-                vertical-alignment: center;
+            VerticalLayout {
+                alignment: center;
+                QbzIcon {
+                    source: @image-url("../assets/icons/plus.svg");
+                    width: 16px;
+                    height: 16px;
+                    tint: Theme.text-muted;
+                }
             }
         }
 
         ScrollView {
             vertical-stretch: 1;
+            horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
             VerticalLayout {
                 spacing: 2px;
                 // Real playlist rows are populated when the sidebar
                 // milestone wires playlist data. No fixtures.
-            }
-        }
-
-        Rectangle {
-            height: 56px;
-            border-radius: Radius.md;
-            background: Theme.surface-elevated;
-
-            HorizontalLayout {
-                padding: 10px;
-                spacing: Spacing.sm;
-
-                Rectangle {
-                    width: 36px;
-                    height: 36px;
-                    border-radius: Radius.pill;
-                    background: Theme.accent;
-                    Text {
-                        text: "Q";
-                        color: Theme.accent-text;
-                        font-weight: Typography.semibold;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                }
-                VerticalLayout {
-                    alignment: center;
-                    horizontal-stretch: 1;
-                    Text {
-                        text: "QBZ User";
-                        color: Theme.text-primary;
-                        font-size: Typography.body;
-                    }
-                    Text {
-                        text: "QBZ MVP";
-                        color: Theme.text-muted;
-                        font-size: 11px;
-                    }
-                }
-                Text {
-                    text: "⚙";
-                    color: Theme.text-muted;
-                    font-size: 16px;
-                    vertical-alignment: center;
-                }
             }
         }
     }

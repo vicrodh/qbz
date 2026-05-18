@@ -40,8 +40,10 @@ async fn enter_shell(
     runtime: Arc<AppRuntime<SlintAdapter>>,
     weak: slint::Weak<AppWindow>,
     image_cache: artwork::ImageCache,
+    user_name: String,
 ) {
-    let _ = weak.upgrade_in_event_loop(|w| {
+    let _ = weak.upgrade_in_event_loop(move |w| {
+        w.global::<SessionState>().set_user_name(user_name.into());
         w.global::<HomeState>().set_loading(true);
         w.set_screen(AppScreen::Shell);
     });
@@ -112,9 +114,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 log::error!("[qbz-slint] core init failed: {e}");
             }
             match auth::restore_saved_session(&runtime).await {
-                Ok(Some(user_id)) => {
+                Ok(Some((user_id, user_name))) => {
                     log::info!("[qbz-slint] session restored for user {user_id}");
-                    enter_shell(runtime, weak, image_cache).await;
+                    enter_shell(runtime, weak, image_cache, user_name).await;
                 }
                 Ok(None) => {
                     log::info!("[qbz-slint] no saved session — showing login");
@@ -142,9 +144,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let image_cache = image_cache.clone();
             handle.spawn(async move {
                 match auth::login_via_system_browser(&runtime).await {
-                    Ok(user_id) => {
+                    Ok((user_id, user_name)) => {
                         log::info!("[qbz-slint] authenticated as user {user_id}");
-                        enter_shell(runtime, weak, image_cache).await;
+                        enter_shell(runtime, weak, image_cache, user_name).await;
                     }
                     Err(e) => log::error!("[qbz-slint] sign-in failed: {e}"),
                 }
@@ -230,6 +232,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             });
         });
     }
+
+    // Log out: clear the session and return to the login screen.
+    {
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window.on_logout(move || {
+            let runtime = runtime.clone();
+            let weak = weak.clone();
+            handle.spawn(async move {
+                if let Err(e) = auth::logout(&runtime).await {
+                    log::error!("[qbz-slint] logout failed: {e}");
+                }
+                let _ = weak.upgrade_in_event_loop(|w| {
+                    w.global::<NavState>().set_showing_album(false);
+                    w.global::<SessionState>().set_user_name("".into());
+                    w.set_screen(AppScreen::Login);
+                });
+            });
+        });
+    }
+
+    window.on_close_app(|| {
+        log::info!("[qbz-slint] closing");
+        let _ = slint::quit_event_loop();
+    });
 
     window.on_open_tos(|| {
         dispatch(AppCommand::OpenTermsOfService);
