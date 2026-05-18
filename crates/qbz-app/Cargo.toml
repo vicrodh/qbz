@@ -6,6 +6,10 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+qbz-models = { path = "../qbz-models" }
+qbz-audio = { path = "../qbz-audio" }
+qbz-player = { path = "../qbz-player" }
+qbz-core = { path = "../qbz-core" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }

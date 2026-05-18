@@ -4,5 +4,6 @@ pub mod graphics_detection;
 pub mod playback_context;
 pub mod runtime;
 pub mod session_store;
+pub mod shell;
 pub mod settings;
 pub mod user_data;
