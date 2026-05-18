@@ -9,8 +9,8 @@
 //! pulls in the generated Rust bindings.
 //!
 //! Status: foundation tokens, login screen, app shell, functional
-//! system-browser OAuth, and a real Discover / Home view fed by the
-//! Qobuz discover index.
+//! system-browser OAuth, saved-session restore, and a real Discover /
+//! Home view fed by the Qobuz discover index with cached artwork.
 
 slint::include_modules!();
 
@@ -33,6 +33,59 @@ fn dispatch(command: AppCommand) {
     log::info!("[qbz-slint] AppCommand::{} dispatched", command.id());
 }
 
+/// Reveal the shell and load the Discover / Home view with real data,
+/// then kick off cached artwork downloads.
+async fn enter_shell(
+    runtime: Arc<AppRuntime<SlintAdapter>>,
+    weak: slint::Weak<AppWindow>,
+    image_cache: artwork::ImageCache,
+) {
+    let _ = weak.upgrade_in_event_loop(|w| {
+        w.global::<HomeState>().set_loading(true);
+        w.set_screen(AppScreen::Shell);
+    });
+
+    match home::load_home(&runtime).await {
+        Ok(sections) => {
+            // Collect artwork jobs before the data is consumed by
+            // apply_sections.
+            let jobs: Vec<artwork::ArtworkJob> = sections
+                .iter()
+                .enumerate()
+                .flat_map(|(section_idx, section)| {
+                    section
+                        .albums
+                        .iter()
+                        .enumerate()
+                        .filter_map(move |(album_idx, card)| {
+                            if card.artwork_url.is_empty() {
+                                None
+                            } else {
+                                Some(artwork::ArtworkJob {
+                                    section_idx,
+                                    album_idx,
+                                    url: card.artwork_url.clone(),
+                                })
+                            }
+                        })
+                })
+                .collect();
+            let weak_for_artwork = weak.clone();
+            let _ = weak.upgrade_in_event_loop(move |w| {
+                home::apply_sections(&w, sections);
+                w.global::<HomeState>().set_loading(false);
+            });
+            artwork::spawn_loads(jobs, weak_for_artwork, image_cache);
+        }
+        Err(e) => {
+            log::error!("[qbz-slint] discover load failed: {e}");
+            let _ = weak.upgrade_in_event_loop(|w| {
+                w.global::<HomeState>().set_loading(false);
+            });
+        }
+    }
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
@@ -46,18 +99,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let image_cache = artwork::open_cache();
     artwork::spawn_evict(image_cache.clone());
 
-    // Extract Qobuz bundle tokens in the background so OAuth is ready
-    // by the time the user signs in.
+    // Startup: initialize the core, then try to restore a saved session.
+    // A valid saved token jumps straight to the shell; otherwise the
+    // login screen stays.
     {
         let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let image_cache = image_cache.clone();
         tokio_rt.spawn(async move {
             if let Err(e) = runtime.init().await {
                 log::error!("[qbz-slint] core init failed: {e}");
             }
+            match auth::restore_saved_session(&runtime).await {
+                Ok(Some(user_id)) => {
+                    log::info!("[qbz-slint] session restored for user {user_id}");
+                    enter_shell(runtime, weak, image_cache).await;
+                }
+                Ok(None) => log::info!("[qbz-slint] no saved session — showing login"),
+                Err(e) => log::error!("[qbz-slint] session restore failed: {e}"),
+            }
         });
     }
 
-    // Sign in via the system browser → real OAuth → Discover/Home.
+    // Sign in via the system browser → real OAuth → shell.
     // "Sign in via Browser" and "Use your system browser instead" are the
     // same flow in the MVP (the in-app webview path is intentionally absent).
     let on_browser_login = {
@@ -70,55 +134,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let weak = weak.clone();
             let image_cache = image_cache.clone();
             handle.spawn(async move {
-                let user_id = match auth::login_via_system_browser(&runtime).await {
-                    Ok(user_id) => user_id,
-                    Err(e) => {
-                        log::error!("[qbz-slint] sign-in failed: {e}");
-                        return;
+                match auth::login_via_system_browser(&runtime).await {
+                    Ok(user_id) => {
+                        log::info!("[qbz-slint] authenticated as user {user_id}");
+                        enter_shell(runtime, weak, image_cache).await;
                     }
-                };
-                log::info!("[qbz-slint] authenticated as user {user_id}");
-
-                let _ = weak.upgrade_in_event_loop(move |w| {
-                    w.global::<HomeState>().set_loading(true);
-                    w.set_screen(AppScreen::Shell);
-                });
-
-                match home::load_home(&runtime).await {
-                    Ok(sections) => {
-                        // Collect artwork jobs before the data is consumed
-                        // by apply_sections.
-                        let jobs: Vec<artwork::ArtworkJob> = sections
-                            .iter()
-                            .enumerate()
-                            .flat_map(|(section_idx, section)| {
-                                section.albums.iter().enumerate().filter_map(
-                                    move |(album_idx, card)| {
-                                        if card.artwork_url.is_empty() {
-                                            None
-                                        } else {
-                                            Some(artwork::ArtworkJob {
-                                                section_idx,
-                                                album_idx,
-                                                url: card.artwork_url.clone(),
-                                            })
-                                        }
-                                    },
-                                )
-                            })
-                            .collect();
-                        let _ = weak.upgrade_in_event_loop(move |w| {
-                            home::apply_sections(&w, sections);
-                            w.global::<HomeState>().set_loading(false);
-                        });
-                        artwork::spawn_loads(jobs, weak.clone(), image_cache.clone());
-                    }
-                    Err(e) => {
-                        log::error!("[qbz-slint] discover load failed: {e}");
-                        let _ = weak.upgrade_in_event_loop(|w| {
-                            w.global::<HomeState>().set_loading(false);
-                        });
-                    }
+                    Err(e) => log::error!("[qbz-slint] sign-in failed: {e}"),
                 }
             });
         }
@@ -166,7 +187,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
-    log::info!("[qbz-slint] window ready — login screen");
+    log::info!("[qbz-slint] window ready");
     window.run()?;
     Ok(())
 }

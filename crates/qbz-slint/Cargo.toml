@@ -24,6 +24,7 @@ qbz-app = { path = "../qbz-app" }
 qbz-core = { path = "../qbz-core" }
 qbz-models = { path = "../qbz-models" }
 qbz-cache = { path = "../qbz-cache" }
+qbz-credentials = { path = "../qbz-credentials" }
 
 [build-dependencies]
 slint-build = "1"

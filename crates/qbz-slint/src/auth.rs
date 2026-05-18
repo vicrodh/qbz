@@ -68,6 +68,7 @@ where
             .map_err(|e| e.to_string())?
     };
     let user_id = session.user_id;
+    let token = session.user_auth_token.clone();
 
     // Emit LoggedIn through the core (idempotent set_session).
     core.set_session(session).await.map_err(|e| e.to_string())?;
@@ -75,8 +76,53 @@ where
     // Activate the per-user session (creates dirs, opens the session store).
     runtime.activate(user_id).await?;
 
+    // Persist the token so the next launch restores the session silently.
+    if let Err(e) = qbz_credentials::save_oauth_token(&token) {
+        log::warn!("[qbz-slint] failed to persist OAuth token: {e}");
+    }
+
     log::info!("[qbz-slint] login complete for user {user_id}");
     Ok(user_id)
+}
+
+/// Restore a previously saved session from the encrypted token store
+/// (keyring + AES-256-GCM file — the same store the Tauri app uses).
+///
+/// Returns `Ok(Some(user_id))` when a saved token is valid and the session
+/// is activated, `Ok(None)` when there is no token. A token that exists
+/// but is rejected by Qobuz is cleared and treated as `None`.
+pub async fn restore_saved_session<A>(runtime: &Arc<AppRuntime<A>>) -> Result<Option<u64>, String>
+where
+    A: FrontendAdapter + Send + Sync + 'static,
+{
+    let token = match qbz_credentials::load_oauth_token() {
+        Ok(Some(token)) => token,
+        Ok(None) => return Ok(None),
+        Err(e) => {
+            log::warn!("[qbz-slint] could not read saved token: {e}");
+            return Ok(None);
+        }
+    };
+
+    let core = runtime.core();
+    if !core.is_api_initialized().await {
+        core.try_init_api().await.map_err(|e| e.to_string())?;
+    }
+
+    match core.login_with_token(&token).await {
+        Ok(session) => {
+            let user_id = session.user_id;
+            core.set_session(session).await.map_err(|e| e.to_string())?;
+            runtime.activate(user_id).await?;
+            log::info!("[qbz-slint] restored saved session for user {user_id}");
+            Ok(Some(user_id))
+        }
+        Err(e) => {
+            log::warn!("[qbz-slint] saved token rejected, clearing: {e}");
+            let _ = qbz_credentials::clear_oauth_token();
+            Ok(None)
+        }
+    }
 }
 
 /// Accept connections until one carries the OAuth code, replying with a
