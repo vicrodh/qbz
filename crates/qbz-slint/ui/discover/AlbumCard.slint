@@ -29,6 +29,15 @@ export component AlbumCard inherits Rectangle {
             background: Theme.surface-elevated;
             clip: true;
 
+            // Cover art. Empty until the artwork pipeline resolves it,
+            // leaving the elevated placeholder visible underneath.
+            Image {
+                width: 100%;
+                height: 100%;
+                source: root.album.artwork;
+                image-fit: cover;
+            }
+
             if root.album.ribbon != "": Rectangle {
                 x: 0px;
                 y: parent.height - self.height - 8px;

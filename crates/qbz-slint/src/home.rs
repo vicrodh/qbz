@@ -177,6 +177,7 @@ pub fn apply_sections(window: &AppWindow, data: Vec<SectionData>) {
                     ribbon: card.ribbon.into(),
                     ribbon_kind: card.ribbon_kind.into(),
                     artwork_url: card.artwork_url.into(),
+                    artwork: slint::Image::default(),
                 })
                 .collect();
             DiscoverSection {

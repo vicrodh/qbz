@@ -15,6 +15,7 @@
 slint::include_modules!();
 
 mod adapter;
+mod artwork;
 mod auth;
 mod commands;
 mod home;
@@ -81,10 +82,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 match home::load_home(&runtime).await {
                     Ok(sections) => {
+                        // Collect artwork jobs before the data is consumed
+                        // by apply_sections.
+                        let jobs: Vec<artwork::ArtworkJob> = sections
+                            .iter()
+                            .enumerate()
+                            .flat_map(|(section_idx, section)| {
+                                section.albums.iter().enumerate().filter_map(
+                                    move |(album_idx, card)| {
+                                        if card.artwork_url.is_empty() {
+                                            None
+                                        } else {
+                                            Some(artwork::ArtworkJob {
+                                                section_idx,
+                                                album_idx,
+                                                url: card.artwork_url.clone(),
+                                            })
+                                        }
+                                    },
+                                )
+                            })
+                            .collect();
                         let _ = weak.upgrade_in_event_loop(move |w| {
                             home::apply_sections(&w, sections);
                             w.global::<HomeState>().set_loading(false);
                         });
+                        artwork::spawn_loads(jobs, weak.clone());
                     }
                     Err(e) => {
                         log::error!("[qbz-slint] discover load failed: {e}");
