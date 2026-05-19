@@ -103,7 +103,10 @@ fn map_album(album: Album) -> AlbumData {
         .as_deref()
         .map(strip_html)
         .unwrap_or_default();
-    let description_short = truncate_words(&description, 200);
+    // The header description fills the full width to the right of the
+    // artwork, so a longer truncation keeps it from looking like a thin
+    // strip; the Read more modal still holds the complete text.
+    let description_short = truncate_words(&description, 360);
     let artwork_url = album.image.best().cloned().unwrap_or_default();
     let label = album
         .label

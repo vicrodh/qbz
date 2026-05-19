@@ -426,6 +426,12 @@ export component AlbumPageView inherits Rectangle {
                     // with a Read more link to the full modal.
                     if AlbumState.description != "": Rectangle { height: 12px; }
                     if AlbumState.description != "": Text {
+                        // Explicit width so the text fills the whole band
+                        // to the right of the artwork instead of wrapping
+                        // narrow and leaving dead space. Bound to root.width
+                        // (not the parent layout) to avoid a binding loop:
+                        // page padding 32+32, artwork 224, header gap 32.
+                        width: root.width - 320px;
                         text: AlbumState.description-short;
                         color: Theme.text-secondary;
                         font-size: Typography.legal;
