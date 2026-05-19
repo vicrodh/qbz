@@ -247,7 +247,10 @@ export component HeaderBar inherits Rectangle {
 
     // --- Tabs (anchored left) ----------------------------------------------
     tabs := HorizontalLayout {
-        x: Spacing.md;
+        // xs (not md): the sidebar toggle is a bare icon with ~10px of
+        // breathing room to the Discover tab; the window-edge margin is
+        // matched to that so the toggle glyph sits symmetrically.
+        x: Spacing.xs;
         y: (root.height - self.height) / 2;
         height: 30px;
         spacing: 2px;
