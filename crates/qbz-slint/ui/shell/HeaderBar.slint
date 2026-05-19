@@ -13,7 +13,7 @@ import { Spacing } from "../foundation/spacing.slint";
 import { Typography } from "../foundation/typography.slint";
 import { Layout } from "../foundation/layout.slint";
 import { Radius } from "../foundation/radius.slint";
-import { SessionState, NavState, ContentView, ShellState } from "../state.slint";
+import { SessionState, NavState, ContentView, ShellState, HeaderMenuState, NavMenuEntry } from "../state.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 
 // Sidebar collapse toggle — bare bright icon, no background. Sits at
@@ -144,115 +144,44 @@ component MenuItem inherits Rectangle {
     }
 }
 
-// One entry of a nav-tab dropdown.
-struct NavMenuEntry {
-    label: string,
-    icon: image,
-    has-glyph: bool,
-}
-
-// A menu row for the nav-tab dropdowns, with an optional leading glyph.
-component NavMenuItem inherits Rectangle {
-    in property <string> label;
-    in property <image> icon;
-    in property <bool> has-glyph: false;
-    callback clicked();
-    // Fires whenever the pointer is over the row — drives the dropdown's
-    // idle-close timer reset.
-    callback hovered();
-
-    height: 32px;
-    background: ta.has-hover ? Theme.surface-hover : transparent;
-
-    HorizontalLayout {
-        padding-left: 14px;
-        padding-right: 22px;
-        spacing: 9px;
-        if root.has-glyph: VerticalLayout {
-            alignment: center;
-            QbzIcon {
-                source: root.icon;
-                width: 14px;
-                height: 14px;
-                tint: Theme.text-secondary;
-            }
-        }
-        Text {
-            text: root.label;
-            color: Theme.text-secondary;
-            font-size: 13px;
-            vertical-alignment: center;
-            horizontal-stretch: 1;
-        }
-    }
-
-    ta := TouchArea {
-        mouse-cursor: pointer;
-        clicked => {
-            root.clicked();
-        }
-        changed has-hover => {
-            if (self.has-hover) {
-                root.hovered();
-            }
-        }
-        moved => {
-            root.hovered();
-        }
-    }
-}
-
-// A nav tab plus its dropdown menu. Clicking or hovering the tab opens a
-// PopupWindow positioned just below it, styled like the hamburger menu.
+// A nav tab plus its dropdown menu.
 //
-// Single-open is enforced by Slint itself: only one PopupWindow can be
-// open per window, so calling show() on another tab's menu closes the
-// previous one automatically — sweeping the pointer across tabs always
-// leaves just one menu open.
+// The tab no longer owns a PopupWindow — a PopupWindow grabs the pointer
+// while open, so hovering a sibling tab delivered no hover event and the
+// menus could not be hover-switched. Instead, hovering or clicking the
+// tab writes this tab's identity (index, header x-position, menu rows,
+// home-item) into the HeaderMenuState global. The actual menu panel is
+// drawn by HeaderMenuOverlay, a late child of the AppShell root, so it
+// renders on top of the content area and does not grab the pointer.
 //
-// Idle-close: an idle-timer (1.5s) closes the menu when the pointer has
-// not interacted with it. The timer is (re)started whenever the menu is
-// opened and whenever the pointer hovers/moves over a menu row.
-//
-// Menu rows are visual placeholders for now; the optional `home-item`
-// index marks the one row that keeps the app on the working Home view.
+// Hovering a different tab simply overwrites HeaderMenuState, so the new
+// menu opens and the previous one closes instantly. Single-open is
+// automatic — there is one global `open-index`.
 component NavTabWithMenu inherits Rectangle {
     in property <image> icon;
     in property <string> label;
     in property <bool> active: false;
     in property <bool> show-icon: true;
     in property <[NavMenuEntry]> items;
+    // This tab's index (0..3) — written into HeaderMenuState.open-index.
+    in property <int> tab-index;
     // Index of the row wired to Home (-1 = none). Clicking it switches
     // to ContentView.home; all other rows are harmless no-ops.
     in property <int> home-item: -1;
 
-    // True while this tab's menu is open — gates the idle-close timer.
-    property <bool> menu-open: false;
-
     width: tab.width;
     height: 30px;
 
-    // Opens the menu and (re)arms the idle-close countdown.
+    // Publishes this tab's menu into the shared overlay state. The
+    // overlay aligns the panel under `anchor-x`; `absolute-position`
+    // resolves to a window-relative coordinate, which is what the
+    // AppShell-level overlay needs (the tab itself sits inside the
+    // header's tab-row layout, several offsets deep).
     function open-menu() {
-        root.menu-open = true;
-        idle-timer.running = true;
-        idle-timer.restart();
-        menu.show();
-    }
-
-    // (Re)arms the idle-close countdown — called on pointer activity
-    // inside the menu. Exposed as a function so repeated menu rows can
-    // reach the timer, which lives in this component's scope.
-    function reset-idle() {
-        idle-timer.restart();
-    }
-
-    // Closes the menu and disarms the idle timer — called when a row is
-    // activated.
-    function close-menu() {
-        root.menu-open = false;
-        idle-timer.running = false;
-        menu.close();
+        HeaderMenuState.open-index = root.tab-index;
+        HeaderMenuState.anchor-x = root.absolute-position.x;
+        HeaderMenuState.items = root.items;
+        HeaderMenuState.home-item = root.home-item;
     }
 
     tab := NavTab {
@@ -263,60 +192,10 @@ component NavTabWithMenu inherits Rectangle {
         clicked => {
             root.open-menu();
         }
-        // Open the dropdown on hover, no click needed.
+        // Open the dropdown on hover, no click needed. Hovering a
+        // different tab overwrites the global → instant switch.
         hovered => {
             root.open-menu();
-        }
-    }
-
-    // Closes the menu after 1.5s of no pointer interaction with it.
-    idle-timer := Timer {
-        interval: 1500ms;
-        running: false;
-        triggered => {
-            self.running = false;
-            if (root.menu-open) {
-                root.menu-open = false;
-                menu.close();
-            }
-        }
-    }
-
-    menu := PopupWindow {
-        x: 0;
-        y: parent.height + 6px;
-        width: 188px;
-        height: menu-box.preferred-height;
-
-        menu-box := Rectangle {
-            background: Theme.surface-main;
-            border-radius: Radius.sm;
-            border-width: 1px;
-            border-color: Theme.border-muted;
-            drop-shadow-blur: 24px;
-            drop-shadow-color: Theme.card-shadow;
-            drop-shadow-offset-y: 6px;
-
-            VerticalLayout {
-                padding-top: 6px;
-                padding-bottom: 6px;
-                for entry[idx] in root.items: NavMenuItem {
-                    label: entry.label;
-                    icon: entry.icon;
-                    has-glyph: entry.has-glyph;
-                    clicked => {
-                        if (idx == root.home-item) {
-                            NavState.view = ContentView.home;
-                        }
-                        root.close-menu();
-                    }
-                    // Any pointer interaction with a row resets the
-                    // idle-close countdown.
-                    hovered => {
-                        root.reset-idle();
-                    }
-                }
-            }
         }
     }
 }
@@ -375,6 +254,7 @@ export component HeaderBar inherits Rectangle {
             SidebarToggle { }
         }
         NavTabWithMenu {
+            tab-index: 0;
             icon: @image-url("../assets/icons/compass.svg");
             label: @tr("Discover");
             active: true;
@@ -389,6 +269,7 @@ export component HeaderBar inherits Rectangle {
             home-item: 0;
         }
         NavTabWithMenu {
+            tab-index: 1;
             icon: @image-url("../assets/icons/music-library-2.svg");
             label: @tr("Library");
             show-icon: root.show-tab-icons;
@@ -401,6 +282,7 @@ export component HeaderBar inherits Rectangle {
             ];
         }
         NavTabWithMenu {
+            tab-index: 2;
             icon: @image-url("../assets/icons/hard-drive.svg");
             label: @tr("Local Library");
             show-icon: root.show-tab-icons;
@@ -412,6 +294,7 @@ export component HeaderBar inherits Rectangle {
             ];
         }
         NavTabWithMenu {
+            tab-index: 3;
             icon: @image-url("../assets/icons/cassette-tape.svg");
             label: @tr("My QBZ");
             show-icon: root.show-tab-icons;

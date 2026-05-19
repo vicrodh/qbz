@@ -149,6 +149,34 @@ export global SettingsState {
     in-out property <int> retry-behavior-index: 0;
 }
 
+// One entry of a nav-tab dropdown.
+export struct NavMenuEntry {
+    label: string,
+    icon: image,
+    has-glyph: bool,
+}
+
+// Header nav-tab dropdown state.
+//
+// The four header tabs (Discover / Library / Local Library / My QBZ) no
+// longer own a PopupWindow each — a PopupWindow grabs the pointer while
+// open, which blocks hover-switching between tabs. Instead a single
+// in-window overlay (HeaderMenuOverlay, a late child of the AppShell
+// root) draws the open tab's menu. Tabs write their identity into this
+// global on hover/click; hovering a different tab overwrites it, giving
+// an instant switch. `open-index` of -1 means no menu is open.
+export global HeaderMenuState {
+    // Which tab's menu is open: -1 = none, 0..3 = the tab index.
+    in-out property <int> open-index: -1;
+    // Header x-coordinate of the open tab, so the overlay aligns the
+    // menu panel under it.
+    in-out property <length> anchor-x: 0px;
+    // The open tab's menu rows.
+    in-out property <[NavMenuEntry]> items: [];
+    // Index of the row wired to Home (-1 = none); only Discover uses it.
+    in-out property <int> home-item: -1;
+}
+
 export global NavState {
     in-out property <ContentView> view: ContentView.home;
     // Browser-like history flags, driven by the Rust nav module.

@@ -1,0 +1,56 @@
+// A single row of a header nav-tab dropdown, with an optional leading
+// glyph. Shared by HeaderBar (tab definitions) and HeaderMenuOverlay
+// (the in-window menu panel that actually renders the rows).
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { QbzIcon } from "../primitives/QbzIcon.slint";
+
+export component NavMenuItem inherits Rectangle {
+    in property <string> label;
+    in property <image> icon;
+    in property <bool> has-glyph: false;
+    callback clicked();
+    // Fires whenever the pointer is over the row — drives the dropdown's
+    // idle-close timer reset.
+    callback hovered();
+
+    height: 32px;
+    background: ta.has-hover ? Theme.surface-hover : transparent;
+
+    HorizontalLayout {
+        padding-left: 14px;
+        padding-right: 22px;
+        spacing: 9px;
+        if root.has-glyph: VerticalLayout {
+            alignment: center;
+            QbzIcon {
+                source: root.icon;
+                width: 14px;
+                height: 14px;
+                tint: Theme.text-secondary;
+            }
+        }
+        Text {
+            text: root.label;
+            color: Theme.text-secondary;
+            font-size: 13px;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+        }
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked();
+        }
+        changed has-hover => {
+            if (self.has-hover) {
+                root.hovered();
+            }
+        }
+        moved => {
+            root.hovered();
+        }
+    }
+}
