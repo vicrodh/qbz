@@ -1,0 +1,197 @@
+// Playlist card — the album card's twin for playlists: a 162px cover (a
+// collage of up to four covers), a hover overlay with favorite / play /
+// more, and a title / subtitle stack. No quality badge, no award ribbon.
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Typography } from "../foundation/typography.slint";
+import { Radius } from "../foundation/radius.slint";
+import { Spacing } from "../foundation/spacing.slint";
+import { SearchPlaylistItem } from "../state.slint";
+import { QbzIcon } from "../primitives/QbzIcon.slint";
+import { ContextMenu } from "../primitives/ContextMenu.slint";
+import { ContextMenuItem } from "../primitives/ContextMenuItem.slint";
+import { PlaylistCollage } from "PlaylistCollage.slint";
+
+component OverlayButton inherits Rectangle {
+    in property <image> icon;
+    in property <bool> primary: false;
+    in property <length> diameter: 36px;
+    in property <length> icon-size: 16px;
+    out property <bool> hovered: ta.has-hover;
+    callback clicked();
+
+    width: root.diameter;
+    height: root.diameter;
+    border-radius: root.diameter / 2;
+    background: root.primary
+        ? (ta.has-hover ? #ffffffd6 : #ffffff)
+        : (ta.has-hover ? #ffffff3d : #ffffff24);
+    border-width: root.primary ? 0px : 1.5px;
+    border-color: #ffffffcc;
+
+    QbzIcon {
+        source: root.icon;
+        width: root.icon-size;
+        height: root.icon-size;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        tint: root.primary ? #000000 : #ffffff;
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+export component PlaylistCard inherits Rectangle {
+    in property <SearchPlaylistItem> playlist;
+    // kind ("playlist"), playlist id, action ("play" | "play-next" |
+    // "queue" | "favorite").
+    callback media-action(string, string, string);
+
+    width: 162px;
+    height: 210px;
+
+    property <bool> overlay-on: hover.has-hover
+        || fav-btn.hovered || play-btn.hovered || more-btn.hovered;
+
+    VerticalLayout {
+        alignment: start;
+        spacing: 0px;
+
+        // --- Cover collage + hover overlay -------------------------------
+        Rectangle {
+            width: 162px;
+            height: 162px;
+            border-radius: Radius.sm;
+            clip: true;
+
+            PlaylistCollage {
+                playlist: root.playlist;
+                size: 162px;
+            }
+
+            Rectangle {
+                width: 100%;
+                height: 100%;
+                background: #000000;
+                opacity: root.overlay-on ? 0.6 : 0.0;
+                animate opacity { duration: 150ms; }
+            }
+
+            hover := TouchArea {
+                width: 100%;
+                height: 100%;
+                mouse-cursor: pointer;
+                clicked => {
+                    root.media-action("playlist", root.playlist.id, "play");
+                }
+            }
+
+            HorizontalLayout {
+                x: 0px;
+                y: 95px;
+                width: 162px;
+                height: 44px;
+                alignment: center;
+                spacing: 12px;
+                opacity: root.overlay-on ? 1.0 : 0.0;
+                animate opacity { duration: 150ms; }
+
+                VerticalLayout {
+                    alignment: center;
+                    fav-btn := OverlayButton {
+                        icon: @image-url("../assets/icons/heart.svg");
+                        clicked => {
+                            root.media-action("playlist", root.playlist.id, "favorite");
+                        }
+                    }
+                }
+                play-btn := OverlayButton {
+                    icon: @image-url("../assets/icons/play-fill.svg");
+                    primary: true;
+                    diameter: 44px;
+                    icon-size: 18px;
+                    clicked => {
+                        root.media-action("playlist", root.playlist.id, "play");
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    more-btn := OverlayButton {
+                        icon: @image-url("../assets/icons/ellipsis.svg");
+                        clicked => {
+                            playlist-menu.show();
+                        }
+                    }
+                }
+            }
+
+            playlist-menu := PopupWindow {
+                x: 26px;
+                y: 56px;
+                width: 196px;
+                height: 109px;
+                ContextMenu {
+                    ContextMenuItem {
+                        icon: @image-url("../assets/icons/play.svg");
+                        label: @tr("Play");
+                        clicked => {
+                            root.media-action("playlist", root.playlist.id, "play");
+                        }
+                    }
+                    ContextMenuItem {
+                        icon: @image-url("../assets/icons/list-plus.svg");
+                        label: @tr("Play next");
+                        clicked => {
+                            root.media-action("playlist", root.playlist.id, "play-next");
+                        }
+                    }
+                    ContextMenuItem {
+                        icon: @image-url("../assets/icons/list-end.svg");
+                        label: @tr("Add to queue");
+                        clicked => {
+                            root.media-action("playlist", root.playlist.id, "queue");
+                        }
+                    }
+                    ContextMenuItem {
+                        icon: @image-url("../assets/icons/heart.svg");
+                        label: @tr("Add to favorites");
+                        clicked => {
+                            root.media-action("playlist", root.playlist.id, "favorite");
+                        }
+                    }
+                }
+            }
+        }
+
+        Rectangle { height: 6px; }
+
+        // --- Title / subtitle --------------------------------------------
+        VerticalLayout {
+            height: 42px;
+            spacing: 2px;
+            padding-left: Spacing.xs;
+            Text {
+                text: root.playlist.title;
+                height: 20px;
+                color: Theme.text-primary;
+                font-size: Typography.body;
+                font-weight: Typography.semibold;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+            Text {
+                text: root.playlist.subtitle;
+                height: 16px;
+                color: Theme.text-muted;
+                font-size: Typography.link;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+        }
+    }
+}

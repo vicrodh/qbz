@@ -1,6 +1,6 @@
-// Artist carousel — a title, prev/next page controls, and a clipped,
-// sliding track of artist cards. Same paging mechanism as Carousel, but
-// for artists (circular cards). Used by the search results All tab.
+// Artist carousel — title, "View all" link, prev/next page controls, and
+// a clipped sliding track of artist cards. Same paging mechanism as
+// Carousel. Used by the search results All tab.
 
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
@@ -39,14 +39,39 @@ component NavButton inherits Rectangle {
     }
 }
 
+component ViewAllLink inherits Rectangle {
+    callback clicked();
+    width: link-text.preferred-width + 16px;
+    height: 26px;
+    border-radius: 4px;
+    background: ta.has-hover ? Theme.surface-hover : transparent;
+    link-text := Text {
+        text: @tr("View all");
+        color: Theme.accent;
+        font-size: 14px;
+        font-weight: Typography.medium;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+    }
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
 export component ArtistCarousel inherits VerticalLayout {
     in property <string> title;
     in property <[SlimItem]> artists;
+    in property <bool> show-view-all: false;
     callback artist-clicked(string);
+    callback media-action(string, string, string);
+    callback view-all-clicked();
 
-    property <length> card-width: 160px;
-    property <length> card-height: 200px;
-    property <length> gap: 24px;
+    property <length> card-width: 170px;
+    property <length> card-height: 248px;
+    property <length> gap: 16px;
 
     property <int> count: root.artists.length;
     property <int> per-page: Math.max(
@@ -62,6 +87,7 @@ export component ArtistCarousel inherits VerticalLayout {
     spacing: 12px;
 
     HorizontalLayout {
+        spacing: 8px;
         Text {
             text: root.title;
             color: Theme.text-primary;
@@ -70,26 +96,31 @@ export component ArtistCarousel inherits VerticalLayout {
             vertical-alignment: center;
             horizontal-stretch: 1;
         }
-        HorizontalLayout {
-            spacing: 4px;
-            VerticalLayout {
-                alignment: center;
-                NavButton {
-                    icon: @image-url("../assets/icons/chevron-left.svg");
-                    enabled: root.current-page > 0;
-                    clicked => {
-                        root.page = root.current-page - 1;
-                    }
+        VerticalLayout {
+            alignment: center;
+            NavButton {
+                icon: @image-url("../assets/icons/chevron-left.svg");
+                enabled: root.current-page > 0;
+                clicked => {
+                    root.page = root.current-page - 1;
                 }
             }
-            VerticalLayout {
-                alignment: center;
-                NavButton {
-                    icon: @image-url("../assets/icons/chevron-right.svg");
-                    enabled: root.current-page < root.page-count - 1;
-                    clicked => {
-                        root.page = root.current-page + 1;
-                    }
+        }
+        VerticalLayout {
+            alignment: center;
+            NavButton {
+                icon: @image-url("../assets/icons/chevron-right.svg");
+                enabled: root.current-page < root.page-count - 1;
+                clicked => {
+                    root.page = root.current-page + 1;
+                }
+            }
+        }
+        if root.show-view-all: VerticalLayout {
+            alignment: center;
+            ViewAllLink {
+                clicked => {
+                    root.view-all-clicked();
                 }
             }
         }
@@ -112,6 +143,9 @@ export component ArtistCarousel inherits VerticalLayout {
                     artist: artist;
                     clicked(id) => {
                         root.artist-clicked(id);
+                    }
+                    media-action(k, i, a) => {
+                        root.media-action(k, i, a);
                     }
                 }
             }

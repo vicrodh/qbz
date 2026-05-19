@@ -5,6 +5,7 @@
 //! types into plain `Send` rows (the unit-tested layer), and
 //! `apply_search` writes the `SearchState` global on the Slint event loop.
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use qbz_app::shell::AppRuntime;
@@ -70,6 +71,8 @@ pub struct ArtistRow {
     pub name: String,
     pub subtitle: String,
     pub artwork_url: String,
+    /// Whether the user already follows (favorites) this artist.
+    pub following: bool,
 }
 
 /// A playlist result row, before it becomes a Slint `SearchPlaylistItem`.
@@ -78,7 +81,8 @@ pub struct PlaylistRow {
     pub id: String,
     pub title: String,
     pub subtitle: String,
-    pub artwork_url: String,
+    /// Up to four distinct cover URLs for the collage.
+    pub cover_urls: Vec<String>,
 }
 
 /// The most-popular hero entry.
@@ -143,6 +147,33 @@ fn year_of(date: Option<&str>) -> String {
     date.and_then(|d| d.get(0..4)).unwrap_or("").to_string()
 }
 
+/// Up to four distinct cover URLs for a playlist collage. Qobuz returns
+/// pre-built cover lists in `images300` / `images150` / `images`; the
+/// highest-resolution non-empty list wins.
+fn playlist_cover_urls(playlist: &Playlist) -> Vec<String> {
+    let source = [
+        &playlist.images300,
+        &playlist.images150,
+        &playlist.images,
+    ]
+    .into_iter()
+    .flatten()
+    .find(|v| !v.is_empty());
+
+    let mut out: Vec<String> = Vec::new();
+    if let Some(list) = source {
+        for url in list {
+            if !url.is_empty() && !out.contains(url) {
+                out.push(url.clone());
+            }
+            if out.len() == 4 {
+                break;
+            }
+        }
+    }
+    out
+}
+
 // ==================== Mappers (unit-tested) ====================
 
 pub fn map_album(album: Album) -> AlbumRow {
@@ -183,7 +214,7 @@ pub fn map_track(track: Track) -> TrackRow {
     }
 }
 
-pub fn map_artist(artist: &Artist) -> ArtistRow {
+pub fn map_artist(artist: &Artist, following: bool) -> ArtistRow {
     ArtistRow {
         id: artist.id.to_string(),
         name: artist.name.clone(),
@@ -196,17 +227,12 @@ pub fn map_artist(artist: &Artist) -> ArtistRow {
             .as_ref()
             .and_then(|i| i.best().cloned())
             .unwrap_or_default(),
+        following,
     }
 }
 
 pub fn map_playlist(playlist: Playlist) -> PlaylistRow {
-    let artwork_url = playlist
-        .images150
-        .as_ref()
-        .or(playlist.images.as_ref())
-        .or(playlist.images300.as_ref())
-        .and_then(|imgs| imgs.first().cloned())
-        .unwrap_or_default();
+    let cover_urls = playlist_cover_urls(&playlist);
     let mut subtitle = playlist.owner.name.clone();
     if playlist.tracks_count > 0 {
         if subtitle.is_empty() {
@@ -219,21 +245,29 @@ pub fn map_playlist(playlist: Playlist) -> PlaylistRow {
         id: playlist.id.to_string(),
         title: playlist.name,
         subtitle,
-        artwork_url,
+        cover_urls,
     }
 }
 
-fn map_most_popular(item: Option<MostPopularItem>) -> MostPopularRow {
+fn map_most_popular(item: Option<MostPopularItem>, favorite_artists: &HashSet<u64>) -> MostPopularRow {
     match item {
         Some(MostPopularItem::Albums(a)) => MostPopularRow::Album(map_album(a)),
-        Some(MostPopularItem::Artists(a)) => MostPopularRow::Artist(map_artist(&a)),
+        Some(MostPopularItem::Artists(a)) => {
+            let following = favorite_artists.contains(&a.id);
+            MostPopularRow::Artist(map_artist(&a, following))
+        }
         Some(MostPopularItem::Tracks(t)) => MostPopularRow::Track(map_track(t)),
         None => MostPopularRow::None,
     }
 }
 
-/// Map a combined-search result into plain `Send` data.
-pub fn map_search_all(query: &str, results: SearchAllResults) -> SearchData {
+/// Map a combined-search result into plain `Send` data. `favorite_artists`
+/// is the set of artist ids the user already follows.
+pub fn map_search_all(
+    query: &str,
+    results: SearchAllResults,
+    favorite_artists: &HashSet<u64>,
+) -> SearchData {
     SearchData {
         query: query.to_string(),
         albums_total: results.albums.total,
@@ -242,15 +276,21 @@ pub fn map_search_all(query: &str, results: SearchAllResults) -> SearchData {
         playlists_total: results.playlists.total,
         albums: results.albums.items.into_iter().map(map_album).collect(),
         tracks: results.tracks.items.into_iter().map(map_track).collect(),
-        artists: results.artists.items.iter().map(map_artist).collect(),
+        artists: results
+            .artists
+            .items
+            .iter()
+            .map(|a| map_artist(a, favorite_artists.contains(&a.id)))
+            .collect(),
         playlists: results.playlists.items.into_iter().map(map_playlist).collect(),
-        most_popular: map_most_popular(results.most_popular),
+        most_popular: map_most_popular(results.most_popular, favorite_artists),
     }
 }
 
 // ==================== Load (async, worker thread) ====================
 
-/// Run a combined search and map it to plain `Send` data.
+/// Run a combined search and map it to plain `Send` data. The search and
+/// the user's followed-artist set are fetched concurrently.
 pub async fn load_search<A>(
     runtime: &Arc<AppRuntime<A>>,
     query: &str,
@@ -260,13 +300,15 @@ where
 {
     // Plan A passes an empty blacklist; the blacklist module is migrated
     // separately (roadmap task #9).
-    let blacklist: std::collections::HashSet<u64> = std::collections::HashSet::new();
-    let results = runtime
-        .core()
-        .search_all(query, &blacklist)
-        .await
-        .map_err(|e| e.to_string())?;
-    Ok(map_search_all(query, results))
+    let blacklist: HashSet<u64> = HashSet::new();
+    let core = runtime.core();
+    let (results, favs) = tokio::join!(
+        core.search_all(query, &blacklist),
+        core.favorite_artist_ids(),
+    );
+    let results = results.map_err(|e| e.to_string())?;
+    let favs = favs.unwrap_or_default();
+    Ok(map_search_all(query, results, &favs))
 }
 
 // ==================== Apply (Slint event loop) ====================
@@ -308,16 +350,27 @@ fn artist_item(row: ArtistRow) -> SlimItem {
         rank: Default::default(),
         artwork_url: row.artwork_url.into(),
         artwork: slint::Image::default(),
+        following: row.following,
     }
 }
 
 fn playlist_item(row: PlaylistRow) -> SearchPlaylistItem {
+    let url = |i: usize| -> slint::SharedString {
+        row.cover_urls.get(i).cloned().unwrap_or_default().into()
+    };
     SearchPlaylistItem {
         id: row.id.into(),
         title: row.title.into(),
         subtitle: row.subtitle.into(),
-        artwork_url: row.artwork_url.into(),
-        artwork: slint::Image::default(),
+        cover_count: row.cover_urls.len().min(4) as i32,
+        url1: url(0),
+        url2: url(1),
+        url3: url(2),
+        url4: url(3),
+        cover1: slint::Image::default(),
+        cover2: slint::Image::default(),
+        cover3: slint::Image::default(),
+        cover4: slint::Image::default(),
     }
 }
 
@@ -379,6 +432,33 @@ pub fn reset_search(window: &AppWindow) {
     state.set_loading(true);
 }
 
+/// Mark an artist as followed in every `SearchState` list it appears in
+/// (results list + most-popular hero). Runs on the Slint event loop.
+pub fn mark_artist_followed(window: &AppWindow, artist_id: &str, following: bool) {
+    let state = window.global::<SearchState>();
+    if let Some(vm) = state
+        .get_artists()
+        .as_any()
+        .downcast_ref::<VecModel<SlimItem>>()
+    {
+        for i in 0..vm.row_count() {
+            if let Some(mut item) = vm.row_data(i) {
+                if item.id == artist_id {
+                    item.following = following;
+                    vm.set_row_data(i, item);
+                }
+            }
+        }
+    }
+    if state.get_most_popular_kind() == "artist" {
+        let mut mp = state.get_most_popular_artist();
+        if mp.id == artist_id {
+            mp.following = following;
+            state.set_most_popular_artist(mp);
+        }
+    }
+}
+
 // ==================== Load-more (pagination) ====================
 
 /// Which category a load-more request targets.
@@ -402,8 +482,8 @@ pub fn category_for_tab(tab: i32) -> Option<SearchCategory> {
     }
 }
 
-/// Map a filter-dropdown index to the Qobuz `search_type` value.
-/// Index 0 (No filter) maps to `None`.
+/// Map a filter index to the Qobuz `search_type` value. Index 0 maps to
+/// `None` (no filter).
 pub fn search_type_for_filter(index: i32) -> Option<String> {
     match index {
         1 => Some("MainArtist".into()),
@@ -459,12 +539,17 @@ where
             ))
         }
         SearchCategory::Artists => {
-            let page = core
-                .search_artists(query, PAGE_SIZE, offset, search_type)
-                .await
-                .map_err(|e| e.to_string())?;
+            let (page, favs) = tokio::join!(
+                core.search_artists(query, PAGE_SIZE, offset, search_type),
+                core.favorite_artist_ids(),
+            );
+            let page = page.map_err(|e| e.to_string())?;
+            let favs = favs.unwrap_or_default();
             Ok(MoreRows::Artists(
-                page.items.iter().map(map_artist).collect(),
+                page.items
+                    .iter()
+                    .map(|a| map_artist(a, favs.contains(&a.id)))
+                    .collect(),
             ))
         }
         SearchCategory::Playlists => {
@@ -558,42 +643,48 @@ pub fn replace_category(window: &AppWindow, more: MoreRows) {
 
 // ==================== Artwork jobs ====================
 
-/// Build artwork download jobs for a freshly applied `SearchData` — one
-/// per result row that carries a cover URL.
+/// Cover-download jobs for an album/track/artist row at `idx`.
+fn simple_job(target: ArtworkTarget, url: &str) -> Option<ArtworkJob> {
+    (!url.is_empty()).then(|| ArtworkJob {
+        target,
+        url: url.to_string(),
+    })
+}
+
+/// Playlist collage jobs — one per cover URL the row carries.
+fn playlist_jobs(idx: usize, urls: &[String], jobs: &mut Vec<ArtworkJob>) {
+    for (slot, url) in urls.iter().enumerate().take(4) {
+        if !url.is_empty() {
+            jobs.push(ArtworkJob {
+                target: ArtworkTarget::SearchPlaylistCover { idx, slot },
+                url: url.clone(),
+            });
+        }
+    }
+}
+
+/// Build artwork download jobs for a freshly applied `SearchData`.
 pub fn artwork_jobs(data: &SearchData) -> Vec<ArtworkJob> {
     let mut jobs = Vec::new();
     for (idx, row) in data.albums.iter().enumerate() {
-        if !row.artwork_url.is_empty() {
-            jobs.push(ArtworkJob {
-                target: ArtworkTarget::SearchAlbum { idx },
-                url: row.artwork_url.clone(),
-            });
-        }
+        jobs.extend(simple_job(ArtworkTarget::SearchAlbum { idx }, &row.artwork_url));
     }
     for (idx, row) in data.tracks.iter().enumerate() {
-        if !row.artwork_url.is_empty() {
-            jobs.push(ArtworkJob {
-                target: ArtworkTarget::SearchTrack { idx },
-                url: row.artwork_url.clone(),
-            });
-        }
+        jobs.extend(simple_job(ArtworkTarget::SearchTrack { idx }, &row.artwork_url));
     }
     for (idx, row) in data.artists.iter().enumerate() {
-        if !row.artwork_url.is_empty() {
-            jobs.push(ArtworkJob {
-                target: ArtworkTarget::SearchArtist { idx },
-                url: row.artwork_url.clone(),
-            });
-        }
+        jobs.extend(simple_job(ArtworkTarget::SearchArtist { idx }, &row.artwork_url));
     }
     for (idx, row) in data.playlists.iter().enumerate() {
-        if !row.artwork_url.is_empty() {
-            jobs.push(ArtworkJob {
-                target: ArtworkTarget::SearchPlaylist { idx },
-                url: row.artwork_url.clone(),
-            });
-        }
+        playlist_jobs(idx, &row.cover_urls, &mut jobs);
     }
+    let mp_url = match &data.most_popular {
+        MostPopularRow::Album(r) => r.artwork_url.as_str(),
+        MostPopularRow::Artist(r) => r.artwork_url.as_str(),
+        MostPopularRow::Track(r) => r.artwork_url.as_str(),
+        MostPopularRow::None => "",
+    };
+    jobs.extend(simple_job(ArtworkTarget::SearchMostPopular, mp_url));
     jobs
 }
 
@@ -604,42 +695,31 @@ pub fn artwork_jobs_for_more(more: &MoreRows, start: usize) -> Vec<ArtworkJob> {
     match more {
         MoreRows::Albums(rows) => {
             for (i, row) in rows.iter().enumerate() {
-                if !row.artwork_url.is_empty() {
-                    jobs.push(ArtworkJob {
-                        target: ArtworkTarget::SearchAlbum { idx: start + i },
-                        url: row.artwork_url.clone(),
-                    });
-                }
+                jobs.extend(simple_job(
+                    ArtworkTarget::SearchAlbum { idx: start + i },
+                    &row.artwork_url,
+                ));
             }
         }
         MoreRows::Tracks(rows) => {
             for (i, row) in rows.iter().enumerate() {
-                if !row.artwork_url.is_empty() {
-                    jobs.push(ArtworkJob {
-                        target: ArtworkTarget::SearchTrack { idx: start + i },
-                        url: row.artwork_url.clone(),
-                    });
-                }
+                jobs.extend(simple_job(
+                    ArtworkTarget::SearchTrack { idx: start + i },
+                    &row.artwork_url,
+                ));
             }
         }
         MoreRows::Artists(rows) => {
             for (i, row) in rows.iter().enumerate() {
-                if !row.artwork_url.is_empty() {
-                    jobs.push(ArtworkJob {
-                        target: ArtworkTarget::SearchArtist { idx: start + i },
-                        url: row.artwork_url.clone(),
-                    });
-                }
+                jobs.extend(simple_job(
+                    ArtworkTarget::SearchArtist { idx: start + i },
+                    &row.artwork_url,
+                ));
             }
         }
         MoreRows::Playlists(rows) => {
             for (i, row) in rows.iter().enumerate() {
-                if !row.artwork_url.is_empty() {
-                    jobs.push(ArtworkJob {
-                        target: ArtworkTarget::SearchPlaylist { idx: start + i },
-                        url: row.artwork_url.clone(),
-                    });
-                }
+                playlist_jobs(start + i, &row.cover_urls, &mut jobs);
             }
         }
     }
@@ -702,9 +782,10 @@ mod tests {
             tracks_appears_on: None,
             playlists: None,
         };
-        let row = map_artist(&artist);
+        let row = map_artist(&artist, true);
         assert_eq!(row.id, "7");
         assert_eq!(row.name, "Metallica");
         assert_eq!(row.subtitle, "12 albums");
+        assert!(row.following);
     }
 }

@@ -31,6 +31,8 @@ export struct SlimItem {
     rank: string,          // "" = no rank
     artwork-url: string,
     artwork: image,
+    // Artist follow state — drives the ArtistCard Follow button.
+    following: bool,
 }
 
 // Discover / Home screen state.
@@ -343,13 +345,21 @@ export struct SearchTrackItem {
     artwork: image,
 }
 
-// A playlist result row in search.
+// A playlist result in search. Qobuz returns up to four cover URLs per
+// playlist; the card renders them as a count-based collage.
 export struct SearchPlaylistItem {
     id: string,
     title: string,
     subtitle: string,      // owner name + track count
-    artwork-url: string,
-    artwork: image,
+    cover-count: int,      // number of cover images, 0-4
+    url1: string,
+    url2: string,
+    url3: string,
+    url4: string,
+    cover1: image,
+    cover2: image,
+    cover3: image,
+    cover4: image,
 }
 
 // Search results screen state. The Rust search controller populates the

@@ -863,6 +863,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         );
                     }
                 }
+                ("artist", "follow") => {
+                    let runtime = runtime.clone();
+                    let weak = weak.clone();
+                    let artist_id = id.clone();
+                    handle.spawn(async move {
+                        match runtime.core().add_favorite("artist", &artist_id).await {
+                            Ok(()) => {
+                                let _ = weak.upgrade_in_event_loop(move |w| {
+                                    search::mark_artist_followed(&w, &artist_id, true);
+                                });
+                            }
+                            Err(e) => {
+                                log::error!("[qbz-slint] follow artist failed: {e}");
+                            }
+                        }
+                    });
+                }
                 _ => {}
             }
         });

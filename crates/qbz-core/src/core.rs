@@ -770,6 +770,41 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
         Ok(ids)
     }
 
+    /// Fetch the set of the user's favorite (followed) artist IDs. Pages
+    /// through the favorites endpoint until exhausted. Used to reflect
+    /// follow state on artist cards.
+    pub async fn favorite_artist_ids(&self) -> Result<std::collections::HashSet<u64>, CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+
+        let mut ids = std::collections::HashSet::new();
+        let page_size: u32 = 500;
+        let mut offset: u32 = 0;
+        loop {
+            let value = client
+                .get_favorites("artists", page_size, offset)
+                .await
+                .map_err(CoreError::Api)?;
+            let items = value
+                .get("artists")
+                .and_then(|a| a.get("items"))
+                .and_then(|i| i.as_array())
+                .cloned()
+                .unwrap_or_default();
+            let count = items.len() as u32;
+            for item in &items {
+                if let Some(id) = item.get("id").and_then(|v| v.as_u64()) {
+                    ids.insert(id);
+                }
+            }
+            if count < page_size {
+                break;
+            }
+            offset += page_size;
+        }
+        Ok(ids)
+    }
+
     /// Toggle the favorite state of a track. `make_favorite = true` adds it,
     /// `false` removes it. Thin convenience over `add_favorite` /
     /// `remove_favorite` so callers do not duplicate the type string.

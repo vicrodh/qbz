@@ -1,0 +1,114 @@
+// Playlist cover collage. Qobuz returns up to four cover images per
+// playlist; the layout is chosen by how many are available — single,
+// dual (side by side), triple (one large + two stacked), or quad (three
+// stacked left + one large right). Ported from the Tauri PlaylistCollage.
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { QbzIcon } from "../primitives/QbzIcon.slint";
+import { SearchPlaylistItem } from "../state.slint";
+
+export component PlaylistCollage inherits Rectangle {
+    in property <SearchPlaylistItem> playlist;
+    in property <length> size: 162px;
+
+    width: root.size;
+    height: root.size;
+    clip: true;
+    background: Theme.surface-elevated;
+
+    property <length> gap: 2px;
+    property <int> n: root.playlist.cover-count;
+
+    // 0 covers — placeholder glyph.
+    if root.n <= 0: QbzIcon {
+        source: @image-url("../assets/icons/list-music.svg");
+        width: root.size * 0.32;
+        height: root.size * 0.32;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        tint: Theme.text-muted;
+    }
+
+    // 1 — full bleed.
+    if root.n == 1: Image {
+        width: 100%;
+        height: 100%;
+        source: root.playlist.cover1;
+        image-fit: cover;
+    }
+
+    // 2 — side by side halves.
+    if root.n == 2: HorizontalLayout {
+        spacing: root.gap;
+        Image {
+            source: root.playlist.cover1;
+            image-fit: cover;
+            width: (root.size - root.gap) / 2;
+            height: root.size;
+        }
+        Image {
+            source: root.playlist.cover2;
+            image-fit: cover;
+            width: (root.size - root.gap) / 2;
+            height: root.size;
+        }
+    }
+
+    // 3 — one large left, two stacked right.
+    if root.n == 3: HorizontalLayout {
+        spacing: root.gap;
+        Image {
+            source: root.playlist.cover1;
+            image-fit: cover;
+            width: (root.size - root.gap) * 0.62;
+            height: root.size;
+        }
+        VerticalLayout {
+            spacing: root.gap;
+            Image {
+                source: root.playlist.cover2;
+                image-fit: cover;
+                width: (root.size - root.gap) * 0.38;
+                height: (root.size - root.gap) / 2;
+            }
+            Image {
+                source: root.playlist.cover3;
+                image-fit: cover;
+                width: (root.size - root.gap) * 0.38;
+                height: (root.size - root.gap) / 2;
+            }
+        }
+    }
+
+    // 4+ — three stacked left, one large right.
+    if root.n >= 4: HorizontalLayout {
+        spacing: root.gap;
+        VerticalLayout {
+            spacing: root.gap;
+            Image {
+                source: root.playlist.cover1;
+                image-fit: cover;
+                width: (root.size - root.gap) * 0.34;
+                height: (root.size - 2 * root.gap) / 3;
+            }
+            Image {
+                source: root.playlist.cover2;
+                image-fit: cover;
+                width: (root.size - root.gap) * 0.34;
+                height: (root.size - 2 * root.gap) / 3;
+            }
+            Image {
+                source: root.playlist.cover3;
+                image-fit: cover;
+                width: (root.size - root.gap) * 0.34;
+                height: (root.size - 2 * root.gap) / 3;
+            }
+        }
+        Image {
+            source: root.playlist.cover4;
+            image-fit: cover;
+            width: (root.size - root.gap) * 0.66;
+            height: root.size;
+        }
+    }
+}

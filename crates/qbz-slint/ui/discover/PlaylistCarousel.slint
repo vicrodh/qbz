@@ -1,14 +1,11 @@
-// Discover section carousel — a title, prev/next page controls, and a
-// clipped, sliding track of album cards.
-//
-// Pagination by slice (no scrollbar), mirroring the Svelte
-// DiscoverySection. Because there is no ScrollView the height is exactly
-// the card height — nothing injects extra vertical space.
+// Playlist carousel — title, "View all" link, prev/next page controls,
+// and a clipped sliding track of playlist cards. Same paging mechanism as
+// Carousel. Used by the search results All tab.
 
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
-import { DiscoverSection } from "../state.slint";
-import { AlbumCard } from "AlbumCard.slint";
+import { SearchPlaylistItem } from "../state.slint";
+import { PlaylistCard } from "PlaylistCard.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 
 component NavButton inherits Rectangle {
@@ -64,24 +61,23 @@ component ViewAllLink inherits Rectangle {
     }
 }
 
-export component Carousel inherits VerticalLayout {
-    in property <DiscoverSection> section;
+export component PlaylistCarousel inherits VerticalLayout {
+    in property <string> title;
+    in property <[SearchPlaylistItem]> playlists;
     in property <bool> show-view-all: false;
-    callback album-clicked(string);
-    callback media-action(string, string, string);
     callback view-all-clicked();
+    callback media-action(string, string, string);
 
-    property <length> card-width: 220px;
-    property <length> card-height: 266px;
-    property <length> gap: 32px;
+    property <length> card-width: 162px;
+    property <length> card-height: 210px;
+    property <length> gap: 24px;
 
-    property <int> count: root.section.albums.length;
+    property <int> count: root.playlists.length;
     property <int> per-page: Math.max(
         1,
         Math.floor((viewport.width + root.gap) / (root.card-width + root.gap)));
     property <int> page-count: Math.max(1, Math.ceil(root.count / root.per-page));
     property <int> page: 0;
-    // Self-correcting page index — stays valid when the window resizes.
     property <int> current-page: Math.min(Math.max(0, root.page), root.page-count - 1);
     property <length> step: root.per-page * (root.card-width + root.gap);
     property <length> content-width:
@@ -89,50 +85,46 @@ export component Carousel inherits VerticalLayout {
 
     spacing: 12px;
 
-    // --- Header: title + page controls -----------------------------------
     HorizontalLayout {
+        spacing: 8px;
         Text {
-            text: root.section.title;
+            text: root.title;
             color: Theme.text-primary;
             font-size: 18px;
             font-weight: Typography.semibold;
             vertical-alignment: center;
             horizontal-stretch: 1;
         }
-        HorizontalLayout {
-            spacing: 4px;
-            VerticalLayout {
-                alignment: center;
-                NavButton {
-                    icon: @image-url("../assets/icons/chevron-left.svg");
-                    enabled: root.current-page > 0;
-                    clicked => {
-                        root.page = root.current-page - 1;
-                    }
+        VerticalLayout {
+            alignment: center;
+            NavButton {
+                icon: @image-url("../assets/icons/chevron-left.svg");
+                enabled: root.current-page > 0;
+                clicked => {
+                    root.page = root.current-page - 1;
                 }
             }
-            VerticalLayout {
-                alignment: center;
-                NavButton {
-                    icon: @image-url("../assets/icons/chevron-right.svg");
-                    enabled: root.current-page < root.page-count - 1;
-                    clicked => {
-                        root.page = root.current-page + 1;
-                    }
+        }
+        VerticalLayout {
+            alignment: center;
+            NavButton {
+                icon: @image-url("../assets/icons/chevron-right.svg");
+                enabled: root.current-page < root.page-count - 1;
+                clicked => {
+                    root.page = root.current-page + 1;
                 }
             }
-            if root.show-view-all: VerticalLayout {
-                alignment: center;
-                ViewAllLink {
-                    clicked => {
-                        root.view-all-clicked();
-                    }
+        }
+        if root.show-view-all: VerticalLayout {
+            alignment: center;
+            ViewAllLink {
+                clicked => {
+                    root.view-all-clicked();
                 }
             }
         }
     }
 
-    // --- Track: clipped viewport, slides by page -------------------------
     viewport := Rectangle {
         height: root.card-height;
         clip: true;
@@ -146,20 +138,15 @@ export component Carousel inherits VerticalLayout {
 
             HorizontalLayout {
                 spacing: root.gap;
-                for album in root.section.albums: AlbumCard {
-                    album: album;
-                    clicked(id) => {
-                        root.album-clicked(id);
-                    }
-                    media-action(kind, id, action) => {
-                        root.media-action(kind, id, action);
+                for playlist in root.playlists: PlaylistCard {
+                    playlist: playlist;
+                    media-action(k, i, a) => {
+                        root.media-action(k, i, a);
                     }
                 }
             }
         }
 
-        // Cider-style edge fades — clipped cards dissolve into the
-        // content background instead of being hard-cut.
         Rectangle {
             x: 0px;
             width: 56px;

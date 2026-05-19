@@ -1,5 +1,6 @@
-// Artist card — a circular portrait with the artist name and a subtitle
-// (album count). Mirrors the Tauri search artist card.
+// Artist card — a circular portrait with the artist name and, when the
+// user does not already follow the artist, a Follow chip. Style ported
+// from the Tauri Discover "For You" artist tile.
 
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
@@ -9,27 +10,41 @@ import { QbzIcon } from "../primitives/QbzIcon.slint";
 export component ArtistCard inherits Rectangle {
     in property <SlimItem> artist;
     callback clicked(string);
+    // kind ("artist"), artist id, action ("follow").
+    callback media-action(string, string, string);
 
-    width: 160px;
-    height: 200px;
+    width: 170px;
+    height: 248px;
+    border-radius: 8px;
+    background: ta.has-hover ? Theme.surface-elevated : transparent;
+
+    // Whole-card click — declared before the content so the Follow chip
+    // keeps its own clicks.
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked(root.artist.id);
+        }
+    }
 
     VerticalLayout {
+        padding: 12px;
+        spacing: 8px;
         alignment: start;
-        spacing: 12px;
 
-        // Circular portrait, centered in the card column.
+        // Circular portrait.
         HorizontalLayout {
             alignment: center;
             Rectangle {
-                width: 148px;
-                height: 148px;
-                border-radius: 74px;
+                width: 140px;
+                height: 140px;
+                border-radius: 70px;
                 clip: true;
                 background: Theme.surface-elevated;
                 QbzIcon {
                     source: @image-url("../assets/icons/user.svg");
-                    width: 46px;
-                    height: 46px;
+                    width: 44px;
+                    height: 44px;
                     x: (parent.width - self.width) / 2;
                     y: (parent.height - self.height) / 2;
                     tint: Theme.text-muted;
@@ -43,31 +58,54 @@ export component ArtistCard inherits Rectangle {
             }
         }
 
-        VerticalLayout {
-            spacing: 2px;
-            Text {
-                text: root.artist.title;
-                color: Theme.text-primary;
-                font-size: Typography.body;
-                font-weight: Typography.medium;
-                horizontal-alignment: center;
-                overflow: elide;
-            }
-            Text {
-                text: root.artist.subtitle;
-                visible: root.artist.subtitle != "";
-                color: Theme.text-muted;
-                font-size: Typography.link;
-                horizontal-alignment: center;
-                overflow: elide;
-            }
+        Text {
+            text: root.artist.title;
+            width: 146px;
+            color: Theme.text-primary;
+            font-size: 14px;
+            font-weight: Typography.medium;
+            horizontal-alignment: center;
+            overflow: elide;
         }
-    }
 
-    ta := TouchArea {
-        mouse-cursor: pointer;
-        clicked => {
-            root.clicked(root.artist.id);
+        // Follow chip — only while the user does not follow the artist.
+        if !root.artist.following: HorizontalLayout {
+            alignment: center;
+            Rectangle {
+                width: chip-row.preferred-width;
+                height: 30px;
+                border-radius: 15px;
+                background: follow-ta.has-hover
+                    ? Theme.surface-hover
+                    : Theme.surface-elevated;
+                chip-row := HorizontalLayout {
+                    padding-left: 14px;
+                    padding-right: 14px;
+                    spacing: 6px;
+                    VerticalLayout {
+                        alignment: center;
+                        QbzIcon {
+                            source: @image-url("../assets/icons/user-plus.svg");
+                            width: 14px;
+                            height: 14px;
+                            tint: Theme.text-primary;
+                        }
+                    }
+                    Text {
+                        text: @tr("Follow");
+                        color: Theme.text-primary;
+                        font-size: 12px;
+                        font-weight: Typography.medium;
+                        vertical-alignment: center;
+                    }
+                }
+                follow-ta := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        root.media-action("artist", root.artist.id, "follow");
+                    }
+                }
+            }
         }
     }
 }

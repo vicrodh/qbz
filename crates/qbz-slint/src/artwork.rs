@@ -45,8 +45,10 @@ pub enum ArtworkTarget {
     SearchTrack { idx: usize },
     /// A row in `SearchState.artists[idx]`.
     SearchArtist { idx: usize },
-    /// A row in `SearchState.playlists[idx]`.
-    SearchPlaylist { idx: usize },
+    /// One collage cover slot (0-3) of `SearchState.playlists[idx]`.
+    SearchPlaylistCover { idx: usize, slot: usize },
+    /// The most-popular search hero (its kind is read from SearchState).
+    SearchMostPopular,
 }
 
 /// An artwork download job: which card, and the image URL.
@@ -287,11 +289,38 @@ fn apply_artwork(
                 model.set_row_data(idx, item);
             }
         }
-        ArtworkTarget::SearchPlaylist { idx } => {
+        ArtworkTarget::SearchPlaylistCover { idx, slot } => {
             let model = window.global::<SearchState>().get_playlists();
             if let Some(mut item) = model.row_data(idx) {
-                item.artwork = image;
+                match slot {
+                    0 => item.cover1 = image,
+                    1 => item.cover2 = image,
+                    2 => item.cover3 = image,
+                    3 => item.cover4 = image,
+                    _ => return,
+                }
                 model.set_row_data(idx, item);
+            }
+        }
+        ArtworkTarget::SearchMostPopular => {
+            let state = window.global::<SearchState>();
+            match state.get_most_popular_kind().as_str() {
+                "album" => {
+                    let mut it = state.get_most_popular_album();
+                    it.artwork = image;
+                    state.set_most_popular_album(it);
+                }
+                "artist" => {
+                    let mut it = state.get_most_popular_artist();
+                    it.artwork = image;
+                    state.set_most_popular_artist(it);
+                }
+                "track" => {
+                    let mut it = state.get_most_popular_track();
+                    it.artwork = image;
+                    state.set_most_popular_track(it);
+                }
+                _ => {}
             }
         }
     }

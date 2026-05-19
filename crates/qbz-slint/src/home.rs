@@ -299,6 +299,7 @@ pub fn apply_home(window: &AppWindow, data: HomeData) {
                 rank: slim.rank.into(),
                 artwork_url: slim.artwork_url.into(),
                 artwork: slint::Image::default(),
+                following: false,
             })
             .collect()
     };
