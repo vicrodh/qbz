@@ -58,6 +58,33 @@ pub fn open_cache() -> ImageCache {
     }
 }
 
+/// Process-wide handle to the image cache, so controllers that are not
+/// threaded the cache explicitly (the playback controller) can still
+/// resolve cover art. Set once at startup.
+static SHARED_CACHE: std::sync::OnceLock<ImageCache> = std::sync::OnceLock::new();
+
+/// Publish the image cache for `shared_cache()` consumers. Call once.
+pub fn set_shared_cache(cache: ImageCache) {
+    let _ = SHARED_CACHE.set(cache);
+}
+
+/// The shared image cache, if `set_shared_cache` has run.
+pub fn shared_cache() -> Option<ImageCache> {
+    SHARED_CACHE.get().cloned()
+}
+
+/// Build a Slint image from decoded RGBA8 pixels. Returns an empty image
+/// if the buffer length does not match the dimensions.
+pub fn pixels_to_image(pixels: &[u8], width: u32, height: u32) -> slint::Image {
+    let mut buffer = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::new(width, height);
+    let dst = buffer.make_mut_bytes();
+    if dst.len() != pixels.len() {
+        return slint::Image::default();
+    }
+    dst.copy_from_slice(pixels);
+    slint::Image::from_rgba8(buffer)
+}
+
 /// Trim the image cache to the size budget. Runs once at startup.
 pub fn spawn_evict(cache: ImageCache) {
     tokio::spawn(async move {
