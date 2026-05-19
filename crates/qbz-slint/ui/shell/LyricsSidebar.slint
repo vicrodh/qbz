@@ -37,7 +37,11 @@ component CloseButton inherits Rectangle {
 }
 
 export component LyricsSidebar inherits Rectangle {
-    width: 320px;
+    // Always present; the width animates 0 <-> 320 so the panel slides
+    // in smoothly, matching the left sidebar's collapse animation.
+    width: ShellState.right-panel == 2 ? 320px : 0px;
+    clip: true;
+    animate width { duration: 160ms; easing: ease-in-out; }
     background: Theme.surface-card;
 
     VerticalLayout {

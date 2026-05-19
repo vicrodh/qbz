@@ -1,9 +1,9 @@
-// Browser-like back / forward navigation pair.
+// Sidebar-collapse toggle + browser-like back / forward navigation pair.
 //
-// Same visual format as the Discover tab pill group (an elevated rounded
-// container). Used inline beside the Discover tabs and in place of the
-// per-page Back button. Both buttons drive the NavState global, so the
-// Rust nav history records every move.
+// Two separate elevated pills with a gap between them: the sidebar
+// toggle stands on its own, the [<] [>] history pair is its own group.
+// Used inline beside the Discover tabs and in place of the per-page
+// Back button.
 
 import { Theme } from "../foundation/semantic-colors.slint";
 import { NavState, ShellState } from "../state.slint";
@@ -39,40 +39,50 @@ component NavBtn inherits Rectangle {
     }
 }
 
-export component NavButtons inherits Rectangle {
+// One elevated rounded pill wrapping its NavBtn children.
+component NavPill inherits Rectangle {
     background: Theme.surface-elevated;
     border-radius: 6px;
-    width: btn-row.preferred-width;
     height: 34px;
+    @children
+}
 
-    btn-row := HorizontalLayout {
-        padding: 3px;
-        spacing: 4px;
-        // Leading button: collapses / expands the left sidebar. Lives
-        // here so it appears just left of the [<] [>] pair in every view.
-        NavBtn {
-            icon: @image-url("../assets/icons/panel-left.svg");
-            clicked => {
-                ShellState.sidebar-collapsed = !ShellState.sidebar-collapsed;
+export component NavButtons inherits HorizontalLayout {
+    spacing: 8px;
+
+    // Sidebar collapse toggle — its own pill.
+    NavPill {
+        width: collapse-row.preferred-width;
+        collapse-row := HorizontalLayout {
+            padding: 3px;
+            NavBtn {
+                icon: @image-url("../assets/icons/panel-left.svg");
+                clicked => {
+                    ShellState.sidebar-collapsed = !ShellState.sidebar-collapsed;
+                }
             }
         }
-        // 1px separator between the collapse button and the history pair.
-        Rectangle {
-            width: 1px;
-            background: Theme.border-subtle;
-        }
-        NavBtn {
-            icon: @image-url("../assets/icons/chevron-left.svg");
-            enabled: NavState.can-back;
-            clicked => {
-                NavState.request-back();
+    }
+
+    // Back / forward history pair — its own pill.
+    NavPill {
+        width: history-row.preferred-width;
+        history-row := HorizontalLayout {
+            padding: 3px;
+            spacing: 4px;
+            NavBtn {
+                icon: @image-url("../assets/icons/chevron-left.svg");
+                enabled: NavState.can-back;
+                clicked => {
+                    NavState.request-back();
+                }
             }
-        }
-        NavBtn {
-            icon: @image-url("../assets/icons/chevron-right.svg");
-            enabled: NavState.can-forward;
-            clicked => {
-                NavState.request-forward();
+            NavBtn {
+                icon: @image-url("../assets/icons/chevron-right.svg");
+                enabled: NavState.can-forward;
+                clicked => {
+                    NavState.request-forward();
+                }
             }
         }
     }

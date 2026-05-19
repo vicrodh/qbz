@@ -108,10 +108,11 @@ export component AppShell inherits Rectangle {
                 }
             }
 
-            // Right-side panel — a layout sibling of the content area,
-            // so it shrinks the content rather than overlaying it.
-            if ShellState.right-panel == 1: QueueSidebar { }
-            if ShellState.right-panel == 2: LyricsSidebar { }
+            // Right-side panels — layout siblings of the content area, so
+            // they shrink the content rather than overlaying it. Always
+            // present; each animates its own width open/closed.
+            QueueSidebar { }
+            LyricsSidebar { }
         }
 
         PlayerBar {
