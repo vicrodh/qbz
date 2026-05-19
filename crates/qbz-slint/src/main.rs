@@ -609,6 +609,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             };
             let st = w.global::<SearchState>();
             let query = st.get_query().to_string();
+            let filter = search::search_type_for_filter(st.get_filter_index());
             let offset = match category {
                 search::SearchCategory::Albums => st.get_albums().row_count(),
                 search::SearchCategory::Tracks => st.get_tracks().row_count(),
@@ -619,7 +620,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let weak = weak.clone();
             let image_cache = image_cache.clone();
             handle.spawn(async move {
-                match search::load_more(&runtime, &query, category, offset).await {
+                match search::load_more(&runtime, &query, category, filter, offset).await {
                     Ok(more) => {
                         let jobs = search::artwork_jobs_for_more(&more, offset as usize);
                         let _ = weak.upgrade_in_event_loop(move |w| {
@@ -628,6 +629,42 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         artwork::spawn_loads(jobs, weak.clone(), image_cache);
                     }
                     Err(e) => log::error!("[qbz-slint] search load-more failed: {e}"),
+                }
+            });
+        });
+    }
+
+    // Change the searchType filter on a per-type tab: re-query that
+    // category from offset 0 and replace its list.
+    {
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        let image_cache = image_cache.clone();
+        window.global::<SearchActions>().on_filter_changed(move |index| {
+            let Some(w) = weak.upgrade() else {
+                return;
+            };
+            let st = w.global::<SearchState>();
+            st.set_filter_index(index);
+            let Some(category) = search::category_for_tab(st.get_tab()) else {
+                return;
+            };
+            let query = st.get_query().to_string();
+            let search_type = search::search_type_for_filter(index);
+            let runtime = runtime.clone();
+            let weak = weak.clone();
+            let image_cache = image_cache.clone();
+            handle.spawn(async move {
+                match search::load_more(&runtime, &query, category, search_type, 0).await {
+                    Ok(more) => {
+                        let jobs = search::artwork_jobs_for_more(&more, 0);
+                        let _ = weak.upgrade_in_event_loop(move |w| {
+                            search::replace_category(&w, more);
+                        });
+                        artwork::spawn_loads(jobs, weak.clone(), image_cache);
+                    }
+                    Err(e) => log::error!("[qbz-slint] search filter failed: {e}"),
                 }
             });
         });

@@ -372,8 +372,9 @@ export global SearchState {
     in property <AlbumCardItem> most-popular-album;
     in property <SlimItem> most-popular-artist;
     in property <SearchTrackItem> most-popular-track;
-    // Active searchType filter: "" | "MainArtist" | "Performer" | ...
-    in property <string> filter-type;
+    // Active searchType filter, as a dropdown index (0 = no filter).
+    // The controller owns the index -> API-value mapping.
+    in property <int> filter-index: 0;
 }
 
 // Search actions wired to the Rust search controller.
@@ -384,8 +385,8 @@ export global SearchActions {
     callback live(string);
     // User picked a results tab (0..4).
     callback tab-changed(int);
-    // searchType filter changed.
-    callback filter-changed(string);
+    // searchType filter changed — the new dropdown index.
+    callback filter-changed(int);
     // Request the next page for the given tab.
     callback load-more(int);
 }

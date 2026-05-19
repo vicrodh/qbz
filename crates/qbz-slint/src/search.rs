@@ -375,6 +375,7 @@ pub fn reset_search(window: &AppWindow) {
     state.set_artists_total(0);
     state.set_playlists_total(0);
     state.set_most_popular_kind("".into());
+    state.set_filter_index(0);
     state.set_loading(true);
 }
 
@@ -401,6 +402,19 @@ pub fn category_for_tab(tab: i32) -> Option<SearchCategory> {
     }
 }
 
+/// Map a filter-dropdown index to the Qobuz `search_type` value.
+/// Index 0 (No filter) maps to `None`.
+pub fn search_type_for_filter(index: i32) -> Option<String> {
+    match index {
+        1 => Some("MainArtist".into()),
+        2 => Some("Performer".into()),
+        3 => Some("Composer".into()),
+        4 => Some("Label".into()),
+        5 => Some("ReleaseName".into()),
+        _ => None,
+    }
+}
+
 /// A page of additional rows fetched by load-more, ready to append.
 pub enum MoreRows {
     Albums(Vec<AlbumRow>),
@@ -417,16 +431,18 @@ pub async fn load_more<A>(
     runtime: &Arc<AppRuntime<A>>,
     query: &str,
     category: SearchCategory,
+    search_type: Option<String>,
     offset: u32,
 ) -> Result<MoreRows, String>
 where
     A: FrontendAdapter + Send + Sync + 'static,
 {
     let core = runtime.core();
+    let search_type = search_type.as_deref();
     match category {
         SearchCategory::Albums => {
             let page = core
-                .search_albums(query, PAGE_SIZE, offset, None)
+                .search_albums(query, PAGE_SIZE, offset, search_type)
                 .await
                 .map_err(|e| e.to_string())?;
             Ok(MoreRows::Albums(
@@ -435,7 +451,7 @@ where
         }
         SearchCategory::Tracks => {
             let page = core
-                .search_tracks(query, PAGE_SIZE, offset, None)
+                .search_tracks(query, PAGE_SIZE, offset, search_type)
                 .await
                 .map_err(|e| e.to_string())?;
             Ok(MoreRows::Tracks(
@@ -444,7 +460,7 @@ where
         }
         SearchCategory::Artists => {
             let page = core
-                .search_artists(query, PAGE_SIZE, offset, None)
+                .search_artists(query, PAGE_SIZE, offset, search_type)
                 .await
                 .map_err(|e| e.to_string())?;
             Ok(MoreRows::Artists(
@@ -512,6 +528,30 @@ pub fn append_results(window: &AppWindow, more: MoreRows) {
                     vm.push(playlist_item(row));
                 }
             }
+        }
+    }
+}
+
+/// Replace one category's `SearchState` list wholesale — used when the
+/// searchType filter changes and the category is re-queried from offset 0.
+pub fn replace_category(window: &AppWindow, more: MoreRows) {
+    let state = window.global::<SearchState>();
+    match more {
+        MoreRows::Albums(rows) => {
+            let items: Vec<AlbumCardItem> = rows.into_iter().map(album_item).collect();
+            state.set_albums(ModelRc::new(VecModel::from(items)));
+        }
+        MoreRows::Tracks(rows) => {
+            let items: Vec<SearchTrackItem> = rows.into_iter().map(track_item).collect();
+            state.set_tracks(ModelRc::new(VecModel::from(items)));
+        }
+        MoreRows::Artists(rows) => {
+            let items: Vec<SlimItem> = rows.into_iter().map(artist_item).collect();
+            state.set_artists(ModelRc::new(VecModel::from(items)));
+        }
+        MoreRows::Playlists(rows) => {
+            let items: Vec<SearchPlaylistItem> = rows.into_iter().map(playlist_item).collect();
+            state.set_playlists(ModelRc::new(VecModel::from(items)));
         }
     }
 }
@@ -618,6 +658,15 @@ mod tests {
         assert_eq!(category_for_tab(3), Some(SearchCategory::Artists));
         assert_eq!(category_for_tab(4), Some(SearchCategory::Playlists));
         assert_eq!(category_for_tab(9), None);
+    }
+
+    #[test]
+    fn search_type_for_filter_maps_dropdown_index() {
+        assert_eq!(search_type_for_filter(0), None);
+        assert_eq!(search_type_for_filter(1), Some("MainArtist".to_string()));
+        assert_eq!(search_type_for_filter(3), Some("Composer".to_string()));
+        assert_eq!(search_type_for_filter(5), Some("ReleaseName".to_string()));
+        assert_eq!(search_type_for_filter(99), None);
     }
 
     #[test]

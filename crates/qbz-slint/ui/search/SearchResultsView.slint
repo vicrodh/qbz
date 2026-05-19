@@ -15,6 +15,7 @@ import { SearchTrackRow } from "SearchTrackRow.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { ContextMenu } from "../primitives/ContextMenu.slint";
 import { ContextMenuItem } from "../primitives/ContextMenuItem.slint";
+import { QbzSelect } from "../primitives/QbzSelect.slint";
 
 // One tab in the results tab strip.
 component SearchTab inherits Rectangle {
@@ -372,6 +373,26 @@ export component SearchResultsView inherits Rectangle {
                 label: @tr("Playlists");
                 active: SearchState.tab == 4;
                 clicked => { SearchActions.tab-changed(4); }
+            }
+        }
+
+        // searchType filter — shown on the Albums / Tracks / Artists tabs.
+        if SearchState.tab >= 1 && SearchState.tab <= 3: HorizontalLayout {
+            alignment: start;
+            QbzSelect {
+                menu-width: 180px;
+                options: [
+                    @tr("No filter"),
+                    @tr("Main artist"),
+                    @tr("Performer"),
+                    @tr("Composer"),
+                    @tr("Label"),
+                    @tr("Release name"),
+                ];
+                current-index: SearchState.filter-index;
+                selected(i) => {
+                    SearchActions.filter-changed(i);
+                }
             }
         }
 
