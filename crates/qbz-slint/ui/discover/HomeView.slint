@@ -12,7 +12,6 @@ import { HomeState, NavState, ContentView } from "../state.slint";
 import { Carousel } from "Carousel.slint";
 import { GridSection } from "GridSection.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
-import { ScrollView } from "std-widgets.slint";
 
 component Tab inherits Rectangle {
     in property <string> label;
@@ -160,14 +159,15 @@ export component HomeView inherits Rectangle {
         }
 
         // --- Scrollable sections -----------------------------------------
-        // viewport-width is pinned to the visible width so the carousels'
-        // clipped (oversized) content never triggers a horizontal scrollbar
-        // or reserves a gutter for one.
-        home-scroll := ScrollView {
+        // A Flickable (not a ScrollView): wheel scrolling with no scrollbar
+        // gutters at all. viewport-width is pinned to the Flickable width so
+        // the carousels' clipped content can never scroll horizontally.
+        Flickable {
             vertical-stretch: 1;
-            viewport-width: home-scroll.visible-width;
-            horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
-            VerticalLayout {
+            viewport-width: self.width;
+            viewport-height: home-content.preferred-height;
+
+            home-content := VerticalLayout {
                 padding: 32px;
                 spacing: 28px;
                 alignment: start;
