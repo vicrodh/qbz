@@ -97,6 +97,33 @@ component MenuItem inherits Rectangle {
     }
 }
 
+// Square icon button for the header's right-side controls.
+component HeaderIconButton inherits Rectangle {
+    in property <image> icon;
+    callback clicked();
+
+    width: 36px;
+    height: 36px;
+    border-radius: Radius.sm;
+    background: ta.has-hover ? Theme.surface-hover : transparent;
+
+    QbzIcon {
+        source: root.icon;
+        width: 19px;
+        height: 19px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        tint: ta.has-hover ? Theme.text-primary : Theme.text-secondary;
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
 export component HeaderBar inherits Rectangle {
     callback logout();
     callback close-app();
@@ -170,29 +197,23 @@ export component HeaderBar inherits Rectangle {
         }
     }
 
-    // --- Hamburger (anchored right) ----------------------------------------
-    user-area := TouchArea {
+    // --- Right controls: queue, lyrics, hamburger (anchored right) ---------
+    right-controls := HorizontalLayout {
         x: root.width - self.width - Spacing.md;
         y: (root.height - self.height) / 2;
-        width: 36px;
         height: 36px;
-        mouse-cursor: pointer;
-        clicked => {
-            menu.show();
+        spacing: 2px;
+        HeaderIconButton {
+            icon: @image-url("../assets/icons/list-music.svg");
         }
-        Rectangle {
-            width: 100%;
-            height: 100%;
-            border-radius: Radius.sm;
-            background: user-area.has-hover ? Theme.surface-hover : transparent;
+        HeaderIconButton {
+            icon: @image-url("../assets/icons/captions.svg");
         }
-        QbzIcon {
-            source: @image-url("../assets/icons/menu.svg");
-            width: 20px;
-            height: 20px;
-            x: (parent.width - self.width) / 2;
-            y: (parent.height - self.height) / 2;
-            tint: user-area.has-hover ? Theme.text-primary : Theme.text-secondary;
+        HeaderIconButton {
+            icon: @image-url("../assets/icons/menu.svg");
+            clicked => {
+                menu.show();
+            }
         }
     }
 
