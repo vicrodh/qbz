@@ -10,9 +10,7 @@ use std::path::PathBuf;
 
 use md5::{Digest, Md5};
 
-use qbz_models::{
-    Album, Artist, Playlist, Quality, SearchResultsPage, StreamUrl, Track,
-};
+use qbz_models::{Quality, StreamUrl};
 
 use crate::audio::{AlsaPlugin, AudioBackendType};
 use crate::config::audio_settings::{AudioSettings, AudioSettingsState};
@@ -77,22 +75,12 @@ pub struct DacCapabilities {
     pub error: Option<String>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(tag = "type", content = "content", rename_all = "lowercase")]
-pub enum V2MostPopularItem {
-    Tracks(Track),
-    Albums(Album),
-    Artists(Artist),
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct V2SearchAllResults {
-    pub albums: SearchResultsPage<Album>,
-    pub tracks: SearchResultsPage<Track>,
-    pub artists: SearchResultsPage<Artist>,
-    pub playlists: SearchResultsPage<Playlist>,
-    pub most_popular: Option<V2MostPopularItem>,
-}
+// Combined-search result types moved to qbz-models (single definition).
+// Aliases kept so command code and its response serialization are unchanged.
+pub use qbz_models::{
+    MostPopularItem as V2MostPopularItem,
+    SearchAllResults as V2SearchAllResults,
+};
 
 /// Convert config AudioSettings to qbz_audio::AudioSettings.
 /// Used by runtime_bootstrap (once at startup) and v2_reinit_audio_device

@@ -111,6 +111,8 @@ pub use types::{
     Quality,
     RawPlaylistTag,
     ReleasesGridResponse,
+    MostPopularItem,
+    SearchAllResults,
     SearchResults,
     SearchResultsPage,
     SessionStartResponse,

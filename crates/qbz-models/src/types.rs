@@ -665,6 +665,28 @@ pub struct SearchResultsPage<T> {
     pub limit: u32,
 }
 
+/// One entry of the Qobuz `most_popular` block in a combined search.
+/// Serde tagging matches the legacy `V2MostPopularItem` so the Tauri
+/// command's response shape is unchanged.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", content = "content", rename_all = "lowercase")]
+pub enum MostPopularItem {
+    Tracks(Track),
+    Albums(Album),
+    Artists(Artist),
+}
+
+/// Combined search result: the four category pages plus an optional
+/// "most popular" hero entry.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchAllResults {
+    pub albums: SearchResultsPage<Album>,
+    pub tracks: SearchResultsPage<Track>,
+    pub artists: SearchResultsPage<Artist>,
+    pub playlists: SearchResultsPage<Playlist>,
+    pub most_popular: Option<MostPopularItem>,
+}
+
 /// Favorites container
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Favorites {
