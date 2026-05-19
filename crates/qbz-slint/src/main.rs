@@ -249,6 +249,12 @@ fn navigate_artist(
     });
 }
 
+thread_local! {
+    /// Debounce timer for the header live search — restarted on every
+    /// keystroke, fires the search 300 ms after typing stops.
+    static SEARCH_DEBOUNCE: slint::Timer = slint::Timer::default();
+}
+
 /// Run a search and show the results view. Shared by the search-submit
 /// callback, the live-search debounce, and history back/forward.
 fn navigate_search(
@@ -258,6 +264,9 @@ fn navigate_search(
     _image_cache: artwork::ImageCache,
     query: String,
 ) {
+    // Capture a version so a slow, stale load cannot overwrite a newer
+    // search's results (the user kept typing).
+    let version = search::next_search_version();
     handle.spawn(async move {
         let _ = weak.upgrade_in_event_loop(|w| {
             search::reset_search(&w);
@@ -266,14 +275,18 @@ fn navigate_search(
         match search::load_search(&runtime, &query).await {
             Ok(data) => {
                 let _ = weak.upgrade_in_event_loop(move |w| {
-                    search::apply_search(&w, data);
-                    w.global::<SearchState>().set_loading(false);
+                    if search::is_current_version(version) {
+                        search::apply_search(&w, data);
+                        w.global::<SearchState>().set_loading(false);
+                    }
                 });
             }
             Err(e) => {
                 log::error!("[qbz-slint] search load failed: {e}");
-                let _ = weak.upgrade_in_event_loop(|w| {
-                    w.global::<SearchState>().set_loading(false);
+                let _ = weak.upgrade_in_event_loop(move |w| {
+                    if search::is_current_version(version) {
+                        w.global::<SearchState>().set_loading(false);
+                    }
                 });
             }
         }
@@ -507,6 +520,61 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             if let Some(w) = weak.upgrade() {
                 update_nav_flags(&w);
             }
+        });
+    }
+
+    // Submit search (Enter): record history and show the results page.
+    {
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        let image_cache = image_cache.clone();
+        window.global::<SearchActions>().on_submit(move |query| {
+            let q = query.trim().to_string();
+            if q.len() < 2 {
+                return;
+            }
+            SEARCH_DEBOUNCE.with(|t| t.stop());
+            nav::record(nav::NavEntry::Search(q.clone()));
+            navigate_search(runtime.clone(), weak.clone(), &handle, image_cache.clone(), q);
+            if let Some(w) = weak.upgrade() {
+                update_nav_flags(&w);
+            }
+        });
+    }
+
+    // Live search: debounce 300 ms, minimum 2 characters. Does not record
+    // history (per-keystroke entries would pollute the back stack).
+    {
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        let image_cache = image_cache.clone();
+        window.global::<SearchActions>().on_live(move |query| {
+            let q = query.trim().to_string();
+            if q.len() < 2 {
+                SEARCH_DEBOUNCE.with(|t| t.stop());
+                return;
+            }
+            let runtime = runtime.clone();
+            let weak = weak.clone();
+            let handle = handle.clone();
+            let image_cache = image_cache.clone();
+            SEARCH_DEBOUNCE.with(|t| {
+                t.start(
+                    slint::TimerMode::SingleShot,
+                    std::time::Duration::from_millis(300),
+                    move || {
+                        navigate_search(
+                            runtime.clone(),
+                            weak.clone(),
+                            &handle,
+                            image_cache.clone(),
+                            q.clone(),
+                        );
+                    },
+                );
+            });
         });
     }
 

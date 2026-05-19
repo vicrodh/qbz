@@ -13,7 +13,7 @@ import { Spacing } from "../foundation/spacing.slint";
 import { Typography } from "../foundation/typography.slint";
 import { Layout } from "../foundation/layout.slint";
 import { Radius } from "../foundation/radius.slint";
-import { SessionState, NavState, ContentView, ShellState, HeaderMenuState, NavMenuEntry } from "../state.slint";
+import { SessionState, NavState, ContentView, ShellState, HeaderMenuState, NavMenuEntry, SearchActions } from "../state.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 
 // Sidebar collapse toggle — bare bright icon, no background. Sits at
@@ -341,6 +341,10 @@ export component HeaderBar inherits Rectangle {
                     font-size: 13px;
                     vertical-alignment: center;
                     single-line: true;
+                    // Enter submits to the full results page; every edit
+                    // feeds the debounced live search (Rust side).
+                    accepted => { SearchActions.submit(self.text); }
+                    edited => { SearchActions.live(self.text); }
                 }
                 Text {
                     visible: search-input.text == "";
