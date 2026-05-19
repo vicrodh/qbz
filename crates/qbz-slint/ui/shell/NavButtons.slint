@@ -1,39 +1,13 @@
-// Sidebar-collapse toggle + browser-like back / forward navigation pair.
+// Browser-like back / forward navigation pair.
 //
-// The sidebar toggle is a bare icon button (no background). The [<] [>]
-// history pair uses the same circular elevated style as the Discover
-// carousel page navigators. Used inline beside the Discover tabs and in
-// place of the per-page Back button.
+// The [<] [>] history pair uses the same circular elevated style as the
+// Discover carousel page navigators. Used inline beside the Discover
+// tabs and in place of the per-page Back button. (The sidebar-collapse
+// toggle lives in the header now, not here.)
 
 import { Theme } from "../foundation/semantic-colors.slint";
-import { NavState, ShellState } from "../state.slint";
+import { NavState } from "../state.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
-
-// Bare icon button — no background, brightest icon tint. Used for the
-// sidebar collapse toggle.
-component PlainNavBtn inherits Rectangle {
-    in property <image> icon;
-    callback clicked();
-
-    width: 32px;
-    height: 28px;
-
-    QbzIcon {
-        source: root.icon;
-        width: 17px;
-        height: 17px;
-        x: (parent.width - self.width) / 2;
-        y: (parent.height - self.height) / 2;
-        tint: Theme.text-primary;
-    }
-
-    ta := TouchArea {
-        mouse-cursor: pointer;
-        clicked => {
-            root.clicked();
-        }
-    }
-}
 
 // Circular elevated icon button — same look as the Discover carousel
 // page navigators (Carousel.slint NavButton).
@@ -71,40 +45,25 @@ component HistoryNavBtn inherits Rectangle {
 }
 
 export component NavButtons inherits HorizontalLayout {
-    spacing: 8px;
+    spacing: 4px;
 
-    // Sidebar collapse toggle — bare icon, no pill.
     VerticalLayout {
         alignment: center;
-        PlainNavBtn {
-            icon: @image-url("../assets/icons/panel-left.svg");
+        HistoryNavBtn {
+            icon: @image-url("../assets/icons/chevron-left.svg");
+            enabled: NavState.can-back;
             clicked => {
-                ShellState.sidebar-collapsed = !ShellState.sidebar-collapsed;
+                NavState.request-back();
             }
         }
     }
-
-    // Back / forward history pair — circular carousel-navigator style.
-    HorizontalLayout {
-        spacing: 4px;
-        VerticalLayout {
-            alignment: center;
-            HistoryNavBtn {
-                icon: @image-url("../assets/icons/chevron-left.svg");
-                enabled: NavState.can-back;
-                clicked => {
-                    NavState.request-back();
-                }
-            }
-        }
-        VerticalLayout {
-            alignment: center;
-            HistoryNavBtn {
-                icon: @image-url("../assets/icons/chevron-right.svg");
-                enabled: NavState.can-forward;
-                clicked => {
-                    NavState.request-forward();
-                }
+    VerticalLayout {
+        alignment: center;
+        HistoryNavBtn {
+            icon: @image-url("../assets/icons/chevron-right.svg");
+            enabled: NavState.can-forward;
+            clicked => {
+                NavState.request-forward();
             }
         }
     }

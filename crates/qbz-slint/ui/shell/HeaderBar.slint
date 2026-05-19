@@ -16,6 +16,29 @@ import { Radius } from "../foundation/radius.slint";
 import { SessionState, NavState, ContentView, ShellState } from "../state.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 
+// Sidebar collapse toggle — bare bright icon, no background. Sits at
+// the very left of the header, before the Discover tab.
+component SidebarToggle inherits Rectangle {
+    width: 30px;
+    height: 30px;
+
+    QbzIcon {
+        source: @image-url("../assets/icons/panel-left.svg");
+        width: 19px;
+        height: 19px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        tint: Theme.text-primary;
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            ShellState.sidebar-collapsed = !ShellState.sidebar-collapsed;
+        }
+    }
+}
+
 component NavTab inherits Rectangle {
     in property <image> icon;
     in property <string> label;
@@ -344,6 +367,10 @@ export component HeaderBar inherits Rectangle {
         y: (root.height - self.height) / 2;
         height: 30px;
         spacing: Spacing.xs;
+        VerticalLayout {
+            alignment: center;
+            SidebarToggle { }
+        }
         NavTabWithMenu {
             icon: @image-url("../assets/icons/compass.svg");
             label: @tr("Discover");
@@ -430,6 +457,11 @@ export component HeaderBar inherits Rectangle {
                 Text {
                     visible: search-input.text == "";
                     text: @tr("Search");
+                    // Span the input box so vertical-alignment centers the
+                    // placeholder the same way the TextInput centers its
+                    // own text — otherwise it rides at the top.
+                    width: 100%;
+                    height: 100%;
                     color: Theme.text-muted;
                     font-size: 13px;
                     vertical-alignment: center;
