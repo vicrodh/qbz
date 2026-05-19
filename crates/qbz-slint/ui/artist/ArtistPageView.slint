@@ -149,6 +149,13 @@ component TrackRow inherits Rectangle {
             }
             ContextMenuItem {
                 icon: @image-url("../assets/icons/list-plus.svg");
+                label: @tr("Play next");
+                clicked => {
+                    root.media-action("track", root.track.id, "play-next");
+                }
+            }
+            ContextMenuItem {
+                icon: @image-url("../assets/icons/list-end.svg");
                 label: @tr("Add to queue");
                 clicked => {
                     root.media-action("track", root.track.id, "queue");
