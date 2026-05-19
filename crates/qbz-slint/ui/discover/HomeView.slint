@@ -111,8 +111,8 @@ component GearButton inherits Rectangle {
 
     QbzIcon {
         source: @image-url("../assets/icons/home-gear.svg");
-        width: 18px;
-        height: 18px;
+        width: 20px;
+        height: 20px;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
         tint: ta.has-hover ? Theme.text-primary : Theme.text-muted;
@@ -143,34 +143,42 @@ export component HomeView inherits Rectangle {
             height: 56px;
             background: Theme.surface-main;
 
-            // Back / forward history pair, anchored left.
+            // History pair + the three-tab nav bar, grouped at the left
+            // with a gap delimiting the two clusters. Explicit width
+            // (= content) so the layout does not fill the toolbar and
+            // overlap the right controls.
             left-controls := HorizontalLayout {
                 x: 32px;
                 y: (parent.height - self.height) / 2;
-                NavButtons { }
-            }
-
-            // Centered three-tab nav bar.
-            tab-pill := Rectangle {
-                x: (parent.width - self.width) / 2;
-                y: (parent.height - self.height) / 2;
-                width: tab-row.preferred-width;
-                height: tab-row.preferred-height;
-                background: Theme.surface-elevated;
-                border-radius: 6px;
-                tab-row := HorizontalLayout {
-                    padding: 3px;
-                    spacing: 4px;
-                    Tab { label: @tr("Home"); active: true; }
-                    Tab { label: @tr("Editor's Picks"); }
-                    Tab { label: @tr("For You"); }
+                width: self.preferred-width;
+                spacing: 16px;
+                VerticalLayout {
+                    alignment: center;
+                    NavButtons { }
+                }
+                tab-pill := Rectangle {
+                    width: tab-row.preferred-width;
+                    height: tab-row.preferred-height;
+                    background: Theme.surface-elevated;
+                    border-radius: 6px;
+                    tab-row := HorizontalLayout {
+                        padding: 3px;
+                        spacing: 4px;
+                        Tab { label: @tr("Home"); active: true; }
+                        Tab { label: @tr("Editor's Picks"); }
+                        Tab { label: @tr("For You"); }
+                    }
                 }
             }
 
-            // Genre filter + sort gear, anchored right.
+            // Genre filter + sort gear, anchored right. Explicit width
+            // (= content) so `x` resolves correctly — without it the
+            // layout fills the toolbar and the cluster lands far left,
+            // on top of the history arrows.
             right-controls := HorizontalLayout {
                 x: parent.width - self.width - 32px;
                 y: (parent.height - self.height) / 2;
+                width: self.preferred-width;
                 spacing: 6px;
                 GenreButton { }
                 // Per-tab sort / show-hide control for the Discover
