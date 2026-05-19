@@ -273,6 +273,12 @@ fn apply_entry(
         nav::NavEntry::Artist(id) => {
             navigate_artist(runtime.clone(), weak.clone(), handle, image_cache.clone(), id);
         }
+        nav::NavEntry::Search(_query) => {
+            // Upgraded to a full navigate_search call in Task 6.
+            let _ = weak.upgrade_in_event_loop(|w| {
+                w.global::<NavState>().set_view(ContentView::Search);
+            });
+        }
     }
 }
 

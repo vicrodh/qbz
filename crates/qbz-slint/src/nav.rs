@@ -16,6 +16,8 @@ pub enum NavEntry {
     Album(String),
     Artist(String),
     Settings,
+    /// A search results page; the string is the query.
+    Search(String),
 }
 
 struct History {
@@ -121,6 +123,15 @@ mod tests {
         record(NavEntry::Artist("3".into()));
         assert!(!can_forward());
         assert_eq!(go_back(), Some(NavEntry::Album("1".into())));
+    }
+
+    #[test]
+    fn search_entry_round_trips_history() {
+        reset();
+        record(NavEntry::Search("metallica".into()));
+        record(NavEntry::Album("5".into()));
+        assert_eq!(go_back(), Some(NavEntry::Search("metallica".into())));
+        assert_eq!(go_back(), Some(NavEntry::Home));
     }
 
     #[test]
