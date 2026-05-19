@@ -6,10 +6,12 @@
 // content well); no hairline borders.
 
 import { Theme } from "../foundation/semantic-colors.slint";
-import { NavState, ContentView } from "../state.slint";
+import { NavState, ContentView, ShellState } from "../state.slint";
 import { Sidebar } from "Sidebar.slint";
 import { HeaderBar } from "HeaderBar.slint";
 import { PlayerBar } from "PlayerBar.slint";
+import { QueueSidebar } from "QueueSidebar.slint";
+import { LyricsSidebar } from "LyricsSidebar.slint";
 import { HomeView } from "../discover/HomeView.slint";
 import { AlbumPageView } from "../album/AlbumPageView.slint";
 import { ArtistPageView } from "../artist/ArtistPageView.slint";
@@ -105,6 +107,11 @@ export component AppShell inherits Rectangle {
                     }
                 }
             }
+
+            // Right-side panel — a layout sibling of the content area,
+            // so it shrinks the content rather than overlaying it.
+            if ShellState.right-panel == 1: QueueSidebar { }
+            if ShellState.right-panel == 2: LyricsSidebar { }
         }
 
         PlayerBar { }

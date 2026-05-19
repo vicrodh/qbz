@@ -54,9 +54,11 @@ component TrackRow inherits Rectangle {
 
     height: 52px;
     border-radius: 8px;
+    // The even-row tint is clearly fainter than the hover tint so the two
+    // never read as the same state.
     background: ta.has-hover
-        ? Theme.surface-hover
-        : (Math.mod(root.index, 2) == 1 ? Theme.surface-card : transparent);
+        ? #ffffff16
+        : (Math.mod(root.index, 2) == 1 ? #ffffff07 : transparent);
 
     ta := TouchArea {
         mouse-cursor: default;
@@ -253,14 +255,6 @@ export component ArtistPageView inherits Rectangle {
                         font-weight: Typography.bold;
                         overflow: elide;
                     }
-                    Rectangle { height: 12px; }
-                    Text {
-                        text: ArtistState.bio;
-                        visible: ArtistState.bio != "";
-                        color: Theme.text-secondary;
-                        font-size: Typography.body;
-                        wrap: word-wrap;
-                    }
                     Rectangle { height: 18px; }
                     HorizontalLayout {
                         alignment: start;
@@ -288,6 +282,15 @@ export component ArtistPageView inherits Rectangle {
                         }
                     }
                 }
+            }
+
+            // Biography — full content width, below the header block.
+            if ArtistState.bio != "": Rectangle { height: 18px; }
+            if ArtistState.bio != "": Text {
+                text: ArtistState.bio;
+                color: Theme.text-secondary;
+                font-size: Typography.body;
+                wrap: word-wrap;
             }
 
             Rectangle { height: 36px; }

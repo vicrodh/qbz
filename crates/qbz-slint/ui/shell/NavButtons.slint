@@ -6,7 +6,7 @@
 // Rust nav history records every move.
 
 import { Theme } from "../foundation/semantic-colors.slint";
-import { NavState } from "../state.slint";
+import { NavState, ShellState } from "../state.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 
 component NavBtn inherits Rectangle {
@@ -48,6 +48,19 @@ export component NavButtons inherits Rectangle {
     btn-row := HorizontalLayout {
         padding: 3px;
         spacing: 4px;
+        // Leading button: collapses / expands the left sidebar. Lives
+        // here so it appears just left of the [<] [>] pair in every view.
+        NavBtn {
+            icon: @image-url("../assets/icons/panel-left.svg");
+            clicked => {
+                ShellState.sidebar-collapsed = !ShellState.sidebar-collapsed;
+            }
+        }
+        // 1px separator between the collapse button and the history pair.
+        Rectangle {
+            width: 1px;
+            background: Theme.border-subtle;
+        }
         NavBtn {
             icon: @image-url("../assets/icons/chevron-left.svg");
             enabled: NavState.can-back;

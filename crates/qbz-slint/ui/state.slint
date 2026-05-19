@@ -168,6 +168,16 @@ export global ArtistState {
     in property <bool> loading: false;
 }
 
+// Shell chrome state — collapsible left sidebar and right-side panels.
+// Globals are imported directly by the shell components, so toggles
+// need no callback plumbing.
+export global ShellState {
+    in-out property <bool> sidebar-collapsed: false;
+    in-out property <length> sidebar-width: 280px;
+    // 0 = none, 1 = queue, 2 = lyrics
+    in-out property <int> right-panel: 0;
+}
+
 // Authenticated user, for the header user element.
 export global SessionState {
     in property <string> user-name: "";

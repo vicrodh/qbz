@@ -13,7 +13,7 @@ import { Spacing } from "../foundation/spacing.slint";
 import { Typography } from "../foundation/typography.slint";
 import { Layout } from "../foundation/layout.slint";
 import { Radius } from "../foundation/radius.slint";
-import { SessionState, NavState, ContentView } from "../state.slint";
+import { SessionState, NavState, ContentView, ShellState } from "../state.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 
 component NavTab inherits Rectangle {
@@ -97,15 +97,104 @@ component MenuItem inherits Rectangle {
     }
 }
 
-// Square icon button for the header's right-side controls.
+// Text-only menu row for the nav-tab dropdowns (no leading icon).
+component NavMenuItem inherits Rectangle {
+    in property <string> label;
+    callback clicked();
+
+    height: 32px;
+    background: ta.has-hover ? Theme.surface-hover : transparent;
+
+    HorizontalLayout {
+        padding-left: 14px;
+        padding-right: 22px;
+        Text {
+            text: root.label;
+            color: Theme.text-secondary;
+            font-size: 13px;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+        }
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+// A nav tab plus its dropdown menu. Clicking the tab opens a
+// PopupWindow positioned just below it, styled like the hamburger menu.
+// Menu rows are visual placeholders for now; the optional `home-item`
+// index marks the one row that keeps the app on the working Home view.
+component NavTabWithMenu inherits Rectangle {
+    in property <image> icon;
+    in property <string> label;
+    in property <bool> active: false;
+    in property <bool> show-icon: true;
+    in property <[string]> items;
+    // Index of the row wired to Home (-1 = none). Clicking it switches
+    // to ContentView.home; all other rows are harmless no-ops.
+    in property <int> home-item: -1;
+
+    width: tab.width;
+    height: 30px;
+
+    tab := NavTab {
+        icon: root.icon;
+        label: root.label;
+        active: root.active;
+        show-icon: root.show-icon;
+        clicked => {
+            menu.show();
+        }
+    }
+
+    menu := PopupWindow {
+        x: 0;
+        y: parent.height + 6px;
+        width: 188px;
+        height: menu-box.preferred-height;
+
+        menu-box := Rectangle {
+            background: Theme.surface-elevated;
+            border-radius: Radius.md;
+            border-width: 1px;
+            border-color: Theme.border-subtle;
+            drop-shadow-blur: 24px;
+            drop-shadow-color: Theme.card-shadow;
+            drop-shadow-offset-y: 6px;
+
+            VerticalLayout {
+                padding-top: 6px;
+                padding-bottom: 6px;
+                for entry[idx] in root.items: NavMenuItem {
+                    label: entry;
+                    clicked => {
+                        if (idx == root.home-item) {
+                            NavState.view = ContentView.home;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Square icon button for the header's right-side controls. `active`
+// gives it a highlighted look when its associated panel is open.
 component HeaderIconButton inherits Rectangle {
     in property <image> icon;
+    in property <bool> active: false;
     callback clicked();
 
     width: 36px;
     height: 36px;
     border-radius: Radius.sm;
-    background: ta.has-hover ? Theme.surface-hover : transparent;
+    background: root.active ? Theme.surface-elevated
+        : ta.has-hover ? Theme.surface-hover : transparent;
 
     QbzIcon {
         source: root.icon;
@@ -113,7 +202,8 @@ component HeaderIconButton inherits Rectangle {
         height: 19px;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
-        tint: ta.has-hover ? Theme.text-primary : Theme.text-secondary;
+        tint: root.active ? Theme.accent
+            : ta.has-hover ? Theme.text-primary : Theme.text-secondary;
     }
 
     ta := TouchArea {
@@ -141,26 +231,34 @@ export component HeaderBar inherits Rectangle {
         y: (root.height - self.height) / 2;
         height: 30px;
         spacing: Spacing.xs;
-        NavTab {
+        NavTabWithMenu {
             icon: @image-url("../assets/icons/compass.svg");
-            label: "Discover";
+            label: @tr("Discover");
             active: true;
             show-icon: root.show-tab-icons;
+            items: [@tr("Home"), @tr("Editor's Picks"), @tr("For You")];
+            // Row 0 = Home, the one working destination.
+            home-item: 0;
         }
-        NavTab {
+        NavTabWithMenu {
             icon: @image-url("../assets/icons/library-big.svg");
-            label: "Library";
+            label: @tr("Library");
             show-icon: root.show-tab-icons;
+            items: [@tr("Tracks"), @tr("Albums"), @tr("Artists"),
+                @tr("Playlists"), @tr("Labels")];
         }
-        NavTab {
+        NavTabWithMenu {
             icon: @image-url("../assets/icons/hard-drive.svg");
-            label: "Local Library";
+            label: @tr("Local Library");
             show-icon: root.show-tab-icons;
+            items: [@tr("Albums"), @tr("Artists"), @tr("Folders"),
+                @tr("Tracks")];
         }
-        NavTab {
+        NavTabWithMenu {
             icon: @image-url("../assets/icons/cassette-tape.svg");
-            label: "My QBZ";
+            label: @tr("My QBZ");
             show-icon: root.show-tab-icons;
+            items: [@tr("Collections"), @tr("Mixtapes")];
         }
     }
 
@@ -206,11 +304,21 @@ export component HeaderBar inherits Rectangle {
         width: 112px;
         height: 36px;
         spacing: 2px;
+        // Lyrics panel toggle.
         HeaderIconButton {
             icon: @image-url("../assets/icons/captions.svg");
+            active: ShellState.right-panel == 2;
+            clicked => {
+                ShellState.right-panel = ShellState.right-panel == 2 ? 0 : 2;
+            }
         }
+        // Queue panel toggle.
         HeaderIconButton {
             icon: @image-url("../assets/icons/list-ordered.svg");
+            active: ShellState.right-panel == 1;
+            clicked => {
+                ShellState.right-panel = ShellState.right-panel == 1 ? 0 : 1;
+            }
         }
         HeaderIconButton {
             icon: @image-url("../assets/icons/menu.svg");

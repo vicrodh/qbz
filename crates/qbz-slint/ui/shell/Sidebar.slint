@@ -3,18 +3,31 @@
 // The playlist list is empty until real playlist data is wired (the
 // sidebar is a later milestone). The user element now lives in the
 // header, not at the bottom of the sidebar.
+//
+// The sidebar is collapsible: its rendered width is driven by
+// ShellState (0px when collapsed, otherwise the user-set width). A thin
+// drag handle on the right edge resizes it, clamped to [200px, 420px];
+// dragging below ~160px collapses it entirely.
 
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Spacing } from "../foundation/spacing.slint";
-import { Layout } from "../foundation/layout.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
+import { ShellState } from "../state.slint";
 import { ScrollView } from "std-widgets.slint";
 
 export component Sidebar inherits Rectangle {
-    width: Layout.sidebar-width;
+    // Rendered width — 0 when collapsed, otherwise the user-set width.
+    width: ShellState.sidebar-collapsed ? 0px : ShellState.sidebar-width;
     // The sidebar sits one surface above the content area, matching the
     // QBZ dark theme (--bg-secondary sidebar over --bg-primary content).
     background: Theme.surface-card;
+    // Clip so content doesn't spill while the width animates to 0.
+    clip: true;
+    animate width { duration: 160ms; easing: ease-in-out; }
+
+    // Captured sidebar width at pointer-down, so drag deltas are
+    // measured from a stable origin.
+    property <length> drag-start-width: ShellState.sidebar-width;
 
     VerticalLayout {
         padding: Spacing.md;
@@ -22,7 +35,7 @@ export component Sidebar inherits Rectangle {
 
         HorizontalLayout {
             Text {
-                text: "PLAYLISTS";
+                text: @tr("PLAYLISTS");
                 color: Theme.text-muted;
                 font-size: 11px;
                 letter-spacing: 1.5px;
@@ -47,6 +60,32 @@ export component Sidebar inherits Rectangle {
                 spacing: 2px;
                 // Real playlist rows are populated when the sidebar
                 // milestone wires playlist data. No fixtures.
+            }
+        }
+    }
+
+    // Drag handle — a thin strip pinned to the right edge. Resizes the
+    // sidebar; below ~160px it collapses instead of resizing.
+    drag-handle := TouchArea {
+        x: parent.width - self.width;
+        width: 6px;
+        height: parent.height;
+        mouse-cursor: ew-resize;
+
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.down) {
+                root.drag-start-width = ShellState.sidebar-width;
+            }
+        }
+        moved => {
+            if (self.pressed) {
+                if (root.drag-start-width + (self.mouse-x - self.pressed-x) < 160px) {
+                    ShellState.sidebar-collapsed = true;
+                } else {
+                    ShellState.sidebar-width = Math.min(Math.max(
+                        root.drag-start-width + (self.mouse-x - self.pressed-x),
+                        200px), 420px);
+                }
             }
         }
     }

@@ -1,0 +1,85 @@
+// Right-side Queue panel.
+//
+// Rendered as a layout sibling of the content area (see AppShell), so it
+// shrinks the content rather than overlaying it. Closing sets
+// ShellState.right-panel = 0. The body is a structural placeholder;
+// queue contents are wired in a later milestone.
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Spacing } from "../foundation/spacing.slint";
+import { Typography } from "../foundation/typography.slint";
+import { Radius } from "../foundation/radius.slint";
+import { QbzIcon } from "../primitives/QbzIcon.slint";
+import { ShellState } from "../state.slint";
+
+component CloseButton inherits Rectangle {
+    callback clicked();
+    width: 28px;
+    height: 28px;
+    border-radius: Radius.sm;
+    background: ta.has-hover ? Theme.surface-hover : transparent;
+
+    QbzIcon {
+        source: @image-url("../assets/icons/x.svg");
+        width: 15px;
+        height: 15px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        tint: ta.has-hover ? Theme.text-primary : Theme.text-secondary;
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+export component QueueSidebar inherits Rectangle {
+    width: 320px;
+    background: Theme.surface-card;
+
+    VerticalLayout {
+        spacing: 0px;
+
+        // Header row — title + close button.
+        HorizontalLayout {
+            padding-left: Spacing.md;
+            padding-right: Spacing.sm;
+            padding-top: Spacing.sm;
+            padding-bottom: Spacing.sm;
+            height: 44px;
+            Text {
+                text: @tr("Queue");
+                color: Theme.text-primary;
+                font-size: Typography.heading;
+                font-weight: Typography.semibold;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+            VerticalLayout {
+                alignment: center;
+                CloseButton {
+                    clicked => {
+                        ShellState.right-panel = 0;
+                    }
+                }
+            }
+        }
+        Rectangle {
+            height: 1px;
+            background: Theme.border-subtle;
+        }
+
+        // Body — placeholder until queue contents are wired.
+        Rectangle {
+            vertical-stretch: 1;
+            Text {
+                text: @tr("Nothing queued");
+                color: Theme.text-muted;
+                font-size: Typography.body;
+            }
+        }
+    }
+}
