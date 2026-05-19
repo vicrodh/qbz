@@ -119,6 +119,21 @@ async fn enter_shell(
                     })
                 }
             }));
+            jobs.extend(
+                data.recent_albums
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(idx, card)| {
+                        if card.artwork_url.is_empty() {
+                            None
+                        } else {
+                            Some(artwork::ArtworkJob {
+                                target: artwork::ArtworkTarget::RecentAlbum { idx },
+                                url: card.artwork_url.clone(),
+                            })
+                        }
+                    }),
+            );
             let weak_for_artwork = weak.clone();
             let _ = weak.upgrade_in_event_loop(move |w| {
                 home::apply_home(&w, data);

@@ -19,6 +19,7 @@ pub struct HomeData {
     pub sections: Vec<SectionData>,
     pub popular: Vec<SlimData>,
     pub recent: Vec<SlimData>,
+    pub recent_albums: Vec<CardData>,
 }
 
 pub struct SectionData {
@@ -98,11 +99,27 @@ where
             artwork_url: track.artwork_url,
         })
         .collect();
+    let recent_albums = crate::recently::load_albums()
+        .into_iter()
+        .map(|album| CardData {
+            id: album.id,
+            title: album.title,
+            artist: album.artist,
+            genre: String::new(),
+            year: String::new(),
+            quality_tier: String::new(),
+            quality_label: String::new(),
+            ribbon: String::new(),
+            ribbon_kind: String::new(),
+            artwork_url: album.artwork_url,
+        })
+        .collect();
 
     Ok(HomeData {
         sections,
         popular,
         recent,
+        recent_albums,
     })
 }
 
@@ -241,34 +258,34 @@ fn format_rate(rate: f64) -> String {
     }
 }
 
+/// Convert one `CardData` into the Slint `AlbumCardItem`.
+fn card_to_item(card: CardData) -> AlbumCardItem {
+    AlbumCardItem {
+        id: card.id.into(),
+        title: card.title.into(),
+        artist: card.artist.into(),
+        genre: card.genre.into(),
+        year: card.year.into(),
+        quality_tier: card.quality_tier.into(),
+        quality_label: card.quality_label.into(),
+        ribbon: card.ribbon.into(),
+        ribbon_kind: card.ribbon_kind.into(),
+        artwork_url: card.artwork_url.into(),
+        artwork: slint::Image::default(),
+    }
+}
+
 /// Convert worker-thread home data into Slint models and push them onto
 /// the `HomeState` global. Must run on the Slint event loop.
 pub fn apply_home(window: &AppWindow, data: HomeData) {
     let sections: Vec<DiscoverSection> = data
         .sections
         .into_iter()
-        .map(|section| {
-            let albums: Vec<AlbumCardItem> = section
-                .albums
-                .into_iter()
-                .map(|card| AlbumCardItem {
-                    id: card.id.into(),
-                    title: card.title.into(),
-                    artist: card.artist.into(),
-                    genre: card.genre.into(),
-                    year: card.year.into(),
-                    quality_tier: card.quality_tier.into(),
-                    quality_label: card.quality_label.into(),
-                    ribbon: card.ribbon.into(),
-                    ribbon_kind: card.ribbon_kind.into(),
-                    artwork_url: card.artwork_url.into(),
-                    artwork: slint::Image::default(),
-                })
-                .collect();
-            DiscoverSection {
-                title: section.title.into(),
-                albums: ModelRc::new(VecModel::from(albums)),
-            }
+        .map(|section| DiscoverSection {
+            title: section.title.into(),
+            albums: ModelRc::new(VecModel::from(
+                section.albums.into_iter().map(card_to_item).collect::<Vec<_>>(),
+            )),
         })
         .collect();
 
@@ -287,11 +304,14 @@ pub fn apply_home(window: &AppWindow, data: HomeData) {
     };
     let popular = to_slim_items(data.popular);
     let recent = to_slim_items(data.recent);
+    let recent_albums: Vec<AlbumCardItem> =
+        data.recent_albums.into_iter().map(card_to_item).collect();
 
     let state = window.global::<HomeState>();
     state.set_sections(ModelRc::new(VecModel::from(sections)));
     state.set_popular(ModelRc::new(VecModel::from(popular)));
     state.set_recent(ModelRc::new(VecModel::from(recent)));
+    state.set_recent_albums(ModelRc::new(VecModel::from(recent_albums)));
 }
 
 #[cfg(test)]

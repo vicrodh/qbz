@@ -188,8 +188,21 @@ export component HomeView inherits Rectangle {
                     }
                 }
 
+                if HomeState.recent-albums.length > 0: Carousel {
+                    section: {
+                        title: @tr("Recently Played Albums"),
+                        albums: HomeState.recent-albums,
+                    };
+                    album-clicked(id) => {
+                        root.album-clicked(id);
+                    }
+                    media-action(kind, id, action) => {
+                        root.media-action(kind, id, action);
+                    }
+                }
+
                 if HomeState.recent.length > 0: GridSection {
-                    title: @tr("Recently Played");
+                    title: @tr("Recently Played Tracks");
                     items: HomeState.recent;
                     item-clicked(id) => {
                         root.media-action("track", id, "play");

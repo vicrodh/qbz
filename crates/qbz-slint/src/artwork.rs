@@ -37,6 +37,8 @@ pub enum ArtworkTarget {
     Popular { idx: usize },
     /// A card in `HomeState.recent[idx]`.
     Recent { idx: usize },
+    /// A card in `HomeState.recent-albums[idx]`.
+    RecentAlbum { idx: usize },
 }
 
 /// An artwork download job: which card, and the image URL.
@@ -128,26 +130,49 @@ pub async fn fetch_and_decode(
     Some((rgba.into_raw(), width, height))
 }
 
-/// Average RGB of decoded RGBA pixels, darkened so the result works as a
-/// header gradient tint. Mirrors, cheaply, the Tauri header that derives
-/// its color from the artwork. Returns a dark fallback for empty input.
+/// Representative color of decoded RGBA pixels for the header gradient.
+///
+/// A plain average desaturates badly (everything trends grey), so the
+/// average is saturation-boosted off its own mean and then normalized to
+/// a fixed peak brightness — the result keeps the cover's hue and reads
+/// as a clear tinted band against the dark surface. Dark fallback for
+/// empty input.
 pub fn header_tint(pixels: &[u8]) -> (u8, u8, u8) {
-    let (mut r, mut g, mut b, mut n) = (0u64, 0u64, 0u64, 0u64);
+    let (mut r, mut g, mut b, mut n) = (0f64, 0f64, 0f64, 0u64);
     for px in pixels.chunks_exact(4) {
         if px[3] < 16 {
             continue;
         }
-        r += px[0] as u64;
-        g += px[1] as u64;
-        b += px[2] as u64;
+        r += px[0] as f64;
+        g += px[1] as f64;
+        b += px[2] as f64;
         n += 1;
     }
     if n == 0 {
-        return (24, 24, 30);
+        return (34, 34, 42);
     }
-    // 0.5 keeps the tint dark enough for white text to stay readable.
-    let darken = |sum: u64| ((sum / n) as f64 * 0.5) as u8;
-    (darken(r), darken(g), darken(b))
+    let nf = n as f64;
+    let (mut r, mut g, mut b) = (r / nf, g / nf, b / nf);
+
+    // Saturation boost: push each channel away from the average's mean.
+    let mean = (r + g + b) / 3.0;
+    let boost = 2.1;
+    let saturate = |c: f64| (mean + (c - mean) * boost).clamp(0.0, 255.0);
+    r = saturate(r);
+    g = saturate(g);
+    b = saturate(b);
+
+    // Normalize the brightest channel to a fixed peak so the tint is
+    // always clearly visible — bright enough to perceive, dark enough to
+    // keep white text readable. Caps the scale so a near-black cover is
+    // only modestly lifted.
+    let peak = r.max(g).max(b).max(1.0);
+    let scale = (138.0 / peak).min(1.7);
+    (
+        (r * scale) as u8,
+        (g * scale) as u8,
+        (b * scale) as u8,
+    )
 }
 
 /// Apply decoded pixels to a single card. Runs on the Slint event loop.
@@ -197,6 +222,14 @@ fn apply_artwork(
             };
             item.artwork = image;
             recent.set_row_data(idx, item);
+        }
+        ArtworkTarget::RecentAlbum { idx } => {
+            let albums = home.get_recent_albums();
+            let Some(mut item) = albums.row_data(idx) else {
+                return;
+            };
+            item.artwork = image;
+            albums.set_row_data(idx, item);
         }
     }
 }

@@ -38,6 +38,7 @@ export global HomeState {
     in property <[DiscoverSection]> sections: [];
     in property <[SlimItem]> popular: [];
     in property <[SlimItem]> recent: [];
+    in property <[AlbumCardItem]> recent-albums: [];
     in property <bool> loading: false;
 }
 
@@ -59,6 +60,10 @@ export global AlbumState {
     in property <string> artist-id;
     in property <string> info-line;
     in property <string> quality-tier;
+    // "24-bit / 96 kHz" — quality-badge detail line.
+    in property <string> quality-detail;
+    // Editorial description / review (HTML stripped). May be empty.
+    in property <string> description;
     in property <image> artwork;
     // Artwork-derived tint for the header gradient.
     in property <color> header-color: #181820;
