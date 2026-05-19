@@ -652,6 +652,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         );
                     }
                 }
+                ("album", "play-next") => playback::enqueue_album_next(
+                    runtime.clone(),
+                    weak.clone(),
+                    handle.clone(),
+                    id,
+                ),
+                ("track", "play-next") => {
+                    if let Ok(track_id) = id.parse::<u64>() {
+                        playback::play_track_next(
+                            runtime.clone(),
+                            weak.clone(),
+                            handle.clone(),
+                            track_id,
+                        );
+                    }
+                }
                 _ => {}
             }
         });
