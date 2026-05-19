@@ -131,6 +131,9 @@ component NavMenuItem inherits Rectangle {
     in property <image> icon;
     in property <bool> has-glyph: false;
     callback clicked();
+    // Fires whenever the pointer is over the row — drives the dropdown's
+    // idle-close timer reset.
+    callback hovered();
 
     height: 32px;
     background: ta.has-hover ? Theme.surface-hover : transparent;
@@ -162,11 +165,29 @@ component NavMenuItem inherits Rectangle {
         clicked => {
             root.clicked();
         }
+        changed has-hover => {
+            if (self.has-hover) {
+                root.hovered();
+            }
+        }
+        moved => {
+            root.hovered();
+        }
     }
 }
 
-// A nav tab plus its dropdown menu. Clicking the tab opens a
+// A nav tab plus its dropdown menu. Clicking or hovering the tab opens a
 // PopupWindow positioned just below it, styled like the hamburger menu.
+//
+// Single-open is enforced by Slint itself: only one PopupWindow can be
+// open per window, so calling show() on another tab's menu closes the
+// previous one automatically — sweeping the pointer across tabs always
+// leaves just one menu open.
+//
+// Idle-close: an idle-timer (1.5s) closes the menu when the pointer has
+// not interacted with it. The timer is (re)started whenever the menu is
+// opened and whenever the pointer hovers/moves over a menu row.
+//
 // Menu rows are visual placeholders for now; the optional `home-item`
 // index marks the one row that keeps the app on the working Home view.
 component NavTabWithMenu inherits Rectangle {
@@ -179,8 +200,34 @@ component NavTabWithMenu inherits Rectangle {
     // to ContentView.home; all other rows are harmless no-ops.
     in property <int> home-item: -1;
 
+    // True while this tab's menu is open — gates the idle-close timer.
+    property <bool> menu-open: false;
+
     width: tab.width;
     height: 30px;
+
+    // Opens the menu and (re)arms the idle-close countdown.
+    function open-menu() {
+        root.menu-open = true;
+        idle-timer.running = true;
+        idle-timer.restart();
+        menu.show();
+    }
+
+    // (Re)arms the idle-close countdown — called on pointer activity
+    // inside the menu. Exposed as a function so repeated menu rows can
+    // reach the timer, which lives in this component's scope.
+    function reset-idle() {
+        idle-timer.restart();
+    }
+
+    // Closes the menu and disarms the idle timer — called when a row is
+    // activated.
+    function close-menu() {
+        root.menu-open = false;
+        idle-timer.running = false;
+        menu.close();
+    }
 
     tab := NavTab {
         icon: root.icon;
@@ -188,11 +235,24 @@ component NavTabWithMenu inherits Rectangle {
         active: root.active;
         show-icon: root.show-icon;
         clicked => {
-            menu.show();
+            root.open-menu();
         }
         // Open the dropdown on hover, no click needed.
         hovered => {
-            menu.show();
+            root.open-menu();
+        }
+    }
+
+    // Closes the menu after 1.5s of no pointer interaction with it.
+    idle-timer := Timer {
+        interval: 1500ms;
+        running: false;
+        triggered => {
+            self.running = false;
+            if (root.menu-open) {
+                root.menu-open = false;
+                menu.close();
+            }
         }
     }
 
@@ -222,6 +282,12 @@ component NavTabWithMenu inherits Rectangle {
                         if (idx == root.home-item) {
                             NavState.view = ContentView.home;
                         }
+                        root.close-menu();
+                    }
+                    // Any pointer interaction with a row resets the
+                    // idle-close countdown.
+                    hovered => {
+                        root.reset-idle();
                     }
                 }
             }
