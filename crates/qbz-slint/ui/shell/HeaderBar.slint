@@ -22,6 +22,8 @@ component NavTab inherits Rectangle {
     in property <bool> active: false;
     in property <bool> show-icon: true;
     callback clicked();
+    // Fires when the pointer first enters the tab — drives hover-to-open.
+    callback hovered();
 
     height: 30px;
     width: tab-row.preferred-width;
@@ -69,6 +71,11 @@ component NavTab inherits Rectangle {
         mouse-cursor: pointer;
         clicked => {
             root.clicked();
+        }
+        changed has-hover => {
+            if (self.has-hover) {
+                root.hovered();
+            }
         }
     }
 }
@@ -181,6 +188,10 @@ component NavTabWithMenu inherits Rectangle {
         active: root.active;
         show-icon: root.show-icon;
         clicked => {
+            menu.show();
+        }
+        // Open the dropdown on hover, no click needed.
+        hovered => {
             menu.show();
         }
     }
