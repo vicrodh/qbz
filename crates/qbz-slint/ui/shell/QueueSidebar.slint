@@ -79,8 +79,9 @@ component IconButton inherits Rectangle {
         source: root.icon;
         width: root.icon-size;
         height: root.icon-size;
-        x: (parent.width - self.width) / 2;
-        y: (parent.height - self.height) / 2;
+        // Round to whole pixels — a fractional offset renders blurry.
+        x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+        y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
         tint: !root.enabled
             ? Theme.text-disabled
             : (root.active

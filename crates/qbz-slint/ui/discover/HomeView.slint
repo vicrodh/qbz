@@ -149,7 +149,12 @@ export component HomeView inherits Rectangle {
             // overlap the right controls.
             left-controls := HorizontalLayout {
                 x: 32px;
-                y: (parent.height - self.height) / 2;
+                // Align the toolbar content's vertical center to y=25 —
+                // 11px (the back/forward padding-top used by the album /
+                // artist / settings views) + 14px (half the 28px nav
+                // buttons). Keeps the [<] [>] pair at the same screen
+                // position across every view, with no jump on navigation.
+                y: 25px - self.height / 2;
                 width: self.preferred-width;
                 // Explicit height too — without it the layout fills the
                 // 56px toolbar, so `y` resolves to 0 and the tab pill
@@ -181,7 +186,8 @@ export component HomeView inherits Rectangle {
             // on top of the history arrows.
             right-controls := HorizontalLayout {
                 x: parent.width - self.width - 32px;
-                y: (parent.height - self.height) / 2;
+                // Same y baseline as the left controls (see above).
+                y: 25px - self.height / 2;
                 width: self.preferred-width;
                 height: self.preferred-height;
                 spacing: 6px;

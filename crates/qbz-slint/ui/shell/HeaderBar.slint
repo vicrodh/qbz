@@ -217,8 +217,10 @@ component HeaderIconButton inherits Rectangle {
         source: root.icon;
         width: 19px;
         height: 19px;
-        x: (parent.width - self.width) / 2;
-        y: (parent.height - self.height) / 2;
+        // Round the centering to whole pixels — a fractional offset
+        // (here 8.5px) makes the glyph render blurry.
+        x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+        y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
         tint: root.active ? Theme.accent
             : ta.has-hover ? Theme.text-primary : Theme.text-secondary;
     }
@@ -248,7 +250,7 @@ export component HeaderBar inherits Rectangle {
         x: Spacing.md;
         y: (root.height - self.height) / 2;
         height: 30px;
-        spacing: Spacing.xs;
+        spacing: 2px;
         VerticalLayout {
             alignment: center;
             SidebarToggle { }
