@@ -10,6 +10,7 @@ import { Typography } from "../foundation/typography.slint";
 import { Radius } from "../foundation/radius.slint";
 import { NavState, ContentView, SettingsState } from "../state.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
+import { NavButtons } from "../shell/NavButtons.slint";
 import { AudioSettings } from "AudioSettings.slint";
 import { PlaybackSettings } from "PlaybackSettings.slint";
 import { ScrollView } from "std-widgets.slint";
@@ -75,31 +76,9 @@ export component SettingsView inherits Rectangle {
                 spacing: 12px;
                 alignment: start;
 
-                back := TouchArea {
-                    width: back-row.preferred-width;
-                    height: 26px;
-                    mouse-cursor: pointer;
-                    clicked => {
-                        NavState.view = ContentView.home;
-                    }
-                    back-row := HorizontalLayout {
-                        spacing: 6px;
-                        VerticalLayout {
-                            alignment: center;
-                            QbzIcon {
-                                source: @image-url("../assets/icons/arrow-left.svg");
-                                width: 16px;
-                                height: 16px;
-                                tint: back.has-hover ? Theme.text-secondary : Theme.text-muted;
-                            }
-                        }
-                        Text {
-                            text: @tr("Back");
-                            color: back.has-hover ? Theme.text-secondary : Theme.text-muted;
-                            font-size: Typography.body;
-                            vertical-alignment: center;
-                        }
-                    }
+                HorizontalLayout {
+                    alignment: start;
+                    NavButtons { }
                 }
 
                 Text {

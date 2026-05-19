@@ -34,6 +34,8 @@ pub struct AlbumData {
     pub quality_detail: String,
     /// Editorial description / review (HTML stripped). May be empty.
     pub description: String,
+    /// Short, truncated description for the header (full text in a modal).
+    pub description_short: String,
     pub artwork_url: String,
     /// Record label name, for the sidebar (empty when unknown).
     pub label: String,
@@ -101,6 +103,7 @@ fn map_album(album: Album) -> AlbumData {
         .as_deref()
         .map(strip_html)
         .unwrap_or_default();
+    let description_short = truncate_words(&description, 200);
     let artwork_url = album.image.best().cloned().unwrap_or_default();
     let label = album
         .label
@@ -132,11 +135,24 @@ fn map_album(album: Album) -> AlbumData {
         quality_tier,
         quality_detail,
         description,
+        description_short,
         artwork_url,
         label,
         awards,
         tracks,
     }
+}
+
+/// Truncate text to at most `max` characters, cutting back to the last
+/// word boundary and appending an ellipsis. Returns the text unchanged
+/// when it is already short enough.
+fn truncate_words(text: &str, max: usize) -> String {
+    if text.chars().count() <= max {
+        return text.to_string();
+    }
+    let truncated: String = text.chars().take(max).collect();
+    let cut = truncated.rfind(' ').unwrap_or(truncated.len());
+    format!("{}…", truncated[..cut].trim_end())
 }
 
 /// "24-bit / 96 kHz" — the quality-badge detail string.
@@ -257,6 +273,7 @@ pub fn apply_album(window: &AppWindow, data: AlbumData) {
     state.set_quality_tier(data.quality_tier.into());
     state.set_quality_detail(data.quality_detail.into());
     state.set_description(data.description.into());
+    state.set_description_short(data.description_short.into());
     state.set_label(data.label.into());
     state.set_awards(ModelRc::new(VecModel::from(awards)));
 

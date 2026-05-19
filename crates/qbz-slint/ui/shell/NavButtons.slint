@@ -1,0 +1,66 @@
+// Browser-like back / forward navigation pair.
+//
+// Same visual format as the Discover tab pill group (an elevated rounded
+// container). Used inline beside the Discover tabs and in place of the
+// per-page Back button. Both buttons drive the NavState global, so the
+// Rust nav history records every move.
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { NavState } from "../state.slint";
+import { QbzIcon } from "../primitives/QbzIcon.slint";
+
+component NavBtn inherits Rectangle {
+    in property <image> icon;
+    in property <bool> enabled: true;
+    callback clicked();
+
+    width: 32px;
+    height: 28px;
+    border-radius: 4px;
+    background: ta.has-hover && root.enabled ? Theme.surface-hover : transparent;
+    opacity: root.enabled ? 1.0 : 0.3;
+
+    QbzIcon {
+        source: root.icon;
+        width: 15px;
+        height: 15px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        tint: Theme.text-secondary;
+    }
+
+    ta := TouchArea {
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => {
+            if (root.enabled) {
+                root.clicked();
+            }
+        }
+    }
+}
+
+export component NavButtons inherits Rectangle {
+    background: Theme.surface-elevated;
+    border-radius: 6px;
+    width: btn-row.preferred-width;
+    height: 34px;
+
+    btn-row := HorizontalLayout {
+        padding: 3px;
+        spacing: 4px;
+        NavBtn {
+            icon: @image-url("../assets/icons/chevron-left.svg");
+            enabled: NavState.can-back;
+            clicked => {
+                NavState.request-back();
+            }
+        }
+        NavBtn {
+            icon: @image-url("../assets/icons/chevron-right.svg");
+            enabled: NavState.can-forward;
+            clicked => {
+                NavState.request-forward();
+            }
+        }
+    }
+}

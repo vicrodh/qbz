@@ -21,6 +21,7 @@ mod artwork;
 mod auth;
 mod commands;
 mod home;
+mod nav;
 mod recently;
 mod settings;
 
@@ -150,6 +151,123 @@ async fn enter_shell(
     }
 }
 
+/// Push the navigation history flags onto `NavState`. UI thread only.
+fn update_nav_flags(window: &AppWindow) {
+    let state = window.global::<NavState>();
+    state.set_can_back(nav::can_back());
+    state.set_can_forward(nav::can_forward());
+}
+
+/// Load an album and show the album view, then fetch its artwork. Shared
+/// by the `open-album` callback and by history back/forward.
+fn navigate_album(
+    runtime: Arc<AppRuntime<SlintAdapter>>,
+    weak: slint::Weak<AppWindow>,
+    handle: &tokio::runtime::Handle,
+    image_cache: artwork::ImageCache,
+    album_id: String,
+) {
+    handle.spawn(async move {
+        let _ = weak.upgrade_in_event_loop(|w| {
+            album::reset_album(&w);
+            w.global::<NavState>().set_view(ContentView::Album);
+        });
+        match album::load_album(&runtime, &album_id).await {
+            Ok(data) => {
+                let artwork_url = data.artwork_url.clone();
+                let _ = weak.upgrade_in_event_loop(move |w| {
+                    album::apply_album(&w, data);
+                    w.global::<AlbumState>().set_loading(false);
+                });
+                if !artwork_url.is_empty() {
+                    if let Some((pixels, width, height)) =
+                        artwork::fetch_and_decode(&artwork_url, &image_cache, 448).await
+                    {
+                        let _ = weak.upgrade_in_event_loop(move |w| {
+                            album::apply_artwork(&w, &pixels, width, height);
+                        });
+                    }
+                }
+            }
+            Err(e) => {
+                log::error!("[qbz-slint] album load failed: {e}");
+                let _ = weak.upgrade_in_event_loop(|w| {
+                    w.global::<AlbumState>().set_loading(false);
+                });
+            }
+        }
+    });
+}
+
+/// Load an artist page and show the artist view, then fetch the portrait.
+/// Shared by the `open-artist` callback and by history back/forward.
+fn navigate_artist(
+    runtime: Arc<AppRuntime<SlintAdapter>>,
+    weak: slint::Weak<AppWindow>,
+    handle: &tokio::runtime::Handle,
+    image_cache: artwork::ImageCache,
+    artist_id: String,
+) {
+    handle.spawn(async move {
+        let _ = weak.upgrade_in_event_loop(|w| {
+            artist::reset_artist(&w);
+            w.global::<NavState>().set_view(ContentView::Artist);
+        });
+        match artist::load_artist(&runtime, &artist_id).await {
+            Ok(data) => {
+                let artwork_url = data.artwork_url.clone();
+                let _ = weak.upgrade_in_event_loop(move |w| {
+                    artist::apply_artist(&w, data);
+                    w.global::<ArtistState>().set_loading(false);
+                });
+                if !artwork_url.is_empty() {
+                    if let Some((pixels, width, height)) =
+                        artwork::fetch_and_decode(&artwork_url, &image_cache, 440).await
+                    {
+                        let _ = weak.upgrade_in_event_loop(move |w| {
+                            artist::apply_artwork(&w, &pixels, width, height);
+                        });
+                    }
+                }
+            }
+            Err(e) => {
+                log::error!("[qbz-slint] artist load failed: {e}");
+                let _ = weak.upgrade_in_event_loop(|w| {
+                    w.global::<ArtistState>().set_loading(false);
+                });
+            }
+        }
+    });
+}
+
+/// Apply a history entry — set the view and re-load entity pages.
+fn apply_entry(
+    entry: nav::NavEntry,
+    runtime: &Arc<AppRuntime<SlintAdapter>>,
+    weak: &slint::Weak<AppWindow>,
+    handle: &tokio::runtime::Handle,
+    image_cache: &artwork::ImageCache,
+) {
+    match entry {
+        nav::NavEntry::Home => {
+            let _ = weak.upgrade_in_event_loop(|w| {
+                w.global::<NavState>().set_view(ContentView::Home);
+            });
+        }
+        nav::NavEntry::Settings => {
+            let _ = weak.upgrade_in_event_loop(|w| {
+                w.global::<NavState>().set_view(ContentView::Settings);
+            });
+        }
+        nav::NavEntry::Album(id) => {
+            navigate_album(runtime.clone(), weak.clone(), handle, image_cache.clone(), id);
+        }
+        nav::NavEntry::Artist(id) => {
+            navigate_artist(runtime.clone(), weak.clone(), handle, image_cache.clone(), id);
+        }
+    }
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
@@ -262,91 +380,88 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 
-    // Open an album: load it, show the album view, then fetch its artwork.
+    // Open an album: record history, then load and show it.
     {
         let runtime = app_runtime.clone();
         let weak = window.as_weak();
         let handle = tokio_rt.handle().clone();
         let image_cache = image_cache.clone();
         window.on_open_album(move |album_id| {
-            let runtime = runtime.clone();
-            let weak = weak.clone();
-            let image_cache = image_cache.clone();
             let album_id = album_id.to_string();
-            handle.spawn(async move {
-                let _ = weak.upgrade_in_event_loop(|w| {
-                    album::reset_album(&w);
-                    w.global::<NavState>().set_view(ContentView::Album);
-                });
-                match album::load_album(&runtime, &album_id).await {
-                    Ok(data) => {
-                        let artwork_url = data.artwork_url.clone();
-                        let _ = weak.upgrade_in_event_loop(move |w| {
-                            album::apply_album(&w, data);
-                            w.global::<AlbumState>().set_loading(false);
-                        });
-                        if !artwork_url.is_empty() {
-                            if let Some((pixels, width, height)) =
-                                artwork::fetch_and_decode(&artwork_url, &image_cache, 448).await
-                            {
-                                let _ = weak.upgrade_in_event_loop(move |w| {
-                                    album::apply_artwork(&w, &pixels, width, height);
-                                });
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        log::error!("[qbz-slint] album load failed: {e}");
-                        let _ = weak.upgrade_in_event_loop(|w| {
-                            w.global::<AlbumState>().set_loading(false);
-                        });
-                    }
-                }
-            });
+            nav::record(nav::NavEntry::Album(album_id.clone()));
+            navigate_album(
+                runtime.clone(),
+                weak.clone(),
+                &handle,
+                image_cache.clone(),
+                album_id,
+            );
+            if let Some(w) = weak.upgrade() {
+                update_nav_flags(&w);
+            }
         });
     }
 
-    // Open an artist: load the artist page, show it, then fetch the portrait.
+    // Open an artist: record history, then load and show the page.
     {
         let runtime = app_runtime.clone();
         let weak = window.as_weak();
         let handle = tokio_rt.handle().clone();
         let image_cache = image_cache.clone();
         window.on_open_artist(move |artist_id| {
-            let runtime = runtime.clone();
-            let weak = weak.clone();
-            let image_cache = image_cache.clone();
             let artist_id = artist_id.to_string();
-            handle.spawn(async move {
-                let _ = weak.upgrade_in_event_loop(|w| {
-                    artist::reset_artist(&w);
-                    w.global::<NavState>().set_view(ContentView::Artist);
-                });
-                match artist::load_artist(&runtime, &artist_id).await {
-                    Ok(data) => {
-                        let artwork_url = data.artwork_url.clone();
-                        let _ = weak.upgrade_in_event_loop(move |w| {
-                            artist::apply_artist(&w, data);
-                            w.global::<ArtistState>().set_loading(false);
-                        });
-                        if !artwork_url.is_empty() {
-                            if let Some((pixels, width, height)) =
-                                artwork::fetch_and_decode(&artwork_url, &image_cache, 440).await
-                            {
-                                let _ = weak.upgrade_in_event_loop(move |w| {
-                                    artist::apply_artwork(&w, &pixels, width, height);
-                                });
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        log::error!("[qbz-slint] artist load failed: {e}");
-                        let _ = weak.upgrade_in_event_loop(|w| {
-                            w.global::<ArtistState>().set_loading(false);
-                        });
-                    }
-                }
-            });
+            nav::record(nav::NavEntry::Artist(artist_id.clone()));
+            navigate_artist(
+                runtime.clone(),
+                weak.clone(),
+                &handle,
+                image_cache.clone(),
+                artist_id,
+            );
+            if let Some(w) = weak.upgrade() {
+                update_nav_flags(&w);
+            }
+        });
+    }
+
+    // History navigation — back / forward / settings, all recorded by the
+    // nav module so the [<] [>] pair and the mouse buttons stay in sync.
+    {
+        let weak = window.as_weak();
+        window.global::<NavState>().on_request_settings(move || {
+            nav::record(nav::NavEntry::Settings);
+            if let Some(w) = weak.upgrade() {
+                w.global::<NavState>().set_view(ContentView::Settings);
+                update_nav_flags(&w);
+            }
+        });
+    }
+    {
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        let image_cache = image_cache.clone();
+        window.global::<NavState>().on_request_back(move || {
+            if let Some(entry) = nav::go_back() {
+                apply_entry(entry, &runtime, &weak, &handle, &image_cache);
+            }
+            if let Some(w) = weak.upgrade() {
+                update_nav_flags(&w);
+            }
+        });
+    }
+    {
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        let image_cache = image_cache.clone();
+        window.global::<NavState>().on_request_forward(move || {
+            if let Some(entry) = nav::go_forward() {
+                apply_entry(entry, &runtime, &weak, &handle, &image_cache);
+            }
+            if let Some(w) = weak.upgrade() {
+                update_nav_flags(&w);
+            }
         });
     }
 

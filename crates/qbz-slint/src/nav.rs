@@ -1,0 +1,133 @@
+//! Page navigation history — a browser-like back/forward stack.
+//!
+//! The shell records a [`NavEntry`] on every fresh navigation; the
+//! `[<] [>]` button pair (and the mouse back/forward buttons) walk the
+//! stack. UI thread only, hence `thread_local`.
+//!
+//! Scroll-position restoration per entry is a planned follow-up; for now
+//! the stack tracks which page was visited, not where it was scrolled.
+
+use std::cell::RefCell;
+
+/// One navigable destination.
+#[derive(Clone, Debug, PartialEq)]
+pub enum NavEntry {
+    Home,
+    Album(String),
+    Artist(String),
+    Settings,
+}
+
+struct History {
+    entries: Vec<NavEntry>,
+    /// Index of the entry currently shown.
+    cursor: usize,
+}
+
+thread_local! {
+    static HISTORY: RefCell<History> = RefCell::new(History {
+        entries: vec![NavEntry::Home],
+        cursor: 0,
+    });
+}
+
+/// Record a fresh forward navigation, dropping any forward history. A
+/// no-op when the destination already is the current entry, so repeated
+/// clicks on the same page do not pile up.
+pub fn record(entry: NavEntry) {
+    HISTORY.with(|h| {
+        let h = &mut *h.borrow_mut();
+        if h.entries.get(h.cursor) == Some(&entry) {
+            return;
+        }
+        h.entries.truncate(h.cursor + 1);
+        h.entries.push(entry);
+        h.cursor = h.entries.len() - 1;
+    });
+}
+
+/// Step back; returns the entry that is now current, or `None` at the
+/// start of the stack.
+pub fn go_back() -> Option<NavEntry> {
+    HISTORY.with(|h| {
+        let h = &mut *h.borrow_mut();
+        if h.cursor == 0 {
+            return None;
+        }
+        h.cursor -= 1;
+        h.entries.get(h.cursor).cloned()
+    })
+}
+
+/// Step forward; returns the entry that is now current, or `None` at the
+/// end of the stack.
+pub fn go_forward() -> Option<NavEntry> {
+    HISTORY.with(|h| {
+        let h = &mut *h.borrow_mut();
+        if h.cursor + 1 >= h.entries.len() {
+            return None;
+        }
+        h.cursor += 1;
+        h.entries.get(h.cursor).cloned()
+    })
+}
+
+/// Whether a back step is available.
+pub fn can_back() -> bool {
+    HISTORY.with(|h| h.borrow().cursor > 0)
+}
+
+/// Whether a forward step is available.
+pub fn can_forward() -> bool {
+    HISTORY.with(|h| {
+        let h = h.borrow();
+        h.cursor + 1 < h.entries.len()
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn reset() {
+        HISTORY.with(|h| {
+            *h.borrow_mut() = History {
+                entries: vec![NavEntry::Home],
+                cursor: 0,
+            };
+        });
+    }
+
+    #[test]
+    fn record_then_back_and_forward() {
+        reset();
+        assert!(!can_back());
+        record(NavEntry::Album("1".into()));
+        record(NavEntry::Artist("2".into()));
+        assert!(can_back());
+        assert!(!can_forward());
+        assert_eq!(go_back(), Some(NavEntry::Album("1".into())));
+        assert_eq!(go_back(), Some(NavEntry::Home));
+        assert_eq!(go_back(), None);
+        assert_eq!(go_forward(), Some(NavEntry::Album("1".into())));
+    }
+
+    #[test]
+    fn record_truncates_forward_history() {
+        reset();
+        record(NavEntry::Album("1".into()));
+        record(NavEntry::Album("2".into()));
+        go_back();
+        record(NavEntry::Artist("3".into()));
+        assert!(!can_forward());
+        assert_eq!(go_back(), Some(NavEntry::Album("1".into())));
+    }
+
+    #[test]
+    fn record_dedupes_current_entry() {
+        reset();
+        record(NavEntry::Album("1".into()));
+        record(NavEntry::Album("1".into()));
+        assert_eq!(go_back(), Some(NavEntry::Home));
+    }
+}

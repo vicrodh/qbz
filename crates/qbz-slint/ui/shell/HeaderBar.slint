@@ -207,7 +207,7 @@ export component HeaderBar inherits Rectangle {
         height: 36px;
         spacing: 2px;
         HeaderIconButton {
-            icon: @image-url("../assets/icons/list-music.svg");
+            icon: @image-url("../assets/icons/list-ordered.svg");
         }
         HeaderIconButton {
             icon: @image-url("../assets/icons/captions.svg");
@@ -274,7 +274,7 @@ export component HeaderBar inherits Rectangle {
                     icon: @image-url("../assets/icons/settings.svg");
                     label: @tr("Settings");
                     clicked => {
-                        NavState.view = ContentView.settings;
+                        NavState.request-settings();
                     }
                 }
                 MenuItem {

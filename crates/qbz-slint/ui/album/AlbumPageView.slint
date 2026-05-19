@@ -14,6 +14,7 @@ import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { ContextMenu } from "../primitives/ContextMenu.slint";
 import { ContextMenuItem } from "../primitives/ContextMenuItem.slint";
 import { QualityBadgeFull } from "../primitives/QualityBadgeFull.slint";
+import { NavButtons } from "../shell/NavButtons.slint";
 
 component CircleAction inherits Rectangle {
     in property <image> icon;
@@ -320,32 +321,10 @@ export component AlbumPageView inherits Rectangle {
             spacing: 0px;
             alignment: start;
 
-            // --- Back button -------------------------------------------------
-            back := TouchArea {
-                width: back-row.preferred-width;
-                height: 28px;
-                mouse-cursor: pointer;
-                clicked => {
-                    NavState.view = ContentView.home;
-                }
-                back-row := HorizontalLayout {
-                    spacing: 6px;
-                    VerticalLayout {
-                        alignment: center;
-                        QbzIcon {
-                            source: @image-url("../assets/icons/arrow-left.svg");
-                            width: 16px;
-                            height: 16px;
-                            tint: back.has-hover ? Theme.text-secondary : Theme.text-muted;
-                        }
-                    }
-                    Text {
-                        text: @tr("Back");
-                        color: back.has-hover ? Theme.text-secondary : Theme.text-muted;
-                        font-size: Typography.body;
-                        vertical-alignment: center;
-                    }
-                }
+            // --- History navigation ------------------------------------------
+            HorizontalLayout {
+                alignment: start;
+                NavButtons { }
             }
 
             Rectangle { height: 22px; }
@@ -412,18 +391,17 @@ export component AlbumPageView inherits Rectangle {
                         overflow: elide;
                     }
 
-                    // Editorial description — truncated, with a Read more
-                    // link that opens the full text in a modal.
+                    // Editorial description — a pre-truncated short string
+                    // (so it naturally wraps to a couple of lines without
+                    // overflowing), with a Read more link to the full modal.
                     if AlbumState.description != "": Rectangle { height: 10px; }
                     if AlbumState.description != "": Text {
-                        text: AlbumState.description;
+                        text: AlbumState.description-short;
                         color: Theme.text-secondary;
                         font-size: Typography.legal;
                         wrap: word-wrap;
-                        height: 34px;
-                        overflow: elide;
                     }
-                    if AlbumState.description != "": read-more := TouchArea {
+                    if AlbumState.description != AlbumState.description-short: read-more := TouchArea {
                         width: read-more-row.preferred-width;
                         height: 22px;
                         mouse-cursor: pointer;

@@ -64,6 +64,8 @@ export global AlbumState {
     in property <string> quality-detail;
     // Editorial description / review (HTML stripped). May be empty.
     in property <string> description;
+    // Truncated description for the header; full text lives in the modal.
+    in property <string> description-short;
     in property <image> artwork;
     // Artwork-derived tint for the header gradient.
     in property <color> header-color: #181820;
@@ -117,6 +119,13 @@ export global SettingsState {
 
 export global NavState {
     in-out property <ContentView> view: ContentView.home;
+    // Browser-like history flags, driven by the Rust nav module.
+    in property <bool> can-back: false;
+    in property <bool> can-forward: false;
+    // Navigation requests routed to Rust so history is recorded.
+    callback request-back();
+    callback request-forward();
+    callback request-settings();
 }
 
 // Artist detail screen state.

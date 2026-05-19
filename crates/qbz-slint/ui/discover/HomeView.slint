@@ -12,6 +12,7 @@ import { HomeState, NavState, ContentView } from "../state.slint";
 import { Carousel } from "Carousel.slint";
 import { GridSection } from "GridSection.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
+import { NavButtons } from "../shell/NavButtons.slint";
 
 component Tab inherits Rectangle {
     in property <string> label;
@@ -122,6 +123,13 @@ export component HomeView inherits Rectangle {
                 padding-left: 32px;
                 padding-right: 32px;
 
+                // Back / forward history pair, inline beside the tabs.
+                VerticalLayout {
+                    alignment: center;
+                    NavButtons { }
+                }
+                Rectangle { width: 16px; }
+
                 VerticalLayout {
                     alignment: center;
                     Rectangle {
@@ -146,7 +154,7 @@ export component HomeView inherits Rectangle {
                         GenreButton { }
                         GearButton {
                             clicked => {
-                                NavState.view = ContentView.settings;
+                                NavState.request-settings();
                             }
                         }
                     }

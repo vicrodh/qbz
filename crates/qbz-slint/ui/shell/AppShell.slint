@@ -26,6 +26,21 @@ export component AppShell inherits Rectangle {
 
     background: Theme.surface-main;
 
+    // Bottom layer: catches the mouse back / forward buttons for history
+    // navigation. Declared first so the real UI sits on top of it.
+    TouchArea {
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.down) {
+                if (e.button == PointerEventButton.back) {
+                    NavState.request-back();
+                }
+                if (e.button == PointerEventButton.forward) {
+                    NavState.request-forward();
+                }
+            }
+        }
+    }
+
     VerticalLayout {
         spacing: 0px;
 
