@@ -135,24 +135,32 @@ component TrackRow inherits Rectangle {
             vertical-alignment: center;
         }
 
-        // More button — fades in on row hover, opens the context menu.
-        Rectangle {
-            width: 32px;
-            more-ta := TouchArea {
-                mouse-cursor: pointer;
-                clicked => {
-                    track-menu.show();
-                }
-            }
-            QbzIcon {
-                source: @image-url("../assets/icons/ellipsis.svg");
-                width: 16px;
-                height: 16px;
-                x: (parent.width - self.width) / 2;
-                y: (parent.height - self.height) / 2;
-                tint: more-ta.has-hover ? Theme.text-primary : Theme.text-secondary;
-                opacity: ta.has-hover ? 1.0 : 0.0;
+        // More button — a 32px square hit area, vertically centered.
+        // Visible while the row OR the button itself is hovered (the
+        // button steals has-hover from the row, so the states are ORed).
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 32px;
+                height: 32px;
+                border-radius: Radius.sm;
+                opacity: (ta.has-hover || more-ta.has-hover) ? 1.0 : 0.0;
                 animate opacity { duration: 120ms; }
+                background: more-ta.has-hover ? Theme.surface-elevated : transparent;
+                QbzIcon {
+                    source: @image-url("../assets/icons/ellipsis.svg");
+                    width: 16px;
+                    height: 16px;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    tint: more-ta.has-hover ? Theme.text-primary : Theme.text-secondary;
+                }
+                more-ta := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        track-menu.show();
+                    }
+                }
             }
         }
     }
