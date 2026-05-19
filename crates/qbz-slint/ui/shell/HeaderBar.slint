@@ -362,7 +362,8 @@ export component HeaderBar inherits Rectangle {
     // Explicit width (3 * 36 + 2 * 2 spacing) so the right anchor lands
     // correctly — a layout left to its own devices fills the parent.
     right-controls := HorizontalLayout {
-        x: root.width - self.width - Spacing.md;
+        // 2px tighter to the window edge than the standard margin.
+        x: root.width - self.width - Spacing.md + 2px;
         y: (root.height - self.height) / 2;
         width: 112px;
         height: 36px;
