@@ -100,6 +100,7 @@ export component AudioSettings inherits VerticalLayout {
             popup-width: 480px;
             options: SettingsState.devices;
             badges: SettingsState.device-bp;
+            groups: SettingsState.device-groups;
             current-index: SettingsState.device-index;
             selected(i) => {
                 SettingsState.device-index = i;

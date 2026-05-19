@@ -106,6 +106,9 @@ export global SettingsState {
     in-out property <[string]> devices: [];
     // Parallel to `devices`: true marks a bit-perfect-capable device.
     in-out property <[bool]> device-bp: [];
+    // Parallel to `devices`: a non-empty entry is a section-header label
+    // shown above that device row (empty = no header).
+    in-out property <[string]> device-groups: [];
     in-out property <int> device-index: 0;
     in-out property <[string]> alsa-plugins: [];
     in-out property <int> alsa-plugin-index: 0;

@@ -128,6 +128,7 @@ pub struct SettingsSnapshot {
     backend_index: i32,
     devices: Vec<String>,
     device_bp: Vec<bool>,
+    device_groups: Vec<String>,
     device_index: i32,
     alsa_plugins: Vec<String>,
     alsa_plugin_index: i32,
@@ -159,26 +160,79 @@ pub struct SettingsSnapshot {
 }
 
 /// Devices enumerated for one backend: parallel label / id / bit-perfect
-/// lists. `bp[i]` flags a device able to deliver bit-perfect output.
+/// / section-header lists. `bp[i]` flags a device able to deliver
+/// bit-perfect output; `groups[i]` is the section-header label shown
+/// above row `i` (empty = no header — the row continues the previous
+/// section). The four lists stay index-aligned with each other and with
+/// `SettingsMaps.devices`, so `device_index` keeps resolving correctly
+/// after the rows are regrouped.
 struct DeviceList {
     labels: Vec<String>,
     ids: Vec<String>,
     bp: Vec<bool>,
+    groups: Vec<String>,
 }
 
-/// Whether a device can deliver bit-perfect playback on `backend`. On
-/// ALSA only the direct-hardware PCMs qualify (`hw:` / `front:` and the
-/// digital `iec958:` / `hdmi:`) — `sysdefault:`, `plughw:` and friends
-/// route through converting plugins. PipeWire reports a hardware flag
-/// per node; PulseAudio always mixes, so never capable.
+/// Which ALSA dropdown section a device belongs to. Mirrors the Tauri
+/// `DeviceDropdown.svelte` ALSA grouping (`Defaults`, `Bit-perfect
+/// (Hardware / Digital)`, `Plugin Hardware`, `Other Outputs`), in that
+/// display order.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+enum AlsaSection {
+    Defaults,
+    BitPerfect,
+    PluginHw,
+    Other,
+}
+
+/// Classify an ALSA device into its dropdown section, matching the Tauri
+/// `DeviceDropdown.svelte` ALSA branch:
+///  - the "System default" entry (empty id) and `default` / `is_default`
+///    devices → Defaults;
+///  - `hw:`, `iec958:`, `front:CARD=` ids, or any label containing
+///    "bit-perfect" → Bit-perfect (Hardware / Digital);
+///  - `plughw:` ids → Plugin Hardware;
+///  - everything else (`sysdefault:`, `hdmi:`, ...) → Other Outputs.
+fn alsa_section(id: &str, is_default: bool, label: &str) -> AlsaSection {
+    let id_l = id.to_ascii_lowercase();
+    if id.is_empty() || id_l == "default" || is_default {
+        AlsaSection::Defaults
+    } else if id_l.starts_with("hw:")
+        || id_l.starts_with("iec958:")
+        || id_l.starts_with("front:card=")
+        || label.to_ascii_lowercase().contains("bit-perfect")
+    {
+        AlsaSection::BitPerfect
+    } else if id_l.starts_with("plughw:") {
+        AlsaSection::PluginHw
+    } else {
+        AlsaSection::Other
+    }
+}
+
+/// The display label for an ALSA section header.
+fn alsa_section_label(section: AlsaSection) -> &'static str {
+    match section {
+        AlsaSection::Defaults => "Defaults",
+        AlsaSection::BitPerfect => "Bit-perfect (Hardware / Digital)",
+        AlsaSection::PluginHw => "Plugin Hardware",
+        AlsaSection::Other => "Other Outputs",
+    }
+}
+
+/// Whether a device can deliver bit-perfect playback on `backend` — the
+/// rule that drives the "BP" badge. On ALSA this is exactly the
+/// Bit-perfect section of the dropdown (Tauri shows the badge on that
+/// group only): direct-hardware `hw:` / `front:CARD=` PCMs and the
+/// digital `iec958:` outputs. `sysdefault:`, `hdmi:`, `plughw:` and the
+/// system default route through converting plugins / mixers and never
+/// qualify. PipeWire reports a hardware flag per node; PulseAudio always
+/// mixes, so never capable.
 fn device_is_bit_perfect(backend: AudioBackendType, device: &qbz_audio::AudioDevice) -> bool {
     match backend {
         AudioBackendType::Alsa => {
-            let id = device.id.to_ascii_lowercase();
-            id.starts_with("hw:")
-                || id.starts_with("front:")
-                || id.starts_with("iec958:")
-                || id.starts_with("hdmi:")
+            let label = device.description.as_deref().unwrap_or(&device.name);
+            alsa_section(&device.id, device.is_default, label) == AlsaSection::BitPerfect
         }
         AudioBackendType::PipeWire => device.is_hardware,
         AudioBackendType::Pulse | AudioBackendType::SystemDefault => false,
@@ -195,12 +249,28 @@ fn backend_label(t: AudioBackendType) -> String {
     .to_string()
 }
 
+/// One enumerated output device before grouping.
+struct DeviceRow {
+    label: String,
+    id: String,
+    bp: bool,
+}
+
 /// Enumerate output devices for a backend. Always leads with a "System
 /// default" entry (empty id). Blocking — call off the UI thread.
+///
+/// For the ALSA backend the rows are regrouped into the Tauri dropdown
+/// sections (Defaults / Bit-perfect / Plugin Hardware / Other Outputs)
+/// and a parallel `groups` list carries the section header shown above
+/// each section's first row. Other backends keep a flat list with no
+/// headers (`groups` all empty).
 fn enumerate_devices(backend: AudioBackendType) -> DeviceList {
-    let mut labels = vec!["System default".to_string()];
-    let mut ids = vec![String::new()];
-    let mut bp = vec![false];
+    // The synthetic "System default" entry (empty id) always leads.
+    let mut rows = vec![DeviceRow {
+        label: "System default".to_string(),
+        id: String::new(),
+        bp: false,
+    }];
     match BackendManager::create_backend(backend).and_then(|b| b.enumerate_devices()) {
         Ok(devices) => {
             for d in devices {
@@ -208,14 +278,71 @@ fn enumerate_devices(backend: AudioBackendType) -> DeviceList {
                     Some(desc) if !desc.is_empty() => desc.to_string(),
                     _ => d.name.clone(),
                 };
-                labels.push(label);
-                bp.push(device_is_bit_perfect(backend, &d));
-                ids.push(d.id);
+                let bp = device_is_bit_perfect(backend, &d);
+                rows.push(DeviceRow {
+                    label,
+                    id: d.id,
+                    bp,
+                });
             }
         }
         Err(e) => log::warn!("[qbz-slint] device enumeration failed: {e}"),
     }
-    DeviceList { labels, ids, bp }
+
+    if backend == AudioBackendType::Alsa {
+        group_alsa_devices(rows)
+    } else {
+        // Non-ALSA backends: flat list, no section headers.
+        let len = rows.len();
+        let mut list = DeviceList {
+            labels: Vec::with_capacity(len),
+            ids: Vec::with_capacity(len),
+            bp: Vec::with_capacity(len),
+            groups: vec![String::new(); len],
+        };
+        for r in rows {
+            list.labels.push(r.label);
+            list.ids.push(r.id);
+            list.bp.push(r.bp);
+        }
+        list
+    }
+}
+
+/// Regroup ALSA device rows into the Tauri dropdown sections and build
+/// the parallel `groups` header list. A row's `groups` entry is the
+/// section label only when it is the first row of its section; the rest
+/// are empty. Rows keep their relative order within a section, so the
+/// resulting `ids` stay a faithful index map for `device_index`.
+fn group_alsa_devices(rows: Vec<DeviceRow>) -> DeviceList {
+    // Stable sort by section keeps within-section enumeration order.
+    let mut indexed: Vec<(AlsaSection, DeviceRow)> = rows
+        .into_iter()
+        .map(|r| (alsa_section(&r.id, false, &r.label), r))
+        .collect();
+    indexed.sort_by_key(|(section, _)| *section);
+
+    let len = indexed.len();
+    let mut list = DeviceList {
+        labels: Vec::with_capacity(len),
+        ids: Vec::with_capacity(len),
+        bp: Vec::with_capacity(len),
+        groups: Vec::with_capacity(len),
+    };
+    let mut prev_section: Option<AlsaSection> = None;
+    for (section, row) in indexed {
+        let header = if prev_section != Some(section) {
+            prev_section = Some(section);
+            alsa_section_label(section).to_string()
+        } else {
+            String::new()
+        };
+        list.labels.push(row.label);
+        list.ids.push(row.id);
+        list.bp.push(row.bp);
+        list.groups.push(header);
+    }
+    list
 }
 
 fn with_audio<T>(
@@ -309,6 +436,7 @@ fn build_snapshot(
         backend_index: backend_index as i32,
         devices: device_list.labels,
         device_bp: device_list.bp,
+        device_groups: device_list.groups,
         device_index: device_index as i32,
         alsa_plugins: ALSA_PLUGINS.iter().map(|(l, _)| l.to_string()).collect(),
         alsa_plugin_index: alsa_plugin_index as i32,
@@ -372,6 +500,7 @@ pub fn apply_snapshot(window: &AppWindow, snap: SettingsSnapshot) {
     st.set_backend_index(snap.backend_index);
     st.set_devices(string_model(snap.devices));
     st.set_device_bp(bool_model(snap.device_bp));
+    st.set_device_groups(string_model(snap.device_groups));
     st.set_device_index(snap.device_index);
     st.set_alsa_plugins(string_model(snap.alsa_plugins));
     st.set_alsa_plugin_index(snap.alsa_plugin_index);
@@ -802,6 +931,100 @@ mod tests {
         assert_eq!(RETRY_BEHAVIORS[0].1, "ask");
         assert_eq!(RETRY_BEHAVIORS[1].1, "always_fallback");
         assert_eq!(RETRY_BEHAVIORS[2].1, "always_skip");
+    }
+
+    #[test]
+    fn alsa_section_classification_matches_tauri() {
+        // Empty id = synthetic "System default" -> Defaults.
+        assert_eq!(alsa_section("", false, "System default"), AlsaSection::Defaults);
+        // The qbz-audio `default` device -> Defaults.
+        assert_eq!(alsa_section("default", true, "default"), AlsaSection::Defaults);
+        // Direct hardware / digital PCMs -> Bit-perfect.
+        assert_eq!(
+            alsa_section("front:CARD=C20,DEV=0", false, "Cambridge"),
+            AlsaSection::BitPerfect
+        );
+        assert_eq!(
+            alsa_section("iec958:CARD=PCH,DEV=0", false, "S/PDIF"),
+            AlsaSection::BitPerfect
+        );
+        assert_eq!(alsa_section("hw:0,0", false, "raw"), AlsaSection::BitPerfect);
+        // Plugin hardware -> Plugin Hardware.
+        assert_eq!(
+            alsa_section("plughw:0,0", false, "converted"),
+            AlsaSection::PluginHw
+        );
+        // sysdefault: and hdmi: route through plugins / are not in the
+        // Tauri ALSA bit-perfect rule -> Other Outputs.
+        assert_eq!(
+            alsa_section("sysdefault:CARD=PCH", false, "onboard"),
+            AlsaSection::Other
+        );
+        assert_eq!(
+            alsa_section("hdmi:CARD=HDMI,DEV=0", false, "HDMI"),
+            AlsaSection::Other
+        );
+    }
+
+    #[test]
+    fn group_alsa_devices_orders_sections_and_places_headers() {
+        // Deliberately scrambled input order.
+        let rows = vec![
+            DeviceRow {
+                label: "HDMI out".into(),
+                id: "hdmi:CARD=HDMI,DEV=0".into(),
+                bp: false,
+            },
+            DeviceRow {
+                label: "System default".into(),
+                id: String::new(),
+                bp: false,
+            },
+            DeviceRow {
+                label: "Cambridge S/PDIF".into(),
+                id: "iec958:CARD=C20,DEV=0".into(),
+                bp: true,
+            },
+            DeviceRow {
+                label: "Onboard".into(),
+                id: "sysdefault:CARD=PCH".into(),
+                bp: false,
+            },
+            DeviceRow {
+                label: "Cambridge front".into(),
+                id: "front:CARD=C20,DEV=0".into(),
+                bp: true,
+            },
+        ];
+        let list = group_alsa_devices(rows);
+        // Section order: Defaults, Bit-perfect, Other.
+        assert_eq!(
+            list.ids,
+            vec![
+                "",
+                "iec958:CARD=C20,DEV=0",
+                "front:CARD=C20,DEV=0",
+                "hdmi:CARD=HDMI,DEV=0",
+                "sysdefault:CARD=PCH",
+            ]
+        );
+        // Header appears on the first row of each section, empty otherwise.
+        assert_eq!(
+            list.groups,
+            vec![
+                "Defaults".to_string(),
+                "Bit-perfect (Hardware / Digital)".to_string(),
+                String::new(),
+                "Other Outputs".to_string(),
+                String::new(),
+            ]
+        );
+        // BP badge only on the bit-perfect section.
+        assert_eq!(list.bp, vec![false, true, true, false, false]);
+        // All parallel lists stay index-aligned.
+        assert_eq!(list.labels.len(), list.ids.len());
+        assert_eq!(list.ids.len(), list.bp.len());
+        assert_eq!(list.bp.len(), list.groups.len());
     }
 
     #[test]
