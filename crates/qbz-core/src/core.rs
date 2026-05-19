@@ -10,13 +10,118 @@ use qbz_models::{
     Album, Artist, ArtistAlbums, CoreEvent, DiscoverAlbum, DiscoverData, DiscoverPlaylistsResponse,
     DiscoverResponse, FrontendAdapter, GenreInfo, LabelExploreResponse, LabelGetListResponse,
     LabelListPage, LabelPageData, LabelStoryResponse, PageArtistResponse,
-    Playlist, PlaylistTag, Quality, QueueState, QueueTrack, ReleasesGridResponse, RepeatMode,
-    SearchResultsPage, StreamUrl, Track, TracksContainer, UserSession,
+    MostPopularItem, Playlist, PlaylistTag, Quality, QueueState, QueueTrack, ReleasesGridResponse,
+    RepeatMode, SearchAllResults, SearchResultsPage, StreamUrl, Track, TracksContainer,
+    UserSession,
 };
 use qbz_player::{PlaybackState, Player, QueueManager};
 use qbz_qobuz::QobuzClient;
 
 use crate::error::CoreError;
+
+/// Set of blacklisted artist ids. Empty until the blacklist module is
+/// migrated out of src-tauri (roadmap task #9).
+pub type BlacklistFilter = std::collections::HashSet<u64>;
+
+fn parse_page<T: serde::de::DeserializeOwned>(
+    value: &serde_json::Value,
+    key: &str,
+) -> SearchResultsPage<T> {
+    value
+        .get(key)
+        .and_then(|v| serde_json::from_value(v.clone()).ok())
+        .unwrap_or(SearchResultsPage {
+            items: Vec::new(),
+            total: 0,
+            offset: 0,
+            limit: 0,
+        })
+}
+
+/// Pick the first `most_popular` entry that survives the blacklist.
+fn pick_most_popular(
+    value: &serde_json::Value,
+    blacklist: &BlacklistFilter,
+) -> Option<MostPopularItem> {
+    let items = value.get("most_popular")?.get("items")?.as_array()?;
+    for entry in items {
+        let Some(kind) = entry.get("type").and_then(|v| v.as_str()) else {
+            continue;
+        };
+        let Some(content) = entry.get("content") else {
+            continue;
+        };
+        match kind {
+            "artists" => {
+                if let Ok(a) = serde_json::from_value::<Artist>(content.clone()) {
+                    if !blacklist.contains(&a.id) {
+                        return Some(MostPopularItem::Artists(a));
+                    }
+                }
+            }
+            "albums" => {
+                if let Ok(al) = serde_json::from_value::<Album>(content.clone()) {
+                    if !blacklist.contains(&al.artist.id) {
+                        return Some(MostPopularItem::Albums(al));
+                    }
+                }
+            }
+            "tracks" => {
+                if let Ok(t) = serde_json::from_value::<Track>(content.clone()) {
+                    let blocked = t
+                        .performer
+                        .as_ref()
+                        .map_or(false, |p| blacklist.contains(&p.id));
+                    if !blocked {
+                        return Some(MostPopularItem::Tracks(t));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// Parse a `catalog_search` JSON payload into typed category pages,
+/// dropping any item whose artist id is blacklisted and adjusting totals.
+pub(crate) fn parse_search_all(
+    value: &serde_json::Value,
+    blacklist: &BlacklistFilter,
+) -> SearchAllResults {
+    let mut albums = parse_page::<Album>(value, "albums");
+    let mut tracks = parse_page::<Track>(value, "tracks");
+    let mut artists = parse_page::<Artist>(value, "artists");
+    let playlists = parse_page::<Playlist>(value, "playlists");
+
+    let before = artists.items.len();
+    artists.items.retain(|a| !blacklist.contains(&a.id));
+    artists.total = artists
+        .total
+        .saturating_sub((before - artists.items.len()) as u32);
+
+    let before = albums.items.len();
+    albums.items.retain(|al| !blacklist.contains(&al.artist.id));
+    albums.total = albums
+        .total
+        .saturating_sub((before - albums.items.len()) as u32);
+
+    let before = tracks.items.len();
+    tracks
+        .items
+        .retain(|t| t.performer.as_ref().map_or(true, |p| !blacklist.contains(&p.id)));
+    tracks.total = tracks
+        .total
+        .saturating_sub((before - tracks.items.len()) as u32);
+
+    SearchAllResults {
+        albums,
+        tracks,
+        artists,
+        playlists,
+        most_popular: pick_most_popular(value, blacklist),
+    }
+}
 
 /// Core orchestrator for QBZ
 ///
@@ -482,6 +587,19 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
             .catalog_search(query, limit, offset)
             .await
             .map_err(CoreError::Api)
+    }
+
+    /// Combined search: `catalog_search` plus parsing of the four category
+    /// pages and the `most_popular` hero, with blacklist filtering applied.
+    /// The blacklist is a parameter so Search does not depend on the
+    /// un-migrated `artist_blacklist` module.
+    pub async fn search_all(
+        &self,
+        query: &str,
+        blacklist: &BlacklistFilter,
+    ) -> Result<SearchAllResults, CoreError> {
+        let json = self.catalog_search(query, 30, 0).await?;
+        Ok(parse_search_all(&json, blacklist))
     }
 
     /// Get album by ID
@@ -1231,5 +1349,32 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
     /// Get the queue manager (for advanced usage)
     pub fn queue(&self) -> Arc<RwLock<QueueManager>> {
         Arc::clone(&self.queue)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_search_all_filters_blacklisted_artist() {
+        let json = serde_json::json!({
+            "albums":  { "items": [], "total": 0, "offset": 0, "limit": 30 },
+            "tracks":  { "items": [], "total": 0, "offset": 0, "limit": 30 },
+            "artists": {
+                "items": [
+                    { "id": 1, "name": "Keep" },
+                    { "id": 999, "name": "Blocked" }
+                ],
+                "total": 2, "offset": 0, "limit": 30
+            },
+            "playlists": { "items": [], "total": 0, "offset": 0, "limit": 30 }
+        });
+        let blocked: BlacklistFilter = [999].into_iter().collect();
+        let out = parse_search_all(&json, &blocked);
+        assert_eq!(out.artists.items.len(), 1);
+        assert_eq!(out.artists.items[0].name, "Keep");
+        assert_eq!(out.artists.total, 1);
+        assert!(out.most_popular.is_none());
     }
 }
