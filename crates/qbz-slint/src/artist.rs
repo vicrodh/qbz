@@ -13,7 +13,7 @@ use slint::{ComponentHandle, ModelRc, VecModel};
 
 use crate::album::TrackData;
 use crate::home::CardData;
-use crate::{AlbumCardItem, AlbumTrackItem, AppWindow, ArtistState};
+use crate::{AlbumCardItem, AlbumTrackItem, AppWindow, ArtistState, DiscoverSection};
 
 /// Plain, `Send` artist data produced on the worker thread.
 pub struct ArtistData {
@@ -21,7 +21,14 @@ pub struct ArtistData {
     pub bio: String,
     pub artwork_url: String,
     pub top_tracks: Vec<TrackData>,
-    pub releases: Vec<CardData>,
+    /// Releases grouped into titled sections (Albums, EPs & Singles, ...).
+    pub release_sections: Vec<ReleaseSection>,
+}
+
+/// One titled group of artist releases.
+pub struct ReleaseSection {
+    pub title: String,
+    pub cards: Vec<CardData>,
 }
 
 /// Fetch and map an artist page by id.
@@ -71,12 +78,15 @@ fn map_artist(page: PageArtistResponse) -> ArtistData {
         .map(|(index, track)| map_track(index, track))
         .collect();
 
-    let releases = page
+    let release_sections = page
         .releases
         .unwrap_or_default()
         .into_iter()
-        .flat_map(|group| group.items)
-        .map(map_release)
+        .filter(|group| !group.items.is_empty())
+        .map(|group| ReleaseSection {
+            title: release_section_title(&group.release_type),
+            cards: group.items.into_iter().map(map_release).collect(),
+        })
         .collect();
 
     ArtistData {
@@ -84,8 +94,21 @@ fn map_artist(page: PageArtistResponse) -> ArtistData {
         bio,
         artwork_url,
         top_tracks,
-        releases,
+        release_sections,
     }
+}
+
+/// Human title for a Qobuz artist-page release group type.
+fn release_section_title(release_type: &str) -> String {
+    match release_type {
+        "album" => "Albums",
+        "epSingle" | "ep" | "single" => "EPs & Singles",
+        "live" => "Live Albums",
+        "compilation" => "Compilations",
+        "download" => "Downloads",
+        _ => "Other Releases",
+    }
+    .to_string()
 }
 
 fn map_track(index: usize, track: PageArtistTrack) -> TrackData {
@@ -160,6 +183,22 @@ fn strip_html(input: &str) -> String {
         .to_string()
 }
 
+fn card_to_item(card: CardData) -> AlbumCardItem {
+    AlbumCardItem {
+        id: card.id.into(),
+        title: card.title.into(),
+        artist: card.artist.into(),
+        genre: card.genre.into(),
+        year: card.year.into(),
+        quality_tier: card.quality_tier.into(),
+        quality_label: card.quality_label.into(),
+        ribbon: card.ribbon.into(),
+        ribbon_kind: card.ribbon_kind.into(),
+        artwork_url: card.artwork_url.into(),
+        artwork: slint::Image::default(),
+    }
+}
+
 /// Apply artist data to the `ArtistState` global. Runs on the Slint event loop.
 pub fn apply_artist(window: &AppWindow, data: ArtistData) {
     let top_tracks: Vec<AlbumTrackItem> = data
@@ -175,21 +214,14 @@ pub fn apply_artist(window: &AppWindow, data: ArtistData) {
             explicit: track.explicit,
         })
         .collect();
-    let releases: Vec<AlbumCardItem> = data
-        .releases
+    let release_sections: Vec<DiscoverSection> = data
+        .release_sections
         .into_iter()
-        .map(|card| AlbumCardItem {
-            id: card.id.into(),
-            title: card.title.into(),
-            artist: card.artist.into(),
-            genre: card.genre.into(),
-            year: card.year.into(),
-            quality_tier: card.quality_tier.into(),
-            quality_label: slint::SharedString::new(),
-            ribbon: card.ribbon.into(),
-            ribbon_kind: card.ribbon_kind.into(),
-            artwork_url: card.artwork_url.into(),
-            artwork: slint::Image::default(),
+        .map(|section| DiscoverSection {
+            title: section.title.into(),
+            albums: ModelRc::new(VecModel::from(
+                section.cards.into_iter().map(card_to_item).collect::<Vec<_>>(),
+            )),
         })
         .collect();
 
@@ -197,14 +229,14 @@ pub fn apply_artist(window: &AppWindow, data: ArtistData) {
     state.set_name(data.name.into());
     state.set_bio(data.bio.into());
     state.set_top_tracks(ModelRc::new(VecModel::from(top_tracks)));
-    state.set_releases(ModelRc::new(VecModel::from(releases)));
+    state.set_release_sections(ModelRc::new(VecModel::from(release_sections)));
 }
 
 /// Clear artist state before loading a new artist.
 pub fn reset_artist(window: &AppWindow) {
     let state = window.global::<ArtistState>();
     state.set_top_tracks(ModelRc::new(VecModel::from(Vec::<AlbumTrackItem>::new())));
-    state.set_releases(ModelRc::new(VecModel::from(Vec::<AlbumCardItem>::new())));
+    state.set_release_sections(ModelRc::new(VecModel::from(Vec::<DiscoverSection>::new())));
     state.set_artwork(slint::Image::default());
     state.set_name("".into());
     state.set_bio("".into());
@@ -219,7 +251,8 @@ pub fn apply_artwork(window: &AppWindow, pixels: &[u8], width: u32, height: u32)
         return;
     }
     dst.copy_from_slice(pixels);
-    window
-        .global::<ArtistState>()
-        .set_artwork(slint::Image::from_rgba8(buffer));
+    let (r, g, b) = crate::artwork::header_tint(pixels);
+    let state = window.global::<ArtistState>();
+    state.set_artwork(slint::Image::from_rgba8(buffer));
+    state.set_header_color(slint::Color::from_rgb_u8(r, g, b));
 }

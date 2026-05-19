@@ -15,6 +15,7 @@ use crate::{AlbumState, AlbumTrackItem, AppWindow};
 
 /// Plain, `Send` album data produced on the worker thread.
 pub struct AlbumData {
+    pub id: String,
     pub title: String,
     pub artist: String,
     pub artist_id: String,
@@ -22,6 +23,10 @@ pub struct AlbumData {
     pub info_line: String,
     pub quality_tier: String,
     pub artwork_url: String,
+    /// Record label name, for the sidebar (empty when unknown).
+    pub label: String,
+    /// Editorial award names, for the sidebar.
+    pub awards: Vec<String>,
     pub tracks: Vec<TrackData>,
 }
 
@@ -79,6 +84,19 @@ fn map_album(album: Album) -> AlbumData {
 
     let quality_tier = tier(album.maximum_bit_depth).to_string();
     let artwork_url = album.image.best().cloned().unwrap_or_default();
+    let label = album
+        .label
+        .as_ref()
+        .map(|l| l.name.clone())
+        .unwrap_or_default();
+    let awards = album
+        .awards
+        .as_deref()
+        .unwrap_or_default()
+        .iter()
+        .map(|a| a.name.clone())
+        .filter(|n| !n.is_empty())
+        .collect();
     let tracks = album
         .tracks
         .map(|container| container.items)
@@ -88,12 +106,15 @@ fn map_album(album: Album) -> AlbumData {
         .collect();
 
     AlbumData {
+        id: album.id,
         title: album.title,
         artist,
         artist_id,
         info_line,
         quality_tier,
         artwork_url,
+        label,
+        awards,
         tracks,
     }
 }
@@ -155,12 +176,18 @@ pub fn apply_album(window: &AppWindow, data: AlbumData) {
         })
         .collect();
 
+    let awards: Vec<slint::SharedString> =
+        data.awards.into_iter().map(Into::into).collect();
+
     let state = window.global::<AlbumState>();
+    state.set_id(data.id.into());
     state.set_title(data.title.into());
     state.set_artist(data.artist.into());
     state.set_artist_id(data.artist_id.into());
     state.set_info_line(data.info_line.into());
     state.set_quality_tier(data.quality_tier.into());
+    state.set_label(data.label.into());
+    state.set_awards(ModelRc::new(VecModel::from(awards)));
     state.set_tracks(ModelRc::new(VecModel::from(tracks)));
 }
 
@@ -181,9 +208,10 @@ pub fn apply_artwork(window: &AppWindow, pixels: &[u8], width: u32, height: u32)
         return;
     }
     dst.copy_from_slice(pixels);
-    window
-        .global::<AlbumState>()
-        .set_artwork(slint::Image::from_rgba8(buffer));
+    let (r, g, b) = crate::artwork::header_tint(pixels);
+    let state = window.global::<AlbumState>();
+    state.set_artwork(slint::Image::from_rgba8(buffer));
+    state.set_header_color(slint::Color::from_rgb_u8(r, g, b));
 }
 
 #[cfg(test)]

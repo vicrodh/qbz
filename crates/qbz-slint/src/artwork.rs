@@ -126,6 +126,28 @@ pub async fn fetch_and_decode(
     Some((rgba.into_raw(), width, height))
 }
 
+/// Average RGB of decoded RGBA pixels, darkened so the result works as a
+/// header gradient tint. Mirrors, cheaply, the Tauri header that derives
+/// its color from the artwork. Returns a dark fallback for empty input.
+pub fn header_tint(pixels: &[u8]) -> (u8, u8, u8) {
+    let (mut r, mut g, mut b, mut n) = (0u64, 0u64, 0u64, 0u64);
+    for px in pixels.chunks_exact(4) {
+        if px[3] < 16 {
+            continue;
+        }
+        r += px[0] as u64;
+        g += px[1] as u64;
+        b += px[2] as u64;
+        n += 1;
+    }
+    if n == 0 {
+        return (24, 24, 30);
+    }
+    // 0.5 keeps the tint dark enough for white text to stay readable.
+    let darken = |sum: u64| ((sum / n) as f64 * 0.5) as u8;
+    (darken(r), darken(g), darken(b))
+}
+
 /// Apply decoded pixels to a single card. Runs on the Slint event loop.
 fn apply_artwork(
     window: &AppWindow,

@@ -13,7 +13,6 @@ import { AlbumState, AlbumTrackItem, NavState, ContentView } from "../state.slin
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { ContextMenu } from "../primitives/ContextMenu.slint";
 import { ContextMenuItem } from "../primitives/ContextMenuItem.slint";
-import { ScrollView } from "std-widgets.slint";
 
 component CircleAction inherits Rectangle {
     in property <image> icon;
@@ -196,15 +195,89 @@ component TrackRow inherits Rectangle {
     }
 }
 
+// One label/award entry in the album sidebar — a round gradient avatar
+// and a name.
+component SidebarCard inherits Rectangle {
+    in property <image> icon;
+    in property <string> name;
+    in property <brush> avatar-bg;
+    callback clicked();
+
+    height: 56px;
+    border-radius: Radius.sm;
+    background: ta.has-hover ? Theme.surface-hover : Theme.surface-card;
+
+    HorizontalLayout {
+        padding: 8px;
+        spacing: 10px;
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 36px;
+                height: 36px;
+                border-radius: 18px;
+                background: root.avatar-bg;
+                QbzIcon {
+                    source: root.icon;
+                    width: 18px;
+                    height: 18px;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    tint: #ffffff;
+                }
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            Text {
+                text: root.name;
+                color: Theme.text-secondary;
+                font-size: Typography.link;
+                font-weight: Typography.medium;
+                wrap: word-wrap;
+            }
+        }
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+component SidebarHeading inherits Text {
+    color: Theme.text-muted;
+    font-size: 10px;
+    font-weight: Typography.semibold;
+    letter-spacing: 1px;
+}
+
 export component AlbumPageView inherits Rectangle {
     callback open-artist(string);
     callback media-action(string, string, string);
 
     background: Theme.surface-main;
 
-    ScrollView {
-        horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
-        VerticalLayout {
+    Flickable {
+        viewport-width: self.width;
+        viewport-height: page.preferred-height;
+
+        // Artwork-tinted gradient behind the header; scrolls with content.
+        Rectangle {
+            x: 0;
+            y: 0;
+            width: parent.width;
+            height: 340px;
+            background: @linear-gradient(180deg,
+                AlbumState.header-color 0%,
+                transparent 100%);
+        }
+
+        page := VerticalLayout {
+            width: parent.width;
             padding-left: 24px;
             padding-right: 24px;
             padding-top: 14px;
@@ -309,9 +382,12 @@ export component AlbumPageView inherits Rectangle {
                         alignment: start;
                         spacing: 12px;
                         CircleAction {
-                            icon: @image-url("../assets/icons/play.svg");
+                            icon: @image-url("../assets/icons/play-fill.svg");
                             primary: true;
                             diameter: 44px;
+                            clicked => {
+                                root.media-action("album", AlbumState.id, "play");
+                            }
                         }
                         VerticalLayout {
                             alignment: center;
@@ -319,7 +395,32 @@ export component AlbumPageView inherits Rectangle {
                         }
                         VerticalLayout {
                             alignment: center;
-                            CircleAction { icon: @image-url("../assets/icons/heart.svg"); }
+                            CircleAction {
+                                icon: @image-url("../assets/icons/heart.svg");
+                                clicked => {
+                                    root.media-action("album", AlbumState.id, "favorite");
+                                }
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            CircleAction { icon: @image-url("../assets/icons/radio.svg"); }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            CircleAction { icon: @image-url("../assets/icons/user.svg"); }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            CircleAction { icon: @image-url("../assets/icons/book-open.svg"); }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            CircleAction { icon: @image-url("../assets/icons/cassette-tape.svg"); }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            CircleAction { icon: @image-url("../assets/icons/square-check-big.svg"); }
                         }
                         VerticalLayout {
                             alignment: center;
@@ -336,62 +437,100 @@ export component AlbumPageView inherits Rectangle {
             }
             Rectangle { height: 8px; }
 
-            // --- Track list --------------------------------------------------
-            if AlbumState.loading && AlbumState.tracks.length == 0: Text {
-                text: @tr("Loading album...");
-                color: Theme.text-muted;
-                font-size: Typography.body;
-            }
-
-            // Column header.
+            // --- Track list + label/awards sidebar --------------------------
             HorizontalLayout {
-                height: 40px;
-                padding-left: 12px;
-                padding-right: 12px;
-                spacing: 16px;
-                Text {
-                    text: "#";
-                    width: 32px;
-                    color: Theme.text-muted;
-                    font-size: Typography.legal;
-                    letter-spacing: 0.5px;
-                    vertical-alignment: center;
-                }
-                Text {
-                    text: @tr("TITLE");
-                    horizontal-stretch: 1;
-                    color: Theme.text-muted;
-                    font-size: Typography.legal;
-                    letter-spacing: 0.5px;
-                    vertical-alignment: center;
-                }
-                Text {
-                    text: @tr("DURATION");
-                    width: 80px;
-                    color: Theme.text-muted;
-                    font-size: Typography.legal;
-                    letter-spacing: 0.5px;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                }
-                Text {
-                    text: @tr("QUALITY");
-                    width: 80px;
-                    color: Theme.text-muted;
-                    font-size: Typography.legal;
-                    letter-spacing: 0.5px;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                }
-                // Aligns with the per-row more-button slot.
-                Rectangle { width: 32px; }
-            }
+                spacing: 32px;
+                alignment: start;
 
-            for track[index] in AlbumState.tracks: TrackRow {
-                track: track;
-                index: index;
-                media-action(kind, id, action) => {
-                    root.media-action(kind, id, action);
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    spacing: 0px;
+                    alignment: start;
+
+                    if AlbumState.loading && AlbumState.tracks.length == 0: Text {
+                        text: @tr("Loading album...");
+                        color: Theme.text-muted;
+                        font-size: Typography.body;
+                    }
+
+                    // Column header.
+                    HorizontalLayout {
+                        height: 40px;
+                        padding-left: 12px;
+                        padding-right: 12px;
+                        spacing: 16px;
+                        Text {
+                            text: "#";
+                            width: 32px;
+                            color: Theme.text-muted;
+                            font-size: Typography.legal;
+                            letter-spacing: 0.5px;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            text: @tr("TITLE");
+                            horizontal-stretch: 1;
+                            color: Theme.text-muted;
+                            font-size: Typography.legal;
+                            letter-spacing: 0.5px;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            text: @tr("DURATION");
+                            width: 80px;
+                            color: Theme.text-muted;
+                            font-size: Typography.legal;
+                            letter-spacing: 0.5px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            text: @tr("QUALITY");
+                            width: 80px;
+                            color: Theme.text-muted;
+                            font-size: Typography.legal;
+                            letter-spacing: 0.5px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        // Aligns with the per-row more-button slot.
+                        Rectangle { width: 32px; }
+                    }
+
+                    for track[index] in AlbumState.tracks: TrackRow {
+                        track: track;
+                        index: index;
+                        media-action(kind, id, action) => {
+                            root.media-action(kind, id, action);
+                        }
+                    }
+                }
+
+                // Label / awards sidebar.
+                if AlbumState.label != "" || AlbumState.awards.length > 0: VerticalLayout {
+                    width: 254px;
+                    spacing: 24px;
+                    alignment: start;
+
+                    if AlbumState.label != "": VerticalLayout {
+                        spacing: 8px;
+                        SidebarHeading { text: @tr("LABEL"); }
+                        SidebarCard {
+                            icon: @image-url("../assets/icons/disc.svg");
+                            name: AlbumState.label;
+                            avatar-bg: @linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+                        }
+                    }
+
+                    if AlbumState.awards.length > 0: VerticalLayout {
+                        spacing: 8px;
+                        SidebarHeading { text: @tr("AWARDS"); }
+                        for award in AlbumState.awards: SidebarCard {
+                            icon: @image-url("../assets/icons/award.svg");
+                            name: award;
+                            avatar-bg: @linear-gradient(135deg, #b45309 0%, #eab308 100%);
+                        }
+                    }
                 }
             }
         }

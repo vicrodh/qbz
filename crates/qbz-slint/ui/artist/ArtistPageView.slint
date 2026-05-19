@@ -1,16 +1,18 @@
 // Artist detail page.
 //
-// Mirrors the Svelte ArtistDetailView: back button, an artist header
-// (circular portrait, name, biography, action buttons), a Popular
-// Tracks list, and a Discography carousel. Data comes from the
-// ArtistState global; action buttons are visual for now.
+// An artwork-tinted gradient header (circular portrait, name, biography,
+// action buttons), a Popular Tracks list, and the discography split into
+// titled release sections (Albums, EPs & Singles, Live, ...). Data comes
+// from the ArtistState global; action buttons are visual for now.
 
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
-import { ArtistState, AlbumTrackItem, DiscoverSection, NavState, ContentView } from "../state.slint";
+import { Radius } from "../foundation/radius.slint";
+import { ArtistState, AlbumTrackItem, NavState, ContentView } from "../state.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
+import { ContextMenu } from "../primitives/ContextMenu.slint";
+import { ContextMenuItem } from "../primitives/ContextMenuItem.slint";
 import { Carousel } from "../discover/Carousel.slint";
-import { ScrollView } from "std-widgets.slint";
 
 component CircleAction inherits Rectangle {
     in property <image> icon;
@@ -45,12 +47,17 @@ component CircleAction inherits Rectangle {
 component TrackRow inherits Rectangle {
     in property <AlbumTrackItem> track;
     in property <int> index;
+    callback media-action(string, string, string);
 
     height: 52px;
     border-radius: 8px;
     background: ta.has-hover
         ? Theme.surface-hover
         : (Math.mod(root.index, 2) == 1 ? Theme.surface-card : transparent);
+
+    ta := TouchArea {
+        mouse-cursor: default;
+    }
 
     HorizontalLayout {
         padding-left: 12px;
@@ -93,11 +100,70 @@ component TrackRow inherits Rectangle {
             horizontal-alignment: center;
             vertical-alignment: center;
         }
+
+        // More button — 32px square hit area, visible on row/button hover.
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 32px;
+                height: 32px;
+                border-radius: Radius.sm;
+                opacity: (ta.has-hover || more-ta.has-hover) ? 1.0 : 0.0;
+                animate opacity { duration: 120ms; }
+                background: more-ta.has-hover ? Theme.surface-elevated : transparent;
+                QbzIcon {
+                    source: @image-url("../assets/icons/ellipsis.svg");
+                    width: 16px;
+                    height: 16px;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    tint: more-ta.has-hover ? Theme.text-primary : Theme.text-secondary;
+                }
+                more-ta := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        track-menu.show();
+                    }
+                }
+            }
+        }
     }
 
-    ta := TouchArea {
-        mouse-cursor: pointer;
+    track-menu := PopupWindow {
+        x: parent.width - 208px;
+        y: 44px;
+        width: 196px;
+        height: 109px;
+        ContextMenu {
+            ContextMenuItem {
+                icon: @image-url("../assets/icons/play.svg");
+                label: @tr("Play");
+                clicked => {
+                    root.media-action("track", root.track.id, "play");
+                }
+            }
+            ContextMenuItem {
+                icon: @image-url("../assets/icons/list-plus.svg");
+                label: @tr("Add to queue");
+                clicked => {
+                    root.media-action("track", root.track.id, "queue");
+                }
+            }
+            ContextMenuItem {
+                icon: @image-url("../assets/icons/heart.svg");
+                label: @tr("Add to favorites");
+                clicked => {
+                    root.media-action("track", root.track.id, "favorite");
+                }
+            }
+        }
     }
+}
+
+component SectionTitle inherits Text {
+    color: Theme.text-primary;
+    font-size: Typography.heading;
+    font-weight: Typography.semibold;
 }
 
 export component ArtistPageView inherits Rectangle {
@@ -106,9 +172,23 @@ export component ArtistPageView inherits Rectangle {
 
     background: Theme.surface-main;
 
-    ScrollView {
-        horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
-        VerticalLayout {
+    Flickable {
+        viewport-width: self.width;
+        viewport-height: page.preferred-height;
+
+        // Artwork-tinted gradient behind the header; scrolls with content.
+        Rectangle {
+            x: 0;
+            y: 0;
+            width: parent.width;
+            height: 340px;
+            background: @linear-gradient(180deg,
+                ArtistState.header-color 0%,
+                transparent 100%);
+        }
+
+        page := VerticalLayout {
+            width: parent.width;
             padding-left: 24px;
             padding-right: 24px;
             padding-top: 14px;
@@ -175,6 +255,14 @@ export component ArtistPageView inherits Rectangle {
                     horizontal-stretch: 1;
 
                     Text {
+                        text: @tr("ARTIST");
+                        color: Theme.text-muted;
+                        font-size: 10px;
+                        font-weight: Typography.semibold;
+                        letter-spacing: 1.5px;
+                    }
+                    Rectangle { height: 6px; }
+                    Text {
                         text: ArtistState.name;
                         color: Theme.text-primary;
                         font-size: Typography.title;
@@ -194,13 +282,9 @@ export component ArtistPageView inherits Rectangle {
                         alignment: start;
                         spacing: 12px;
                         CircleAction {
-                            icon: @image-url("../assets/icons/play.svg");
+                            icon: @image-url("../assets/icons/play-fill.svg");
                             primary: true;
                             diameter: 44px;
-                        }
-                        VerticalLayout {
-                            alignment: center;
-                            CircleAction { icon: @image-url("../assets/icons/shuffle.svg"); }
                         }
                         VerticalLayout {
                             alignment: center;
@@ -208,13 +292,21 @@ export component ArtistPageView inherits Rectangle {
                         }
                         VerticalLayout {
                             alignment: center;
-                            CircleAction { icon: @image-url("../assets/icons/cast.svg"); }
+                            CircleAction { icon: @image-url("../assets/icons/radio.svg"); }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            CircleAction { icon: @image-url("../assets/icons/library-big.svg"); }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            CircleAction { icon: @image-url("../assets/icons/ellipsis.svg"); }
                         }
                     }
                 }
             }
 
-            Rectangle { height: 32px; }
+            Rectangle { height: 36px; }
 
             if ArtistState.loading && ArtistState.top-tracks.length == 0: Text {
                 text: @tr("Loading artist...");
@@ -223,30 +315,30 @@ export component ArtistPageView inherits Rectangle {
             }
 
             // --- Popular tracks ----------------------------------------------
-            if ArtistState.top-tracks.length > 0: Text {
+            if ArtistState.top-tracks.length > 0: SectionTitle {
                 text: @tr("Popular Tracks");
-                color: Theme.text-primary;
-                font-size: Typography.heading;
-                font-weight: Typography.semibold;
             }
             if ArtistState.top-tracks.length > 0: Rectangle { height: 10px; }
             for track[index] in ArtistState.top-tracks: TrackRow {
                 track: track;
                 index: index;
-            }
-
-            // --- Discography -------------------------------------------------
-            if ArtistState.releases.length > 0: Rectangle { height: 28px; }
-            if ArtistState.releases.length > 0: Carousel {
-                section: {
-                    title: @tr("Discography"),
-                    albums: ArtistState.releases,
-                };
-                album-clicked(id) => {
-                    root.open-album(id);
-                }
                 media-action(kind, id, action) => {
                     root.media-action(kind, id, action);
+                }
+            }
+
+            // --- Release sections (Albums, EPs & Singles, Live, ...) ---------
+            for section in ArtistState.release-sections: VerticalLayout {
+                spacing: 0px;
+                Rectangle { height: 32px; }
+                Carousel {
+                    section: section;
+                    album-clicked(id) => {
+                        root.open-album(id);
+                    }
+                    media-action(kind, id, action) => {
+                        root.media-action(kind, id, action);
+                    }
                 }
             }
         }
