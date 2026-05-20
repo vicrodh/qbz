@@ -1,0 +1,147 @@
+// JUMP TO bar — reusable sticky tab bar.
+//
+// Tauri shows this above each section-rich page (artist, library,
+// future label/musician views). The bar is normally tucked between
+// the page header and the body, and pins to the top of its scroll
+// container once the user scrolls past the header. Per-tab click
+// callbacks let the parent decide what each tab scrolls to; the
+// search icon lights up an inline search input the parent owns.
+//
+// The component itself is presentation-only — sticky positioning is
+// the responsibility of the parent (it has access to the page
+// Flickable's viewport-y and the absolute y where this bar wants to
+// pin). Reuse: drop the bar inside any layout, pass `tabs` + the
+// active id, wire `tab-clicked` to your scroll-to-section logic.
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Typography } from "../foundation/typography.slint";
+import { QbzIcon } from "QbzIcon.slint";
+
+export struct JumpNavTab {
+    id: string,
+    label: string,
+}
+
+export component JumpNavBar inherits Rectangle {
+    in property <[JumpNavTab]> tabs;
+    in property <string> active-tab-id;
+    // When true, the search icon shows the "open" state (accent
+    // tint, surface-elevated background); used by the parent to
+    // signal that the search input is currently visible somewhere
+    // in the page.
+    in property <bool> search-open: false;
+    callback tab-clicked(string /* tab-id */);
+    callback search-clicked();
+
+    height: 44px;
+    background: Theme.surface-main;
+    border-width: 0px;
+
+    // Bottom border so the bar reads as a separate strip when
+    // sticky over the body content.
+    Rectangle {
+        x: 0;
+        y: parent.height - 1px;
+        width: parent.width;
+        height: 1px;
+        background: Theme.border-subtle;
+    }
+
+    HorizontalLayout {
+        padding-left: 32px;
+        padding-right: 32px;
+        spacing: 18px;
+        alignment: stretch;
+
+        // JUMP TO label
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 0;
+            Text {
+                text: @tr("JUMP TO");
+                color: Theme.text-muted;
+                font-size: Typography.legal;
+                font-weight: Typography.semibold;
+                letter-spacing: 0.5px;
+            }
+        }
+
+        // Tabs — horizontally listed, each is a click target. Active
+        // tab gets text-primary + accent underline.
+        HorizontalLayout {
+            spacing: 14px;
+            horizontal-stretch: 1;
+            alignment: start;
+            for tab in root.tabs: VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    height: 32px;
+                    width: tab-text.preferred-width + 4px;
+                    tab-text := Text {
+                        x: 2px;
+                        text: tab.label;
+                        color: tab.id == root.active-tab-id
+                            ? Theme.text-primary
+                            : (tab-ta.has-hover
+                                ? Theme.text-primary
+                                : Theme.text-secondary);
+                        font-size: Typography.body;
+                        font-weight: tab.id == root.active-tab-id
+                            ? Typography.semibold
+                            : Typography.regular;
+                        vertical-alignment: center;
+                        height: 100%;
+                    }
+                    // Accent underline for the active tab.
+                    Rectangle {
+                        x: 0;
+                        y: parent.height - 2px;
+                        width: parent.width;
+                        height: 2px;
+                        background: Theme.accent;
+                        visible: tab.id == root.active-tab-id;
+                    }
+                    tab-ta := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            root.tab-clicked(tab.id);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Search toggle — opens / closes a search input the parent
+        // owns. Stays "active" (accent tinted) while open.
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 0;
+            Rectangle {
+                width: 32px;
+                height: 32px;
+                border-radius: 6px;
+                background: (search-ta.has-hover || root.search-open)
+                    ? Theme.surface-elevated
+                    : transparent;
+                QbzIcon {
+                    source: @image-url("../assets/icons/search.svg");
+                    width: 16px;
+                    height: 16px;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    tint: root.search-open
+                        ? Theme.accent
+                        : (search-ta.has-hover
+                            ? Theme.text-primary
+                            : Theme.text-muted);
+                }
+                search-ta := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        root.search-clicked();
+                    }
+                }
+            }
+        }
+    }
+}

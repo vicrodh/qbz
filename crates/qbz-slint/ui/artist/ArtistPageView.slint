@@ -25,6 +25,7 @@ import { TrackContextMenu } from "../primitives/TrackContextMenu.slint";
 import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
 import { ReleaseGrid } from "ReleaseGrid.slint";
 import { NavButtons } from "../shell/NavButtons.slint";
+import { JumpNavBar, JumpNavTab } from "../primitives/JumpNavBar.slint";
 
 component CircleAction inherits Rectangle {
     in property <image> icon;
@@ -268,6 +269,24 @@ export component ArtistPageView inherits Rectangle {
     // Whether the full-biography modal is open. Mirrors the album
     // description Read-more pattern in AlbumPageView.
     property <bool> show-bio: false;
+    // Whether the in-page search input is currently visible.
+    // Closed by default; the JUMP TO bar's search icon toggles it.
+    property <bool> search-visible: false;
+    // Active JUMP TO tab. Currently set by tab-clicked only — a
+    // future pass will compute it from scroll position so the bar
+    // self-tracks the visible section.
+    property <string> active-jump-tab: "popular-tracks";
+    // Static tab list — same labels Tauri uses. The Slint tabs trigger
+    // scroll-to-section via tab-clicked; until the section anchors are
+    // wired, the click just updates the active state.
+    property <[JumpNavTab]> jump-tabs: [
+        { id: "about", label: "About" },
+        { id: "popular-tracks", label: "Popular Tracks" },
+        { id: "discography", label: "Discography" },
+        { id: "eps-singles", label: "EPs & Singles" },
+        { id: "compilations", label: "Compilations" },
+        { id: "playlists", label: "Playlists" },
+    ];
     // Width handed down to the bio paragraph. The artist header sits
     // above the body row where the sidebar lives, so the bio never
     // needs to shrink for the sidebar — it always uses the full
@@ -484,10 +503,11 @@ export component ArtistPageView inherits Rectangle {
             // --- In-page search ---------------------------------------------
             // Single client-side substring filter — applied to Popular
             // Tracks (title + artist) and to every release-section
-            // album title. Same pattern as Tauri's `.page-search` plus
-            // the AlbumActions.search wiring AlbumPageView uses for
-            // its track list.
-            if !ArtistState.loading || ArtistState.top-tracks.length > 0:
+            // album title. Hidden by default; the JUMP TO bar's search
+            // icon toggles `search-visible` (mirrors Tauri's search
+            // toggle inside `.jump-nav`).
+            if root.search-visible
+                && (!ArtistState.loading || ArtistState.top-tracks.length > 0):
             Rectangle {
                 height: 36px;
                 border-radius: Radius.sm;
@@ -605,9 +625,11 @@ export component ArtistPageView inherits Rectangle {
                     root.media-action(kind, id, action);
                 }
             }
-            // Load more — visible when there are more than the preview cap.
-            if !root.top-tracks-expanded
-                && ArtistState.top-tracks.length > root.top-tracks-preview: HorizontalLayout {
+            // Load more / View less — same affordance, label flips
+            // with the expanded state. Tauri only shows Load more;
+            // View less is a Slint-side improvement so users can
+            // collapse back to the 5-track preview without scrolling.
+            if ArtistState.top-tracks.length > root.top-tracks-preview: HorizontalLayout {
                 alignment: start;
                 Rectangle {
                     width: load-more-text.preferred-width + 32px;
@@ -619,7 +641,9 @@ export component ArtistPageView inherits Rectangle {
                         ? Theme.surface-elevated
                         : Theme.surface-card;
                     load-more-text := Text {
-                        text: @tr("Load more");
+                        text: root.top-tracks-expanded
+                            ? @tr("View less")
+                            : @tr("Load more");
                         color: Theme.text-secondary;
                         font-size: 13px;
                         x: (parent.width - self.width) / 2;
@@ -628,7 +652,7 @@ export component ArtistPageView inherits Rectangle {
                     load-more-ta := TouchArea {
                         mouse-cursor: pointer;
                         clicked => {
-                            root.top-tracks-expanded = true;
+                            root.top-tracks-expanded = !root.top-tracks-expanded;
                         }
                     }
                 }
@@ -659,6 +683,30 @@ export component ArtistPageView inherits Rectangle {
             }   // close body HorizontalLayout
         }   // close page VerticalLayout
     }   // close Flickable
+
+    // --- Sticky JUMP TO bar -------------------------------------------------
+    // Overlay anchored to the top of ArtistPageView with the same
+    // sticky math as the sidebar: tracks the page scroll until the
+    // user scrolls past the header, then pins to y = 0. The natural
+    // y is the row just below the artist header in the page layout
+    // (NavButtons + spacer + artist header + small gap, ~290px).
+    jump-nav := JumpNavBar {
+        property <length> natural-top: 290px;
+        property <length> sticky-top: 0px;
+
+        x: 0;
+        y: max(self.natural-top + page-flickable.viewport-y, self.sticky-top);
+        width: root.width;
+        tabs: root.jump-tabs;
+        active-tab-id: root.active-jump-tab;
+        search-open: root.search-visible;
+        tab-clicked(id) => {
+            root.active-jump-tab = id;
+        }
+        search-clicked => {
+            root.search-visible = !root.search-visible;
+        }
+    }
 
         // Network sidebar — overlay anchored to the right edge of the
         // ArtistPageView, with sticky-style y positioning so it tracks
