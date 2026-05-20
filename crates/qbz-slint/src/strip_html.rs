@@ -7,16 +7,78 @@
 
 /// Render an HTML-ish blurb into plain text with paragraph breaks.
 pub fn strip_html(input: &str) -> String {
-    // Normalize break/paragraph tags into newlines first (case-
-    // insensitive, with and without self-closing slash and whitespace).
     let normalized = normalize_breaks(input);
+    let stripped = strip_remaining_tags(&normalized);
+    let decoded = decode_entities(&stripped);
+    collapse_blank_lines(&decoded)
+}
 
-    // Drop every other tag — strong/em/i/b/a/etc lose styling but
-    // keep their text content because the rest of the loop emits
-    // characters as-is when not inside a tag.
-    let mut out = String::with_capacity(normalized.len());
+/// Walk by char (not byte) so multi-byte UTF-8 sequences (ó, é, "—",
+/// curly quotes) survive untouched. Skip recognized `<br>` and `</p>`
+/// runs by replacing them with newlines; pass everything else through
+/// so the second pass can strip the remaining tags.
+fn normalize_breaks(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let mut rest = input;
+    while !rest.is_empty() {
+        if let Some(stripped) = rest.strip_prefix('<') {
+            if let Some((replacement, consumed)) = match_break_or_paragraph(stripped) {
+                out.push_str(replacement);
+                rest = &stripped[consumed..];
+                continue;
+            }
+        }
+        // Advance one char (not one byte) — pushes the full UTF-8
+        // sequence intact.
+        let mut chars = rest.chars();
+        if let Some(ch) = chars.next() {
+            out.push(ch);
+            rest = chars.as_str();
+        } else {
+            break;
+        }
+    }
+    out
+}
+
+/// Try to match `<br>` (any case, with optional spaces and self-
+/// closing slash) or `</p>` (any case). `s` starts AFTER the opening
+/// `<`. Returns the replacement string + bytes consumed (after the
+/// closing `>`).
+fn match_break_or_paragraph(s: &str) -> Option<(&'static str, usize)> {
+    let bytes = s.as_bytes();
+    // </p>
+    if bytes.len() >= 3
+        && bytes[0] == b'/'
+        && (bytes[1] == b'p' || bytes[1] == b'P')
+        && bytes[2] == b'>'
+    {
+        return Some(("\n\n", 3));
+    }
+    // <br>, <br/>, <br />, etc.
+    if bytes.len() >= 3 && (bytes[0] == b'b' || bytes[0] == b'B')
+        && (bytes[1] == b'r' || bytes[1] == b'R')
+    {
+        let mut j = 2usize;
+        while j < bytes.len() && bytes[j] != b'>' {
+            // Only allow whitespace and a single '/' between `br` and `>`.
+            if !bytes[j].is_ascii_whitespace() && bytes[j] != b'/' {
+                return None;
+            }
+            j += 1;
+        }
+        if j < bytes.len() && bytes[j] == b'>' {
+            return Some(("\n", j + 1));
+        }
+    }
+    None
+}
+
+/// Drop all remaining tags but keep their text content. Char-safe.
+fn strip_remaining_tags(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
     let mut in_tag = false;
-    for ch in normalized.chars() {
+    for ch in input.chars() {
         match ch {
             '<' => in_tag = true,
             '>' => in_tag = false,
@@ -24,110 +86,54 @@ pub fn strip_html(input: &str) -> String {
             _ => {}
         }
     }
-
-    let decoded = decode_entities(&out);
-    collapse_blank_lines(&decoded)
-}
-
-fn normalize_breaks(input: &str) -> String {
-    // Hand-rolled lowercase walk so we match `<BR>`, `<Br />`, `</P>`,
-    // etc. without paying for a full regex dep.
-    let bytes = input.as_bytes();
-    let mut out = String::with_capacity(input.len());
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'<' {
-            if let Some((replacement, advance)) = match_break_or_paragraph(&bytes[i..]) {
-                out.push_str(replacement);
-                i += advance;
-                continue;
-            }
-        }
-        out.push(bytes[i] as char);
-        i += 1;
-    }
     out
-}
-
-/// Try to match `<br>` (any spacing/case) or `</p>` (any case) at the
-/// start of `b`. Returns the replacement string + byte length to skip
-/// when matched.
-fn match_break_or_paragraph(b: &[u8]) -> Option<(&'static str, usize)> {
-    // <br>, <br/>, <br />, <BR>, <Br/>, ...
-    if b.len() >= 4
-        && b[0] == b'<'
-        && (b[1] == b'b' || b[1] == b'B')
-        && (b[2] == b'r' || b[2] == b'R')
-    {
-        // Walk to the closing '>'
-        let mut j = 3usize;
-        while j < b.len() && b[j] != b'>' {
-            // Only allow whitespace and a single '/' inside <br..>
-            if !b[j].is_ascii_whitespace() && b[j] != b'/' {
-                return None;
-            }
-            j += 1;
-        }
-        if j < b.len() && b[j] == b'>' {
-            return Some(("\n", j + 1));
-        }
-        return None;
-    }
-    // </p>, </P>
-    if b.len() >= 4
-        && b[0] == b'<'
-        && b[1] == b'/'
-        && (b[2] == b'p' || b[2] == b'P')
-        && b[3] == b'>'
-    {
-        return Some(("\n\n", 4));
-    }
-    None
 }
 
 fn decode_entities(input: &str) -> String {
-    // Hand-roll a few of the entities Qobuz uses most. Anything we
-    // don't recognise is left as-is rather than being garbled.
     let mut out = String::with_capacity(input.len());
-    let bytes = input.as_bytes();
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'&' {
-            if let Some((replacement, advance)) = match_entity(&bytes[i..]) {
+    let mut rest = input;
+    while !rest.is_empty() {
+        if rest.as_bytes()[0] == b'&' {
+            if let Some((replacement, consumed)) = match_entity(rest) {
                 out.push_str(replacement);
-                i += advance;
+                rest = &rest[consumed..];
                 continue;
             }
         }
-        out.push(bytes[i] as char);
-        i += 1;
+        let mut chars = rest.chars();
+        if let Some(ch) = chars.next() {
+            out.push(ch);
+            rest = chars.as_str();
+        } else {
+            break;
+        }
     }
     out
 }
 
-fn match_entity(b: &[u8]) -> Option<(&'static str, usize)> {
-    const TABLE: &[(&[u8], &str)] = &[
-        (b"&amp;", "&"),
-        (b"&lt;", "<"),
-        (b"&gt;", ">"),
-        (b"&quot;", "\""),
-        (b"&apos;", "'"),
-        (b"&#39;", "'"),
-        (b"&nbsp;", " "),
-        (b"&copy;", "\u{00A9}"),
-        (b"&#169;", "\u{00A9}"),
-        (b"&#xa9;", "\u{00A9}"),
-        (b"&reg;", "\u{00AE}"),
-        (b"&mdash;", "\u{2014}"),
-        (b"&ndash;", "\u{2013}"),
-        (b"&hellip;", "\u{2026}"),
-        (b"&ldquo;", "\u{201C}"),
-        (b"&rdquo;", "\u{201D}"),
-        (b"&lsquo;", "\u{2018}"),
-        (b"&rsquo;", "\u{2019}"),
+fn match_entity(s: &str) -> Option<(&'static str, usize)> {
+    const TABLE: &[(&str, &str)] = &[
+        ("&amp;", "&"),
+        ("&lt;", "<"),
+        ("&gt;", ">"),
+        ("&quot;", "\""),
+        ("&apos;", "'"),
+        ("&#39;", "'"),
+        ("&nbsp;", " "),
+        ("&copy;", "\u{00A9}"),
+        ("&#169;", "\u{00A9}"),
+        ("&#xa9;", "\u{00A9}"),
+        ("&reg;", "\u{00AE}"),
+        ("&mdash;", "\u{2014}"),
+        ("&ndash;", "\u{2013}"),
+        ("&hellip;", "\u{2026}"),
+        ("&ldquo;", "\u{201C}"),
+        ("&rdquo;", "\u{201D}"),
+        ("&lsquo;", "\u{2018}"),
+        ("&rsquo;", "\u{2019}"),
     ];
     for (needle, replacement) in TABLE {
-        if b.len() >= needle.len() && b[..needle.len()] == **needle {
+        if s.starts_with(needle) {
             return Some((replacement, needle.len()));
         }
     }
@@ -135,9 +141,6 @@ fn match_entity(b: &[u8]) -> Option<(&'static str, usize)> {
 }
 
 fn collapse_blank_lines(input: &str) -> String {
-    // Slint's word wrap renders `\n\n` as a clean paragraph break.
-    // Trim leading/trailing whitespace overall and prevent runs of
-    // 3+ newlines from blowing the layout open.
     let trimmed = input.trim();
     let mut out = String::with_capacity(trimmed.len());
     let mut consecutive_newlines = 0;
@@ -185,11 +188,19 @@ mod tests {
     }
 
     #[test]
+    fn preserves_multibyte_characters() {
+        // Mexican Spanish with accented chars, ñ, ó — the previous
+        // byte-walking implementation would have shredded these into
+        // their UTF-8 bytes (à+³ instead of ó).
+        let html = "<p>La cantautora se estableció en Madrid, España.</p>";
+        let plain = strip_html(html);
+        assert_eq!(plain, "La cantautora se estableció en Madrid, España.");
+    }
+
+    #[test]
     fn collapses_excess_newlines() {
         let html = "<p>A</p><p>B</p><p>C</p>";
         let out = strip_html(html);
-        // Three paragraphs separated by single blank line, no extra
-        // padding above or below.
         assert_eq!(out, "A\n\nB\n\nC");
     }
 }
