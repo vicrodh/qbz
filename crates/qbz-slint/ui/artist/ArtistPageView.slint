@@ -353,14 +353,6 @@ export component ArtistPageView inherits Rectangle {
                     horizontal-stretch: 1;
 
                     Text {
-                        text: @tr("ARTIST");
-                        color: Theme.text-muted;
-                        font-size: 10px;
-                        font-weight: Typography.semibold;
-                        letter-spacing: 1.5px;
-                    }
-                    Rectangle { height: 6px; }
-                    Text {
                         text: ArtistState.name;
                         color: Theme.text-primary;
                         font-size: Typography.title;
