@@ -555,11 +555,14 @@ pub struct MbOrigin {
     pub location_clickable: bool,
 }
 
-/// Reset the network sidebar's MB-driven state. Called when the artist
-/// changes so a stale Origin/Relationships/Discovery never bleeds
-/// across artists.
+/// Reset the network sidebar's MB-driven state and force-open the
+/// panel. Called when the artist changes so a stale Origin /
+/// Relationships / Discovery never bleeds across artists, and so the
+/// sidebar always starts open on every artist visit (per user policy
+/// — close is per-session, never persisted).
 pub fn reset_network_sidebar(window: &AppWindow) {
     let state = window.global::<NetworkSidebarState>();
+    state.set_open(true);
     state.set_mb_available(true);
     state.set_mb_mbid("".into());
     state.set_origin_loading(false);

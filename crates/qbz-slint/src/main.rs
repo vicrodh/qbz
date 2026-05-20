@@ -23,7 +23,6 @@ mod commands;
 mod discovery_dismiss;
 mod home;
 mod nav;
-mod network_sidebar_prefs;
 mod playback;
 mod queue;
 mod recently;
@@ -1167,24 +1166,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             });
     }
 
-    // Artist network sidebar — load the persisted open/closed flag
-    // (defaults to true on first launch), then persist on every toggle.
-    // The Slint side flips NetworkSidebarState.open before emitting
-    // the callback.
+    // Artist network sidebar — no persistence. Default open, user can
+    // close per-session, and reset_network_sidebar reopens it on every
+    // artist navigation. The toggle callback stays a no-op on the
+    // Rust side — Slint already flips NetworkSidebarState.open
+    // directly in the click handler.
     window
-        .global::<NetworkSidebarState>()
-        .set_open(network_sidebar_prefs::load_open());
-    {
-        let weak = window.as_weak();
-        window
-            .global::<NetworkSidebarActions>()
-            .on_toggle(move || {
-                if let Some(w) = weak.upgrade() {
-                    let open = w.global::<NetworkSidebarState>().get_open();
-                    network_sidebar_prefs::set_open(open);
-                }
-            });
-    }
+        .global::<NetworkSidebarActions>()
+        .on_toggle(|| {});
 
     // Network sidebar — typed click callbacks. Each delivers the
     // minimum payload the future target views (ArtistsByLocation,

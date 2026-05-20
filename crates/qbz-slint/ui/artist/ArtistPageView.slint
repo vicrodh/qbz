@@ -601,10 +601,16 @@ export component ArtistPageView inherits Rectangle {
             width: 300px;
             spacing: 0px;
 
-            // 44px to clear the NavButtons row at the top of the
-            // artist body — mirrors Tauri's sticky jump-nav offset
-            // (`top: 44px`).
-            Rectangle { height: 44px; }
+            // Top inset clears the entire artist header — NavButtons
+            // (11 padding + ~32 row + 22 spacer = 65) + the artist
+            // header itself (~214px: ARTIST label + name + truncated
+            // bio + Read more + action buttons) + the 36px spacer
+            // before Popular Tracks. Total ~315px so the sidebar's
+            // top edge sits inline with where Popular Tracks starts,
+            // matching Tauri's `.network-sidebar-column` natural flow
+            // position (inside the body, alongside the sections —
+            // never overlapping the artist header).
+            Rectangle { height: 320px; }
 
             sidebar-panel := Rectangle {
                 vertical-stretch: 1;
