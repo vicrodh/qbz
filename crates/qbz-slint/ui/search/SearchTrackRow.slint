@@ -10,9 +10,8 @@ import { Typography } from "../foundation/typography.slint";
 import { Radius } from "../foundation/radius.slint";
 import { SearchTrackItem } from "../state.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
-import { ContextMenu } from "../primitives/ContextMenu.slint";
-import { ContextMenuItem } from "../primitives/ContextMenuItem.slint";
 import { TrackPlayCell } from "../primitives/TrackPlayCell.slint";
+import { TrackContextMenu } from "../primitives/TrackContextMenu.slint";
 
 export component SearchTrackRow inherits Rectangle {
     in property <SearchTrackItem> track;
@@ -153,40 +152,12 @@ export component SearchTrackRow inherits Rectangle {
         }
     }
 
-    track-menu := PopupWindow {
-        x: parent.width - 208px;
-        y: 46px;
-        width: 196px;
-        height: 109px;
-        ContextMenu {
-            ContextMenuItem {
-                icon: @image-url("../assets/icons/play.svg");
-                label: @tr("Play");
-                clicked => {
-                    root.media-action("track", root.track.id, "play");
-                }
-            }
-            ContextMenuItem {
-                icon: @image-url("../assets/icons/list-plus.svg");
-                label: @tr("Play next");
-                clicked => {
-                    root.media-action("track", root.track.id, "play-next");
-                }
-            }
-            ContextMenuItem {
-                icon: @image-url("../assets/icons/list-end.svg");
-                label: @tr("Add to queue");
-                clicked => {
-                    root.media-action("track", root.track.id, "queue");
-                }
-            }
-            ContextMenuItem {
-                icon: @image-url("../assets/icons/heart.svg");
-                label: @tr("Add to favorites");
-                clicked => {
-                    root.media-action("track", root.track.id, "favorite");
-                }
-            }
+    track-menu := TrackContextMenu {
+        x: parent.width - self.width - 12px;
+        y: 48px;
+        track-id: root.track.id;
+        media-action(k, i, a) => {
+            root.media-action(k, i, a);
         }
     }
 }

@@ -1,0 +1,109 @@
+// Track-row "more" context menu — flat, ported 1:1 from the Tauri
+// TrackMenu component. Items that have no Slint wiring yet emit a
+// media-action with an action string the runtime currently ignores
+// (no-op until backend wiring lands).
+
+import { ContextMenu } from "ContextMenu.slint";
+import { ContextMenuItem } from "ContextMenuItem.slint";
+
+export component TrackContextMenu inherits PopupWindow {
+    in property <string> track-id;
+    callback media-action(string, string, string);
+
+    width: 224px;
+    height: 392px;
+
+    ContextMenu {
+        ContextMenuItem {
+            icon: @image-url("../assets/icons/play.svg");
+            label: @tr("Play now");
+            clicked => {
+                root.media-action("track", root.track-id, "play");
+            }
+        }
+        ContextMenuItem {
+            icon: @image-url("../assets/icons/list-plus.svg");
+            label: @tr("Play next");
+            clicked => {
+                root.media-action("track", root.track-id, "play-next");
+            }
+        }
+        ContextMenuItem {
+            icon: @image-url("../assets/icons/list-end.svg");
+            label: @tr("Add to queue");
+            clicked => {
+                root.media-action("track", root.track-id, "queue");
+            }
+        }
+        ContextMenuItem {
+            icon: @image-url("../assets/icons/radio.svg");
+            label: @tr("Create radio");
+            clicked => {
+                root.media-action("track", root.track-id, "create-radio");
+            }
+        }
+        ContextMenuItem {
+            icon: @image-url("../assets/icons/heart.svg");
+            label: @tr("Add to library");
+            clicked => {
+                root.media-action("track", root.track-id, "favorite");
+            }
+        }
+        ContextMenuItem {
+            icon: @image-url("../assets/icons/cassette-tape.svg");
+            label: @tr("Add to mixtape");
+            clicked => {
+                root.media-action("track", root.track-id, "add-to-mixtape");
+            }
+        }
+        ContextMenuItem {
+            icon: @image-url("../assets/icons/list-music.svg");
+            label: @tr("Add to playlist");
+            clicked => {
+                root.media-action("track", root.track-id, "add-to-playlist");
+            }
+        }
+        ContextMenuItem {
+            icon: @image-url("../assets/icons/link.svg");
+            label: @tr("Share Qobuz link");
+            clicked => {
+                root.media-action("track", root.track-id, "share-qobuz");
+            }
+        }
+        ContextMenuItem {
+            icon: @image-url("../assets/icons/link.svg");
+            label: @tr("Share Song.link");
+            clicked => {
+                root.media-action("track", root.track-id, "share-songlink");
+            }
+        }
+        ContextMenuItem {
+            icon: @image-url("../assets/icons/cloud-download.svg");
+            label: @tr("Make available offline");
+            clicked => {
+                root.media-action("track", root.track-id, "download");
+            }
+        }
+        ContextMenuItem {
+            icon: @image-url("../assets/icons/disc-3.svg");
+            label: @tr("Go to album");
+            clicked => {
+                root.media-action("track", root.track-id, "go-to-album");
+            }
+        }
+        ContextMenuItem {
+            icon: @image-url("../assets/icons/user.svg");
+            label: @tr("Go to artist");
+            clicked => {
+                root.media-action("track", root.track-id, "go-to-artist");
+            }
+        }
+        ContextMenuItem {
+            icon: @image-url("../assets/icons/info.svg");
+            label: @tr("Track info");
+            clicked => {
+                root.media-action("track", root.track-id, "track-info");
+            }
+        }
+    }
+}
