@@ -630,9 +630,145 @@ export component ArtistPageView inherits Rectangle {
                     background: Theme.border-subtle;
                 }
 
-                // Body — placeholder. Sections land in phases 5-8.
-                Rectangle {
+                // Body — sections: Origin (MB), Labels, Similar, MB
+                // Relationships, Discovery. Wrapped in a Flickable so a
+                // long sidebar (Labels + Relationships + Discovery) can
+                // scroll. Phase 5 adds Origin only; phases 6-8 fill the
+                // rest.
+                Flickable {
                     vertical-stretch: 1;
+                    viewport-width: self.width;
+                    viewport-height: sidebar-body.preferred-height;
+
+                    sidebar-body := VerticalLayout {
+                        spacing: 0px;
+                        padding-top: 4px;
+                        padding-bottom: 12px;
+                        alignment: start;
+
+                        // --- Origin (MB metadata) ----------------------
+                        // Mirrors Tauri's .sidebar-section.sidebar-origin
+                        // and the gate `mbAvailable && (loading || data)`.
+                        if NetworkSidebarState.mb-available
+                            && (NetworkSidebarState.origin-loading
+                                || NetworkSidebarState.origin.begin-date != ""
+                                || NetworkSidebarState.origin.end-date != ""
+                                || NetworkSidebarState.origin.location-display != ""):
+                        VerticalLayout {
+                            padding-left: 14px;
+                            padding-right: 14px;
+                            padding-top: 12px;
+                            padding-bottom: 12px;
+                            spacing: 6px;
+
+                            if NetworkSidebarState.origin-loading: Text {
+                                text: @tr("Loading origin…");
+                                color: Theme.text-muted;
+                                font-size: 12px;
+                            }
+
+                            // Born / Founded
+                            if !NetworkSidebarState.origin-loading
+                                && NetworkSidebarState.origin.begin-date != "":
+                            HorizontalLayout {
+                                spacing: 8px;
+                                alignment: stretch;
+                                Text {
+                                    text: NetworkSidebarState.origin.is-person
+                                        ? @tr("BORN")
+                                        : @tr("FOUNDED");
+                                    color: Theme.text-muted;
+                                    font-size: 11px;
+                                    font-weight: Typography.semibold;
+                                    letter-spacing: 0.5px;
+                                    vertical-alignment: center;
+                                    horizontal-stretch: 0;
+                                }
+                                Text {
+                                    text: NetworkSidebarState.origin.begin-date;
+                                    color: Theme.text-primary;
+                                    font-size: 13px;
+                                    horizontal-alignment: right;
+                                    vertical-alignment: center;
+                                    horizontal-stretch: 1;
+                                }
+                            }
+
+                            // Born in / Founded in — optionally clickable
+                            if !NetworkSidebarState.origin-loading
+                                && NetworkSidebarState.origin.location-display != "":
+                            HorizontalLayout {
+                                spacing: 8px;
+                                alignment: stretch;
+                                Text {
+                                    text: NetworkSidebarState.origin.is-person
+                                        ? @tr("BORN IN")
+                                        : @tr("FOUNDED IN");
+                                    color: Theme.text-muted;
+                                    font-size: 11px;
+                                    font-weight: Typography.semibold;
+                                    letter-spacing: 0.5px;
+                                    vertical-alignment: center;
+                                    horizontal-stretch: 0;
+                                }
+                                if NetworkSidebarState.origin.location-clickable: Rectangle {
+                                    horizontal-stretch: 1;
+                                    location-text := Text {
+                                        text: NetworkSidebarState.origin.location-display;
+                                        color: location-ta.has-hover
+                                            ? Theme.accent
+                                            : Theme.text-primary;
+                                        font-size: 13px;
+                                        horizontal-alignment: right;
+                                        vertical-alignment: center;
+                                        width: 100%;
+                                    }
+                                    location-ta := TouchArea {
+                                        mouse-cursor: pointer;
+                                        clicked => {
+                                            NetworkSidebarActions.location-clicked(
+                                                NetworkSidebarState.mb-mbid);
+                                        }
+                                    }
+                                }
+                                if !NetworkSidebarState.origin.location-clickable: Text {
+                                    text: NetworkSidebarState.origin.location-display;
+                                    color: Theme.text-primary;
+                                    font-size: 13px;
+                                    horizontal-alignment: right;
+                                    vertical-alignment: center;
+                                    horizontal-stretch: 1;
+                                }
+                            }
+
+                            // Died / Disbanded
+                            if !NetworkSidebarState.origin-loading
+                                && NetworkSidebarState.origin.end-date != "":
+                            HorizontalLayout {
+                                spacing: 8px;
+                                alignment: stretch;
+                                Text {
+                                    text: NetworkSidebarState.origin.is-person
+                                        ? @tr("DIED")
+                                        : @tr("DISBANDED");
+                                    color: Theme.text-muted;
+                                    font-size: 11px;
+                                    font-weight: Typography.semibold;
+                                    letter-spacing: 0.5px;
+                                    vertical-alignment: center;
+                                    horizontal-stretch: 0;
+                                }
+                                Text {
+                                    text: NetworkSidebarState.origin.end-date;
+                                    color: Theme.text-primary;
+                                    font-size: 13px;
+                                    horizontal-alignment: right;
+                                    vertical-alignment: center;
+                                    horizontal-stretch: 1;
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

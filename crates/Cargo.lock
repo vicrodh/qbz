@@ -5160,6 +5160,7 @@ dependencies = [
  "qbz-cache",
  "qbz-core",
  "qbz-credentials",
+ "qbz-integrations",
  "qbz-models",
  "reqwest",
  "serde",

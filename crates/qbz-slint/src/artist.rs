@@ -17,7 +17,10 @@ use slint::{ComponentHandle, ModelRc, VecModel};
 use crate::album::TrackData;
 use crate::artwork::{ArtworkJob, ArtworkTarget};
 use crate::home::CardData;
-use crate::{AlbumCardItem, AlbumTrackItem, AppWindow, ArtistState, DiscoverSection};
+use crate::{
+    AlbumCardItem, AlbumTrackItem, AppWindow, ArtistState, DiscoverSection, MbOriginData,
+    NetworkSidebarState,
+};
 
 /// Plain, `Send` artist data produced on the worker thread.
 pub struct ArtistData {
@@ -454,4 +457,178 @@ pub fn apply_artwork(window: &AppWindow, pixels: &[u8], width: u32, height: u32)
     let state = window.global::<ArtistState>();
     state.set_artwork(slint::Image::from_rgba8(buffer));
     state.set_header_color(slint::Color::from_rgb_u8(r, g, b));
+}
+
+// ----- MusicBrainz network sidebar ---------------------------------------
+
+/// Plain, `Send` payload mapping `qbz_integrations::ArtistMetadata` into
+/// the shape the Origin section of the sidebar renders.
+pub struct MbMetadata {
+    pub mbid: String,
+    pub origin: MbOrigin,
+}
+
+#[derive(Default)]
+pub struct MbOrigin {
+    pub is_person: bool,
+    pub begin_date: String,
+    pub end_date: String,
+    pub location_display: String,
+    pub location_clickable: bool,
+}
+
+/// Reset the network sidebar's MB-driven state. Called when the artist
+/// changes so a stale Origin/Relationships/Discovery never bleeds
+/// across artists.
+pub fn reset_network_sidebar(window: &AppWindow) {
+    let state = window.global::<NetworkSidebarState>();
+    state.set_mb_available(true);
+    state.set_mb_mbid("".into());
+    state.set_origin_loading(false);
+    state.set_origin(MbOriginData::default());
+    state.set_relationships_loading(false);
+    state.set_discovery_loading(false);
+}
+
+/// Resolve the artist name to an MBID, then fetch artist metadata. Returns
+/// `Ok(None)` when MB is disabled or no confident match is found — the
+/// sidebar treats both the same (Origin section hides).
+pub async fn load_mb_metadata<A>(
+    runtime: &Arc<AppRuntime<A>>,
+    artist_name: &str,
+) -> Result<Option<MbMetadata>, String>
+where
+    A: FrontendAdapter + Send + Sync + 'static,
+{
+    if !runtime.core().musicbrainz_is_enabled().await {
+        return Ok(None);
+    }
+
+    let resolved = runtime
+        .core()
+        .musicbrainz_resolve_artist(artist_name)
+        .await
+        .map_err(|e| e.to_string())?;
+    let Some(resolved) = resolved else {
+        return Ok(None);
+    };
+    // resolve_artist may return a low-confidence match; surface only the
+    // mbid when the client gives us one (the qbz-integrations layer
+    // already filters out the "no match at all" case before returning).
+    let mbid = resolved.mbid;
+    if mbid.is_empty() {
+        return Ok(None);
+    }
+
+    let meta = runtime
+        .core()
+        .musicbrainz_get_artist_metadata(&mbid)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(Some(MbMetadata {
+        mbid: mbid.clone(),
+        origin: map_origin(&meta),
+    }))
+}
+
+fn map_origin(meta: &qbz_integrations::musicbrainz::ArtistMetadata) -> MbOrigin {
+    use qbz_integrations::musicbrainz::{ArtistType, LocationPrecision};
+
+    let is_person = matches!(meta.artist_type, ArtistType::Person);
+
+    let begin_date = meta
+        .life_span
+        .as_ref()
+        .and_then(|ls| ls.begin.as_deref().map(format_mb_date_short))
+        .unwrap_or_default();
+    let end_date = meta
+        .life_span
+        .as_ref()
+        .and_then(|ls| ls.end.as_deref().map(format_mb_date_short))
+        .unwrap_or_default();
+
+    let (location_display, location_clickable) = match &meta.location {
+        Some(loc) => {
+            // Tauri's gate: clickable when precision isn't "country" OR
+            // a city is present somehow. Country-only locations stay as
+            // plain text — there's nothing to drill into.
+            let clickable = !matches!(loc.precision, LocationPrecision::Country)
+                || loc.city.is_some();
+            (loc.display_name.clone(), clickable)
+        }
+        None => (String::new(), false),
+    };
+
+    MbOrigin {
+        is_person,
+        begin_date,
+        end_date,
+        location_display,
+        location_clickable,
+    }
+}
+
+/// Apply the MB metadata to NetworkSidebarState. Runs on the Slint
+/// event loop.
+pub fn apply_mb_metadata(window: &AppWindow, meta: MbMetadata) {
+    let state = window.global::<NetworkSidebarState>();
+    state.set_mb_mbid(meta.mbid.into());
+    state.set_origin(MbOriginData {
+        is_person: meta.origin.is_person,
+        begin_date: meta.origin.begin_date.into(),
+        end_date: meta.origin.end_date.into(),
+        location_display: meta.origin.location_display.into(),
+        location_clickable: meta.origin.location_clickable,
+    });
+    state.set_origin_loading(false);
+}
+
+/// Mark the sidebar as MB-unavailable (disabled in settings, or no
+/// confident match for this artist). The MB-driven sections hide.
+pub fn apply_mb_unavailable(window: &AppWindow) {
+    let state = window.global::<NetworkSidebarState>();
+    state.set_mb_available(false);
+    state.set_origin_loading(false);
+    state.set_relationships_loading(false);
+    state.set_discovery_loading(false);
+}
+
+/// Format a MusicBrainz partial date into a short human string —
+/// "1990", "May 1990", or "May 14, 1990" — matching Tauri's
+/// formatMbDate_v2 output when the locale is en-US.
+fn format_mb_date_short(date: &str) -> String {
+    let parts: Vec<&str> = date.split('-').collect();
+    let month = |m: &str| -> Option<&'static str> {
+        Some(match m {
+            "01" => "January",
+            "02" => "February",
+            "03" => "March",
+            "04" => "April",
+            "05" => "May",
+            "06" => "June",
+            "07" => "July",
+            "08" => "August",
+            "09" => "September",
+            "10" => "October",
+            "11" => "November",
+            "12" => "December",
+            _ => return None,
+        })
+    };
+    match parts.as_slice() {
+        [y] => (*y).to_string(),
+        [y, m] => match month(m) {
+            Some(name) => format!("{} {}", name, y),
+            None => date.to_string(),
+        },
+        [y, m, d] => match month(m) {
+            Some(name) => {
+                let day = d.trim_start_matches('0');
+                format!("{} {}, {}", name, day, y)
+            }
+            None => date.to_string(),
+        },
+        _ => date.to_string(),
+    }
 }

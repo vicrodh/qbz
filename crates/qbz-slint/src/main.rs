@@ -223,17 +223,49 @@ fn navigate_artist(
     handle.spawn(async move {
         let _ = weak.upgrade_in_event_loop(|w| {
             artist::reset_artist(&w);
+            artist::reset_network_sidebar(&w);
             w.global::<NavState>().set_view(ContentView::Artist);
         });
         match artist::load_artist(&runtime, &artist_id).await {
             Ok(data) => {
                 let artwork_url = data.artwork_url.clone();
                 let jobs = artist::artwork_jobs(&data);
+                let artist_name = data.name.clone();
                 let _ = weak.upgrade_in_event_loop(move |w| {
                     artist::apply_artist(&w, data);
                     w.global::<ArtistState>().set_loading(false);
                 });
                 artwork::spawn_loads(jobs, weak.clone(), image_cache.clone());
+
+                // Network sidebar — kick the MB enrichment off in
+                // parallel with artwork. Origin section shows a loading
+                // state until the MB resolve + metadata calls return.
+                let runtime_mb = runtime.clone();
+                let weak_mb = weak.clone();
+                tokio::spawn(async move {
+                    let _ = weak_mb.upgrade_in_event_loop(|w| {
+                        w.global::<NetworkSidebarState>().set_origin_loading(true);
+                    });
+                    match artist::load_mb_metadata(&runtime_mb, &artist_name).await {
+                        Ok(Some(meta)) => {
+                            let _ = weak_mb.upgrade_in_event_loop(move |w| {
+                                artist::apply_mb_metadata(&w, meta);
+                            });
+                        }
+                        Ok(None) => {
+                            let _ = weak_mb.upgrade_in_event_loop(|w| {
+                                artist::apply_mb_unavailable(&w);
+                            });
+                        }
+                        Err(e) => {
+                            log::warn!("[qbz-slint] MB metadata load failed: {e}");
+                            let _ = weak_mb.upgrade_in_event_loop(|w| {
+                                artist::apply_mb_unavailable(&w);
+                            });
+                        }
+                    }
+                });
+
                 if !artwork_url.is_empty() {
                     if let Some((pixels, width, height)) =
                         artwork::fetch_and_decode(&artwork_url, &image_cache, 440).await
@@ -1105,6 +1137,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             });
     }
+
+    // Network sidebar — typed click callbacks. Each delivers the
+    // minimum payload the future target views (ArtistsByLocation,
+    // LabelReleases, MusicianPage) will need. Logged-only until those
+    // views land in Slint.
+    window
+        .global::<NetworkSidebarActions>()
+        .on_location_clicked(|mbid| {
+            log::info!("[qbz-slint] network sidebar: location clicked for mbid={mbid}");
+        });
+    window
+        .global::<NetworkSidebarActions>()
+        .on_label_clicked(|id, name| {
+            log::info!("[qbz-slint] network sidebar: label clicked id={id} name={name}");
+        });
+    window
+        .global::<NetworkSidebarActions>()
+        .on_artist_clicked(|id| {
+            log::info!("[qbz-slint] network sidebar: artist row clicked qobuz_id={id}");
+        });
+    window
+        .global::<NetworkSidebarActions>()
+        .on_musician_clicked(|name, role| {
+            log::info!(
+                "[qbz-slint] network sidebar: musician clicked name={name} role={role}"
+            );
+        });
+    window
+        .global::<NetworkSidebarActions>()
+        .on_discovery_dismissed(|mbid| {
+            log::info!("[qbz-slint] network sidebar: discovery dismissed mbid={mbid}");
+        });
 
     window.on_close_app(|| {
         log::info!("[qbz-slint] closing");

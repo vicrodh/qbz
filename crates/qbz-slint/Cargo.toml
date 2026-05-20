@@ -37,6 +37,7 @@ qbz-app = { path = "../qbz-app" }
 qbz-audio = { path = "../qbz-audio" }
 qbz-core = { path = "../qbz-core" }
 qbz-models = { path = "../qbz-models" }
+qbz-integrations = { path = "../qbz-integrations" }
 qbz-cache = { path = "../qbz-cache" }
 qbz-credentials = { path = "../qbz-credentials" }
 
