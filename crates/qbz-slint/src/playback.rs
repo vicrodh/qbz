@@ -341,6 +341,104 @@ pub fn play_album(
     });
 }
 
+/// Play the artist's top tracks as a fresh queue, starting at the
+/// first track. Wired to the Popular Tracks "play all" CircleAction
+/// in ArtistPageView. Re-fetches the artist page so the queue
+/// carries the same audio metadata the page row uses.
+pub fn play_artist_top_tracks(
+    runtime: Runtime,
+    weak: slint::Weak<AppWindow>,
+    handle: tokio::runtime::Handle,
+    artist_id: String,
+) {
+    handle.spawn(async move {
+        let id: u64 = match artist_id.parse() {
+            Ok(id) => id,
+            Err(_) => {
+                log::warn!("[qbz-slint] play-top: invalid artist id {artist_id}");
+                return;
+            }
+        };
+        let page = match runtime.core().get_artist_page(id, None).await {
+            Ok(page) => page,
+            Err(e) => {
+                log::error!("[qbz-slint] play-top: get_artist_page failed: {e}");
+                return;
+            }
+        };
+        let artist_name = page.name.display.clone();
+        let tracks: Vec<QueueTrack> = page
+            .top_tracks
+            .unwrap_or_default()
+            .into_iter()
+            .map(|track| make_top_track_queue(track, &artist_name))
+            .collect();
+        if tracks.is_empty() {
+            log::warn!("[qbz-slint] play-top: artist {artist_id} has no top tracks");
+            return;
+        }
+        let start_track_id = tracks[0].id;
+        runtime.core().set_queue(tracks, Some(0)).await;
+        after_track_change(&runtime, &weak, start_track_id).await;
+        refresh_sidebar(true);
+    });
+}
+
+/// Build a QueueTrack from a /artist/page top_tracks entry. The page
+/// response carries a thinner audio_info than /album/get tracks; fall
+/// back to sensible defaults when fields are absent.
+fn make_top_track_queue(
+    track: qbz_models::PageArtistTrack,
+    artist_fallback: &str,
+) -> QueueTrack {
+    let audio = track.audio_info.as_ref();
+    let album_id = track.album.as_ref().map(|a| a.id.clone());
+    let album_title = track
+        .album
+        .as_ref()
+        .map(|a| a.title.clone())
+        .unwrap_or_default();
+    let artwork_url = track
+        .album
+        .as_ref()
+        .and_then(|a| a.image.as_ref())
+        .and_then(|img| img.best().cloned());
+    let artist_name = track
+        .artist
+        .as_ref()
+        .map(|a| a.name.display.clone())
+        .filter(|n| !n.is_empty())
+        .unwrap_or_else(|| artist_fallback.to_string());
+    let artist_id = track.artist.as_ref().map(|a| a.id);
+    let hires = audio
+        .and_then(|a| a.maximum_bit_depth)
+        .map(|b| b > 16)
+        .unwrap_or(false);
+    QueueTrack {
+        id: track.id,
+        title: track.title,
+        version: track.version,
+        artist: artist_name,
+        album: album_title,
+        duration_secs: track.duration.unwrap_or(0) as u64,
+        artwork_url,
+        hires,
+        bit_depth: audio.and_then(|a| a.maximum_bit_depth),
+        sample_rate: audio.and_then(|a| a.maximum_sampling_rate),
+        is_local: false,
+        album_id: album_id.clone(),
+        artist_id,
+        streamable: track
+            .rights
+            .as_ref()
+            .and_then(|r| r.streamable)
+            .unwrap_or(true),
+        source: Some("qobuz".to_string()),
+        parental_warning: track.parental_warning.unwrap_or(false),
+        source_item_id_hint: album_id,
+    }
+}
+
 /// Play a single track immediately as a one-track queue.
 pub fn play_track_now(
     runtime: Runtime,

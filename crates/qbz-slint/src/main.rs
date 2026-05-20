@@ -222,10 +222,13 @@ fn navigate_artist(
     image_cache: artwork::ImageCache,
     artist_id: String,
 ) {
+    let artist_id_for_state = artist_id.clone();
     handle.spawn(async move {
-        let _ = weak.upgrade_in_event_loop(|w| {
+        let id_for_apply = artist_id_for_state.clone();
+        let _ = weak.upgrade_in_event_loop(move |w| {
             artist::reset_artist(&w);
             artist::reset_network_sidebar(&w);
+            w.global::<ArtistState>().set_id(id_for_apply.into());
             w.global::<NavState>().set_view(ContentView::Artist);
         });
         match artist::load_artist(&runtime, &artist_id).await {
@@ -985,6 +988,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         );
                     }
                 }
+                ("artist", "play-top") => playback::play_artist_top_tracks(
+                    runtime.clone(),
+                    weak.clone(),
+                    handle.clone(),
+                    id.clone(),
+                ),
                 ("artist", "follow") => {
                     let runtime = runtime.clone();
                     let weak = weak.clone();

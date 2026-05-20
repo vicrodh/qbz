@@ -208,6 +208,7 @@ export struct SimilarEntry {
 }
 
 export global ArtistState {
+    in property <string> id;
     in property <string> name;
     in property <string> bio;
     // Truncated bio (word-boundary cut + ellipsis) for the at-rest view;

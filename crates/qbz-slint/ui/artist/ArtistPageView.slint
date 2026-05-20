@@ -97,16 +97,50 @@ component TrackRow inherits Rectangle {
         padding-right: 12px;
         spacing: 16px;
 
+        // Leading cell — track number / play overlay normally,
+        // selection checkbox when multi-select is on. The cell width
+        // stays the same so the rest of the row does not shift.
         VerticalLayout {
             alignment: center;
-            play-cell := TrackPlayCell {
-                track-id: root.track.id;
-                number: root.track.number;
-                show-artwork: false;
-                number-width: 28px;
-                row-hovered: root.row-hovered;
-                play => {
-                    root.media-action("track", root.track.id, "play");
+            Rectangle {
+                width: 28px;
+                height: 28px;
+                play-cell := TrackPlayCell {
+                    track-id: root.track.id;
+                    number: root.track.number;
+                    show-artwork: false;
+                    number-width: 28px;
+                    row-hovered: root.row-hovered && !root.multi-select-mode;
+                    visible: !root.multi-select-mode;
+                    play => {
+                        root.media-action("track", root.track.id, "play");
+                    }
+                }
+                if root.multi-select-mode: Rectangle {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    width: 22px;
+                    height: 22px;
+                    border-radius: 11px;
+                    background: root.track.selected ? Theme.accent : transparent;
+                    border-width: root.track.selected ? 0px : 1.5px;
+                    border-color: select-ta.has-hover ? Theme.text-primary : Theme.text-muted;
+                    animate background { duration: 120ms; }
+                    QbzIcon {
+                        source: @image-url("../assets/icons/check.svg");
+                        width: 14px;
+                        height: 14px;
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        tint: #ffffff;
+                        visible: root.track.selected;
+                    }
+                    select-ta := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            root.media-action("track", root.track.id, "toggle-select");
+                        }
+                    }
                 }
             }
         }
@@ -138,37 +172,6 @@ component TrackRow inherits Rectangle {
             font-size: Typography.legal;
             horizontal-alignment: center;
             vertical-alignment: center;
-        }
-
-        // Select checkbox — only visible while the section is in
-        // multi-select mode (toggled by the section header's Select
-        // button). Mirrors Tauri's #if multiSelectMode gate.
-        if root.multi-select-mode: VerticalLayout {
-            alignment: center;
-            Rectangle {
-                width: 22px;
-                height: 22px;
-                border-radius: 11px;
-                background: root.track.selected ? Theme.accent : transparent;
-                border-width: root.track.selected ? 0px : 1.5px;
-                border-color: select-ta.has-hover ? Theme.text-primary : Theme.text-muted;
-                animate background { duration: 120ms; }
-                QbzIcon {
-                    source: @image-url("../assets/icons/check.svg");
-                    width: 14px;
-                    height: 14px;
-                    x: (parent.width - self.width) / 2;
-                    y: (parent.height - self.height) / 2;
-                    tint: #ffffff;
-                    visible: root.track.selected;
-                }
-                select-ta := TouchArea {
-                    mouse-cursor: pointer;
-                    clicked => {
-                        root.media-action("track", root.track.id, "toggle-select");
-                    }
-                }
-            }
         }
 
         // More / context-menu button — always visible on Popular Tracks.
@@ -581,23 +584,24 @@ export component ArtistPageView inherits Rectangle {
             // (Play all / Select-mode toggle / More menu). Mirrors Tauri's
             // popular-tracks section-header.
             if ArtistState.top-tracks.length > 0: HorizontalLayout {
-                alignment: space-between;
                 spacing: 12px;
                 VerticalLayout {
                     alignment: center;
+                    horizontal-stretch: 1;
                     SectionTitle {
                         text: @tr("Popular Tracks");
                     }
                 }
                 HorizontalLayout {
-                    alignment: end;
+                    horizontal-stretch: 0;
                     spacing: 12px;
                     CircleAction {
                         icon: @image-url("../assets/icons/play-fill.svg");
                         primary: true;
                         diameter: 40px;
                         clicked => {
-                            root.media-action("artist", "", "play-top");
+                            root.media-action(
+                                "artist", ArtistState.id, "play-top");
                         }
                     }
                     CircleAction {
@@ -615,6 +619,56 @@ export component ArtistPageView inherits Rectangle {
                 }
             }
             if ArtistState.top-tracks.length > 0: Rectangle { height: 10px; }
+
+            // Check-all row — shown above the list whenever the
+            // section is in multi-select mode. Matches the QBZ
+            // pattern: leading checkbox on the left of the row, just
+            // like the per-row selectors below.
+            if root.multi-select-mode
+                && ArtistState.top-tracks.length > 0:
+            HorizontalLayout {
+                height: 36px;
+                padding-left: 12px;
+                padding-right: 12px;
+                spacing: 16px;
+                VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: 28px;
+                        height: 28px;
+                        check-all-box := Rectangle {
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
+                            width: 22px;
+                            height: 22px;
+                            border-radius: 11px;
+                            background: transparent;
+                            border-width: 1.5px;
+                            border-color: check-all-ta.has-hover
+                                ? Theme.text-primary
+                                : Theme.text-muted;
+                            check-all-ta := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => {
+                                    root.media-action(
+                                        "artist", "", "select-all-top-tracks");
+                                }
+                            }
+                        }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    horizontal-stretch: 1;
+                    Text {
+                        text: @tr("Select all");
+                        color: Theme.text-secondary;
+                        font-size: Typography.body;
+                        font-weight: Typography.medium;
+                    }
+                }
+            }
+
             for track[index] in ArtistState.top-tracks: TrackRow {
                 visible: root.top-tracks-expanded || index < root.top-tracks-preview;
                 height: self.visible ? 52px : 0px;
