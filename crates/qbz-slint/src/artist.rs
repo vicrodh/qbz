@@ -377,14 +377,30 @@ fn map_release(release: PageArtistRelease) -> CardData {
         .image
         .and_then(|img| img.best().cloned())
         .unwrap_or_default();
+    let year = release
+        .dates
+        .as_ref()
+        .and_then(|d| d.original.as_deref())
+        .and_then(|s| s.get(..4).map(|y| y.to_string()))
+        .unwrap_or_default();
+    let bit_depth = release.audio_info.as_ref().and_then(|a| a.maximum_bit_depth);
+    let sample_rate = release
+        .audio_info
+        .as_ref()
+        .and_then(|a| a.maximum_sampling_rate);
+    let quality_tier = tier(bit_depth).to_string();
+    let quality_label = match (bit_depth, sample_rate) {
+        (Some(bd), Some(sr)) => format!("{}-bit / {} kHz", bd, sr),
+        _ => String::new(),
+    };
     CardData {
         id: release.id,
         title: release.title,
         artist,
         genre: release.genre.map(|g| g.name).unwrap_or_default(),
-        year: String::new(),
-        quality_tier: String::new(),
-        quality_label: String::new(),
+        year,
+        quality_tier,
+        quality_label,
         ribbon: String::new(),
         ribbon_kind: String::new(),
         artwork_url,
@@ -414,10 +430,15 @@ fn mmss(secs: u32) -> String {
 // multi-paragraph biographies — gone with this refactor.
 
 fn card_to_item(card: CardData) -> AlbumCardItem {
+    // On the artist page the card subtitle slot should show the
+    // release year — the artist is redundant since we're already on
+    // their page. The AlbumCard reads `artist` for its subtitle line,
+    // so re-route year through that field instead of changing the
+    // shared card primitive.
     AlbumCardItem {
         id: card.id.into(),
         title: card.title.into(),
-        artist: card.artist.into(),
+        artist: card.year.clone().into(),
         genre: card.genre.into(),
         year: card.year.into(),
         quality_tier: card.quality_tier.into(),

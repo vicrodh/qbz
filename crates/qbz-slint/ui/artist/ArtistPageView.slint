@@ -679,26 +679,24 @@ export component ArtistPageView inherits Rectangle {
                     root.media-action(kind, id, action);
                 }
             }
-            // Load more / View less — same affordance, label flips
-            // with the expanded state. Tauri only shows Load more;
+            // Load more / View less — centered text-only affordance
+            // sitting 4px below the last visible row. The label flips
+            // with the expanded state (Tauri only shows Load more;
             // View less is a Slint-side improvement so users can
-            // collapse back to the 5-track preview without scrolling.
+            // collapse back to the 5-track preview without scrolling).
+            if ArtistState.top-tracks.length > root.top-tracks-preview: Rectangle { height: 4px; }
             if ArtistState.top-tracks.length > root.top-tracks-preview: HorizontalLayout {
-                alignment: start;
+                alignment: center;
                 Rectangle {
-                    width: load-more-text.preferred-width + 32px;
-                    height: 32px;
-                    border-radius: Radius.sm;
-                    border-width: 1px;
-                    border-color: Theme.border-subtle;
-                    background: load-more-ta.has-hover
-                        ? Theme.surface-elevated
-                        : Theme.surface-card;
+                    width: load-more-text.preferred-width + 24px;
+                    height: 28px;
                     load-more-text := Text {
                         text: root.top-tracks-expanded
                             ? @tr("View less")
                             : @tr("Load more");
-                        color: Theme.text-secondary;
+                        color: load-more-ta.has-hover
+                            ? Theme.text-primary
+                            : Theme.text-secondary;
                         font-size: 13px;
                         x: (parent.width - self.width) / 2;
                         y: (parent.height - self.height) / 2;
