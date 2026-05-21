@@ -14,6 +14,7 @@ import { Carousel } from "Carousel.slint";
 import { SlimCarousel } from "SlimCarousel.slint";
 import { ArtistCarousel } from "ArtistCarousel.slint";
 import { Spotlight } from "Spotlight.slint";
+import { QobuzMixesRow } from "QobuzMixesRow.slint";
 import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
 
 export component ForYouView inherits VerticalLayout {
@@ -23,6 +24,7 @@ export component ForYouView inherits VerticalLayout {
     callback play-track(string);
     callback play-top-tracks(string);
     callback start-radio(string);
+    callback open-mix(string);
 
     spacing: 40px;
     alignment: start;
@@ -32,6 +34,13 @@ export component ForYouView inherits VerticalLayout {
         && ForYouState.top-artists.length == 0: HorizontalLayout {
         alignment: center;
         LoadingSpinner { size: 36px; }
+    }
+
+    // 0. Qobuz Mixes (static navigation tiles).
+    QobuzMixesRow {
+        open-mix(which) => {
+            root.open-mix(which);
+        }
     }
 
     // 1. Release Watch.

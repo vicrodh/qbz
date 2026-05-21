@@ -283,6 +283,9 @@ export component HomeView inherits Rectangle {
                     start-radio(id) => {
                         root.media-action("artist", id, "radio");
                     }
+                    open-mix(which) => {
+                        root.media-action("mix", which, "open");
+                    }
                 }
 
                 // The Recently Played + Popular sections below belong

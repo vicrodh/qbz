@@ -1279,6 +1279,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 }
+                ("mix", which) => {
+                    // Qobuz Mixes tiles — the DailyQ/WeeklyQ/FavQ/TopQ
+                    // detail views are a separate feature; log until
+                    // they exist.
+                    log::info!("[qbz-slint] qobuz mix '{which}' clicked (view not implemented)");
+                }
                 _ => {}
             }
         });

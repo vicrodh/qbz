@@ -1,0 +1,107 @@
+// Discover > For You "Qobuz Mixes" — port of Tauri's QobuzMixesRow.
+// Four 220px navigation tiles (DailyQ / WeeklyQ / FavQ / TopQ): a
+// gradient artwork with a badge + name, and a description below. Pure
+// navigation entries (no per-tile data); the mix detail views they
+// open are a separate feature, so the callbacks are logged for now.
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Typography } from "../foundation/typography.slint";
+
+component MixTile inherits Rectangle {
+    in property <brush> gradient;
+    in property <string> badge;
+    in property <string> name;
+    in property <string> desc;
+    callback clicked();
+
+    width: 220px;
+    height: 268px;
+
+    VerticalLayout {
+        spacing: 8px;
+        // Gradient artwork.
+        Rectangle {
+            width: 220px;
+            height: 220px;
+            border-radius: 8px;
+            background: root.gradient;
+            clip: true;
+            Text {
+                text: root.badge;
+                x: 12px;
+                y: 12px;
+                color: #ffffffcc;
+                font-size: 10px;
+                font-weight: Typography.semibold;
+                letter-spacing: 1px;
+            }
+            Text {
+                text: root.name;
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                color: #ffffff;
+                font-size: 22px;
+                font-weight: Typography.bold;
+            }
+            ta := TouchArea {
+                mouse-cursor: pointer;
+                clicked => {
+                    root.clicked();
+                }
+            }
+        }
+        Text {
+            text: root.desc;
+            color: Theme.text-muted;
+            font-size: 12px;
+            wrap: word-wrap;
+            width: 220px;
+        }
+    }
+}
+
+export component QobuzMixesRow inherits VerticalLayout {
+    callback open-mix(string /* daily | weekly | fav | top */);
+
+    spacing: 12px;
+
+    Text {
+        text: @tr("Qobuz Mixes");
+        color: Theme.text-primary;
+        font-size: 18px;
+        font-weight: Typography.semibold;
+    }
+
+    HorizontalLayout {
+        spacing: 32px;
+        alignment: start;
+        MixTile {
+            gradient: @linear-gradient(135deg, #1e3a8a 0%, #6366f1 50%, #c084fc 100%);
+            badge: "qobuz";
+            name: "DailyQ";
+            desc: @tr("Elevate your day with a customized selection of music.");
+            clicked => { root.open-mix("daily"); }
+        }
+        MixTile {
+            gradient: @linear-gradient(135deg, #065f46 0%, #10b981 50%, #fbbf24 100%);
+            badge: "qobuz";
+            name: "WeeklyQ";
+            desc: @tr("Take a weekly journey with a fresh mix every Friday.");
+            clicked => { root.open-mix("weekly"); }
+        }
+        MixTile {
+            gradient: @linear-gradient(135deg, #7f1d1d 0%, #ef4444 50%, #fb923c 100%);
+            badge: "qbz";
+            name: "FavQ";
+            desc: @tr("A fresh shuffle from your personal library.");
+            clicked => { root.open-mix("fav"); }
+        }
+        MixTile {
+            gradient: @linear-gradient(135deg, #1f2937 0%, #4b5563 50%, #fbbf24 100%);
+            badge: "qbz";
+            name: "TopQ";
+            desc: @tr("Discover new music from your most-played playlists.");
+            clicked => { root.open-mix("top"); }
+        }
+    }
+}
