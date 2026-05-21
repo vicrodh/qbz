@@ -22,6 +22,7 @@ mod auth;
 mod commands;
 mod custom_artwork;
 mod discovery_dismiss;
+mod favorites;
 mod home;
 mod label;
 mod location_view;
@@ -520,6 +521,44 @@ fn navigate_label(
                 log::error!("[qbz-slint] label load failed: {e}");
                 let _ = weak.upgrade_in_event_loop(|w| {
                     w.global::<LabelState>().set_loading(false);
+                });
+            }
+        }
+    });
+}
+
+/// Open Library > Favorites on `tab` and lazy-load that tab's data.
+/// Switching the active tab also routes here so each tab fetches on
+/// first view (Tauri's loadTabIfNeeded).
+fn navigate_favorites(
+    runtime: Arc<AppRuntime<SlintAdapter>>,
+    weak: slint::Weak<AppWindow>,
+    handle: &tokio::runtime::Handle,
+    image_cache: artwork::ImageCache,
+    tab: favorites::FavTab,
+    tab_id: &str,
+) {
+    let tab_id = tab_id.to_string();
+    handle.spawn(async move {
+        let tab_id_for_ui = tab_id.clone();
+        let _ = weak.upgrade_in_event_loop(move |w| {
+            let state = w.global::<FavoritesState>();
+            state.set_active_tab(tab_id_for_ui.into());
+            favorites::reset_loading(&w);
+            w.global::<NavState>().set_view(ContentView::Favorites);
+        });
+        match favorites::load_favorites(&runtime, tab).await {
+            Ok(data) => {
+                let jobs = favorites::artwork_jobs(&data);
+                let _ = weak.upgrade_in_event_loop(move |w| {
+                    favorites::apply_favorites(&w, data);
+                });
+                artwork::spawn_loads(jobs, weak.clone(), image_cache.clone());
+            }
+            Err(e) => {
+                log::error!("[qbz-slint] favorites load failed: {e}");
+                let _ = weak.upgrade_in_event_loop(|w| {
+                    w.global::<FavoritesState>().set_loading(false);
                 });
             }
         }
@@ -1720,6 +1759,105 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 });
+            });
+    }
+
+    // Header nav-menu navigation — currently routes the Library
+    // dropdown rows into Library > Favorites tabs.
+    {
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        let image_cache = image_cache.clone();
+        window.on_header_menu_navigate(move |route| {
+            if route == "home" {
+                if let Some(w) = weak.upgrade() {
+                    w.global::<NavState>().set_view(ContentView::Home);
+                }
+                return;
+            }
+            if let Some(tab) = favorites::FavTab::from_route(route.as_str()) {
+                let tab_id = route.strip_prefix("favorites-").unwrap_or("tracks");
+                nav::record(nav::NavEntry::Home); // favorites is not yet a history entry
+                navigate_favorites(
+                    runtime.clone(),
+                    weak.clone(),
+                    &handle,
+                    image_cache.clone(),
+                    tab,
+                    tab_id,
+                );
+            }
+        });
+    }
+
+    // Favorites view actions — tab switch (lazy-load), open album /
+    // artist, and per-row track actions routed to the media-action
+    // handler.
+    {
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        let image_cache = image_cache.clone();
+        window
+            .global::<FavoritesActions>()
+            .on_select_tab(move |id| {
+                let Some(tab) = favorites::FavTab::from_tab_id(id.as_str()) else {
+                    // Playlists / Labels: just switch the visible tab,
+                    // their content is not implemented yet.
+                    if let Some(w) = weak.upgrade() {
+                        w.global::<FavoritesState>().set_active_tab(id);
+                    }
+                    return;
+                };
+                navigate_favorites(
+                    runtime.clone(),
+                    weak.clone(),
+                    &handle,
+                    image_cache.clone(),
+                    tab,
+                    id.as_str(),
+                );
+            });
+    }
+    {
+        let weak = window.as_weak();
+        window
+            .global::<FavoritesActions>()
+            .on_open_album(move |id| {
+                if let Some(w) = weak.upgrade() {
+                    w.invoke_open_album(id);
+                }
+            });
+    }
+    {
+        let weak = window.as_weak();
+        window
+            .global::<FavoritesActions>()
+            .on_open_artist(move |id| {
+                if let Some(w) = weak.upgrade() {
+                    w.invoke_open_artist(id);
+                }
+            });
+    }
+    {
+        let weak = window.as_weak();
+        window
+            .global::<FavoritesActions>()
+            .on_play_track(move |id| {
+                if let Some(w) = weak.upgrade() {
+                    w.invoke_media_action("track".into(), id, "play".into());
+                }
+            });
+    }
+    {
+        let weak = window.as_weak();
+        window
+            .global::<FavoritesActions>()
+            .on_track_action(move |id, action| {
+                if let Some(w) = weak.upgrade() {
+                    w.invoke_media_action("track".into(), id, action);
+                }
             });
     }
 

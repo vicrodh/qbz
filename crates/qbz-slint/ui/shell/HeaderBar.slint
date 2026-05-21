@@ -266,7 +266,7 @@ export component HeaderBar inherits Rectangle {
             show-icon: root.show-tab-icons;
             // Discover rows are text-only (no glyphs).
             items: [
-                { label: @tr("Home"), has-glyph: false },
+                { label: @tr("Home"), has-glyph: false, route: "home" },
                 { label: @tr("Editor's Picks"), has-glyph: false },
                 { label: @tr("For You"), has-glyph: false },
             ];
@@ -279,11 +279,11 @@ export component HeaderBar inherits Rectangle {
             label: @tr("Library");
             show-icon: root.show-tab-icons;
             items: [
-                { label: @tr("Tracks"), icon: @image-url("../assets/icons/music.svg"), has-glyph: true },
-                { label: @tr("Albums"), icon: @image-url("../assets/icons/disc.svg"), has-glyph: true },
-                { label: @tr("Artists"), icon: @image-url("../assets/icons/user.svg"), has-glyph: true },
-                { label: @tr("Playlists"), icon: @image-url("../assets/icons/list-music.svg"), has-glyph: true },
-                { label: @tr("Labels"), icon: @image-url("../assets/icons/disc-3.svg"), has-glyph: true },
+                { label: @tr("Tracks"), icon: @image-url("../assets/icons/music.svg"), has-glyph: true, route: "favorites-tracks" },
+                { label: @tr("Albums"), icon: @image-url("../assets/icons/disc.svg"), has-glyph: true, route: "favorites-albums" },
+                { label: @tr("Artists"), icon: @image-url("../assets/icons/user.svg"), has-glyph: true, route: "favorites-artists" },
+                { label: @tr("Playlists"), icon: @image-url("../assets/icons/list-music.svg"), has-glyph: true, route: "favorites-playlists" },
+                { label: @tr("Labels"), icon: @image-url("../assets/icons/disc-3.svg"), has-glyph: true, route: "favorites-labels" },
             ];
         }
         NavTabWithMenu {

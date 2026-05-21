@@ -58,6 +58,12 @@ pub enum ArtworkTarget {
     LabelAlbum { index: usize },
     /// A card in LocationViewState.artists[index].
     LocationArtist { index: usize },
+    /// A row in FavoritesState.tracks[index].
+    FavoriteTrack { index: usize },
+    /// A card in FavoritesState.albums[index].
+    FavoriteAlbum { index: usize },
+    /// A card in FavoritesState.artists[index].
+    FavoriteArtist { index: usize },
 }
 
 /// An artwork download job: which card, and the image URL.
@@ -362,6 +368,27 @@ fn apply_artwork(
         }
         ArtworkTarget::LocationArtist { index } => {
             let model = window.global::<crate::LocationViewState>().get_artists();
+            if let Some(mut item) = model.row_data(index) {
+                item.image = image;
+                model.set_row_data(index, item);
+            }
+        }
+        ArtworkTarget::FavoriteTrack { index } => {
+            let model = window.global::<crate::FavoritesState>().get_tracks();
+            if let Some(mut item) = model.row_data(index) {
+                item.artwork = image;
+                model.set_row_data(index, item);
+            }
+        }
+        ArtworkTarget::FavoriteAlbum { index } => {
+            let model = window.global::<crate::FavoritesState>().get_albums();
+            if let Some(mut item) = model.row_data(index) {
+                item.artwork = image;
+                model.set_row_data(index, item);
+            }
+        }
+        ArtworkTarget::FavoriteArtist { index } => {
+            let model = window.global::<crate::FavoritesState>().get_artists();
             if let Some(mut item) = model.row_data(index) {
                 item.image = image;
                 model.set_row_data(index, item);

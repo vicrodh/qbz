@@ -19,6 +19,7 @@ import { ArtistPageView } from "../artist/ArtistPageView.slint";
 import { MusicianPageView } from "../musician/MusicianPageView.slint";
 import { LabelReleasesView } from "../label/LabelReleasesView.slint";
 import { ArtistsByLocationView } from "../location/ArtistsByLocationView.slint";
+import { FavoritesView } from "../favorites/FavoritesView.slint";
 import { SettingsView } from "../settings/SettingsView.slint";
 import { SearchResultsView } from "../search/SearchResultsView.slint";
 
@@ -26,6 +27,7 @@ export component AppShell inherits Rectangle {
     callback open-album(string);
     callback open-artist(string);
     callback media-action(string, string, string);
+    callback header-menu-navigate(string);
     callback settings-bool(string, bool);
     callback settings-select(string, int);
     callback settings-slider(string, int);
@@ -115,6 +117,14 @@ export component AppShell inherits Rectangle {
                         root.open-artist(id);
                     }
                 }
+                if NavState.view == ContentView.favorites: FavoritesView {
+                    open-album(id) => {
+                        root.open-album(id);
+                    }
+                    open-artist(id) => {
+                        root.open-artist(id);
+                    }
+                }
                 if NavState.view == ContentView.settings: SettingsView {
                     settings-bool(k, v) => {
                         root.settings-bool(k, v);
@@ -163,5 +173,9 @@ export component AppShell inherits Rectangle {
     // the header and the content region. A plain in-window overlay (not
     // a PopupWindow) — it does not grab the pointer, so the header tabs
     // stay hoverable and menus can be hover-switched instantly.
-    HeaderMenuOverlay { }
+    HeaderMenuOverlay {
+        navigate(route) => {
+            root.header-menu-navigate(route);
+        }
+    }
 }

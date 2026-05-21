@@ -1,0 +1,278 @@
+// Library > Favorites — the user's saved tracks / albums / artists /
+// playlists / labels. Mirrors Tauri's FavoritesView.svelte core: a
+// tab bar over per-tab content. Tracks reuse the shared
+// SearchTrackRow, albums the Discover AlbumCard, artists a round-
+// portrait grid. Playlists + Labels are stubbed pending their
+// backing views.
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Typography } from "../foundation/typography.slint";
+import {
+    FavoritesState,
+    FavoritesActions,
+    AlbumCardItem,
+    SearchTrackItem,
+    FavoriteArtistItem,
+} from "../state.slint";
+import { AlbumCard } from "../discover/AlbumCard.slint";
+import { SearchTrackRow } from "../search/SearchTrackRow.slint";
+import { QbzIcon } from "../primitives/QbzIcon.slint";
+import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
+
+// One tab in the favorites tab bar.
+component FavTab inherits Rectangle {
+    in property <string> label;
+    in property <string> id;
+    in property <int> count;
+    callback selected(string);
+
+    property <bool> active: FavoritesState.active-tab == root.id;
+    height: 34px;
+    width: tab-row.preferred-width;
+
+    tab-row := HorizontalLayout {
+        padding-left: 4px;
+        padding-right: 4px;
+        spacing: 6px;
+        Text {
+            text: root.label;
+            color: root.active ? Theme.text-primary : Theme.text-muted;
+            font-size: Typography.body;
+            font-weight: root.active ? Typography.semibold : Typography.regular;
+            vertical-alignment: center;
+        }
+        if root.count > 0: Text {
+            text: root.count;
+            color: Theme.text-muted;
+            font-size: Typography.legal;
+            vertical-alignment: center;
+        }
+    }
+    // Active underline.
+    Rectangle {
+        y: parent.height - 2px;
+        height: 2px;
+        width: parent.width;
+        background: root.active ? Theme.accent : transparent;
+        border-radius: 1px;
+    }
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.selected(root.id);
+        }
+    }
+}
+
+component FavArtistCard inherits Rectangle {
+    in property <FavoriteArtistItem> item;
+    callback clicked(string);
+
+    width: 160px;
+    height: 200px;
+
+    VerticalLayout {
+        spacing: 10px;
+        Rectangle {
+            width: 140px;
+            height: 140px;
+            x: (parent.width - self.width) / 2;
+            border-radius: 70px;
+            background: Theme.surface-elevated;
+            clip: true;
+            Image {
+                width: 100%;
+                height: 100%;
+                source: root.item.image;
+                image-fit: cover;
+            }
+            if root.item.image-url == "": QbzIcon {
+                source: @image-url("../assets/icons/user.svg");
+                width: 44px;
+                height: 44px;
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                tint: Theme.text-muted;
+            }
+            ta := TouchArea {
+                mouse-cursor: pointer;
+                clicked => {
+                    root.clicked(root.item.id);
+                }
+            }
+        }
+        Text {
+            text: root.item.name;
+            color: Theme.text-primary;
+            font-size: Typography.body;
+            font-weight: Typography.medium;
+            horizontal-alignment: center;
+            overflow: elide;
+            width: 160px;
+        }
+        if root.item.albums-line != "": Text {
+            text: root.item.albums-line;
+            color: Theme.text-muted;
+            font-size: Typography.legal;
+            horizontal-alignment: center;
+            width: 160px;
+        }
+    }
+}
+
+export component FavoritesView inherits Rectangle {
+    callback open-album(string);
+    callback open-artist(string);
+
+    property <length> album-w: 220px;
+    property <length> album-h: 266px;
+    property <length> artist-w: 160px;
+    property <length> artist-h: 200px;
+    property <length> gap: 24px;
+
+    background: Theme.surface-main;
+
+    Flickable {
+        viewport-width: self.width;
+        viewport-height: page.preferred-height;
+
+        page := VerticalLayout {
+            width: parent.width;
+            padding-left: 32px;
+            padding-right: 32px;
+            padding-top: 20px;
+            padding-bottom: 100px;
+            spacing: 0px;
+            alignment: start;
+
+            Text {
+                text: @tr("Favorites");
+                color: Theme.text-primary;
+                font-size: Typography.title;
+                font-weight: Typography.bold;
+            }
+
+            Rectangle { height: 16px; }
+
+            // --- Tab bar -----------------------------------------------
+            HorizontalLayout {
+                spacing: 20px;
+                alignment: start;
+                FavTab {
+                    label: @tr("Tracks");
+                    id: "tracks";
+                    count: FavoritesState.tracks-total;
+                    selected(id) => { FavoritesActions.select-tab(id); }
+                }
+                FavTab {
+                    label: @tr("Albums");
+                    id: "albums";
+                    count: FavoritesState.albums-total;
+                    selected(id) => { FavoritesActions.select-tab(id); }
+                }
+                FavTab {
+                    label: @tr("Artists");
+                    id: "artists";
+                    count: FavoritesState.artists-total;
+                    selected(id) => { FavoritesActions.select-tab(id); }
+                }
+                FavTab {
+                    label: @tr("Playlists");
+                    id: "playlists";
+                    selected(id) => { FavoritesActions.select-tab(id); }
+                }
+                FavTab {
+                    label: @tr("Labels");
+                    id: "labels";
+                    selected(id) => { FavoritesActions.select-tab(id); }
+                }
+            }
+            Rectangle {
+                height: 1px;
+                background: Theme.border-subtle;
+            }
+            Rectangle { height: 20px; }
+
+            if FavoritesState.loading: HorizontalLayout {
+                alignment: center;
+                LoadingSpinner { size: 36px; }
+            }
+
+            // --- Tracks tab --------------------------------------------
+            if !FavoritesState.loading
+                && FavoritesState.active-tab == "tracks": VerticalLayout {
+                spacing: 0px;
+                if FavoritesState.tracks.length == 0: Text {
+                    text: @tr("No favorite tracks yet.");
+                    color: Theme.text-muted;
+                    font-size: Typography.body;
+                }
+                for track[i] in FavoritesState.tracks: SearchTrackRow {
+                    track: track;
+                    index: i;
+                    show-artwork: true;
+                    media-action(kind, id, action) => {
+                        FavoritesActions.track-action(id, action);
+                    }
+                }
+            }
+
+            // --- Albums tab --------------------------------------------
+            if !FavoritesState.loading
+                && FavoritesState.active-tab == "albums": albums-grid := Rectangle {
+                property <int> columns: Math.max(
+                    1,
+                    Math.floor((self.width + root.gap) / (root.album-w + root.gap)));
+                property <int> rows: Math.ceil(FavoritesState.albums.length / self.columns);
+                height: self.rows > 0
+                    ? self.rows * root.album-h + Math.max(0, self.rows - 1) * root.gap
+                    : 0px;
+                if FavoritesState.albums.length == 0: Text {
+                    text: @tr("No favorite albums yet.");
+                    color: Theme.text-muted;
+                    font-size: Typography.body;
+                }
+                for album[i] in FavoritesState.albums: AlbumCard {
+                    x: Math.mod(i, albums-grid.columns) * (root.album-w + root.gap);
+                    y: Math.floor(i / albums-grid.columns) * (root.album-h + root.gap);
+                    width: root.album-w;
+                    height: root.album-h;
+                    album: album;
+                    clicked(id) => { root.open-album(id); }
+                }
+            }
+
+            // --- Artists tab -------------------------------------------
+            if !FavoritesState.loading
+                && FavoritesState.active-tab == "artists": artists-grid := Rectangle {
+                property <int> columns: Math.max(
+                    1,
+                    Math.floor((self.width + root.gap) / (root.artist-w + root.gap)));
+                property <int> rows: Math.ceil(FavoritesState.artists.length / self.columns);
+                height: self.rows > 0
+                    ? self.rows * root.artist-h + Math.max(0, self.rows - 1) * root.gap
+                    : 0px;
+                if FavoritesState.artists.length == 0: Text {
+                    text: @tr("No favorite artists yet.");
+                    color: Theme.text-muted;
+                    font-size: Typography.body;
+                }
+                for artist[i] in FavoritesState.artists: FavArtistCard {
+                    x: Math.mod(i, artists-grid.columns) * (root.artist-w + root.gap);
+                    y: Math.floor(i / artists-grid.columns) * (root.artist-h + root.gap);
+                    item: artist;
+                    clicked(id) => { root.open-artist(id); }
+                }
+            }
+
+            // --- Playlists / Labels (pending) --------------------------
+            if !FavoritesState.loading
+                && (FavoritesState.active-tab == "playlists"
+                    || FavoritesState.active-tab == "labels"): Text {
+                text: @tr("Coming soon.");
+                color: Theme.text-muted;
+                font-size: Typography.body;
+            }
+        }
+    }
+}

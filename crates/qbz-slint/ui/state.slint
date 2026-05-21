@@ -94,7 +94,7 @@ export global AlbumActions {
 }
 
 // Which content view the shell shows.
-export enum ContentView { home, album, artist, settings, search, musician, label, location }
+export enum ContentView { home, album, artist, settings, search, musician, label, location, favorites }
 
 // Settings screen state. Audio and Playback preferences are loaded from
 // the persistence stores by the Rust settings controller and pushed here;
@@ -166,6 +166,10 @@ export struct NavMenuEntry {
     label: string,
     icon: image,
     has-glyph: bool,
+    // Destination route fired when the row is clicked, e.g. "home",
+    // "favorites-tracks", "favorites-albums". Empty = no-op (the
+    // destination isn't implemented yet).
+    route: string,
 }
 
 // Header nav-tab dropdown state.
@@ -634,6 +638,43 @@ export struct SearchPlaylistItem {
     cover2: image,
     cover3: image,
     cover4: image,
+}
+
+// One artist tile in the Favorites > Artists grid.
+export struct FavoriteArtistItem {
+    id: string,
+    name: string,
+    albums-line: string,
+    image-url: string,
+    image: image,
+}
+
+// Library > Favorites state. The active tab decides which model is
+// shown; all are populated lazily by `crate::favorites` the first
+// time their tab is opened. Albums reuse AlbumCardItem, tracks reuse
+// SearchTrackItem (artwork-on), artists use FavoriteArtistItem.
+export global FavoritesState {
+    // "tracks" | "albums" | "artists" | "playlists" | "labels"
+    in-out property <string> active-tab: "tracks";
+    // Tracks reuse SearchTrackItem so the shared SearchTrackRow can
+    // render them (artwork-on, per-row cover thumbnail).
+    in property <[SearchTrackItem]> tracks: [];
+    in property <[AlbumCardItem]> albums: [];
+    in property <[FavoriteArtistItem]> artists: [];
+    in property <int> tracks-total: 0;
+    in property <int> albums-total: 0;
+    in property <int> artists-total: 0;
+    in property <bool> loading: false;
+}
+
+export global FavoritesActions {
+    // Switch tab; the Rust side lazy-loads the tab's data if it
+    // hasn't been fetched yet.
+    callback select-tab(string);
+    callback open-album(string);
+    callback open-artist(string);
+    callback play-track(string /* track id */);
+    callback track-action(string /* track id */, string /* action */);
 }
 
 // Search results screen state. The Rust search controller populates the

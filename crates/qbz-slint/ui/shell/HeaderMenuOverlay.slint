@@ -26,6 +26,10 @@ export component HeaderMenuOverlay inherits Rectangle {
     // while a menu is open.
     visible: HeaderMenuState.open-index >= 0;
 
+    // Bubbles a row's destination route (e.g. "favorites-tracks") up
+    // to the shell so Rust can run the navigation + data load.
+    callback navigate(string);
+
     // (Re)arms the idle countdown — called on any pointer activity over
     // the panel or its rows.
     function reset-idle() {
@@ -111,7 +115,9 @@ export component HeaderMenuOverlay inherits Rectangle {
                     icon: entry.icon;
                     has-glyph: entry.has-glyph;
                     clicked => {
-                        if (idx == HeaderMenuState.home-item) {
+                        if (entry.route != "") {
+                            root.navigate(entry.route);
+                        } else if (idx == HeaderMenuState.home-item) {
                             NavState.view = ContentView.home;
                         }
                         root.close-menu();
