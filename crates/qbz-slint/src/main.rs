@@ -28,6 +28,7 @@ mod genre_filter;
 mod home;
 mod label;
 mod location_view;
+mod mix;
 mod musician;
 mod nav;
 mod play_history;
@@ -477,6 +478,9 @@ fn apply_entry(
         nav::NavEntry::Label { id, name } => {
             navigate_label(runtime.clone(), weak.clone(), handle, image_cache.clone(), id, name);
         }
+        nav::NavEntry::Mix { kind } => {
+            navigate_mix(runtime.clone(), weak.clone(), handle, image_cache.clone(), kind);
+        }
         nav::NavEntry::Location {
             mbid,
             area_id,
@@ -609,6 +613,30 @@ fn navigate_favorites(
                 });
             }
         }
+    });
+}
+
+/// Open a Qobuz mix detail view (daily / weekly / fav / top) and load
+/// its tracks.
+fn navigate_mix(
+    runtime: Arc<AppRuntime<SlintAdapter>>,
+    weak: slint::Weak<AppWindow>,
+    handle: &tokio::runtime::Handle,
+    image_cache: artwork::ImageCache,
+    kind: String,
+) {
+    handle.spawn(async move {
+        let kind_for_reset = kind.clone();
+        let _ = weak.upgrade_in_event_loop(move |w| {
+            mix::reset_mix(&w, &kind_for_reset);
+            w.global::<NavState>().set_view(ContentView::Mix);
+        });
+        let tracks = mix::load_mix(&runtime, &kind).await;
+        let jobs = mix::artwork_jobs(&tracks);
+        let _ = weak.upgrade_in_event_loop(move |w| {
+            mix::apply_mix(&w, &kind, tracks);
+        });
+        artwork::spawn_loads(jobs, weak.clone(), image_cache.clone());
     });
 }
 
@@ -1166,6 +1194,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let runtime = app_runtime.clone();
         let weak = window.as_weak();
         let handle = tokio_rt.handle().clone();
+        let image_cache = image_cache.clone();
         window.on_media_action(move |kind, id, action| {
             let kind = kind.to_string();
             let id = id.to_string();
@@ -1282,11 +1311,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 }
+                ("mix", "play-all") => {
+                    let runtime = runtime.clone();
+                    let weak = weak.clone();
+                    let handle = handle.clone();
+                    handle.clone().spawn(async move {
+                        let tracks = mix::current_tracks();
+                        playback::play_tracks(runtime, weak, handle, tracks, 0);
+                    });
+                }
+                ("mix-track", track_id) => {
+                    let idx = mix::index_of(track_id);
+                    let runtime = runtime.clone();
+                    let weak = weak.clone();
+                    let handle = handle.clone();
+                    handle.clone().spawn(async move {
+                        let tracks = mix::current_tracks();
+                        playback::play_tracks(runtime, weak, handle, tracks, idx);
+                    });
+                }
                 ("mix", which) => {
-                    // Qobuz Mixes tiles — the DailyQ/WeeklyQ/FavQ/TopQ
-                    // detail views are a separate feature; log until
-                    // they exist.
-                    log::info!("[qbz-slint] qobuz mix '{which}' clicked (view not implemented)");
+                    // A Qobuz Mixes tile — open its detail view.
+                    nav::record(nav::NavEntry::Mix { kind: which.to_string() });
+                    navigate_mix(
+                        runtime.clone(),
+                        weak.clone(),
+                        &handle,
+                        image_cache.clone(),
+                        which.to_string(),
+                    );
+                    if let Some(w) = weak.upgrade() {
+                        update_nav_flags(&w);
+                    }
                 }
                 _ => {}
             }

@@ -1,0 +1,128 @@
+// Qobuz mix detail view (DailyQ / WeeklyQ / FavQ / TopQ). Header with
+// the mix name + description + a Play all button, over the mix's
+// track list (reusing the shared SearchTrackRow).
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Typography } from "../foundation/typography.slint";
+import { MixState } from "../state.slint";
+import { SearchTrackRow } from "../search/SearchTrackRow.slint";
+import { QbzIcon } from "../primitives/QbzIcon.slint";
+import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
+import { NavButtons } from "../shell/NavButtons.slint";
+
+export component MixView inherits Rectangle {
+    callback play-track(string);
+    callback play-all();
+
+    background: Theme.surface-main;
+
+    Flickable {
+        viewport-width: self.width;
+        viewport-height: page.preferred-height;
+
+        page := VerticalLayout {
+            width: parent.width;
+            padding-left: 32px;
+            padding-right: 32px;
+            padding-top: 11px;
+            padding-bottom: 100px;
+            spacing: 0px;
+            alignment: start;
+
+            HorizontalLayout {
+                alignment: start;
+                NavButtons { }
+            }
+
+            Rectangle { height: 22px; }
+
+            // --- Header ------------------------------------------------
+            HorizontalLayout {
+                spacing: 20px;
+                alignment: start;
+                Rectangle {
+                    width: 120px;
+                    height: 120px;
+                    border-radius: 8px;
+                    background: @linear-gradient(135deg, #1e3a8a 0%, #6366f1 50%, #c084fc 100%);
+                    Text {
+                        text: MixState.title;
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        color: #ffffff;
+                        font-size: 18px;
+                        font-weight: Typography.bold;
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    spacing: 8px;
+                    Text {
+                        text: MixState.title;
+                        color: Theme.text-primary;
+                        font-size: Typography.title;
+                        font-weight: Typography.bold;
+                    }
+                    Text {
+                        text: MixState.subtitle;
+                        color: Theme.text-muted;
+                        font-size: Typography.body;
+                    }
+                    if MixState.tracks.length > 0: Rectangle {
+                        width: play-row.preferred-width + 28px;
+                        height: 36px;
+                        border-radius: 18px;
+                        background: play-ta.has-hover ? #ffffffd6 : Theme.accent;
+                        play-row := HorizontalLayout {
+                            x: (parent.width - self.preferred-width) / 2;
+                            spacing: 8px;
+                            VerticalLayout {
+                                alignment: center;
+                                QbzIcon {
+                                    source: @image-url("../assets/icons/play-fill.svg");
+                                    width: 14px;
+                                    height: 14px;
+                                    tint: #ffffff;
+                                }
+                            }
+                            Text {
+                                text: @tr("Play all");
+                                color: #ffffff;
+                                font-size: 14px;
+                                font-weight: Typography.semibold;
+                                vertical-alignment: center;
+                            }
+                        }
+                        play-ta := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                root.play-all();
+                            }
+                        }
+                    }
+                }
+            }
+
+            Rectangle { height: 28px; }
+
+            if MixState.loading: HorizontalLayout {
+                alignment: center;
+                LoadingSpinner { size: 36px; }
+            }
+            if !MixState.loading && MixState.tracks.length == 0: Text {
+                text: @tr("No tracks for this mix.");
+                color: Theme.text-muted;
+                font-size: Typography.body;
+            }
+
+            for track[i] in MixState.tracks: SearchTrackRow {
+                track: track;
+                index: i;
+                show-artwork: true;
+                media-action(kind, id, action) => {
+                    root.play-track(id);
+                }
+            }
+        }
+    }
+}

@@ -1138,6 +1138,21 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
             .map_err(CoreError::Api)
     }
 
+    /// Dynamic mix suggestions (`/dynamic/suggest`) seeded from
+    /// recently-listened track ids. Returns the suggested tracks.
+    pub async fn get_dynamic_suggest(
+        &self,
+        listened_track_ids: &[u64],
+        limit: u32,
+    ) -> Result<Vec<Track>, CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+        client
+            .get_dynamic_suggest(listened_track_ids, limit)
+            .await
+            .map_err(CoreError::Api)
+    }
+
     /// Smart artist radio via the local `qbz-radio` pool builder — a
     /// richer alternative to the Qobuz `/radio/artist` endpoint. Builds
     /// a session pool (seed tracks + similar artists + second-degree)

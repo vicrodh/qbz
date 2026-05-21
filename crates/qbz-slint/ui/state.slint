@@ -185,7 +185,7 @@ export global AlbumActions {
 }
 
 // Which content view the shell shows.
-export enum ContentView { home, album, artist, settings, search, musician, label, location, favorites }
+export enum ContentView { home, album, artist, settings, search, musician, label, location, favorites, mix }
 
 // Settings screen state. Audio and Playback preferences are loaded from
 // the persistence stores by the Rust settings controller and pushed here;
@@ -789,6 +789,16 @@ export global FavoritesActions {
     callback open-playlist(string /* playlist id */);
     callback play-track(string /* track id */);
     callback track-action(string /* track id */, string /* action */);
+}
+
+// A Qobuz mix detail page (DailyQ / WeeklyQ / FavQ / TopQ), opened
+// from the For You Qobuz Mixes tiles. Populated by crate::mix.
+export global MixState {
+    in property <string> kind;       // daily | weekly | fav | top
+    in property <string> title;
+    in property <string> subtitle;
+    in property <[SearchTrackItem]> tracks: [];
+    in property <bool> loading: false;
 }
 
 // Search results screen state. The Rust search controller populates the

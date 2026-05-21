@@ -904,6 +904,43 @@ impl QobuzClient {
         Ok(serde_json::from_value(response)?)
     }
 
+    /// Dynamic suggestions for mixes (`POST /dynamic/suggest`). Seeds
+    /// from recently-listened track ids. Returns the suggested tracks
+    /// (items parsed leniently). Ported from the legacy api client;
+    /// the `track_to_analysed` payload is optional and omitted here.
+    pub async fn get_dynamic_suggest(
+        &self,
+        listened_track_ids: &[u64],
+        limit: u32,
+    ) -> Result<Vec<Track>> {
+        let url = endpoints::build_url(paths::DYNAMIC_SUGGEST);
+        let body = serde_json::json!({
+            "limit": limit,
+            "listened_tracks_ids": listened_track_ids,
+            "track_to_analysed": [],
+        });
+        let http_response = self
+            .http
+            .post(&url)
+            .headers(self.authenticated_headers().await?)
+            .json(&body)
+            .send()
+            .await?;
+        let status = http_response.status();
+        if !status.is_success() {
+            return Err(ApiError::ApiResponse(format!(
+                "get_dynamic_suggest status {status}"
+            )));
+        }
+        let response: Value = http_response.json().await?;
+        let items = response
+            .get("tracks")
+            .and_then(|t| t.get("items"))
+            .cloned()
+            .unwrap_or(Value::Null);
+        Ok(serde_json::from_value(items).unwrap_or_default())
+    }
+
     /// Qobuz radio for an artist (`/radio/artist`) — a generated track
     /// list. Ported from the legacy api client.
     pub async fn get_radio_artist(&self, artist_id: &str) -> Result<RadioResponse> {

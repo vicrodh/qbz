@@ -21,6 +21,7 @@ pub mod paths {
     pub const ALBUM_SEARCH: &str = "/album/search";
     pub const ALBUM_GET_FEATURED: &str = "/album/getFeatured";
     pub const ALBUM_SUGGEST: &str = "/album/suggest";
+    pub const DYNAMIC_SUGGEST: &str = "/dynamic/suggest";
 
     // Radio (generated track lists)
     pub const RADIO_ALBUM: &str = "/radio/album";

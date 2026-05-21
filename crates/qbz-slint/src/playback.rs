@@ -511,12 +511,15 @@ pub fn play_track_now(
     });
 }
 
-/// Build a queue from a Qobuz radio track list (each track carries its
-/// own album) and start it. Shared by artist + album radio.
-fn play_radio_response(
+/// Build a queue from a list of catalog tracks (each carrying its own
+/// album) and start playback at `start_index`. Shared by radio
+/// (start 0) and the mix views (start at the clicked track).
+pub fn play_tracks(
     runtime: Runtime,
     weak: slint::Weak<AppWindow>,
+    handle: tokio::runtime::Handle,
     tracks: Vec<qbz_models::Track>,
+    start_index: usize,
 ) -> bool {
     let queue: Vec<QueueTrack> = tracks
         .iter()
@@ -543,14 +546,24 @@ fn play_radio_response(
     if queue.is_empty() {
         return false;
     }
-    let first_id = queue[0].id;
-    let handle = tokio::runtime::Handle::current();
+    let start = start_index.min(queue.len() - 1);
+    let first_id = queue[start].id;
     handle.spawn(async move {
-        runtime.core().set_queue(queue, Some(0)).await;
+        runtime.core().set_queue(queue, Some(start)).await;
         after_track_change(&runtime, &weak, first_id).await;
         refresh_sidebar(true);
     });
     true
+}
+
+/// Build a queue from a Qobuz radio track list and start it.
+fn play_radio_response(
+    runtime: Runtime,
+    weak: slint::Weak<AppWindow>,
+    tracks: Vec<qbz_models::Track>,
+) -> bool {
+    let handle = tokio::runtime::Handle::current();
+    play_tracks(runtime, weak, handle, tracks, 0)
 }
 
 /// Start a Qobuz artist radio (`/radio/artist`). Kept as the simpler

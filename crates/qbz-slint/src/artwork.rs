@@ -86,6 +86,8 @@ pub enum ArtworkTarget {
     ForYouSpotlightArtist,
     /// A card in ForYouState.spotlight-albums[index].
     ForYouSpotlightAlbum { index: usize },
+    /// A row in MixState.tracks[index].
+    MixTrack { index: usize },
 }
 
 /// An artwork download job: which card, and the image URL.
@@ -486,6 +488,13 @@ fn apply_artwork(
         }
         ArtworkTarget::ForYouSpotlightAlbum { index } => {
             let model = window.global::<crate::ForYouState>().get_spotlight_albums();
+            if let Some(mut item) = model.row_data(index) {
+                item.artwork = image;
+                model.set_row_data(index, item);
+            }
+        }
+        ArtworkTarget::MixTrack { index } => {
+            let model = window.global::<crate::MixState>().get_tracks();
             if let Some(mut item) = model.row_data(index) {
                 item.artwork = image;
                 model.set_row_data(index, item);
