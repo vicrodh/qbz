@@ -23,6 +23,7 @@ mod commands;
 mod custom_artwork;
 mod discovery_dismiss;
 mod home;
+mod label;
 mod musician;
 mod nav;
 mod play_history;
@@ -424,7 +425,53 @@ fn apply_entry(
                 role,
             );
         }
+        nav::NavEntry::Label { id, name } => {
+            navigate_label(runtime.clone(), weak.clone(), handle, image_cache.clone(), id, name);
+        }
     }
+}
+
+/// Open a LabelReleasesView for `label_id`. Fetches the label header
+/// + first album page, then the header image.
+fn navigate_label(
+    runtime: Arc<AppRuntime<SlintAdapter>>,
+    weak: slint::Weak<AppWindow>,
+    handle: &tokio::runtime::Handle,
+    image_cache: artwork::ImageCache,
+    label_id: u64,
+    name: String,
+) {
+    handle.spawn(async move {
+        let _ = weak.upgrade_in_event_loop(|w| {
+            label::reset_label(&w);
+            w.global::<NavState>().set_view(ContentView::Label);
+        });
+        match label::load_label(&runtime, label_id, &name).await {
+            Ok(data) => {
+                let jobs = label::artwork_jobs(&data);
+                let image_url = data.image_url.clone();
+                let _ = weak.upgrade_in_event_loop(move |w| {
+                    label::apply_label(&w, data);
+                });
+                artwork::spawn_loads(jobs, weak.clone(), image_cache.clone());
+                if !image_url.is_empty() {
+                    if let Some((pixels, width, height)) =
+                        artwork::fetch_and_decode(&image_url, &image_cache, 240).await
+                    {
+                        let _ = weak.upgrade_in_event_loop(move |w| {
+                            label::apply_image(&w, &pixels, width, height);
+                        });
+                    }
+                }
+            }
+            Err(e) => {
+                log::error!("[qbz-slint] label load failed: {e}");
+                let _ = weak.upgrade_in_event_loop(|w| {
+                    w.global::<LabelState>().set_loading(false);
+                });
+            }
+        }
+    });
 }
 
 /// Open a MusicianPageView for `name + role`. Routes to the artist
@@ -1278,11 +1325,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .on_location_clicked(|mbid| {
             log::info!("[qbz-slint] network sidebar: location clicked for mbid={mbid}");
         });
-    window
-        .global::<NetworkSidebarActions>()
-        .on_label_clicked(|id, name| {
-            log::info!("[qbz-slint] network sidebar: label clicked id={id} name={name}");
-        });
+    // Label click — open LabelReleasesView.
+    {
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        let image_cache = image_cache.clone();
+        window
+            .global::<NetworkSidebarActions>()
+            .on_label_clicked(move |id, name| {
+                let Ok(label_id) = id.parse::<u64>() else {
+                    log::warn!("[qbz-slint] label clicked: invalid id {id}");
+                    return;
+                };
+                let name = name.to_string();
+                nav::record(nav::NavEntry::Label {
+                    id: label_id,
+                    name: name.clone(),
+                });
+                navigate_label(
+                    runtime.clone(),
+                    weak.clone(),
+                    &handle,
+                    image_cache.clone(),
+                    label_id,
+                    name,
+                );
+                if let Some(w) = weak.upgrade() {
+                    update_nav_flags(&w);
+                }
+            });
+    }
     // artist-clicked actually navigates — the target view (artist page)
     // already exists in Slint, unlike LabelReleases / ArtistsByLocation /
     // MusicianPage. Same flow as the top-level on_open_artist handler.
@@ -1441,6 +1514,58 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             log::error!("[qbz-slint] musician load-more failed: {e}");
                             let _ = weak.upgrade_in_event_loop(|w| {
                                 w.global::<MusicianState>().set_load_more_loading(false);
+                            });
+                        }
+                    }
+                });
+            });
+    }
+
+    // Label album pagination — Load more in LabelReleasesView
+    // appends the next page onto the grid.
+    {
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        let image_cache = image_cache.clone();
+        window
+            .global::<LabelActions>()
+            .on_load_more(move || {
+                let Some(w) = weak.upgrade() else {
+                    return;
+                };
+                let state = w.global::<LabelState>();
+                let Ok(label_id) = state.get_id().to_string().parse::<u64>() else {
+                    return;
+                };
+                let offset = state.get_albums().row_count() as u32;
+                state.set_load_more_loading(true);
+                let runtime = runtime.clone();
+                let weak = weak.clone();
+                let image_cache = image_cache.clone();
+                handle.spawn(async move {
+                    match label::load_more_albums(&runtime, label_id, offset).await {
+                        Ok((data, total)) => {
+                            let jobs: Vec<artwork::ArtworkJob> = data
+                                .iter()
+                                .enumerate()
+                                .filter(|(_, a)| !a.artwork_url.is_empty())
+                                .map(|(i, a)| artwork::ArtworkJob {
+                                    url: a.artwork_url.clone(),
+                                    target: artwork::ArtworkTarget::LabelAlbum {
+                                        index: offset as usize + i,
+                                    },
+                                })
+                                .collect();
+                            let _ = weak.upgrade_in_event_loop(move |w| {
+                                label::append_albums(&w, data, total);
+                            });
+                            artwork::spawn_loads(jobs, weak, image_cache);
+                        }
+                        Err(e) => {
+                            log::error!("[qbz-slint] label load-more failed: {e}");
+                            let _ = weak.upgrade_in_event_loop(|w| {
+                                w.global::<LabelState>().set_load_more_loading(false);
                             });
                         }
                     }

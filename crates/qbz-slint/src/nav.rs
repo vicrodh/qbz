@@ -26,6 +26,12 @@ pub enum NavEntry {
         name: String,
         role: String,
     },
+    /// LabelReleasesView — opened by the artist network sidebar's
+    /// Labels section. Carries the label id + name fallback.
+    Label {
+        id: u64,
+        name: String,
+    },
 }
 
 struct History {

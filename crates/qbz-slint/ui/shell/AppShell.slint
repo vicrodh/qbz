@@ -17,6 +17,7 @@ import { HomeView } from "../discover/HomeView.slint";
 import { AlbumPageView } from "../album/AlbumPageView.slint";
 import { ArtistPageView } from "../artist/ArtistPageView.slint";
 import { MusicianPageView } from "../musician/MusicianPageView.slint";
+import { LabelReleasesView } from "../label/LabelReleasesView.slint";
 import { SettingsView } from "../settings/SettingsView.slint";
 import { SearchResultsView } from "../search/SearchResultsView.slint";
 
@@ -98,6 +99,14 @@ export component AppShell inherits Rectangle {
                 if NavState.view == ContentView.musician: MusicianPageView {
                     open-album(id) => {
                         root.open-album(id);
+                    }
+                }
+                if NavState.view == ContentView.label: LabelReleasesView {
+                    open-album(id) => {
+                        root.open-album(id);
+                    }
+                    media-action(kind, id, action) => {
+                        root.media-action(kind, id, action);
                     }
                 }
                 if NavState.view == ContentView.settings: SettingsView {

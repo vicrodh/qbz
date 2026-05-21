@@ -54,6 +54,8 @@ pub enum ArtworkTarget {
     ArtistRelease { section_idx: usize, album_idx: usize },
     /// A card in MusicianState.appearances[index].
     MusicianAppearance { index: usize },
+    /// A card in LabelState.albums[index].
+    LabelAlbum { index: usize },
 }
 
 /// An artwork download job: which card, and the image URL.
@@ -344,6 +346,13 @@ fn apply_artwork(
         }
         ArtworkTarget::MusicianAppearance { index } => {
             let model = window.global::<crate::MusicianState>().get_appearances();
+            if let Some(mut item) = model.row_data(index) {
+                item.artwork = image;
+                model.set_row_data(index, item);
+            }
+        }
+        ArtworkTarget::LabelAlbum { index } => {
+            let model = window.global::<crate::LabelState>().get_albums();
             if let Some(mut item) = model.row_data(index) {
                 item.artwork = image;
                 model.set_row_data(index, item);

@@ -94,7 +94,7 @@ export global AlbumActions {
 }
 
 // Which content view the shell shows.
-export enum ContentView { home, album, artist, settings, search, musician }
+export enum ContentView { home, album, artist, settings, search, musician, label }
 
 // Settings screen state. Audio and Playback preferences are loaded from
 // the persistence stores by the Rust settings controller and pushed here;
@@ -430,6 +430,24 @@ export global MusicianState {
 }
 
 export global MusicianActions {
+    callback load-more();
+}
+
+// LabelReleasesView state — opened by the artist network sidebar's
+// Labels section. Header (name + image) from /label/page, the
+// album grid from /label/getAlbums. Populated by `crate::label`.
+export global LabelState {
+    in property <string> id;
+    in property <string> name;
+    in property <string> image-url;
+    in property <image> image;
+    in property <[AlbumCardItem]> albums: [];
+    in property <int> total: 0;
+    in property <bool> loading: false;
+    in property <bool> load-more-loading: false;
+}
+
+export global LabelActions {
     callback load-more();
 }
 
