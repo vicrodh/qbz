@@ -19,6 +19,10 @@ pub enum NavEntry {
     Discover {
         tab: String,
     },
+    /// A Qobuz mix detail page ("daily" | "weekly" | "fav" | "top").
+    Mix {
+        kind: String,
+    },
     Album(String),
     Artist(String),
     Settings,

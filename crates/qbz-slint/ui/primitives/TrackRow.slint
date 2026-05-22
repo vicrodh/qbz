@@ -1,40 +1,46 @@
-// A track result row for search.
+// The single, shared track-list row. Every track surface (album,
+// artist Popular, search, favorites, mix, playlist) renders this with
+// flags rather than its own copy:
 //
-// Like the album-page track row, but the leading slot is a cover
-// thumbnail — search tracks come from many different albums, so a shared
-// album cover would be wrong. `show-artwork` keeps the slot configurable
-// for a future shared row component (album context would set it false).
+//   show-artwork      leading is a cover thumbnail + a position number
+//                     (search / mix / playlist); false = a number cell
+//                     that swaps to play on hover (album / artist).
+//   show-album        an album-title column (mix / playlist).
+//   show-favorite     a standalone heart button.
+//   show-download     a standalone offline-cache button (album).
+//   multi-select-mode the leading slot becomes a selection checkbox
+//                     (artist Popular, playlist editor).
+//
+// Everything routes through one media-action(kind, id, action):
+// "play" | "play-next" | "queue" | "favorite" | "download" |
+// "toggle-select" and the context-menu actions.
 
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
 import { Radius } from "../foundation/radius.slint";
-import { SearchTrackItem } from "../state.slint";
-import { QbzIcon } from "../primitives/QbzIcon.slint";
-import { TrackPlayCell } from "../primitives/TrackPlayCell.slint";
-import { TrackContextMenu } from "../primitives/TrackContextMenu.slint";
+import { TrackItem } from "../state.slint";
+import { QbzIcon } from "QbzIcon.slint";
+import { TrackPlayCell } from "TrackPlayCell.slint";
+import { TrackContextMenu } from "TrackContextMenu.slint";
 
-export component SearchTrackRow inherits Rectangle {
-    in property <SearchTrackItem> track;
+export component TrackRow inherits Rectangle {
+    in property <TrackItem> track;
     in property <int> index;
     in property <bool> show-artwork: true;
-    // Optional extra columns (mix / playlist-style rows): an album
-    // column and a standalone favorite button. Off by default so the
-    // search / favorites rows are unchanged.
     in property <bool> show-album: false;
     in property <bool> show-favorite: false;
-    // kind ("track"), track id, action ("play" | "play-next" | "queue" | "favorite").
+    in property <bool> show-download: false;
+    in property <bool> multi-select-mode: false;
     callback media-action(string, string, string);
 
-    // Slint's has-hover does not propagate to ancestor TouchAreas, so the
-    // row OR's its own ta with every nested TouchArea to drive the cell
-    // play overlay reliably regardless of pointer position.
+    // Explicit track number, else the 1-based list position.
+    property <string> number-text:
+        root.track.number != "" ? root.track.number : "\{root.index + 1}";
     property <bool> row-hovered:
         ta.has-hover || play-cell.hovered || more-ta.has-hover;
 
     height: 56px;
     border-radius: 8px;
-    // Use the OR'd row-hovered so hovering nested controls (cell / more)
-    // does not break the row tint.
     background: root.row-hovered
         ? #ffffff16
         : (Math.mod(root.index, 2) == 1 ? #ffffff07 : transparent);
@@ -48,31 +54,69 @@ export component SearchTrackRow inherits Rectangle {
         padding-right: 12px;
         spacing: 14px;
 
-        // Track position in the result list.
-        Text {
-            text: "\{root.index + 1}";
-            width: 24px;
-            color: Theme.text-muted;
-            font-size: Typography.body;
-            horizontal-alignment: center;
-            vertical-alignment: center;
+        // Position number — only for artwork rows (the cover doesn't
+        // carry the number; non-artwork rows show it in the play cell).
+        if root.show-artwork && !root.multi-select-mode: VerticalLayout {
+            alignment: center;
+            Text {
+                text: root.number-text;
+                width: 20px;
+                color: Theme.text-muted;
+                font-size: Typography.body;
+                horizontal-alignment: center;
+            }
         }
 
-        // Leading slot — cover thumbnail with the play / playing-state
-        // affordance.
+        // Leading cell — cover/number play affordance, swapped for a
+        // selection checkbox in multi-select mode. The play-cell stays
+        // in the tree (just invisible) so row-hovered can read it.
         VerticalLayout {
             alignment: center;
-            play-cell := TrackPlayCell {
-                track-id: root.track.id;
-                artwork: root.track.artwork;
-                show-artwork: true;
-                row-hovered: root.row-hovered;
-                play => {
-                    root.media-action("track", root.track.id, "play");
+            Rectangle {
+                width: root.show-artwork ? 40px : 28px;
+                height: root.show-artwork ? 40px : 28px;
+                play-cell := TrackPlayCell {
+                    track-id: root.track.id;
+                    number: root.number-text;
+                    artwork: root.track.artwork;
+                    show-artwork: root.show-artwork;
+                    number-width: 28px;
+                    row-hovered: root.row-hovered && !root.multi-select-mode;
+                    visible: !root.multi-select-mode;
+                    play => {
+                        root.media-action("track", root.track.id, "play");
+                    }
+                }
+                if root.multi-select-mode: Rectangle {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    width: 22px;
+                    height: 22px;
+                    border-radius: 11px;
+                    background: root.track.selected ? Theme.accent : transparent;
+                    border-width: root.track.selected ? 0px : 1.5px;
+                    border-color: sel-ta.has-hover ? Theme.text-primary : Theme.text-muted;
+                    animate background { duration: 120ms; }
+                    QbzIcon {
+                        source: @image-url("../assets/icons/check.svg");
+                        width: 14px;
+                        height: 14px;
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        tint: #ffffff;
+                        visible: root.track.selected;
+                    }
+                    sel-ta := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            root.media-action("track", root.track.id, "toggle-select");
+                        }
+                    }
                 }
             }
         }
 
+        // Title + artist.
         VerticalLayout {
             alignment: center;
             horizontal-stretch: 1;
@@ -106,16 +150,15 @@ export component SearchTrackRow inherits Rectangle {
                     }
                 }
             }
-            Text {
+            if root.track.artist != "": Text {
                 text: root.track.artist;
-                visible: root.track.artist != "";
                 color: Theme.text-muted;
                 font-size: Typography.link;
                 overflow: elide;
             }
         }
 
-        // Optional album column (mix / playlist rows).
+        // Album column.
         if root.show-album: Text {
             text: root.track.album;
             width: 220px;
@@ -125,6 +168,7 @@ export component SearchTrackRow inherits Rectangle {
             overflow: elide;
         }
 
+        // Duration.
         Text {
             text: root.track.duration;
             width: 70px;
@@ -133,18 +177,19 @@ export component SearchTrackRow inherits Rectangle {
             horizontal-alignment: center;
             vertical-alignment: center;
         }
+        // Quality.
         Text {
             text: root.track.quality-tier == "hires"
                 ? "Hi-Res"
                 : (root.track.quality-tier == "cd" ? "CD" : "");
-            width: 60px;
+            width: 70px;
             color: Theme.text-muted;
             font-size: Typography.legal;
             horizontal-alignment: center;
             vertical-alignment: center;
         }
 
-        // Optional standalone favorite button.
+        // Favorite.
         if root.show-favorite: VerticalLayout {
             alignment: center;
             Rectangle {
@@ -168,7 +213,32 @@ export component SearchTrackRow inherits Rectangle {
                 }
             }
         }
+        // Offline cache.
+        if root.show-download: VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 28px;
+                height: 28px;
+                border-radius: Radius.sm;
+                background: dl-ta.has-hover ? Theme.surface-elevated : transparent;
+                QbzIcon {
+                    source: @image-url("../assets/icons/cloud-download.svg");
+                    width: 16px;
+                    height: 16px;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    tint: dl-ta.has-hover ? Theme.text-primary : Theme.text-muted;
+                }
+                dl-ta := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        root.media-action("track", root.track.id, "download");
+                    }
+                }
+            }
+        }
 
+        // Context menu.
         VerticalLayout {
             alignment: center;
             Rectangle {

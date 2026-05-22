@@ -20,7 +20,7 @@ use qbz_models::Track;
 use slint::{ComponentHandle, ModelRc, VecModel};
 
 use crate::artwork::{ArtworkJob, ArtworkTarget};
-use crate::{AppWindow, MixState, SearchTrackItem};
+use crate::{AppWindow, MixState, TrackItem};
 
 /// The currently-loaded mix track list, kept so play-all / per-track
 /// play can build the queue without re-fetching.
@@ -124,13 +124,14 @@ fn mmss(secs: u32) -> String {
     format!("{}:{:02}", secs / 60, secs % 60)
 }
 
-fn to_item(track: &Track) -> SearchTrackItem {
+fn to_item(track: &Track) -> TrackItem {
     let mut title = track.title.clone();
     if let Some(v) = track.version.as_ref().filter(|v| !v.is_empty()) {
         title = format!("{title} ({v})");
     }
-    SearchTrackItem {
+    TrackItem {
         id: track.id.to_string().into(),
+        number: "".into(),
         title: title.into(),
         artist: track
             .performer
@@ -152,6 +153,7 @@ fn to_item(track: &Track) -> SearchTrackItem {
         }
         .into(),
         explicit: track.parental_warning,
+        selected: false,
         artwork_url: track
             .album
             .as_ref()
@@ -175,7 +177,7 @@ fn total_duration(tracks: &[Track]) -> String {
 
 pub fn apply_mix(window: &AppWindow, kind: &str, tracks: Vec<Track>) {
     let (title, subtitle) = mix_meta(kind);
-    let items: Vec<SearchTrackItem> = tracks.iter().map(to_item).collect();
+    let items: Vec<TrackItem> = tracks.iter().map(to_item).collect();
     let count = tracks.len() as i32;
     let duration = total_duration(&tracks);
     if let Ok(mut cur) = CURRENT_MIX.lock() {
@@ -197,7 +199,7 @@ pub fn reset_mix(window: &AppWindow, kind: &str) {
     state.set_kind(kind.into());
     state.set_title(title.into());
     state.set_subtitle(subtitle.into());
-    state.set_tracks(ModelRc::new(VecModel::from(Vec::<SearchTrackItem>::new())));
+    state.set_tracks(ModelRc::new(VecModel::from(Vec::<TrackItem>::new())));
     state.set_track_count(0);
     state.set_total_duration("".into());
     state.set_loading(true);

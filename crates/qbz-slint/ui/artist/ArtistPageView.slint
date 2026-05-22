@@ -12,13 +12,14 @@ import {
     ArtistState,
     ArtistActions,
     ArtworkActions,
-    AlbumTrackItem,
+    TrackItem,
     NavState,
     ContentView,
     NetworkSidebarState,
     NetworkSidebarActions,
 } from "../state.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
+import { TrackRow } from "../primitives/TrackRow.slint";
 import { ContextMenu } from "../primitives/ContextMenu.slint";
 import { ContextMenuItem } from "../primitives/ContextMenuItem.slint";
 import { TrackPlayCell } from "../primitives/TrackPlayCell.slint";
@@ -61,152 +62,6 @@ component CircleAction inherits Rectangle {
         mouse-cursor: pointer;
         clicked => {
             root.clicked();
-        }
-    }
-}
-
-component TrackRow inherits Rectangle {
-    in property <AlbumTrackItem> track;
-    in property <int> index;
-    // When true, the row shows a leading checkbox column and hides the
-    // per-row hover affordances — driven by the Popular Tracks "Select"
-    // header toggle, which mirrors Tauri's multiSelectMode flow.
-    in property <bool> multi-select-mode: false;
-    callback media-action(string, string, string);
-
-    // Any-hover detector — Slint does not propagate has-hover to ancestor
-    // TouchAreas, so OR the row TouchArea with the nested ones to drive
-    // the play overlay on the cell from anywhere over the row.
-    property <bool> row-hovered:
-        ta.has-hover || play-cell.hovered || more-ta.has-hover;
-
-    height: 52px;
-    border-radius: 8px;
-    // The even-row tint is clearly fainter than the hover tint so the two
-    // never read as the same state. Use row-hovered so hovering the cell
-    // or the more button keeps the row tint.
-    background: root.row-hovered
-        ? #ffffff16
-        : (Math.mod(root.index, 2) == 1 ? #ffffff07 : transparent);
-
-    ta := TouchArea {
-        mouse-cursor: default;
-    }
-
-    HorizontalLayout {
-        padding-left: 12px;
-        padding-right: 12px;
-        spacing: 16px;
-
-        // Leading cell — track number / play overlay normally,
-        // selection checkbox when multi-select is on. The cell width
-        // stays the same so the rest of the row does not shift.
-        VerticalLayout {
-            alignment: center;
-            Rectangle {
-                width: 28px;
-                height: 28px;
-                play-cell := TrackPlayCell {
-                    track-id: root.track.id;
-                    number: root.track.number;
-                    show-artwork: false;
-                    number-width: 28px;
-                    row-hovered: root.row-hovered && !root.multi-select-mode;
-                    visible: !root.multi-select-mode;
-                    play => {
-                        root.media-action("track", root.track.id, "play");
-                    }
-                }
-                if root.multi-select-mode: Rectangle {
-                    x: (parent.width - self.width) / 2;
-                    y: (parent.height - self.height) / 2;
-                    width: 22px;
-                    height: 22px;
-                    border-radius: 11px;
-                    background: root.track.selected ? Theme.accent : transparent;
-                    border-width: root.track.selected ? 0px : 1.5px;
-                    border-color: select-ta.has-hover ? Theme.text-primary : Theme.text-muted;
-                    animate background { duration: 120ms; }
-                    QbzIcon {
-                        source: @image-url("../assets/icons/check.svg");
-                        width: 14px;
-                        height: 14px;
-                        x: (parent.width - self.width) / 2;
-                        y: (parent.height - self.height) / 2;
-                        tint: #ffffff;
-                        visible: root.track.selected;
-                    }
-                    select-ta := TouchArea {
-                        mouse-cursor: pointer;
-                        clicked => {
-                            root.media-action("track", root.track.id, "toggle-select");
-                        }
-                    }
-                }
-            }
-        }
-        VerticalLayout {
-            alignment: center;
-            horizontal-stretch: 1;
-            Text {
-                text: root.track.title;
-                color: Theme.text-primary;
-                font-size: Typography.body;
-                font-weight: Typography.medium;
-                overflow: elide;
-            }
-        }
-        Text {
-            text: root.track.duration;
-            width: 70px;
-            color: Theme.text-muted;
-            font-size: Typography.body;
-            horizontal-alignment: center;
-            vertical-alignment: center;
-        }
-        Text {
-            text: root.track.quality-tier == "hires"
-                ? "Hi-Res"
-                : (root.track.quality-tier == "cd" ? "CD" : "");
-            width: 70px;
-            color: Theme.text-muted;
-            font-size: Typography.legal;
-            horizontal-alignment: center;
-            vertical-alignment: center;
-        }
-
-        // More / context-menu button — always visible on Popular Tracks.
-        VerticalLayout {
-            alignment: center;
-            Rectangle {
-                width: 32px;
-                height: 32px;
-                border-radius: Radius.sm;
-                background: more-ta.has-hover ? Theme.surface-elevated : transparent;
-                QbzIcon {
-                    source: @image-url("../assets/icons/ellipsis.svg");
-                    width: 16px;
-                    height: 16px;
-                    x: (parent.width - self.width) / 2;
-                    y: (parent.height - self.height) / 2;
-                    tint: more-ta.has-hover ? Theme.text-primary : Theme.text-secondary;
-                }
-                more-ta := TouchArea {
-                    mouse-cursor: pointer;
-                    clicked => {
-                        track-menu.show();
-                    }
-                }
-            }
-        }
-    }
-
-    track-menu := TrackContextMenu {
-        x: parent.width - self.width - 12px;
-        y: 44px;
-        track-id: root.track.id;
-        media-action(k, i, a) => {
-            root.media-action(k, i, a);
         }
     }
 }
@@ -679,9 +534,12 @@ export component ArtistPageView inherits Rectangle {
 
             for track[index] in ArtistState.top-tracks: TrackRow {
                 visible: root.top-tracks-expanded || index < root.top-tracks-preview;
-                height: self.visible ? 52px : 0px;
+                height: self.visible ? 56px : 0px;
                 track: track;
                 index: index;
+                // Artist Popular Tracks: number cell (no cover), with
+                // the multi-select checkbox.
+                show-artwork: false;
                 multi-select-mode: root.multi-select-mode;
                 media-action(kind, id, action) => {
                     root.media-action(kind, id, action);

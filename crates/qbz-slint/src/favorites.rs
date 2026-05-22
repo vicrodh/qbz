@@ -19,7 +19,7 @@ use slint::{ComponentHandle, ModelRc, VecModel};
 use crate::artwork::{ArtworkJob, ArtworkTarget};
 use crate::{
     AlbumCardItem, AppWindow, FavoriteArtistItem, FavoriteLabelItem, FavoritePlaylistItem,
-    FavoritesState, SearchTrackItem,
+    FavoritesState, TrackItem,
 };
 
 /// Page size — matches Tauri's FAVORITES_PAGE_SIZE. We fetch one
@@ -309,16 +309,18 @@ pub fn apply_favorites(window: &AppWindow, data: FavData) {
     let state = window.global::<FavoritesState>();
     match data {
         FavData::Tracks { items, total } => {
-            let rows: Vec<SearchTrackItem> = items
+            let rows: Vec<TrackItem> = items
                 .into_iter()
-                .map(|t| SearchTrackItem {
+                .map(|t| TrackItem {
                     id: t.id.into(),
+                    number: "".into(),
                     title: t.title.into(),
                     artist: t.artist.into(),
                     album: "".into(),
                     duration: t.duration.into(),
                     quality_tier: t.quality_tier.into(),
                     explicit: t.explicit,
+                    selected: false,
                     artwork_url: t.artwork_url.into(),
                     artwork: slint::Image::default(),
                 })

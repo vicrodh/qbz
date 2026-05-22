@@ -10,7 +10,7 @@ import { Typography } from "../foundation/typography.slint";
 import { Radius } from "../foundation/radius.slint";
 import { MixState } from "../state.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
-import { SearchTrackRow } from "../search/SearchTrackRow.slint";
+import { TrackRow } from "../primitives/TrackRow.slint";
 import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
 import { NavButtons } from "../shell/NavButtons.slint";
 
@@ -241,10 +241,10 @@ export component MixView inherits Rectangle {
             }
             Rectangle { height: 6px; }
 
-            // Reuses the shared SearchTrackRow (album column + favorite
+            // Reuses the shared TrackRow (album column + favorite
             // + track context menu). A row "play" starts the mix from
             // that track; menu actions bubble up as media-action.
-            for track[i] in MixState.tracks: SearchTrackRow {
+            for track[i] in MixState.tracks: TrackRow {
                 track: track;
                 index: i;
                 show-artwork: true;

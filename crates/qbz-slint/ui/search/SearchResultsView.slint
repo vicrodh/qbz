@@ -8,7 +8,7 @@
 // per-type tabs show the full loaded set as a card grid or row list with
 // a load-more button.
 
-import { SearchState, SearchActions, SearchTrackItem, SearchPlaylistItem, AlbumCardItem, SlimItem } from "../state.slint";
+import { SearchState, SearchActions, TrackItem, SearchPlaylistItem, AlbumCardItem, SlimItem } from "../state.slint";
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
 import { Radius } from "../foundation/radius.slint";
@@ -18,7 +18,7 @@ import { PlaylistCarousel } from "../discover/PlaylistCarousel.slint";
 import { AlbumCard } from "../discover/AlbumCard.slint";
 import { ArtistCard } from "../discover/ArtistCard.slint";
 import { PlaylistCard } from "../discover/PlaylistCard.slint";
-import { SearchTrackRow } from "SearchTrackRow.slint";
+import { TrackRow } from "../primitives/TrackRow.slint";
 import { NavButtons } from "../shell/NavButtons.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
@@ -480,7 +480,7 @@ export component SearchResultsView inherits Rectangle {
                         if SearchState.most-popular-kind == "track": Rectangle {
                             width: 320px;
                             height: 56px;
-                            SearchTrackRow {
+                            TrackRow {
                                 width: 320px;
                                 track: SearchState.most-popular-track;
                                 index: 0;
@@ -542,7 +542,7 @@ export component SearchResultsView inherits Rectangle {
                         show-more: SearchState.tab == 0 && SearchState.tracks-total > root.preview-cap;
                         more-clicked => { SearchActions.tab-changed(2); }
                     }
-                    for track[idx] in SearchState.tracks: SearchTrackRow {
+                    for track[idx] in SearchState.tracks: TrackRow {
                         visible: SearchState.tab == 2 || idx < root.preview-cap;
                         height: self.visible ? 56px : 0px;
                         track: track;

@@ -18,7 +18,7 @@ use crate::album::TrackData;
 use crate::artwork::{ArtworkJob, ArtworkTarget};
 use crate::home::CardData;
 use crate::{
-    AlbumCardItem, AlbumTrackItem, AppWindow, ArtistState, DiscoverSection, DiscoveryArtist,
+    AlbumCardItem, TrackItem, AppWindow, ArtistState, DiscoverSection, DiscoveryArtist,
     JumpNavTab, LabelEntry, MbOriginData, MbRelationship, MbRelationshipsData,
     NetworkSidebarState, SimilarEntry,
 };
@@ -454,7 +454,7 @@ fn card_to_item(card: CardData) -> AlbumCardItem {
 // in-page search can rebuild the visible models cheaply on every
 // keystroke. Mirrors album::FULL_TRACKS.
 thread_local! {
-    static FULL_TOP_TRACKS: std::cell::RefCell<Vec<AlbumTrackItem>> =
+    static FULL_TOP_TRACKS: std::cell::RefCell<Vec<TrackItem>> =
         std::cell::RefCell::new(Vec::new());
     static FULL_RELEASE_SECTIONS: std::cell::RefCell<Vec<DiscoverSection>> =
         std::cell::RefCell::new(Vec::new());
@@ -471,18 +471,21 @@ pub fn apply_artist(window: &AppWindow, data: ArtistData) {
         .map(|s| (s.title.clone(), s.cards.len()))
         .collect();
 
-    let top_tracks: Vec<AlbumTrackItem> = data
+    let top_tracks: Vec<TrackItem> = data
         .top_tracks
         .into_iter()
-        .map(|track| AlbumTrackItem {
+        .map(|track| TrackItem {
             id: track.id.into(),
             number: track.number.into(),
             title: track.title.into(),
             artist: track.artist.into(),
+            album: "".into(),
             duration: track.duration.into(),
             quality_tier: track.quality_tier.into(),
             explicit: track.explicit,
             selected: false,
+            artwork_url: "".into(),
+            artwork: slint::Image::default(),
         })
         .collect();
     let release_sections: Vec<DiscoverSection> = data
@@ -615,7 +618,7 @@ fn build_jump_tabs(
 /// loop; called by ArtistActions::on_search from main.rs.
 pub fn filter_artist(window: &AppWindow, query: &str) {
     let needle = query.trim().to_lowercase();
-    let filtered_tracks: Vec<AlbumTrackItem> = FULL_TOP_TRACKS.with(|cell| {
+    let filtered_tracks: Vec<TrackItem> = FULL_TOP_TRACKS.with(|cell| {
         cell.borrow()
             .iter()
             .filter(|track| {
@@ -657,7 +660,7 @@ pub fn filter_artist(window: &AppWindow, query: &str) {
 /// Clear artist state before loading a new artist.
 pub fn reset_artist(window: &AppWindow) {
     let state = window.global::<ArtistState>();
-    state.set_top_tracks(ModelRc::new(VecModel::from(Vec::<AlbumTrackItem>::new())));
+    state.set_top_tracks(ModelRc::new(VecModel::from(Vec::<TrackItem>::new())));
     state.set_release_sections(ModelRc::new(VecModel::from(Vec::<DiscoverSection>::new())));
     state.set_labels(ModelRc::new(VecModel::from(Vec::<LabelEntry>::new())));
     state.set_similar_artists(ModelRc::new(VecModel::from(Vec::<SimilarEntry>::new())));

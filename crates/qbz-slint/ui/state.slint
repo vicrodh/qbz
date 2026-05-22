@@ -138,17 +138,27 @@ export global GenreFilterActions {
     callback set-advanced(bool);
 }
 
-export struct AlbumTrackItem {
+// The single, shared track-row model. Superset of every track-list
+// surface (album, artist popular, search, favorites, mix, playlist),
+// rendered by the shared primitives/TrackRow component. Fields that a
+// given surface doesn't use stay empty/false:
+//   - `number`   explicit track number (album/playlist); rows fall
+//                back to their list index when empty.
+//   - `album`    shown only by rows with show-album (mix/playlist).
+//   - `selected` multi-select state (artist Popular, playlist editor).
+//   - `artwork`  the cover thumbnail for show-artwork rows.
+export struct TrackItem {
     id: string,
     number: string,
     title: string,
     artist: string,
+    album: string,
     duration: string,
     quality-tier: string,
     explicit: bool,
-    // Multi-select state — set true when the row is in the user's
-    // selection. First used by the artist page's Popular Tracks.
     selected: bool,
+    artwork-url: string,
+    artwork: image,
 }
 
 // Album detail screen state.
@@ -174,7 +184,7 @@ export global AlbumState {
     in property <color> header-color: #181820;
     in property <string> label;
     in property <[string]> awards: [];
-    in property <[AlbumTrackItem]> tracks: [];
+    in property <[TrackItem]> tracks: [];
     in property <bool> loading: false;
 }
 
@@ -330,7 +340,7 @@ export global ArtistState {
     in property <image> artwork;
     // Artwork-derived tint for the header gradient.
     in property <color> header-color: #181820;
-    in property <[AlbumTrackItem]> top-tracks: [];
+    in property <[TrackItem]> top-tracks: [];
     // Releases grouped into titled sections (Albums, EPs & Singles, ...).
     in property <[DiscoverSection]> release-sections: [];
     // Labels collected from the artist's own album releases (deduped by
@@ -702,21 +712,6 @@ export global QueueState {
     in property <bool> infinite-play: false;
 }
 
-// A track result row in search (cover thumbnail, unlike album tracks).
-export struct SearchTrackItem {
-    id: string,
-    title: string,
-    artist: string,
-    // Album title — shown only by rows with show-album (e.g. the mix
-    // views); empty elsewhere.
-    album: string,
-    duration: string,
-    quality-tier: string,
-    explicit: bool,
-    artwork-url: string,
-    artwork: image,
-}
-
 // A playlist result in search. Qobuz returns up to four cover URLs per
 // playlist; the card renders them as a count-based collage.
 export struct SearchPlaylistItem {
@@ -763,13 +758,13 @@ export struct FavoriteLabelItem {
 // Library > Favorites state. The active tab decides which model is
 // shown; all are populated lazily by `crate::favorites` the first
 // time their tab is opened. Albums reuse AlbumCardItem, tracks reuse
-// SearchTrackItem (artwork-on), artists use FavoriteArtistItem.
+// TrackItem (artwork-on), artists use FavoriteArtistItem.
 export global FavoritesState {
     // "tracks" | "albums" | "artists" | "playlists" | "labels"
     in-out property <string> active-tab: "tracks";
-    // Tracks reuse SearchTrackItem so the shared SearchTrackRow can
+    // Tracks reuse TrackItem so the shared SearchTrackRow can
     // render them (artwork-on, per-row cover thumbnail).
-    in property <[SearchTrackItem]> tracks: [];
+    in property <[TrackItem]> tracks: [];
     in property <[AlbumCardItem]> albums: [];
     in property <[FavoriteArtistItem]> artists: [];
     in property <[FavoritePlaylistItem]> playlists: [];
@@ -802,7 +797,7 @@ export global MixState {
     in property <string> kind;       // daily | weekly | fav | top
     in property <string> title;
     in property <string> subtitle;
-    in property <[SearchTrackItem]> tracks: [];
+    in property <[TrackItem]> tracks: [];
     in property <int> track-count: 0;
     in property <string> total-duration;
     in property <bool> loading: false;
@@ -816,7 +811,7 @@ export global SearchState {
     in property <int> tab: 0;
     in property <bool> loading: false;
     in property <[AlbumCardItem]> albums: [];
-    in property <[SearchTrackItem]> tracks: [];
+    in property <[TrackItem]> tracks: [];
     in property <[SlimItem]> artists: [];
     // Carousel-only variant of artists — skips the top-result artist when
     // it is also the first list entry, so the All-tab carousel does not
@@ -831,7 +826,7 @@ export global SearchState {
     in property <string> most-popular-kind;  // "album" | "artist" | "track" | ""
     in property <AlbumCardItem> most-popular-album;
     in property <SlimItem> most-popular-artist;
-    in property <SearchTrackItem> most-popular-track;
+    in property <TrackItem> most-popular-track;
     // Active searchType filter, as a dropdown index (0 = no filter).
     // The controller owns the index -> API-value mapping.
     in property <int> filter-index: 0;

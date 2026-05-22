@@ -12,13 +12,13 @@ use qbz_core::FrontendAdapter;
 use qbz_models::{Album, Track};
 use slint::{ComponentHandle, ModelRc, VecModel};
 
-use crate::{AlbumState, AlbumTrackItem, AppWindow};
+use crate::{AlbumState, TrackItem, AppWindow};
 
 thread_local! {
     /// The current album's full, unfiltered track list — kept so the
     /// track search can filter against it without a re-fetch. UI thread
     /// only, hence `thread_local`.
-    static FULL_TRACKS: RefCell<Vec<AlbumTrackItem>> = RefCell::new(Vec::new());
+    static FULL_TRACKS: RefCell<Vec<TrackItem>> = RefCell::new(Vec::new());
 }
 
 /// Plain, `Send` album data produced on the worker thread.
@@ -220,18 +220,21 @@ fn format_duration(secs: u32) -> String {
 
 /// Apply album data to the `AlbumState` global. Runs on the Slint event loop.
 pub fn apply_album(window: &AppWindow, data: AlbumData) {
-    let tracks: Vec<AlbumTrackItem> = data
+    let tracks: Vec<TrackItem> = data
         .tracks
         .into_iter()
-        .map(|track| AlbumTrackItem {
+        .map(|track| TrackItem {
             id: track.id.into(),
             number: track.number.into(),
             title: track.title.into(),
             artist: track.artist.into(),
+            album: "".into(),
             duration: track.duration.into(),
             quality_tier: track.quality_tier.into(),
             explicit: track.explicit,
             selected: false,
+            artwork_url: "".into(),
+            artwork: slint::Image::default(),
         })
         .collect();
 
@@ -266,7 +269,7 @@ pub fn apply_album(window: &AppWindow, data: AlbumData) {
 /// Runs on the Slint event loop.
 pub fn filter_tracks(window: &AppWindow, query: &str) {
     let needle = query.trim().to_lowercase();
-    let filtered: Vec<AlbumTrackItem> = FULL_TRACKS.with(|cell| {
+    let filtered: Vec<TrackItem> = FULL_TRACKS.with(|cell| {
         cell.borrow()
             .iter()
             .filter(|track| {
@@ -287,7 +290,7 @@ pub fn filter_tracks(window: &AppWindow, query: &str) {
 pub fn reset_album(window: &AppWindow) {
     FULL_TRACKS.with(|cell| cell.borrow_mut().clear());
     let state = window.global::<AlbumState>();
-    state.set_tracks(ModelRc::new(VecModel::from(Vec::<AlbumTrackItem>::new())));
+    state.set_tracks(ModelRc::new(VecModel::from(Vec::<TrackItem>::new())));
     state.set_artwork(slint::Image::default());
     state.set_loading(true);
 }

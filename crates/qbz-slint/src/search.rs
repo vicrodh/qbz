@@ -14,7 +14,7 @@ use qbz_models::{Album, Artist, MostPopularItem, Playlist, SearchAllResults, Tra
 use slint::{ComponentHandle, Model, ModelRc, VecModel};
 
 use crate::artwork::{ArtworkJob, ArtworkTarget};
-use crate::{AlbumCardItem, AppWindow, SearchPlaylistItem, SearchState, SearchTrackItem, SlimItem};
+use crate::{AlbumCardItem, AppWindow, SearchPlaylistItem, SearchState, TrackItem, SlimItem};
 
 thread_local! {
     /// Monotonic search-attempt counter. Each `navigate_search` captures the
@@ -52,9 +52,9 @@ pub struct AlbumRow {
     pub artwork_url: String,
 }
 
-/// A track result row, before it becomes a Slint `SearchTrackItem`.
+/// A track result row, before it becomes a Slint `TrackItem`.
 #[derive(Debug, Clone, PartialEq)]
-pub struct TrackRow {
+pub struct TrackRowData {
     pub id: String,
     pub title: String,
     pub artist: String,
@@ -91,14 +91,14 @@ pub enum MostPopularRow {
     None,
     Album(AlbumRow),
     Artist(ArtistRow),
-    Track(TrackRow),
+    Track(TrackRowData),
 }
 
 /// The full result of a combined search, as plain `Send` data.
 pub struct SearchData {
     pub query: String,
     pub albums: Vec<AlbumRow>,
-    pub tracks: Vec<TrackRow>,
+    pub tracks: Vec<TrackRowData>,
     pub artists: Vec<ArtistRow>,
     pub playlists: Vec<PlaylistRow>,
     pub albums_total: u32,
@@ -193,7 +193,7 @@ pub fn map_album(album: Album) -> AlbumRow {
     }
 }
 
-pub fn map_track(track: Track) -> TrackRow {
+pub fn map_track(track: Track) -> TrackRowData {
     let mut title = track.title;
     if let Some(version) = track.version.as_ref().filter(|v| !v.is_empty()) {
         title = format!("{title} ({version})");
@@ -203,7 +203,7 @@ pub fn map_track(track: Track) -> TrackRow {
         .as_ref()
         .and_then(|a| a.image.best().cloned())
         .unwrap_or_default();
-    TrackRow {
+    TrackRowData {
         id: track.id.to_string(),
         title,
         artist: track.performer.map(|p| p.name).unwrap_or_default(),
@@ -335,15 +335,17 @@ fn album_item(row: AlbumRow) -> AlbumCardItem {
     }
 }
 
-fn track_item(row: TrackRow) -> SearchTrackItem {
-    SearchTrackItem {
+fn track_item(row: TrackRowData) -> TrackItem {
+    TrackItem {
         id: row.id.into(),
+        number: "".into(),
         title: row.title.into(),
         artist: row.artist.into(),
         album: "".into(),
         duration: row.duration.into(),
         quality_tier: row.quality_tier.into(),
         explicit: row.explicit,
+        selected: false,
         artwork_url: row.artwork_url.into(),
         artwork: slint::Image::default(),
     }
@@ -388,7 +390,7 @@ pub fn apply_search(window: &AppWindow, data: SearchData) {
     state.set_query(data.query.into());
 
     let albums: Vec<AlbumCardItem> = data.albums.into_iter().map(album_item).collect();
-    let tracks: Vec<SearchTrackItem> = data.tracks.into_iter().map(track_item).collect();
+    let tracks: Vec<TrackItem> = data.tracks.into_iter().map(track_item).collect();
     let artists: Vec<SlimItem> = data.artists.into_iter().map(artist_item).collect();
     let playlists: Vec<SearchPlaylistItem> =
         data.playlists.into_iter().map(playlist_item).collect();
@@ -440,7 +442,7 @@ pub fn apply_search(window: &AppWindow, data: SearchData) {
 pub fn reset_search(window: &AppWindow) {
     let state = window.global::<SearchState>();
     state.set_albums(ModelRc::new(VecModel::from(Vec::<AlbumCardItem>::new())));
-    state.set_tracks(ModelRc::new(VecModel::from(Vec::<SearchTrackItem>::new())));
+    state.set_tracks(ModelRc::new(VecModel::from(Vec::<TrackItem>::new())));
     state.set_artists(ModelRc::new(VecModel::from(Vec::<SlimItem>::new())));
     state.set_playlists(ModelRc::new(VecModel::from(Vec::<SearchPlaylistItem>::new())));
     state.set_albums_total(0);
@@ -518,7 +520,7 @@ pub fn search_type_for_filter(index: i32) -> Option<String> {
 /// A page of additional rows fetched by load-more, ready to append.
 pub enum MoreRows {
     Albums(Vec<AlbumRow>),
-    Tracks(Vec<TrackRow>),
+    Tracks(Vec<TrackRowData>),
     Artists(Vec<ArtistRow>),
     Playlists(Vec<PlaylistRow>),
 }
@@ -605,7 +607,7 @@ pub fn append_results(window: &AppWindow, more: MoreRows) {
             if let Some(vm) = state
                 .get_tracks()
                 .as_any()
-                .downcast_ref::<VecModel<SearchTrackItem>>()
+                .downcast_ref::<VecModel<TrackItem>>()
             {
                 for row in rows {
                     vm.push(track_item(row));
@@ -647,7 +649,7 @@ pub fn replace_category(window: &AppWindow, more: MoreRows) {
             state.set_albums(ModelRc::new(VecModel::from(items)));
         }
         MoreRows::Tracks(rows) => {
-            let items: Vec<SearchTrackItem> = rows.into_iter().map(track_item).collect();
+            let items: Vec<TrackItem> = rows.into_iter().map(track_item).collect();
             state.set_tracks(ModelRc::new(VecModel::from(items)));
         }
         MoreRows::Artists(rows) => {

@@ -1,7 +1,7 @@
 // Library > Favorites — the user's saved tracks / albums / artists /
 // playlists / labels. Mirrors Tauri's FavoritesView.svelte core: a
 // tab bar over per-tab content. Tracks reuse the shared
-// SearchTrackRow, albums the Discover AlbumCard, artists a round-
+// TrackRow, albums the Discover AlbumCard, artists a round-
 // portrait grid. Playlists + Labels are stubbed pending their
 // backing views.
 
@@ -12,13 +12,13 @@ import {
     FavoritesState,
     FavoritesActions,
     AlbumCardItem,
-    SearchTrackItem,
+    TrackItem,
     FavoriteArtistItem,
     FavoritePlaylistItem,
     FavoriteLabelItem,
 } from "../state.slint";
 import { AlbumCard } from "../discover/AlbumCard.slint";
-import { SearchTrackRow } from "../search/SearchTrackRow.slint";
+import { TrackRow } from "../primitives/TrackRow.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
 
@@ -323,7 +323,7 @@ export component FavoritesView inherits Rectangle {
                     color: Theme.text-muted;
                     font-size: Typography.body;
                 }
-                for track[i] in FavoritesState.tracks: SearchTrackRow {
+                for track[i] in FavoritesState.tracks: TrackRow {
                     track: track;
                     index: i;
                     show-artwork: true;

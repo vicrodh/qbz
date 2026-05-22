@@ -9,7 +9,8 @@ import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
 import { Radius } from "../foundation/radius.slint";
 import { Spacing } from "../foundation/spacing.slint";
-import { AlbumState, AlbumTrackItem, AlbumActions, ArtworkActions, NavState, ContentView } from "../state.slint";
+import { AlbumState, AlbumActions, ArtworkActions, NavState, ContentView } from "../state.slint";
+import { TrackRow } from "../primitives/TrackRow.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { ContextMenu } from "../primitives/ContextMenu.slint";
 import { ContextMenuItem } from "../primitives/ContextMenuItem.slint";
@@ -47,207 +48,6 @@ component CircleAction inherits Rectangle {
         mouse-cursor: pointer;
         clicked => {
             root.clicked();
-        }
-    }
-}
-
-component TrackRow inherits Rectangle {
-    in property <AlbumTrackItem> track;
-    in property <int> index;
-    // kind ("track"), track id, action ("play" | "queue" | "favorite").
-    callback media-action(string, string, string);
-
-    // Any-hover detector — Slint does not propagate has-hover to ancestor
-    // TouchAreas, so the row OR's its own TouchArea with every nested one
-    // (the play cell + the side buttons) to drive the play overlay.
-    property <bool> row-hovered:
-        ta.has-hover
-        || play-cell.hovered
-        || fav-ta.has-hover
-        || dl-ta.has-hover
-        || more-ta.has-hover;
-
-    height: 56px;
-    border-radius: 8px;
-    // The even-row tint is clearly fainter than the hover tint so the two
-    // never read as the same state. Use row-hovered so hovering nested
-    // controls (cell / fav / dl / more) keeps the row tint.
-    background: root.row-hovered
-        ? #ffffff16
-        : (Math.mod(root.index, 2) == 1 ? #ffffff07 : transparent);
-
-    // Row hover/background detector — declared before the content so the
-    // more-button keeps its own clicks.
-    ta := TouchArea {
-        mouse-cursor: default;
-    }
-
-    HorizontalLayout {
-        padding-left: 12px;
-        padding-right: 12px;
-        spacing: 16px;
-
-        VerticalLayout {
-            alignment: center;
-            play-cell := TrackPlayCell {
-                track-id: root.track.id;
-                number: root.track.number;
-                show-artwork: false;
-                number-width: 32px;
-                row-hovered: root.row-hovered;
-                play => {
-                    root.media-action("track", root.track.id, "play");
-                }
-            }
-        }
-
-        VerticalLayout {
-            alignment: center;
-            horizontal-stretch: 1;
-            spacing: 2px;
-
-            // alignment: start packs the title and the explicit badge at
-            // their natural sizes, so the badge sits right after the name
-            // instead of being stretched out to a column position.
-            HorizontalLayout {
-                alignment: start;
-                spacing: 6px;
-                Text {
-                    text: root.track.title;
-                    color: Theme.text-primary;
-                    font-size: Typography.body;
-                    font-weight: Typography.medium;
-                    vertical-alignment: center;
-                    overflow: elide;
-                }
-                if root.track.explicit: VerticalLayout {
-                    alignment: center;
-                    Rectangle {
-                        width: 16px;
-                        height: 16px;
-                        border-radius: 3px;
-                        background: Theme.surface-elevated;
-                        Text {
-                            text: "E";
-                            color: Theme.text-muted;
-                            font-size: 9px;
-                            font-weight: Typography.semibold;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
-                    }
-                }
-            }
-            Text {
-                text: root.track.artist;
-                visible: root.track.artist != "";
-                color: Theme.text-muted;
-                font-size: Typography.link;
-                overflow: elide;
-            }
-        }
-
-        Text {
-            text: root.track.duration;
-            width: 80px;
-            color: Theme.text-muted;
-            font-size: Typography.body;
-            horizontal-alignment: center;
-            vertical-alignment: center;
-        }
-        Text {
-            text: root.track.quality-tier == "hires"
-                ? "Hi-Res"
-                : (root.track.quality-tier == "cd" ? "CD" : "");
-            width: 80px;
-            color: Theme.text-muted;
-            font-size: Typography.legal;
-            horizontal-alignment: center;
-            vertical-alignment: center;
-        }
-
-        // Favorite button.
-        VerticalLayout {
-            alignment: center;
-            Rectangle {
-                width: 28px;
-                height: 28px;
-                border-radius: Radius.sm;
-                background: fav-ta.has-hover ? Theme.surface-elevated : transparent;
-                QbzIcon {
-                    source: @image-url("../assets/icons/heart.svg");
-                    width: 16px;
-                    height: 16px;
-                    x: (parent.width - self.width) / 2;
-                    y: (parent.height - self.height) / 2;
-                    tint: fav-ta.has-hover ? Theme.text-primary : Theme.text-muted;
-                }
-                fav-ta := TouchArea {
-                    mouse-cursor: pointer;
-                    clicked => {
-                        root.media-action("track", root.track.id, "favorite");
-                    }
-                }
-            }
-        }
-        // Offline-cache button.
-        VerticalLayout {
-            alignment: center;
-            Rectangle {
-                width: 28px;
-                height: 28px;
-                border-radius: Radius.sm;
-                background: dl-ta.has-hover ? Theme.surface-elevated : transparent;
-                QbzIcon {
-                    source: @image-url("../assets/icons/cloud-download.svg");
-                    width: 16px;
-                    height: 16px;
-                    x: (parent.width - self.width) / 2;
-                    y: (parent.height - self.height) / 2;
-                    tint: dl-ta.has-hover ? Theme.text-primary : Theme.text-muted;
-                }
-                dl-ta := TouchArea {
-                    mouse-cursor: pointer;
-                    clicked => {
-                        root.media-action("track", root.track.id, "download");
-                    }
-                }
-            }
-        }
-
-        // Context-menu button — always visible in the muted column color,
-        // a 32px square hit area that brightens on hover.
-        VerticalLayout {
-            alignment: center;
-            Rectangle {
-                width: 32px;
-                height: 32px;
-                border-radius: Radius.sm;
-                background: more-ta.has-hover ? Theme.surface-elevated : transparent;
-                QbzIcon {
-                    source: @image-url("../assets/icons/ellipsis.svg");
-                    width: 16px;
-                    height: 16px;
-                    x: (parent.width - self.width) / 2;
-                    y: (parent.height - self.height) / 2;
-                    tint: more-ta.has-hover ? Theme.text-primary : Theme.text-muted;
-                }
-                more-ta := TouchArea {
-                    mouse-cursor: pointer;
-                    clicked => {
-                        track-menu.show();
-                    }
-                }
-            }
-        }
-    }
-
-    track-menu := TrackContextMenu {
-        x: parent.width - self.width - 12px;
-        y: 48px;
-        track-id: root.track.id;
-        media-action(k, i, a) => {
-            root.media-action(k, i, a);
         }
     }
 }
@@ -747,6 +547,10 @@ export component AlbumPageView inherits Rectangle {
                     for track[index] in AlbumState.tracks: TrackRow {
                         track: track;
                         index: index;
+                        // Album context: number cell (no cover), with the
+                        // offline-cache button.
+                        show-artwork: false;
+                        show-download: true;
                         media-action(kind, id, action) => {
                             root.media-action(kind, id, action);
                         }

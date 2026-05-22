@@ -1297,7 +1297,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let model = w.global::<ArtistState>().get_top_tracks();
                         if let Some(vm) = model
                             .as_any()
-                            .downcast_ref::<slint::VecModel<AlbumTrackItem>>()
+                            .downcast_ref::<slint::VecModel<TrackItem>>()
                         {
                             for i in 0..vm.row_count() {
                                 if let Some(mut item) = vm.row_data(i) {
