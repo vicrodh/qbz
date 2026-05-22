@@ -12,8 +12,48 @@
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Spacing } from "../foundation/spacing.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
-import { ShellState } from "../state.slint";
+import { ShellState, SidebarState, SidebarActions, SidebarPlaylistItem } from "../state.slint";
 import { ScrollView } from "std-widgets.slint";
+
+// One playlist row in the sidebar.
+component PlaylistRow inherits Rectangle {
+    in property <SidebarPlaylistItem> item;
+    in property <bool> active: false;
+    callback clicked(string);
+
+    height: 32px;
+    border-radius: 6px;
+    background: ta.has-hover || root.active ? Theme.surface-hover : transparent;
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 8px;
+        spacing: 8px;
+        VerticalLayout {
+            alignment: center;
+            QbzIcon {
+                source: @image-url("../assets/icons/list-music.svg");
+                width: 15px;
+                height: 15px;
+                tint: root.active ? Theme.text-primary : Theme.text-muted;
+            }
+        }
+        Text {
+            text: root.item.name;
+            color: root.active ? Theme.text-primary : Theme.text-secondary;
+            font-size: 13px;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            overflow: elide;
+        }
+    }
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked(root.item.id);
+        }
+    }
+}
 
 export component Sidebar inherits Rectangle {
     // Rendered width — 0 when collapsed, otherwise the user-set width.
@@ -44,11 +84,25 @@ export component Sidebar inherits Rectangle {
             }
             VerticalLayout {
                 alignment: center;
-                QbzIcon {
-                    source: @image-url("../assets/icons/plus.svg");
-                    width: 16px;
-                    height: 16px;
-                    tint: Theme.text-muted;
+                Rectangle {
+                    width: 22px;
+                    height: 22px;
+                    border-radius: 4px;
+                    background: plus-ta.has-hover ? Theme.surface-hover : transparent;
+                    QbzIcon {
+                        source: @image-url("../assets/icons/plus.svg");
+                        width: 16px;
+                        height: 16px;
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        tint: plus-ta.has-hover ? Theme.text-primary : Theme.text-muted;
+                    }
+                    plus-ta := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            SidebarActions.create-playlist();
+                        }
+                    }
                 }
             }
         }
@@ -58,8 +112,20 @@ export component Sidebar inherits Rectangle {
             horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
             VerticalLayout {
                 spacing: 2px;
-                // Real playlist rows are populated when the sidebar
-                // milestone wires playlist data. No fixtures.
+                alignment: start;
+                for pl in SidebarState.playlists: PlaylistRow {
+                    item: pl;
+                    active: pl.id == SidebarState.active-id;
+                    clicked(id) => {
+                        SidebarActions.open-playlist(id);
+                    }
+                }
+                if SidebarState.playlists.length == 0 && !SidebarState.loading: Text {
+                    text: @tr("No playlists yet.");
+                    color: Theme.text-muted;
+                    font-size: 12px;
+                    wrap: word-wrap;
+                }
             }
         }
     }

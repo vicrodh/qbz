@@ -1,0 +1,144 @@
+// "Create playlist" modal — name field + public toggle + Create.
+// Opened from the sidebar "+" button (CreatePlaylistState.open).
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Typography } from "../foundation/typography.slint";
+import { Radius } from "../foundation/radius.slint";
+import { CreatePlaylistState, CreatePlaylistActions } from "../state.slint";
+import { QbzIcon } from "QbzIcon.slint";
+import { LineEdit } from "std-widgets.slint";
+
+export component CreatePlaylistModal inherits Rectangle {
+    visible: CreatePlaylistState.open;
+
+    if CreatePlaylistState.open: Rectangle {
+        background: #000000bf;
+        TouchArea {
+            mouse-cursor: default;
+            clicked => {
+                CreatePlaylistActions.close();
+            }
+        }
+        Rectangle {
+            width: Math.min(root.width - 80px, 420px);
+            height: panel.preferred-height;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            border-radius: Radius.md;
+            background: Theme.surface-card;
+            border-width: 1px;
+            border-color: Theme.border-subtle;
+            drop-shadow-blur: 32px;
+            drop-shadow-color: #00000080;
+            TouchArea { }
+
+            panel := VerticalLayout {
+                padding: 20px;
+                spacing: 16px;
+
+                HorizontalLayout {
+                    Text {
+                        text: @tr("New playlist");
+                        color: Theme.text-primary;
+                        font-size: Typography.heading;
+                        font-weight: Typography.semibold;
+                        horizontal-stretch: 1;
+                        vertical-alignment: center;
+                    }
+                    close-x := TouchArea {
+                        width: 28px;
+                        height: 28px;
+                        mouse-cursor: pointer;
+                        clicked => {
+                            CreatePlaylistActions.close();
+                        }
+                        QbzIcon {
+                            source: @image-url("../assets/icons/x.svg");
+                            width: 17px;
+                            height: 17px;
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
+                            tint: close-x.has-hover ? Theme.text-primary : Theme.text-muted;
+                        }
+                    }
+                }
+
+                name-input := LineEdit {
+                    placeholder-text: @tr("Playlist name");
+                    text <=> CreatePlaylistState.name;
+                    accepted => {
+                        CreatePlaylistActions.submit();
+                    }
+                }
+
+                // Public toggle row.
+                HorizontalLayout {
+                    spacing: 10px;
+                    toggle := TouchArea {
+                        width: 20px;
+                        height: 20px;
+                        mouse-cursor: pointer;
+                        clicked => {
+                            CreatePlaylistState.is-public = !CreatePlaylistState.is-public;
+                        }
+                        Rectangle {
+                            width: 18px;
+                            height: 18px;
+                            y: (parent.height - self.height) / 2;
+                            border-radius: 4px;
+                            background: CreatePlaylistState.is-public ? Theme.accent : transparent;
+                            border-width: CreatePlaylistState.is-public ? 0px : 1.5px;
+                            border-color: Theme.text-muted;
+                            QbzIcon {
+                                source: @image-url("../assets/icons/check.svg");
+                                width: 12px;
+                                height: 12px;
+                                x: (parent.width - self.width) / 2;
+                                y: (parent.height - self.height) / 2;
+                                tint: #ffffff;
+                                visible: CreatePlaylistState.is-public;
+                            }
+                        }
+                    }
+                    Text {
+                        text: @tr("Public playlist");
+                        color: Theme.text-secondary;
+                        font-size: Typography.body;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                    }
+                }
+
+                // Create button.
+                HorizontalLayout {
+                    alignment: end;
+                    spacing: 10px;
+                    Rectangle {
+                        width: create-label.preferred-width + 36px;
+                        height: 36px;
+                        border-radius: Radius.sm;
+                        opacity: (CreatePlaylistState.name != "" && !CreatePlaylistState.creating) ? 1.0 : 0.5;
+                        background: create-ta.has-hover ? #ffffffd6 : Theme.accent;
+                        create-label := Text {
+                            text: CreatePlaylistState.creating ? @tr("Creating...") : @tr("Create");
+                            color: #ffffff;
+                            font-size: Typography.body;
+                            font-weight: Typography.semibold;
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
+                        }
+                        create-ta := TouchArea {
+                            mouse-cursor: (CreatePlaylistState.name != "" && !CreatePlaylistState.creating)
+                                ? pointer : default;
+                            clicked => {
+                                if (CreatePlaylistState.name != "" && !CreatePlaylistState.creating) {
+                                    CreatePlaylistActions.submit();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

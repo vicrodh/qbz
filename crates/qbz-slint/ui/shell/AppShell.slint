@@ -11,6 +11,7 @@ import { Sidebar } from "Sidebar.slint";
 import { HeaderBar } from "HeaderBar.slint";
 import { HeaderMenuOverlay } from "HeaderMenuOverlay.slint";
 import { PlaylistPickerModal } from "../primitives/PlaylistPickerModal.slint";
+import { CreatePlaylistModal } from "../primitives/CreatePlaylistModal.slint";
 import { PlayerBar } from "PlayerBar.slint";
 import { QueueSidebar } from "QueueSidebar.slint";
 import { LyricsSidebar } from "LyricsSidebar.slint";
@@ -222,4 +223,7 @@ export component AppShell inherits Rectangle {
     // Global "Add to playlist" picker overlay, opened from any track
     // context menu.
     PlaylistPickerModal { }
+
+    // Global "Create playlist" modal, opened from the sidebar "+".
+    CreatePlaylistModal { }
 }

@@ -41,6 +41,7 @@ mod recently;
 mod search;
 mod settings;
 mod share;
+mod sidebar;
 mod ui_prefs;
 
 use std::sync::Arc;
@@ -79,6 +80,9 @@ async fn enter_shell(
     // ticking position/progress onto NowPlayingState and auto-advancing
     // the queue on track end. Safe to start once per shell entry.
     playback::start_poll_loop(runtime.clone(), weak.clone(), tokio::runtime::Handle::current());
+
+    // Load the sidebar playlists list.
+    load_sidebar_playlists(runtime.clone(), weak.clone(), &tokio::runtime::Handle::current());
 
     // Load Audio + Playback settings into the Settings page in the
     // background — store reads and device enumeration are blocking.
@@ -658,8 +662,10 @@ fn navigate_playlist(
         return;
     };
     handle.spawn(async move {
+        let active = playlist_id.clone();
         let _ = weak.upgrade_in_event_loop(move |w| {
             playlist::reset(&w);
+            sidebar::set_active(&w, &active);
             w.global::<NavState>().set_view(ContentView::Playlist);
         });
         if let Some(data) = playlist::load(&runtime, id).await {
@@ -669,6 +675,21 @@ fn navigate_playlist(
             });
             artwork::spawn_loads(jobs, weak.clone(), image_cache.clone());
         }
+    });
+}
+
+/// Load (or reload) the sidebar playlists list off-thread.
+fn load_sidebar_playlists(
+    runtime: Arc<AppRuntime<SlintAdapter>>,
+    weak: slint::Weak<AppWindow>,
+    handle: &tokio::runtime::Handle,
+) {
+    let _ = weak.upgrade_in_event_loop(|w| sidebar::set_loading(&w, true));
+    handle.spawn(async move {
+        let playlists = sidebar::load(&runtime).await;
+        let _ = weak.upgrade_in_event_loop(move |w| {
+            sidebar::apply(&w, playlists);
+        });
     });
 }
 
@@ -2329,6 +2350,102 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if let Some(w) = weak.upgrade() {
                     w.global::<PlaylistPickerState>().set_open(false);
                 }
+            });
+    }
+
+    // Sidebar playlists — open a row, or create a new playlist.
+    {
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        let image_cache = image_cache.clone();
+        window
+            .global::<SidebarActions>()
+            .on_open_playlist(move |id| {
+                nav::record(nav::NavEntry::Playlist(id.to_string()));
+                navigate_playlist(
+                    runtime.clone(),
+                    weak.clone(),
+                    &handle,
+                    image_cache.clone(),
+                    id.to_string(),
+                );
+                if let Some(w) = weak.upgrade() {
+                    update_nav_flags(&w);
+                }
+            });
+    }
+    {
+        let weak = window.as_weak();
+        window
+            .global::<SidebarActions>()
+            .on_create_playlist(move || {
+                if let Some(w) = weak.upgrade() {
+                    w.global::<CreatePlaylistState>().set_name("".into());
+                    w.global::<CreatePlaylistState>().set_is_public(false);
+                    w.global::<CreatePlaylistState>().set_creating(false);
+                    w.global::<CreatePlaylistState>().set_open(true);
+                }
+            });
+    }
+    {
+        let weak = window.as_weak();
+        window
+            .global::<CreatePlaylistActions>()
+            .on_close(move || {
+                if let Some(w) = weak.upgrade() {
+                    w.global::<CreatePlaylistState>().set_open(false);
+                }
+            });
+    }
+    {
+        // Create the playlist, then refresh the sidebar + open it.
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        let image_cache = image_cache.clone();
+        window
+            .global::<CreatePlaylistActions>()
+            .on_submit(move || {
+                let Some(w) = weak.upgrade() else {
+                    return;
+                };
+                let state = w.global::<CreatePlaylistState>();
+                let name = state.get_name().to_string();
+                let is_public = state.get_is_public();
+                if name.trim().is_empty() || state.get_creating() {
+                    return;
+                }
+                state.set_creating(true);
+                let runtime = runtime.clone();
+                let weak = weak.clone();
+                let handle = handle.clone();
+                let image_cache = image_cache.clone();
+                handle.clone().spawn(async move {
+                    match runtime.core().create_playlist(name.trim(), None, is_public).await {
+                        Ok(playlist) => {
+                            let new_id = playlist.id.to_string();
+                            let weak2 = weak.clone();
+                            let r2 = runtime.clone();
+                            let h2 = handle.clone();
+                            let ic2 = image_cache.clone();
+                            let _ = weak.upgrade_in_event_loop(move |w| {
+                                w.global::<CreatePlaylistState>().set_creating(false);
+                                w.global::<CreatePlaylistState>().set_open(false);
+                                load_sidebar_playlists(r2.clone(), weak2.clone(), &h2);
+                                nav::record(nav::NavEntry::Playlist(new_id.clone()));
+                                navigate_playlist(r2, weak2.clone(), &h2, ic2, new_id);
+                                update_nav_flags(&w);
+                            });
+                        }
+                        Err(e) => {
+                            log::error!("[qbz-slint] create playlist failed: {e}");
+                            let _ = weak.upgrade_in_event_loop(|w| {
+                                w.global::<CreatePlaylistState>().set_creating(false);
+                            });
+                        }
+                    }
+                });
             });
     }
 

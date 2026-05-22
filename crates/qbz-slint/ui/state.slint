@@ -198,6 +198,39 @@ export global AlbumActions {
 // Which content view the shell shows.
 export enum ContentView { home, album, artist, settings, search, musician, label, location, favorites, mix, playlist }
 
+// One row in the sidebar playlists list.
+export struct SidebarPlaylistItem {
+    id: string,
+    name: string,
+}
+
+// The sidebar's playlists list (the user's own playlists). Populated
+// by crate::sidebar on shell entry and after create/delete.
+export global SidebarState {
+    in property <[SidebarPlaylistItem]> playlists: [];
+    in property <bool> loading: false;
+    // The currently-open playlist id, for the active-row highlight.
+    in property <string> active-id;
+}
+
+export global SidebarActions {
+    callback open-playlist(string /* id */);
+    callback create-playlist();
+}
+
+// "Create playlist" modal state.
+export global CreatePlaylistState {
+    in-out property <bool> open: false;
+    in-out property <string> name;
+    in-out property <bool> is-public: false;
+    in property <bool> creating: false;
+}
+
+export global CreatePlaylistActions {
+    callback submit();
+    callback close();
+}
+
 // Playlist detail screen state. Rows reuse the shared TrackRow
 // (show-artwork + show-album); populated by crate::playlist.
 export global PlaylistState {
