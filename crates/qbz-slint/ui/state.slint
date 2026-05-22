@@ -245,6 +245,10 @@ export global PlaylistState {
     in property <bool> is-favorite: false;
     // True when the playlist is one of the user's own (editable).
     in property <bool> is-owner: false;
+    // Track edit mode — rows show a selection checkbox and a bulk bar
+    // appears (remove selected). Only available to the owner.
+    in-out property <bool> multi-select-mode: false;
+    in property <int> selected-count: 0;
     in property <[TrackItem]> tracks: [];
     in property <bool> loading: false;
 }

@@ -184,6 +184,17 @@ export component PlaylistView inherits Rectangle {
                                 }
                             }
                         }
+                        // Select tracks (multi-select edit mode).
+                        if PlaylistState.is-owner && PlaylistState.tracks.length > 0: VerticalLayout {
+                            alignment: center;
+                            CircleAction {
+                                icon: @image-url("../assets/icons/square-check-big.svg");
+                                active: PlaylistState.multi-select-mode;
+                                clicked => {
+                                    root.media-action("playlist", "", "select-toggle");
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -248,12 +259,77 @@ export component PlaylistView inherits Rectangle {
             }
             Rectangle { height: 6px; }
 
+            // Bulk action bar — visible in edit mode.
+            if PlaylistState.multi-select-mode: Rectangle {
+                height: 44px;
+                border-radius: 8px;
+                background: Theme.surface-elevated;
+                HorizontalLayout {
+                    padding-left: 14px;
+                    padding-right: 10px;
+                    spacing: 12px;
+                    Text {
+                        text: PlaylistState.selected-count + " " + @tr("selected");
+                        color: Theme.text-secondary;
+                        font-size: Typography.body;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                    }
+                    pill-all := Rectangle {
+                        width: all-label.preferred-width + 24px;
+                        height: 30px;
+                        border-radius: Radius.sm;
+                        background: all-ta.has-hover ? Theme.surface-hover : transparent;
+                        all-label := Text {
+                            text: @tr("Select all");
+                            color: Theme.text-secondary;
+                            font-size: Typography.legal;
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
+                        }
+                        all-ta := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                root.media-action("playlist", "", "select-all");
+                            }
+                        }
+                    }
+                    pill-remove := Rectangle {
+                        width: rm-label.preferred-width + 24px;
+                        height: 30px;
+                        border-radius: Radius.sm;
+                        opacity: PlaylistState.selected-count > 0 ? 1.0 : 0.5;
+                        background: rm-ta.has-hover ? #ef444433 : transparent;
+                        border-width: 1px;
+                        border-color: #ef4444;
+                        rm-label := Text {
+                            text: @tr("Remove");
+                            color: #ef4444;
+                            font-size: Typography.legal;
+                            font-weight: Typography.medium;
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
+                        }
+                        rm-ta := TouchArea {
+                            mouse-cursor: PlaylistState.selected-count > 0 ? pointer : default;
+                            clicked => {
+                                if (PlaylistState.selected-count > 0) {
+                                    root.media-action("playlist", "", "remove-selected");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if PlaylistState.multi-select-mode: Rectangle { height: 8px; }
+
             for track[i] in PlaylistState.tracks: TrackRow {
                 track: track;
                 index: i;
                 show-artwork: true;
                 show-album: true;
                 show-favorite: true;
+                multi-select-mode: PlaylistState.multi-select-mode;
                 media-action(kind, id, action) => {
                     if (action == "play") {
                         root.play-track(id);

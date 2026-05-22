@@ -1435,12 +1435,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     });
                 }
                 ("track", "toggle-select") => {
-                    // Multi-select foundation — flips `selected` on the
-                    // matching row in ArtistState.top-tracks. Other
-                    // track-row contexts (album, search) will be wired as
-                    // selection lands there.
+                    // Flip `selected` on the matching row, in whichever
+                    // multi-select surface is showing: the playlist
+                    // detail or the artist Popular Tracks.
                     if let Some(w) = weak.upgrade() {
-                        let model = w.global::<ArtistState>().get_top_tracks();
+                        let model = if w.global::<NavState>().get_view() == ContentView::Playlist {
+                            w.global::<PlaylistState>().get_tracks()
+                        } else {
+                            w.global::<ArtistState>().get_top_tracks()
+                        };
                         if let Some(vm) = model
                             .as_any()
                             .downcast_ref::<slint::VecModel<TrackItem>>()
@@ -1454,6 +1457,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     }
                                 }
                             }
+                        }
+                        if w.global::<NavState>().get_view() == ContentView::Playlist {
+                            playlist::recount_selected(&w);
                         }
                     }
                 }
@@ -1549,6 +1555,53 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 log::error!("[qbz-slint] toggle playlist favorite failed: {e}");
                             }
                         });
+                    }
+                }
+                ("playlist", "select-toggle") => {
+                    if let Some(w) = weak.upgrade() {
+                        let on = w.global::<PlaylistState>().get_multi_select_mode();
+                        playlist::set_multi_select(&w, !on);
+                    }
+                }
+                ("playlist", "select-all") => {
+                    if let Some(w) = weak.upgrade() {
+                        playlist::select_all(&w);
+                    }
+                }
+                ("playlist", "remove-selected") => {
+                    if let Some(w) = weak.upgrade() {
+                        let pid = w.global::<PlaylistState>().get_id().to_string();
+                        let ids = playlist::selected_ids(&w);
+                        if let (Ok(pid), false) = (pid.parse::<u64>(), ids.is_empty()) {
+                            let runtime = runtime.clone();
+                            let weak = weak.clone();
+                            let handle = handle.clone();
+                            let image_cache = image_cache.clone();
+                            handle.clone().spawn(async move {
+                                match runtime
+                                    .core()
+                                    .remove_tracks_from_playlist(pid, &ids)
+                                    .await
+                                {
+                                    Ok(()) => {
+                                        // Reload the playlist + leave edit mode.
+                                        let _ = weak.upgrade_in_event_loop(|w| {
+                                            playlist::set_multi_select(&w, false);
+                                        });
+                                        navigate_playlist(
+                                            runtime.clone(),
+                                            weak.clone(),
+                                            &handle,
+                                            image_cache.clone(),
+                                            pid.to_string(),
+                                        );
+                                    }
+                                    Err(e) => log::error!(
+                                        "[qbz-slint] remove tracks from playlist failed: {e}"
+                                    ),
+                                }
+                            });
+                        }
                     }
                 }
                 ("playlist", "edit") => {
