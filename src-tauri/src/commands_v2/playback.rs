@@ -26,12 +26,51 @@ use super::cached_audio_incompatible_with_hw;
 
 // ==================== Prefetch (V2) ====================
 
-/// Number of Qobuz tracks to prefetch — resolved per-host from the
-/// detected memory profile. Normal hosts get 5 tracks (~2 minutes
-/// of HiRes cache ahead); LowMemory hosts (issue #331) get 1 to keep
-/// the in-memory footprint manageable on devices like the Pi 3B.
-fn v2_prefetch_count() -> usize {
+/// Memory-profile default number of Qobuz tracks to prefetch. Normal
+/// hosts get 5 (~2 minutes of HiRes cache ahead); LowMemory hosts
+/// (issue #331) get 1 to keep the in-memory footprint manageable on
+/// devices like the Pi 3B. This is the upper bound the adaptive
+/// throttle is allowed to walk back up to — it never raises above this.
+fn v2_prefetch_count_default() -> usize {
     qbz_core::system_capabilities::memory_profile().prefetch_count
+}
+
+/// Translate the active playback `Quality` into the throttle's coarse
+/// quality bucket, used to estimate the live stream's sustained
+/// bandwidth requirement (MB/s). Inputs to `current_prefetch_cap()`.
+fn quality_to_throttle_tag(q: qbz_models::Quality) -> qbz_audio::network_throttle::PlaybackQualityTag {
+    use qbz_audio::network_throttle::PlaybackQualityTag;
+    use qbz_models::Quality;
+    match q {
+        Quality::UltraHiRes => PlaybackQualityTag::UltraHiRes,
+        Quality::HiRes => PlaybackQualityTag::HiRes,
+        Quality::Lossless => PlaybackQualityTag::Lossless,
+        Quality::Mp3 => PlaybackQualityTag::Lossy,
+    }
+}
+
+/// Adaptive prefetch cap. Starts at the memory-profile default and gets
+/// scaled down by the network-throttle state based on observed
+/// bandwidth and recent audio underruns. The throttle never raises the
+/// cap above the memory-profile default, so a user with a fat
+/// connection still gets the full 5-track fan-out the firmware intends.
+fn v2_prefetch_count(quality: qbz_models::Quality) -> usize {
+    let default_cap = v2_prefetch_count_default();
+    let tag = quality_to_throttle_tag(quality);
+    let playback_mbps = qbz_audio::network_throttle::playback_mbps_for_quality(tag);
+    let throttled_cap = qbz_audio::network_throttle::state()
+        .current_prefetch_cap(playback_mbps, default_cap);
+    if throttled_cap < default_cap {
+        log::debug!(
+            "[V2/PREFETCH] Adaptive cap: {} (down from default {}). bw={:?} MB/s, panic={}, playback_need={:.2} MB/s",
+            throttled_cap,
+            default_cap,
+            qbz_audio::network_throttle::state().current_bandwidth_mbps(),
+            qbz_audio::network_throttle::state().in_panic_mode(),
+            playback_mbps,
+        );
+    }
+    throttled_cap
 }
 
 /// How far ahead to look for tracks to prefetch (to handle mixed playlists
@@ -98,7 +137,7 @@ fn spawn_v2_prefetch_with_hw_check(
 
     let mut qobuz_prefetched = 0;
 
-    let prefetch_cap = v2_prefetch_count();
+    let prefetch_cap = v2_prefetch_count(quality);
     for track in upcoming_tracks {
         // Stop once we've prefetched enough Qobuz tracks
         if qobuz_prefetched >= prefetch_cap {

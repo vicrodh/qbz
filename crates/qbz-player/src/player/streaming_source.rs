@@ -282,6 +282,15 @@ impl BufferedMediaSource {
     ///
     /// Used to store in cache after streaming playback completes.
     /// Returns None if download is not complete or failed.
+    ///
+    /// IMPORTANT: This clones the buffer rather than moving it. Earlier
+    /// attempts to use `mem::take` here regressed playback — the
+    /// `Source` impl is still actively reading from `state.data` when
+    /// the promotion path calls this, and zeroing the buffer out from
+    /// under the reader caused immediate EOF (tracks ending 10s into a
+    /// 104s file). Cloning is the safe choice; the audible hiccup at
+    /// promotion that the move attempted to fix needs a different
+    /// approach (shared `Arc<Vec<u8>>` ownership, or off-thread copy).
     pub fn take_complete_data(&self) -> Option<Vec<u8>> {
         let (lock, _) = &*self.state;
         if let Ok(state) = lock.lock() {

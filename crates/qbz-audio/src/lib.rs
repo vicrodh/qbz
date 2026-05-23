@@ -45,6 +45,7 @@ pub mod dynamic_amplify;
 pub mod loudness;
 pub mod loudness_analyzer;
 pub mod loudness_cache;
+pub mod network_throttle;
 pub mod output_sinks;
 pub mod settings;
 pub mod visualizer;
