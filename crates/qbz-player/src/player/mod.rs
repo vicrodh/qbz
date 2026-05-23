@@ -642,10 +642,11 @@ struct StreamRecreateDecision {
 }
 
 /// Read settings once and evaluate every condition that forces a stream
-/// rebuild: format change on backends that demand bit-perfect output (DAC
-/// passthrough, ALSA Direct, CoreAudio Exclusive) and CoreAudio shared-mode
-/// rate drift (CPAL caches the device rate at open time, so when the OS
-/// nominal rate moves we must rebuild or playback runs at the wrong speed).
+/// rebuild: any decoded-format change (sample rate / channels — the output
+/// stream must follow the track's native rate on every backend, #449) and
+/// CoreAudio shared-mode rate drift (CPAL caches the device rate at open
+/// time, so when the OS nominal rate moves we must rebuild or playback runs
+/// at the wrong speed).
 ///
 /// `current_track_sample_rate` / `current_track_channels` describe the last
 /// *decoded source* format and are compared to the incoming `sample_rate` /
@@ -732,16 +733,20 @@ fn evaluate_stream_recreate(
 fn compute_needs_new_stream(
     has_stream: bool,
     format_changed: bool,
-    dac_passthrough: bool,
-    using_alsa_direct: bool,
-    using_coreaudio_exclusive: bool,
+    _dac_passthrough: bool,
+    _using_alsa_direct: bool,
+    _using_coreaudio_exclusive: bool,
     coreaudio_shared_rate_mismatch: bool,
 ) -> bool {
-    !has_stream
-        || (dac_passthrough && format_changed)
-        || (using_alsa_direct && format_changed)
-        || (using_coreaudio_exclusive && format_changed)
-        || coreaudio_shared_rate_mismatch
+    // A decoded-format change (sample rate or channel count) requires a fresh
+    // output stream on EVERY backend so the device follows the track's native
+    // rate (#449). The bit-perfect flags used to gate this, which was correct
+    // only while Stop dropped the stream; once that drop was deferred to avoid
+    // a track-change click (e93fcaec), the default/PipeWire path stopped
+    // switching rates and stayed locked to the first track. Same-rate tracks
+    // keep reusing the stream (format_changed == false), preserving the click
+    // fix.
+    !has_stream || format_changed || coreaudio_shared_rate_mismatch
 }
 
 /// Try to create output stream using the backend system (if configured)
@@ -3668,10 +3673,16 @@ mod tests {
     }
 
     #[test]
-    fn format_change_alone_does_not_force_rebuild_on_default_backend() {
-        // Rodio handles sample-rate conversion; a format change without a
-        // bit-perfect backend does not require a new stream.
-        assert!(!compute_needs_new_stream(
+    fn format_change_on_default_backend_rebuilds_for_native_rate() {
+        // #449 regression guard: a decoded sample-rate/channel change must
+        // rebuild the output stream on EVERY backend, not just the bit-perfect
+        // ones, so the device follows the track's native rate. 1.2.10 got this
+        // "for free" because Stop dropped the stream; once that drop was
+        // deferred to avoid a track-change click (e93fcaec), reusing the stream
+        // on the default/PipeWire backend left the node locked to the first
+        // track's rate for every subsequent track. Same-rate tracks still
+        // reuse (format_changed == false), preserving the click fix.
+        assert!(compute_needs_new_stream(
             true, true, false, false, false, false
         ));
     }
