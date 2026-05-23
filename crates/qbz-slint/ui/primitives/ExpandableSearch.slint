@@ -1,0 +1,137 @@
+// Reusable expandable page-search — the exact pattern from the JUMP TO
+// bar (ArtistView): a magnifier that, on click, opens a right-anchored
+// input that grows to the LEFT (over whatever sits to its left), with
+// a leading magnifier glyph + a trailing X that clears and closes.
+//
+// Self-contained: occupies a small fixed footprint when closed; the
+// open overlay overflows to the left, so nothing to its right moves.
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Typography } from "../foundation/typography.slint";
+import { QbzIcon } from "QbzIcon.slint";
+
+export component ExpandableSearch inherits Rectangle {
+    in property <string> placeholder: "Search…";
+    in property <length> max-open-width: 216px;
+    in-out property <bool> open: false;
+    in-out property <string> query;
+    callback edited(string);
+
+    changed open => {
+        if (root.open) {
+            input.focus();
+        }
+    }
+
+    // Closed footprint — just the magnifier slot.
+    width: 34px;
+    height: 34px;
+
+    // Closed: the magnifier toggle.
+    Rectangle {
+        visible: !root.open;
+        width: 34px;
+        height: 34px;
+        border-radius: 6px;
+        background: open-ta.has-hover ? Theme.surface-hover : transparent;
+        QbzIcon {
+            source: @image-url("../assets/icons/search.svg");
+            width: 16px;
+            height: 16px;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            tint: open-ta.has-hover ? Theme.text-primary : Theme.text-muted;
+        }
+        open-ta := TouchArea {
+            mouse-cursor: pointer;
+            clicked => {
+                root.open = true;
+            }
+        }
+    }
+
+    // Open: right-anchored overlay that grows left.
+    overlay := Rectangle {
+        visible: root.open;
+        x: parent.width - self.width;
+        width: root.open ? root.max-open-width : 0px;
+        height: 34px;
+        background: Theme.surface-card;
+        border-radius: 6px;
+        border-width: 1px;
+        border-color: input.has-focus ? Theme.accent : Theme.border-subtle;
+        clip: true;
+        animate width { duration: 200ms; easing: ease-in-out; }
+
+        HorizontalLayout {
+            padding-left: 11px;
+            padding-right: 5px;
+            spacing: 8px;
+            // Leading magnifier glyph (decorative).
+            VerticalLayout {
+                horizontal-stretch: 0;
+                alignment: center;
+                QbzIcon {
+                    source: @image-url("../assets/icons/search.svg");
+                    width: 14px;
+                    height: 14px;
+                    tint: Theme.text-muted;
+                }
+            }
+            // Input + placeholder.
+            Rectangle {
+                horizontal-stretch: 1;
+                clip: true;
+                input := TextInput {
+                    width: 100%;
+                    height: 100%;
+                    color: Theme.text-primary;
+                    font-size: Typography.body;
+                    vertical-alignment: center;
+                    single-line: true;
+                    text <=> root.query;
+                    edited => {
+                        root.edited(self.text);
+                    }
+                }
+                Text {
+                    visible: input.text == "";
+                    width: 100%;
+                    height: 100%;
+                    text: root.placeholder;
+                    color: Theme.text-muted;
+                    font-size: Typography.body;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+            }
+            // Trailing X — clears + closes (back to the magnifier).
+            VerticalLayout {
+                horizontal-stretch: 0;
+                alignment: center;
+                Rectangle {
+                    width: 24px;
+                    height: 24px;
+                    border-radius: 4px;
+                    background: clear-ta.has-hover ? Theme.surface-elevated : transparent;
+                    QbzIcon {
+                        source: @image-url("../assets/icons/x.svg");
+                        width: 12px;
+                        height: 12px;
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        tint: clear-ta.has-hover ? Theme.text-primary : Theme.text-muted;
+                    }
+                    clear-ta := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            root.query = "";
+                            root.edited("");
+                            root.open = false;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

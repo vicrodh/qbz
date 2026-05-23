@@ -14,6 +14,7 @@ import { PlaylistPickerModal } from "../primitives/PlaylistPickerModal.slint";
 import { CreatePlaylistModal } from "../primitives/CreatePlaylistModal.slint";
 import { EditPlaylistModal } from "../primitives/EditPlaylistModal.slint";
 import { CreateFolderModal } from "../primitives/CreateFolderModal.slint";
+import { DragGhost } from "../primitives/DragGhost.slint";
 import { PlayerBar } from "PlayerBar.slint";
 import { QueueSidebar } from "QueueSidebar.slint";
 import { LyricsSidebar } from "LyricsSidebar.slint";
@@ -237,4 +238,7 @@ export component AppShell inherits Rectangle {
 
     // Global "Create folder" modal.
     CreateFolderModal { }
+
+    // Floating track-drag ghost (follows the cursor, on top of all).
+    DragGhost { }
 }

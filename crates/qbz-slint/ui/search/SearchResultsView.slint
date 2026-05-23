@@ -8,7 +8,7 @@
 // per-type tabs show the full loaded set as a card grid or row list with
 // a load-more button.
 
-import { SearchState, SearchActions, TrackItem, SearchPlaylistItem, AlbumCardItem, SlimItem } from "../state.slint";
+import { SearchState, SearchActions, TrackItem, SearchPlaylistItem, AlbumCardItem, SlimItem, DragState } from "../state.slint";
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
 import { Radius } from "../foundation/radius.slint";
@@ -420,6 +420,7 @@ export component SearchResultsView inherits Rectangle {
 
         // --- Scrollable results body ------------------------------------
         Flickable {
+            interactive: !DragState.active;
             vertical-stretch: 1;
             viewport-width: self.width;
             viewport-height: body.preferred-height;

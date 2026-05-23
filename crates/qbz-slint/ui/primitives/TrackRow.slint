@@ -18,7 +18,7 @@
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
 import { Radius } from "../foundation/radius.slint";
-import { TrackItem } from "../state.slint";
+import { TrackItem, DragActions } from "../state.slint";
 import { QbzIcon } from "QbzIcon.slint";
 import { TrackPlayCell } from "TrackPlayCell.slint";
 import { TrackContextMenu } from "TrackContextMenu.slint";
@@ -31,6 +31,11 @@ export component TrackRow inherits Rectangle {
     in property <bool> show-favorite: false;
     in property <bool> show-download: false;
     in property <bool> multi-select-mode: false;
+    // Custom-order reorder controls (up/down chevrons) at the leading
+    // edge — used by the playlist custom sort.
+    in property <bool> show-reorder: false;
+    // Whether the row can be dragged onto sidebar playlists.
+    in property <bool> draggable: true;
     callback media-action(string, string, string);
 
     // Explicit track number, else the 1-based list position.
@@ -39,20 +44,106 @@ export component TrackRow inherits Rectangle {
     property <bool> row-hovered:
         ta.has-hover || play-cell.hovered || more-ta.has-hover;
 
-    height: 56px;
+    height: 50px;
     border-radius: 8px;
     background: root.row-hovered
         ? #ffffff16
         : (Math.mod(root.index, 2) == 1 ? #ffffff07 : transparent);
 
+    // Background TouchArea — also the drag source. Pressing the row
+    // body (not the play/fav/more controls, which sit on top) and
+    // moving past a threshold begins a track drag onto the sidebar
+    // playlists. Global coords = the row's absolute-position + the
+    // pointer offset; the TouchArea grabs on press so moves keep
+    // arriving even once the pointer leaves the row.
     ta := TouchArea {
         mouse-cursor: default;
+        property <length> down-x;
+        property <length> down-y;
+        property <bool> dragging: false;
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.down) {
+                ta.down-x = root.absolute-position.x + ta.mouse-x;
+                ta.down-y = root.absolute-position.y + ta.mouse-y;
+                ta.dragging = false;
+            }
+            if (e.kind == PointerEventKind.up && ta.dragging) {
+                DragActions.end();
+                ta.dragging = false;
+            }
+        }
+        moved => {
+            if (ta.pressed && root.draggable) {
+                if (!ta.dragging
+                    && (Math.abs(root.absolute-position.x + ta.mouse-x - ta.down-x) > 6px
+                     || Math.abs(root.absolute-position.y + ta.mouse-y - ta.down-y) > 6px)) {
+                    ta.dragging = true;
+                    debug("DRAG absx=", root.absolute-position.x, " absy=", root.absolute-position.y,
+                          " mx=", ta.mouse-x, " my=", ta.mouse-y);
+                    DragActions.start(
+                        root.track.id,
+                        root.track.title,
+                        root.track.album != ""
+                            ? root.track.artist + " · " + root.track.album
+                            : root.track.artist,
+                        root.absolute-position.x + ta.mouse-x,
+                        root.absolute-position.y + ta.mouse-y);
+                }
+                if (ta.dragging) {
+                    DragActions.move(
+                        root.absolute-position.x + ta.mouse-x,
+                        root.absolute-position.y + ta.mouse-y);
+                }
+            }
+        }
     }
 
     HorizontalLayout {
         padding-left: 12px;
         padding-right: 12px;
         spacing: 14px;
+
+        // Reorder chevrons (custom-order mode) — leading edge.
+        if root.show-reorder: VerticalLayout {
+            alignment: center;
+            spacing: 0px;
+            Rectangle {
+                width: 22px;
+                height: 18px;
+                QbzIcon {
+                    source: @image-url("../assets/icons/chevron-up.svg");
+                    width: 14px;
+                    height: 14px;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    tint: up-ta.has-hover ? Theme.text-primary : Theme.text-muted;
+                }
+                up-ta := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        root.media-action("track", root.track.id, "move-up");
+                    }
+                }
+            }
+            Rectangle {
+                width: 22px;
+                height: 18px;
+                QbzIcon {
+                    source: @image-url("../assets/icons/chevron-down.svg");
+                    width: 14px;
+                    height: 14px;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    tint: down-ta.has-hover ? Theme.text-primary : Theme.text-muted;
+                }
+                down-ta := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        root.media-action("track", root.track.id, "move-down");
+                    }
+                }
+            }
+        }
 
         // Position number — only for artwork rows (the cover doesn't
         // carry the number; non-artwork rows show it in the play cell).
@@ -75,13 +166,14 @@ export component TrackRow inherits Rectangle {
         VerticalLayout {
             alignment: center;
             Rectangle {
-                width: root.show-artwork ? 40px : 32px;
-                height: root.show-artwork ? 40px : 28px;
+                width: root.show-artwork ? 36px : 32px;
+                height: root.show-artwork ? 36px : 28px;
                 play-cell := TrackPlayCell {
                     track-id: root.track.id;
                     number: root.number-text;
                     artwork: root.track.artwork;
                     show-artwork: root.show-artwork;
+                    art-size: 36px;
                     number-width: 32px;
                     row-hovered: root.row-hovered && !root.multi-select-mode;
                     visible: !root.multi-select-mode;
@@ -129,7 +221,7 @@ export component TrackRow inherits Rectangle {
                 Text {
                     text: root.track.title;
                     color: Theme.text-primary;
-                    font-size: Typography.body;
+                    font-size: Typography.link;
                     font-weight: Typography.medium;
                     vertical-alignment: center;
                     overflow: elide;
@@ -155,7 +247,7 @@ export component TrackRow inherits Rectangle {
             if root.track.artist != "": Text {
                 text: root.track.artist;
                 color: Theme.text-muted;
-                font-size: Typography.link;
+                font-size: Typography.legal;
                 overflow: elide;
             }
         }

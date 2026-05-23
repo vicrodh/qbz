@@ -17,6 +17,7 @@ import {
     ContentView,
     NetworkSidebarState,
     NetworkSidebarActions,
+    DragState,
 } from "../state.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { TrackRow } from "../primitives/TrackRow.slint";
@@ -159,6 +160,9 @@ export component ArtistPageView inherits Rectangle {
     // it can stay anchored on the right and fill the available height
     // independently of the page scroll.
     page-flickable := Flickable {
+        // Freeze scrolling while a track drag is in flight, so the
+        // dragged row (and thus the ghost position) doesn't drift.
+        interactive: !DragState.active;
         viewport-width: self.width;
         viewport-height: page.preferred-height;
 
@@ -290,7 +294,7 @@ export component ArtistPageView inherits Rectangle {
                     Text {
                         text: ArtistState.name;
                         color: Theme.text-primary;
-                        font-size: Typography.title;
+                        font-size: Typography.section;
                         font-weight: Typography.bold;
                         overflow: elide;
                     }
@@ -534,7 +538,7 @@ export component ArtistPageView inherits Rectangle {
 
             for track[index] in ArtistState.top-tracks: TrackRow {
                 visible: root.top-tracks-expanded || index < root.top-tracks-preview;
-                height: self.visible ? 56px : 0px;
+                height: self.visible ? 50px : 0px;
                 track: track;
                 index: index;
                 // Artist Popular Tracks: number cell (no cover), with

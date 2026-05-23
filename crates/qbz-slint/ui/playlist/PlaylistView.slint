@@ -6,9 +6,11 @@
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
 import { Radius } from "../foundation/radius.slint";
-import { PlaylistState } from "../state.slint";
+import { PlaylistState, PlaylistActions, DragState } from "../state.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { TrackRow } from "../primitives/TrackRow.slint";
+import { ExpandableSearch } from "../primitives/ExpandableSearch.slint";
+import { ListScrollbar } from "../primitives/ListScrollbar.slint";
 import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
 import { NavButtons } from "../shell/NavButtons.slint";
 import { ListView } from "std-widgets.slint";
@@ -48,6 +50,48 @@ component CircleAction inherits Rectangle {
     }
 }
 
+// One row in the Sort menu. The active field shows its direction arrow
+// (asc/desc); re-selecting it toggles direction.
+component SortOption inherits Rectangle {
+    in property <string> label;
+    in property <bool> active: false;
+    in property <bool> asc: true;
+    callback chosen();
+    height: 30px;
+    border-radius: 5px;
+    background: so-ta.has-hover ? Theme.surface-hover : transparent;
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 8px;
+        spacing: 6px;
+        Text {
+            text: root.label;
+            color: root.active ? Theme.text-primary : Theme.text-secondary;
+            font-size: Typography.legal;
+            font-weight: root.active ? Typography.semibold : Typography.regular;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+        }
+        VerticalLayout {
+            alignment: center;
+            if root.active: QbzIcon {
+                source: root.asc
+                    ? @image-url("../assets/icons/chevron-up.svg")
+                    : @image-url("../assets/icons/chevron-down.svg");
+                width: 13px;
+                height: 13px;
+                tint: Theme.accent;
+            }
+        }
+    }
+    so-ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.chosen();
+        }
+    }
+}
+
 export component PlaylistView inherits Rectangle {
     callback play-track(string);
     callback play-all();
@@ -56,33 +100,54 @@ export component PlaylistView inherits Rectangle {
     callback edit();
     callback media-action(string, string, string);
 
+    // Read-more description modal.
+    property <bool> show-description: false;
+
+    // Label for the active sort field.
+    property <string> sort-label:
+        PlaylistState.sort-field == "title" ? @tr("Title")
+        : PlaylistState.sort-field == "artist" ? @tr("Artist")
+        : PlaylistState.sort-field == "album" ? @tr("Album")
+        : PlaylistState.sort-field == "duration" ? @tr("Duration")
+        : PlaylistState.sort-field == "custom" ? @tr("Custom")
+        : @tr("Default");
+
     background: Theme.surface-main;
 
     page := VerticalLayout {
+            // Fill PlaylistView so the ListView's vertical-stretch has
+            // real height (otherwise it collapses to a single row).
+            width: 100%;
+            height: 100%;
             padding-left: 32px;
-            padding-right: 32px;
+            // Smaller right padding so the track list + scrollbar use
+            // the space instead of leaving a dead band on the right.
+            padding-right: 16px;
             padding-top: 11px;
+            padding-bottom: 16px;
             spacing: 0px;
-            alignment: start;
 
             HorizontalLayout {
+                vertical-stretch: 0;
                 alignment: start;
                 NavButtons { }
             }
 
+            // Same nav -> header separation as AlbumView (homologated).
             Rectangle { height: 22px; }
 
             // --- Header ------------------------------------------------
             HorizontalLayout {
-                spacing: 32px;
+                vertical-stretch: 0;
+                spacing: 24px;
                 alignment: start;
                 // Cover — custom artwork if set, else a 4-up collage of
                 // the first tracks' covers (Tauri parity), else the
                 // server playlist image, else the first track, else a
                 // placeholder.
                 cover-box := Rectangle {
-                    width: 224px;
-                    height: 224px;
+                    width: 150px;
+                    height: 150px;
                     border-radius: Radius.md;
                     background: Theme.surface-elevated;
                     clip: true;
@@ -112,12 +177,12 @@ export component PlaylistView inherits Rectangle {
                         HorizontalLayout {
                             spacing: 2px;
                             Image {
-                                width: 111px; height: 111px;
+                                width: (cover-box.width - 2px) / 2; height: (cover-box.width - 2px) / 2;
                                 source: PlaylistState.tracks[0].artwork;
                                 image-fit: cover;
                             }
                             Image {
-                                width: 111px; height: 111px;
+                                width: (cover-box.width - 2px) / 2; height: (cover-box.width - 2px) / 2;
                                 source: PlaylistState.tracks[1].artwork;
                                 image-fit: cover;
                             }
@@ -125,12 +190,12 @@ export component PlaylistView inherits Rectangle {
                         HorizontalLayout {
                             spacing: 2px;
                             Image {
-                                width: 111px; height: 111px;
+                                width: (cover-box.width - 2px) / 2; height: (cover-box.width - 2px) / 2;
                                 source: PlaylistState.tracks[2].artwork;
                                 image-fit: cover;
                             }
                             Image {
-                                width: 111px; height: 111px;
+                                width: (cover-box.width - 2px) / 2; height: (cover-box.width - 2px) / 2;
                                 source: PlaylistState.tracks[3].artwork;
                                 image-fit: cover;
                             }
@@ -226,24 +291,40 @@ export component PlaylistView inherits Rectangle {
                         font-weight: Typography.semibold;
                         letter-spacing: 1.5px;
                     }
-                    Rectangle { height: 6px; }
+                    Rectangle { height: 4px; }
                     Text {
                         text: PlaylistState.name;
                         color: Theme.text-primary;
-                        font-size: Typography.title;
+                        font-size: Typography.section;
                         font-weight: Typography.bold;
                         wrap: word-wrap;
                     }
-                    if PlaylistState.description != "": Rectangle { height: 8px; }
+                    if PlaylistState.description != "": Rectangle { height: 6px; }
                     if PlaylistState.description != "": Text {
-                        width: root.width - 320px;
-                        text: PlaylistState.description;
+                        width: root.width - 250px;
+                        text: PlaylistState.description-short;
                         color: Theme.text-secondary;
-                        font-size: Typography.body;
+                        font-size: Typography.legal;
                         wrap: word-wrap;
-                        overflow: elide;
                     }
-                    Rectangle { height: 10px; }
+                    if PlaylistState.description != PlaylistState.description-short: Rectangle { height: 3px; }
+                    if PlaylistState.description != PlaylistState.description-short: read-more := TouchArea {
+                        width: rm-row.preferred-width;
+                        height: 18px;
+                        mouse-cursor: pointer;
+                        clicked => {
+                            root.show-description = true;
+                        }
+                        rm-row := HorizontalLayout {
+                            Text {
+                                text: @tr("Read more");
+                                color: read-more.has-hover ? Theme.accent-hover : Theme.accent;
+                                font-size: Typography.legal;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                    Rectangle { height: 8px; }
                     Text {
                         text: PlaylistState.owner
                             + "  •  " + PlaylistState.track-count + " " + @tr("tracks")
@@ -251,10 +332,10 @@ export component PlaylistView inherits Rectangle {
                         color: Theme.text-secondary;
                         font-size: Typography.legal;
                     }
-                    Rectangle { height: 20px; }
-                    // Actions.
+                    Rectangle { height: 14px; }
+                    // Actions — buttons left, search + sort floating right.
                     HorizontalLayout {
-                        alignment: start;
+                        vertical-stretch: 0;
                         spacing: 12px;
                         CircleAction {
                             icon: @image-url("../assets/icons/play-fill.svg");
@@ -266,6 +347,7 @@ export component PlaylistView inherits Rectangle {
                             }
                         }
                         VerticalLayout {
+                            horizontal-stretch: 0;
                             alignment: center;
                             CircleAction {
                                 icon: @image-url("../assets/icons/shuffle.svg");
@@ -276,6 +358,7 @@ export component PlaylistView inherits Rectangle {
                             }
                         }
                         VerticalLayout {
+                            horizontal-stretch: 0;
                             alignment: center;
                             CircleAction {
                                 icon: @image-url("../assets/icons/heart.svg");
@@ -287,6 +370,7 @@ export component PlaylistView inherits Rectangle {
                         }
                         // Edit (rename / delete) — only the user's own.
                         if PlaylistState.is-owner: VerticalLayout {
+                            horizontal-stretch: 0;
                             alignment: center;
                             CircleAction {
                                 icon: @image-url("../assets/icons/pen-line.svg");
@@ -297,6 +381,7 @@ export component PlaylistView inherits Rectangle {
                         }
                         // Select tracks (multi-select edit mode).
                         if PlaylistState.is-owner && PlaylistState.tracks.length > 0: VerticalLayout {
+                            horizontal-stretch: 0;
                             alignment: center;
                             CircleAction {
                                 icon: @image-url("../assets/icons/square-check-big.svg");
@@ -306,13 +391,127 @@ export component PlaylistView inherits Rectangle {
                                 }
                             }
                         }
+
+                        // Spacer floats the search + sort to the right.
+                        Rectangle { horizontal-stretch: 1; }
+
+                        // In-playlist search (shared ExpandableSearch).
+                        VerticalLayout {
+                            horizontal-stretch: 0;
+                            alignment: center;
+                            ExpandableSearch {
+                                placeholder: @tr("Search tracks");
+                                max-open-width: 220px;
+                                edited(q) => {
+                                    PlaylistActions.search(q);
+                                }
+                            }
+                        }
+
+                        // Sort dropdown — fixed width so it never grows
+                        // when the active option changes.
+                        VerticalLayout {
+                            horizontal-stretch: 0;
+                            alignment: center;
+                            sort-anchor := Rectangle {
+                                height: 34px;
+                                width: 132px;
+                                border-radius: 6px;
+                                background: sort-ta.has-hover ? Theme.surface-hover : Theme.surface-elevated;
+                                border-width: 1px;
+                                border-color: Theme.border-subtle;
+                                sort-row := HorizontalLayout {
+                                    padding-left: 11px;
+                                    padding-right: 8px;
+                                    spacing: 5px;
+                                    Text {
+                                        text: @tr("Sort") + ": " + root.sort-label;
+                                        color: Theme.text-secondary;
+                                        font-size: Typography.legal;
+                                        vertical-alignment: center;
+                                        horizontal-stretch: 1;
+                                        overflow: elide;
+                                    }
+                                    VerticalLayout {
+                                        horizontal-stretch: 0;
+                                        alignment: center;
+                                        QbzIcon {
+                                            source: @image-url("../assets/icons/chevron-down.svg");
+                                            width: 13px;
+                                            height: 13px;
+                                            tint: Theme.text-muted;
+                                        }
+                                    }
+                                }
+                                sort-ta := TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => {
+                                        sort-menu.show();
+                                    }
+                                }
+                                sort-menu := PopupWindow {
+                                    x: sort-anchor.width - 172px;
+                                    y: 38px;
+                                    width: 172px;
+                                    Rectangle {
+                                        background: Theme.surface-card;
+                                        border-width: 1px;
+                                        border-color: Theme.border-subtle;
+                                        border-radius: 8px;
+                                        drop-shadow-blur: 20px;
+                                        drop-shadow-color: #00000080;
+                                        VerticalLayout {
+                                            padding: 6px;
+                                            spacing: 1px;
+                                            SortOption {
+                                                label: @tr("Default");
+                                                active: PlaylistState.sort-field == "default";
+                                                chosen => { PlaylistActions.set-sort("default"); }
+                                            }
+                                            SortOption {
+                                                label: @tr("Title");
+                                                active: PlaylistState.sort-field == "title";
+                                                asc: PlaylistState.sort-asc;
+                                                chosen => { PlaylistActions.set-sort("title"); }
+                                            }
+                                            SortOption {
+                                                label: @tr("Artist");
+                                                active: PlaylistState.sort-field == "artist";
+                                                asc: PlaylistState.sort-asc;
+                                                chosen => { PlaylistActions.set-sort("artist"); }
+                                            }
+                                            SortOption {
+                                                label: @tr("Album");
+                                                active: PlaylistState.sort-field == "album";
+                                                asc: PlaylistState.sort-asc;
+                                                chosen => { PlaylistActions.set-sort("album"); }
+                                            }
+                                            SortOption {
+                                                label: @tr("Duration");
+                                                active: PlaylistState.sort-field == "duration";
+                                                asc: PlaylistState.sort-asc;
+                                                chosen => { PlaylistActions.set-sort("duration"); }
+                                            }
+                                            // Manual order — enables the per-row
+                                            // up/down reorder controls.
+                                            SortOption {
+                                                label: @tr("Custom");
+                                                active: PlaylistState.sort-field == "custom";
+                                                chosen => { PlaylistActions.set-sort("custom"); }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
 
-            Rectangle { height: 28px; }
+            Rectangle { height: 18px; }
 
             if PlaylistState.loading: HorizontalLayout {
+                vertical-stretch: 0;
                 alignment: center;
                 LoadingSpinner { size: 36px; }
             }
@@ -323,9 +522,12 @@ export component PlaylistView inherits Rectangle {
             }
 
             // --- Track list column header ------------------------------
+            // Extra right padding (12 + 14px gutter) aligns the column
+            // labels with the rows, which are inset by the scrollbar.
             if PlaylistState.tracks.length > 0: HorizontalLayout {
+                vertical-stretch: 0;
                 padding-left: 12px;
-                padding-right: 12px;
+                padding-right: 26px;
                 spacing: 14px;
                 Text {
                     text: "#";
@@ -364,6 +566,8 @@ export component PlaylistView inherits Rectangle {
                 Rectangle { width: 28px; }
                 Rectangle { width: 32px; }
             }
+            // Breathing room between the column labels and the divider.
+            if PlaylistState.tracks.length > 0: Rectangle { height: 3px; }
             if PlaylistState.tracks.length > 0: Rectangle {
                 height: 1px;
                 background: Theme.border-subtle;
@@ -434,24 +638,36 @@ export component PlaylistView inherits Rectangle {
             }
             if PlaylistState.multi-select-mode: Rectangle { height: 8px; }
 
-            // Virtualized track list — only the visible rows are
-            // instantiated, so a 2000-track playlist stays smooth.
-            track-list := ListView {
+            // Virtualized track list (built-in scrollbar hidden — a
+            // custom one sits in its own gutter to the right).
+            HorizontalLayout {
                 vertical-stretch: 1;
-                for track[i] in PlaylistState.tracks: TrackRow {
-                    track: track;
-                    index: i;
-                    show-artwork: true;
-                    show-album: true;
-                    show-favorite: true;
-                    multi-select-mode: PlaylistState.multi-select-mode;
-                    media-action(kind, id, action) => {
-                        if (action == "play") {
-                            root.play-track(id);
-                        } else {
-                            root.media-action(kind, id, action);
+                spacing: 0px;
+                track-list := ListView {
+                    horizontal-stretch: 1;
+                    vertical-scrollbar-policy: ScrollBarPolicy.always-off;
+                    for track[i] in PlaylistState.tracks: TrackRow {
+                        track: track;
+                        index: i;
+                        show-artwork: true;
+                        show-album: true;
+                        show-favorite: true;
+                        show-reorder: PlaylistState.sort-field == "custom";
+                        multi-select-mode: PlaylistState.multi-select-mode;
+                        media-action(kind, id, action) => {
+                            if (action == "play") {
+                                root.play-track(id);
+                            } else {
+                                root.media-action(kind, id, action);
+                            }
                         }
                     }
+                }
+                ListScrollbar {
+                    horizontal-stretch: 0;
+                    viewport-height: track-list.viewport-height;
+                    visible-height: track-list.visible-height;
+                    viewport-y <=> track-list.viewport-y;
                 }
             }
     }
@@ -481,6 +697,72 @@ export component PlaylistView inherits Rectangle {
             mouse-cursor: pointer;
             clicked => {
                 track-list.viewport-y = 0;
+            }
+        }
+    }
+
+    // Read-more description modal (same treatment as Album / Artist).
+    if root.show-description: Rectangle {
+        background: #000000bf;
+        TouchArea {
+            mouse-cursor: default;
+            clicked => {
+                root.show-description = false;
+            }
+        }
+        Rectangle {
+            width: Math.min(root.width - 80px, 560px);
+            height: Math.min(root.height - 120px, 460px);
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            border-radius: Radius.md;
+            background: Theme.surface-card;
+            border-width: 1px;
+            border-color: Theme.border-subtle;
+            drop-shadow-blur: 32px;
+            drop-shadow-color: #00000080;
+            TouchArea { }
+            VerticalLayout {
+                padding: 24px;
+                spacing: 14px;
+                HorizontalLayout {
+                    Text {
+                        text: @tr("About this playlist");
+                        color: Theme.text-primary;
+                        font-size: Typography.section;
+                        font-weight: Typography.semibold;
+                        horizontal-stretch: 1;
+                        vertical-alignment: center;
+                    }
+                    desc-close := TouchArea {
+                        width: 28px;
+                        height: 28px;
+                        mouse-cursor: pointer;
+                        clicked => {
+                            root.show-description = false;
+                        }
+                        QbzIcon {
+                            source: @image-url("../assets/icons/x.svg");
+                            width: 18px;
+                            height: 18px;
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
+                            tint: desc-close.has-hover ? Theme.text-primary : Theme.text-muted;
+                        }
+                    }
+                }
+                Flickable {
+                    vertical-stretch: 1;
+                    viewport-width: self.width;
+                    viewport-height: desc-full.preferred-height;
+                    desc-full := Text {
+                        width: parent.width;
+                        text: PlaylistState.description;
+                        color: Theme.text-secondary;
+                        font-size: Typography.body;
+                        wrap: word-wrap;
+                    }
+                }
             }
         }
     }

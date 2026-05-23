@@ -1,0 +1,45 @@
+// Floating drag ghost — the dark pill that follows the cursor while
+// tracks are being dragged onto the sidebar. Mirrors Tauri's
+// setDragImage pill: "N tracks" for a group, or title + "artist ·
+// album" for one. Visual only (no TouchArea, so it never blocks the
+// pointer). Rendered once at the top of AppShell.
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Typography } from "../foundation/typography.slint";
+import { DragState } from "../state.slint";
+
+export component DragGhost inherits Rectangle {
+    if DragState.active: Rectangle {
+        x: DragState.pointer-x + 10px;
+        y: DragState.pointer-y + 14px;
+        width: pill.preferred-width;
+        height: pill.preferred-height;
+        border-radius: 8px;
+        background: #1e1e28e0;
+        border-width: 1px;
+        border-color: #ffffff1f;
+        drop-shadow-blur: 14px;
+        drop-shadow-color: #00000059;
+
+        pill := VerticalLayout {
+            padding-left: 14px;
+            padding-right: 14px;
+            padding-top: 8px;
+            padding-bottom: 8px;
+            spacing: 2px;
+            Text {
+                text: DragState.count > 1
+                    ? DragState.count + " " + @tr("tracks")
+                    : DragState.ghost-title;
+                color: #ffffff;
+                font-size: 12px;
+                font-weight: Typography.medium;
+            }
+            if DragState.count == 1 && DragState.ghost-subtitle != "": Text {
+                text: DragState.ghost-subtitle;
+                color: #ffffff8c;
+                font-size: 10px;
+            }
+        }
+    }
+}

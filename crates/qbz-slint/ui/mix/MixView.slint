@@ -8,7 +8,7 @@
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
 import { Radius } from "../foundation/radius.slint";
-import { MixState } from "../state.slint";
+import { MixState, DragState } from "../state.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { TrackRow } from "../primitives/TrackRow.slint";
 import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
@@ -67,6 +67,7 @@ export component MixView inherits Rectangle {
     background: Theme.surface-main;
 
     Flickable {
+        interactive: !DragState.active;
         viewport-width: self.width;
         viewport-height: page.preferred-height;
 
@@ -121,7 +122,7 @@ export component MixView inherits Rectangle {
                     Text {
                         text: MixState.title;
                         color: Theme.text-primary;
-                        font-size: Typography.title;
+                        font-size: Typography.section;
                         font-weight: Typography.bold;
                     }
                     Rectangle { height: 8px; }
@@ -235,6 +236,7 @@ export component MixView inherits Rectangle {
                 Rectangle { width: 28px; }
                 Rectangle { width: 32px; }
             }
+            if MixState.tracks.length > 0: Rectangle { height: 3px; }
             if MixState.tracks.length > 0: Rectangle {
                 height: 1px;
                 background: Theme.border-subtle;

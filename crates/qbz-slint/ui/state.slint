@@ -195,6 +195,32 @@ export global AlbumActions {
     callback search(string);
 }
 
+// Track drag-and-drop onto sidebar playlists (a star QBZ feature).
+// Slint has no HTML5 DnD, so this is pointer-based: the source row
+// grabs the pointer and feeds global coords here; the floating ghost
+// + each sidebar playlist row read this to self-detect the drop.
+export global DragState {
+    in-out property <bool> active: false;
+    // Dragged-track count + ghost text (count == 1 shows title +
+    // "artist · album"; count > 1 shows "N tracks").
+    in-out property <int> count: 0;
+    in-out property <string> ghost-title;
+    in-out property <string> ghost-subtitle;
+    // Global pointer position (window coords) while dragging.
+    in-out property <length> pointer-x;
+    in-out property <length> pointer-y;
+    // The sidebar playlist id currently under the pointer (drop target).
+    in-out property <string> over-playlist-id;
+}
+
+export global DragActions {
+    // Begin a track drag from a row. `track-id` is the row; the Rust
+    // side expands it to the multi-selection when applicable.
+    callback start(string /* track id */, string /* title */, string /* subtitle */, length, length);
+    callback move(length /* gx */, length /* gy */);
+    callback end();
+}
+
 // Which content view the shell shows.
 export enum ContentView { home, album, artist, settings, search, musician, label, location, favorites, mix, playlist }
 
@@ -269,6 +295,9 @@ export global PlaylistState {
     in property <string> name;
     in property <string> owner;
     in property <string> description;
+    // Truncated description for the header (~2 lines); full text in
+    // the Read-more modal. Equal to description when it fits.
+    in property <string> description-short;
     in property <int> track-count: 0;
     in property <string> total-duration;
     in property <string> cover-url;
@@ -285,6 +314,17 @@ export global PlaylistState {
     in property <int> selected-count: 0;
     in property <[TrackItem]> tracks: [];
     in property <bool> loading: false;
+    // Sort: "" / "default" = playlist order; else title|artist|album|
+    // duration. `sort-asc` flips on re-selecting the active field.
+    in property <string> sort-field: "default";
+    in property <bool> sort-asc: true;
+}
+
+export global PlaylistActions {
+    // Client-side filter of the visible track list by query.
+    callback search(string);
+    // Sort by a field (re-selecting the active field toggles asc/desc).
+    callback set-sort(string);
 }
 
 // "Edit playlist" modal state (rename + description + delete).

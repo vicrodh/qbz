@@ -16,6 +16,7 @@ import {
     FavoriteArtistItem,
     FavoritePlaylistItem,
     FavoriteLabelItem,
+    DragState,
 } from "../state.slint";
 import { AlbumCard } from "../discover/AlbumCard.slint";
 import { TrackRow } from "../primitives/TrackRow.slint";
@@ -247,6 +248,7 @@ export component FavoritesView inherits Rectangle {
     background: Theme.surface-main;
 
     Flickable {
+        interactive: !DragState.active;
         viewport-width: self.width;
         viewport-height: page.preferred-height;
 

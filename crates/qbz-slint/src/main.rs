@@ -35,6 +35,7 @@ mod play_history;
 mod strip_html;
 mod playback;
 mod queue;
+mod drag;
 mod folders;
 mod library_db;
 mod playlist;
@@ -685,6 +686,31 @@ fn navigate_playlist(
             artwork::spawn_loads(jobs, weak.clone(), image_cache.clone());
         }
     });
+}
+
+/// Resolve the track ids for a drag started on `track_id`. If the
+/// current view has a multi-selection that includes the dragged row
+/// (and is >1), the whole selection is dragged; otherwise just the
+/// row. Mirrors Tauri's group-drag rule.
+fn gather_drag_ids(w: &AppWindow, track_id: &str) -> Vec<u64> {
+    use slint::Model;
+    let view = w.global::<NavState>().get_view();
+    let model = match view {
+        ContentView::Playlist => Some(w.global::<PlaylistState>().get_tracks()),
+        ContentView::Artist => Some(w.global::<ArtistState>().get_top_tracks()),
+        _ => None,
+    };
+    if let Some(model) = model {
+        let selected: Vec<u64> = (0..model.row_count())
+            .filter_map(|i| model.row_data(i))
+            .filter(|t| t.selected)
+            .filter_map(|t| t.id.parse::<u64>().ok())
+            .collect();
+        if selected.len() > 1 && selected.iter().any(|&id| id.to_string() == track_id) {
+            return selected;
+        }
+    }
+    track_id.parse::<u64>().map(|id| vec![id]).unwrap_or_default()
 }
 
 /// Load (or reload) the sidebar playlists list off-thread.
@@ -1678,6 +1704,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         es.set_open(true);
                     }
                 }
+                ("track", "move-up") | ("track", "move-down") => {
+                    // Custom-order reorder (playlist view). Optimistic UI
+                    // move, then persist the full order off-thread.
+                    if let Some(w) = weak.upgrade() {
+                        let up = action == "move-up";
+                        let orders = playlist::move_track(&w, id.as_str(), up);
+                        let pid = w.global::<PlaylistState>().get_id().to_string();
+                        if !orders.is_empty() {
+                            if let Ok(pid) = pid.parse::<u64>() {
+                                handle.spawn(async move {
+                                    tokio::task::spawn_blocking(move || {
+                                        playlist::persist_custom(pid, orders);
+                                    })
+                                    .await
+                                    .ok();
+                                });
+                            }
+                        }
+                    }
+                }
                 ("playlist-track", track_id) => {
                     let idx = playlist::index_of(track_id);
                     let runtime = runtime.clone();
@@ -2479,6 +2525,104 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .on_close(move || {
                 if let Some(w) = weak.upgrade() {
                     w.global::<PlaylistPickerState>().set_open(false);
+                }
+            });
+    }
+
+    // Track drag onto sidebar playlists (a star QBZ feature).
+    {
+        let weak = window.as_weak();
+        window.global::<DragActions>().on_start(
+            move |track_id, title, subtitle, gx, gy| {
+                let Some(w) = weak.upgrade() else { return };
+                log::info!("[qbz-slint][drag] start gx={gx} gy={gy} (cursor should be here)");
+                let ids = gather_drag_ids(&w, track_id.as_str());
+                drag::set_dragged(ids.clone());
+                let ds = w.global::<DragState>();
+                ds.set_count(ids.len() as i32);
+                ds.set_ghost_title(title);
+                ds.set_ghost_subtitle(subtitle);
+                ds.set_pointer_x(gx);
+                ds.set_pointer_y(gy);
+                ds.set_over_playlist_id("".into());
+                ds.set_active(true);
+            },
+        );
+    }
+    {
+        let weak = window.as_weak();
+        window.global::<DragActions>().on_move(move |gx, gy| {
+            if let Some(w) = weak.upgrade() {
+                let ds = w.global::<DragState>();
+                ds.set_pointer_x(gx);
+                ds.set_pointer_y(gy);
+            }
+        });
+    }
+    {
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window.global::<DragActions>().on_end(move || {
+            let Some(w) = weak.upgrade() else { return };
+            let ds = w.global::<DragState>();
+            let pid = ds.get_over_playlist_id().to_string();
+            ds.set_active(false);
+            ds.set_over_playlist_id("".into());
+            let ids = drag::dragged();
+            drag::clear();
+            if let (Ok(pid), false) = (pid.parse::<u64>(), ids.is_empty()) {
+                let runtime = runtime.clone();
+                handle.spawn(async move {
+                    match runtime.core().add_tracks_to_playlist(pid, &ids).await {
+                        Ok(()) => log::info!(
+                            "[qbz-slint] dropped {} track(s) onto playlist {pid}",
+                            ids.len()
+                        ),
+                        Err(e) => log::error!("[qbz-slint] drop add to playlist failed: {e}"),
+                    }
+                });
+            }
+        });
+    }
+
+    // Playlist in-page track search (client-side filter).
+    {
+        let weak = window.as_weak();
+        window
+            .global::<PlaylistActions>()
+            .on_search(move |query| {
+                if let Some(w) = weak.upgrade() {
+                    playlist::filter_tracks(&w, query.as_str());
+                }
+            });
+    }
+    {
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window
+            .global::<PlaylistActions>()
+            .on_set_sort(move |field| {
+                let Some(w) = weak.upgrade() else { return; };
+                playlist::set_sort(&w, field.as_str());
+                // Entering custom: load (or seed) the local order, then
+                // re-render. Off-thread (opens library.db).
+                if field.as_str() == "custom" {
+                    let pid = w.global::<PlaylistState>().get_id().to_string();
+                    if let Ok(pid) = pid.parse::<u64>() {
+                        let ids = playlist::current_track_ids();
+                        let weak = weak.clone();
+                        handle.spawn(async move {
+                            let orders = tokio::task::spawn_blocking(move || {
+                                playlist::load_or_init_custom(pid, ids)
+                            })
+                            .await
+                            .unwrap_or_default();
+                            let _ = weak.upgrade_in_event_loop(move |w| {
+                                playlist::apply_custom_order(&w, orders);
+                            });
+                        });
+                    }
                 }
             });
     }

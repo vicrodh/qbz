@@ -1,0 +1,65 @@
+// Custom vertical scrollbar for a ListView — Slint's built-in one is
+// too thin and its thumb has no minimum size, so on a thousands-row
+// list it shrinks to a sliver. This sits in its own gutter (not over
+// the rows), is thicker, keeps a minimum thumb height, and is
+// draggable. Bind `viewport-y` two-way to the ListView and feed it the
+// list's viewport/visible heights.
+
+import { Theme } from "../foundation/semantic-colors.slint";
+
+export component ListScrollbar inherits Rectangle {
+    in property <length> viewport-height;
+    in property <length> visible-height;
+    in-out property <length> viewport-y;
+
+    // Only meaningful when the content overflows.
+    property <length> max-scroll: max(0px, root.viewport-height - root.visible-height);
+    property <length> thumb-h:
+        root.viewport-height > 0px
+            ? max(48px, root.visible-height / root.viewport-height * root.height)
+            : root.height;
+    property <length> travel: max(0px, root.height - root.thumb-h);
+
+    width: 14px;
+    visible: root.max-scroll > 0px;
+
+    // Track.
+    Rectangle {
+        width: 6px;
+        x: (parent.width - self.width) / 2;
+        height: 100%;
+        background: #ffffff12;
+        border-radius: 3px;
+    }
+
+    // Thumb.
+    thumb := Rectangle {
+        width: bar-ta.has-hover || bar-ta.pressed ? 10px : 8px;
+        x: (parent.width - self.width) / 2;
+        height: root.thumb-h;
+        y: root.max-scroll > 0px
+            ? (-root.viewport-y / root.max-scroll) * root.travel
+            : 0px;
+        border-radius: 5px;
+        background: bar-ta.has-hover || bar-ta.pressed ? #ffffff77 : #ffffff44;
+        animate width { duration: 100ms; }
+    }
+
+    // Drag / click-to-position over the whole gutter — centers the
+    // thumb on the pointer.
+    bar-ta := TouchArea {
+        mouse-cursor: pointer;
+        moved => {
+            if (bar-ta.pressed && root.travel > 0px) {
+                root.viewport-y = -min(root.max-scroll, max(0px,
+                    (bar-ta.mouse-y - root.thumb-h / 2) / root.travel * root.max-scroll));
+            }
+        }
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.down && root.travel > 0px) {
+                root.viewport-y = -min(root.max-scroll, max(0px,
+                    (bar-ta.mouse-y - root.thumb-h / 2) / root.travel * root.max-scroll));
+            }
+        }
+    }
+}

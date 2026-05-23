@@ -12,7 +12,7 @@
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Spacing } from "../foundation/spacing.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
-import { ShellState, SidebarState, SidebarActions, SidebarEntry } from "../state.slint";
+import { ShellState, SidebarState, SidebarActions, SidebarEntry, DragState } from "../state.slint";
 import { ScrollView } from "std-widgets.slint";
 
 // A single context-menu item row.
@@ -55,10 +55,46 @@ component SidebarRow inherits Rectangle {
     callback delete-folder(string);
 
     property <bool> is-folder: root.entry.kind == "folder";
+
+    // Track-drag drop target: a playlist row self-detects whether the
+    // global drag pointer is within its bounds (the source grabs the
+    // pointer, so normal hover doesn't fire during a drag). It claims
+    // the drop target while hot, and releases it when the pointer
+    // leaves.
+    //
+    // absolute-position must be read in an event handler (recompute),
+    // NOT a declarative binding — reading it during the layout phase
+    // is a recursion. So we mirror the drag pointer/active flag and
+    // recompute on their change.
+    property <length> drag-px: DragState.pointer-x;
+    property <length> drag-py: DragState.pointer-y;
+    property <bool> drag-on: DragState.active;
+    property <bool> drop-hot: false;
+    function recompute-drop() {
+        root.drop-hot = root.drag-on
+            && !root.is-folder
+            && root.drag-px >= root.absolute-position.x
+            && root.drag-px <= root.absolute-position.x + root.width
+            && root.drag-py >= root.absolute-position.y
+            && root.drag-py <= root.absolute-position.y + root.height;
+        if (root.drop-hot) {
+            DragState.over-playlist-id = root.entry.id;
+        } else if (DragState.over-playlist-id == root.entry.id) {
+            DragState.over-playlist-id = "";
+        }
+    }
+    changed drag-px => { root.recompute-drop(); }
+    changed drag-py => { root.recompute-drop(); }
+    changed drag-on => { root.recompute-drop(); }
+
     height: 32px;
     border-radius: 6px;
-    background: ta.has-hover || more-ta.has-hover || root.active
-        ? Theme.surface-hover : transparent;
+    background: root.drop-hot
+        ? #22c55e26
+        : (ta.has-hover || more-ta.has-hover || root.active
+            ? Theme.surface-hover : transparent);
+    border-width: root.drop-hot ? 1px : 0px;
+    border-color: #22c55e66;
 
     HorizontalLayout {
         padding-left: root.entry.indent ? 24px : 8px;

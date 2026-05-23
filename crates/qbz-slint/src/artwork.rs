@@ -522,11 +522,9 @@ fn apply_artwork(
             }
         }
         ArtworkTarget::PlaylistTrack { index } => {
-            let model = window.global::<crate::PlaylistState>().get_tracks();
-            if let Some(mut item) = model.row_data(index) {
-                item.artwork = image;
-                model.set_row_data(index, item);
-            }
+            // Resolve into the stable FULL_ITEMS + the visible row (by
+            // id) so sorting/filtering keeps the artwork.
+            crate::playlist::set_track_artwork(window, index, image);
         }
         ArtworkTarget::PlaylistCover => {
             window.global::<crate::PlaylistState>().set_cover(image);

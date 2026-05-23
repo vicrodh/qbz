@@ -9,7 +9,7 @@ import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
 import { Radius } from "../foundation/radius.slint";
 import { Spacing } from "../foundation/spacing.slint";
-import { AlbumState, AlbumActions, ArtworkActions, NavState, ContentView } from "../state.slint";
+import { AlbumState, AlbumActions, ArtworkActions, NavState, ContentView, DragState } from "../state.slint";
 import { TrackRow } from "../primitives/TrackRow.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { ContextMenu } from "../primitives/ContextMenu.slint";
@@ -122,6 +122,8 @@ export component AlbumPageView inherits Rectangle {
     background: Theme.surface-main;
 
     Flickable {
+        // Freeze scroll during a track drag so the ghost doesn't drift.
+        interactive: !DragState.active;
         viewport-width: self.width;
         viewport-height: page.preferred-height;
 
@@ -251,7 +253,7 @@ export component AlbumPageView inherits Rectangle {
                     Text {
                         text: AlbumState.title;
                         color: Theme.text-primary;
-                        font-size: Typography.title;
+                        font-size: Typography.section;
                         font-weight: Typography.bold;
                         overflow: elide;
                     }
