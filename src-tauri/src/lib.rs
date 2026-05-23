@@ -1968,6 +1968,7 @@ pub fn run(qconnect_cli_override: Option<bool>) {
             commands_v2::v2_set_media_metadata,
             commands_v2::v2_play_next_gapless,
             commands_v2::v2_prefetch_track,
+            commands_v2::v2_is_track_cached,
             commands_v2::v2_reinit_audio_device,
             commands_v2::v2_check_audio_device_presence,
             commands_v2::v2_get_audio_output_status,

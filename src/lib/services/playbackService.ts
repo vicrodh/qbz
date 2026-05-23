@@ -171,9 +171,20 @@ async function handoffPlayTrackToRemoteRenderer(trackId: number): Promise<boolea
  * on one bad row. Returns true when a next track was dispatched,
  * false when the queue is empty.
  */
+// Bound the auto-skip cascade (issue #467): a run of failing tracks must not
+// walk the queue. The counter is reset by the next successful play.
+const MAX_CONSECUTIVE_SKIPS = 5;
+let consecutiveSkips = 0;
+
 async function autoSkipToNext(): Promise<boolean> {
+  if (consecutiveSkips >= MAX_CONSECUTIVE_SKIPS) {
+    console.warn(`[playback] Auto-skip cap (${MAX_CONSECUTIVE_SKIPS}) reached — stopping queue walk (#467)`);
+    showToast(get(t)('toast.noAvailableTracks'), 'info');
+    return false;
+  }
   const next = await nextTrack();
   if (!next) return false;
+  consecutiveSkips++;
   console.log('Auto-skipping to next track:', next.title);
   // Brief delay so the "unavailable" toast is readable before we
   // replace it with the next track's loading toast.
@@ -350,6 +361,8 @@ export async function playTrack(
 
     setIsPlaying(true);
     dismissBuffering();
+    // A track actually started playing — reset the auto-skip cascade guard (#467).
+    consecutiveSkips = 0;
     if (showSuccessToast) {
       showToast(`Playing: ${track.title}`, 'success');
     }
@@ -472,9 +485,16 @@ export async function playTrack(
         }, 500);
         return false;
       } else if (behavior === 'always_skip') {
+        if (consecutiveSkips >= MAX_CONSECUTIVE_SKIPS) {
+          console.warn(`[playback] Auto-skip cap (${MAX_CONSECUTIVE_SKIPS}) reached — stopping queue walk (#467)`);
+          showToast(get(t)('toast.noAvailableTracks'), 'info');
+          setIsPlaying(false);
+          return false;
+        }
         showToast(get(t)('qualityFallback.autoSkipping'), 'info');
         const next = await nextTrack();
         if (next) {
+          consecutiveSkips++;
           setTimeout(() => {
             const nextSource = resolvePlaybackSource(next);
             const nextIsLocal = isPlaybackSourceLocal(nextSource, next.is_local ?? false);

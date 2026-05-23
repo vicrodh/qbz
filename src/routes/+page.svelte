@@ -3099,7 +3099,18 @@
     // Local tracks are always available
     if (isLocalTrack(track.id)) return true;
 
-    // Check if Qobuz track has a local copy
+    // A track in the playback/disk cache is playable offline — this covers the
+    // currently-playing, fully-buffered track and prefetched upcoming tracks,
+    // not just explicitly downloaded copies (issue #467).
+    try {
+      if (await invoke<boolean>('v2_is_track_cached', { trackId: track.id })) {
+        return true;
+      }
+    } catch {
+      // Fall through to the downloaded-copy check below.
+    }
+
+    // Check if Qobuz track has a downloaded local copy
     try {
       const localIds = await invoke<number[]>('v2_playlist_get_tracks_with_local_copies', {
         trackIds: [track.id]
@@ -3110,18 +3121,28 @@
     }
   }
 
+  // Maximum consecutive offline skips before we stop walking the queue.
+  // Prevents the synchronous skip cascade from blasting the logical queue
+  // pointer to the end while the engine is still playing (issue #467).
+  const MAX_OFFLINE_SKIPS = 5;
+
   // Helper to play a track from the queue (with offline skip support)
   async function playQueueTrack(track: BackendQueueTrack, skippedIds = new Set<number>(), gaplessTransition = false) {
     const source = resolvePlaybackSource(track);
     const isLocal = isPlaybackSourceLocal(source, isLocalTrack(track.id));
 
-    // In offline mode, check if track is available
-    if (offlineStatus.isOffline && !isLocal) {
+    // In offline mode, check if track is available — but NEVER for the gapless
+    // target. By definition it is the track the engine is already playing, so
+    // entering the skip branch here would desync the logical queue from the
+    // audio engine and walk the queue to the end (issue #467). Fall through to
+    // update metadata only.
+    if (offlineStatus.isOffline && !isLocal && !gaplessTransition) {
       const available = await isTrackAvailable(track);
       if (!available) {
-        // Skip to next track (prevent infinite loop)
-        if (skippedIds.has(track.id)) {
-          // Already tried this track, stop to prevent infinite loop
+        // Bound the cascade: a run of undownloaded tracks must not walk the
+        // whole queue synchronously. Stop on a revisit OR once we hit the
+        // consecutive-skip cap (issue #467).
+        if (skippedIds.has(track.id) || skippedIds.size >= MAX_OFFLINE_SKIPS) {
           setQueueEnded(true);
           showToast($t('toast.noAvailableTracks'), 'info');
           return;

@@ -53,6 +53,8 @@
     onLoadMore?: () => void;
     isLoadingMore?: boolean;
     onAddAlbumToPlaylist?: (albumId: string) => void;
+    onAlbumFavorite?: (albumId: string) => void;
+    isAlbumFavorite?: (albumId: string) => boolean;
   }
 
   let {
@@ -79,6 +81,8 @@
     onLoadMore,
     isLoadingMore = false,
     onAddAlbumToPlaylist,
+    onAlbumFavorite,
+    isAlbumFavorite,
   }: Props = $props();
 
   // Constants
@@ -330,6 +334,8 @@
                   onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
                   onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
                   onReDownloadAlbum={onReDownloadAlbum ? () => onReDownloadAlbum(album.id) : undefined}
+                  isFavorite={isAlbumFavorite?.(album.id) ?? false}
+                  onFavorite={onAlbumFavorite ? () => onAlbumFavorite(album.id) : undefined}
                   onClick={() => handleAlbumClickEvent(album.id)}
                 />
               </div>

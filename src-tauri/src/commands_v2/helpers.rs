@@ -960,17 +960,22 @@ pub async fn v2_cmaf_stream(
         // Progress logging every 5 segments or on last segment
         if seg_idx % 5 == 0 || seg_idx == n_segments {
             let elapsed = start.elapsed().as_secs_f64();
+            let mbps = if elapsed > 0.0 {
+                total_written as f64 / (1024.0 * 1024.0) / elapsed
+            } else {
+                0.0
+            };
             log::info!(
                 "[V2/CMAF-STREAM] Segment {}/{} ({:.1} MB, {:.1} MB/s)",
                 seg_idx,
                 n_segments - 1,
                 total_written as f64 / (1024.0 * 1024.0),
-                if elapsed > 0.0 {
-                    total_written as f64 / (1024.0 * 1024.0) / elapsed
-                } else {
-                    0.0
-                }
+                mbps
             );
+            // Feed the network-throttle state with the latest observed
+            // bandwidth so the prefetch scheduler can scale down on slow
+            // connections and stay out of the live stream's way.
+            qbz_audio::network_throttle::state().record_segment_bandwidth(mbps);
         }
     }
 

@@ -140,6 +140,7 @@
     id: number;
     number: number;
     title: string;
+    version?: string | null; // Remix/edition subtitle (#360 / #452)
     artist?: string;
     album?: string;
     albumArt?: string;
@@ -1275,6 +1276,7 @@
       id: track.id,
       number: index + 1,
       title: track.title,
+      version: track.version ?? null,
       artist: track.performer?.name,
       album: track.album?.title,
       albumArt: track.album?.image?.small || track.album?.image?.thumbnail || track.album?.image?.large,

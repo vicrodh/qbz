@@ -38,6 +38,7 @@ pub mod endpoints;
 pub mod error;
 pub mod link_resolver;
 pub mod performers;
+pub mod retry;
 
 // Re-export main types
 pub use bundle::BundleTokens;

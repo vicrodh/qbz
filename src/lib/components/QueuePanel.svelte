@@ -878,6 +878,12 @@
     border-radius: 6px;
     cursor: pointer;
     transition: background-color 150ms ease;
+    /* macOS/WKWebView couples draggability with selectability: the inherited
+       `-webkit-user-select: none` on <body> blocks dragstart on these rows, so
+       queue reordering (and its blue insertion line) silently broke on macOS
+       (#453). Marking the row as a drag element restores it. WebKitGTK (Linux)
+       is unaffected. */
+    -webkit-user-drag: element;
   }
 
   .queue-track:hover {

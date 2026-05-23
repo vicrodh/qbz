@@ -1361,10 +1361,35 @@ pub async fn v2_get_offline_status(
         });
     }
 
-    // Check network connectivity
-    let has_network = crate::offline::check_network_connectivity().await;
+    // Fix E (issue #467): positive liveness override. If audio segments were
+    // flowing within the liveness window we are, by definition, online —
+    // regardless of what the connectivity probe says. Heavy Hi-Res tracks
+    // (long Dream Theater / Yes) saturate the link and can time the probe
+    // out; active streaming is the strongest possible "online" signal.
+    const LIVENESS_WINDOW_SECS: u64 = 45;
+    if let Some(secs) = qbz_audio::network_throttle::state().seconds_since_download() {
+        if secs <= LIVENESS_WINDOW_SECS {
+            crate::offline::reset_connectivity_failures();
+            return Ok(crate::offline::OfflineStatus {
+                is_offline: false,
+                reason: None,
+                manual_mode_enabled: false,
+            });
+        }
+    }
 
-    if !has_network {
+    // Check network connectivity (cheap concurrent probe) and apply
+    // consecutive-failure hysteresis (Fix A, issue #467): a single failed poll
+    // must not flip offline — only OFFLINE_FAILURE_THRESHOLD consecutive
+    // failures do.
+    let has_network = crate::offline::check_network_connectivity().await;
+    let failures = crate::offline::record_connectivity_result(has_network);
+
+    if !has_network && failures >= crate::offline::OFFLINE_FAILURE_THRESHOLD {
+        log::info!(
+            "[offline] Declaring offline after {} consecutive connectivity failures",
+            failures
+        );
         return Ok(crate::offline::OfflineStatus {
             is_offline: true,
             reason: Some(crate::offline::OfflineReason::NoNetwork),
@@ -1372,6 +1397,15 @@ pub async fn v2_get_offline_status(
         });
     }
 
+    if !has_network {
+        log::info!(
+            "[offline] Connectivity probe failed ({}/{}); staying online (hysteresis)",
+            failures,
+            crate::offline::OFFLINE_FAILURE_THRESHOLD
+        );
+    }
+
+    // Online, or a transient failure still under the threshold: stay online.
     Ok(crate::offline::OfflineStatus {
         is_offline: false,
         reason: None,

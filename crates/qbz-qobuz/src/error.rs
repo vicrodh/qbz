@@ -42,6 +42,24 @@ pub enum ApiError {
 
     #[error("Rate limited, retry after {0} seconds")]
     RateLimited(u64),
+
+    #[error("Server error (HTTP {0})")]
+    ServerError(u16),
+}
+
+impl ApiError {
+    /// True for errors worth retrying with backoff (issue #467): transport
+    /// problems (timeout/connect/reset), 5xx server errors, and 429 rate
+    /// limiting. Terminal errors — a real 404 `TrackUnavailable`, auth or
+    /// parse failures — return false and should propagate to the (bounded)
+    /// skip path instead of being retried.
+    pub fn is_transient(&self) -> bool {
+        match self {
+            ApiError::NetworkError(e) => crate::retry::reqwest_is_transient(e),
+            ApiError::RateLimited(_) | ApiError::ServerError(_) => true,
+            _ => false,
+        }
+    }
 }
 
 pub type Result<T> = std::result::Result<T, ApiError>;

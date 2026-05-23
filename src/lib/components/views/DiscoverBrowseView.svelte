@@ -9,6 +9,11 @@
     getSelectedGenreIds,
     type GenreFilterContext
   } from '$lib/stores/genreFilterStore';
+  import {
+    isAlbumFavorite,
+    toggleAlbumFavorite,
+    subscribe as subscribeAlbumFavs,
+  } from '$lib/stores/albumFavoritesStore';
 
   interface DiscoverAlbum {
     id: string;
@@ -93,6 +98,20 @@
     pressAward: 'discover-press-accolades',
   };
   const genreContext = $derived(GENRE_CONTEXT_MAP[endpointType]);
+
+  // Album favorite state — reactive against the shared albumFavoritesStore so
+  // the heart on each card reflects (and toggles) real favorite status. The
+  // collapsed Discovery view already wires this; the "see all" browse pages
+  // were missing it, so the heart did nothing here (issue #468).
+  let favoritesVersion = $state(0);
+  $effect(() => {
+    const unsub = subscribeAlbumFavs(() => { favoritesVersion++; });
+    return unsub;
+  });
+  function isFav(albumId: string): boolean {
+    void favoritesVersion;
+    return isAlbumFavorite(albumId);
+  }
 
   // State
   let albums = $state<FavoriteAlbum[]>([]);
@@ -309,6 +328,8 @@
         onOpenAlbumFolder={onOpenAlbumFolder}
         onReDownloadAlbum={onReDownloadAlbum}
         onAddAlbumToPlaylist={onAddAlbumToPlaylist}
+        onAlbumFavorite={(id) => { void toggleAlbumFavorite(id); }}
+        isAlbumFavorite={isFav}
         {downloadStateVersion}
         {isAlbumDownloaded}
         {showRanking}
