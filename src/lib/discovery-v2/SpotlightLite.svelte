@@ -224,6 +224,7 @@
                 ribbon={item.album.ribbon}
                 genre={item.album.genre}
                 releaseYear={item.album.releaseYear}
+                releaseDate={item.album.releaseDate}
                 onClick={() => onAlbumClick?.(item.album.albumId)}
                 onArtistClick={item.album.artistId ? () => onArtistClick?.(item.album.artistId!) : undefined}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(item.album.albumId) : undefined}

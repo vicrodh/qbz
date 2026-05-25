@@ -21,6 +21,10 @@
     ribbon?: AlbumRibbon;
     genre?: string;
     releaseYear?: number;
+    /** Full release date (e.g. "2025-11-06"). Shown in the hover overlay as
+     *  "MMM D, YYYY"; falls back to releaseYear (year only) when absent or
+     *  unparseable. Restores the pre-AlbumCardLite overlay format (#469). */
+    releaseDate?: string;
     isPlaying?: boolean;
     isFavorite?: boolean;
     /** Album is already cached offline. When true, the kebab menu
@@ -53,6 +57,7 @@
     ribbon,
     genre,
     releaseYear,
+    releaseDate,
     isPlaying = false,
     isFavorite = false,
     isAlbumFullyDownloaded = false,
@@ -68,6 +73,28 @@
     onDownload,
     onReDownloadAlbum,
   }: Props = $props();
+
+  // Hover-overlay release label: restore the "MMM D, YYYY" full date (#469).
+  // Parse "YYYY-MM-DD" as a LOCAL date so the day never shifts across
+  // timezones, then format with the user's locale (short month). Falls back
+  // to year-only when there is no full date.
+  function formatReleaseDate(value: string | undefined): string | undefined {
+    if (!value) return undefined;
+    const iso = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    const date = iso
+      ? new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]))
+      : new Date(value);
+    if (Number.isNaN(date.getTime())) return undefined;
+    return date.toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  }
+
+  const releaseLabel = $derived(
+    formatReleaseDate(releaseDate) ?? (releaseYear != null ? String(releaseYear) : undefined)
+  );
 
   // Quick-menu state. Position carries the click coordinates so the
   // portaled popover anchors near the kebab button.
@@ -120,10 +147,10 @@
     {#if ribbon}
       <div class="ribbon ribbon-{ribbon.kind}" title={ribbon.label}>{ribbon.label}</div>
     {/if}
-    {#if genre || releaseYear}
+    {#if genre || releaseLabel}
       <div class="meta">
         {#if genre}<span class="meta-genre">{genre}</span>{/if}
-        {#if releaseYear}<span class="meta-year">{releaseYear}</span>{/if}
+        {#if releaseLabel}<span class="meta-year">{releaseLabel}</span>{/if}
       </div>
     {/if}
     <div class="actions">

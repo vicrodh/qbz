@@ -467,6 +467,7 @@
       ribbon={album.ribbon}
       genre={album.genre}
       releaseYear={album.releaseYear}
+      releaseDate={album.releaseDate}
       isFavorite={isFav(album.albumId)}
       onClick={() => onAlbumClick?.(album.albumId)}
       onPlay={() => onAlbumPlay?.(album.albumId)}

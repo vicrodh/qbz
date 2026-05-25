@@ -56,6 +56,9 @@ export interface DiscoveryAlbumCard {
   ribbon?: AlbumRibbon;
   genre?: string;
   releaseYear?: number;
+  /** Full release date (e.g. "2025-11-06"). Drives the AlbumCardLite hover
+   *  overlay's "MMM D, YYYY" label (#469); releaseYear stays as fallback. */
+  releaseDate?: string;
 }
 
 function parseYear(value: string | undefined): number | undefined {
@@ -105,6 +108,7 @@ function qobuzAlbumToCard(album: QobuzAlbum): DiscoveryAlbumCard {
     ribbon: pickAlbumRibbon(album.awards),
     genre: album.genre?.name,
     releaseYear: parseYear(album.release_date_original),
+    releaseDate: album.release_date_original,
   };
 }
 
@@ -127,6 +131,7 @@ function discoverAlbumToCard(album: DiscoverAlbum): DiscoveryAlbumCard {
     ribbon: pickAlbumRibbon(album.awards),
     genre: album.genre?.name,
     releaseYear: parseYear(album.dates?.original),
+    releaseDate: album.dates?.original,
   };
 }
 
@@ -332,6 +337,7 @@ export async function fetchRediscoverLibrary(
       isHiRes: !!a.quality && a.quality !== 'CD Quality',
       genre: a.genre || undefined,
       releaseYear: parseYear(a.releaseDate),
+      releaseDate: a.releaseDate,
     }));
   } catch (err) {
     console.error('[discovery-v2] fetchRediscoverLibrary failed', err);
@@ -446,6 +452,7 @@ export async function fetchSimilarAlbums(
         samplingRate: a.maximum_sampling_rate,
         genre: a.genre?.name,
         releaseYear: parseYear(a.release_date_original),
+        releaseDate: a.release_date_original,
       })),
     };
   } catch (err) {
@@ -498,6 +505,7 @@ export async function fetchEssentialsByGenre(
         samplingRate: a.maximum_sampling_rate,
         genre: a.genre?.name,
         releaseYear: parseYear(a.release_date_original),
+        releaseDate: a.release_date_original,
       })),
     };
   } catch (err) {
