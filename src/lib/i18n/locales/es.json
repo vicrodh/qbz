@@ -1466,11 +1466,6 @@
   },
   "player": {
     "nowPlaying": "Reproduciendo",
-    "controllingRemote": "Controlando: {name}",
-    "noQbzdFound": "No se encontraron daemons QBZ en tu red",
-    "noQbzdFoundHint": "Asegurate de que qbzd este corriendo en el dispositivo",
-    "recentDaemons": "Recientes",
-    "discoveredDaemons": "Descubiertos en la red",
     "queue": "Cola",
     "upNext": "Siguiente",
     "ofTotal": "de",

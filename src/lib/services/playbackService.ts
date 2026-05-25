@@ -14,8 +14,6 @@ import { get } from 'svelte/store';
 import { t } from '$lib/i18n';
 import { formatTrackTitle } from '$lib/utils/trackTitle';
 import { cmdStop, cmdPlayTrack, skipIfRemote } from '$lib/services/commandRouter';
-import { getTarget } from '$lib/stores/playbackTargetStore';
-import { remotePost } from '$lib/services/remoteApi';
 import { getUserItem, setUserItem } from '$lib/utils/userStorage';
 import {
   isPlaybackSourceLocal,
@@ -242,18 +240,6 @@ export async function playTrack(
 
   try {
     let handledRemotely = false;
-    const target = getTarget();
-
-    // When controlling a qbzd daemon, send play directly to daemon.
-    // No local stop, no QConnect, no metadata — daemon handles everything.
-    if (target.type === 'qbzd') {
-      await remotePost('/api/playback/play-track', {
-        track_id: track.id,
-        quality: effectiveQuality(track),
-      });
-      setIsPlaying(true);
-      return true;
-    }
 
     if (!gaplessTransition && !isLocal && source !== 'plex') {
       handledRemotely = await handoffPlayTrackToRemoteRenderer(track.id);
@@ -332,28 +318,19 @@ export async function playTrack(
         } else if (isLocal) {
           await invoke('v2_library_play_track', { trackId: track.id });
         } else {
-          // Route to daemon or local based on playback target
-          const target = getTarget();
-          if (target.type === 'qbzd') {
-            await remotePost('/api/playback/play-track', {
-              track_id: track.id,
-              quality: effectiveQuality(track),
-            });
-          } else {
-            const result = await invoke<PlayTrackResult>('v2_play_track', {
-              trackId: track.id,
-              quality: effectiveQuality(track),
-              durationSecs: track.duration ? Math.round(track.duration) : null,
-              forceLowestQuality: forceLowestQuality || null
-            });
+          const result = await invoke<PlayTrackResult>('v2_play_track', {
+            trackId: track.id,
+            quality: effectiveQuality(track),
+            durationSecs: track.duration ? Math.round(track.duration) : null,
+            forceLowestQuality: forceLowestQuality || null
+          });
 
-            // Update track format based on actual stream format_id from Qobuz
-            const actualFormat = formatIdToString(result.format_id);
-            if (actualFormat) {
-              track.format = actualFormat;
-              // Re-set current track to update the UI with actual format
-              setCurrentTrack(track);
-            }
+          // Update track format based on actual stream format_id from Qobuz
+          const actualFormat = formatIdToString(result.format_id);
+          if (actualFormat) {
+            track.format = actualFormat;
+            // Re-set current track to update the UI with actual format
+            setCurrentTrack(track);
           }
         }
       }

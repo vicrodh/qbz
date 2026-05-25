@@ -79,6 +79,6 @@ CLAUDE.md
 AGENTS.md
 
 /crates/target/
-# /crates/Cargo.lock  # tracked for reproducible qbzd CI builds
+# /crates/Cargo.lock  # tracked for reproducible CI builds
 test-results/
 

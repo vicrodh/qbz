@@ -1466,11 +1466,6 @@
   },
   "player": {
     "nowPlaying": "Now Playing",
-    "controllingRemote": "Controlling: {name}",
-    "noQbzdFound": "No QBZ Daemons found on your network",
-    "noQbzdFoundHint": "Make sure qbzd is running on the target device",
-    "recentDaemons": "Recent",
-    "discoveredDaemons": "Discovered on network",
     "queue": "Queue",
     "upNext": "Up Next",
     "ofTotal": "of",

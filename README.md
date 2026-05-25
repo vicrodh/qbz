@@ -338,10 +338,6 @@ subgraph group_crates["Rust Crates"]
   node_rust_integrations["qbz-integrations<br/>external services"]
 end
 
-subgraph group_service["Daemon"]
-  node_daemon["qbzd<br/>local daemon"]
-end
-
 subgraph group_packaging["Packaging"]
   node_packaging_ci["Packaging & CI<br/>release automation<br/>[workflows]"]
 end
@@ -365,11 +361,7 @@ node_app_library -->|"indexes"| node_rust_library
 node_app_library -->|"enriches"| node_rust_qobuz
 node_app_cast -->|"delegates"| node_rust_cast
 node_app_connect -->|"implements"| node_rust_connect
-node_daemon -->|"coordinates"| node_app_player
-node_daemon -->|"serves"| node_app_library
-node_daemon -->|"hosts"| node_app_connect
 node_packaging_ci -.->|"builds"| node_tauri_backend
-node_packaging_ci -.->|"packages"| node_daemon
 node_packaging_ci -.->|"bundles"| node_ui_shell
 
 click node_ui_shell "https://github.com/vicrodh/qbz/tree/main/src"
@@ -393,7 +385,6 @@ click node_rust_library "https://github.com/vicrodh/qbz/tree/main/crates/qbz-lib
 click node_rust_cast "https://github.com/vicrodh/qbz/tree/main/crates/qbz-cast/src"
 click node_rust_connect "https://github.com/vicrodh/qbz/tree/main/crates/qconnect-protocol/src"
 click node_rust_integrations "https://github.com/vicrodh/qbz/tree/main/crates/qbz-integrations/src"
-click node_daemon "https://github.com/vicrodh/qbz/tree/main/crates/qbzd/src"
 click node_packaging_ci "https://github.com/vicrodh/qbz/blob/main/.github/workflows"
 
 classDef toneNeutral fill:#f8fafc,stroke:#334155,stroke-width:1.5px,color:#0f172a
@@ -406,7 +397,6 @@ classDef toneTeal fill:#ccfbf1,stroke:#0f766e,stroke-width:1.5px,color:#134e4a
 class node_ui_shell,node_ui_state,node_ui_views,node_ui_remote toneBlue
 class node_tauri_backend,node_cmd_v2,node_cmd_legacy,node_app_audio,node_app_player,node_app_library,node_app_cache,node_app_cast,node_app_connect toneAmber
 class node_rust_player,node_rust_audio,node_rust_cache,node_rust_qobuz,node_rust_library,node_rust_cast,node_rust_connect,node_rust_integrations toneMint
-class node_daemon toneRose
 class node_packaging_ci toneIndigo
 ```
 
