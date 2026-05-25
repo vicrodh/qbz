@@ -432,8 +432,14 @@ fn build_snapshot(
         streaming_quality_index: ui_prefs::streaming_quality_index(streaming_quality_key) as i32,
         sample_rates: MAX_SAMPLE_RATES.iter().map(|(l, _)| l.to_string()).collect(),
         sample_rate_index: sample_rate_index as i32,
-        backends: backend_types.iter().map(|t| backend_label(*t)).collect(),
-        backend_index: backend_index as i32,
+        // Index 0 is "Auto" (a resolve-and-set action, #470); the concrete
+        // backends follow. backend_type is always persisted concrete, so the
+        // current selection is its position shifted by 1 past the Auto entry —
+        // the dropdown never rests on Auto.
+        backends: std::iter::once("Auto".to_string())
+            .chain(backend_types.iter().map(|t| backend_label(*t)))
+            .collect(),
+        backend_index: backend_index as i32 + 1,
         devices: device_list.labels,
         device_bp: device_list.bp,
         device_groups: device_list.groups,
@@ -784,15 +790,35 @@ pub async fn handle_select(
             apply_audio(&ctx, &runtime, Apply::Reinit);
         }
         "backend" => {
-            let backend = ctx
-                .maps
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .backends
-                .get(index)
-                .copied();
-            let Some(backend) = backend else {
-                return;
+            // Dropdown index 0 is "Auto" — a resolve-and-set action (#470), not a
+            // persisted mode. Pick the best available backend (PipeWire if present,
+            // else System), persist it concrete, and let the rebuilt snapshot move
+            // the dropdown onto that backend; backend_type is never left null/Auto.
+            // Indices >= 1 map to the concrete `maps.backends` list (no Auto entry).
+            let backend = if index == 0 {
+                let types = ctx
+                    .maps
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .backends
+                    .clone();
+                if types.iter().any(|t| *t == AudioBackendType::PipeWire) {
+                    AudioBackendType::PipeWire
+                } else {
+                    AudioBackendType::SystemDefault
+                }
+            } else {
+                let resolved = ctx
+                    .maps
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .backends
+                    .get(index - 1)
+                    .copied();
+                let Some(resolved) = resolved else {
+                    return;
+                };
+                resolved
             };
             if let Err(e) = with_audio(&ctx.audio, |s| s.set_backend_type(Some(backend))) {
                 log::error!("[qbz-slint] persist backend failed: {e}");
