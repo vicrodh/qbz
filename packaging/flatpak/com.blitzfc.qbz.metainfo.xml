@@ -69,6 +69,18 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="1.2.14" date="2026-05-25">
+      <description>
+        <p>Just cleaning: a maintenance release — audio that works out of the box, a smarter backend picker, and a round of fixes and dependency updates.</p>
+        <ul>
+          <li>New "System" audio output: the shared system default that works out of the box and mixes with other apps like any normal player; "Auto" now picks the best available backend for your machine</li>
+          <li>PipeWire is detected via its runtime socket, so its backend is no longer hidden on systems without pactl</li>
+          <li>The album hover overlay shows the full release date again, not just the year</li>
+          <li>Fixes: queue drag-and-drop on macOS, favorites edition/version on click-to-play, the favorite button on browse pages, and gapless/offline robustness</li>
+          <li>Hardened redaction of sensitive data in logs, cpal/alsa and dependency updates, and continued app-core groundwork</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.2.13" date="2026-05-16">
       <description>
         <p>400+ stars: a polish and stability release led by macOS fixes, with the usual round of bug fixes and groundwork under the hood.</p>

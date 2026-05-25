@@ -5165,7 +5165,7 @@ dependencies = [
 
 [[package]]
 name = "qbz-nix"
-version = "1.2.13"
+version = "1.2.14"
 dependencies = [
  "aes-gcm",
  "anyhow",
