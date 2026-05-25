@@ -230,13 +230,13 @@ fn map_album(album: DiscoverAlbum) -> CardData {
         .map(|a| a.id.to_string())
         .unwrap_or_default();
     let genre = album.genre.map(|g| g.name).unwrap_or_default();
-    let year = album
-        .dates
-        .as_ref()
-        .and_then(|d| d.original.as_ref().or(d.download.as_ref()).or(d.stream.as_ref()))
-        .and_then(|date| date.get(0..4))
-        .unwrap_or("")
-        .to_string();
+    let year = crate::dates::release_label(
+        album
+            .dates
+            .as_ref()
+            .and_then(|d| d.original.as_ref().or(d.download.as_ref()).or(d.stream.as_ref()))
+            .map(|s| s.as_str()),
+    );
     let (ribbon, ribbon_kind) = pick_ribbon(album.awards.as_deref());
     let quality_tier = quality_tier(album.audio_info.as_ref()).to_string();
     let quality_label = quality_label(album.audio_info.as_ref());

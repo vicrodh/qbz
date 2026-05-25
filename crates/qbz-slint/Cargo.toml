@@ -35,6 +35,7 @@ rfd = { version = "0.15", default-features = false, features = ["xdg-portal", "t
 serde = { workspace = true }
 serde_json = { workspace = true }
 dirs = "5"
+chrono = { workspace = true, features = ["unstable-locales"] }
 qbz-app = { path = "../qbz-app" }
 qbz-audio = { path = "../qbz-audio" }
 qbz-core = { path = "../qbz-core" }

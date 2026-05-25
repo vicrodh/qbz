@@ -21,6 +21,7 @@ mod artwork;
 mod auth;
 mod commands;
 mod custom_artwork;
+mod dates;
 mod discovery_dismiss;
 mod favorites;
 mod foryou;

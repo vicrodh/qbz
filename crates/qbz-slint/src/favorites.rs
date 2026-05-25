@@ -104,6 +104,7 @@ pub struct AlbumCard {
     pub title: String,
     pub artist: String,
     pub artist_id: String,
+    pub genre: String,
     pub year: String,
     pub quality_tier: String,
     pub quality_label: String,
@@ -240,11 +241,8 @@ fn map_track(track: Track) -> TrackCard {
 }
 
 fn map_album(album: Album) -> AlbumCard {
-    let year = album
-        .release_date_original
-        .as_deref()
-        .and_then(|s| s.get(..4).map(|y| y.to_string()))
-        .unwrap_or_default();
+    let year = crate::dates::release_label(album.release_date_original.as_deref());
+    let genre = album.genre.map(|g| g.name).unwrap_or_default();
     let quality_label = match (album.maximum_bit_depth, album.maximum_sampling_rate) {
         (Some(bd), Some(sr)) => format!("{}-bit / {} kHz", bd, sr),
         _ => String::new(),
@@ -254,6 +252,7 @@ fn map_album(album: Album) -> AlbumCard {
         title: album.title,
         artist: album.artist.name,
         artist_id: album.artist.id.to_string(),
+        genre,
         year,
         quality_tier: tier(album.maximum_bit_depth).to_string(),
         quality_label,
@@ -338,7 +337,7 @@ pub fn apply_favorites(window: &AppWindow, data: FavData) {
                     title: a.title.into(),
                     artist: a.artist.into(),
                     artist_id: a.artist_id.into(),
-                    genre: "".into(),
+                    genre: a.genre.into(),
                     year: a.year.into(),
                     quality_tier: a.quality_tier.into(),
                     quality_label: a.quality_label.into(),
