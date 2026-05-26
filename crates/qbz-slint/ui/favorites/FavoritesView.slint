@@ -22,6 +22,7 @@ import { AlbumCard } from "../discover/AlbumCard.slint";
 import { TrackRow } from "../primitives/TrackRow.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
+import { ListScrollbar } from "../primitives/ListScrollbar.slint";
 import { NavButtons } from "../shell/NavButtons.slint";
 
 // One tab in the favorites tab bar.
@@ -248,7 +249,7 @@ export component FavoritesView inherits Rectangle {
 
     background: Theme.surface-main;
 
-    Flickable {
+    flick := Flickable {
         interactive: !DragState.active;
         viewport-width: self.width;
         viewport-height: page.preferred-height;
@@ -441,5 +442,15 @@ export component FavoritesView inherits Rectangle {
                 }
             }
         }
+    }
+
+    // Shared scrollbar in the right gutter (homologated cross-view).
+    ListScrollbar {
+        x: parent.width - self.width - 4px;
+        width: 14px;
+        height: 100%;
+        viewport-height: flick.viewport-height;
+        visible-height: flick.height;
+        viewport-y <=> flick.viewport-y;
     }
 }

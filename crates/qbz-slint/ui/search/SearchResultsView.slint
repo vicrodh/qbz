@@ -21,6 +21,7 @@ import { PlaylistCard } from "../discover/PlaylistCard.slint";
 import { TrackRow } from "../primitives/TrackRow.slint";
 import { SearchTrackHero } from "../primitives/SearchTrackHero.slint";
 import { NavButtons } from "../shell/NavButtons.slint";
+import { ListScrollbar } from "../primitives/ListScrollbar.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
 
@@ -430,7 +431,7 @@ export component SearchResultsView inherits Rectangle {
         }
 
         // --- Scrollable results body ------------------------------------
-        Flickable {
+        flick := Flickable {
             interactive: !DragState.active;
             vertical-stretch: 1;
             viewport-width: self.width;
@@ -621,5 +622,19 @@ export component SearchResultsView inherits Rectangle {
                 }
             }
         }
+    }
+
+    // Shared scrollbar in the right gutter (homologated cross-view). Sits
+    // below the fixed header (56px nav row + 40px tab strip when shown).
+    property <length> search-header-h:
+        !(SearchState.loading && !root.has-results) ? 96px : 56px;
+    ListScrollbar {
+        x: parent.width - self.width - 4px;
+        y: root.search-header-h;
+        width: 14px;
+        height: parent.height - root.search-header-h;
+        viewport-height: flick.viewport-height;
+        visible-height: flick.height;
+        viewport-y <=> flick.viewport-y;
     }
 }

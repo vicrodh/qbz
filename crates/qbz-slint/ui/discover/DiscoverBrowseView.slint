@@ -15,6 +15,7 @@ import { AlbumCard } from "AlbumCard.slint";
 import { AlbumListRow, AlbumListHeader } from "../primitives/AlbumListRow.slint";
 import { GenreFilterPopup } from "GenreFilterPopup.slint";
 import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
+import { ListScrollbar } from "../primitives/ListScrollbar.slint";
 import { NavButtons } from "../shell/NavButtons.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 
@@ -271,7 +272,7 @@ export component DiscoverBrowseView inherits Rectangle {
         }
 
         // --- Scrolling list (only the listing scrolls) ------------------
-        Flickable {
+        flick := Flickable {
             vertical-stretch: 1;
             viewport-width: self.width;
             viewport-height: page.preferred-height;
@@ -375,6 +376,18 @@ export component DiscoverBrowseView inherits Rectangle {
                 }
             }
         }
+    }
+
+    // Shared scrollbar in the right gutter (homologated cross-view). Sits
+    // below the fixed 56px header so it tracks only the scrolling list.
+    ListScrollbar {
+        x: parent.width - self.width - 4px;
+        y: 56px;
+        width: 14px;
+        height: parent.height - 56px;
+        viewport-height: flick.viewport-height;
+        visible-height: flick.height;
+        viewport-y <=> flick.viewport-y;
     }
 
     // --- Genre filter overlay --------------------------------------------

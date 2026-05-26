@@ -254,22 +254,61 @@ export component TrackRow inherits Rectangle {
                     }
                 }
             }
-            if root.track.artist != "": Text {
-                text: root.track.artist;
-                color: Theme.text-muted;
-                font-size: Typography.legal;
-                overflow: elide;
+            // Artist — a clickable link when an artist-id is present
+            // (opens the artist view), plain muted text otherwise. The
+            // TouchArea is sized to the text via the wrapping layout so it
+            // doesn't swallow clicks across the whole row width.
+            if root.track.artist != "": HorizontalLayout {
+                alignment: start;
+                Rectangle {
+                    width: artist-link.preferred-width;
+                    artist-link := Text {
+                        text: root.track.artist;
+                        color: (root.track.artist-id != "" && artist-ta.has-hover)
+                            ? Theme.text-primary
+                            : Theme.text-muted;
+                        font-size: Typography.legal;
+                        overflow: elide;
+                    }
+                    artist-ta := TouchArea {
+                        // Only interactive when there is an artist to open.
+                        enabled: root.track.artist-id != "";
+                        mouse-cursor: root.track.artist-id != "" ? pointer : default;
+                        clicked => {
+                            root.media-action("artist", root.track.artist-id, "open");
+                        }
+                    }
+                }
             }
         }
 
-        // Album column.
-        if root.show-album: Text {
-            text: root.track.album;
+        // Album column — clickable link when an album-id is present
+        // (opens the album view), plain muted text otherwise.
+        if root.show-album: Rectangle {
             width: 220px;
-            color: Theme.text-muted;
-            font-size: Typography.legal;
-            vertical-alignment: center;
-            overflow: elide;
+            album-link := Text {
+                x: 0;
+                width: 100%;
+                text: root.track.album;
+                color: (root.track.album-id != "" && album-ta.has-hover)
+                    ? Theme.text-primary
+                    : Theme.text-muted;
+                font-size: Typography.legal;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+            album-ta := TouchArea {
+                // Constrain to the rendered text so empty padding isn't clickable.
+                x: 0;
+                width: album-link.preferred-width < parent.width
+                    ? album-link.preferred-width
+                    : parent.width;
+                enabled: root.track.album-id != "";
+                mouse-cursor: root.track.album-id != "" ? pointer : default;
+                clicked => {
+                    root.media-action("album", root.track.album-id, "open");
+                }
+            }
         }
 
         // Duration.
@@ -293,7 +332,9 @@ export component TrackRow inherits Rectangle {
             vertical-alignment: center;
         }
 
-        // Favorite.
+        // Favorite — filled accent heart when favorited, outline heart
+        // otherwise. Click toggles (handled in Rust, which flips
+        // `is-favorite` optimistically so this updates immediately).
         if root.show-favorite: VerticalLayout {
             alignment: center;
             Rectangle {
@@ -302,12 +343,16 @@ export component TrackRow inherits Rectangle {
                 border-radius: Radius.sm;
                 background: fav-ta.has-hover ? Theme.surface-elevated : transparent;
                 QbzIcon {
-                    source: @image-url("../assets/icons/heart.svg");
+                    source: root.track.is-favorite
+                        ? @image-url("../assets/icons/heart-filled.svg")
+                        : @image-url("../assets/icons/heart.svg");
                     width: 16px;
                     height: 16px;
                     x: (parent.width - self.width) / 2;
                     y: (parent.height - self.height) / 2;
-                    tint: fav-ta.has-hover ? Theme.text-primary : Theme.text-muted;
+                    tint: root.track.is-favorite
+                        ? Theme.accent
+                        : (fav-ta.has-hover ? Theme.text-primary : Theme.text-muted);
                 }
                 fav-ta := TouchArea {
                     mouse-cursor: pointer;

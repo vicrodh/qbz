@@ -12,6 +12,7 @@ import { MixState, DragState } from "../state.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { TrackRow } from "../primitives/TrackRow.slint";
 import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
+import { ListScrollbar } from "../primitives/ListScrollbar.slint";
 import { NavButtons } from "../shell/NavButtons.slint";
 
 // Circular header action button (Play / Shuffle / Save / Refresh).
@@ -66,7 +67,7 @@ export component MixView inherits Rectangle {
 
     background: Theme.surface-main;
 
-    Flickable {
+    flick := Flickable {
         interactive: !DragState.active;
         viewport-width: self.width;
         viewport-height: page.preferred-height;
@@ -261,5 +262,15 @@ export component MixView inherits Rectangle {
                 }
             }
         }
+    }
+
+    // Shared scrollbar in the right gutter (homologated cross-view).
+    ListScrollbar {
+        x: parent.width - self.width - 4px;
+        width: 14px;
+        height: 100%;
+        viewport-height: flick.viewport-height;
+        visible-height: flick.height;
+        viewport-y <=> flick.viewport-y;
     }
 }

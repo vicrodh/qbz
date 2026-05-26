@@ -15,6 +15,7 @@ import { HomeSkeleton } from "HomeSkeleton.slint";
 import { ForYouView } from "ForYouView.slint";
 import { GenreFilterPopup } from "GenreFilterPopup.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
+import { ListScrollbar } from "../primitives/ListScrollbar.slint";
 import { NavButtons } from "../shell/NavButtons.slint";
 
 // Header + hint shown for a recently-played module while it has no data
@@ -242,8 +243,14 @@ export component HomeView inherits Rectangle {
         // A Flickable (not a ScrollView): wheel scrolling with no scrollbar
         // gutters at all. viewport-width is pinned to the Flickable width so
         // the carousels' clipped content can never scroll horizontally.
-        Flickable {
+        // Wrapped in a non-layout Rectangle so the shared ListScrollbar can
+        // overlay the right gutter without stealing layout space (see the
+        // scrollbar homologation note in ListScrollbar.slint).
+        Rectangle {
             vertical-stretch: 1;
+            flick := Flickable {
+            width: 100%;
+            height: 100%;
             viewport-width: self.width;
             viewport-height: home-content.preferred-height;
 
@@ -348,6 +355,16 @@ export component HomeView inherits Rectangle {
                         root.album-clicked(id);
                     }
                 }
+            }
+            }
+            // Shared scrollbar in the right gutter (homologated cross-view).
+            ListScrollbar {
+                x: parent.width - self.width - 4px;
+                width: 14px;
+                height: 100%;
+                viewport-height: flick.viewport-height;
+                visible-height: flick.height;
+                viewport-y <=> flick.viewport-y;
             }
         }
     }

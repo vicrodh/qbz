@@ -358,11 +358,18 @@ fn map_track(index: usize, track: PageArtistTrack) -> TrackData {
     if let Some(version) = track.version.as_ref().filter(|v| !v.is_empty()) {
         title = format!("{title} ({version})");
     }
+    let (artist, artist_id) = track
+        .artist
+        .map(|a| (a.name.display, a.id.to_string()))
+        .unwrap_or_default();
+    let album_id = track.album.map(|a| a.id).unwrap_or_default();
     TrackData {
         id: track.id.to_string(),
         number: (index + 1).to_string(),
         title,
-        artist: track.artist.map(|a| a.name.display).unwrap_or_default(),
+        artist,
+        artist_id,
+        album_id,
         duration: mmss(track.duration.unwrap_or(0)),
         quality_tier: tier(track.audio_info.and_then(|a| a.maximum_bit_depth)).to_string(),
         explicit: track.parental_warning.unwrap_or(false),
@@ -481,7 +488,7 @@ pub fn apply_artist(window: &AppWindow, data: ArtistData) {
         .top_tracks
         .into_iter()
         .map(|track| TrackItem {
-            id: track.id.into(),
+            id: track.id.clone().into(),
             number: track.number.into(),
             title: track.title.into(),
             artist: track.artist.into(),
@@ -492,6 +499,9 @@ pub fn apply_artist(window: &AppWindow, data: ArtistData) {
             selected: false,
             artwork_url: "".into(),
             artwork: slint::Image::default(),
+            is_favorite: crate::fav_cache::is_favorite(&track.id),
+            artist_id: track.artist_id.into(),
+            album_id: track.album_id.into(),
         })
         .collect();
     let release_sections: Vec<DiscoverSection> = data

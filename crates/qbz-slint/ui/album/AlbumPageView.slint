@@ -18,6 +18,7 @@ import { QualityBadgeFull } from "../primitives/QualityBadgeFull.slint";
 import { TrackPlayCell } from "../primitives/TrackPlayCell.slint";
 import { TrackContextMenu } from "../primitives/TrackContextMenu.slint";
 import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
+import { ListScrollbar } from "../primitives/ListScrollbar.slint";
 import { NavButtons } from "../shell/NavButtons.slint";
 
 component CircleAction inherits Rectangle {
@@ -121,7 +122,7 @@ export component AlbumPageView inherits Rectangle {
 
     background: Theme.surface-main;
 
-    Flickable {
+    flick := Flickable {
         // Freeze scroll during a track drag so the ghost doesn't drift.
         interactive: !DragState.active;
         viewport-width: self.width;
@@ -587,6 +588,16 @@ export component AlbumPageView inherits Rectangle {
                 }
             }
         }
+    }
+
+    // Shared scrollbar in the right gutter (homologated cross-view).
+    ListScrollbar {
+        x: parent.width - self.width - 4px;
+        width: 14px;
+        height: 100%;
+        viewport-height: flick.viewport-height;
+        visible-height: flick.height;
+        viewport-y <=> flick.viewport-y;
     }
 
     // --- Full-description modal --------------------------------------------

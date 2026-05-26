@@ -49,6 +49,13 @@ pub struct TrackData {
     pub number: String,
     pub title: String,
     pub artist: String,
+    /// Performer id for the clickable artist link ("" = plain text).
+    pub artist_id: String,
+    /// Album id for the clickable album link ("" = plain text). Album view
+    /// leaves this empty (its rows belong to the album being viewed, so the
+    /// apply layer stamps the viewed album's id); artist top-tracks set it
+    /// per-track since they span different albums.
+    pub album_id: String,
     pub duration: String,
     pub quality_tier: String,
     pub explicit: bool,
@@ -182,11 +189,18 @@ fn map_track(track: Track) -> TrackData {
     if let Some(version) = track.version.as_ref().filter(|v| !v.is_empty()) {
         title = format!("{title} ({version})");
     }
+    let (artist, artist_id) = track
+        .performer
+        .map(|p| (p.name, p.id.to_string()))
+        .unwrap_or_default();
     TrackData {
         id: track.id.to_string(),
         number: track.track_number.to_string(),
         title,
-        artist: track.performer.map(|p| p.name).unwrap_or_default(),
+        artist,
+        artist_id,
+        // The album view stamps the viewed album's id at the apply layer.
+        album_id: String::new(),
         duration: mmss(track.duration),
         quality_tier: tier(track.maximum_bit_depth).to_string(),
         explicit: track.parental_warning,
@@ -220,11 +234,15 @@ fn format_duration(secs: u32) -> String {
 
 /// Apply album data to the `AlbumState` global. Runs on the Slint event loop.
 pub fn apply_album(window: &AppWindow, data: AlbumData) {
+    // These rows belong to the album currently being viewed, so the
+    // album link target is this album's own id (the album column is not
+    // shown here, but album-id keeps the row model complete).
+    let album_id: slint::SharedString = data.id.clone().into();
     let tracks: Vec<TrackItem> = data
         .tracks
         .into_iter()
         .map(|track| TrackItem {
-            id: track.id.into(),
+            id: track.id.clone().into(),
             number: track.number.into(),
             title: track.title.into(),
             artist: track.artist.into(),
@@ -235,6 +253,9 @@ pub fn apply_album(window: &AppWindow, data: AlbumData) {
             selected: false,
             artwork_url: "".into(),
             artwork: slint::Image::default(),
+            is_favorite: crate::fav_cache::is_favorite(&track.id),
+            artist_id: track.artist_id.into(),
+            album_id: album_id.clone(),
         })
         .collect();
 

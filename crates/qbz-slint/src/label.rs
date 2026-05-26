@@ -34,10 +34,15 @@ pub struct AlbumCard {
     pub title: String,
     pub artist: String,
     pub artist_id: String,
+    pub genre: String,
     pub year: String,
     pub quality_tier: String,
     pub quality_label: String,
     pub artwork_url: String,
+    // List-row extras (AlbumListRow columns; ignored by the grid card).
+    pub quality_detail: String, // "24-bit / 96 kHz"
+    pub track_count: String,    // "12"
+    pub plain_year: String,     // "1973"
 }
 
 /// Fetch the label page (name + image) and the first album page.
@@ -109,15 +114,29 @@ fn map_album(album: Album) -> AlbumCard {
         (Some(bd), Some(sr)) => format!("{}-bit / {} kHz", bd, sr),
         _ => String::new(),
     };
+    let genre = album.genre.map(|g| g.name).unwrap_or_default();
+    let quality_detail = match (album.maximum_bit_depth, album.maximum_sampling_rate) {
+        (Some(bd), Some(sr)) => format!("{}-bit / {} kHz", bd, sr),
+        _ => String::new(),
+    };
+    let track_count = album
+        .tracks_count
+        .filter(|n| *n > 0)
+        .map(|n| n.to_string())
+        .unwrap_or_default();
     AlbumCard {
         id: album.id,
         title: album.title,
         artist: album.artist.name,
         artist_id: album.artist.id.to_string(),
-        year,
+        genre,
+        year: year.clone(),
         quality_tier,
         quality_label,
         artwork_url: album.image.best().cloned().unwrap_or_default(),
+        quality_detail,
+        track_count,
+        plain_year: year,
     }
 }
 
@@ -153,7 +172,7 @@ fn to_item(card: AlbumCard) -> AlbumCardItem {
         title: card.title.into(),
         artist: card.artist.into(),
         artist_id: card.artist_id.into(),
-        genre: "".into(),
+        genre: card.genre.into(),
         year: card.year.into(),
         quality_tier: card.quality_tier.into(),
         quality_label: card.quality_label.into(),
@@ -161,8 +180,12 @@ fn to_item(card: AlbumCard) -> AlbumCardItem {
         ribbon_kind: "".into(),
         artwork_url: card.artwork_url.into(),
         artwork: slint::Image::default(),
-        // Label grid cards render as grid AlbumCards only — list-row
-        // extras stay default.
+        // List-row extras — feed the AlbumListRow columns (QUALITY /
+        // TRACKS / YEAR) for the list view toggle. SOURCE is hidden in
+        // this single-source (Qobuz) context.
+        quality_detail: card.quality_detail.into(),
+        track_count: card.track_count.into(),
+        plain_year: card.plain_year.into(),
         ..Default::default()
     }
 }

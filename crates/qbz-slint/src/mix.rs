@@ -161,6 +161,19 @@ fn to_item(track: &Track) -> TrackItem {
             .unwrap_or_default()
             .into(),
         artwork: slint::Image::default(),
+        is_favorite: crate::fav_cache::is_favorite(&track.id.to_string()),
+        artist_id: track
+            .performer
+            .as_ref()
+            .map(|p| p.id.to_string())
+            .unwrap_or_default()
+            .into(),
+        album_id: track
+            .album
+            .as_ref()
+            .map(|a| a.id.clone())
+            .unwrap_or_default()
+            .into(),
     }
 }
 

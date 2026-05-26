@@ -26,6 +26,7 @@ import { ContextMenuItem } from "../primitives/ContextMenuItem.slint";
 import { TrackPlayCell } from "../primitives/TrackPlayCell.slint";
 import { TrackContextMenu } from "../primitives/TrackContextMenu.slint";
 import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
+import { ListScrollbar } from "../primitives/ListScrollbar.slint";
 import { ReleaseGrid } from "ReleaseGrid.slint";
 import { NavButtons } from "../shell/NavButtons.slint";
 import { JumpNavBar, JumpNavTab } from "../primitives/JumpNavBar.slint";
@@ -605,6 +606,19 @@ export component ArtistPageView inherits Rectangle {
             }   // close body HorizontalLayout
         }   // close page VerticalLayout
     }   // close Flickable
+
+    // Shared scrollbar in the right gutter (homologated cross-view).
+    // Hidden while the network sidebar is open — that panel pins to the
+    // same right edge and carries its own scroll, so the page scrollbar
+    // there would overlap it.
+    if !NetworkSidebarState.open: ListScrollbar {
+        x: parent.width - self.width - 4px;
+        width: 14px;
+        height: 100%;
+        viewport-height: page-flickable.viewport-height;
+        visible-height: page-flickable.height;
+        viewport-y <=> page-flickable.viewport-y;
+    }
 
     // --- Sticky JUMP TO bar -------------------------------------------------
     // Overlay anchored to the top of ArtistPageView with the same

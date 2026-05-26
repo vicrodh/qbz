@@ -24,6 +24,7 @@ mod custom_artwork;
 mod dates;
 mod discover_browse;
 mod discovery_dismiss;
+mod fav_cache;
 mod favorites;
 mod foryou;
 mod genre_filter;
@@ -94,6 +95,19 @@ async fn enter_shell(
 
     // Load the sidebar playlists list.
     load_sidebar_playlists(runtime.clone(), weak.clone(), &tokio::runtime::Handle::current());
+
+    // Warm the shared favorite-track cache so track rows can show the
+    // correct heart state from their first paint (album / artist / search
+    // / playlist / mix / favorites all read it). Background-fetched once.
+    {
+        let runtime = runtime.clone();
+        tokio::spawn(async move {
+            match runtime.core().favorite_track_ids().await {
+                Ok(ids) => fav_cache::set_all(ids),
+                Err(e) => log::warn!("[qbz-slint] favorite cache load failed: {e}"),
+            }
+        });
+    }
 
     // Load Audio + Playback settings into the Settings page in the
     // background — store reads and device enumeration are blocking.
@@ -222,6 +236,42 @@ fn update_nav_flags(window: &AppWindow) {
     let state = window.global::<NavState>();
     state.set_can_back(nav::can_back());
     state.set_can_forward(nav::can_forward());
+}
+
+/// Flip the `is-favorite` flag on every visible row matching `track_id`,
+/// across all track-list surfaces (album, artist Popular, search,
+/// playlist, mix, favorites). Used for the optimistic favorite toggle so
+/// the heart updates the instant the user clicks, regardless of which
+/// view they are on.
+fn set_row_favorite(window: &AppWindow, track_id: &str, favorite: bool) {
+    let flip = |model: &slint::ModelRc<TrackItem>| {
+        if let Some(vm) = model.as_any().downcast_ref::<slint::VecModel<TrackItem>>() {
+            for i in 0..vm.row_count() {
+                if let Some(mut item) = vm.row_data(i) {
+                    if item.id == track_id {
+                        if item.is_favorite != favorite {
+                            item.is_favorite = favorite;
+                            vm.set_row_data(i, item);
+                        }
+                    }
+                }
+            }
+        }
+    };
+    flip(&window.global::<AlbumState>().get_tracks());
+    flip(&window.global::<ArtistState>().get_top_tracks());
+    flip(&window.global::<SearchState>().get_tracks());
+    flip(&window.global::<PlaylistState>().get_tracks());
+    flip(&window.global::<MixState>().get_tracks());
+    flip(&window.global::<FavoritesState>().get_tracks());
+
+    // Search's most-popular track hero is a standalone TrackItem.
+    let search = window.global::<SearchState>();
+    let mut hero = search.get_most_popular_track();
+    if hero.id == track_id && hero.is_favorite != favorite {
+        hero.is_favorite = favorite;
+        search.set_most_popular_track(hero);
+    }
 }
 
 /// Lazy-load the Discover > For You sections the first time the tab is
@@ -1998,11 +2048,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
                 ("track", "favorite") => {
+                    // Toggle (not just add): read the cached state, flip it
+                    // optimistically across every visible track model + the
+                    // shared cache, then add/remove on the network.
+                    let was_fav = fav_cache::is_favorite(&id);
+                    let make_fav = !was_fav;
+                    if let Ok(track_id) = id.parse::<u64>() {
+                        fav_cache::set(track_id, make_fav);
+                    }
+                    if let Some(w) = weak.upgrade() {
+                        set_row_favorite(&w, &id, make_fav);
+                    }
                     let runtime = runtime.clone();
+                    let weak = weak.clone();
                     let track_id = id.clone();
                     handle.spawn(async move {
-                        if let Err(e) = runtime.core().add_favorite("track", &track_id).await {
-                            log::error!("[qbz-slint] favorite track failed: {e}");
+                        let res = if make_fav {
+                            runtime.core().add_favorite("track", &track_id).await
+                        } else {
+                            runtime.core().remove_favorite("track", &track_id).await
+                        };
+                        if let Err(e) = res {
+                            log::error!("[qbz-slint] toggle track favorite failed: {e}");
+                            // Roll the optimistic change back on failure.
+                            if let Ok(tid) = track_id.parse::<u64>() {
+                                fav_cache::set(tid, was_fav);
+                            }
+                            let _ = weak.upgrade_in_event_loop(move |w| {
+                                set_row_favorite(&w, &track_id, was_fav);
+                            });
                         }
                     });
                 }

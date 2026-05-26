@@ -21,6 +21,7 @@ import {
 } from "../state.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
+import { ListScrollbar } from "../primitives/ListScrollbar.slint";
 import { NavButtons } from "../shell/NavButtons.slint";
 import { PmCollage } from "../primitives/PmCollage.slint";
 import { PmFolderIcon } from "../primitives/PmFolderIcon.slint";
@@ -1228,7 +1229,7 @@ export component PlaylistManagerView inherits Rectangle {
         }
 
         // --- Scrolling content -----------------------------------------
-        Flickable {
+        pm-flick := Flickable {
             vertical-stretch: 1;
             viewport-width: self.width;
             viewport-height: page.preferred-height;
@@ -1414,5 +1415,17 @@ export component PlaylistManagerView inherits Rectangle {
                 }
             }
         }
+    }
+
+    // Shared scrollbar in the right gutter (homologated cross-view). Sits
+    // below the fixed 56px toolbar so it tracks only the scrolling area.
+    ListScrollbar {
+        x: parent.width - self.width - 4px;
+        y: 56px;
+        width: 14px;
+        height: parent.height - 56px;
+        viewport-height: pm-flick.viewport-height;
+        visible-height: pm-flick.height;
+        viewport-y <=> pm-flick.viewport-y;
     }
 }

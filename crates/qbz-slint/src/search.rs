@@ -59,6 +59,10 @@ pub struct TrackRowData {
     pub id: String,
     pub title: String,
     pub artist: String,
+    /// Performer id for the clickable artist link ("" = plain text).
+    pub artist_id: String,
+    /// Album id for the clickable album link ("" = plain text).
+    pub album_id: String,
     pub duration: String,
     pub quality_tier: String,
     /// Detailed quality label, e.g. "Hi-Res 24-bit / 192 kHz". Used by the
@@ -208,10 +212,17 @@ pub fn map_track(track: Track) -> TrackRowData {
         .as_ref()
         .and_then(|a| a.image.best().cloned())
         .unwrap_or_default();
+    let album_id = track.album.as_ref().map(|a| a.id.clone()).unwrap_or_default();
+    let (artist, artist_id) = track
+        .performer
+        .map(|p| (p.name, p.id.to_string()))
+        .unwrap_or_default();
     TrackRowData {
         id: track.id.to_string(),
         title,
-        artist: track.performer.map(|p| p.name).unwrap_or_default(),
+        artist,
+        artist_id,
+        album_id,
         duration: mmss(track.duration),
         quality_tier: tier(track.maximum_bit_depth).to_string(),
         quality_label: quality_label(track.maximum_bit_depth, track.maximum_sampling_rate),
@@ -344,6 +355,7 @@ fn album_item(row: AlbumRow) -> AlbumCardItem {
 }
 
 fn track_item(row: TrackRowData) -> TrackItem {
+    let is_favorite = crate::fav_cache::is_favorite(&row.id);
     TrackItem {
         id: row.id.into(),
         number: "".into(),
@@ -356,6 +368,9 @@ fn track_item(row: TrackRowData) -> TrackItem {
         selected: false,
         artwork_url: row.artwork_url.into(),
         artwork: slint::Image::default(),
+        is_favorite,
+        artist_id: row.artist_id.into(),
+        album_id: row.album_id.into(),
     }
 }
 

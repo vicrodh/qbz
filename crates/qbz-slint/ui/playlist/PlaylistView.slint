@@ -15,11 +15,17 @@ import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
 import { NavButtons } from "../shell/NavButtons.slint";
 import { ListView } from "std-widgets.slint";
 
+// Header action button — homologated 1:1 with AlbumPageView's
+// CircleAction: a ghost circle (translucent fill + faint ring, never a
+// solid accent fill) so the playlist transport row matches the album
+// one. Adds `active` (accent-tinted glyph for toggled state, e.g.
+// favorite / select mode) and `enabled` (dimmed + non-interactive),
+// which the album header doesn't need but the playlist one does.
 component CircleAction inherits Rectangle {
     in property <image> icon;
     in property <bool> primary: false;
     in property <bool> active: false;
-    in property <length> diameter: 38px;
+    in property <length> diameter: 40px;
     in property <bool> enabled: true;
     callback clicked();
 
@@ -27,18 +33,21 @@ component CircleAction inherits Rectangle {
     height: root.diameter;
     border-radius: root.diameter / 2;
     opacity: root.enabled ? 1.0 : 0.4;
-    background: root.primary
-        ? (ta.has-hover ? #ffffffd6 : Theme.accent)
-        : (ta.has-hover ? Theme.surface-hover : Theme.surface-elevated);
+    // Ghost circle — translucent fill with a faint ring (matches the
+    // Tauri transport controls + AlbumPageView).
+    background: ta.has-hover ? Theme.surface-hover : transparent;
+    border-width: 1px;
+    border-color: ta.has-hover ? Theme.text-disabled : Theme.border-subtle;
+
     QbzIcon {
         source: root.icon;
-        width: root.primary ? 18px : 16px;
-        height: root.primary ? 18px : 16px;
+        width: root.primary ? 19px : 17px;
+        height: root.primary ? 19px : 17px;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
-        tint: root.primary
-            ? #ffffff
-            : (root.active ? Theme.accent : Theme.text-secondary);
+        tint: root.active
+            ? Theme.accent
+            : (ta.has-hover ? Theme.text-primary : Theme.text-secondary);
     }
     ta := TouchArea {
         mouse-cursor: root.enabled ? pointer : default;
@@ -152,11 +161,11 @@ export component PlaylistView inherits Rectangle {
                     background: Theme.surface-elevated;
                     clip: true;
 
-                    // Hover state — drives the artwork buttons (only
-                    // shown on mouse-over). OR'd with the buttons so
-                    // moving onto a button keeps them visible.
+                    // Hover state — drives the artwork overlay (only
+                    // shown on mouse-over). OR'd with the overlay button so
+                    // moving onto it keeps the overlay visible.
                     property <bool> hovered:
-                        cover-hover.has-hover || set-ta.has-hover || clr-ta.has-hover;
+                        cover-hover.has-hover || cover-btn-ta.has-hover;
 
                     // Custom artwork / single server image.
                     property <bool> show-single:
@@ -221,60 +230,57 @@ export component PlaylistView inherits Rectangle {
                         tint: Theme.text-muted;
                     }
 
-                    // Hover detector (below the buttons so they stay
-                    // clickable). Owner only.
+                    // Hover detector (below the overlay buttons so they
+                    // stay clickable). Owner only.
                     cover-hover := TouchArea {
                         mouse-cursor: PlaylistState.is-owner ? pointer : default;
                         enabled: PlaylistState.is-owner;
                     }
 
-                    // Set custom artwork (owner only) — bottom-right,
-                    // shown on hover.
-                    Rectangle {
-                        visible: PlaylistState.is-owner && cover-box.hovered;
-                        width: 32px;
-                        height: 32px;
-                        border-radius: 16px;
-                        x: parent.width - self.width - 8px;
-                        y: parent.height - self.height - 8px;
-                        background: set-ta.has-hover ? Theme.accent : #000000aa;
-                        QbzIcon {
-                            source: @image-url("../assets/icons/image-plus.svg");
-                            width: 16px;
-                            height: 16px;
+                    // Hover overlay — a centered "change cover" affordance
+                    // over the whole artwork, mirroring Tauri's
+                    // `.artwork-overlay`: a dim scrim that fades in on
+                    // hover with a single centered button. ImagePlus when
+                    // no custom art is set (sets one); X when one is
+                    // (clears it). Owner only. The button stays in the tree
+                    // (its TouchArea name must be in scope for `hovered`),
+                    // its glyph + action just switch on `has-custom`.
+                    cover-overlay := Rectangle {
+                        opacity: (PlaylistState.is-owner && cover-box.hovered) ? 1.0 : 0.0;
+                        background: #00000066;
+                        animate opacity { duration: 150ms; }
+
+                        cover-btn := Rectangle {
+                            width: 44px;
+                            height: 44px;
+                            border-radius: 22px;
                             x: (parent.width - self.width) / 2;
                             y: (parent.height - self.height) / 2;
-                            tint: #ffffff;
-                        }
-                        set-ta := TouchArea {
-                            mouse-cursor: pointer;
-                            clicked => {
-                                root.media-action("playlist", "", "set-artwork");
+                            background: cover-btn-ta.has-hover
+                                ? (PlaylistState.has-custom ? #ef4444 : Theme.accent)
+                                : #000000aa;
+                            QbzIcon {
+                                source: PlaylistState.has-custom
+                                    ? @image-url("../assets/icons/x.svg")
+                                    : @image-url("../assets/icons/image-plus.svg");
+                                width: PlaylistState.has-custom ? 20px : 22px;
+                                height: PlaylistState.has-custom ? 20px : 22px;
+                                x: (parent.width - self.width) / 2;
+                                y: (parent.height - self.height) / 2;
+                                tint: #ffffff;
                             }
-                        }
-                    }
-                    // Clear custom artwork — top-right, shown on hover
-                    // when a custom image is set.
-                    Rectangle {
-                        visible: PlaylistState.is-owner && PlaylistState.has-custom && cover-box.hovered;
-                        width: 28px;
-                        height: 28px;
-                        border-radius: 14px;
-                        x: parent.width - self.width - 8px;
-                        y: 8px;
-                        background: clr-ta.has-hover ? #ef4444 : #000000aa;
-                        QbzIcon {
-                            source: @image-url("../assets/icons/x.svg");
-                            width: 14px;
-                            height: 14px;
-                            x: (parent.width - self.width) / 2;
-                            y: (parent.height - self.height) / 2;
-                            tint: #ffffff;
-                        }
-                        clr-ta := TouchArea {
-                            mouse-cursor: pointer;
-                            clicked => {
-                                root.media-action("playlist", "", "clear-artwork");
+                            cover-btn-ta := TouchArea {
+                                mouse-cursor: pointer;
+                                // Only interactive while the overlay is up
+                                // (and the user owns the playlist).
+                                enabled: PlaylistState.is-owner && cover-box.hovered;
+                                clicked => {
+                                    if (PlaylistState.has-custom) {
+                                        root.media-action("playlist", "", "clear-artwork");
+                                    } else {
+                                        root.media-action("playlist", "", "set-artwork");
+                                    }
+                                }
                             }
                         }
                     }
@@ -639,12 +645,14 @@ export component PlaylistView inherits Rectangle {
             if PlaylistState.multi-select-mode: Rectangle { height: 8px; }
 
             // Virtualized track list (built-in scrollbar hidden — a
-            // custom one sits in its own gutter to the right).
-            HorizontalLayout {
+            // custom one OVERLAYS its own gutter to the right — homologated
+            // with every other view (the scrollbar sits in the right gutter
+            // without shrinking the list).
+            Rectangle {
                 vertical-stretch: 1;
-                spacing: 0px;
                 track-list := ListView {
-                    horizontal-stretch: 1;
+                    width: 100%;
+                    height: 100%;
                     vertical-scrollbar-policy: ScrollBarPolicy.always-off;
                     for track[i] in PlaylistState.tracks: TrackRow {
                         track: track;
@@ -664,7 +672,9 @@ export component PlaylistView inherits Rectangle {
                     }
                 }
                 ListScrollbar {
-                    horizontal-stretch: 0;
+                    x: parent.width - self.width - 4px;
+                    width: 14px;
+                    height: 100%;
                     viewport-height: track-list.viewport-height;
                     visible-height: track-list.visible-height;
                     viewport-y <=> track-list.viewport-y;

@@ -92,6 +92,8 @@ pub struct TrackCard {
     pub id: String,
     pub title: String,
     pub artist: String,
+    pub artist_id: String,
+    pub album_id: String,
     pub duration: String,
     pub quality_tier: String,
     pub explicit: bool,
@@ -229,10 +231,17 @@ fn map_track(track: Track) -> TrackCard {
         .as_ref()
         .and_then(|a| a.image.best().cloned())
         .unwrap_or_default();
+    let album_id = track.album.as_ref().map(|a| a.id.clone()).unwrap_or_default();
+    let (artist, artist_id) = track
+        .performer
+        .map(|p| (p.name, p.id.to_string()))
+        .unwrap_or_default();
     TrackCard {
         id: track.id.to_string(),
         title,
-        artist: track.performer.map(|p| p.name).unwrap_or_default(),
+        artist,
+        artist_id,
+        album_id,
         duration: mmss(track.duration),
         quality_tier: tier(track.maximum_bit_depth).to_string(),
         explicit: track.parental_warning,
@@ -324,6 +333,11 @@ pub fn apply_favorites(window: &AppWindow, data: FavData) {
                     selected: false,
                     artwork_url: t.artwork_url.into(),
                     artwork: slint::Image::default(),
+                    // Everything in the Favorites > Tracks tab is, by
+                    // definition, a favorite.
+                    is_favorite: true,
+                    artist_id: t.artist_id.into(),
+                    album_id: t.album_id.into(),
                 })
                 .collect();
             state.set_tracks(ModelRc::new(VecModel::from(rows)));

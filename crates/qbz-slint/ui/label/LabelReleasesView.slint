@@ -9,21 +9,55 @@ import { Typography } from "../foundation/typography.slint";
 import { Radius } from "../foundation/radius.slint";
 import { LabelState, LabelActions, AlbumCardItem } from "../state.slint";
 import { AlbumCard } from "../discover/AlbumCard.slint";
+import { AlbumListRow, AlbumListHeader } from "../primitives/AlbumListRow.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
+import { ListScrollbar } from "../primitives/ListScrollbar.slint";
 import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
 import { NavButtons } from "../shell/NavButtons.slint";
 
+// One half of the grid/list segmented toggle — identical to
+// DiscoverBrowseView's ToggleButton so the two views read the same.
+component ToggleButton inherits Rectangle {
+    in property <image> icon;
+    in property <bool> active: false;
+    callback clicked();
+
+    width: 34px;
+    height: 34px;
+    background: root.active
+        ? Theme.surface-hover
+        : (ta.has-hover ? Theme.surface-elevated : transparent);
+
+    QbzIcon {
+        source: root.icon;
+        width: 17px;
+        height: 17px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        tint: root.active ? Theme.text-primary : Theme.text-muted;
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
 export component LabelReleasesView inherits Rectangle {
     callback open-album(string);
+    callback open-artist(string);
     callback media-action(string, string, string);
 
     property <length> card-width: 220px;
     property <length> card-height: 266px;
     property <length> card-gap: 24px;
+    property <length> list-row-gap: 4px;
 
     background: Theme.surface-main;
 
-    Flickable {
+    flick := Flickable {
         viewport-width: self.width;
         viewport-height: page.preferred-height;
 
@@ -71,6 +105,7 @@ export component LabelReleasesView inherits Rectangle {
                 VerticalLayout {
                     alignment: center;
                     spacing: 6px;
+                    horizontal-stretch: 1;
                     Text {
                         text: @tr("LABEL");
                         color: Theme.text-muted;
@@ -90,6 +125,35 @@ export component LabelReleasesView inherits Rectangle {
                         font-size: Typography.body;
                     }
                 }
+
+                // Grid/list segmented toggle — floats right of the header,
+                // same widget + behavior as DiscoverBrowseView.
+                VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: 68px;
+                        height: 34px;
+                        border-radius: 6px;
+                        background: Theme.surface-elevated;
+                        clip: true;
+                        HorizontalLayout {
+                            ToggleButton {
+                                icon: @image-url("../assets/icons/layout-grid.svg");
+                                active: LabelState.view-mode == "grid";
+                                clicked => {
+                                    LabelState.view-mode = "grid";
+                                }
+                            }
+                            ToggleButton {
+                                icon: @image-url("../assets/icons/list.svg");
+                                active: LabelState.view-mode == "list";
+                                clicked => {
+                                    LabelState.view-mode = "list";
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             Rectangle { height: 32px; }
@@ -100,7 +164,8 @@ export component LabelReleasesView inherits Rectangle {
             }
 
             // --- Album grid --------------------------------------------
-            if LabelState.albums.length > 0: grid := Rectangle {
+            if LabelState.albums.length > 0
+                && LabelState.view-mode == "grid": grid := Rectangle {
                 property <int> columns: Math.max(
                     1,
                     Math.floor((self.width + root.card-gap) / (root.card-width + root.card-gap)));
@@ -118,7 +183,37 @@ export component LabelReleasesView inherits Rectangle {
                         root.open-album(id);
                     }
                     media-action(kind, id, action) => {
-                        root.media-action(kind, id, action);
+                        if (kind == "artist") {
+                            root.open-artist(id);
+                        } else {
+                            root.media-action(kind, id, action);
+                        }
+                    }
+                }
+            }
+
+            // --- Album list --------------------------------------------
+            // Reusable AlbumListRow; SOURCE column hidden (single-source
+            // Qobuz catalog). Header labels the columns.
+            if LabelState.albums.length > 0
+                && LabelState.view-mode == "list": VerticalLayout {
+                spacing: root.list-row-gap;
+                AlbumListHeader {
+                    show-source: false;
+                }
+                for album[i] in LabelState.albums: AlbumListRow {
+                    album: album;
+                    index: i;
+                    show-source: false;
+                    clicked(id) => {
+                        root.open-album(id);
+                    }
+                    media-action(kind, id, action) => {
+                        if (kind == "artist") {
+                            root.open-artist(id);
+                        } else {
+                            root.media-action(kind, id, action);
+                        }
                     }
                 }
             }
@@ -150,5 +245,15 @@ export component LabelReleasesView inherits Rectangle {
                 }
             }
         }
+    }
+
+    // Shared scrollbar in the right gutter (homologated cross-view).
+    ListScrollbar {
+        x: parent.width - self.width - 4px;
+        width: 14px;
+        height: 100%;
+        viewport-height: flick.viewport-height;
+        visible-height: flick.height;
+        viewport-y <=> flick.viewport-y;
     }
 }

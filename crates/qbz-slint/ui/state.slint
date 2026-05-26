@@ -203,6 +203,14 @@ export struct TrackItem {
     selected: bool,
     artwork-url: string,
     artwork: image,
+    // Favorite state — drives the heart fill and the optimistic toggle.
+    // Populated from the user's favorite-track set when each row is built.
+    is-favorite: bool,
+    // Ids for the clickable artist/album links in the row. Empty = the
+    // text is plain (not a link). artist-id -> artist view, album-id ->
+    // album view, both via the media-action bubble channel.
+    artist-id: string,
+    album-id: string,
 }
 
 // Album detail screen state.
@@ -1127,6 +1135,9 @@ export global LabelState {
     in property <int> total: 0;
     in property <bool> loading: false;
     in property <bool> load-more-loading: false;
+    // "grid" | "list" — the view toggle (mirrors DiscoverBrowseView).
+    // UI-owned, like Discover's; no Rust round-trip needed.
+    in-out property <string> view-mode: "grid";
 }
 
 export global LabelActions {
