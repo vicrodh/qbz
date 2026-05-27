@@ -1438,6 +1438,14 @@ export struct FavoriteArtistItem {
     image: image,
 }
 
+// An A-Z section of favorite artists (grid grouped mode + sidepanel left
+// list). `key` is the bucket letter ("#", "A".."Z"); `title` the header.
+export struct FavArtistSection {
+    key: string,
+    title: string,
+    artists: [FavoriteArtistItem],
+}
+
 // One label card in the Favorites > Labels grid.
 export struct FavoriteLabelItem {
     id: string,
@@ -1490,6 +1498,21 @@ export global FavoritesState {
     in property <[FavoriteLabelItem]> labels: [];
     in property <[FavoriteLabelItem]> labels-visible: []; // after search filter (rendered)
     in-out property <string> labels-search: "";
+    // Artists — toolbar / grid view
+    in-out property <string> artists-search: "";
+    in-out property <string> artists-view-mode: "grid";    // grid | sidepanel
+    in-out property <bool> artists-group-enabled: false;    // A-Z grouping (grid)
+    in property <[FavoriteArtistItem]> artists-visible: []; // after search (flat grid)
+    in property <[FavArtistSection]> artists-grouped: [];   // A-Z sections (grouped grid + sidepanel list)
+    in property <[AlphaJump]> artists-alpha: [];            // A-Z jump strip
+    in property <int> artists-shown: 0;                     // count after search
+    // Artists — sidepanel (the selected artist's albums)
+    in-out property <string> selected-artist-id: "";        // "" = none selected
+    in property <string> selected-artist-name: "";
+    in property <bool> selected-albums-loading: false;
+    in property <string> selected-albums-error: "";
+    in property <int> selected-albums-total: 0;             // sum across sections
+    in property <[DiscoverSection]> selected-artist-sections: []; // release-type sections
     in property <int> tracks-total: 0;
     in property <int> albums-total: 0;
     in property <int> artists-total: 0;
@@ -1522,6 +1545,11 @@ export global FavoritesActions {
     callback search-playlists(string /* query */);
     callback playlists-set-view(string /* grid | list */);
     callback playlist-action(string /* playlist id */, string /* play | play-next | queue | share | favorite */);
+    callback search-artists(string /* query */);
+    callback artists-set-view(string /* grid | sidepanel */);
+    callback artists-set-group(string /* off | alpha */);
+    callback artists-shuffle();
+    callback select-artist(string /* artist id */, string /* name */);
     callback albums-set-view(string /* grid | list */);
     callback albums-set-sort(string /* sort key */);
     callback albums-set-group(string /* off | alpha | artist */);
