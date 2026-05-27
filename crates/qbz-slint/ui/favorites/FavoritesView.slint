@@ -793,6 +793,21 @@ export component FavoritesView inherits Rectangle {
                     }
                 }
             }
+            if FavoritesState.active-tab == "artists"
+                && FavoritesState.artists.length > 0: HorizontalLayout {
+                spacing: 8px;
+                VerticalLayout {
+                    alignment: center;
+                    ExpandableSearch {
+                        placeholder: @tr("Search");
+                        sm: true;
+                        query <=> FavoritesState.artists-search;
+                        edited(q) => {
+                            FavoritesActions.search-artists(q);
+                        }
+                    }
+                }
+            }
         }
 
         Rectangle { height: 14px; }
@@ -1036,7 +1051,7 @@ export component FavoritesView inherits Rectangle {
                             property <int> columns: Math.max(
                                 1,
                                 Math.floor((self.width + root.gap) / (root.artist-w + root.gap)));
-                            property <int> rows: Math.ceil(FavoritesState.artists.length / self.columns);
+                            property <int> rows: Math.ceil(FavoritesState.artists-visible.length / self.columns);
                             height: self.rows > 0
                                 ? self.rows * root.artist-h + Math.max(0, self.rows - 1) * root.gap
                                 : 0px;
@@ -1045,7 +1060,13 @@ export component FavoritesView inherits Rectangle {
                                 color: Theme.text-muted;
                                 font-size: Typography.body;
                             }
-                            for artist[i] in FavoritesState.artists: FavArtistCard {
+                            if FavoritesState.artists.length > 0
+                                && FavoritesState.artists-shown == 0: Text {
+                                text: @tr("No artists match your search.");
+                                color: Theme.text-muted;
+                                font-size: Typography.body;
+                            }
+                            for artist[i] in FavoritesState.artists-visible: FavArtistCard {
                                 x: Math.mod(i, artists-grid.columns) * (root.artist-w + root.gap);
                                 y: Math.floor(i / artists-grid.columns) * (root.artist-h + root.gap);
                                 item: artist;

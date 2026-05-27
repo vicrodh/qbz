@@ -4351,6 +4351,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             });
     }
     {
+        // Local search over the loaded favorite artists (name).
+        let weak = window.as_weak();
+        window
+            .global::<FavoritesActions>()
+            .on_search_artists(move |q| {
+                if let Some(w) = weak.upgrade() {
+                    w.global::<FavoritesState>().set_artists_search(q);
+                    favorites::derive_artists(&w);
+                }
+            });
+    }
+    {
         // Playlist card actions: play / play-next / queue / share / favorite.
         let runtime = app_runtime.clone();
         let weak = window.as_weak();
