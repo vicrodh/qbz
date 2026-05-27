@@ -1458,6 +1458,7 @@ export global FavoritesState {
     in property <[TrackItem]> tracks: [];
     in property <[TrackItem]> tracks-visible: [];
     in-out property <string> tracks-search: "";
+    in-out property <string> tracks-group-mode: "off"; // off|album|artist|name
     in-out property <bool> tracks-multi-select: false;
     in property <int> tracks-selected-count: 0;
     in property <[AlbumCardItem]> albums: [];
@@ -1490,6 +1491,7 @@ export global FavoritesActions {
     callback play-track(string /* track id */);
     callback track-action(string /* track id */, string /* action */);
     callback search-tracks(string /* query */);
+    callback tracks-set-group(string /* off | album | artist | name */);
     callback play-all-tracks();
     callback shuffle-tracks();
     callback toggle-multi-select();

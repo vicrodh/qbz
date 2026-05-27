@@ -420,6 +420,29 @@ export component FavoritesView inherits Rectangle {
                             }
                         }
                     }
+                    VerticalLayout {
+                        alignment: center;
+                        QbzSelect {
+                            menu-width: 150px;
+                            options: [
+                                @tr("Group: Off"),
+                                @tr("Group: Album"),
+                                @tr("Group: Artist"),
+                                @tr("Group: Name"),
+                            ];
+                            current-index: FavoritesState.tracks-group-mode == "off" ? 0
+                                : FavoritesState.tracks-group-mode == "album" ? 1
+                                : FavoritesState.tracks-group-mode == "artist" ? 2
+                                : 3;
+                            selected(i) => {
+                                FavoritesActions.tracks-set-group(
+                                    i == 0 ? "off"
+                                    : i == 1 ? "album"
+                                    : i == 2 ? "artist"
+                                    : "name");
+                            }
+                        }
+                    }
                 }
                 if FavoritesState.tracks.length > 0: Rectangle { height: 12px; }
 

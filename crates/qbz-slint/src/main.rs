@@ -4399,6 +4399,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             });
     }
     {
+        // Group the favorite tracks (off / album / artist / name).
+        let weak = window.as_weak();
+        window
+            .global::<FavoritesActions>()
+            .on_tracks_set_group(move |g| {
+                if let Some(w) = weak.upgrade() {
+                    w.global::<FavoritesState>().set_tracks_group_mode(g);
+                    favorites::derive_tracks(&w);
+                }
+            });
+    }
+    {
         // Play all favorite tracks as a fresh queue.
         let runtime = app_runtime.clone();
         let weak = window.as_weak();

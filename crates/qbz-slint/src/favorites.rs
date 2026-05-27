@@ -427,19 +427,39 @@ pub fn derive_tracks(window: &AppWindow) {
     let state = window.global::<FavoritesState>();
     let query_owned = state.get_tracks_search().to_lowercase();
     let query = query_owned.trim();
+    let group = state.get_tracks_group_mode().to_string();
     let all = state.get_tracks();
-    if query.is_empty() {
+    // Fast path: no search + no grouping -> share full model (artwork live).
+    if query.is_empty() && group == "off" {
         state.set_tracks_visible(all);
         return;
     }
-    let filtered: Vec<TrackItem> = (0..all.row_count())
+    let mut filtered: Vec<TrackItem> = (0..all.row_count())
         .filter_map(|i| all.row_data(i))
         .filter(|t| {
-            t.title.to_lowercase().contains(query)
+            query.is_empty()
+                || t.title.to_lowercase().contains(query)
                 || t.artist.to_lowercase().contains(query)
                 || t.album.to_lowercase().contains(query)
         })
         .collect();
+    // Group-by reorders the rows so a group's tracks sit together (Tauri
+    // adds visible headers; v1 here is group-ordering without header rows
+    // until the list is virtualized).
+    let lc = |s: &slint::SharedString| s.to_lowercase();
+    match group.as_str() {
+        "album" => {
+            filtered.sort_by(|a, b| lc(&a.album).cmp(&lc(&b.album)).then(lc(&a.title).cmp(&lc(&b.title))))
+        }
+        "artist" => filtered.sort_by(|a, b| {
+            lc(&a.artist)
+                .cmp(&lc(&b.artist))
+                .then(lc(&a.album).cmp(&lc(&b.album)))
+                .then(lc(&a.title).cmp(&lc(&b.title)))
+        }),
+        "name" => filtered.sort_by(|a, b| lc(&a.title).cmp(&lc(&b.title))),
+        _ => {}
+    }
     state.set_tracks_visible(ModelRc::new(VecModel::from(filtered)));
 }
 
