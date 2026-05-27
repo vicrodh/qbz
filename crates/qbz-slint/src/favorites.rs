@@ -85,7 +85,10 @@ impl FavTab {
 
 /// Favorites-labels response item — the qbz-models `Label` is just
 /// {id, name}, but the favorites payload carries an image + count,
-/// so parse into this richer local shape.
+/// so parse into this richer local shape. `image` is a bare string on
+/// the wire (LegacyLabelDto), but typed as Value to also tolerate the
+/// `{mega|extralarge|large|thumbnail|small}` object form other label
+/// surfaces return (resolved via `label::extract_label_image`).
 #[derive(Deserialize)]
 struct FavLabel {
     #[serde(default)]
@@ -94,6 +97,8 @@ struct FavLabel {
     name: String,
     #[serde(default)]
     albums_count: Option<u32>,
+    #[serde(default)]
+    image: Option<serde_json::Value>,
 }
 
 pub enum FavData {
@@ -141,6 +146,7 @@ pub struct LabelCard {
     pub id: String,
     pub name: String,
     pub albums_line: String,
+    pub image_url: String,
 }
 
 /// Fetch + parse one favorites tab.
@@ -378,14 +384,17 @@ fn map_playlist(playlist: Playlist) -> PlaylistCard {
 }
 
 fn map_label(label: FavLabel) -> LabelCard {
+    // Tauri's favorites label card says "{n} albums" (library.albumCount),
+    // matching the sibling FavArtistCard's "{n} albums".
     let albums_line = match label.albums_count {
-        Some(n) if n > 0 => format!("{} releases", n),
+        Some(n) if n > 0 => format!("{} albums", n),
         _ => String::new(),
     };
     LabelCard {
         id: label.id.to_string(),
         name: label.name,
         albums_line,
+        image_url: crate::label::extract_label_image(label.image.as_ref()),
     }
 }
 
@@ -491,9 +500,16 @@ pub fn apply_favorites(window: &AppWindow, data: FavData) {
                     id: l.id.into(),
                     name: l.name.into(),
                     albums_line: l.albums_line.into(),
+                    image_url: l.image_url.into(),
+                    image: slint::Image::default(),
                 })
                 .collect();
-            state.set_labels(ModelRc::new(VecModel::from(rows)));
+            // `labels` is the full set the artwork pipeline targets;
+            // `labels-visible` (what the grid renders) shares it until a
+            // search filter forks it, so artwork stays live.
+            let model = ModelRc::new(VecModel::from(rows));
+            state.set_labels(model.clone());
+            state.set_labels_visible(model);
             state.set_labels_total(total as i32);
         }
     }
@@ -967,7 +983,14 @@ pub fn artwork_jobs(data: &FavData) -> Vec<ArtworkJob> {
                 target: ArtworkTarget::FavoritePlaylist { index: i },
             })
             .collect(),
-        // Labels render an icon, no remote artwork.
-        FavData::Labels { .. } => Vec::new(),
+        FavData::Labels { items, .. } => items
+            .iter()
+            .enumerate()
+            .filter(|(_, l)| !l.image_url.is_empty())
+            .map(|(i, l)| ArtworkJob {
+                url: l.image_url.clone(),
+                target: ArtworkTarget::FavoriteLabel { index: i },
+            })
+            .collect(),
     }
 }

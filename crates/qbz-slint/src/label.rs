@@ -112,8 +112,9 @@ where
 
 /// Extract the best URL from /label/page's flexible image value. It
 /// can be a bare string or an object with mega/extralarge/large/...
-/// keys (mirrors the Svelte extraction order).
-fn extract_label_image(image: Option<&serde_json::Value>) -> String {
+/// keys (mirrors the Svelte extraction order). Reused by the favorites
+/// Labels tab, whose wire `image` is a bare string per the Android DTO.
+pub(crate) fn extract_label_image(image: Option<&serde_json::Value>) -> String {
     let Some(image) = image else {
         return String::new();
     };

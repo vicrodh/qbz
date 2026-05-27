@@ -1448,11 +1448,13 @@ export struct FavoritePlaylistItem {
     cover: image,
 }
 
-// One label row in the Favorites > Labels list.
+// One label card in the Favorites > Labels grid.
 export struct FavoriteLabelItem {
     id: string,
     name: string,
-    albums-line: string,   // "N releases"
+    albums-line: string,   // "N albums"
+    image-url: string,     // resolved URL ("" -> gradient placeholder)
+    image: image,          // decoded cover, filled by the artwork pipeline
 }
 
 // Library > Favorites state. The active tab decides which model is
@@ -1486,6 +1488,7 @@ export global FavoritesState {
     in property <[FavoriteArtistItem]> artists: [];
     in property <[FavoritePlaylistItem]> playlists: [];
     in property <[FavoriteLabelItem]> labels: [];
+    in property <[FavoriteLabelItem]> labels-visible: []; // after search filter (rendered)
     in property <int> tracks-total: 0;
     in property <int> albums-total: 0;
     in property <int> artists-total: 0;
