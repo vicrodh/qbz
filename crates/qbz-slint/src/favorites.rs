@@ -21,7 +21,7 @@ use slint::{ComponentHandle, Model, ModelRc, VecModel};
 use crate::album_map::{self, map_album, to_item, AlbumCard};
 use crate::artwork::{ArtworkJob, ArtworkTarget};
 use crate::{
-    AlbumCardItem, AppWindow, DiscoverSection, FavoriteArtistItem, FavoriteLabelItem,
+    AlbumCardItem, AlphaJump, AppWindow, DiscoverSection, FavoriteArtistItem, FavoriteLabelItem,
     FavoritePlaylistItem, FavoritesState, TrackItem,
 };
 
@@ -512,6 +512,7 @@ pub fn derive_tracks(window: &AppWindow) {
     let group = state.get_tracks_group_mode().to_string();
     let genre_names = crate::genre_filter::selected_names("favorites");
     let all = state.get_tracks();
+    state.set_tracks_alpha(ModelRc::new(VecModel::from(Vec::<AlphaJump>::new())));
     // Fast path: no search + no grouping + no genre filter -> share model.
     if query.is_empty() && group == "off" && genre_names.is_empty() {
         state.set_tracks_visible(all);
@@ -543,6 +544,22 @@ pub fn derive_tracks(window: &AppWindow) {
         }),
         "name" => filtered.sort_by(|a, b| lc(&a.title).cmp(&lc(&b.title))),
         _ => {}
+    }
+    // A-Z jump strip for name grouping: first row index per distinct initial.
+    if group == "name" {
+        let mut jumps: Vec<AlphaJump> = Vec::new();
+        let mut last = String::new();
+        for (i, t) in filtered.iter().enumerate() {
+            let key = album_alpha_key(t.title.as_str());
+            if key != last {
+                jumps.push(AlphaJump {
+                    letter: key.clone().into(),
+                    index: i as i32,
+                });
+                last = key;
+            }
+        }
+        state.set_tracks_alpha(ModelRc::new(VecModel::from(jumps)));
     }
     state.set_tracks_visible(ModelRc::new(VecModel::from(filtered)));
 }
@@ -583,6 +600,7 @@ pub fn derive_albums(window: &AppWindow) {
     let group = state.get_albums_group_mode().to_string();
     let genre_names = crate::genre_filter::selected_names("favorites");
     let all = state.get_albums();
+    state.set_albums_alpha(ModelRc::new(VecModel::from(Vec::<AlphaJump>::new())));
     let empty_sections = || ModelRc::new(VecModel::from(Vec::<DiscoverSection>::new()));
 
     // Fast path: no filter, default order, no grouping, no genre -> share.
@@ -638,6 +656,18 @@ pub fn derive_albums(window: &AppWindow) {
         (false, true) => std::cmp::Ordering::Greater,
         _ => a.to_lowercase().cmp(&b.to_lowercase()),
     });
+    // A-Z jump strip for alpha grouping: the section letters in order.
+    if group == "alpha" {
+        let alpha: Vec<AlphaJump> = map
+            .iter()
+            .enumerate()
+            .map(|(i, (k, _))| AlphaJump {
+                letter: k.clone().into(),
+                index: i as i32,
+            })
+            .collect();
+        state.set_albums_alpha(ModelRc::new(VecModel::from(alpha)));
+    }
     let sections: Vec<DiscoverSection> = map
         .into_iter()
         .map(|(key, items)| DiscoverSection {

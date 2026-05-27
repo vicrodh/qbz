@@ -29,6 +29,14 @@ export struct AlbumCardItem {
     plain-year: string,    // "1973" — bare year for the list-row YEAR column
 }
 
+// One entry in an A-Z jump strip (favorites tracks name-group / albums
+// A-Z group). `index` is the first row index (tracks); albums jump
+// proportionally by the entry's ordinal so it needs no exact offset.
+export struct AlphaJump {
+    letter: string,
+    index: int,
+}
+
 // One button in the shared multi-select bulk bar (MultiSelectBar).
 export struct BulkAction {
     id: string,             // emitted verbatim via MultiSelectBar.action(id)
@@ -1463,6 +1471,7 @@ export global FavoritesState {
     in property <[TrackItem]> tracks-visible: [];
     in-out property <string> tracks-search: "";
     in-out property <string> tracks-group-mode: "off"; // off|album|artist|name
+    in property <[AlphaJump]> tracks-alpha: []; // A-Z jumps (name grouping)
     in-out property <bool> tracks-multi-select: false;
     in property <int> tracks-selected-count: 0;
     in property <[AlbumCardItem]> albums: [];
@@ -1472,6 +1481,7 @@ export global FavoritesState {
     in-out property <string> albums-search: "";
     in-out property <string> albums-sort-by: "default"; // default|title-asc|title-desc|artist-asc
     in-out property <string> albums-group-mode: "off"; // off|alpha|artist
+    in property <[AlphaJump]> albums-alpha: []; // A-Z jumps (alpha grouping)
     in property <int> albums-shown: 0; // count after filter (grouped or flat)
     in property <[FavoriteArtistItem]> artists: [];
     in property <[FavoritePlaylistItem]> playlists: [];

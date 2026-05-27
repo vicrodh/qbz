@@ -19,6 +19,7 @@ import {
     DragState,
     GenreFilterState,
     GenreFilterActions,
+    AlphaJump,
 } from "../state.slint";
 import { AlbumCollectionView } from "../discover/AlbumCollectionView.slint";
 import { GenreFilterPopup } from "../discover/GenreFilterPopup.slint";
@@ -361,6 +362,37 @@ component ViewToggle inherits Rectangle {
             active: FavoritesState.albums-view-mode == "list";
             clicked => {
                 FavoritesActions.albums-set-view("list");
+            }
+        }
+    }
+}
+
+// Vertical A-Z jump strip overlaid on the right edge of a grouped list /
+// grid. Emits jump(ordinal, index); the host scrolls its list/flickable.
+component AlphaStrip inherits Rectangle {
+    in property <[AlphaJump]> jumps;
+    callback jump(int /* ordinal */, int /* index */);
+    width: 18px;
+
+    VerticalLayout {
+        alignment: center;
+        spacing: 0px;
+        for j[k] in root.jumps: Rectangle {
+            height: 15px;
+            width: 18px;
+            Text {
+                text: j.letter;
+                color: la.has-hover ? Theme.accent : Theme.text-muted;
+                font-size: 9px;
+                font-weight: Typography.semibold;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+            la := TouchArea {
+                mouse-cursor: pointer;
+                clicked => {
+                    root.jump(k, j.index);
+                }
             }
         }
     }
@@ -740,6 +772,18 @@ export component FavoritesView inherits Rectangle {
                         visible-height: track-list.visible-height;
                         viewport-y <=> track-list.viewport-y;
                     }
+                    // A-Z jump strip (name grouping) — accurate (uniform rows).
+                    if FavoritesState.tracks-group-mode == "name"
+                        && FavoritesState.tracks-alpha.length > 0: AlphaStrip {
+                        x: parent.width - self.width - 20px;
+                        height: 100%;
+                        jumps: FavoritesState.tracks-alpha;
+                        jump(ord, idx) => {
+                            track-list.viewport-y = -Math.min(
+                                idx * 50px / 1px,
+                                Math.max(0, (track-list.viewport-height - track-list.visible-height) / 1px)) * 1px;
+                        }
+                    }
                 }
             }
 
@@ -865,6 +909,18 @@ export component FavoritesView inherits Rectangle {
                     viewport-height: other-flick.viewport-height;
                     visible-height: other-flick.height;
                     viewport-y <=> other-flick.viewport-y;
+                }
+                // A-Z jump strip (albums alpha grouping) — proportional jump.
+                if FavoritesState.active-tab == "albums"
+                    && FavoritesState.albums-group-mode == "alpha"
+                    && FavoritesState.albums-alpha.length > 0: AlphaStrip {
+                    x: parent.width - self.width - 20px;
+                    height: 100%;
+                    jumps: FavoritesState.albums-alpha;
+                    jump(ord, idx) => {
+                        other-flick.viewport-y = -(ord / Math.max(1, FavoritesState.albums-alpha.length - 1))
+                            * Math.max(0, (other-flick.viewport-height - other-flick.height) / 1px) * 1px;
+                    }
                 }
             }
         }
