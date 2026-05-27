@@ -8,7 +8,7 @@
 
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
-import { HomeState, HomeActions, GenreFilterState, NavState, ContentView } from "../state.slint";
+import { HomeState, HomeActions, GenreFilterState, GenreFilterActions, NavState, ContentView } from "../state.slint";
 import { Carousel } from "Carousel.slint";
 import { SlimCarousel } from "SlimCarousel.slint";
 import { HomeSkeleton } from "HomeSkeleton.slint";
@@ -225,6 +225,7 @@ export component HomeView inherits Rectangle {
                 spacing: 6px;
                 GenreButton {
                     clicked => {
+                        GenreFilterActions.set-context("discover");
                         GenreFilterState.open = !GenreFilterState.open;
                     }
                 }

@@ -143,7 +143,7 @@ async fn enter_shell(
 /// `Option<Vec<u64>>` the discover endpoints take (None = no filter).
 /// Shared by the home re-fetch and the DiscoverBrowse "View all" page.
 fn current_genre_filter() -> Option<Vec<u64>> {
-    let ids = genre_filter::filter_ids();
+    let ids = genre_filter::filter_ids("discover");
     (!ids.is_empty()).then_some(ids)
 }
 
@@ -159,7 +159,7 @@ async fn reload_home(
 ) {
     // Expand the selection to descendants so a parent selection
     // covers its child genres (the child-genre filtering recovery).
-    let genre_ids = genre_filter::filter_ids();
+    let genre_ids = genre_filter::filter_ids("discover");
     let genre_ids = (!genre_ids.is_empty()).then_some(genre_ids);
 
     match home::load_home(runtime, genre_ids).await {
@@ -780,6 +780,10 @@ fn navigate_favorites(
             state.set_active_tab(tab_id_for_ui.into());
             favorites::reset_loading(&w);
             w.global::<NavState>().set_view(ContentView::Favorites);
+            // The genre popup edits the favorites context here, and the
+            // toolbar genre button shows the favorites selection count.
+            genre_filter::set_context("favorites");
+            genre_filter::apply_state(&w);
         });
         match favorites::load_favorites(&runtime, tab).await {
             Ok(data) => {
@@ -3233,9 +3237,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             });
     }
 
-    // Genre filter — shared selection across the three Discover tabs.
-    // Toggling / clearing re-fetches the discover index with the new
-    // genre ids and rebuilds the section sets; the active tab stays.
+    // Genre filter — selection is per context ("discover" / "favorites").
+    // Toggling / clearing re-fetches the discover index (discover context)
+    // or re-derives the favorites tab (favorites context).
+    {
+        let weak = window.as_weak();
+        window
+            .global::<GenreFilterActions>()
+            .on_set_context(move |ctx| {
+                genre_filter::set_context(ctx.as_str());
+                if let Some(w) = weak.upgrade() {
+                    genre_filter::apply_state(&w);
+                }
+            });
+    }
     {
         let runtime = app_runtime.clone();
         let weak = window.as_weak();
@@ -3254,6 +3269,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     return;
                 };
                 genre_filter::apply_state(&w);
+                // Favorites: client-side genre filter — re-derive the active
+                // favorites tab instead of re-fetching the discover index.
+                if genre_filter::current_context() == "favorites" {
+                    let runtime_f = runtime.clone();
+                    let weak_f = weak.clone();
+                    let id_f = id.to_string();
+                    handle.spawn(async move {
+                        if !was_selected {
+                            if let Ok(gid) = id_f.parse::<u64>() {
+                                genre_filter::load_descendants(&runtime_f, gid).await;
+                            }
+                        }
+                        let _ = weak_f.upgrade_in_event_loop(|w| {
+                            genre_filter::apply_state(&w);
+                            if w.global::<FavoritesState>().get_active_tab().as_str() == "albums" {
+                                favorites::derive_albums(&w);
+                            } else {
+                                favorites::derive_tracks(&w);
+                            }
+                        });
+                    });
+                    return;
+                }
                 // When the DiscoverBrowse "View all" page is showing, the
                 // genre change re-fetches THAT page; otherwise it reloads
                 // the Discover home index.
@@ -3347,6 +3385,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     return;
                 };
                 genre_filter::apply_state(&w);
+                if genre_filter::current_context() == "favorites" {
+                    if w.global::<FavoritesState>().get_active_tab().as_str() == "albums" {
+                        favorites::derive_albums(&w);
+                    } else {
+                        favorites::derive_tracks(&w);
+                    }
+                    return;
+                }
                 let browse_target = current_browse_target(&w);
                 if browse_target.is_none() {
                     w.global::<HomeState>().set_loading(true);

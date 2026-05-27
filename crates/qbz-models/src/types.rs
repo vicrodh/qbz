@@ -248,6 +248,8 @@ pub struct AlbumSummary {
     pub image: ImageSet,
     /// Label (if returned in track response)
     pub label: Option<Label>,
+    /// Genre (when returned, e.g. on favorites track album objects).
+    pub genre: Option<Genre>,
 }
 
 /// Album model

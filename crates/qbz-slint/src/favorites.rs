@@ -8,6 +8,7 @@
 //! relevant branch into typed qbz-models items and maps them to the
 //! Slint row/card structs.
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, Mutex};
 
@@ -36,6 +37,12 @@ const MAX_ITEMS: usize = 10_000;
 /// The loaded favorite tracks as a play-ready queue source (Play all /
 /// Shuffle). Set on the UI thread by `apply_favorites`.
 static FAV_CURRENT: LazyLock<Mutex<Vec<Track>>> = LazyLock::new(|| Mutex::new(Vec::new()));
+
+thread_local! {
+    /// Track id -> genre name, for the favorites Tracks genre filter
+    /// (TrackItem carries no genre). Set on the UI thread by apply.
+    static FAV_TRACK_GENRE: RefCell<HashMap<String, String>> = RefCell::new(HashMap::new());
+}
 
 /// Which favorites tab to load.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -105,6 +112,7 @@ pub struct TrackCard {
     pub artist_id: String,
     pub album: String,
     pub album_id: String,
+    pub genre: String,
     pub duration: String,
     pub quality_tier: String,
     pub explicit: bool,
@@ -248,6 +256,12 @@ fn map_track(track: Track) -> TrackCard {
         .map(|a| a.title.clone())
         .unwrap_or_default();
     let album_id = track.album.as_ref().map(|a| a.id.clone()).unwrap_or_default();
+    let genre = track
+        .album
+        .as_ref()
+        .and_then(|a| a.genre.as_ref())
+        .map(|g| g.name.clone())
+        .unwrap_or_default();
     let (artist, artist_id) = track
         .performer
         .map(|p| (p.name, p.id.to_string()))
@@ -259,6 +273,7 @@ fn map_track(track: Track) -> TrackCard {
         artist_id,
         album,
         album_id,
+        genre,
         duration: mmss(track.duration),
         quality_tier: album_map::tier(track.maximum_bit_depth).to_string(),
         explicit: track.parental_warning,
@@ -319,6 +334,9 @@ pub fn apply_favorites(window: &AppWindow, data: FavData) {
             if let Ok(mut current) = FAV_CURRENT.lock() {
                 *current = play;
             }
+            FAV_TRACK_GENRE.with(|m| {
+                *m.borrow_mut() = items.iter().map(|t| (t.id.clone(), t.genre.clone())).collect();
+            });
             let rows: Vec<TrackItem> = items
                 .into_iter()
                 .map(|t| TrackItem {
@@ -428,19 +446,21 @@ pub fn derive_tracks(window: &AppWindow) {
     let query_owned = state.get_tracks_search().to_lowercase();
     let query = query_owned.trim();
     let group = state.get_tracks_group_mode().to_string();
+    let genre_names = crate::genre_filter::selected_names("favorites");
     let all = state.get_tracks();
-    // Fast path: no search + no grouping -> share full model (artwork live).
-    if query.is_empty() && group == "off" {
+    // Fast path: no search + no grouping + no genre filter -> share model.
+    if query.is_empty() && group == "off" && genre_names.is_empty() {
         state.set_tracks_visible(all);
         return;
     }
     let mut filtered: Vec<TrackItem> = (0..all.row_count())
         .filter_map(|i| all.row_data(i))
         .filter(|t| {
-            query.is_empty()
+            (query.is_empty()
                 || t.title.to_lowercase().contains(query)
                 || t.artist.to_lowercase().contains(query)
-                || t.album.to_lowercase().contains(query)
+                || t.album.to_lowercase().contains(query))
+                && track_genre_matches(t.id.as_str(), &genre_names)
         })
         .collect();
     // Group-by reorders the rows so a group's tracks sit together (Tauri
@@ -497,11 +517,12 @@ pub fn derive_albums(window: &AppWindow) {
     let query = query_owned.trim();
     let sort = state.get_albums_sort_by().to_string();
     let group = state.get_albums_group_mode().to_string();
+    let genre_names = crate::genre_filter::selected_names("favorites");
     let all = state.get_albums();
     let empty_sections = || ModelRc::new(VecModel::from(Vec::<DiscoverSection>::new()));
 
-    // Fast path: no filter, default order, no grouping -> share full model.
-    if query.is_empty() && sort == "default" && group == "off" {
+    // Fast path: no filter, default order, no grouping, no genre -> share.
+    if query.is_empty() && sort == "default" && group == "off" && genre_names.is_empty() {
         let n = all.row_count() as i32;
         state.set_albums_visible(all);
         state.set_albums_grouped(empty_sections());
@@ -512,9 +533,10 @@ pub fn derive_albums(window: &AppWindow) {
     let mut filtered: Vec<AlbumCardItem> = (0..all.row_count())
         .filter_map(|i| all.row_data(i))
         .filter(|a| {
-            query.is_empty()
+            (query.is_empty()
                 || a.title.to_lowercase().contains(query)
-                || a.artist.to_lowercase().contains(query)
+                || a.artist.to_lowercase().contains(query))
+                && album_genre_matches(a.genre.as_str(), &genre_names)
         })
         .collect();
     album_map::sort_album_items(&mut filtered, &sort);
@@ -571,6 +593,31 @@ fn album_alpha_key(title: &str) -> String {
         Some(c) if c.is_alphabetic() => c.to_uppercase().to_string(),
         _ => "#".to_string(),
     }
+}
+
+/// True if `genre` matches any selected genre name (favorites filter).
+fn album_genre_matches(genre: &str, names: &[String]) -> bool {
+    if names.is_empty() {
+        return true;
+    }
+    let g = genre.to_lowercase();
+    names.iter().any(|n| g.contains(&n.to_lowercase()))
+}
+
+/// Same, looking the track's genre up in the id->genre map.
+fn track_genre_matches(id: &str, names: &[String]) -> bool {
+    if names.is_empty() {
+        return true;
+    }
+    FAV_TRACK_GENRE.with(|m| {
+        m.borrow()
+            .get(id)
+            .map(|g| {
+                let gl = g.to_lowercase();
+                names.iter().any(|n| gl.contains(&n.to_lowercase()))
+            })
+            .unwrap_or(false)
+    })
 }
 
 /// A random album id from the currently-visible set (Shuffle / random).

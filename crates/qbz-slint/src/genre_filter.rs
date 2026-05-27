@@ -1,11 +1,13 @@
 //! Filter-by-genre controller.
 //!
-//! Loads the parent genres for the Discover popup's simple grid and
-//! owns the shared genre selection (one set for all three Discover
-//! tabs, matching Tauri's single "home" genre context). The selection
+//! Loads the parent genres for the popup's simple grid and owns the genre
+//! selection. The selection is **per context** ("discover" for the three
+//! Discover tabs, "favorites" for the favorites tabs) so the two surfaces
+//! filter independently (Tauri keeps them separate too). The popup edits
+//! whatever context is `current` (set when it opens). The selection
 //! persists to `<data-dir>/qbz/genre_filter.json` when "Remember
-//! selection" is on, and feeds `genre_ids` into the discover-index
-//! fetch.
+//! selection" is on, and feeds `genre_ids` into the discover-index fetch /
+//! the favorites client-side genre filter.
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -26,6 +28,10 @@ struct GenreItem {
 
 #[derive(Default, Serialize, Deserialize)]
 struct Persisted {
+    /// Per-context selections ("discover" / "favorites" / ...).
+    #[serde(default)]
+    contexts: HashMap<String, Vec<u64>>,
+    /// Legacy single-list selection — migrated into the "discover" context.
     #[serde(default)]
     selected: Vec<u64>,
     #[serde(default = "default_true")]
@@ -40,17 +46,41 @@ struct State {
     parents: Vec<GenreItem>,
     /// Lazily loaded children, keyed by parent id (levels 2 and 3).
     children: HashMap<u64, Vec<GenreItem>>,
-    selected: Vec<u64>,
+    /// Selected genre ids per context.
+    selected: HashMap<String, Vec<u64>>,
+    /// The context the popup is currently editing.
+    current: String,
     expanded: HashSet<u64>,
     search: String,
     remember: bool,
+}
+
+impl State {
+    /// Mutable handle to the current context's selection (created if absent).
+    fn cur_mut(&mut self) -> &mut Vec<u64> {
+        let key = self.current.clone();
+        self.selected.entry(key).or_default()
+    }
+    fn is_selected(&self, id: u64) -> bool {
+        self.selected
+            .get(&self.current)
+            .map(|v| v.contains(&id))
+            .unwrap_or(false)
+    }
+    fn cur_len(&self) -> usize {
+        self.selected
+            .get(&self.current)
+            .map(|v| v.len())
+            .unwrap_or(0)
+    }
 }
 
 static STATE: LazyLock<Mutex<State>> = LazyLock::new(|| {
     Mutex::new(State {
         parents: Vec::new(),
         children: HashMap::new(),
-        selected: Vec::new(),
+        selected: HashMap::new(),
+        current: "discover".to_string(),
         expanded: HashSet::new(),
         search: String::new(),
         remember: true,
@@ -71,7 +101,7 @@ fn load_persisted() -> Persisted {
     }
 }
 
-fn save_persisted(selected: &[u64], remember: bool) {
+fn save_persisted(contexts: &HashMap<String, Vec<u64>>, remember: bool) {
     let Some(path) = store_path() else {
         return;
     };
@@ -84,7 +114,8 @@ fn save_persisted(selected: &[u64], remember: bool) {
         let _ = std::fs::create_dir_all(parent);
     }
     let data = Persisted {
-        selected: selected.to_vec(),
+        contexts: contexts.clone(),
+        selected: Vec::new(),
         remember,
     };
     if let Ok(json) = serde_json::to_vec_pretty(&data) {
@@ -92,27 +123,69 @@ fn save_persisted(selected: &[u64], remember: bool) {
     }
 }
 
-/// The explicitly-selected genre ids (what the user clicked).
-pub fn selected_ids() -> Vec<u64> {
-    STATE.lock().map(|s| s.selected.clone()).unwrap_or_default()
+/// Set the context the popup edits (call when opening it for a surface).
+pub fn set_context(ctx: &str) {
+    if let Ok(mut s) = STATE.lock() {
+        s.current = ctx.to_string();
+        s.selected.entry(ctx.to_string()).or_default();
+    }
 }
 
-/// The ids to actually filter by: the selection plus every loaded
-/// descendant of each selected genre. Selecting a parent therefore
-/// covers its children/grandchildren — restoring the child-genre
-/// filtering the discovery-v2 home redesign dropped (the old home
-/// expanded to descendant names client-side; here we expand to
-/// descendant ids for the server filter).
-pub fn filter_ids() -> Vec<u64> {
+/// The context the popup is currently editing.
+pub fn current_context() -> String {
+    STATE
+        .lock()
+        .map(|s| s.current.clone())
+        .unwrap_or_else(|_| "discover".to_string())
+}
+
+/// The explicitly-selected genre ids in the current popup context.
+pub fn selected_ids() -> Vec<u64> {
+    STATE
+        .lock()
+        .map(|s| s.selected.get(&s.current).cloned().unwrap_or_default())
+        .unwrap_or_default()
+}
+
+/// The ids to filter by for `ctx`: its selection plus every loaded
+/// descendant of each selected genre (selecting a parent covers its
+/// children). Server-side genre filter for Discover.
+pub fn filter_ids(ctx: &str) -> Vec<u64> {
     let Ok(s) = STATE.lock() else {
         return Vec::new();
     };
     let mut out: HashSet<u64> = HashSet::new();
-    for id in &s.selected {
-        out.insert(*id);
-        collect_descendants(&s.children, *id, &mut out);
+    if let Some(sel) = s.selected.get(ctx) {
+        for id in sel {
+            out.insert(*id);
+            collect_descendants(&s.children, *id, &mut out);
+        }
     }
     out.into_iter().collect()
+}
+
+/// Selected genre NAMES (+ descendant names) for `ctx` — for the
+/// client-side album / track genre filter used by favorites.
+pub fn selected_names(ctx: &str) -> Vec<String> {
+    let Ok(s) = STATE.lock() else {
+        return Vec::new();
+    };
+    let mut ids: HashSet<u64> = HashSet::new();
+    if let Some(sel) = s.selected.get(ctx) {
+        for id in sel {
+            ids.insert(*id);
+            collect_descendants(&s.children, *id, &mut ids);
+        }
+    }
+    let mut names: Vec<String> = Vec::new();
+    for id in ids {
+        if let Some(g) = s.parents.iter().find(|g| g.id == id) {
+            names.push(g.name.clone());
+        } else if let Some(g) = s.children.values().flatten().find(|g| g.id == id) {
+            names.push(g.name.clone());
+        }
+    }
+    names
 }
 
 fn collect_descendants(
@@ -139,9 +212,9 @@ fn store_children(parent_id: u64, kids: Vec<GenreItem>) {
     }
 }
 
-/// Fetch the parent genres (if not already loaded) and seed the
-/// persisted selection. Runs on a worker; call apply_state afterwards
-/// on the UI thread.
+/// Fetch the parent genres (if not already loaded) and seed the persisted
+/// selection. Runs on a worker; call apply_state afterwards on the UI
+/// thread.
 pub async fn load_parents<A>(runtime: &AppRuntime<A>)
 where
     A: FrontendAdapter + Send + Sync + 'static,
@@ -168,18 +241,23 @@ where
     };
     parents.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
 
-    // Keep persisted selections as-is — they may reference child
-    // genres not yet loaded (advanced view), so validating against
-    // parents only would wrongly drop them.
+    // Keep persisted selections as-is — they may reference child genres
+    // not yet loaded (advanced view), so validating against parents only
+    // would wrongly drop them.
     if let Ok(mut s) = STATE.lock() {
         s.parents = parents;
-        s.selected = persisted.selected;
+        let mut contexts = persisted.contexts;
+        // Migrate a legacy flat selection into the discover context.
+        if contexts.is_empty() && !persisted.selected.is_empty() {
+            contexts.insert("discover".to_string(), persisted.selected);
+        }
+        s.selected = contexts;
         s.remember = persisted.remember;
     }
 }
 
-/// Load one genre level (children of `parent_id`) and store it. No-op
-/// if already loaded.
+/// Load one genre level (children of `parent_id`) and store it. No-op if
+/// already loaded.
 pub async fn load_children<A>(runtime: &AppRuntime<A>, parent_id: u64)
 where
     A: FrontendAdapter + Send + Sync + 'static,
@@ -208,8 +286,8 @@ fn child_ids(parent_id: u64) -> Vec<u64> {
         .unwrap_or_default()
 }
 
-/// Eager-load every parent's children (level 2) so the advanced tree
-/// can show child counts up front. Grandchildren stay lazy.
+/// Eager-load every parent's children (level 2) so the advanced tree can
+/// show child counts up front. Grandchildren stay lazy.
 pub async fn load_all_parent_children<A>(runtime: &AppRuntime<A>)
 where
     A: FrontendAdapter + Send + Sync + 'static,
@@ -223,8 +301,8 @@ where
     }
 }
 
-/// Eager-load a genre's full descendant subtree (children +
-/// grandchildren), so a selection expands correctly in filter_ids.
+/// Eager-load a genre's full descendant subtree (children + grandchildren),
+/// so a selection expands correctly in filter_ids / selected_names.
 pub async fn load_descendants<A>(runtime: &AppRuntime<A>, id: u64)
 where
     A: FrontendAdapter + Send + Sync + 'static,
@@ -235,8 +313,8 @@ where
     }
 }
 
-/// Toggle a tree node's expanded state. Returns true if it is now
-/// expanded (so the caller can lazy-load its children).
+/// Toggle a tree node's expanded state. Returns true if it is now expanded
+/// (so the caller can lazy-load its children).
 pub fn toggle_expand(id_str: &str) -> bool {
     let Ok(id) = id_str.parse::<u64>() else {
         return false;
@@ -259,8 +337,8 @@ pub fn set_search(query: &str) {
     }
 }
 
-/// Push the current parents + selection + tree into GenreFilterState.
-/// UI thread.
+/// Push the current parents + selection + tree into GenreFilterState (for
+/// the current context). UI thread.
 pub fn apply_state(window: &AppWindow) {
     let (chips, rows, count, remember) = {
         let Ok(s) = STATE.lock() else {
@@ -272,10 +350,10 @@ pub fn apply_state(window: &AppWindow) {
             .map(|g| GenreChip {
                 id: g.id.to_string().into(),
                 name: g.name.clone().into(),
-                selected: s.selected.contains(&g.id),
+                selected: s.is_selected(g.id),
             })
             .collect();
-        (chips, build_tree_rows(&s), s.selected.len() as i32, s.remember)
+        (chips, build_tree_rows(&s), s.cur_len() as i32, s.remember)
     };
     let state = window.global::<GenreFilterState>();
     state.set_genres(ModelRc::new(VecModel::from(chips)));
@@ -287,8 +365,8 @@ pub fn apply_state(window: &AppWindow) {
 fn tree_row(item: &GenreItem, level: i32, s: &State) -> GenreTreeRow {
     let loaded = s.children.get(&item.id);
     let count = loaded.map(|c| c.len()).unwrap_or(0);
-    // Parents always have children; deeper levels show an expand
-    // arrow optimistically until a load proves them empty.
+    // Parents always have children; deeper levels show an expand arrow
+    // optimistically until a load proves them empty.
     let has_children = if level == 0 {
         true
     } else if level == 1 {
@@ -300,17 +378,17 @@ fn tree_row(item: &GenreItem, level: i32, s: &State) -> GenreTreeRow {
         id: item.id.to_string().into(),
         name: item.name.clone().into(),
         level,
-        selected: s.selected.contains(&item.id),
+        selected: s.is_selected(item.id),
         expanded: s.expanded.contains(&item.id),
         has_children,
         count: count as i32,
     }
 }
 
-/// Flatten the genre tree into the currently-visible rows. With a
-/// search query, returns a flat list of all loaded genres matching
-/// the query (ignoring expansion); otherwise honors per-node
-/// expansion down three levels.
+/// Flatten the genre tree into the currently-visible rows. With a search
+/// query, returns a flat list of all loaded genres matching the query
+/// (ignoring expansion); otherwise honors per-node expansion down three
+/// levels.
 fn build_tree_rows(s: &State) -> Vec<GenreTreeRow> {
     let query = s.search.trim().to_lowercase();
     let mut rows: Vec<GenreTreeRow> = Vec::new();
@@ -355,8 +433,8 @@ fn build_tree_rows(s: &State) -> Vec<GenreTreeRow> {
     rows
 }
 
-/// Toggle a genre id in the selection. Returns true if the selection
-/// changed (so the caller can re-fetch).
+/// Toggle a genre id in the current context's selection. Returns true if
+/// the selection changed (so the caller can re-fetch / re-derive).
 pub fn toggle(id_str: &str) -> bool {
     let Ok(id) = id_str.parse::<u64>() else {
         return false;
@@ -364,14 +442,17 @@ pub fn toggle(id_str: &str) -> bool {
     let Ok(mut s) = STATE.lock() else {
         return false;
     };
-    if let Some(pos) = s.selected.iter().position(|x| *x == id) {
-        s.selected.remove(pos);
-    } else {
-        s.selected.push(id);
+    {
+        let sel = s.cur_mut();
+        if let Some(pos) = sel.iter().position(|x| *x == id) {
+            sel.remove(pos);
+        } else {
+            sel.push(id);
+        }
     }
-    let (sel, rem) = (s.selected.clone(), s.remember);
+    let (contexts, rem) = (s.selected.clone(), s.remember);
     drop(s);
-    save_persisted(&sel, rem);
+    save_persisted(&contexts, rem);
     true
 }
 
@@ -379,10 +460,10 @@ pub fn clear() {
     let Ok(mut s) = STATE.lock() else {
         return;
     };
-    s.selected.clear();
-    let rem = s.remember;
+    s.cur_mut().clear();
+    let (contexts, rem) = (s.selected.clone(), s.remember);
     drop(s);
-    save_persisted(&[], rem);
+    save_persisted(&contexts, rem);
 }
 
 pub fn set_remember(remember: bool) {
@@ -390,7 +471,7 @@ pub fn set_remember(remember: bool) {
         return;
     };
     s.remember = remember;
-    let sel = s.selected.clone();
+    let contexts = s.selected.clone();
     drop(s);
-    save_persisted(&sel, remember);
+    save_persisted(&contexts, remember);
 }

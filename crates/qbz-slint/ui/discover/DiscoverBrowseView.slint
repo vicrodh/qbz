@@ -10,7 +10,7 @@
 
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
-import { DiscoverBrowseState, DiscoverBrowseActions, GenreFilterState } from "../state.slint";
+import { DiscoverBrowseState, DiscoverBrowseActions, GenreFilterState, GenreFilterActions } from "../state.slint";
 import { AlbumCollectionView } from "AlbumCollectionView.slint";
 import { GenreFilterPopup } from "GenreFilterPopup.slint";
 import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
@@ -209,6 +209,7 @@ export component DiscoverBrowseView inherits Rectangle {
                     alignment: center;
                     GenreButton {
                         clicked => {
+                            GenreFilterActions.set-context("discover");
                             GenreFilterState.open = !GenreFilterState.open;
                         }
                     }

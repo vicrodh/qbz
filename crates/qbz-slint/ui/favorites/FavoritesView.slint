@@ -17,8 +17,11 @@ import {
     FavoritePlaylistItem,
     FavoriteLabelItem,
     DragState,
+    GenreFilterState,
+    GenreFilterActions,
 } from "../state.slint";
 import { AlbumCollectionView } from "../discover/AlbumCollectionView.slint";
+import { GenreFilterPopup } from "../discover/GenreFilterPopup.slint";
 import { TrackRow } from "../primitives/TrackRow.slint";
 import { ExpandableSearch } from "../primitives/ExpandableSearch.slint";
 import { CircleAction } from "../primitives/CircleAction.slint";
@@ -238,6 +241,50 @@ component FavArtistCard inherits Rectangle {
             font-size: Typography.legal;
             horizontal-alignment: center;
             width: 160px;
+        }
+    }
+}
+
+// Genre-filter trigger for the favorites toolbars — opens the shared
+// popup in the "favorites" context. Accent fill + "N genres" when active.
+component FavGenreButton inherits Rectangle {
+    property <bool> active: GenreFilterState.selected-count > 0;
+    width: genre-row.preferred-width;
+    height: 34px;
+    border-radius: 6px;
+    background: root.active
+        ? Theme.accent
+        : (ta.has-hover ? Theme.surface-hover : Theme.surface-elevated);
+
+    genre-row := HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 14px;
+        spacing: 7px;
+        VerticalLayout {
+            alignment: center;
+            QbzIcon {
+                source: @image-url("../assets/icons/list-filter.svg");
+                width: 14px;
+                height: 14px;
+                tint: root.active ? #ffffff : Theme.text-secondary;
+            }
+        }
+        Text {
+            text: root.active
+                ? (GenreFilterState.selected-count == 1
+                    ? @tr("1 genre")
+                    : @tr("{} genres", GenreFilterState.selected-count))
+                : @tr("Filter by genre");
+            color: root.active ? #ffffff : Theme.text-secondary;
+            font-size: 13px;
+            vertical-alignment: center;
+        }
+    }
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            GenreFilterActions.set-context("favorites");
+            GenreFilterState.open = !GenreFilterState.open;
         }
     }
 }
@@ -466,6 +513,10 @@ export component FavoritesView inherits Rectangle {
                     }
                     VerticalLayout {
                         alignment: center;
+                        FavGenreButton { }
+                    }
+                    VerticalLayout {
+                        alignment: center;
                         QbzSelect {
                             menu-width: 150px;
                             options: [
@@ -571,6 +622,10 @@ export component FavoritesView inherits Rectangle {
                                 FavoritesActions.albums-search(q);
                             }
                         }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        FavGenreButton { }
                     }
                     VerticalLayout {
                         alignment: center;
@@ -751,5 +806,20 @@ export component FavoritesView inherits Rectangle {
         viewport-height: flick.viewport-height;
         visible-height: flick.height;
         viewport-y <=> flick.viewport-y;
+    }
+
+    // Genre filter overlay — the shared popup, favorites context.
+    if GenreFilterState.open: Rectangle {
+        width: 100%;
+        height: 100%;
+        TouchArea {
+            clicked => {
+                GenreFilterState.open = false;
+            }
+        }
+    }
+    if GenreFilterState.open: GenreFilterPopup {
+        x: root.width - self.width - 32px;
+        y: 56px;
     }
 }

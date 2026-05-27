@@ -203,6 +203,9 @@ export global GenreFilterState {
 }
 
 export global GenreFilterActions {
+    // Set the context the popup edits ("discover" | "favorites"), called
+    // when a surface opens the shared popup.
+    callback set-context(string);
     callback toggle(string /* genre id */);
     callback toggle-expand(string /* genre id */);
     callback search(string /* query */);
