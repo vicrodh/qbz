@@ -344,8 +344,18 @@ export component FavoritesView inherits Rectangle {
                     show-artwork: true;
                     show-album: true;
                     show-favorite: true;
+                    // Album / artist name links open the respective page; the
+                    // row drops `kind`, so route those explicitly (the
+                    // track-action path forces kind="track" and would treat an
+                    // album-id as an artist-id).
                     media-action(kind, id, action) => {
-                        FavoritesActions.track-action(id, action);
+                        if (kind == "album" && action == "open") {
+                            FavoritesActions.open-album(id);
+                        } else if (kind == "artist" && action == "open") {
+                            FavoritesActions.open-artist(id);
+                        } else {
+                            FavoritesActions.track-action(id, action);
+                        }
                     }
                 }
             }
