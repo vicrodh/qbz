@@ -1447,8 +1447,13 @@ export global FavoritesState {
     // "tracks" | "albums" | "artists" | "playlists" | "labels"
     in-out property <string> active-tab: "tracks";
     // Tracks reuse TrackItem so the shared SearchTrackRow can
-    // render them (artwork-on, per-row cover thumbnail).
+    // render them (artwork-on, per-row cover thumbnail). `tracks` is the
+    // full fetched set (the artwork pipeline targets it); `tracks-visible`
+    // is what the list renders after the search filter (mirrors
+    // LabelState.albums vs .visible).
     in property <[TrackItem]> tracks: [];
+    in property <[TrackItem]> tracks-visible: [];
+    in-out property <string> tracks-search: "";
     in property <[AlbumCardItem]> albums: [];
     in property <[FavoriteArtistItem]> artists: [];
     in property <[FavoritePlaylistItem]> playlists: [];
@@ -1471,6 +1476,7 @@ export global FavoritesActions {
     callback open-playlist(string /* playlist id */);
     callback play-track(string /* track id */);
     callback track-action(string /* track id */, string /* action */);
+    callback search-tracks(string /* query */);
 }
 
 // A Qobuz mix detail page (DailyQ / WeeklyQ / FavQ / TopQ), opened

@@ -20,6 +20,7 @@ import {
 } from "../state.slint";
 import { AlbumCard } from "../discover/AlbumCard.slint";
 import { TrackRow } from "../primitives/TrackRow.slint";
+import { ExpandableSearch } from "../primitives/ExpandableSearch.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
 import { ListScrollbar } from "../primitives/ListScrollbar.slint";
@@ -333,12 +334,48 @@ export component FavoritesView inherits Rectangle {
             if !FavoritesState.loading
                 && FavoritesState.active-tab == "tracks": VerticalLayout {
                 spacing: 0px;
+                // Toolbar — results count (left) + expandable search (right).
+                if FavoritesState.tracks.length > 0: HorizontalLayout {
+                    spacing: 8px;
+                    VerticalLayout {
+                        alignment: center;
+                        horizontal-stretch: 1;
+                        Text {
+                            text: FavoritesState.tracks-visible.length
+                                + (FavoritesState.tracks-search != ""
+                                    ? " / " + FavoritesState.tracks.length
+                                    : "")
+                                + " " + @tr("tracks");
+                            color: Theme.text-muted;
+                            font-size: Typography.legal;
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        ExpandableSearch {
+                            placeholder: @tr("Search");
+                            query <=> FavoritesState.tracks-search;
+                            edited(q) => {
+                                FavoritesActions.search-tracks(q);
+                            }
+                        }
+                    }
+                }
+                if FavoritesState.tracks.length > 0: Rectangle { height: 12px; }
+
                 if FavoritesState.tracks.length == 0: Text {
                     text: @tr("No favorite tracks yet.");
                     color: Theme.text-muted;
                     font-size: Typography.body;
                 }
-                for track[i] in FavoritesState.tracks: TrackRow {
+                // Search filtered everything out.
+                if FavoritesState.tracks.length > 0
+                    && FavoritesState.tracks-visible.length == 0: Text {
+                    text: @tr("No tracks match your search.");
+                    color: Theme.text-muted;
+                    font-size: Typography.body;
+                }
+                for track[i] in FavoritesState.tracks-visible: TrackRow {
                     track: track;
                     index: i;
                     show-artwork: true;

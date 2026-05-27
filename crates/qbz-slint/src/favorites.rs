@@ -14,7 +14,7 @@ use qbz_app::shell::AppRuntime;
 use qbz_core::FrontendAdapter;
 use qbz_models::{Album, Artist, Playlist, Track};
 use serde::Deserialize;
-use slint::{ComponentHandle, ModelRc, VecModel};
+use slint::{ComponentHandle, Model, ModelRc, VecModel};
 
 use crate::album_map::{self, map_album, to_item, AlbumCard};
 use crate::artwork::{ArtworkJob, ArtworkTarget};
@@ -330,8 +330,14 @@ pub fn apply_favorites(window: &AppWindow, data: FavData) {
                     album_id: t.album_id.into(),
                 })
                 .collect();
-            state.set_tracks(ModelRc::new(VecModel::from(rows)));
+            // `tracks` is the full set the artwork pipeline targets;
+            // `tracks-visible` (what the list renders) shares the same
+            // model until a search filter forks it, so artwork stays live.
+            let model = ModelRc::new(VecModel::from(rows));
+            state.set_tracks(model.clone());
+            state.set_tracks_visible(model);
             state.set_tracks_total(total as i32);
+            state.set_tracks_search("".into());
         }
         FavData::Albums { items, total } => {
             let cards: Vec<AlbumCardItem> = items.into_iter().map(to_item).collect();
@@ -381,6 +387,31 @@ pub fn apply_favorites(window: &AppWindow, data: FavData) {
         }
     }
     state.set_loading(false);
+}
+
+/// Re-derive the rendered Tracks list (`tracks-visible`) from the full
+/// `tracks` set and the search query. An empty query shares the full
+/// model so artwork keeps updating in place (the LabelState albums/visible
+/// pattern); a query forks a filtered clone (each row carries its already
+/// decoded artwork, so no re-fetch).
+pub fn derive_tracks(window: &AppWindow) {
+    let state = window.global::<FavoritesState>();
+    let query_owned = state.get_tracks_search().to_lowercase();
+    let query = query_owned.trim();
+    let all = state.get_tracks();
+    if query.is_empty() {
+        state.set_tracks_visible(all);
+        return;
+    }
+    let filtered: Vec<TrackItem> = (0..all.row_count())
+        .filter_map(|i| all.row_data(i))
+        .filter(|t| {
+            t.title.to_lowercase().contains(query)
+                || t.artist.to_lowercase().contains(query)
+                || t.album.to_lowercase().contains(query)
+        })
+        .collect();
+    state.set_tracks_visible(ModelRc::new(VecModel::from(filtered)));
 }
 
 pub fn reset_loading(window: &AppWindow) {

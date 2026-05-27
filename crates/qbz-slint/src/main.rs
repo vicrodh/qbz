@@ -4259,6 +4259,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             });
     }
+    {
+        // Local search over the loaded favorite tracks (title / artist /
+        // album), re-deriving the rendered list.
+        let weak = window.as_weak();
+        window
+            .global::<FavoritesActions>()
+            .on_search_tracks(move |q| {
+                if let Some(w) = weak.upgrade() {
+                    w.global::<FavoritesState>().set_tracks_search(q);
+                    favorites::derive_tracks(&w);
+                }
+            });
+    }
 
     // Artwork right-click menu wiring — Open in browser / Save as /
     // Add custom / Remove custom. Mirrors the v2_library_* + native
