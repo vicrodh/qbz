@@ -14,7 +14,6 @@ import {
     AlbumCardItem,
     TrackItem,
     FavoriteArtistItem,
-    FavoritePlaylistItem,
     FavoriteLabelItem,
     DragState,
     GenreFilterState,
@@ -22,6 +21,7 @@ import {
     AlphaJump,
 } from "../state.slint";
 import { AlbumCollectionView } from "../discover/AlbumCollectionView.slint";
+import { PlaylistCard } from "../discover/PlaylistCard.slint";
 import { GenreFilterPopup } from "../discover/GenreFilterPopup.slint";
 import { TrackRow } from "../primitives/TrackRow.slint";
 import { ExpandableSearch } from "../primitives/ExpandableSearch.slint";
@@ -131,56 +131,46 @@ component FavTabMenu inherits HorizontalLayout {
     }
 }
 
-component FavPlaylistCard inherits Rectangle {
-    in property <FavoritePlaylistItem> item;
-    callback clicked(string);
+// One underline sub-tab for the Playlists tab (Library / Following).
+// Underline style, NOT a pill (ADR-008). Mirrors the FavTab pattern.
+component PlaylistSubTab inherits Rectangle {
+    in property <string> label;
+    in property <string> tab-id;     // "favorites" | "following"
+    in property <int> count: 0;
+    property <bool> active: FavoritesState.playlists-sub-tab == root.tab-id;
+    height: 36px;
+    width: row.preferred-width;
 
-    width: 180px;
-    height: 234px;
-
-    VerticalLayout {
-        spacing: 8px;
-        Rectangle {
-            width: 180px;
-            height: 180px;
-            border-radius: Radius.sm;
-            background: Theme.surface-elevated;
-            clip: true;
-            Image {
-                width: 100%;
-                height: 100%;
-                source: root.item.cover;
-                image-fit: cover;
-            }
-            if root.item.cover-url == "": QbzIcon {
-                source: @image-url("../assets/icons/list-music.svg");
-                width: 44px;
-                height: 44px;
-                x: (parent.width - self.width) / 2;
-                y: (parent.height - self.height) / 2;
-                tint: Theme.text-muted;
-            }
-            ta := TouchArea {
-                mouse-cursor: pointer;
-                clicked => {
-                    root.clicked(root.item.id);
-                }
-            }
-        }
+    row := HorizontalLayout {
+        padding-left: 2px;
+        padding-right: 2px;
+        spacing: 6px;
         Text {
-            text: root.item.name;
-            color: Theme.text-primary;
+            text: root.label;
+            color: root.active ? Theme.text-primary : Theme.text-muted;
             font-size: Typography.body;
-            font-weight: Typography.medium;
-            overflow: elide;
-            width: 180px;
+            font-weight: root.active ? Typography.semibold : Typography.regular;
+            vertical-alignment: center;
         }
-        Text {
-            text: root.item.tracks-line;
+        if root.count > 0: Text {
+            text: root.count;
             color: Theme.text-muted;
             font-size: Typography.legal;
-            overflow: elide;
-            width: 180px;
+            vertical-alignment: center;
+        }
+    }
+    // Active underline.
+    Rectangle {
+        y: parent.height - 2px;
+        height: 2px;
+        width: parent.width;
+        background: root.active ? Theme.accent : transparent;
+        border-radius: 1px;
+    }
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            FavoritesActions.playlists-set-sub-tab(root.tab-id);
         }
     }
 }
@@ -629,6 +619,22 @@ export component FavoritesView inherits Rectangle {
                     }
                 }
             }
+            if FavoritesState.active-tab == "playlists"
+                && (FavoritesState.playlists-favorites.length > 0
+                    || FavoritesState.playlists-following.length > 0): HorizontalLayout {
+                spacing: 8px;
+                VerticalLayout {
+                    alignment: center;
+                    ExpandableSearch {
+                        placeholder: @tr("Search");
+                        sm: true;
+                        query <=> FavoritesState.playlists-search;
+                        edited(q) => {
+                            FavoritesActions.search-playlists(q);
+                        }
+                    }
+                }
+            }
         }
 
         Rectangle { height: 14px; }
@@ -889,27 +895,67 @@ export component FavoritesView inherits Rectangle {
                             }
                         }
 
-                        // --- Playlists tab ---
-                        if FavoritesState.active-tab == "playlists": playlists-grid := Rectangle {
-                            property <length> pl-w: 180px;
-                            property <length> pl-h: 234px;
-                            property <int> columns: Math.max(
-                                1,
-                                Math.floor((self.width + root.gap) / (self.pl-w + root.gap)));
-                            property <int> rows: Math.ceil(FavoritesState.playlists.length / self.columns);
-                            height: self.rows > 0
-                                ? self.rows * self.pl-h + Math.max(0, self.rows - 1) * root.gap
-                                : 0px;
-                            if FavoritesState.playlists.length == 0: Text {
+                        // --- Playlists tab (two sub-tabs: Library / Following) ---
+                        if FavoritesState.active-tab == "playlists": VerticalLayout {
+                            spacing: 0px;
+                            // Sub-tab selector (underline tabs, no pills — ADR-008).
+                            HorizontalLayout {
+                                spacing: 24px;
+                                alignment: start;
+                                PlaylistSubTab {
+                                    label: @tr("Library");
+                                    tab-id: "favorites";
+                                }
+                                PlaylistSubTab {
+                                    label: @tr("Following");
+                                    tab-id: "following";
+                                    count: FavoritesState.playlists-following-count;
+                                }
+                            }
+                            Rectangle { height: 16px; }
+                            if FavoritesState.playlists-visible.length == 0
+                                && FavoritesState.playlists-search != "": Text {
+                                text: @tr("No playlists match your search.");
+                                color: Theme.text-muted;
+                                font-size: Typography.body;
+                            }
+                            if FavoritesState.playlists-visible.length == 0
+                                && FavoritesState.playlists-search == ""
+                                && FavoritesState.playlists-sub-tab == "following": Text {
+                                text: @tr("No followed playlists yet.");
+                                color: Theme.text-muted;
+                                font-size: Typography.body;
+                            }
+                            if FavoritesState.playlists-visible.length == 0
+                                && FavoritesState.playlists-search == ""
+                                && FavoritesState.playlists-sub-tab != "following": Text {
                                 text: @tr("No favorite playlists yet.");
                                 color: Theme.text-muted;
                                 font-size: Typography.body;
                             }
-                            for pl[i] in FavoritesState.playlists: FavPlaylistCard {
-                                x: Math.mod(i, playlists-grid.columns) * (playlists-grid.pl-w + root.gap);
-                                y: Math.floor(i / playlists-grid.columns) * (playlists-grid.pl-h + root.gap);
-                                item: pl;
-                                clicked(id) => { FavoritesActions.open-playlist(id); }
+                            playlists-grid := Rectangle {
+                                property <length> pl-w: 220px;
+                                property <length> pl-h: 266px;
+                                property <int> columns: Math.max(
+                                    1,
+                                    Math.floor((self.width + root.gap) / (self.pl-w + root.gap)));
+                                property <int> rows: Math.ceil(FavoritesState.playlists-visible.length / self.columns);
+                                height: self.rows > 0
+                                    ? self.rows * self.pl-h + Math.max(0, self.rows - 1) * root.gap
+                                    : 0px;
+                                for pl[i] in FavoritesState.playlists-visible: PlaylistCard {
+                                    x: Math.mod(i, playlists-grid.columns) * (playlists-grid.pl-w + root.gap);
+                                    y: Math.floor(i / playlists-grid.columns) * (playlists-grid.pl-h + root.gap);
+                                    playlist: pl;
+                                    body-opens: true;
+                                    media-action(k, id, a) => {
+                                        if (a == "open") {
+                                            FavoritesActions.open-playlist(id);
+                                        } else {
+                                            FavoritesActions.playlist-action(id, a);
+                                        }
+                                    }
+                                }
                             }
                         }
 

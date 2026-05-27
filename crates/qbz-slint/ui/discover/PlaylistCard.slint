@@ -49,8 +49,12 @@ component OverlayButton inherits Rectangle {
 export component PlaylistCard inherits Rectangle {
     in property <SearchPlaylistItem> playlist;
     // kind ("playlist"), playlist id, action ("play" | "play-next" |
-    // "queue" | "favorite").
+    // "queue" | "favorite" | "open").
     callback media-action(string, string, string);
+    // When true, a click on the card BODY opens the playlist ("open")
+    // instead of playing it — the Favorites grid wants body=open, the play
+    // button=play. Discover/Search leave it false (body=play), unchanged.
+    in property <bool> body-opens: false;
 
     width: 220px;
     height: 266px;
@@ -87,7 +91,7 @@ export component PlaylistCard inherits Rectangle {
                 height: 100%;
                 mouse-cursor: pointer;
                 clicked => {
-                    root.media-action("playlist", root.playlist.id, "play");
+                    root.media-action("playlist", root.playlist.id, root.body-opens ? "open" : "play");
                 }
             }
 

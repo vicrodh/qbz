@@ -1438,16 +1438,6 @@ export struct FavoriteArtistItem {
     image: image,
 }
 
-// One playlist tile in the Favorites > Playlists grid.
-export struct FavoritePlaylistItem {
-    id: string,
-    name: string,
-    owner: string,
-    tracks-line: string,   // "N tracks"
-    cover-url: string,
-    cover: image,
-}
-
 // One label card in the Favorites > Labels grid.
 export struct FavoriteLabelItem {
     id: string,
@@ -1486,7 +1476,6 @@ export global FavoritesState {
     in property <[AlphaJump]> albums-alpha: []; // A-Z jumps (alpha grouping)
     in property <int> albums-shown: 0; // count after filter (grouped or flat)
     in property <[FavoriteArtistItem]> artists: [];
-    in property <[FavoritePlaylistItem]> playlists: [];
     // Playlists has two internal sub-tabs (mirror Tauri favoritePlaylists /
     // followingPlaylists), both rendered with the rich SearchPlaylistItem
     // (4-cover collage). `playlists-visible` is the current sub-tab after the
