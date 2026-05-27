@@ -350,8 +350,15 @@ pub fn apply_favorites(window: &AppWindow, data: FavData) {
         }
         FavData::Albums { items, total } => {
             let cards: Vec<AlbumCardItem> = items.into_iter().map(to_item).collect();
-            state.set_albums(ModelRc::new(VecModel::from(cards)));
+            // `albums` is the full set (artwork target); `albums-visible`
+            // (what the grid/list renders) shares it until a search/sort
+            // forks it, so artwork stays live.
+            let model = ModelRc::new(VecModel::from(cards));
+            state.set_albums(model.clone());
+            state.set_albums_visible(model);
             state.set_albums_total(total as i32);
+            state.set_albums_search("".into());
+            state.set_albums_sort_by("default".into());
         }
         FavData::Artists { items, total } => {
             let cards: Vec<FavoriteArtistItem> = items
@@ -445,6 +452,47 @@ pub fn shuffled_tracks() -> Vec<Track> {
         tracks.swap(i, j);
     }
     tracks
+}
+
+/// Re-derive the rendered Albums list (`albums-visible`) from the full
+/// `albums` set + the search query and sort key. Empty query + default
+/// order shares the full model so artwork stays live; otherwise forks a
+/// filtered + sorted clone (mirrors label.rs::derive_releases).
+pub fn derive_albums(window: &AppWindow) {
+    let state = window.global::<FavoritesState>();
+    let query_owned = state.get_albums_search().to_lowercase();
+    let query = query_owned.trim();
+    let sort = state.get_albums_sort_by().to_string();
+    let all = state.get_albums();
+    if query.is_empty() && sort == "default" {
+        state.set_albums_visible(all);
+        return;
+    }
+    let mut filtered: Vec<AlbumCardItem> = (0..all.row_count())
+        .filter_map(|i| all.row_data(i))
+        .filter(|a| {
+            query.is_empty()
+                || a.title.to_lowercase().contains(query)
+                || a.artist.to_lowercase().contains(query)
+        })
+        .collect();
+    album_map::sort_album_items(&mut filtered, &sort);
+    state.set_albums_visible(ModelRc::new(VecModel::from(filtered)));
+}
+
+/// A random album id from the currently-visible set (Shuffle / random).
+pub fn random_visible_album(window: &AppWindow) -> Option<String> {
+    let model = window.global::<FavoritesState>().get_albums_visible();
+    let n = model.row_count();
+    if n == 0 {
+        return None;
+    }
+    let seed = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(1);
+    let idx = (seed % n as u64) as usize;
+    model.row_data(idx).map(|a| a.id.to_string())
 }
 
 // ---- Tracks multi-select (mirrors playlist.rs) -------------------------

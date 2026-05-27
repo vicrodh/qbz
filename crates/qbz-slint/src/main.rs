@@ -4277,6 +4277,43 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             });
     }
     {
+        // Local search over the loaded favorite albums (title / artist).
+        let weak = window.as_weak();
+        window
+            .global::<FavoritesActions>()
+            .on_albums_search(move |q| {
+                if let Some(w) = weak.upgrade() {
+                    w.global::<FavoritesState>().set_albums_search(q);
+                    favorites::derive_albums(&w);
+                }
+            });
+    }
+    {
+        // Sort the favorite albums (default / title / artist).
+        let weak = window.as_weak();
+        window
+            .global::<FavoritesActions>()
+            .on_albums_set_sort(move |s| {
+                if let Some(w) = weak.upgrade() {
+                    w.global::<FavoritesState>().set_albums_sort_by(s);
+                    favorites::derive_albums(&w);
+                }
+            });
+    }
+    {
+        // Play a random album from the visible favorites set.
+        let weak = window.as_weak();
+        window
+            .global::<FavoritesActions>()
+            .on_albums_shuffle(move || {
+                if let Some(w) = weak.upgrade() {
+                    if let Some(id) = favorites::random_visible_album(&w) {
+                        w.invoke_media_action("album".into(), id.into(), "play".into());
+                    }
+                }
+            });
+    }
+    {
         // Local search over the loaded favorite tracks (title / artist /
         // album), re-deriving the rendered list.
         let weak = window.as_weak();

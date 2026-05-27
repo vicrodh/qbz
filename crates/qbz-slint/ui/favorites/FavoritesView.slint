@@ -24,6 +24,7 @@ import { ExpandableSearch } from "../primitives/ExpandableSearch.slint";
 import { CircleAction } from "../primitives/CircleAction.slint";
 import { MultiSelectBar } from "../primitives/MultiSelectBar.slint";
 import { ToggleButton } from "../primitives/ToggleButton.slint";
+import { QbzSelect } from "../primitives/QbzSelect.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
 import { ListScrollbar } from "../primitives/ListScrollbar.slint";
@@ -325,6 +326,20 @@ export component FavoritesView inherits Rectangle {
                         }
                     }
                 }
+                // Albums header action — Shuffle (play a random album).
+                if FavoritesState.active-tab == "albums"
+                    && FavoritesState.albums-visible.length > 0: HorizontalLayout {
+                    spacing: 8px;
+                    VerticalLayout {
+                        alignment: center;
+                        CircleAction {
+                            icon: @image-url("../assets/icons/shuffle.svg");
+                            clicked => {
+                                FavoritesActions.albums-shuffle();
+                            }
+                        }
+                    }
+                }
             }
 
             Rectangle { height: 16px; }
@@ -468,9 +483,46 @@ export component FavoritesView inherits Rectangle {
                         alignment: center;
                         horizontal-stretch: 1;
                         Text {
-                            text: FavoritesState.albums.length + " " + @tr("albums");
+                            text: FavoritesState.albums-visible.length
+                                + (FavoritesState.albums-search != ""
+                                    ? " / " + FavoritesState.albums.length
+                                    : "")
+                                + " " + @tr("albums");
                             color: Theme.text-muted;
                             font-size: Typography.legal;
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        ExpandableSearch {
+                            placeholder: @tr("Search");
+                            query <=> FavoritesState.albums-search;
+                            edited(q) => {
+                                FavoritesActions.albums-search(q);
+                            }
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        QbzSelect {
+                            menu-width: 168px;
+                            options: [
+                                @tr("Default"),
+                                @tr("Title A-Z"),
+                                @tr("Title Z-A"),
+                                @tr("Artist A-Z"),
+                            ];
+                            current-index: FavoritesState.albums-sort-by == "default" ? 0
+                                : FavoritesState.albums-sort-by == "title-asc" ? 1
+                                : FavoritesState.albums-sort-by == "title-desc" ? 2
+                                : 3;
+                            selected(i) => {
+                                FavoritesActions.albums-set-sort(
+                                    i == 0 ? "default"
+                                    : i == 1 ? "title-asc"
+                                    : i == 2 ? "title-desc"
+                                    : "artist-asc");
+                            }
                         }
                     }
                     VerticalLayout {
@@ -507,9 +559,15 @@ export component FavoritesView inherits Rectangle {
                     color: Theme.text-muted;
                     font-size: Typography.body;
                 }
+                if FavoritesState.albums.length > 0
+                    && FavoritesState.albums-visible.length == 0: Text {
+                    text: @tr("No albums match your search.");
+                    color: Theme.text-muted;
+                    font-size: Typography.body;
+                }
 
                 AlbumCollectionView {
-                    albums: FavoritesState.albums;
+                    albums: FavoritesState.albums-visible;
                     view-mode: FavoritesState.albums-view-mode;
                     is-grouped: false;
                     show-source: false;

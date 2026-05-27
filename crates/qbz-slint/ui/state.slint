@@ -1457,7 +1457,10 @@ export global FavoritesState {
     in-out property <bool> tracks-multi-select: false;
     in property <int> tracks-selected-count: 0;
     in property <[AlbumCardItem]> albums: [];
+    in property <[AlbumCardItem]> albums-visible: []; // after search + sort (what the grid/list renders)
     in-out property <string> albums-view-mode: "grid"; // "grid" | "list"
+    in-out property <string> albums-search: "";
+    in-out property <string> albums-sort-by: "default"; // default|title-asc|title-desc|artist-asc
     in property <[FavoriteArtistItem]> artists: [];
     in property <[FavoritePlaylistItem]> playlists: [];
     in property <[FavoriteLabelItem]> labels: [];
@@ -1485,6 +1488,9 @@ export global FavoritesActions {
     callback toggle-multi-select();
     callback bulk-action(string /* select-all | remove-selected | clear */);
     callback album-action(string /* album id */, string /* action */);
+    callback albums-search(string /* query */);
+    callback albums-set-sort(string /* sort key */);
+    callback albums-shuffle();
 }
 
 // A Qobuz mix detail page (DailyQ / WeeklyQ / FavQ / TopQ), opened
