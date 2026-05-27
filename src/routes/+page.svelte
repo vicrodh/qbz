@@ -4240,6 +4240,9 @@
       userId: 0,
       subscription: 'Local Library Only'
     });
+
+    void initDiscordRpc();
+
     navigateTo('library');
     showToast($t('toast.offlineModeStarted'), 'info');
   }
@@ -4262,6 +4265,8 @@
     setStorageUserId(info.userId);
     migrateLocalStorage(info.userId);
     migrateLocalStorageV2(info.userId);
+
+    void initDiscordRpc();
 
     // Re-read stores that were initialised at module-load (before userId was set)
     rehydratePurchasesStore();
@@ -4871,8 +4876,6 @@
     void invoke('v2_mark_boot_succeeded').catch((err) => {
       console.warn('[BootWatchdog] mark_boot_succeeded failed:', err);
     });
-
-    void initDiscordRpc();
 
     // Window-title preference: load from localStorage and subscribe so that
     // toggling the setting updates the OS title bar immediately.
