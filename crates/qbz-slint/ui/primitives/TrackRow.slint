@@ -194,17 +194,17 @@ export component TrackRow inherits Rectangle {
                 if root.multi-select-mode: Rectangle {
                     x: (parent.width - self.width) / 2;
                     y: (parent.height - self.height) / 2;
-                    width: 22px;
-                    height: 22px;
-                    border-radius: 11px;
+                    width: 13px;
+                    height: 13px;
+                    border-radius: 6.5px;
                     background: root.track.selected ? Theme.accent : transparent;
                     border-width: root.track.selected ? 0px : 1.5px;
                     border-color: sel-ta.has-hover ? Theme.text-primary : Theme.text-muted;
                     animate background { duration: 120ms; }
                     QbzIcon {
                         source: @image-url("../assets/icons/check.svg");
-                        width: 14px;
-                        height: 14px;
+                        width: 8px;
+                        height: 8px;
                         x: (parent.width - self.width) / 2;
                         y: (parent.height - self.height) / 2;
                         tint: #ffffff;
