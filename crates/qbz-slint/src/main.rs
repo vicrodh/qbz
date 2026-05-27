@@ -2361,6 +2361,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let model = match w.global::<NavState>().get_view() {
                             ContentView::Playlist => w.global::<PlaylistState>().get_tracks(),
                             ContentView::Label => w.global::<LabelState>().get_top_tracks(),
+                            ContentView::Favorites => {
+                                w.global::<FavoritesState>().get_tracks_visible()
+                            }
                             _ => w.global::<ArtistState>().get_top_tracks(),
                         };
                         if let Some(vm) = model
@@ -2377,8 +2380,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 }
                             }
                         }
-                        if w.global::<NavState>().get_view() == ContentView::Playlist {
-                            playlist::recount_selected(&w);
+                        match w.global::<NavState>().get_view() {
+                            ContentView::Playlist => playlist::recount_selected(&w),
+                            ContentView::Favorites => favorites::recount_selected(&w),
+                            _ => {}
                         }
                     }
                 }
@@ -4304,6 +4309,72 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     favorites::shuffled_tracks(),
                     0,
                 );
+            });
+    }
+    {
+        // Enter / leave the tracks multi-select edit mode.
+        let weak = window.as_weak();
+        window
+            .global::<FavoritesActions>()
+            .on_toggle_multi_select(move || {
+                if let Some(w) = weak.upgrade() {
+                    let on = w.global::<FavoritesState>().get_tracks_multi_select();
+                    favorites::set_multi_select(&w, !on);
+                }
+            });
+    }
+    {
+        // Bulk bar actions over the selected favorite tracks.
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        let image_cache = image_cache.clone();
+        window
+            .global::<FavoritesActions>()
+            .on_bulk_action(move |action| {
+                let Some(w) = weak.upgrade() else {
+                    return;
+                };
+                match action.as_str() {
+                    "select-all" => favorites::select_all(&w),
+                    "clear" => favorites::clear_selection(&w),
+                    "remove-selected" => {
+                        let ids = favorites::selected_ids(&w);
+                        if ids.is_empty() {
+                            return;
+                        }
+                        let runtime = runtime.clone();
+                        let weak = weak.clone();
+                        let handle = handle.clone();
+                        let image_cache = image_cache.clone();
+                        handle.clone().spawn(async move {
+                            for id in &ids {
+                                if let Err(e) =
+                                    runtime.core().remove_favorite("track", id).await
+                                {
+                                    log::error!(
+                                        "[qbz-slint] bulk remove favorite {id} failed: {e}"
+                                    );
+                                }
+                                if let Ok(tid) = id.parse::<u64>() {
+                                    crate::fav_cache::set(tid, false);
+                                }
+                            }
+                            let _ = weak.upgrade_in_event_loop(|w| {
+                                favorites::set_multi_select(&w, false);
+                            });
+                            navigate_favorites(
+                                runtime.clone(),
+                                weak.clone(),
+                                &handle,
+                                image_cache.clone(),
+                                favorites::FavTab::Tracks,
+                                "tracks",
+                            );
+                        });
+                    }
+                    _ => {}
+                }
             });
     }
 

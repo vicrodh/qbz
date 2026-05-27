@@ -22,6 +22,7 @@ import { AlbumCard } from "../discover/AlbumCard.slint";
 import { TrackRow } from "../primitives/TrackRow.slint";
 import { ExpandableSearch } from "../primitives/ExpandableSearch.slint";
 import { CircleAction } from "../primitives/CircleAction.slint";
+import { MultiSelectBar } from "../primitives/MultiSelectBar.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
 import { ListScrollbar } from "../primitives/ListScrollbar.slint";
@@ -312,6 +313,16 @@ export component FavoritesView inherits Rectangle {
                             }
                         }
                     }
+                    VerticalLayout {
+                        alignment: center;
+                        CircleAction {
+                            icon: @image-url("../assets/icons/square-check-big.svg");
+                            active: FavoritesState.tracks-multi-select;
+                            clicked => {
+                                FavoritesActions.toggle-multi-select();
+                            }
+                        }
+                    }
                 }
             }
 
@@ -396,6 +407,20 @@ export component FavoritesView inherits Rectangle {
                 }
                 if FavoritesState.tracks.length > 0: Rectangle { height: 12px; }
 
+                // Bulk action bar — visible in multi-select edit mode.
+                if FavoritesState.tracks-multi-select: MultiSelectBar {
+                    selected-count: FavoritesState.tracks-selected-count;
+                    actions: [
+                        { id: "select-all", label: @tr("Select all"), danger: false, needs-selection: false },
+                        { id: "remove-selected", label: @tr("Remove from favorites"), danger: true, needs-selection: true },
+                        { id: "clear", label: @tr("Clear"), danger: false, needs-selection: true },
+                    ];
+                    action(id) => {
+                        FavoritesActions.bulk-action(id);
+                    }
+                }
+                if FavoritesState.tracks-multi-select: Rectangle { height: 8px; }
+
                 if FavoritesState.tracks.length == 0: Text {
                     text: @tr("No favorite tracks yet.");
                     color: Theme.text-muted;
@@ -414,6 +439,7 @@ export component FavoritesView inherits Rectangle {
                     show-artwork: true;
                     show-album: true;
                     show-favorite: true;
+                    multi-select-mode: FavoritesState.tracks-multi-select;
                     // Album / artist name links open the respective page; the
                     // row drops `kind`, so route those explicitly (the
                     // track-action path forces kind="track" and would treat an
