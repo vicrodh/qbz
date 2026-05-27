@@ -614,6 +614,21 @@ export component FavoritesView inherits Rectangle {
                     ViewToggle { }
                 }
             }
+            if FavoritesState.active-tab == "labels"
+                && FavoritesState.labels.length > 0: HorizontalLayout {
+                spacing: 8px;
+                VerticalLayout {
+                    alignment: center;
+                    ExpandableSearch {
+                        placeholder: @tr("Search");
+                        sm: true;
+                        query <=> FavoritesState.labels-search;
+                        edited(q) => {
+                            FavoritesActions.search-labels(q);
+                        }
+                    }
+                }
+            }
         }
 
         Rectangle { height: 14px; }

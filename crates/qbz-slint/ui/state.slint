@@ -1489,6 +1489,7 @@ export global FavoritesState {
     in property <[FavoritePlaylistItem]> playlists: [];
     in property <[FavoriteLabelItem]> labels: [];
     in property <[FavoriteLabelItem]> labels-visible: []; // after search filter (rendered)
+    in-out property <string> labels-search: "";
     in property <int> tracks-total: 0;
     in property <int> albums-total: 0;
     in property <int> artists-total: 0;
@@ -1516,6 +1517,7 @@ export global FavoritesActions {
     callback bulk-action(string /* select-all | remove-selected | clear */);
     callback album-action(string /* album id */, string /* action */);
     callback albums-search(string /* query */);
+    callback search-labels(string /* query */);
     callback albums-set-view(string /* grid | list */);
     callback albums-set-sort(string /* sort key */);
     callback albums-set-group(string /* off | alpha | artist */);

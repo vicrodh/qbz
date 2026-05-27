@@ -4507,6 +4507,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             });
     }
     {
+        // Local search over the loaded favorite labels (name).
+        let weak = window.as_weak();
+        window
+            .global::<FavoritesActions>()
+            .on_search_labels(move |q| {
+                if let Some(w) = weak.upgrade() {
+                    w.global::<FavoritesState>().set_labels_search(q);
+                    favorites::derive_labels(&w);
+                }
+            });
+    }
+    {
         // Group the favorite tracks (off / album / artist / name).
         let weak = window.as_weak();
         window
