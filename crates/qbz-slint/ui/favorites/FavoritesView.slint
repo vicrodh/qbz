@@ -1,9 +1,9 @@
 // Library > Favorites — the user's saved tracks / albums / artists /
-// playlists / labels. Mirrors Tauri's FavoritesView.svelte core: a
-// tab bar over per-tab content. Tracks reuse the shared
-// TrackRow, albums the Discover AlbumCard, artists a round-
-// portrait grid. Playlists + Labels are stubbed pending their
-// backing views.
+// playlists / labels. A fixed chrome block (back/forward + title + the
+// tab menu on row 1; per-view action buttons + toolbar on row 2) sits
+// over a single scrolling content area. Tracks reuse the shared TrackRow,
+// albums the shared AlbumCollectionView, artists/playlists round/tile
+// grids, labels a row list.
 
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
@@ -33,7 +33,7 @@ import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
 import { ListScrollbar } from "../primitives/ListScrollbar.slint";
 import { NavButtons } from "../shell/NavButtons.slint";
 
-// One tab in the favorites tab bar.
+// One tab in the favorites tab menu.
 component FavTab inherits Rectangle {
     in property <string> label;
     in property <string> id;
@@ -74,6 +74,57 @@ component FavTab inherits Rectangle {
         mouse-cursor: pointer;
         clicked => {
             root.selected(root.id);
+        }
+    }
+}
+
+// The 5 favorites tabs as one floating group (row 1, right side). Counts
+// stay live (FavoritesState.*-total are seeded up front).
+component FavTabMenu inherits HorizontalLayout {
+    spacing: 18px;
+    VerticalLayout {
+        alignment: center;
+        FavTab {
+            label: @tr("Tracks");
+            id: "tracks";
+            count: FavoritesState.tracks-total;
+            selected(id) => { FavoritesActions.select-tab(id); }
+        }
+    }
+    VerticalLayout {
+        alignment: center;
+        FavTab {
+            label: @tr("Albums");
+            id: "albums";
+            count: FavoritesState.albums-total;
+            selected(id) => { FavoritesActions.select-tab(id); }
+        }
+    }
+    VerticalLayout {
+        alignment: center;
+        FavTab {
+            label: @tr("Artists");
+            id: "artists";
+            count: FavoritesState.artists-total;
+            selected(id) => { FavoritesActions.select-tab(id); }
+        }
+    }
+    VerticalLayout {
+        alignment: center;
+        FavTab {
+            label: @tr("Playlists");
+            id: "playlists";
+            count: FavoritesState.playlists-total;
+            selected(id) => { FavoritesActions.select-tab(id); }
+        }
+    }
+    VerticalLayout {
+        alignment: center;
+        FavTab {
+            label: @tr("Labels");
+            id: "labels";
+            count: FavoritesState.labels-total;
+            selected(id) => { FavoritesActions.select-tab(id); }
         }
     }
 }
@@ -289,567 +340,542 @@ component FavGenreButton inherits Rectangle {
     }
 }
 
+// Grid/list segmented toggle (albums toolbar).
+component ViewToggle inherits Rectangle {
+    width: 68px;
+    height: 34px;
+    border-radius: 6px;
+    background: Theme.surface-elevated;
+    clip: true;
+    HorizontalLayout {
+        ToggleButton {
+            icon: @image-url("../assets/icons/layout-grid.svg");
+            active: FavoritesState.albums-view-mode == "grid";
+            clicked => {
+                FavoritesActions.albums-set-view("grid");
+            }
+        }
+        ToggleButton {
+            icon: @image-url("../assets/icons/list.svg");
+            active: FavoritesState.albums-view-mode == "list";
+            clicked => {
+                FavoritesActions.albums-set-view("list");
+            }
+        }
+    }
+}
+
 export component FavoritesView inherits Rectangle {
     callback open-album(string);
     callback open-artist(string);
 
-    property <length> album-w: 220px;
-    property <length> album-h: 266px;
     property <length> artist-w: 160px;
     property <length> artist-h: 200px;
     property <length> gap: 24px;
 
     background: Theme.surface-main;
 
-    flick := Flickable {
-        interactive: !DragState.active;
-        viewport-width: self.width;
-        viewport-height: page.preferred-height;
+    VerticalLayout {
+        spacing: 0px;
 
-        page := VerticalLayout {
-            width: parent.width;
+        // ===================== FIXED CHROME =====================
+
+        // Row 1 — back/forward + title (left), tab menu (right).
+        HorizontalLayout {
             padding-left: 32px;
             padding-right: 32px;
             padding-top: 11px;
-            padding-bottom: 100px;
-            spacing: 0px;
-            alignment: start;
-
-            // Back / forward nav buttons — same position as every other
-            // page (11px top padding, then a 22px gap to the header).
-            HorizontalLayout {
-                alignment: start;
+            spacing: 16px;
+            VerticalLayout {
+                alignment: center;
                 NavButtons { }
             }
+            VerticalLayout {
+                alignment: center;
+                Text {
+                    text: @tr("Favorites");
+                    color: Theme.text-primary;
+                    font-size: Typography.section;
+                    font-weight: Typography.bold;
+                }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            VerticalLayout {
+                alignment: center;
+                FavTabMenu { }
+            }
+        }
 
-            Rectangle { height: 22px; }
+        Rectangle { height: 12px; }
 
-            // Page title — same size as the album name in AlbumView
-            // (Typography.section), not the larger Typography.title.
-            HorizontalLayout {
-                spacing: 12px;
+        // Row 2 — per-view action buttons (left), toolbar (right).
+        HorizontalLayout {
+            padding-left: 32px;
+            padding-right: 32px;
+            spacing: 8px;
+
+            // --- Left: action buttons ---
+            if FavoritesState.active-tab == "tracks"
+                && FavoritesState.tracks-visible.length > 0: HorizontalLayout {
+                spacing: 8px;
                 VerticalLayout {
                     alignment: center;
-                    horizontal-stretch: 1;
-                    Text {
-                        text: @tr("Favorites");
-                        color: Theme.text-primary;
-                        font-size: Typography.section;
-                        font-weight: Typography.bold;
-                    }
-                }
-                // Tracks header actions — Play all + Shuffle the favorites
-                // queue. Shown only when the Tracks tab has rendered rows.
-                if FavoritesState.active-tab == "tracks"
-                    && FavoritesState.tracks-visible.length > 0: HorizontalLayout {
-                    spacing: 8px;
-                    VerticalLayout {
-                        alignment: center;
-                        CircleAction {
-                            icon: @image-url("../assets/icons/play-fill.svg");
-                            primary: true;
-                            clicked => {
-                                FavoritesActions.play-all-tracks();
-                            }
-                        }
-                    }
-                    VerticalLayout {
-                        alignment: center;
-                        CircleAction {
-                            icon: @image-url("../assets/icons/shuffle.svg");
-                            clicked => {
-                                FavoritesActions.shuffle-tracks();
-                            }
-                        }
-                    }
-                    VerticalLayout {
-                        alignment: center;
-                        CircleAction {
-                            icon: @image-url("../assets/icons/square-check-big.svg");
-                            active: FavoritesState.tracks-multi-select;
-                            clicked => {
-                                FavoritesActions.toggle-multi-select();
-                            }
+                    CircleAction {
+                        icon: @image-url("../assets/icons/play-fill.svg");
+                        primary: true;
+                        clicked => {
+                            FavoritesActions.play-all-tracks();
                         }
                     }
                 }
-                // Albums header action — Shuffle (play a random album).
-                if FavoritesState.active-tab == "albums"
-                    && FavoritesState.albums-visible.length > 0: HorizontalLayout {
-                    spacing: 8px;
-                    VerticalLayout {
-                        alignment: center;
-                        CircleAction {
-                            icon: @image-url("../assets/icons/shuffle.svg");
-                            clicked => {
-                                FavoritesActions.albums-shuffle();
-                            }
-                        }
-                    }
-                }
-            }
-
-            Rectangle { height: 16px; }
-
-            // --- Tab bar -----------------------------------------------
-            HorizontalLayout {
-                spacing: 20px;
-                alignment: start;
-                FavTab {
-                    label: @tr("Tracks");
-                    id: "tracks";
-                    count: FavoritesState.tracks-total;
-                    selected(id) => { FavoritesActions.select-tab(id); }
-                }
-                FavTab {
-                    label: @tr("Albums");
-                    id: "albums";
-                    count: FavoritesState.albums-total;
-                    selected(id) => { FavoritesActions.select-tab(id); }
-                }
-                FavTab {
-                    label: @tr("Artists");
-                    id: "artists";
-                    count: FavoritesState.artists-total;
-                    selected(id) => { FavoritesActions.select-tab(id); }
-                }
-                FavTab {
-                    label: @tr("Playlists");
-                    id: "playlists";
-                    count: FavoritesState.playlists-total;
-                    selected(id) => { FavoritesActions.select-tab(id); }
-                }
-                FavTab {
-                    label: @tr("Labels");
-                    id: "labels";
-                    count: FavoritesState.labels-total;
-                    selected(id) => { FavoritesActions.select-tab(id); }
-                }
-            }
-            Rectangle {
-                height: 1px;
-                background: Theme.border-subtle;
-            }
-            Rectangle { height: 20px; }
-
-            if FavoritesState.loading: HorizontalLayout {
-                alignment: center;
-                LoadingSpinner { size: 36px; }
-            }
-
-            // Load error + retry.
-            if !FavoritesState.loading && FavoritesState.load-error != "": VerticalLayout {
-                alignment: center;
-                spacing: 10px;
-                Rectangle { height: 24px; }
-                Text {
-                    text: @tr("Couldn't load favorites.");
-                    color: Theme.text-primary;
-                    font-size: Typography.body;
-                    font-weight: Typography.semibold;
-                    horizontal-alignment: center;
-                }
-                Text {
-                    text: FavoritesState.load-error;
-                    color: Theme.text-muted;
-                    font-size: Typography.legal;
-                    horizontal-alignment: center;
-                }
-                HorizontalLayout {
+                VerticalLayout {
                     alignment: center;
-                    Rectangle {
-                        width: retry-label.preferred-width + 28px;
-                        height: 32px;
-                        border-radius: 6px;
-                        background: retry-ta.has-hover ? Theme.surface-hover : Theme.surface-elevated;
-                        border-width: 1px;
-                        border-color: Theme.border-subtle;
-                        retry-label := Text {
-                            text: @tr("Retry");
-                            color: Theme.text-primary;
-                            font-size: Typography.legal;
-                            x: (parent.width - self.width) / 2;
-                            y: (parent.height - self.height) / 2;
+                    CircleAction {
+                        icon: @image-url("../assets/icons/shuffle.svg");
+                        clicked => {
+                            FavoritesActions.shuffle-tracks();
                         }
-                        retry-ta := TouchArea {
-                            mouse-cursor: pointer;
-                            clicked => {
-                                FavoritesActions.retry-load();
-                            }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    CircleAction {
+                        icon: @image-url("../assets/icons/square-check-big.svg");
+                        active: FavoritesState.tracks-multi-select;
+                        clicked => {
+                            FavoritesActions.toggle-multi-select();
+                        }
+                    }
+                }
+            }
+            if FavoritesState.active-tab == "albums"
+                && FavoritesState.albums-visible.length > 0: HorizontalLayout {
+                spacing: 8px;
+                VerticalLayout {
+                    alignment: center;
+                    CircleAction {
+                        icon: @image-url("../assets/icons/shuffle.svg");
+                        clicked => {
+                            FavoritesActions.albums-shuffle();
                         }
                     }
                 }
             }
 
-            // --- Tracks tab --------------------------------------------
-            if !FavoritesState.loading && FavoritesState.load-error == ""
-                && FavoritesState.active-tab == "tracks": VerticalLayout {
-                spacing: 0px;
-                // Toolbar — results count (left) + expandable search (right).
-                if FavoritesState.tracks.length > 0: HorizontalLayout {
-                    spacing: 8px;
-                    VerticalLayout {
-                        alignment: center;
-                        horizontal-stretch: 1;
-                        Text {
-                            text: FavoritesState.tracks-visible.length
-                                + (FavoritesState.tracks-search != ""
-                                    ? " / " + FavoritesState.tracks.length
-                                    : "")
-                                + " " + @tr("tracks");
-                            color: Theme.text-muted;
-                            font-size: Typography.legal;
-                        }
-                    }
-                    VerticalLayout {
-                        alignment: center;
-                        ExpandableSearch {
-                            placeholder: @tr("Search");
-                            query <=> FavoritesState.tracks-search;
-                            edited(q) => {
-                                FavoritesActions.search-tracks(q);
-                            }
-                        }
-                    }
-                    VerticalLayout {
-                        alignment: center;
-                        FavGenreButton { }
-                    }
-                    VerticalLayout {
-                        alignment: center;
-                        QbzSelect {
-                            menu-width: 150px;
-                            options: [
-                                @tr("Group: Off"),
-                                @tr("Group: Album"),
-                                @tr("Group: Artist"),
-                                @tr("Group: Name"),
-                            ];
-                            current-index: FavoritesState.tracks-group-mode == "off" ? 0
-                                : FavoritesState.tracks-group-mode == "album" ? 1
-                                : FavoritesState.tracks-group-mode == "artist" ? 2
-                                : 3;
-                            selected(i) => {
-                                FavoritesActions.tracks-set-group(
-                                    i == 0 ? "off"
-                                    : i == 1 ? "album"
-                                    : i == 2 ? "artist"
-                                    : "name");
-                            }
-                        }
-                    }
-                }
-                if FavoritesState.tracks.length > 0: Rectangle { height: 12px; }
+            Rectangle { horizontal-stretch: 1; }
 
-                // Bulk action bar — visible in multi-select edit mode.
-                if FavoritesState.tracks-multi-select: MultiSelectBar {
-                    selected-count: FavoritesState.tracks-selected-count;
-                    actions: [
-                        { id: "select-all", label: @tr("Select all"), danger: false, needs-selection: false },
-                        { id: "play-next", label: @tr("Play next"), danger: false, needs-selection: true },
-                        { id: "queue", label: @tr("Add to queue"), danger: false, needs-selection: true },
-                        { id: "add-to-playlist", label: @tr("Add to playlist"), danger: false, needs-selection: true },
-                        { id: "remove-selected", label: @tr("Remove from favorites"), danger: true, needs-selection: true },
-                        { id: "clear", label: @tr("Clear"), danger: false, needs-selection: true },
-                    ];
-                    action(id) => {
-                        FavoritesActions.bulk-action(id);
+            // --- Right: per-view toolbar ---
+            if FavoritesState.active-tab == "tracks"
+                && FavoritesState.tracks.length > 0: HorizontalLayout {
+                spacing: 8px;
+                VerticalLayout {
+                    alignment: center;
+                    Text {
+                        text: FavoritesState.tracks-visible.length
+                            + (FavoritesState.tracks-search != ""
+                                ? " / " + FavoritesState.tracks.length
+                                : "")
+                            + " " + @tr("tracks");
+                        color: Theme.text-muted;
+                        font-size: Typography.legal;
                     }
                 }
-                if FavoritesState.tracks-multi-select: Rectangle { height: 8px; }
+                VerticalLayout {
+                    alignment: center;
+                    ExpandableSearch {
+                        placeholder: @tr("Search");
+                        query <=> FavoritesState.tracks-search;
+                        edited(q) => {
+                            FavoritesActions.search-tracks(q);
+                        }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    FavGenreButton { }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    QbzSelect {
+                        menu-width: 150px;
+                        options: [
+                            @tr("Group: Off"),
+                            @tr("Group: Album"),
+                            @tr("Group: Artist"),
+                            @tr("Group: Name"),
+                        ];
+                        current-index: FavoritesState.tracks-group-mode == "off" ? 0
+                            : FavoritesState.tracks-group-mode == "album" ? 1
+                            : FavoritesState.tracks-group-mode == "artist" ? 2
+                            : 3;
+                        selected(i) => {
+                            FavoritesActions.tracks-set-group(
+                                i == 0 ? "off"
+                                : i == 1 ? "album"
+                                : i == 2 ? "artist"
+                                : "name");
+                        }
+                    }
+                }
+            }
+            if FavoritesState.active-tab == "albums"
+                && FavoritesState.albums.length > 0: HorizontalLayout {
+                spacing: 8px;
+                VerticalLayout {
+                    alignment: center;
+                    Text {
+                        text: FavoritesState.albums-shown
+                            + (FavoritesState.albums-search != ""
+                                ? " / " + FavoritesState.albums.length
+                                : "")
+                            + " " + @tr("albums");
+                        color: Theme.text-muted;
+                        font-size: Typography.legal;
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    ExpandableSearch {
+                        placeholder: @tr("Search");
+                        query <=> FavoritesState.albums-search;
+                        edited(q) => {
+                            FavoritesActions.albums-search(q);
+                        }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    FavGenreButton { }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    QbzSelect {
+                        menu-width: 150px;
+                        options: [
+                            @tr("Group: Off"),
+                            @tr("Group: A-Z"),
+                            @tr("Group: Artist"),
+                        ];
+                        current-index: FavoritesState.albums-group-mode == "off" ? 0
+                            : FavoritesState.albums-group-mode == "alpha" ? 1
+                            : 2;
+                        selected(i) => {
+                            FavoritesActions.albums-set-group(
+                                i == 0 ? "off" : i == 1 ? "alpha" : "artist");
+                        }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    QbzSelect {
+                        menu-width: 168px;
+                        options: [
+                            @tr("Default"),
+                            @tr("Title A-Z"),
+                            @tr("Title Z-A"),
+                            @tr("Artist A-Z"),
+                        ];
+                        current-index: FavoritesState.albums-sort-by == "default" ? 0
+                            : FavoritesState.albums-sort-by == "title-asc" ? 1
+                            : FavoritesState.albums-sort-by == "title-desc" ? 2
+                            : 3;
+                        selected(i) => {
+                            FavoritesActions.albums-set-sort(
+                                i == 0 ? "default"
+                                : i == 1 ? "title-asc"
+                                : i == 2 ? "title-desc"
+                                : "artist-asc");
+                        }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    ViewToggle { }
+                }
+            }
+        }
 
-                if FavoritesState.tracks.length == 0: Text {
-                    text: @tr("No favorite tracks yet.");
-                    color: Theme.text-muted;
-                    font-size: Typography.body;
-                }
-                // Search filtered everything out.
-                if FavoritesState.tracks.length > 0
-                    && FavoritesState.tracks-visible.length == 0: Text {
-                    text: @tr("No tracks match your search.");
-                    color: Theme.text-muted;
-                    font-size: Typography.body;
-                }
-                for track[i] in FavoritesState.tracks-visible: VerticalLayout {
+        Rectangle { height: 14px; }
+        Rectangle {
+            height: 1px;
+            background: Theme.border-subtle;
+        }
+
+        // ===================== SCROLLING CONTENT =====================
+        Rectangle {
+            vertical-stretch: 1;
+            clip: true;
+
+            flick := Flickable {
+                interactive: !DragState.active;
+                viewport-width: self.width;
+                viewport-height: page.preferred-height;
+
+                page := VerticalLayout {
+                    width: parent.width;
+                    padding-left: 32px;
+                    padding-right: 32px;
+                    padding-top: 16px;
+                    padding-bottom: 100px;
                     spacing: 0px;
-                    // Group header rows when grouping by album / artist (a
-                    // new header each time the group key changes). Name
-                    // grouping just reorders alphabetically.
-                    if FavoritesState.tracks-group-mode == "album" && track.album != ""
-                        && (i == 0 || FavoritesState.tracks-visible[i - 1].album != track.album): Rectangle {
-                        height: 32px;
-                        Text {
-                            x: 2px;
-                            width: parent.width - 4px;
-                            height: 100%;
-                            text: track.album;
-                            color: Theme.text-secondary;
-                            font-size: Typography.legal;
-                            font-weight: Typography.semibold;
-                            vertical-alignment: center;
-                            overflow: elide;
-                        }
-                    }
-                    if FavoritesState.tracks-group-mode == "artist" && track.artist != ""
-                        && (i == 0 || FavoritesState.tracks-visible[i - 1].artist != track.artist): Rectangle {
-                        height: 32px;
-                        Text {
-                            x: 2px;
-                            width: parent.width - 4px;
-                            height: 100%;
-                            text: track.artist;
-                            color: Theme.text-secondary;
-                            font-size: Typography.legal;
-                            font-weight: Typography.semibold;
-                            vertical-alignment: center;
-                            overflow: elide;
-                        }
-                    }
-                    TrackRow {
-                        track: track;
-                        index: i;
-                        show-artwork: true;
-                        // Hide the album column when grouping by album (the
-                        // header already names it — mirrors Tauri).
-                        show-album: FavoritesState.tracks-group-mode != "album";
-                        show-favorite: true;
-                        multi-select-mode: FavoritesState.tracks-multi-select;
-                        // Album / artist name links open the respective page;
-                        // the row drops `kind`, so route those explicitly (the
-                        // track-action path forces kind="track" and would treat
-                        // an album-id as an artist-id).
-                        media-action(kind, id, action) => {
-                            if (kind == "album" && action == "open") {
-                                FavoritesActions.open-album(id);
-                            } else if (kind == "artist" && action == "open") {
-                                FavoritesActions.open-artist(id);
-                            } else if (action == "favorite") {
-                                // In the favorites list, un-favorite + fade out.
-                                FavoritesActions.unfavorite-track(id);
-                            } else {
-                                FavoritesActions.track-action(id, action);
-                            }
-                        }
-                    }
-                }
-            }
+                    alignment: start;
 
-            // --- Albums tab --------------------------------------------
-            if !FavoritesState.loading && FavoritesState.load-error == ""
-                && FavoritesState.active-tab == "albums": VerticalLayout {
-                spacing: 0px;
-                // Toolbar — count (left) + grid/list segmented toggle (right).
-                if FavoritesState.albums.length > 0: HorizontalLayout {
-                    spacing: 8px;
-                    VerticalLayout {
+                    if FavoritesState.loading: HorizontalLayout {
                         alignment: center;
-                        horizontal-stretch: 1;
+                        LoadingSpinner { size: 36px; }
+                    }
+
+                    // Load error + retry.
+                    if !FavoritesState.loading && FavoritesState.load-error != "": VerticalLayout {
+                        alignment: center;
+                        spacing: 10px;
+                        Rectangle { height: 24px; }
                         Text {
-                            text: FavoritesState.albums-shown
-                                + (FavoritesState.albums-search != ""
-                                    ? " / " + FavoritesState.albums.length
-                                    : "")
-                                + " " + @tr("albums");
+                            text: @tr("Couldn't load favorites.");
+                            color: Theme.text-primary;
+                            font-size: Typography.body;
+                            font-weight: Typography.semibold;
+                            horizontal-alignment: center;
+                        }
+                        Text {
+                            text: FavoritesState.load-error;
                             color: Theme.text-muted;
                             font-size: Typography.legal;
+                            horizontal-alignment: center;
                         }
-                    }
-                    VerticalLayout {
-                        alignment: center;
-                        ExpandableSearch {
-                            placeholder: @tr("Search");
-                            query <=> FavoritesState.albums-search;
-                            edited(q) => {
-                                FavoritesActions.albums-search(q);
-                            }
-                        }
-                    }
-                    VerticalLayout {
-                        alignment: center;
-                        FavGenreButton { }
-                    }
-                    VerticalLayout {
-                        alignment: center;
-                        QbzSelect {
-                            menu-width: 150px;
-                            options: [
-                                @tr("Group: Off"),
-                                @tr("Group: A-Z"),
-                                @tr("Group: Artist"),
-                            ];
-                            current-index: FavoritesState.albums-group-mode == "off" ? 0
-                                : FavoritesState.albums-group-mode == "alpha" ? 1
-                                : 2;
-                            selected(i) => {
-                                FavoritesActions.albums-set-group(
-                                    i == 0 ? "off" : i == 1 ? "alpha" : "artist");
-                            }
-                        }
-                    }
-                    VerticalLayout {
-                        alignment: center;
-                        QbzSelect {
-                            menu-width: 168px;
-                            options: [
-                                @tr("Default"),
-                                @tr("Title A-Z"),
-                                @tr("Title Z-A"),
-                                @tr("Artist A-Z"),
-                            ];
-                            current-index: FavoritesState.albums-sort-by == "default" ? 0
-                                : FavoritesState.albums-sort-by == "title-asc" ? 1
-                                : FavoritesState.albums-sort-by == "title-desc" ? 2
-                                : 3;
-                            selected(i) => {
-                                FavoritesActions.albums-set-sort(
-                                    i == 0 ? "default"
-                                    : i == 1 ? "title-asc"
-                                    : i == 2 ? "title-desc"
-                                    : "artist-asc");
-                            }
-                        }
-                    }
-                    VerticalLayout {
-                        alignment: center;
-                        Rectangle {
-                            width: 68px;
-                            height: 34px;
-                            border-radius: 6px;
-                            background: Theme.surface-elevated;
-                            clip: true;
-                            HorizontalLayout {
-                                ToggleButton {
-                                    icon: @image-url("../assets/icons/layout-grid.svg");
-                                    active: FavoritesState.albums-view-mode == "grid";
-                                    clicked => {
-                                        FavoritesActions.albums-set-view("grid");
-                                    }
+                        HorizontalLayout {
+                            alignment: center;
+                            Rectangle {
+                                width: retry-label.preferred-width + 28px;
+                                height: 32px;
+                                border-radius: 6px;
+                                background: retry-ta.has-hover ? Theme.surface-hover : Theme.surface-elevated;
+                                border-width: 1px;
+                                border-color: Theme.border-subtle;
+                                retry-label := Text {
+                                    text: @tr("Retry");
+                                    color: Theme.text-primary;
+                                    font-size: Typography.legal;
+                                    x: (parent.width - self.width) / 2;
+                                    y: (parent.height - self.height) / 2;
                                 }
-                                ToggleButton {
-                                    icon: @image-url("../assets/icons/list.svg");
-                                    active: FavoritesState.albums-view-mode == "list";
+                                retry-ta := TouchArea {
+                                    mouse-cursor: pointer;
                                     clicked => {
-                                        FavoritesActions.albums-set-view("list");
+                                        FavoritesActions.retry-load();
                                     }
                                 }
                             }
                         }
                     }
-                }
-                if FavoritesState.albums.length > 0: Rectangle { height: 12px; }
 
-                if FavoritesState.albums.length == 0: Text {
-                    text: @tr("No favorite albums yet.");
-                    color: Theme.text-muted;
-                    font-size: Typography.body;
-                }
-                if FavoritesState.albums.length > 0
-                    && FavoritesState.albums-shown == 0: Text {
-                    text: @tr("No albums match your search.");
-                    color: Theme.text-muted;
-                    font-size: Typography.body;
-                }
+                    // --- Tracks tab ---------------------------------------
+                    if !FavoritesState.loading && FavoritesState.load-error == ""
+                        && FavoritesState.active-tab == "tracks": VerticalLayout {
+                        spacing: 0px;
 
-                AlbumCollectionView {
-                    albums: FavoritesState.albums-visible;
-                    grouped: FavoritesState.albums-grouped;
-                    view-mode: FavoritesState.albums-view-mode;
-                    is-grouped: FavoritesState.albums-group-mode != "off";
-                    show-source: false;
-                    open-album(id) => {
-                        root.open-album(id);
+                        // Bulk action bar — visible in multi-select edit mode.
+                        if FavoritesState.tracks-multi-select: MultiSelectBar {
+                            selected-count: FavoritesState.tracks-selected-count;
+                            actions: [
+                                { id: "select-all", label: @tr("Select all"), danger: false, needs-selection: false },
+                                { id: "play-next", label: @tr("Play next"), danger: false, needs-selection: true },
+                                { id: "queue", label: @tr("Add to queue"), danger: false, needs-selection: true },
+                                { id: "add-to-playlist", label: @tr("Add to playlist"), danger: false, needs-selection: true },
+                                { id: "remove-selected", label: @tr("Remove from favorites"), danger: true, needs-selection: true },
+                                { id: "clear", label: @tr("Clear"), danger: false, needs-selection: true },
+                            ];
+                            action(id) => {
+                                FavoritesActions.bulk-action(id);
+                            }
+                        }
+                        if FavoritesState.tracks-multi-select: Rectangle { height: 8px; }
+
+                        if FavoritesState.tracks.length == 0: Text {
+                            text: @tr("No favorite tracks yet.");
+                            color: Theme.text-muted;
+                            font-size: Typography.body;
+                        }
+                        // Search filtered everything out.
+                        if FavoritesState.tracks.length > 0
+                            && FavoritesState.tracks-visible.length == 0: Text {
+                            text: @tr("No tracks match your search.");
+                            color: Theme.text-muted;
+                            font-size: Typography.body;
+                        }
+                        for track[i] in FavoritesState.tracks-visible: VerticalLayout {
+                            spacing: 0px;
+                            // Group header rows when grouping by album / artist
+                            // (a new header each time the group key changes).
+                            if FavoritesState.tracks-group-mode == "album" && track.album != ""
+                                && (i == 0 || FavoritesState.tracks-visible[i - 1].album != track.album): Rectangle {
+                                height: 32px;
+                                Text {
+                                    x: 2px;
+                                    width: parent.width - 4px;
+                                    height: 100%;
+                                    text: track.album;
+                                    color: Theme.text-secondary;
+                                    font-size: Typography.legal;
+                                    font-weight: Typography.semibold;
+                                    vertical-alignment: center;
+                                    overflow: elide;
+                                }
+                            }
+                            if FavoritesState.tracks-group-mode == "artist" && track.artist != ""
+                                && (i == 0 || FavoritesState.tracks-visible[i - 1].artist != track.artist): Rectangle {
+                                height: 32px;
+                                Text {
+                                    x: 2px;
+                                    width: parent.width - 4px;
+                                    height: 100%;
+                                    text: track.artist;
+                                    color: Theme.text-secondary;
+                                    font-size: Typography.legal;
+                                    font-weight: Typography.semibold;
+                                    vertical-alignment: center;
+                                    overflow: elide;
+                                }
+                            }
+                            TrackRow {
+                                track: track;
+                                index: i;
+                                show-artwork: true;
+                                show-album: FavoritesState.tracks-group-mode != "album";
+                                show-favorite: true;
+                                multi-select-mode: FavoritesState.tracks-multi-select;
+                                media-action(kind, id, action) => {
+                                    if (kind == "album" && action == "open") {
+                                        FavoritesActions.open-album(id);
+                                    } else if (kind == "artist" && action == "open") {
+                                        FavoritesActions.open-artist(id);
+                                    } else if (action == "favorite") {
+                                        FavoritesActions.unfavorite-track(id);
+                                    } else {
+                                        FavoritesActions.track-action(id, action);
+                                    }
+                                }
+                            }
+                        }
                     }
-                    open-artist(id) => {
-                        root.open-artist(id);
+
+                    // --- Albums tab ---------------------------------------
+                    if !FavoritesState.loading && FavoritesState.load-error == ""
+                        && FavoritesState.active-tab == "albums": VerticalLayout {
+                        spacing: 0px;
+                        if FavoritesState.albums.length == 0: Text {
+                            text: @tr("No favorite albums yet.");
+                            color: Theme.text-muted;
+                            font-size: Typography.body;
+                        }
+                        if FavoritesState.albums.length > 0
+                            && FavoritesState.albums-shown == 0: Text {
+                            text: @tr("No albums match your search.");
+                            color: Theme.text-muted;
+                            font-size: Typography.body;
+                        }
+                        AlbumCollectionView {
+                            albums: FavoritesState.albums-visible;
+                            grouped: FavoritesState.albums-grouped;
+                            view-mode: FavoritesState.albums-view-mode;
+                            is-grouped: FavoritesState.albums-group-mode != "off";
+                            show-source: false;
+                            open-album(id) => {
+                                root.open-album(id);
+                            }
+                            open-artist(id) => {
+                                root.open-artist(id);
+                            }
+                            media-action(kind, id, action) => {
+                                if (action == "favorite") {
+                                    FavoritesActions.unfavorite-album(id);
+                                } else {
+                                    FavoritesActions.album-action(id, action);
+                                }
+                            }
+                        }
                     }
-                    media-action(kind, id, action) => {
-                        if (action == "favorite") {
-                            // In the favorites list, un-favorite + fade out.
-                            FavoritesActions.unfavorite-album(id);
-                        } else {
-                            FavoritesActions.album-action(id, action);
+
+                    // --- Artists tab --------------------------------------
+                    if !FavoritesState.loading && FavoritesState.load-error == ""
+                        && FavoritesState.active-tab == "artists": artists-grid := Rectangle {
+                        property <int> columns: Math.max(
+                            1,
+                            Math.floor((self.width + root.gap) / (root.artist-w + root.gap)));
+                        property <int> rows: Math.ceil(FavoritesState.artists.length / self.columns);
+                        height: self.rows > 0
+                            ? self.rows * root.artist-h + Math.max(0, self.rows - 1) * root.gap
+                            : 0px;
+                        if FavoritesState.artists.length == 0: Text {
+                            text: @tr("No favorite artists yet.");
+                            color: Theme.text-muted;
+                            font-size: Typography.body;
+                        }
+                        for artist[i] in FavoritesState.artists: FavArtistCard {
+                            x: Math.mod(i, artists-grid.columns) * (root.artist-w + root.gap);
+                            y: Math.floor(i / artists-grid.columns) * (root.artist-h + root.gap);
+                            item: artist;
+                            clicked(id) => { root.open-artist(id); }
+                        }
+                    }
+
+                    // --- Playlists tab ------------------------------------
+                    if !FavoritesState.loading && FavoritesState.load-error == ""
+                        && FavoritesState.active-tab == "playlists": playlists-grid := Rectangle {
+                        property <length> pl-w: 180px;
+                        property <length> pl-h: 234px;
+                        property <int> columns: Math.max(
+                            1,
+                            Math.floor((self.width + root.gap) / (self.pl-w + root.gap)));
+                        property <int> rows: Math.ceil(FavoritesState.playlists.length / self.columns);
+                        height: self.rows > 0
+                            ? self.rows * self.pl-h + Math.max(0, self.rows - 1) * root.gap
+                            : 0px;
+                        if FavoritesState.playlists.length == 0: Text {
+                            text: @tr("No favorite playlists yet.");
+                            color: Theme.text-muted;
+                            font-size: Typography.body;
+                        }
+                        for pl[i] in FavoritesState.playlists: FavPlaylistCard {
+                            x: Math.mod(i, playlists-grid.columns) * (playlists-grid.pl-w + root.gap);
+                            y: Math.floor(i / playlists-grid.columns) * (playlists-grid.pl-h + root.gap);
+                            item: pl;
+                            clicked(id) => { FavoritesActions.open-playlist(id); }
+                        }
+                    }
+
+                    // --- Labels tab ---------------------------------------
+                    if !FavoritesState.loading && FavoritesState.load-error == ""
+                        && FavoritesState.active-tab == "labels": VerticalLayout {
+                        spacing: 0px;
+                        if FavoritesState.labels.length == 0: Text {
+                            text: @tr("No favorite labels yet.");
+                            color: Theme.text-muted;
+                            font-size: Typography.body;
+                        }
+                        for label[i] in FavoritesState.labels: FavLabelRow {
+                            item: label;
+                            index: i;
+                            clicked(id, name) => { FavoritesActions.open-label(id, name); }
                         }
                     }
                 }
             }
 
-            // --- Artists tab -------------------------------------------
-            if !FavoritesState.loading
-                && FavoritesState.active-tab == "artists": artists-grid := Rectangle {
-                property <int> columns: Math.max(
-                    1,
-                    Math.floor((self.width + root.gap) / (root.artist-w + root.gap)));
-                property <int> rows: Math.ceil(FavoritesState.artists.length / self.columns);
-                height: self.rows > 0
-                    ? self.rows * root.artist-h + Math.max(0, self.rows - 1) * root.gap
-                    : 0px;
-                if FavoritesState.artists.length == 0: Text {
-                    text: @tr("No favorite artists yet.");
-                    color: Theme.text-muted;
-                    font-size: Typography.body;
-                }
-                for artist[i] in FavoritesState.artists: FavArtistCard {
-                    x: Math.mod(i, artists-grid.columns) * (root.artist-w + root.gap);
-                    y: Math.floor(i / artists-grid.columns) * (root.artist-h + root.gap);
-                    item: artist;
-                    clicked(id) => { root.open-artist(id); }
-                }
-            }
-
-            // --- Playlists tab -----------------------------------------
-            if !FavoritesState.loading
-                && FavoritesState.active-tab == "playlists": playlists-grid := Rectangle {
-                property <length> pl-w: 180px;
-                property <length> pl-h: 234px;
-                property <int> columns: Math.max(
-                    1,
-                    Math.floor((self.width + root.gap) / (self.pl-w + root.gap)));
-                property <int> rows: Math.ceil(FavoritesState.playlists.length / self.columns);
-                height: self.rows > 0
-                    ? self.rows * self.pl-h + Math.max(0, self.rows - 1) * root.gap
-                    : 0px;
-                if FavoritesState.playlists.length == 0: Text {
-                    text: @tr("No favorite playlists yet.");
-                    color: Theme.text-muted;
-                    font-size: Typography.body;
-                }
-                for pl[i] in FavoritesState.playlists: FavPlaylistCard {
-                    x: Math.mod(i, playlists-grid.columns) * (playlists-grid.pl-w + root.gap);
-                    y: Math.floor(i / playlists-grid.columns) * (playlists-grid.pl-h + root.gap);
-                    item: pl;
-                    clicked(id) => { FavoritesActions.open-playlist(id); }
-                }
-            }
-
-            // --- Labels tab --------------------------------------------
-            if !FavoritesState.loading
-                && FavoritesState.active-tab == "labels": VerticalLayout {
-                spacing: 0px;
-                if FavoritesState.labels.length == 0: Text {
-                    text: @tr("No favorite labels yet.");
-                    color: Theme.text-muted;
-                    font-size: Typography.body;
-                }
-                for label[i] in FavoritesState.labels: FavLabelRow {
-                    item: label;
-                    index: i;
-                    clicked(id, name) => { FavoritesActions.open-label(id, name); }
-                }
+            // Scrollbar in the right gutter of the content area.
+            ListScrollbar {
+                x: parent.width - self.width - 4px;
+                width: 14px;
+                height: 100%;
+                viewport-height: flick.viewport-height;
+                visible-height: flick.height;
+                viewport-y <=> flick.viewport-y;
             }
         }
     }
 
-    // Shared scrollbar in the right gutter (homologated cross-view).
-    ListScrollbar {
-        x: parent.width - self.width - 4px;
-        width: 14px;
-        height: 100%;
-        viewport-height: flick.viewport-height;
-        visible-height: flick.height;
-        viewport-y <=> flick.viewport-y;
-    }
-
-    // Genre filter overlay — the shared popup, favorites context.
+    // Genre filter overlay — the shared popup, favorites context. Anchored
+    // under the toolbar's genre button (below the fixed chrome).
     if GenreFilterState.open: Rectangle {
         width: 100%;
         height: 100%;
@@ -861,6 +887,6 @@ export component FavoritesView inherits Rectangle {
     }
     if GenreFilterState.open: GenreFilterPopup {
         x: root.width - self.width - 32px;
-        y: 56px;
+        y: 104px;
     }
 }
