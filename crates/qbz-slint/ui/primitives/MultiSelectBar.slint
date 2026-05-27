@@ -68,12 +68,15 @@ export component MultiSelectBar inherits Rectangle {
             vertical-alignment: center;
             horizontal-stretch: 1;
         }
-        for act in root.actions: BulkButton {
-            label: act.label;
-            danger: act.danger;
-            enabled-when: !act.needs-selection || root.selected-count > 0;
-            clicked => {
-                root.action(act.id);
+        for act in root.actions: VerticalLayout {
+            alignment: center;
+            BulkButton {
+                label: act.label;
+                danger: act.danger;
+                enabled-when: !act.needs-selection || root.selected-count > 0;
+                clicked => {
+                    root.action(act.id);
+                }
             }
         }
     }

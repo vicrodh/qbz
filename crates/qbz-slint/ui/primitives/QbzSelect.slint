@@ -47,6 +47,9 @@ export component QbzSelect inherits Rectangle {
     // option labels (device names). 0px keeps the list at `menu-width`.
     in property <length> popup-width: 0px;
     in property <bool> enabled: true;
+    // Bootstrap-style small variant. Default is the standard size (used by
+    // Settings); toolbars opt in with `sm: true`.
+    in property <bool> sm: false;
     callback selected(int);
 
     // Resolved width of the open list.
@@ -58,7 +61,7 @@ export component QbzSelect inherits Rectangle {
     private property <length> header-height: 24px;
 
     width: root.menu-width;
-    height: 34px;
+    height: root.sm ? 30px : 34px;
     border-radius: Radius.sm;
     border-width: 1px;
     border-color: Theme.border-subtle;
@@ -66,8 +69,8 @@ export component QbzSelect inherits Rectangle {
     opacity: root.enabled ? 1.0 : 0.4;
 
     HorizontalLayout {
-        padding-left: 12px;
-        padding-right: 10px;
+        padding-left: root.sm ? 10px : 12px;
+        padding-right: root.sm ? 8px : 10px;
         spacing: 8px;
         Text {
             text: root.current-index >= 0 && root.current-index < root.options.length
@@ -89,8 +92,8 @@ export component QbzSelect inherits Rectangle {
             alignment: center;
             QbzIcon {
                 source: @image-url("../assets/icons/chevron-down.svg");
-                width: 16px;
-                height: 16px;
+                width: root.sm ? 14px : 16px;
+                height: root.sm ? 14px : 16px;
                 tint: Theme.text-muted;
             }
         }

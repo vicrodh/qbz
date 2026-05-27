@@ -9,18 +9,20 @@ import { QbzIcon } from "QbzIcon.slint";
 export component ToggleButton inherits Rectangle {
     in property <image> icon;
     in property <bool> active: false;
+    // Bootstrap-style small variant. Default is the standard size.
+    in property <bool> sm: false;
     callback clicked();
 
-    width: 34px;
-    height: 34px;
+    width: root.sm ? 30px : 34px;
+    height: root.sm ? 30px : 34px;
     background: root.active
         ? Theme.surface-hover
         : (ta.has-hover ? Theme.surface-elevated : transparent);
 
     QbzIcon {
         source: root.icon;
-        width: 17px;
-        height: 17px;
+        width: root.sm ? 15px : 17px;
+        height: root.sm ? 15px : 17px;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
         tint: root.active ? Theme.text-primary : Theme.text-muted;

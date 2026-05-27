@@ -303,22 +303,22 @@ component FavArtistCard inherits Rectangle {
 component FavGenreButton inherits Rectangle {
     property <bool> active: GenreFilterState.selected-count > 0;
     width: genre-row.preferred-width;
-    height: 34px;
+    height: 30px;
     border-radius: 6px;
     background: root.active
         ? Theme.accent
         : (ta.has-hover ? Theme.surface-hover : Theme.surface-elevated);
 
     genre-row := HorizontalLayout {
-        padding-left: 12px;
-        padding-right: 14px;
+        padding-left: 10px;
+        padding-right: 12px;
         spacing: 7px;
         VerticalLayout {
             alignment: center;
             QbzIcon {
                 source: @image-url("../assets/icons/list-filter.svg");
-                width: 14px;
-                height: 14px;
+                width: 13px;
+                height: 13px;
                 tint: root.active ? #ffffff : Theme.text-secondary;
             }
         }
@@ -329,7 +329,7 @@ component FavGenreButton inherits Rectangle {
                     : @tr("{} genres", GenreFilterState.selected-count))
                 : @tr("Filter by genre");
             color: root.active ? #ffffff : Theme.text-secondary;
-            font-size: 13px;
+            font-size: 12px;
             vertical-alignment: center;
         }
     }
@@ -344,8 +344,8 @@ component FavGenreButton inherits Rectangle {
 
 // Grid/list segmented toggle (albums toolbar).
 component ViewToggle inherits Rectangle {
-    width: 68px;
-    height: 34px;
+    width: 60px;
+    height: 30px;
     border-radius: 6px;
     background: Theme.surface-elevated;
     clip: true;
@@ -353,6 +353,7 @@ component ViewToggle inherits Rectangle {
         ToggleButton {
             icon: @image-url("../assets/icons/layout-grid.svg");
             active: FavoritesState.albums-view-mode == "grid";
+            sm: true;
             clicked => {
                 FavoritesActions.albums-set-view("grid");
             }
@@ -360,6 +361,7 @@ component ViewToggle inherits Rectangle {
         ToggleButton {
             icon: @image-url("../assets/icons/list.svg");
             active: FavoritesState.albums-view-mode == "list";
+            sm: true;
             clicked => {
                 FavoritesActions.albums-set-view("list");
             }
@@ -505,6 +507,7 @@ export component FavoritesView inherits Rectangle {
                     alignment: center;
                     ExpandableSearch {
                         placeholder: @tr("Search");
+                        sm: true;
                         query <=> FavoritesState.tracks-search;
                         edited(q) => {
                             FavoritesActions.search-tracks(q);
@@ -525,6 +528,7 @@ export component FavoritesView inherits Rectangle {
                             @tr("Group: Artist"),
                             @tr("Group: Name"),
                         ];
+                        sm: true;
                         current-index: FavoritesState.tracks-group-mode == "off" ? 0
                             : FavoritesState.tracks-group-mode == "album" ? 1
                             : FavoritesState.tracks-group-mode == "artist" ? 2
@@ -546,6 +550,7 @@ export component FavoritesView inherits Rectangle {
                     alignment: center;
                     ExpandableSearch {
                         placeholder: @tr("Search");
+                        sm: true;
                         query <=> FavoritesState.albums-search;
                         edited(q) => {
                             FavoritesActions.albums-search(q);
@@ -565,6 +570,7 @@ export component FavoritesView inherits Rectangle {
                             @tr("Group: A-Z"),
                             @tr("Group: Artist"),
                         ];
+                        sm: true;
                         current-index: FavoritesState.albums-group-mode == "off" ? 0
                             : FavoritesState.albums-group-mode == "alpha" ? 1
                             : 2;
@@ -584,6 +590,7 @@ export component FavoritesView inherits Rectangle {
                             @tr("Title Z-A"),
                             @tr("Artist A-Z"),
                         ];
+                        sm: true;
                         current-index: FavoritesState.albums-sort-by == "default" ? 0
                             : FavoritesState.albums-sort-by == "title-asc" ? 1
                             : FavoritesState.albums-sort-by == "title-desc" ? 2

@@ -15,6 +15,8 @@ export component ExpandableSearch inherits Rectangle {
     in property <length> max-open-width: 216px;
     in-out property <bool> open: false;
     in-out property <string> query;
+    // Bootstrap-style small variant. Default is the standard size.
+    in property <bool> sm: false;
     callback edited(string);
 
     changed open => {
@@ -24,20 +26,20 @@ export component ExpandableSearch inherits Rectangle {
     }
 
     // Closed footprint — just the magnifier slot.
-    width: 34px;
-    height: 34px;
+    width: root.sm ? 30px : 34px;
+    height: root.sm ? 30px : 34px;
 
     // Closed: the magnifier toggle.
     Rectangle {
         visible: !root.open;
-        width: 34px;
-        height: 34px;
+        width: root.sm ? 30px : 34px;
+        height: root.sm ? 30px : 34px;
         border-radius: 6px;
         background: open-ta.has-hover ? Theme.surface-hover : transparent;
         QbzIcon {
             source: @image-url("../assets/icons/search.svg");
-            width: 16px;
-            height: 16px;
+            width: root.sm ? 14px : 16px;
+            height: root.sm ? 14px : 16px;
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
             tint: open-ta.has-hover ? Theme.text-primary : Theme.text-muted;
@@ -55,7 +57,7 @@ export component ExpandableSearch inherits Rectangle {
         visible: root.open;
         x: parent.width - self.width;
         width: root.open ? root.max-open-width : 0px;
-        height: 34px;
+        height: root.sm ? 30px : 34px;
         background: Theme.surface-card;
         border-radius: 6px;
         border-width: 1px;
@@ -110,8 +112,8 @@ export component ExpandableSearch inherits Rectangle {
                 horizontal-stretch: 0;
                 alignment: center;
                 Rectangle {
-                    width: 24px;
-                    height: 24px;
+                    width: root.sm ? 22px : 24px;
+                    height: root.sm ? 22px : 24px;
                     border-radius: 4px;
                     background: clear-ta.has-hover ? Theme.surface-elevated : transparent;
                     QbzIcon {
