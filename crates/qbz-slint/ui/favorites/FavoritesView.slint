@@ -570,27 +570,65 @@ export component FavoritesView inherits Rectangle {
                     color: Theme.text-muted;
                     font-size: Typography.body;
                 }
-                for track[i] in FavoritesState.tracks-visible: TrackRow {
-                    track: track;
-                    index: i;
-                    show-artwork: true;
-                    show-album: true;
-                    show-favorite: true;
-                    multi-select-mode: FavoritesState.tracks-multi-select;
-                    // Album / artist name links open the respective page; the
-                    // row drops `kind`, so route those explicitly (the
-                    // track-action path forces kind="track" and would treat an
-                    // album-id as an artist-id).
-                    media-action(kind, id, action) => {
-                        if (kind == "album" && action == "open") {
-                            FavoritesActions.open-album(id);
-                        } else if (kind == "artist" && action == "open") {
-                            FavoritesActions.open-artist(id);
-                        } else if (action == "favorite") {
-                            // In the favorites list, un-favorite + fade out.
-                            FavoritesActions.unfavorite-track(id);
-                        } else {
-                            FavoritesActions.track-action(id, action);
+                for track[i] in FavoritesState.tracks-visible: VerticalLayout {
+                    spacing: 0px;
+                    // Group header rows when grouping by album / artist (a
+                    // new header each time the group key changes). Name
+                    // grouping just reorders alphabetically.
+                    if FavoritesState.tracks-group-mode == "album" && track.album != ""
+                        && (i == 0 || FavoritesState.tracks-visible[i - 1].album != track.album): Rectangle {
+                        height: 32px;
+                        Text {
+                            x: 2px;
+                            width: parent.width - 4px;
+                            height: 100%;
+                            text: track.album;
+                            color: Theme.text-secondary;
+                            font-size: Typography.legal;
+                            font-weight: Typography.semibold;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                    }
+                    if FavoritesState.tracks-group-mode == "artist" && track.artist != ""
+                        && (i == 0 || FavoritesState.tracks-visible[i - 1].artist != track.artist): Rectangle {
+                        height: 32px;
+                        Text {
+                            x: 2px;
+                            width: parent.width - 4px;
+                            height: 100%;
+                            text: track.artist;
+                            color: Theme.text-secondary;
+                            font-size: Typography.legal;
+                            font-weight: Typography.semibold;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                    }
+                    TrackRow {
+                        track: track;
+                        index: i;
+                        show-artwork: true;
+                        // Hide the album column when grouping by album (the
+                        // header already names it — mirrors Tauri).
+                        show-album: FavoritesState.tracks-group-mode != "album";
+                        show-favorite: true;
+                        multi-select-mode: FavoritesState.tracks-multi-select;
+                        // Album / artist name links open the respective page;
+                        // the row drops `kind`, so route those explicitly (the
+                        // track-action path forces kind="track" and would treat
+                        // an album-id as an artist-id).
+                        media-action(kind, id, action) => {
+                            if (kind == "album" && action == "open") {
+                                FavoritesActions.open-album(id);
+                            } else if (kind == "artist" && action == "open") {
+                                FavoritesActions.open-artist(id);
+                            } else if (action == "favorite") {
+                                // In the favorites list, un-favorite + fade out.
+                                FavoritesActions.unfavorite-track(id);
+                            } else {
+                                FavoritesActions.track-action(id, action);
+                            }
                         }
                     }
                 }
