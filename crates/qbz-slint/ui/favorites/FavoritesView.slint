@@ -583,7 +583,14 @@ export component FavoritesView inherits Rectangle {
         Rectangle { height: 12px; }
 
         // Row 2 — per-view action buttons (left), toolbar (right).
+        // vertical-stretch: 0 is load-bearing: without it, when this row's
+        // sized children are absent (tabs whose toolbar is conditional) its
+        // auto stretch becomes 1 and it splits the leftover height with the
+        // scrolling content (which, for the Flickable-based tabs, has a small
+        // preferred height) — inflating the sub-header. Tracks/Albums looked
+        // fine only because their content fills, leaving no slack to grab.
         HorizontalLayout {
+            vertical-stretch: 0;
             padding-left: 32px;
             padding-right: 32px;
             spacing: 8px;
