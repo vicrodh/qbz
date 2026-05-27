@@ -791,8 +791,11 @@ fn navigate_favorites(
             }
             Err(e) => {
                 log::error!("[qbz-slint] favorites load failed: {e}");
-                let _ = weak.upgrade_in_event_loop(|w| {
-                    w.global::<FavoritesState>().set_loading(false);
+                let msg = e.to_string();
+                let _ = weak.upgrade_in_event_loop(move |w| {
+                    let st = w.global::<FavoritesState>();
+                    st.set_loading(false);
+                    st.set_load_error(msg.into());
                 });
             }
         }
@@ -4383,6 +4386,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         favorites::remove_album_row(&w, &id_rm);
                     }
                 });
+            });
+    }
+    {
+        // Retry loading the current favorites tab after a load error.
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        let image_cache = image_cache.clone();
+        window
+            .global::<FavoritesActions>()
+            .on_retry_load(move || {
+                if let Some(w) = weak.upgrade() {
+                    let tab_id = w.global::<FavoritesState>().get_active_tab().to_string();
+                    if let Some(tab) = favorites::FavTab::from_tab_id(&tab_id) {
+                        navigate_favorites(
+                            runtime.clone(),
+                            weak.clone(),
+                            &handle,
+                            image_cache.clone(),
+                            tab,
+                            &tab_id,
+                        );
+                    }
+                }
             });
     }
     {

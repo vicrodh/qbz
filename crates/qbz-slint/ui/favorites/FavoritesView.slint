@@ -390,8 +390,52 @@ export component FavoritesView inherits Rectangle {
                 LoadingSpinner { size: 36px; }
             }
 
+            // Load error + retry.
+            if !FavoritesState.loading && FavoritesState.load-error != "": VerticalLayout {
+                alignment: center;
+                spacing: 10px;
+                Rectangle { height: 24px; }
+                Text {
+                    text: @tr("Couldn't load favorites.");
+                    color: Theme.text-primary;
+                    font-size: Typography.body;
+                    font-weight: Typography.semibold;
+                    horizontal-alignment: center;
+                }
+                Text {
+                    text: FavoritesState.load-error;
+                    color: Theme.text-muted;
+                    font-size: Typography.legal;
+                    horizontal-alignment: center;
+                }
+                HorizontalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: retry-label.preferred-width + 28px;
+                        height: 32px;
+                        border-radius: 6px;
+                        background: retry-ta.has-hover ? Theme.surface-hover : Theme.surface-elevated;
+                        border-width: 1px;
+                        border-color: Theme.border-subtle;
+                        retry-label := Text {
+                            text: @tr("Retry");
+                            color: Theme.text-primary;
+                            font-size: Typography.legal;
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
+                        }
+                        retry-ta := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                FavoritesActions.retry-load();
+                            }
+                        }
+                    }
+                }
+            }
+
             // --- Tracks tab --------------------------------------------
-            if !FavoritesState.loading
+            if !FavoritesState.loading && FavoritesState.load-error == ""
                 && FavoritesState.active-tab == "tracks": VerticalLayout {
                 spacing: 0px;
                 // Toolbar — results count (left) + expandable search (right).
@@ -499,7 +543,7 @@ export component FavoritesView inherits Rectangle {
             }
 
             // --- Albums tab --------------------------------------------
-            if !FavoritesState.loading
+            if !FavoritesState.loading && FavoritesState.load-error == ""
                 && FavoritesState.active-tab == "albums": VerticalLayout {
                 spacing: 0px;
                 // Toolbar — count (left) + grid/list segmented toggle (right).

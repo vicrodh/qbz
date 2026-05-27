@@ -1478,6 +1478,7 @@ export global FavoritesState {
     in property <int> playlists-total: 0;
     in property <int> labels-total: 0;
     in property <bool> loading: false;
+    in property <string> load-error: ""; // non-empty -> show error + retry
 }
 
 export global FavoritesActions {
@@ -1503,6 +1504,7 @@ export global FavoritesActions {
     callback albums-shuffle();
     callback unfavorite-track(string /* track id */);
     callback unfavorite-album(string /* album id */);
+    callback retry-load();
 }
 
 // A Qobuz mix detail page (DailyQ / WeeklyQ / FavQ / TopQ), opened

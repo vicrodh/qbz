@@ -717,7 +717,9 @@ pub fn selected_ids(window: &AppWindow) -> Vec<String> {
 }
 
 pub fn reset_loading(window: &AppWindow) {
-    window.global::<FavoritesState>().set_loading(true);
+    let state = window.global::<FavoritesState>();
+    state.set_loading(true);
+    state.set_load_error("".into());
 }
 
 /// Artwork jobs for the freshly loaded tab.
