@@ -342,6 +342,8 @@ export component FavoritesView inherits Rectangle {
                     track: track;
                     index: i;
                     show-artwork: true;
+                    show-album: true;
+                    show-favorite: true;
                     media-action(kind, id, action) => {
                         FavoritesActions.track-action(id, action);
                     }

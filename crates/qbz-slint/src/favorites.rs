@@ -94,6 +94,7 @@ pub struct TrackCard {
     pub title: String,
     pub artist: String,
     pub artist_id: String,
+    pub album: String,
     pub album_id: String,
     pub duration: String,
     pub quality_tier: String,
@@ -211,6 +212,11 @@ fn map_track(track: Track) -> TrackCard {
         .as_ref()
         .and_then(|a| a.image.best().cloned())
         .unwrap_or_default();
+    let album = track
+        .album
+        .as_ref()
+        .map(|a| a.title.clone())
+        .unwrap_or_default();
     let album_id = track.album.as_ref().map(|a| a.id.clone()).unwrap_or_default();
     let (artist, artist_id) = track
         .performer
@@ -221,6 +227,7 @@ fn map_track(track: Track) -> TrackCard {
         title,
         artist,
         artist_id,
+        album,
         album_id,
         duration: mmss(track.duration),
         quality_tier: album_map::tier(track.maximum_bit_depth).to_string(),
@@ -286,7 +293,7 @@ pub fn apply_favorites(window: &AppWindow, data: FavData) {
                     number: "".into(),
                     title: t.title.into(),
                     artist: t.artist.into(),
-                    album: "".into(),
+                    album: t.album.into(),
                     duration: t.duration.into(),
                     quality_tier: t.quality_tier.into(),
                     explicit: t.explicit,
