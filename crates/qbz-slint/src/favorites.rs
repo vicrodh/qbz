@@ -8,7 +8,7 @@
 //! relevant branch into typed qbz-models items and maps them to the
 //! Slint row/card structs.
 
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock, Mutex};
 
 use qbz_app::shell::AppRuntime;
 use qbz_core::FrontendAdapter;
@@ -31,6 +31,10 @@ pub const PAGE_SIZE: u32 = 500;
 /// Hard ceiling on favorites pulled across all pages (mirrors Tauri's
 /// FAVORITES_PAGE_SIZE * FAVORITES_MAX_PAGES ceiling).
 const MAX_ITEMS: usize = 10_000;
+
+/// The loaded favorite tracks as a play-ready queue source (Play all /
+/// Shuffle). Set on the UI thread by `apply_favorites`.
+static FAV_CURRENT: LazyLock<Mutex<Vec<Track>>> = LazyLock::new(|| Mutex::new(Vec::new()));
 
 /// Which favorites tab to load.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -85,7 +89,7 @@ struct FavLabel {
 }
 
 pub enum FavData {
-    Tracks { items: Vec<TrackCard>, total: usize },
+    Tracks { items: Vec<TrackCard>, play: Vec<Track>, total: usize },
     Albums { items: Vec<AlbumCard>, total: usize },
     Artists { items: Vec<ArtistCard>, total: usize },
     Playlists { items: Vec<PlaylistCard>, total: usize },
@@ -191,8 +195,10 @@ where
     Ok(match tab {
         FavTab::Tracks => {
             let tracks: Vec<Track> = serde_json::from_value(items).unwrap_or_default();
+            let play = tracks.clone();
             FavData::Tracks {
                 items: tracks.into_iter().map(map_track).collect(),
+                play,
                 total,
             }
         }
@@ -308,7 +314,10 @@ fn map_label(label: FavLabel) -> LabelCard {
 pub fn apply_favorites(window: &AppWindow, data: FavData) {
     let state = window.global::<FavoritesState>();
     match data {
-        FavData::Tracks { items, total } => {
+        FavData::Tracks { items, play, total } => {
+            if let Ok(mut current) = FAV_CURRENT.lock() {
+                *current = play;
+            }
             let rows: Vec<TrackItem> = items
                 .into_iter()
                 .map(|t| TrackItem {
@@ -412,6 +421,30 @@ pub fn derive_tracks(window: &AppWindow) {
         })
         .collect();
     state.set_tracks_visible(ModelRc::new(VecModel::from(filtered)));
+}
+
+/// The loaded favorite tracks as a play-ready queue (Play all).
+pub fn play_tracks() -> Vec<Track> {
+    FAV_CURRENT.lock().map(|c| c.clone()).unwrap_or_default()
+}
+
+/// The favorite tracks in a fresh random order (Shuffle). Mirrors
+/// playlist::shuffled_tracks (time-seeded xorshift Fisher-Yates).
+pub fn shuffled_tracks() -> Vec<Track> {
+    let mut tracks = play_tracks();
+    let mut seed = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(1)
+        | 1;
+    for i in (1..tracks.len()).rev() {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        let j = (seed % (i as u64 + 1)) as usize;
+        tracks.swap(i, j);
+    }
+    tracks
 }
 
 pub fn reset_loading(window: &AppWindow) {

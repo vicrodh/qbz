@@ -21,6 +21,7 @@ import {
 import { AlbumCard } from "../discover/AlbumCard.slint";
 import { TrackRow } from "../primitives/TrackRow.slint";
 import { ExpandableSearch } from "../primitives/ExpandableSearch.slint";
+import { CircleAction } from "../primitives/CircleAction.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
 import { ListScrollbar } from "../primitives/ListScrollbar.slint";
@@ -275,11 +276,43 @@ export component FavoritesView inherits Rectangle {
 
             // Page title — same size as the album name in AlbumView
             // (Typography.section), not the larger Typography.title.
-            Text {
-                text: @tr("Favorites");
-                color: Theme.text-primary;
-                font-size: Typography.section;
-                font-weight: Typography.bold;
+            HorizontalLayout {
+                spacing: 12px;
+                VerticalLayout {
+                    alignment: center;
+                    horizontal-stretch: 1;
+                    Text {
+                        text: @tr("Favorites");
+                        color: Theme.text-primary;
+                        font-size: Typography.section;
+                        font-weight: Typography.bold;
+                    }
+                }
+                // Tracks header actions — Play all + Shuffle the favorites
+                // queue. Shown only when the Tracks tab has rendered rows.
+                if FavoritesState.active-tab == "tracks"
+                    && FavoritesState.tracks-visible.length > 0: HorizontalLayout {
+                    spacing: 8px;
+                    VerticalLayout {
+                        alignment: center;
+                        CircleAction {
+                            icon: @image-url("../assets/icons/play-fill.svg");
+                            primary: true;
+                            clicked => {
+                                FavoritesActions.play-all-tracks();
+                            }
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        CircleAction {
+                            icon: @image-url("../assets/icons/shuffle.svg");
+                            clicked => {
+                                FavoritesActions.shuffle-tracks();
+                            }
+                        }
+                    }
+                }
             }
 
             Rectangle { height: 16px; }

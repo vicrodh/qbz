@@ -4272,6 +4272,40 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             });
     }
+    {
+        // Play all favorite tracks as a fresh queue.
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window
+            .global::<FavoritesActions>()
+            .on_play_all_tracks(move || {
+                playback::play_tracks(
+                    runtime.clone(),
+                    weak.clone(),
+                    handle.clone(),
+                    favorites::play_tracks(),
+                    0,
+                );
+            });
+    }
+    {
+        // Shuffle-play the favorite tracks.
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window
+            .global::<FavoritesActions>()
+            .on_shuffle_tracks(move || {
+                playback::play_tracks(
+                    runtime.clone(),
+                    weak.clone(),
+                    handle.clone(),
+                    favorites::shuffled_tracks(),
+                    0,
+                );
+            });
+    }
 
     // Artwork right-click menu wiring — Open in browser / Save as /
     // Add custom / Remove custom. Mirrors the v2_library_* + native
