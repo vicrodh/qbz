@@ -434,6 +434,65 @@ component FavArtistCard inherits Rectangle {
     }
 }
 
+// One row in the Favorites Artists sidepanel left list — a 40px round thumb
+// + name; the selected row is highlighted.
+component SidepanelArtistRow inherits Rectangle {
+    in property <FavoriteArtistItem> item;
+    in property <bool> selected;
+    callback clicked(string, string);
+    height: 56px;
+    border-radius: 8px;
+    background: root.selected
+        ? Theme.surface-elevated
+        : (ta.has-hover ? #ffffff10 : transparent);
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 8px;
+        spacing: 10px;
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 40px;
+                height: 40px;
+                border-radius: 20px;
+                background: Theme.surface-elevated;
+                clip: true;
+                Image {
+                    width: 100%;
+                    height: 100%;
+                    image-fit: cover;
+                    source: root.item.image;
+                }
+                if root.item.image-url == "": QbzIcon {
+                    source: @image-url("../assets/icons/user.svg");
+                    width: 18px;
+                    height: 18px;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    tint: Theme.text-muted;
+                }
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            Text {
+                text: root.item.name;
+                color: root.selected ? Theme.text-primary : Theme.text-secondary;
+                font-size: Typography.body;
+                font-weight: root.selected ? Typography.semibold : Typography.regular;
+                overflow: elide;
+            }
+        }
+    }
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked(root.item.id, root.item.name);
+        }
+    }
+}
+
 // Genre-filter trigger for the favorites toolbars — opens the shared
 // popup in the "favorites" context. Accent fill + "N genres" when active.
 component FavGenreButton inherits Rectangle {
@@ -827,7 +886,23 @@ export component FavoritesView inherits Rectangle {
                         }
                     }
                 }
+                // Grid <-> sidepanel view toggle.
                 VerticalLayout {
+                    alignment: center;
+                    ToggleButton {
+                        icon: FavoritesState.artists-view-mode == "sidepanel"
+                            ? @image-url("../assets/icons/layout-grid.svg")
+                            : @image-url("../assets/icons/list.svg");
+                        active: FavoritesState.artists-view-mode == "sidepanel";
+                        sm: true;
+                        clicked => {
+                            FavoritesActions.artists-set-view(
+                                FavoritesState.artists-view-mode == "grid" ? "sidepanel" : "grid");
+                        }
+                    }
+                }
+                // Group (A-Z) — grid mode only (Tauri hides it in sidepanel).
+                if FavoritesState.artists-view-mode == "grid": VerticalLayout {
                     alignment: center;
                     QbzSelect {
                         menu-width: 150px;
@@ -1030,7 +1105,9 @@ export component FavoritesView inherits Rectangle {
 
             // --- Albums / Artists / Playlists / Labels — scrolling ---------
             if !FavoritesState.loading && FavoritesState.load-error == ""
-                && FavoritesState.active-tab != "tracks": Rectangle {
+                && FavoritesState.active-tab != "tracks"
+                && !(FavoritesState.active-tab == "artists"
+                    && FavoritesState.artists-view-mode == "sidepanel"): Rectangle {
                 other-flick := Flickable {
                     interactive: !DragState.active;
                     viewport-width: self.width;
@@ -1278,6 +1355,151 @@ export component FavoritesView inherits Rectangle {
                     jump(ord, idx) => {
                         other-flick.viewport-y = -(ord / Math.max(1, FavoritesState.artists-alpha.length - 1))
                             * Math.max(0, (other-flick.viewport-height - other-flick.height) / 1px) * 1px;
+                    }
+                }
+            }
+
+            // --- Artists SIDEPANEL — two-column, each column self-scrolling ---
+            if !FavoritesState.loading && FavoritesState.load-error == ""
+                && FavoritesState.active-tab == "artists"
+                && FavoritesState.artists-view-mode == "sidepanel": HorizontalLayout {
+                padding-left: 32px;
+                padding-right: 32px;
+                padding-top: 16px;
+                spacing: 0px;
+
+                // LEFT: the favorites artist list (self-scrolling).
+                Rectangle {
+                    width: 300px;
+                    ListView {
+                        width: 100%;
+                        height: 100%;
+                        for artist[i] in FavoritesState.artists-visible: SidepanelArtistRow {
+                            item: artist;
+                            selected: FavoritesState.selected-artist-id == artist.id;
+                            clicked(id, name) => {
+                                FavoritesActions.select-artist(id, name);
+                            }
+                        }
+                    }
+                }
+                Rectangle {
+                    width: 1px;
+                    background: Theme.border-subtle;
+                }
+
+                // RIGHT: the selected artist's albums (5-state machine).
+                Rectangle {
+                    horizontal-stretch: 1;
+                    clip: true;
+
+                    if FavoritesState.selected-artist-id == "": VerticalLayout {
+                        alignment: center;
+                        spacing: 10px;
+                        HorizontalLayout {
+                            alignment: center;
+                            QbzIcon {
+                                source: @image-url("../assets/icons/user.svg");
+                                width: 44px;
+                                height: 44px;
+                                tint: Theme.text-muted;
+                            }
+                        }
+                        Text {
+                            text: @tr("Select an artist to see their albums.");
+                            color: Theme.text-muted;
+                            font-size: Typography.body;
+                            horizontal-alignment: center;
+                        }
+                    }
+                    if FavoritesState.selected-artist-id != ""
+                        && FavoritesState.selected-albums-loading: VerticalLayout {
+                        alignment: center;
+                        HorizontalLayout {
+                            alignment: center;
+                            LoadingSpinner { size: 32px; }
+                        }
+                    }
+                    if FavoritesState.selected-artist-id != ""
+                        && !FavoritesState.selected-albums-loading
+                        && FavoritesState.selected-albums-error != "": VerticalLayout {
+                        alignment: center;
+                        Text {
+                            text: @tr("Couldn't load albums.");
+                            color: Theme.text-primary;
+                            font-size: Typography.body;
+                            font-weight: Typography.semibold;
+                            horizontal-alignment: center;
+                        }
+                    }
+                    if FavoritesState.selected-artist-id != ""
+                        && !FavoritesState.selected-albums-loading
+                        && FavoritesState.selected-albums-error == ""
+                        && FavoritesState.selected-albums-total == 0: VerticalLayout {
+                        alignment: center;
+                        Text {
+                            text: @tr("No albums found.");
+                            color: Theme.text-muted;
+                            font-size: Typography.body;
+                            horizontal-alignment: center;
+                        }
+                    }
+                    if FavoritesState.selected-artist-id != ""
+                        && !FavoritesState.selected-albums-loading
+                        && FavoritesState.selected-albums-error == ""
+                        && FavoritesState.selected-albums-total > 0: Flickable {
+                        width: 100%;
+                        height: 100%;
+                        viewport-width: self.width;
+                        viewport-height: sections-col.preferred-height;
+                        sections-col := VerticalLayout {
+                            width: parent.width;
+                            padding-left: 20px;
+                            padding-right: 12px;
+                            padding-bottom: 100px;
+                            spacing: 18px;
+                            alignment: start;
+                            for section[s] in FavoritesState.selected-artist-sections: VerticalLayout {
+                                spacing: 8px;
+                                Text {
+                                    text: section.title;
+                                    color: Theme.text-primary;
+                                    font-size: Typography.body;
+                                    font-weight: Typography.semibold;
+                                }
+                                AlbumCollectionView {
+                                    albums: section.albums;
+                                    is-grouped: false;
+                                    view-mode: "grid";
+                                    show-source: false;
+                                    open-album(id) => {
+                                        root.open-album(id);
+                                    }
+                                    open-artist(id) => {
+                                        root.open-artist(id);
+                                    }
+                                    media-action(kind, id, action) => {
+                                        FavoritesActions.album-action(id, action);
+                                    }
+                                }
+                            }
+                            // Footer — jump to the full artist page (compilations
+                            // and other-artist content live there).
+                            Rectangle {
+                                height: footer-txt.preferred-height + 10px;
+                                footer-txt := Text {
+                                    text: @tr("Go to artist page");
+                                    color: Theme.accent;
+                                    font-size: Typography.body;
+                                }
+                                TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => {
+                                        root.open-artist(FavoritesState.selected-artist-id);
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
