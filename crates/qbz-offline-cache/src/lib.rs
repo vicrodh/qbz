@@ -23,13 +23,17 @@ pub mod metadata;
 pub mod migration;
 pub mod path_validator;
 pub mod playback;
+pub mod purge;
 pub mod secret_vault;
+pub mod state;
 pub mod types;
 
 pub use db::{CmafBundleRow, OfflineCacheDb};
 pub use downloader::{spawn_track_cache_download, StreamFetcher};
 pub use event::{CacheEvent, CacheEventSink, CacheFormat};
 pub use metadata::{sanitize_filename, CompleteTrackMetadata};
+pub use purge::purge_all_cached_files;
+pub use state::OfflineCacheState;
 pub use migration::{
     detect_legacy_cached_files, migrate_legacy_cached_files, MigrationError, MigrationStatus,
 };
