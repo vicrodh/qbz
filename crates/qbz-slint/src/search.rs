@@ -356,6 +356,7 @@ fn album_item(row: AlbumRow) -> AlbumCardItem {
 
 fn track_item(row: TrackRowData) -> TrackItem {
     let is_favorite = crate::fav_cache::is_favorite(&row.id);
+    let is_cached = crate::offline_cache::is_cached(&row.id);
     TrackItem {
         id: row.id.into(),
         number: "".into(),
@@ -372,7 +373,7 @@ fn track_item(row: TrackRowData) -> TrackItem {
         artist_id: row.artist_id.into(),
         album_id: row.album_id.into(),
         removing: false,
-        cache_status: 0,
+        cache_status: if is_cached { 3 } else { 0 },
         cache_progress: 0.0,
         unlocking: false,
     }

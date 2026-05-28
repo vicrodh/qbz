@@ -257,7 +257,7 @@ pub fn apply_album(window: &AppWindow, data: AlbumData) {
             artist_id: track.artist_id.into(),
             album_id: album_id.clone(),
             removing: false,
-            cache_status: 0,
+            cache_status: if crate::offline_cache::is_cached(&track.id) { 3 } else { 0 },
             cache_progress: 0.0,
             unlocking: false,
         })

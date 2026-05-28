@@ -89,6 +89,7 @@ where
 
     // Bring up the per-user offline cache (shared index.db + library.db with Tauri).
     crate::offline::activate(user_id).await;
+    crate::offline_cache::load_cached_ids().await;
 
     // Persist the token so the next launch restores the session silently.
     if let Err(e) = qbz_credentials::save_oauth_token(&token) {
@@ -137,6 +138,7 @@ where
             core.set_session(session).await.map_err(|e| e.to_string())?;
             runtime.activate(user_id).await?;
             crate::offline::activate(user_id).await;
+            crate::offline_cache::load_cached_ids().await;
             log::info!("[qbz-slint] restored saved session for user {user_id}");
             Ok(Some(SessionInfo {
                 user_id,

@@ -402,7 +402,7 @@ pub fn apply_favorites(window: &AppWindow, data: FavData) {
             let rows: Vec<TrackItem> = items
                 .into_iter()
                 .map(|t| TrackItem {
-                    id: t.id.into(),
+                    id: t.id.clone().into(),
                     number: "".into(),
                     title: t.title.into(),
                     artist: t.artist.into(),
@@ -419,7 +419,7 @@ pub fn apply_favorites(window: &AppWindow, data: FavData) {
                     artist_id: t.artist_id.into(),
                     album_id: t.album_id.into(),
                     removing: false,
-                    cache_status: 0,
+                    cache_status: if crate::offline_cache::is_cached(&t.id) { 3 } else { 0 },
                     cache_progress: 0.0,
                     unlocking: false,
                 })
