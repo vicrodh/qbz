@@ -408,14 +408,26 @@ export component TrackRow inherits Rectangle {
                 height: 28px;
                 border-radius: Radius.sm;
                 background: dl-ta.has-hover ? Theme.surface-elevated : transparent;
-                QbzIcon {
+                // Queued / downloading: a SPINNING loader (continuous rotation
+                // via animation-tick, like LoadingSpinner) so it reads as
+                // "working in the background". Isolated in its own `if` so the
+                // per-frame tick only drives the row while it is downloading.
+                if root.track.cache-status == 1 || root.track.cache-status == 2: Image {
+                    width: 16px;
+                    height: 16px;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    source: @image-url("../assets/icons/loader-circle.svg");
+                    colorize: Theme.accent;
+                    transform-rotation: ((animation-tick() / 1ms) * 0.36) * 1deg;
+                }
+                // Idle / ready / failed: a static glyph.
+                if root.track.cache-status != 1 && root.track.cache-status != 2: QbzIcon {
                     source: root.track.cache-status == 3
                         ? @image-url("../assets/icons/circle-check-big.svg")
                         : (root.track.cache-status == 4
                             ? @image-url("../assets/icons/triangle-alert.svg")
-                            : ((root.track.cache-status == 1 || root.track.cache-status == 2)
-                                ? @image-url("../assets/icons/loader-circle.svg")
-                                : @image-url("../assets/icons/cloud-download.svg")));
+                            : @image-url("../assets/icons/cloud-download.svg"));
                     width: 16px;
                     height: 16px;
                     x: (parent.width - self.width) / 2;
@@ -424,9 +436,7 @@ export component TrackRow inherits Rectangle {
                         ? Theme.accent
                         : (root.track.cache-status == 4
                             ? #e0564f
-                            : ((root.track.cache-status == 1 || root.track.cache-status == 2)
-                                ? Theme.accent
-                                : (dl-ta.has-hover ? Theme.text-primary : Theme.text-muted)));
+                            : (dl-ta.has-hover ? Theme.text-primary : Theme.text-muted));
                 }
                 dl-ta := TouchArea {
                     mouse-cursor: pointer;
