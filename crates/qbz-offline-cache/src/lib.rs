@@ -16,6 +16,8 @@
 
 pub mod cmaf_store;
 pub mod db;
+pub mod downloader;
+pub mod event;
 pub mod maintenance;
 pub mod metadata;
 pub mod migration;
@@ -25,12 +27,14 @@ pub mod secret_vault;
 pub mod types;
 
 pub use db::{CmafBundleRow, OfflineCacheDb};
+pub use downloader::{spawn_track_cache_download, StreamFetcher};
+pub use event::{CacheEvent, CacheEventSink, CacheFormat};
 pub use metadata::{sanitize_filename, CompleteTrackMetadata};
 pub use migration::{
     detect_legacy_cached_files, migrate_legacy_cached_files, MigrationError, MigrationStatus,
 };
 pub use path_validator::{is_offline_root_available, validate_path, PathStatus};
-pub use playback::load_cmaf_bundle;
+pub use playback::{load_cmaf_bundle, load_cmaf_bundle_with_ui_events};
 pub use types::{
     CacheProgress, CachedTrackInfo, OfflineCacheStats, OfflineCacheStatus, ReadyTrackForSync,
     TrackCacheInfo,
