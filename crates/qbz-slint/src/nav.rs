@@ -25,6 +25,12 @@ pub enum NavEntry {
     Favorites {
         tab: String,
     },
+    /// A Local Library browse tab page ("tracks" | "folders" | "albums" |
+    /// "artists"). Each tab is its own history entry so back/forward moves
+    /// between the Local Library tabs, mirroring Favorites / Discover.
+    LocalLibrary {
+        tab: String,
+    },
     /// A Discover "View all" full-list page — one album module
     /// (new releases, qobuzissimes, ...) opened from a Carousel's
     /// "View all" link. Carries the /discover/<x> endpoint + the

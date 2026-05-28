@@ -32,6 +32,7 @@ import { MixView } from "../mix/MixView.slint";
 import { PlaylistView } from "../playlist/PlaylistView.slint";
 import { PlaylistManagerView } from "../playlist/PlaylistManagerView.slint";
 import { OfflineManagerView } from "../offline/OfflineManagerView.slint";
+import { LocalLibraryView } from "../locallibrary/LocalLibraryView.slint";
 import { SettingsView } from "../settings/SettingsView.slint";
 import { SearchResultsView } from "../search/SearchResultsView.slint";
 
@@ -171,6 +172,7 @@ export component AppShell inherits Rectangle {
                 }
                 if NavState.view == ContentView.playlist-manager: PlaylistManagerView { }
                 if NavState.view == ContentView.offline-manager: OfflineManagerView { }
+                if NavState.view == ContentView.local-library: LocalLibraryView { }
                 if NavState.view == ContentView.mix: MixView {
                     play-track(id) => {
                         root.media-action("mix-track", id, "play");

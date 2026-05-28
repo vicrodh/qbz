@@ -323,12 +323,36 @@ export global DragActions {
 }
 
 // Which content view the shell shows.
-export enum ContentView { home, album, artist, settings, search, musician, label, label-releases, location, favorites, mix, playlist, discover-browse, playlist-manager, offline-manager }
+export enum ContentView { home, album, artist, settings, search, musician, label, label-releases, location, favorites, mix, playlist, discover-browse, playlist-manager, offline-manager, local-library }
 
 // In-app toast (transient notification). Mirrors Tauri's toastStore:
 // a single toast at a time (a new one replaces the current), auto-hidden
 // by the Rust layer per kind. `buffering` is persistent (no auto-hide).
 export enum ToastKind { success, error, info, warning, buffering }
+
+// Local Library (on-disk + Plex music). Greenfield Slint port — the view
+// shows header stats + the browse tabs (Albums / Artists / Folders /
+// Tracks). All management/maintenance/danger actions live under
+// Settings > Local Library; the gear button routes there.
+export global LocalLibraryState {
+    // "albums" | "artists" | "folders" | "tracks"
+    in-out property <string> active-tab: "albums";
+    in property <bool> loading: false;
+    in property <string> load-error: "";
+    // Header stats / per-tab badge counts.
+    in property <int> album-count: 0;
+    in property <int> artist-count: 0;
+    in property <int> track-count: 0;
+    in property <int> folder-count: 0;
+}
+
+export global LocalLibraryActions {
+    // Switch browse tab — records a per-tab history entry (mirrors Favorites
+    // / Discover) so back/forward moves between Local Library tabs.
+    callback select-tab(string /* "albums"|"artists"|"folders"|"tracks" */);
+    // Open Settings > Local Library (the gear button — management lives there).
+    callback open-settings();
+}
 
 // Global toast state, driven by crate::toast. The Toast overlay (mounted
 // at the app root) renders whatever is here. The Rust layer owns timing

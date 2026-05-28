@@ -1,0 +1,123 @@
+// Local Library — the user's on-disk + Plex music, browsed inside QBZ.
+//
+// Greenfield Slint port. This shell renders the header stats + the four
+// browse tabs (Albums / Artists / Folders / Tracks). All folder management,
+// scan, maintenance, and danger-zone actions live under Settings > Local
+// Library, NOT in this view — the gear button routes there.
+//
+// The per-tab bodies are filled slice by slice (Albums first). For now each
+// tab shows an empty placeholder so the wiring is visible end to end.
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { LocalLibraryState, LocalLibraryActions } from "../state.slint";
+
+component TabButton inherits TouchArea {
+    in property <string> label;
+    in property <bool> active;
+    height: 36px;
+    horizontal-stretch: 0;
+    Rectangle {
+        border-radius: 18px;
+        background: root.active
+            ? Theme.accent
+            : (root.has-hover ? Theme.surface-hover : transparent);
+        HorizontalLayout {
+            padding-left: 16px;
+            padding-right: 16px;
+            Text {
+                text: root.label;
+                vertical-alignment: center;
+                color: root.active ? Theme.accent-text : Theme.text-secondary;
+                font-size: 14px;
+                font-weight: root.active ? 700 : 500;
+            }
+        }
+    }
+}
+
+export component LocalLibraryView inherits Rectangle {
+    background: transparent;
+
+    VerticalLayout {
+        padding: 24px;
+        spacing: 20px;
+
+        // ---- Header: title + stats + gear (-> Settings > Local Library) ----
+        HorizontalLayout {
+            spacing: 16px;
+            VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: 2px;
+                Text {
+                    text: @tr("Local Library");
+                    color: Theme.text-primary;
+                    font-size: 28px;
+                    font-weight: 800;
+                }
+                Text {
+                    text: @tr("{} albums · {} artists · {} tracks",
+                        LocalLibraryState.album-count,
+                        LocalLibraryState.artist-count,
+                        LocalLibraryState.track-count);
+                    color: Theme.text-muted;
+                    font-size: 13px;
+                }
+            }
+            gear := TouchArea {
+                width: 38px;
+                height: 38px;
+                clicked => { LocalLibraryActions.open-settings(); }
+                Rectangle {
+                    border-radius: 10px;
+                    background: gear.has-hover ? Theme.surface-hover : transparent;
+                    Image {
+                        source: @image-url("../assets/icons/settings.svg");
+                        width: 20px;
+                        height: 20px;
+                        colorize: Theme.text-secondary;
+                    }
+                }
+            }
+        }
+
+        // ---- Tab bar (Albums / Artists / Folders / Tracks) ----
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: start;
+            for tab in [
+                { id: "albums", label: @tr("Albums") },
+                { id: "artists", label: @tr("Artists") },
+                { id: "folders", label: @tr("Folders") },
+                { id: "tracks", label: @tr("Tracks") },
+            ] : TabButton {
+                label: tab.label;
+                active: LocalLibraryState.active-tab == tab.id;
+                clicked => { LocalLibraryActions.select-tab(tab.id); }
+            }
+        }
+
+        // ---- Body (placeholder until each tab slice lands) ----
+        Rectangle {
+            vertical-stretch: 1;
+            background: Theme.surface-card;
+            border-radius: 12px;
+            VerticalLayout {
+                alignment: center;
+                spacing: 6px;
+                Text {
+                    text: @tr("Local Library port in progress");
+                    horizontal-alignment: center;
+                    color: Theme.text-secondary;
+                    font-size: 16px;
+                    font-weight: 600;
+                }
+                Text {
+                    text: @tr("The “{}” tab is coming next.", LocalLibraryState.active-tab);
+                    horizontal-alignment: center;
+                    color: Theme.text-muted;
+                    font-size: 13px;
+                }
+            }
+        }
+    }
+}

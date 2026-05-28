@@ -43,6 +43,7 @@ mod queue;
 mod drag;
 mod folders;
 mod library_db;
+mod local_library;
 mod offline;
 mod offline_cache;
 mod offline_manager;
@@ -625,6 +626,17 @@ fn apply_entry(
                 );
             }
         }
+        nav::NavEntry::LocalLibrary { tab } => {
+            if let Some(lib_tab) = local_library::LibTab::from_tab_id(&tab) {
+                navigate_local_library(
+                    runtime.clone(),
+                    weak.clone(),
+                    handle,
+                    image_cache.clone(),
+                    lib_tab,
+                );
+            }
+        }
         nav::NavEntry::Settings => {
             let _ = weak.upgrade_in_event_loop(|w| {
                 w.global::<NavState>().set_view(ContentView::Settings);
@@ -882,6 +894,25 @@ fn navigate_favorites(
                 });
             }
         }
+    });
+}
+
+/// Open a Local Library browse tab (Albums / Artists / Folders / Tracks).
+///
+/// Sets the active tab + switches the view. Per-tab data loading lands with
+/// each tab slice (Albums first); for now the view renders its shell + an
+/// empty placeholder, so the navigation is verifiable end to end.
+fn navigate_local_library(
+    _runtime: Arc<AppRuntime<SlintAdapter>>,
+    weak: slint::Weak<AppWindow>,
+    _handle: &tokio::runtime::Handle,
+    _image_cache: artwork::ImageCache,
+    tab: local_library::LibTab,
+) {
+    let tab_id = tab.tab_id().to_string();
+    let _ = weak.upgrade_in_event_loop(move |w| {
+        w.global::<LocalLibraryState>().set_active_tab(tab_id.into());
+        w.global::<NavState>().set_view(ContentView::LocalLibrary);
     });
 }
 
@@ -3847,8 +3878,70 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     tab,
                     tab_id,
                 );
+                return;
+            }
+            // Local Library tabs — same per-tab history pattern as Favorites.
+            if let Some(tab) = local_library::LibTab::from_route(route.as_str()) {
+                nav::record(nav::NavEntry::LocalLibrary {
+                    tab: tab.tab_id().to_string(),
+                });
+                if let Some(w) = weak.upgrade() {
+                    update_nav_flags(&w);
+                }
+                navigate_local_library(
+                    runtime.clone(),
+                    weak.clone(),
+                    &handle,
+                    image_cache.clone(),
+                    tab,
+                );
             }
         });
+    }
+
+    // Local Library — in-view tab bar (select-tab) + the gear button
+    // (open-settings -> Settings > Local Library). Same per-tab history
+    // pattern as Favorites.
+    {
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        let image_cache = image_cache.clone();
+        window
+            .global::<LocalLibraryActions>()
+            .on_select_tab(move |tab_id| {
+                if let Some(tab) = local_library::LibTab::from_tab_id(tab_id.as_str()) {
+                    nav::record(nav::NavEntry::LocalLibrary {
+                        tab: tab.tab_id().to_string(),
+                    });
+                    if let Some(w) = weak.upgrade() {
+                        update_nav_flags(&w);
+                    }
+                    navigate_local_library(
+                        runtime.clone(),
+                        weak.clone(),
+                        &handle,
+                        image_cache.clone(),
+                        tab,
+                    );
+                }
+            });
+    }
+    {
+        let weak = window.as_weak();
+        window
+            .global::<LocalLibraryActions>()
+            .on_open_settings(move || {
+                // Management/maintenance/danger actions live under
+                // Settings > Local Library. TODO(locallibrary): pre-open the
+                // Local Library settings sub-page via target-tab routing once
+                // that page exists.
+                nav::record(nav::NavEntry::Settings);
+                if let Some(w) = weak.upgrade() {
+                    w.global::<NavState>().set_view(ContentView::Settings);
+                    update_nav_flags(&w);
+                }
+            });
     }
 
     // Discover "View all" — open the full-list page for a section,
