@@ -5058,6 +5058,7 @@ dependencies = [
  "qbz-audio",
  "qbz-integrations",
  "qbz-models",
+ "qbz-offline-cache",
  "qbz-player",
  "qbz-qobuz",
  "qbz-radio",

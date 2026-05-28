@@ -54,6 +54,7 @@
 
 pub mod core;
 pub mod error;
+pub mod offline_resolve;
 pub mod system_capabilities;
 
 // Re-exports from qbz-models for convenience

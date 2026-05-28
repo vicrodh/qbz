@@ -12,6 +12,7 @@ qbz-player = { path = "../qbz-player" }
 qbz-qobuz = { path = "../qbz-qobuz" }
 qbz-radio = { path = "../qbz-radio" }
 qbz-integrations = { path = "../qbz-integrations" }
+qbz-offline-cache = { path = "../qbz-offline-cache" }
 
 # Async
 tokio = { workspace = true }
