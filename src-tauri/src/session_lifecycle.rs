@@ -187,8 +187,11 @@ pub async fn activate_session(app: &tauri::AppHandle, user_id: u64) -> Result<()
     listenbrainz_v2.init_from_cache().await;
     log::info!("[SessionLifecycle] ListenBrainz V2 state loaded from V2 cache");
 
-    musicbrainz_v2.init_from_cache(true).await;
-    log::info!("[SessionLifecycle] MusicBrainz V2 state loaded from V2 cache");
+    // use_proxy=false: hit MusicBrainz directly from the user's own IP so the
+    // per-IP 1 req/s budget is per-user, not shared across all users behind the
+    // proxy's Cloudflare egress IPs. See qbz-nix-docs MusicBrainz direct-mode plan.
+    musicbrainz_v2.init_from_cache(false).await;
+    log::info!("[SessionLifecycle] MusicBrainz V2 state loaded from V2 cache (direct mode)");
 
     // LastFm V2: no persistent cache yet, reset to clean state
     lastfm_v2.init_with_session(None).await;
@@ -361,7 +364,7 @@ pub async fn deactivate_session(app: &tauri::AppHandle) -> Result<(), String> {
     // Teardown V2 integration states (clear in-memory + close caches)
     listenbrainz_v2.clear_credentials().await;
     listenbrainz_v2.teardown().await;
-    musicbrainz_v2.init_with_config(true, true).await; // Reset to defaults
+    musicbrainz_v2.init_with_config(true, false).await; // Reset to defaults (direct mode)
     musicbrainz_v2.teardown().await;
     lastfm_v2.init_with_session(None).await; // Clear session
     log::info!("[SessionLifecycle] V2 integration states torn down");

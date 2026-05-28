@@ -72,7 +72,12 @@ impl Default for MusicBrainzConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            use_proxy: true,
+            // Direct-to-MusicBrainz by default: each client uses its OWN IP, so
+            // the per-IP 1 req/s budget is per-user instead of shared across all
+            // QBZ users behind the proxy's Cloudflare egress IPs (which is what
+            // triggered the 503s). MB read access needs no key, so the proxy
+            // added only the funnel. Flip to true to route via the proxy again.
+            use_proxy: false,
         }
     }
 }
@@ -160,19 +165,7 @@ impl MusicBrainzClient {
         let url = format!("{}/recording?query=isrc:{}&fmt=json", base, isrc);
 
         let response = self.client.get(&url).send().await?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            if status.as_u16() == 429 {
-                return Err(IntegrationError::RateLimited(60));
-            }
-            let text = response.text().await.unwrap_or_default();
-            return Err(IntegrationError::internal(format!(
-                "MusicBrainz search failed: {} - {}",
-                status, text
-            )));
-        }
-
+        let response = self.handle_response_status(response).await?;
         response.json().await.map_err(Into::into)
     }
 
@@ -198,19 +191,7 @@ impl MusicBrainzClient {
         );
 
         let response = self.client.get(&url).send().await?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            if status.as_u16() == 429 {
-                return Err(IntegrationError::RateLimited(60));
-            }
-            let text = response.text().await.unwrap_or_default();
-            return Err(IntegrationError::internal(format!(
-                "MusicBrainz artist search failed: {} - {}",
-                status, text
-            )));
-        }
-
+        let response = self.handle_response_status(response).await?;
         response.json().await.map_err(Into::into)
     }
 
@@ -757,14 +738,32 @@ impl MusicBrainzClient {
             return Ok(response);
         }
         let status = response.status();
-        if status.as_u16() == 429 {
-            return Err(IntegrationError::RateLimited(60));
+        // 429 (proxy-translated) and 503 (direct MusicBrainz) both signal that
+        // the rate limit was hit. Surface the server's Retry-After so the caller
+        // can back off instead of treating it as a generic error.
+        if matches!(status.as_u16(), 429 | 503) {
+            return Err(IntegrationError::RateLimited(Self::parse_retry_after(
+                &response,
+            )));
         }
         let text = response.text().await.unwrap_or_default();
         Err(IntegrationError::internal(format!(
             "MusicBrainz API error {}: {}",
             status, text
         )))
+    }
+
+    /// Parse the `Retry-After` header (whole seconds). MusicBrainz sends it on
+    /// HTTP 503 when the per-IP rate limit is exceeded. Defaults to 1s because
+    /// MB's per-IP limiter recovers within ~1 second.
+    fn parse_retry_after(response: &reqwest::Response) -> u64 {
+        response
+            .headers()
+            .get(reqwest::header::RETRY_AFTER)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.trim().parse::<u64>().ok())
+            .filter(|&s| s > 0)
+            .unwrap_or(1)
     }
 
     /// Escape special characters in Lucene queries
