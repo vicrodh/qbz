@@ -2551,6 +2551,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         playback::play_tracks(runtime, weak, handle, tracks, idx);
                     });
                 }
+                ("playlist", "cache") => {
+                    if let Ok(pid) = id.parse::<u64>() {
+                        offline_cache::cache_playlist(
+                            runtime.clone(),
+                            weak.clone(),
+                            handle.clone(),
+                            pid,
+                        );
+                    }
+                }
                 ("playlist", "play-all") => {
                     let runtime = runtime.clone();
                     let weak = weak.clone();

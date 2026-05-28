@@ -32,7 +32,10 @@ export component TrackRow inherits Rectangle {
     in property <bool> show-artwork: true;
     in property <bool> show-album: false;
     in property <bool> show-favorite: false;
-    in property <bool> show-download: false;
+    // On by default: every Qobuz track row carries the offline cloud/check
+    // button. A non-Qobuz surface (future Local Library / Plex rows, which are
+    // already local) should set this false.
+    in property <bool> show-download: true;
     in property <bool> multi-select-mode: false;
     // Custom-order reorder controls (up/down chevrons) at the leading
     // edge — used by the playlist custom sort.

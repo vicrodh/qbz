@@ -375,6 +375,18 @@ export component PlaylistView inherits Rectangle {
                                 }
                             }
                         }
+                        // Make the whole playlist available offline.
+                        VerticalLayout {
+                            horizontal-stretch: 0;
+                            alignment: center;
+                            CircleAction {
+                                icon: @image-url("../assets/icons/cloud-download.svg");
+                                enabled: PlaylistState.tracks.length > 0;
+                                clicked => {
+                                    root.media-action("playlist", PlaylistState.id, "cache");
+                                }
+                            }
+                        }
                         // Edit (rename / delete) — only the user's own.
                         if PlaylistState.is-owner: VerticalLayout {
                             horizontal-stretch: 0;

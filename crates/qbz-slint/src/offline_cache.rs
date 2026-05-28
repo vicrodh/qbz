@@ -310,6 +310,32 @@ pub fn cache_album(
     });
 }
 
+/// Cache a whole playlist for offline playback: fetch its tracks, then batch.
+pub fn cache_playlist(
+    runtime: Runtime,
+    weak: slint::Weak<AppWindow>,
+    handle: tokio::runtime::Handle,
+    playlist_id: u64,
+) {
+    let inner = handle.clone();
+    handle.spawn(async move {
+        let pl = match runtime.core().get_playlist(playlist_id).await {
+            Ok(p) => p,
+            Err(e) => {
+                log::error!("[qbz-slint] cache playlist {playlist_id} failed: {e}");
+                crate::toast::error_weak(&weak, "Couldn't load that playlist");
+                return;
+            }
+        };
+        let tracks: Vec<qbz_models::Track> = pl.tracks.map(|c| c.items).unwrap_or_default();
+        if tracks.is_empty() {
+            crate::toast::error_weak(&weak, "This playlist has no playable tracks");
+            return;
+        }
+        cache_tracks(runtime, weak, inner, tracks);
+    });
+}
+
 /// Remove a track's offline copy (DB row + on-disk bundle/file + library row).
 pub fn remove_cached(
     _runtime: Runtime,
