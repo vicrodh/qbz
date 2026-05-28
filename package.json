@@ -50,7 +50,7 @@
     "@types/node": "^25.7.0",
     "jsdom": "^29.1.1",
     "patch-package": "^8.0.1",
-    "svelte": "^5.55.7",
+    "svelte": "^5.55.10",
     "svelte-check": "^4.4.8",
     "typescript": "~6.0.3",
     "vite": "^8.0.14",
