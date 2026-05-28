@@ -5130,6 +5130,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "qbz-offline-cache"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "qbz-cmaf",
+ "qbz-qobuz",
+ "qbz-secrets",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "qbz-player"
 version = "0.1.0"
 dependencies = [

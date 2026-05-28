@@ -1,0 +1,25 @@
+[package]
+name = "qbz-offline-cache"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Offline cache for QBZ: download-for-offline store, CMAF bundle vault, SQLite index, cached playback resolution (frontend-agnostic)"
+
+[dependencies]
+# Sibling crates: the network + crypto + init-parse already live here.
+qbz-qobuz = { path = "../qbz-qobuz" }
+qbz-cmaf = { path = "../qbz-cmaf" }
+qbz-secrets = { path = "../qbz-secrets" }
+
+# SQLite index (match qbz-library's version/features)
+rusqlite = { version = "0.31", features = ["bundled"] }
+
+# DTO serialization (camelCase envelopes shared with the frontend)
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Logging
+log = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"
