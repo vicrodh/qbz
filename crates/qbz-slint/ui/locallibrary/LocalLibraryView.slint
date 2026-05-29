@@ -21,6 +21,11 @@ import { Typography } from "../foundation/typography.slint";
 import { LocalLibraryState, LocalLibraryActions } from "../state.slint";
 import { NavButtons } from "../shell/NavButtons.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
+import { AlbumCollectionView } from "../discover/AlbumCollectionView.slint";
+import { ExpandableSearch } from "../primitives/ExpandableSearch.slint";
+import { QbzSelect } from "../primitives/QbzSelect.slint";
+import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
+import { ListScrollbar } from "../primitives/ListScrollbar.slint";
 
 // One tab in the Local Library tab menu — underline style (ADR-008: NO
 // pills). 1:1 with Favorites' FavTab so the chrome reads identically.
@@ -184,15 +189,65 @@ export component LocalLibraryView inherits Rectangle {
         Rectangle { height: 12px; }
 
         // Row 2 — per-tab action buttons (left) + toolbar (right). Filled as
-        // each tab slice lands (Albums: play/shuffle + search/sort/view).
-        // vertical-stretch: 0 is load-bearing (see FavoritesView): without it
-        // an empty row grabs leftover height and inflates the sub-header.
+        // each tab slice lands. vertical-stretch: 0 is load-bearing (see
+        // FavoritesView): without it an empty row grabs leftover height and
+        // inflates the sub-header.
         HorizontalLayout {
             vertical-stretch: 0;
             padding-left: 32px;
             padding-right: 32px;
             spacing: 8px;
+
             Rectangle { horizontal-stretch: 1; }
+
+            // Albums toolbar — search + sort (both server-side). The
+            // grid/list toggle, group-by and filters land with the next slice.
+            if LocalLibraryState.active-tab == "albums"
+                && (LocalLibraryState.albums.length > 0
+                    || LocalLibraryState.albums-search != ""): HorizontalLayout {
+                spacing: 8px;
+                VerticalLayout {
+                    alignment: center;
+                    ExpandableSearch {
+                        placeholder: @tr("Search");
+                        sm: true;
+                        query <=> LocalLibraryState.albums-search;
+                        edited(q) => {
+                            LocalLibraryActions.albums-search(q);
+                        }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    QbzSelect {
+                        menu-width: 180px;
+                        options: [
+                            @tr("Artist A-Z"),
+                            @tr("Artist Z-A"),
+                            @tr("Title A-Z"),
+                            @tr("Title Z-A"),
+                            @tr("Year (newest)"),
+                            @tr("Year (oldest)"),
+                        ];
+                        sm: true;
+                        current-index: LocalLibraryState.albums-sort == "artist-asc" ? 0
+                            : LocalLibraryState.albums-sort == "artist-desc" ? 1
+                            : LocalLibraryState.albums-sort == "title-asc" ? 2
+                            : LocalLibraryState.albums-sort == "title-desc" ? 3
+                            : LocalLibraryState.albums-sort == "year-desc" ? 4
+                            : 5;
+                        selected(i) => {
+                            LocalLibraryActions.albums-set-sort(
+                                i == 0 ? "artist-asc"
+                                : i == 1 ? "artist-desc"
+                                : i == 2 ? "title-asc"
+                                : i == 3 ? "title-desc"
+                                : i == 4 ? "year-desc"
+                                : "year-asc");
+                        }
+                    }
+                }
+            }
         }
 
         Rectangle { height: 14px; }
@@ -206,8 +261,139 @@ export component LocalLibraryView inherits Rectangle {
             vertical-stretch: 1;
             clip: true;
 
-            // Placeholder until each tab slice lands (Albums is next).
-            VerticalLayout {
+            // -------- Albums tab — chunked grid --------------------------
+            if LocalLibraryState.active-tab == "albums": Rectangle {
+                // Initial page load.
+                if LocalLibraryState.albums-loading: VerticalLayout {
+                    alignment: center;
+                    HorizontalLayout {
+                        alignment: center;
+                        LoadingSpinner { size: 36px; }
+                    }
+                }
+                // Load error + retry.
+                if !LocalLibraryState.albums-loading
+                    && LocalLibraryState.albums-load-failed: VerticalLayout {
+                    alignment: center;
+                    spacing: 10px;
+                    Text {
+                        text: @tr("Couldn't load your local albums.");
+                        color: Theme.text-primary;
+                        font-size: Typography.body;
+                        font-weight: Typography.semibold;
+                        horizontal-alignment: center;
+                    }
+                    HorizontalLayout {
+                        alignment: center;
+                        Rectangle {
+                            width: retry-label.preferred-width + 28px;
+                            height: 32px;
+                            border-radius: 6px;
+                            background: retry-ta.has-hover ? Theme.surface-hover : Theme.surface-elevated;
+                            border-width: 1px;
+                            border-color: Theme.border-subtle;
+                            retry-label := Text {
+                                text: @tr("Retry");
+                                color: Theme.text-primary;
+                                font-size: Typography.legal;
+                                x: (parent.width - self.width) / 2;
+                                y: (parent.height - self.height) / 2;
+                            }
+                            retry-ta := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => {
+                                    LocalLibraryActions.albums-retry();
+                                }
+                            }
+                        }
+                    }
+                }
+                // Empty — no albums indexed yet.
+                if !LocalLibraryState.albums-loading
+                    && !LocalLibraryState.albums-load-failed
+                    && LocalLibraryState.albums.length == 0
+                    && LocalLibraryState.albums-search == "": VerticalLayout {
+                    alignment: center;
+                    Text {
+                        text: @tr("No albums in your local library yet.");
+                        color: Theme.text-muted;
+                        font-size: Typography.body;
+                        horizontal-alignment: center;
+                    }
+                }
+                // Empty — search matched nothing.
+                if !LocalLibraryState.albums-loading
+                    && !LocalLibraryState.albums-load-failed
+                    && LocalLibraryState.albums.length == 0
+                    && LocalLibraryState.albums-search != "": VerticalLayout {
+                    alignment: center;
+                    Text {
+                        text: @tr("No albums match your search.");
+                        color: Theme.text-muted;
+                        font-size: Typography.body;
+                        horizontal-alignment: center;
+                    }
+                }
+                // The grid — self-scrolling, paged on scroll-near-bottom.
+                if !LocalLibraryState.albums-loading
+                    && !LocalLibraryState.albums-load-failed
+                    && LocalLibraryState.albums.length > 0: Rectangle {
+                    albums-flick := Flickable {
+                        viewport-width: self.width;
+                        viewport-height: albums-page.preferred-height;
+                        changed viewport-y => {
+                            if (-self.viewport-y + self.height >= self.viewport-height - 600px
+                                && LocalLibraryState.albums-has-more
+                                && !LocalLibraryState.albums-loading-more
+                                && !LocalLibraryState.albums-loading) {
+                                LocalLibraryActions.albums-load-more();
+                            }
+                        }
+                        albums-page := VerticalLayout {
+                            width: parent.width;
+                            padding-left: 32px;
+                            padding-right: 32px;
+                            padding-top: 16px;
+                            padding-bottom: 100px;
+                            spacing: 0px;
+                            alignment: start;
+                            AlbumCollectionView {
+                                albums: LocalLibraryState.albums;
+                                is-grouped: false;
+                                view-mode: "grid";
+                                show-source: false;
+                                // Local albums aren't Qobuz-favoritable — hide the heart.
+                                show-favorite: false;
+                                open-album(id) => {
+                                    LocalLibraryActions.open-album(id);
+                                }
+                                open-artist(id) => {
+                                    LocalLibraryActions.open-artist(id);
+                                }
+                                media-action(kind, id, action) => {
+                                    LocalLibraryActions.album-action(id, action);
+                                }
+                            }
+                            if LocalLibraryState.albums-loading-more: HorizontalLayout {
+                                alignment: center;
+                                padding-top: 16px;
+                                LoadingSpinner { size: 24px; }
+                            }
+                        }
+                    }
+                    ListScrollbar {
+                        x: parent.width - self.width - 4px;
+                        width: 14px;
+                        height: 100%;
+                        viewport-height: albums-flick.viewport-height;
+                        visible-height: albums-flick.height;
+                        viewport-y <=> albums-flick.viewport-y;
+                    }
+                }
+            }
+
+            // -------- Other tabs — placeholder until their slices land ----
+            if LocalLibraryState.active-tab != "albums": VerticalLayout {
                 alignment: center;
                 spacing: 6px;
                 Text {
@@ -218,7 +404,7 @@ export component LocalLibraryView inherits Rectangle {
                     font-weight: Typography.semibold;
                 }
                 Text {
-                    text: @tr("Building the browse tabs slice by slice.");
+                    text: @tr("This tab is coming next.");
                     horizontal-alignment: center;
                     color: Theme.text-muted;
                     font-size: Typography.legal;

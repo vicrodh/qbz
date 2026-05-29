@@ -899,14 +899,14 @@ fn navigate_favorites(
 
 /// Open a Local Library browse tab (Albums / Artists / Folders / Tracks).
 ///
-/// Sets the active tab + switches the view. Per-tab data loading lands with
-/// each tab slice (Albums first); for now the view renders its shell + an
-/// empty placeholder, so the navigation is verifiable end to end.
+/// Sets the active tab + switches the view, then lazily loads the tab's data
+/// on first visit. Albums is the first slice (chunked grid); the other tabs
+/// render their shell + a placeholder until their slices land.
 fn navigate_local_library(
     _runtime: Arc<AppRuntime<SlintAdapter>>,
     weak: slint::Weak<AppWindow>,
-    _handle: &tokio::runtime::Handle,
-    _image_cache: artwork::ImageCache,
+    handle: &tokio::runtime::Handle,
+    image_cache: artwork::ImageCache,
     tab: local_library::LibTab,
 ) {
     let tab_id = tab.tab_id().to_string();
@@ -914,6 +914,10 @@ fn navigate_local_library(
         w.global::<LocalLibraryState>().set_active_tab(tab_id.into());
         w.global::<NavState>().set_view(ContentView::LocalLibrary);
     });
+    // Lazy per-tab load — Albums fetches page 1 on first visit.
+    if tab == local_library::LibTab::Albums {
+        local_library::ensure_albums_loaded(weak, handle.clone(), image_cache);
+    }
 }
 
 /// Open a Qobuz mix detail view (daily / weekly / fav / top) and load
@@ -3941,6 +3945,78 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     w.global::<NavState>().set_view(ContentView::Settings);
                     update_nav_flags(&w);
                 }
+            });
+    }
+
+    // Local Library — Albums tab controls (search / sort re-query page 1;
+    // load-more pages on scroll; retry) + the shared AlbumCollectionView's
+    // open / per-card actions (album-detail + playback land with later slices).
+    {
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        let image_cache = image_cache.clone();
+        window
+            .global::<LocalLibraryActions>()
+            .on_albums_search(move |_query| {
+                // The query is two-way bound to albums-search; reload page 1.
+                local_library::reload_albums(weak.clone(), handle.clone(), image_cache.clone());
+            });
+    }
+    {
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        let image_cache = image_cache.clone();
+        window
+            .global::<LocalLibraryActions>()
+            .on_albums_set_sort(move |sort| {
+                if let Some(w) = weak.upgrade() {
+                    w.global::<LocalLibraryState>().set_albums_sort(sort);
+                }
+                local_library::reload_albums(weak.clone(), handle.clone(), image_cache.clone());
+            });
+    }
+    {
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        let image_cache = image_cache.clone();
+        window
+            .global::<LocalLibraryActions>()
+            .on_albums_load_more(move || {
+                local_library::load_more_albums(weak.clone(), handle.clone(), image_cache.clone());
+            });
+    }
+    {
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        let image_cache = image_cache.clone();
+        window
+            .global::<LocalLibraryActions>()
+            .on_albums_retry(move || {
+                local_library::reload_albums(weak.clone(), handle.clone(), image_cache.clone());
+            });
+    }
+    {
+        window
+            .global::<LocalLibraryActions>()
+            .on_open_album(move |id| {
+                // TODO(locallibrary): open the local album-detail view.
+                log::debug!("[qbz-slint] local album open (album-detail slice pending): {id}");
+            });
+    }
+    {
+        window
+            .global::<LocalLibraryActions>()
+            .on_open_artist(move |id| {
+                // TODO(locallibrary): open the local Artists tab / artist.
+                log::debug!("[qbz-slint] local artist open (Artists slice pending): {id}");
+            });
+    }
+    {
+        window
+            .global::<LocalLibraryActions>()
+            .on_album_action(move |id, action| {
+                // TODO(locallibrary): play / queue local albums.
+                log::debug!("[qbz-slint] local album action (playback slice pending): {id} {action}");
             });
     }
 

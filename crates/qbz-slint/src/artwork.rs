@@ -79,6 +79,10 @@ pub enum ArtworkTarget {
     FavoriteAlbum { index: usize },
     /// A card in DiscoverBrowseState.albums[index].
     DiscoverBrowseAlbum { index: usize },
+    /// A card in LocalLibraryState.albums[index] (Local Library grid). `gen`
+    /// is the albums generation at fetch time; a stale cover (the model was
+    /// replaced by a search/sort/retry) is dropped on apply.
+    LocalAlbumCard { index: usize, gen: u64 },
     /// A card in FavoritesState.artists[index].
     FavoriteArtist { index: usize },
     /// A card in FavoritesState.labels[index].
@@ -217,6 +221,29 @@ pub fn spawn_loads(jobs: Vec<ArtworkJob>, window: slint::Weak<AppWindow>, cache:
             let decode_size = job.target.decode_size();
             let (pixels, width, height) =
                 fetch_and_decode(&job.url, &cache, decode_size).await?;
+            let target = job.target;
+            let _ = window.upgrade_in_event_loop(move |w| {
+                apply_artwork(&w, target, &pixels, width, height);
+            });
+            Some(())
+        });
+    }
+}
+
+/// Like `spawn_loads`, but each job's `url` is a LOCAL filesystem path
+/// (Local Library covers) rather than an HTTP URL. Decodes via the
+/// source-aware `ArtworkRef::LocalFile` instead of the HTTP cache path.
+pub fn spawn_local_loads(jobs: Vec<ArtworkJob>, window: slint::Weak<AppWindow>, cache: ImageCache) {
+    let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT));
+    for job in jobs {
+        let semaphore = semaphore.clone();
+        let window = window.clone();
+        let cache = cache.clone();
+        tokio::spawn(async move {
+            let _permit = semaphore.acquire().await.ok()?;
+            let decode_size = job.target.decode_size();
+            let art = ArtworkRef::LocalFile(job.url.clone());
+            let (pixels, width, height) = fetch_and_decode_ref(&art, &cache, decode_size).await?;
             let target = job.target;
             let _ = window.upgrade_in_event_loop(move |w| {
                 apply_artwork(&w, target, &pixels, width, height);
@@ -570,6 +597,17 @@ fn apply_artwork(
         }
         ArtworkTarget::DiscoverBrowseAlbum { index } => {
             let model = window.global::<crate::DiscoverBrowseState>().get_albums();
+            if let Some(mut item) = model.row_data(index) {
+                item.artwork = image;
+                model.set_row_data(index, item);
+            }
+        }
+        ArtworkTarget::LocalAlbumCard { index, gen } => {
+            // Drop the cover if a reload superseded the page it belongs to.
+            if !crate::local_library::albums_gen_current(gen) {
+                return;
+            }
+            let model = window.global::<crate::LocalLibraryState>().get_albums();
             if let Some(mut item) = model.row_data(index) {
                 item.artwork = image;
                 model.set_row_data(index, item);

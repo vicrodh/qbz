@@ -344,6 +344,25 @@ export global LocalLibraryState {
     in property <int> artist-count: 0;
     in property <int> track-count: 0;
     in property <int> folder-count: 0;
+
+    // --- Albums tab (server-paginated, metadata-grouped local albums) ----
+    // `albums` is the accumulated paged set (also the artwork target). Sort
+    // + search are pushed to SQL (the performant path); paging fetches the
+    // next chunk on scroll. List / group / A-Z / filters land with the next
+    // slice — this slice ships the chunked grid.
+    in property <[AlbumCardItem]> albums: [];
+    in property <int> albums-total: 0;
+    in property <bool> albums-loading: false;        // initial page fetch
+    in property <bool> albums-loading-more: false;    // subsequent pages
+    in property <bool> albums-has-more: false;
+    in property <bool> albums-load-failed: false;
+    in-out property <int> albums-next-offset: 0;
+    in-out property <string> albums-search: "";
+    // "artist-asc" | "artist-desc" | "title-asc" | "title-desc"
+    //   | "year-desc" | "year-asc"
+    in-out property <string> albums-sort: "artist-asc";
+    // "grid" | "list" — the list view toggle lands with the next slice.
+    in-out property <string> albums-view-mode: "grid";
 }
 
 export global LocalLibraryActions {
@@ -352,6 +371,23 @@ export global LocalLibraryActions {
     callback select-tab(string /* "albums"|"artists"|"folders"|"tracks" */);
     // Open Settings > Local Library (the gear button — management lives there).
     callback open-settings();
+
+    // --- Albums tab ---
+    // Re-query page 1 with the current search text (server-side LIKE).
+    callback albums-search(string /* query */);
+    // Set the sort key + re-query page 1 (server-side ORDER BY).
+    callback albums-set-sort(string /* sort key */);
+    // Fetch + append the next page (driven by scroll-near-bottom).
+    callback albums-load-more();
+    // Retry after a load error.
+    callback albums-retry();
+    // Open a local album's detail view (lands with the album-detail slice).
+    callback open-album(string /* album id */);
+    // Open an artist (lands with the Artists slice).
+    callback open-artist(string /* artist id */);
+    // Per-card action (play / queue / play-next) — lands with the playback
+    // slice. Wired now so the shared AlbumCollectionView contract is honored.
+    callback album-action(string /* album id */, string /* action */);
 }
 
 // Global toast state, driven by crate::toast. The Toast overlay (mounted
