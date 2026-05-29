@@ -16,7 +16,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use slint::{ComponentHandle, Model, ModelRc, VecModel};
 
 use crate::artwork::{ArtworkJob, ArtworkTarget, ImageCache};
-use crate::{AlbumCardItem, AppWindow, LocalLibraryState, TrackItem};
+use crate::{AlbumCardItem, AppWindow, LocalArtistItem, LocalLibraryState, TrackItem};
 
 /// The four browse tabs. Order mirrors Tauri's default tab order
 /// (`tracks / folders / albums / artists`); the visible order is a user
@@ -733,6 +733,49 @@ pub fn ensure_folders_loaded(
                 apply_folders(&w, cards);
                 crate::artwork::spawn_local_loads(jobs, w.as_weak(), image_cache);
             });
+        });
+    });
+}
+
+// ============================== Artists tab ===============================
+//
+// A full-loaded grid of artists (name + album/track counts). Images +
+// click-to-detail are a later slice; merge/dedup of normalized-equal names
+// (the Tauri artistMergeResult) is deferred — v1 shows the DB's distinct
+// album-artist rows.
+
+fn apply_artists(window: &AppWindow, artists: Vec<qbz_library::LocalArtist>) {
+    let items: Vec<LocalArtistItem> = artists
+        .into_iter()
+        .map(|a| LocalArtistItem {
+            name: a.name.into(),
+            subtitle: format!("{} albums · {} tracks", a.album_count, a.track_count).into(),
+        })
+        .collect();
+    let s = window.global::<LocalLibraryState>();
+    s.set_artists(ModelRc::new(VecModel::from(items)));
+    s.set_artists_loading(false);
+    s.set_artists_load_failed(false);
+}
+
+/// Load the artists grid on first visit (re-entry keeps it).
+pub fn ensure_artists_loaded(weak: slint::Weak<AppWindow>, handle: tokio::runtime::Handle) {
+    let _ = weak.upgrade_in_event_loop(move |w| {
+        let s = w.global::<LocalLibraryState>();
+        if s.get_artists().row_count() != 0 || s.get_artists_loading() {
+            return;
+        }
+        s.set_artists_loading(true);
+        s.set_artists_load_failed(false);
+        let weak2 = w.as_weak();
+        handle.spawn(async move {
+            let artists = tokio::task::spawn_blocking(|| {
+                crate::library_db::with_db(|db| db.get_artists_with_filter(true, false))
+                    .unwrap_or_default()
+            })
+            .await
+            .unwrap_or_default();
+            let _ = weak2.upgrade_in_event_loop(move |w| apply_artists(&w, artists));
         });
     });
 }

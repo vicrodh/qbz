@@ -597,10 +597,103 @@ export component LocalLibraryView inherits Rectangle {
                 }
             }
 
-            // -------- Other tabs — placeholder until their slices land ----
+            // -------- Artists tab — name + counts grid -------------------
+            if LocalLibraryState.active-tab == "artists": Rectangle {
+                if LocalLibraryState.artists-loading: VerticalLayout {
+                    alignment: center;
+                    HorizontalLayout {
+                        alignment: center;
+                        LoadingSpinner { size: 36px; }
+                    }
+                }
+                if !LocalLibraryState.artists-loading
+                    && LocalLibraryState.artists.length == 0: VerticalLayout {
+                    alignment: center;
+                    Text {
+                        text: @tr("No artists in your local library yet.");
+                        color: Theme.text-muted;
+                        font-size: Typography.body;
+                        horizontal-alignment: center;
+                    }
+                }
+                if !LocalLibraryState.artists-loading
+                    && LocalLibraryState.artists.length > 0: Rectangle {
+                    artists-flick := Flickable {
+                        viewport-width: self.width;
+                        viewport-height: artists-page.preferred-height;
+                        artists-page := VerticalLayout {
+                            width: parent.width;
+                            padding-left: 32px;
+                            padding-right: 32px;
+                            padding-top: 16px;
+                            padding-bottom: 100px;
+                            alignment: start;
+                            artists-grid := Rectangle {
+                                property <length> card-w: 160px;
+                                property <length> card-h: 200px;
+                                property <length> gap: 24px;
+                                property <int> columns: Math.max(1,
+                                    Math.floor((self.width + self.gap) / (self.card-w + self.gap)));
+                                property <int> rows: Math.ceil(LocalLibraryState.artists.length / self.columns);
+                                height: self.rows > 0
+                                    ? self.rows * self.card-h + Math.max(0, self.rows - 1) * self.gap
+                                    : 0px;
+                                for artist[i] in LocalLibraryState.artists: VerticalLayout {
+                                    x: Math.mod(i, artists-grid.columns) * (artists-grid.card-w + artists-grid.gap);
+                                    y: Math.floor(i / artists-grid.columns) * (artists-grid.card-h + artists-grid.gap);
+                                    width: artists-grid.card-w;
+                                    spacing: 10px;
+                                    Rectangle {
+                                        width: 120px;
+                                        height: 120px;
+                                        x: (parent.width - self.width) / 2;
+                                        border-radius: 60px;
+                                        background: Theme.surface-elevated;
+                                        QbzIcon {
+                                            source: @image-url("../assets/icons/user.svg");
+                                            width: 44px;
+                                            height: 44px;
+                                            x: (parent.width - self.width) / 2;
+                                            y: (parent.height - self.height) / 2;
+                                            tint: Theme.text-muted;
+                                        }
+                                    }
+                                    Text {
+                                        text: artist.name;
+                                        color: Theme.text-primary;
+                                        font-size: Typography.body;
+                                        font-weight: Typography.medium;
+                                        horizontal-alignment: center;
+                                        overflow: elide;
+                                        width: artists-grid.card-w;
+                                    }
+                                    Text {
+                                        text: artist.subtitle;
+                                        color: Theme.text-muted;
+                                        font-size: Typography.legal;
+                                        horizontal-alignment: center;
+                                        width: artists-grid.card-w;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    ListScrollbar {
+                        x: parent.width - self.width - 4px;
+                        width: 14px;
+                        height: 100%;
+                        viewport-height: artists-flick.viewport-height;
+                        visible-height: artists-flick.height;
+                        viewport-y <=> artists-flick.viewport-y;
+                    }
+                }
+            }
+
+            // -------- Other tabs — placeholder (all four now have bodies) -
             if LocalLibraryState.active-tab != "albums"
                 && LocalLibraryState.active-tab != "tracks"
-                && LocalLibraryState.active-tab != "folders": VerticalLayout {
+                && LocalLibraryState.active-tab != "folders"
+                && LocalLibraryState.active-tab != "artists": VerticalLayout {
                 alignment: center;
                 spacing: 6px;
                 Text {

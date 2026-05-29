@@ -971,7 +971,9 @@ fn navigate_local_library(
         local_library::LibTab::Tracks => {
             local_library::ensure_tracks_loaded(weak, handle.clone());
         }
-        _ => {}
+        local_library::LibTab::Artists => {
+            local_library::ensure_artists_loaded(weak, handle.clone());
+        }
     }
 }
 

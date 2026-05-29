@@ -337,6 +337,13 @@ export enum ToastKind { success, error, info, warning, buffering }
 // shows header stats + the browse tabs (Albums / Artists / Folders /
 // Tracks). All management/maintenance/danger actions live under
 // Settings > Local Library; the gear button routes there.
+// One card in the Local Library Artists grid (name + "N albums · M tracks").
+// Images + click-to-detail are a later slice.
+export struct LocalArtistItem {
+    name: string,
+    subtitle: string,
+}
+
 export global LocalLibraryState {
     // "albums" | "artists" | "folders" | "tracks"
     in-out property <string> active-tab: "albums";
@@ -382,6 +389,11 @@ export global LocalLibraryState {
     in property <[AlbumCardItem]> folders: [];
     in property <bool> folders-loading: false;
     in property <bool> folders-load-failed: false;
+
+    // --- Artists tab — name + counts grid (full load; images later) -----
+    in property <[LocalArtistItem]> artists: [];
+    in property <bool> artists-loading: false;
+    in property <bool> artists-load-failed: false;
 }
 
 export global LocalLibraryActions {
