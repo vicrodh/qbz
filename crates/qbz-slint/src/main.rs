@@ -45,6 +45,7 @@ mod folders;
 mod library_db;
 mod local_library;
 mod local_library_settings;
+mod locallibrary_prefs;
 mod tag_editor;
 mod offline;
 mod offline_cache;
@@ -959,6 +960,8 @@ fn navigate_local_library(
 ) {
     let tab_id = tab.tab_id().to_string();
     let _ = weak.upgrade_in_event_loop(move |w| {
+        // Restore the persisted Tracks group-by before the tab derives.
+        locallibrary_prefs::load(&w);
         w.global::<LocalLibraryState>().set_active_tab(tab_id.into());
         w.global::<NavState>().set_view(ContentView::LocalLibrary);
     });
@@ -4314,29 +4317,122 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         window
             .global::<LocalLibraryActions>()
             .on_track_action(move |id, action| {
-                if action.as_str() == "play" {
-                    if let Ok(row_id) = id.parse::<i64>() {
-                        // Queue the current (searched) list so playback
-                        // continues down it from the clicked row.
-                        let query = weak
-                            .upgrade()
-                            .map(|w| {
-                                w.global::<LocalLibraryState>()
-                                    .get_tracks_search()
-                                    .to_string()
-                            })
-                            .unwrap_or_default();
-                        playback::play_local_tracks_from(
-                            runtime.clone(),
-                            weak.clone(),
-                            handle.clone(),
-                            query,
-                            row_id,
-                        );
+                match action.as_str() {
+                    "play" => {
+                        if let Ok(row_id) = id.parse::<i64>() {
+                            // Queue the current (searched) list so playback
+                            // continues down it from the clicked row.
+                            let query = weak
+                                .upgrade()
+                                .map(|w| {
+                                    w.global::<LocalLibraryState>()
+                                        .get_tracks_search()
+                                        .to_string()
+                                })
+                                .unwrap_or_default();
+                            playback::play_local_tracks_from(
+                                runtime.clone(),
+                                weak.clone(),
+                                handle.clone(),
+                                query,
+                                row_id,
+                            );
+                        }
                     }
-                } else {
-                    // play-next / queue land with a later slice.
-                    log::debug!("[qbz-slint] local track action (queue slice pending): {id} {action}");
+                    "toggle-select" => {
+                        if let Some(w) = weak.upgrade() {
+                            local_library::toggle_track_select(&w, id.as_str());
+                        }
+                    }
+                    "play-next" | "queue" => {
+                        // Resolve the row from the loaded cache (no DB) and enqueue.
+                        if let Some(row) = local_library::local_track_by_id(id.as_str()) {
+                            playback::enqueue_local_tracks(
+                                runtime.clone(),
+                                handle.clone(),
+                                vec![row],
+                                action.as_str() == "play-next",
+                            );
+                        }
+                    }
+                    _ => {
+                        log::debug!("[qbz-slint] unhandled local track action: {id} {action}");
+                    }
+                }
+            });
+    }
+
+    // ---- Tracks tab: group-by + multi-select + bulk ----
+    {
+        let weak = window.as_weak();
+        window
+            .global::<LocalLibraryActions>()
+            .on_tracks_set_group(move |mode| {
+                if let Some(w) = weak.upgrade() {
+                    local_library::set_tracks_group(&w, mode.as_str());
+                }
+            });
+    }
+    {
+        let weak = window.as_weak();
+        window
+            .global::<LocalLibraryActions>()
+            .on_tracks_toggle_multi_select(move || {
+                if let Some(w) = weak.upgrade() {
+                    let on = w.global::<LocalLibraryState>().get_tracks_multi_select();
+                    local_library::set_tracks_multi_select(&w, !on);
+                }
+            });
+    }
+    {
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window
+            .global::<LocalLibraryActions>()
+            .on_tracks_bulk_action(move |action| {
+                let Some(w) = weak.upgrade() else {
+                    return;
+                };
+                match action.as_str() {
+                    "select-all" => local_library::select_all_tracks(&w),
+                    "clear" => local_library::clear_tracks_selection(&w),
+                    "queue" => {
+                        let rows = local_library::selected_local_tracks(&w);
+                        playback::enqueue_local_tracks(runtime.clone(), handle.clone(), rows, false);
+                        local_library::clear_tracks_selection(&w);
+                    }
+                    "play-next" => {
+                        let rows = local_library::selected_local_tracks(&w);
+                        playback::enqueue_local_tracks(runtime.clone(), handle.clone(), rows, true);
+                        local_library::clear_tracks_selection(&w);
+                    }
+                    "add-to-playlist" => {
+                        // Plex rows can't be added (no local add path); skip them,
+                        // deciding on the underlying LocalTrack.source.
+                        let rows = local_library::selected_local_tracks(&w);
+                        let ids: Vec<String> = rows
+                            .iter()
+                            .filter(|t| t.source.as_deref() != Some("plex"))
+                            .map(|t| t.id.to_string())
+                            .collect();
+                        let skipped = rows.len() - ids.len();
+                        if skipped > 0 {
+                            log::info!("[qbz-slint] add-to-playlist skipped {skipped} Plex track(s)");
+                        }
+                        if !ids.is_empty() {
+                            playlist_picker::open_multi(&w, &ids, true);
+                            let runtime = runtime.clone();
+                            let weak2 = weak.clone();
+                            handle.spawn(async move {
+                                let playlists = playlist_picker::load(&runtime).await;
+                                let _ = weak2.upgrade_in_event_loop(move |w| {
+                                    playlist_picker::apply(&w, playlists);
+                                });
+                            });
+                        }
+                    }
+                    _ => {}
                 }
             });
     }
@@ -4567,22 +4663,51 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     return;
                 };
                 let picker = w.global::<PlaylistPickerState>();
-                // Bulk add (favorites) carries track-ids; single add carries
-                // track-id.
+                let is_local = picker.get_local_mode();
+                // Bulk add carries track-ids; single add carries track-id.
                 let ids_model = picker.get_track_ids();
+                let track_id_single = picker.get_track_id().to_string();
+                picker.set_open(false);
+                let Ok(pid) = playlist_id.parse::<u64>() else {
+                    return;
+                };
+
+                if is_local {
+                    // Local row ids are i64 -> add_local_track_to_playlist.
+                    let ids_i64: Vec<i64> = (0..ids_model.row_count())
+                        .filter_map(|i| ids_model.row_data(i))
+                        .filter_map(|s| s.parse::<i64>().ok())
+                        .collect();
+                    if ids_i64.is_empty() {
+                        return;
+                    }
+                    handle.spawn(async move {
+                        let _ = tokio::task::spawn_blocking(move || {
+                            crate::library_db::with_db(|db| {
+                                for (pos, lid) in ids_i64.iter().enumerate() {
+                                    db.add_local_track_to_playlist(pid, *lid, pos as i32)?;
+                                }
+                                Ok(())
+                            })
+                        })
+                        .await;
+                    });
+                    return;
+                }
+
+                // Qobuz path.
                 let mut ids: Vec<u64> = (0..ids_model.row_count())
                     .filter_map(|i| ids_model.row_data(i))
                     .filter_map(|s| s.parse::<u64>().ok())
                     .collect();
                 if ids.is_empty() {
-                    if let Ok(tid) = picker.get_track_id().parse::<u64>() {
+                    if let Ok(tid) = track_id_single.parse::<u64>() {
                         ids.push(tid);
                     }
                 }
-                picker.set_open(false);
-                let (Ok(pid), false) = (playlist_id.parse::<u64>(), ids.is_empty()) else {
+                if ids.is_empty() {
                     return;
-                };
+                }
                 let runtime = runtime.clone();
                 handle.spawn(async move {
                     if let Err(e) = runtime.core().add_tracks_to_playlist(pid, &ids).await {
@@ -5795,7 +5920,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "add-to-playlist" => {
                         let ids = favorites::selected_ids(&w);
                         if !ids.is_empty() {
-                            playlist_picker::open_multi(&w, &ids);
+                            playlist_picker::open_multi(&w, &ids, false);
                             let runtime = runtime.clone();
                             let weak = weak.clone();
                             handle.spawn(async move {

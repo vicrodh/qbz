@@ -414,6 +414,13 @@ export global LocalLibraryState {
     in property <bool> tracks-load-failed: false;
     in-out property <int> tracks-next-offset: 0;
     in-out property <string> tracks-search: "";
+    // Group-by + multi-select (this slice). `tracks-visible` is the
+    // group-ordered + search-filtered render model (the list renders THIS).
+    in property <[TrackItem]> tracks-visible: [];
+    in-out property <string> tracks-group-mode: "off";   // off | album | artist | name
+    in property <[AlphaJump]> tracks-alpha: [];          // A-Z jumps (name grouping)
+    in-out property <bool> tracks-multi-select: false;    // checkbox column on
+    in property <int> tracks-selected-count: 0;          // bar count + select-all
 
     // --- Folders tab ---------------------------------------------------
     // flat = album grid grouped by directory; tree = two-pane lazy filesystem.
@@ -491,8 +498,14 @@ export global LocalLibraryActions {
     callback tracks-search(string /* query */);
     callback tracks-load-more();
     callback tracks-retry();
-    // Per-row play/queue — local playback lands with the source-aware slice.
+    // Per-row play/queue/toggle-select (action: play|play-next|queue|toggle-select).
     callback track-action(string /* track id */, string /* action */);
+    // Group-by mode (off|album|artist|name), persisted.
+    callback tracks-set-group(string /* mode */);
+    // Toggle the multi-select checkbox column.
+    callback tracks-toggle-multi-select();
+    // Bulk bar action: select-all | clear | queue | play-next | add-to-playlist.
+    callback tracks-bulk-action(string /* action */);
 
     // --- Folders tab ---
     callback folders-search(string /* query */);
@@ -1809,6 +1822,9 @@ export global PlaylistPickerState {
     in property <[string]> track-ids: []; // bulk add (favorites multi-select)
     in property <[PlaylistPickItem]> playlists: [];
     in property <bool> loading: false;
+    // True when track-ids are LocalLibrary row ids (i64) -> route to
+    // add_local_track_to_playlist instead of the Qobuz endpoint.
+    in property <bool> local-mode: false;
 }
 
 export global PlaylistPickerActions {

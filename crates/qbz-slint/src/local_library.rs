@@ -12,7 +12,7 @@
 //! button routes there.
 
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock, Mutex};
 
 use qbz_app::shell::AppRuntime;
 use slint::{ComponentHandle, Model, ModelRc, VecModel};
@@ -429,6 +429,16 @@ const TRACKS_PAGE: u64 = 200;
 
 static TRACKS_GEN: AtomicU64 = AtomicU64::new(0);
 
+/// The loaded `LocalTrack` rows backing `tracks`, kept in lockstep with the
+/// paged model in apply/append. The selection-source for bulk queue/play-next/
+/// add-to-playlist (resolves ids -> LocalTrack with no DB round-trip).
+static TRACKS_CURRENT: LazyLock<Mutex<Vec<qbz_library::LocalTrack>>> =
+    LazyLock::new(|| Mutex::new(Vec::new()));
+
+fn tracks_current() -> std::sync::MutexGuard<'static, Vec<qbz_library::LocalTrack>> {
+    TRACKS_CURRENT.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 fn fmt_duration(secs: u64) -> String {
     format!("{}:{:02}", secs / 60, secs % 60)
 }
@@ -483,6 +493,8 @@ fn fetch_tracks_page(query: String, offset: u64) -> Option<(Vec<qbz_library::Loc
 }
 
 fn apply_tracks(window: &AppWindow, rows: Vec<qbz_library::LocalTrack>, has_more: bool) {
+    // Keep the selection-source cache in lockstep (clone BEFORE the move).
+    *tracks_current() = rows.clone();
     let items: Vec<TrackItem> = rows.into_iter().map(map_local_track).collect();
     let s = window.global::<LocalLibraryState>();
     let n = items.len() as i32;
@@ -492,9 +504,11 @@ fn apply_tracks(window: &AppWindow, rows: Vec<qbz_library::LocalTrack>, has_more
     s.set_tracks_loading(false);
     s.set_tracks_loading_more(false);
     s.set_tracks_load_failed(false);
+    derive_tracks(window);
 }
 
 fn append_tracks(window: &AppWindow, rows: Vec<qbz_library::LocalTrack>, has_more: bool) {
+    tracks_current().extend(rows.clone());
     let new_items: Vec<TrackItem> = rows.into_iter().map(map_local_track).collect();
     let s = window.global::<LocalLibraryState>();
     let model = s.get_tracks();
@@ -507,6 +521,164 @@ fn append_tracks(window: &AppWindow, rows: Vec<qbz_library::LocalTrack>, has_mor
     s.set_tracks_next_offset(s.get_tracks_next_offset() + added);
     s.set_tracks_has_more(has_more);
     s.set_tracks_loading_more(false);
+    derive_tracks(window);
+}
+
+// --- Tracks group-by + multi-select (reduced port of favorites helpers) ---
+
+/// Re-derive the group-ordered + search-filtered `tracks-visible` render model
+/// from the loaded `tracks`, plus the A-Z jump strip for name grouping. Uses
+/// the local `folder_alpha_key`; no genre filter (no local genre surface).
+pub fn derive_tracks(window: &AppWindow) {
+    let s = window.global::<LocalLibraryState>();
+    let query_owned = s.get_tracks_search().to_lowercase();
+    let query = query_owned.trim();
+    let group = s.get_tracks_group_mode().to_string();
+    let all = s.get_tracks();
+    s.set_tracks_alpha(ModelRc::new(VecModel::from(Vec::<AlphaJump>::new())));
+
+    // Fast path: no search + no grouping -> share the loaded model.
+    if query.is_empty() && group == "off" {
+        s.set_tracks_visible(all);
+        return;
+    }
+    let mut filtered: Vec<TrackItem> = (0..all.row_count())
+        .filter_map(|i| all.row_data(i))
+        .filter(|t| {
+            query.is_empty()
+                || t.title.to_lowercase().contains(query)
+                || t.artist.to_lowercase().contains(query)
+                || t.album.to_lowercase().contains(query)
+        })
+        .collect();
+    let lc = |s: &slint::SharedString| s.to_lowercase();
+    match group.as_str() {
+        "album" => filtered
+            .sort_by(|a, b| lc(&a.album).cmp(&lc(&b.album)).then(lc(&a.title).cmp(&lc(&b.title)))),
+        "artist" => filtered.sort_by(|a, b| {
+            lc(&a.artist)
+                .cmp(&lc(&b.artist))
+                .then(lc(&a.album).cmp(&lc(&b.album)))
+                .then(lc(&a.title).cmp(&lc(&b.title)))
+        }),
+        "name" => filtered.sort_by(|a, b| lc(&a.title).cmp(&lc(&b.title))),
+        _ => {}
+    }
+    if group == "name" {
+        let mut jumps: Vec<AlphaJump> = Vec::new();
+        let mut last = String::new();
+        for (i, t) in filtered.iter().enumerate() {
+            let key = folder_alpha_key(t.title.as_str());
+            if key != last {
+                jumps.push(AlphaJump {
+                    letter: key.clone().into(),
+                    index: i as i32,
+                });
+                last = key;
+            }
+        }
+        s.set_tracks_alpha(ModelRc::new(VecModel::from(jumps)));
+    }
+    s.set_tracks_visible(ModelRc::new(VecModel::from(filtered)));
+}
+
+/// Set the group mode, persist it, re-derive.
+pub fn set_tracks_group(window: &AppWindow, mode: &str) {
+    window.global::<LocalLibraryState>().set_tracks_group_mode(mode.into());
+    crate::locallibrary_prefs::save(window);
+    derive_tracks(window);
+}
+
+/// Enter/leave multi-select; leaving clears the selection.
+pub fn set_tracks_multi_select(window: &AppWindow, on: bool) {
+    window.global::<LocalLibraryState>().set_tracks_multi_select(on);
+    if !on {
+        clear_tracks_selection(window);
+    }
+}
+
+/// Recount selected visible rows into `tracks-selected-count`.
+pub fn recount_tracks_selected(window: &AppWindow) {
+    let s = window.global::<LocalLibraryState>();
+    let model = s.get_tracks_visible();
+    let count = (0..model.row_count())
+        .filter(|&i| model.row_data(i).map(|t| t.selected).unwrap_or(false))
+        .count();
+    s.set_tracks_selected_count(count as i32);
+}
+
+/// Toggle one row's selection (by id) in the visible model.
+pub fn toggle_track_select(window: &AppWindow, id: &str) {
+    let model = window.global::<LocalLibraryState>().get_tracks_visible();
+    for i in 0..model.row_count() {
+        if let Some(mut item) = model.row_data(i) {
+            if item.id.as_str() == id {
+                item.selected = !item.selected;
+                model.set_row_data(i, item);
+                break;
+            }
+        }
+    }
+    recount_tracks_selected(window);
+}
+
+/// Select-all toggle: select every visible row, or clear if all selected.
+pub fn select_all_tracks(window: &AppWindow) {
+    let model = window.global::<LocalLibraryState>().get_tracks_visible();
+    let total = model.row_count();
+    let selected = (0..total)
+        .filter(|&i| model.row_data(i).map(|t| t.selected).unwrap_or(false))
+        .count();
+    let target = selected != total;
+    for i in 0..total {
+        if let Some(mut item) = model.row_data(i) {
+            if item.selected != target {
+                item.selected = target;
+                model.set_row_data(i, item);
+            }
+        }
+    }
+    recount_tracks_selected(window);
+}
+
+/// Deselect every visible row (multi-select mode stays on).
+pub fn clear_tracks_selection(window: &AppWindow) {
+    let s = window.global::<LocalLibraryState>();
+    let model = s.get_tracks_visible();
+    for i in 0..model.row_count() {
+        if let Some(mut item) = model.row_data(i) {
+            if item.selected {
+                item.selected = false;
+                model.set_row_data(i, item);
+            }
+        }
+    }
+    s.set_tracks_selected_count(0);
+}
+
+/// The selected rows resolved to `LocalTrack`, in DISPLAY order (iterate the
+/// visible model, look each selected id up in `TRACKS_CURRENT`). Deviates from
+/// favorites' load-order resolution so the queue matches what the user sees.
+pub fn selected_local_tracks(window: &AppWindow) -> Vec<qbz_library::LocalTrack> {
+    let model = window.global::<LocalLibraryState>().get_tracks_visible();
+    let cache = tracks_current();
+    let mut out = Vec::new();
+    for i in 0..model.row_count() {
+        if let Some(item) = model.row_data(i) {
+            if item.selected {
+                let id = item.id.to_string();
+                if let Some(t) = cache.iter().find(|t| t.id.to_string() == id) {
+                    out.push(t.clone());
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Resolve a single row id (display) to its `LocalTrack` from the cache.
+pub fn local_track_by_id(id: &str) -> Option<qbz_library::LocalTrack> {
+    tracks_current().iter().find(|t| t.id.to_string() == id).cloned()
 }
 
 fn spawn_tracks_page_load(window: &AppWindow, handle: tokio::runtime::Handle, gen: u64) {

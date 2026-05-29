@@ -28,6 +28,7 @@ import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
 import { ListScrollbar } from "../primitives/ListScrollbar.slint";
 import { TrackRow } from "../primitives/TrackRow.slint";
 import { ToggleButton } from "../primitives/ToggleButton.slint";
+import { MultiSelectBar } from "../primitives/MultiSelectBar.slint";
 import { ListView } from "std-widgets.slint";
 
 // One tab in the Local Library tab menu — underline style (ADR-008: NO
@@ -506,11 +507,20 @@ export component LocalLibraryView inherits Rectangle {
                 }
             }
 
-            // Tracks toolbar — search.
+            // Tracks toolbar — multi-select toggle + search + group-by.
             if LocalLibraryState.active-tab == "tracks"
                 && (LocalLibraryState.tracks.length > 0
                     || LocalLibraryState.tracks-search != ""): HorizontalLayout {
                 spacing: 8px;
+                VerticalLayout {
+                    alignment: center;
+                    CircleIconBtn {
+                        icon: @image-url("../assets/icons/square-check-big.svg");
+                        clicked => {
+                            LocalLibraryActions.tracks-toggle-multi-select();
+                        }
+                    }
+                }
                 VerticalLayout {
                     alignment: center;
                     ExpandableSearch {
@@ -519,6 +529,27 @@ export component LocalLibraryView inherits Rectangle {
                         query <=> LocalLibraryState.tracks-search;
                         edited(q) => {
                             LocalLibraryActions.tracks-search(q);
+                        }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    QbzSelect {
+                        menu-width: 160px;
+                        sm: true;
+                        options: [
+                            @tr("No grouping"),
+                            @tr("By album"),
+                            @tr("By artist"),
+                            @tr("By name"),
+                        ];
+                        current-index: LocalLibraryState.tracks-group-mode == "album" ? 1
+                            : LocalLibraryState.tracks-group-mode == "artist" ? 2
+                            : LocalLibraryState.tracks-group-mode == "name" ? 3
+                            : 0;
+                        selected(i) => {
+                            LocalLibraryActions.tracks-set-group(
+                                i == 1 ? "album" : i == 2 ? "artist" : i == 3 ? "name" : "off");
                         }
                     }
                 }
@@ -846,20 +877,43 @@ export component LocalLibraryView inherits Rectangle {
                         horizontal-alignment: center;
                     }
                 }
+                // No-match (search/filter emptied the visible set).
                 if !LocalLibraryState.tracks-loading
                     && !LocalLibraryState.tracks-load-failed
-                    && LocalLibraryState.tracks.length > 0: Rectangle {
-                    // Padded content, but the scrollbar floats at the view's
-                    // TRUE right edge — matching the Albums grid, which is the
-                    // chrome-bezel standard. (Previously it was inset by the
-                    // 32px content padding, sitting too far into the content.)
+                    && LocalLibraryState.tracks.length > 0
+                    && LocalLibraryState.tracks-visible.length == 0: VerticalLayout {
+                    alignment: center;
+                    Text {
+                        text: @tr("No tracks match your search.");
+                        color: Theme.text-muted;
+                        font-size: Typography.body;
+                        horizontal-alignment: center;
+                    }
+                }
+                if !LocalLibraryState.tracks-loading
+                    && !LocalLibraryState.tracks-load-failed
+                    && LocalLibraryState.tracks-visible.length > 0: Rectangle {
                     VerticalLayout {
                         padding-left: 32px;
                         padding-right: 32px;
                         padding-top: 16px;
+                        // Bulk action bar (Tauri Tracks subset — no make-offline/remove).
+                        if LocalLibraryState.tracks-multi-select: MultiSelectBar {
+                            selected-count: LocalLibraryState.tracks-selected-count;
+                            actions: [
+                                { id: "select-all", label: @tr("Select all"), danger: false, needs-selection: false },
+                                { id: "queue", label: @tr("Add to queue"), danger: false, needs-selection: true },
+                                { id: "play-next", label: @tr("Play next"), danger: false, needs-selection: true },
+                                { id: "add-to-playlist", label: @tr("Add to playlist"), danger: false, needs-selection: true },
+                                { id: "clear", label: @tr("Clear"), danger: false, needs-selection: true },
+                            ];
+                            action(id) => {
+                                LocalLibraryActions.tracks-bulk-action(id);
+                            }
+                        }
+                        if LocalLibraryState.tracks-multi-select: Rectangle { height: 8px; }
                         tracks-list := ListView {
-                            width: 100%;
-                            height: 100%;
+                            vertical-stretch: 1;
                             vertical-scrollbar-policy: ScrollBarPolicy.always-off;
                             changed viewport-y => {
                                 if (-self.viewport-y + self.visible-height >= self.viewport-height - 600px
@@ -869,28 +923,75 @@ export component LocalLibraryView inherits Rectangle {
                                     LocalLibraryActions.tracks-load-more();
                                 }
                             }
-                            for track[i] in LocalLibraryState.tracks: TrackRow {
-                                track: track;
-                                index: i;
-                                show-artwork: false;
-                                show-album: true;
-                                show-favorite: false;
-                                show-download: false;
-                                show-source: true;
-                                media-action(kind, id, action) => {
-                                    if (kind == "album" && action == "open") {
-                                        LocalLibraryActions.open-album(id);
-                                    } else if (kind == "artist" && action == "open") {
-                                        LocalLibraryActions.open-artist(id);
-                                    } else {
-                                        LocalLibraryActions.track-action(id, action);
+                            for track[i] in LocalLibraryState.tracks-visible: VerticalLayout {
+                                spacing: 0px;
+                                // Group header rows for album / artist grouping.
+                                if LocalLibraryState.tracks-group-mode == "album" && track.album != ""
+                                    && (i == 0 || LocalLibraryState.tracks-visible[i - 1].album != track.album): Rectangle {
+                                    height: 32px;
+                                    Text {
+                                        x: 2px;
+                                        width: parent.width - 4px;
+                                        height: 100%;
+                                        text: track.album;
+                                        color: Theme.text-secondary;
+                                        font-size: Typography.legal;
+                                        font-weight: Typography.semibold;
+                                        vertical-alignment: center;
+                                        overflow: elide;
+                                    }
+                                }
+                                if LocalLibraryState.tracks-group-mode == "artist" && track.artist != ""
+                                    && (i == 0 || LocalLibraryState.tracks-visible[i - 1].artist != track.artist): Rectangle {
+                                    height: 32px;
+                                    Text {
+                                        x: 2px;
+                                        width: parent.width - 4px;
+                                        height: 100%;
+                                        text: track.artist;
+                                        color: Theme.text-secondary;
+                                        font-size: Typography.legal;
+                                        font-weight: Typography.semibold;
+                                        vertical-alignment: center;
+                                        overflow: elide;
+                                    }
+                                }
+                                TrackRow {
+                                    track: track;
+                                    index: i;
+                                    show-artwork: false;
+                                    show-album: LocalLibraryState.tracks-group-mode != "album";
+                                    show-favorite: false;
+                                    show-download: false;
+                                    show-source: true;
+                                    multi-select-mode: LocalLibraryState.tracks-multi-select;
+                                    media-action(kind, id, action) => {
+                                        if (kind == "album" && action == "open") {
+                                            LocalLibraryActions.open-album(id);
+                                        } else if (kind == "artist" && action == "open") {
+                                            LocalLibraryActions.open-artist(id);
+                                        } else {
+                                            LocalLibraryActions.track-action(id, action);
+                                        }
                                     }
                                 }
                             }
                         }
                     }
+                    // A-Z jump strip for name grouping (far right; scrollbar insets).
+                    if LocalLibraryState.tracks-group-mode == "name"
+                        && LocalLibraryState.tracks-alpha.length > 0: AlphaStrip {
+                        x: parent.width - self.width - 2px;
+                        height: 100%;
+                        jumps: LocalLibraryState.tracks-alpha;
+                        jump(ord, idx) => {
+                            tracks-list.viewport-y = -idx * 50px;
+                        }
+                    }
                     ListScrollbar {
-                        x: parent.width - self.width - 4px;
+                        x: LocalLibraryState.tracks-group-mode == "name"
+                            ? parent.width - self.width - 22px
+                            : parent.width - self.width - 4px;
                         width: 14px;
                         height: 100%;
                         viewport-height: tracks-list.viewport-height;

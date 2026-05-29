@@ -1164,6 +1164,39 @@ pub fn enqueue_tracks(
     });
 }
 
+/// Append (or insert-next) a batch of already-loaded LocalLibrary rows to the
+/// queue. Mirrors `enqueue_tracks` but for `LocalTrack`: `local_queue_track`
+/// builds source-aware QueueTracks (is_local=true; "local"/"qobuz_download")
+/// so `play_audible` routes user files through the protected `play_data` seam
+/// and offline copies through `play_track_resolved`. Reversed for "play next"
+/// to preserve selection order.
+pub fn enqueue_local_tracks(
+    runtime: Runtime,
+    handle: tokio::runtime::Handle,
+    tracks: Vec<qbz_library::LocalTrack>,
+    next: bool,
+) {
+    if tracks.is_empty() {
+        return;
+    }
+    handle.spawn(async move {
+        let ordered: Vec<qbz_library::LocalTrack> = if next {
+            tracks.into_iter().rev().collect()
+        } else {
+            tracks
+        };
+        for track in &ordered {
+            let qt = local_queue_track(track);
+            if next {
+                runtime.core().add_track_next(qt).await;
+            } else {
+                runtime.core().add_track(qt).await;
+            }
+        }
+        refresh_sidebar(false);
+    });
+}
+
 /// Toggle play / pause on the live player.
 pub fn toggle_play_pause(runtime: Runtime, handle: tokio::runtime::Handle) {
     handle.spawn(async move {

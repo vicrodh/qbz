@@ -20,17 +20,21 @@ pub fn open(window: &AppWindow, track_id: &str) {
     state.set_track_id(track_id.into());
     state.set_track_ids(ModelRc::new(VecModel::from(Vec::<slint::SharedString>::new())));
     state.set_playlists(ModelRc::new(VecModel::from(Vec::<PlaylistPickItem>::new())));
+    state.set_local_mode(false);
     state.set_loading(true);
     state.set_open(true);
 }
 
-/// Open the picker for a batch of track ids (favorites bulk add). UI thread.
-pub fn open_multi(window: &AppWindow, ids: &[String]) {
+/// Open the picker for a batch of track ids (bulk add). `local` routes the ids
+/// as LocalLibrary row ids (i64) to `add_local_track_to_playlist` instead of
+/// the Qobuz endpoint. UI thread.
+pub fn open_multi(window: &AppWindow, ids: &[String], local: bool) {
     let state = window.global::<PlaylistPickerState>();
     state.set_track_id("".into());
     let model: Vec<slint::SharedString> = ids.iter().map(|s| s.clone().into()).collect();
     state.set_track_ids(ModelRc::new(VecModel::from(model)));
     state.set_playlists(ModelRc::new(VecModel::from(Vec::<PlaylistPickItem>::new())));
+    state.set_local_mode(local);
     state.set_loading(true);
     state.set_open(true);
 }
