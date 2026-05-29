@@ -81,6 +81,63 @@ pub fn is_network_path(_path: &Path) -> bool {
     false
 }
 
+/// Return the normalized network-filesystem label (`cifs` / `nfs` / `sshfs` /
+/// `rclone` / `webdav` / `glusterfs` / `ceph` / `other`) for `path` when it
+/// lives on a network-backed filesystem, else `None`. Mirrors the fs-type
+/// classification the Tauri side persisted via `crate::network::is_network_path`,
+/// so the Slint folder-settings modal can show + store the same auto-detected
+/// type. (`is_network_path` returns only the bool; this adds the label.)
+#[cfg(target_os = "linux")]
+pub fn network_fs_label(path: &Path) -> Option<String> {
+    let mounts = read_mounts();
+    if mounts.is_empty() {
+        return None;
+    }
+    let target = path
+        .canonicalize()
+        .unwrap_or_else(|_| path.to_path_buf());
+    let target_str = target.to_string_lossy();
+
+    let mut best: Option<(&str, usize)> = None;
+    for (mount_point, fs_type) in &mounts {
+        if target_str.starts_with(mount_point) {
+            let len = mount_point.len();
+            if best.map(|(_, l)| l < len).unwrap_or(true) {
+                best = Some((fs_type.as_str(), len));
+            }
+        }
+    }
+    let fs_type = best.map(|(t, _)| t)?;
+    if !is_network_fs(fs_type) {
+        return None;
+    }
+    Some(normalize_network_label(fs_type))
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn network_fs_label(_path: &Path) -> Option<String> {
+    None
+}
+
+/// Collapse the raw /proc/mounts fs type to the label set the folder-settings
+/// modal exposes. Unknown network types fall through to `other`.
+#[cfg(target_os = "linux")]
+fn normalize_network_label(fs_type: &str) -> String {
+    let lower = fs_type.to_lowercase();
+    let base = lower.strip_prefix("fuse.").unwrap_or(&lower);
+    match base {
+        "nfs" | "nfs4" => "nfs",
+        "cifs" | "smb" | "smbfs" | "smb3" => "cifs",
+        "sshfs" => "sshfs",
+        "rclone" | "rclonefs" => "rclone",
+        "davfs" | "webdav" => "webdav",
+        "glusterfs" => "glusterfs",
+        "ceph" => "ceph",
+        _ => "other",
+    }
+    .to_string()
+}
+
 #[cfg(target_os = "linux")]
 fn read_mounts() -> Vec<(String, String)> {
     // Inside Flatpak the sandbox's own /proc/mounts reflects the

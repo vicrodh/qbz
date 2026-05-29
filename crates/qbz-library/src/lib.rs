@@ -48,7 +48,7 @@ pub use database::{
 pub use errors::LibraryError;
 pub use metadata::MetadataExtractor;
 pub use models::*;
-pub use mount_info::is_network_path;
+pub use mount_info::{is_network_path, network_fs_label};
 pub use scanner::{LibraryScanner, ScanResult};
 pub use thumbnails::{
     clear_thumbnails, generate_thumbnail, generate_thumbnail_from_bytes, get_cache_size,

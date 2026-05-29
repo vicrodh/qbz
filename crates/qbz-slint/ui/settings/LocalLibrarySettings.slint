@@ -1,0 +1,278 @@
+// Settings > Local Library — the folder-management surface relocated here
+// from the Tauri browse view's inline gear panel (per the existing decision
+// in local_library.rs: management lives in Settings, the browse-view gear
+// routes here). Folder list (add/remove/edit/enable) + filter + maintenance
+// (cleanup missing) + two-step danger-zone clear. The scan engine + progress
+// bar land with Slice B (LibraryScanState). ADR-008: no pills — plain
+// bordered icon buttons + square badges.
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Typography } from "../foundation/typography.slint";
+import { Radius } from "../foundation/radius.slint";
+import { LibraryFoldersState, LibraryManageActions } from "../state.slint";
+import { SettingRow } from "SettingRow.slint";
+import { QbzIcon } from "../primitives/QbzIcon.slint";
+import { QbzCheckbox } from "../primitives/QbzCheckbox.slint";
+import { ExpandableSearch } from "../primitives/ExpandableSearch.slint";
+import { ScrollView } from "std-widgets.slint";
+
+component GroupHeader inherits Text {
+    color: Theme.text-muted;
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    font-weight: Typography.semibold;
+}
+
+// Matches OfflineSettings/AudioSettings' SecondaryButton.
+component SecondaryButton inherits Rectangle {
+    in property <string> label;
+    in property <bool> danger: false;
+    in property <bool> enabled: true;
+    callback clicked();
+    width: 170px;
+    height: 34px;
+    border-radius: Radius.sm;
+    border-width: 1px;
+    border-color: root.danger ? #e0564f : Theme.border-subtle;
+    background: ta.has-hover && root.enabled ? Theme.surface-hover : Theme.surface-elevated;
+    opacity: root.enabled ? 1.0 : 0.5;
+    Text {
+        width: 100%;
+        height: 100%;
+        text: root.label;
+        color: root.danger ? #e0564f : Theme.text-secondary;
+        font-size: Typography.body;
+        font-weight: Typography.medium;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    ta := TouchArea {
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => {
+            if (root.enabled) { root.clicked(); }
+        }
+    }
+}
+
+// Plain bordered icon button for the folder toolbar (ADR-008: NOT a pill).
+component IconBtn inherits Rectangle {
+    in property <image> icon;
+    in property <bool> enabled: true;
+    callback clicked();
+    width: 34px;
+    height: 34px;
+    border-radius: Radius.sm;
+    border-width: 1px;
+    border-color: Theme.border-subtle;
+    background: ta.has-hover && root.enabled ? Theme.surface-hover : Theme.surface-elevated;
+    opacity: root.enabled ? 1.0 : 0.4;
+    QbzIcon {
+        source: root.icon;
+        width: 16px;
+        height: 16px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        tint: Theme.text-secondary;
+    }
+    ta := TouchArea {
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => {
+            if (root.enabled) { root.clicked(); }
+        }
+    }
+}
+
+// One folder row.
+component FolderRow inherits Rectangle {
+    in property <string> display-name;
+    in property <bool> enabled-folder;
+    in property <bool> is-network;
+    in property <bool> accessible;
+    in property <bool> selected;
+    callback toggle();
+    height: 48px;
+    border-radius: Radius.sm;
+    background: root.selected
+        ? Theme.surface-elevated
+        : (ta.has-hover ? Theme.surface-hover : transparent);
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 12px;
+        spacing: 12px;
+
+        VerticalLayout {
+            alignment: center;
+            QbzCheckbox {
+                checked: root.selected;
+                toggled => { root.toggle(); }
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            QbzIcon {
+                source: root.is-network
+                    ? @image-url("../assets/icons/network.svg")
+                    : @image-url("../assets/icons/hard-drive.svg");
+                width: 18px;
+                height: 18px;
+                tint: root.is-network
+                    ? (root.accessible ? #3fae6a : #e0564f)
+                    : Theme.text-secondary;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            Text {
+                text: root.display-name;
+                color: root.enabled-folder ? Theme.text-primary : Theme.text-muted;
+                font-size: Typography.body;
+                overflow: elide;
+            }
+        }
+        // Square status badge (ADR-008: plain text, not a pill).
+        if !root.enabled-folder || (root.is-network && !root.accessible): VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: badge-text.preferred-width + 16px;
+                height: 22px;
+                border-radius: Radius.sm;
+                background: Theme.surface-elevated;
+                border-width: 1px;
+                border-color: !root.enabled-folder ? Theme.border-subtle : #e0564f;
+                badge-text := Text {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    text: !root.enabled-folder ? @tr("Disabled") : @tr("Unavailable");
+                    color: !root.enabled-folder ? Theme.text-muted : #e0564f;
+                    font-size: Typography.legal;
+                    font-weight: Typography.medium;
+                }
+            }
+        }
+    }
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.toggle(); }
+    }
+}
+
+export component LocalLibrarySettings inherits VerticalLayout {
+    spacing: 4px;
+
+    // Lazy-load the folder list each time the panel is shown (the `if
+    // section==4` mount in SettingsView creates this fresh on entry).
+    init => {
+        LibraryManageActions.load();
+    }
+
+    // --- Library folders -------------------------------------------------
+    HorizontalLayout {
+        spacing: 8px;
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            GroupHeader { text: @tr("LIBRARY FOLDERS"); }
+        }
+        // Toolbar: scan-all / add / edit (one selected) / remove (any selected).
+        IconBtn {
+            icon: @image-url("../assets/icons/refresh-cw.svg");
+            clicked => { LibraryManageActions.scan-all(); }
+        }
+        IconBtn {
+            icon: @image-url("../assets/icons/folder-plus.svg");
+            clicked => { LibraryManageActions.add-folder(); }
+        }
+        IconBtn {
+            icon: @image-url("../assets/icons/pencil.svg");
+            enabled: LibraryFoldersState.selected-count == 1;
+            clicked => { LibraryManageActions.edit-folder(0); }
+        }
+        IconBtn {
+            icon: @image-url("../assets/icons/trash-2.svg");
+            enabled: LibraryFoldersState.selected-count > 0;
+            clicked => { LibraryManageActions.remove-folders(); }
+        }
+    }
+
+    Rectangle { height: 6px; }
+
+    // Filter.
+    HorizontalLayout {
+        ExpandableSearch {
+            placeholder: @tr("Filter folders...");
+            sm: true;
+            query <=> LibraryFoldersState.filter;
+            edited(q) => { LibraryManageActions.set-filter(q); }
+        }
+        Rectangle { horizontal-stretch: 1; }
+    }
+
+    Rectangle { height: 8px; }
+
+    // Folder list.
+    if LibraryFoldersState.folders.length == 0 && !LibraryFoldersState.loading: Text {
+        text: LibraryFoldersState.filter == ""
+            ? @tr("No folders yet. Add a folder to build your local library.")
+            : @tr("No folders match your filter.");
+        color: Theme.text-muted;
+        font-size: Typography.body;
+    }
+    if LibraryFoldersState.folders.length > 0: Rectangle {
+        height: Math.min(LibraryFoldersState.folders.length * 50px, 380px);
+        ScrollView {
+            horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
+            VerticalLayout {
+                spacing: 2px;
+                for f in LibraryFoldersState.folders: FolderRow {
+                    display-name: f.display-name;
+                    enabled-folder: f.enabled;
+                    is-network: f.is-network;
+                    accessible: f.accessible;
+                    selected: f.selected;
+                    toggle => { LibraryManageActions.toggle-folder-select(f.id); }
+                }
+            }
+        }
+    }
+
+    Rectangle { height: 22px; }
+
+    // --- Maintenance -----------------------------------------------------
+    GroupHeader { text: @tr("MAINTENANCE"); }
+    SettingRow {
+        label: @tr("Cleanup missing files");
+        description: @tr("Remove tracks whose files no longer exist on disk.");
+        VerticalLayout {
+            alignment: center;
+            spacing: 4px;
+            SecondaryButton {
+                label: LibraryFoldersState.cleaning-missing ? @tr("Cleaning up...") : @tr("Cleanup");
+                enabled: !LibraryFoldersState.cleaning-missing;
+                clicked => { LibraryManageActions.cleanup-missing(); }
+            }
+            if LibraryFoldersState.cleanup-status != "": Text {
+                text: LibraryFoldersState.cleanup-status;
+                color: Theme.text-muted;
+                font-size: Typography.legal;
+                horizontal-alignment: right;
+            }
+        }
+    }
+
+    Rectangle { height: 22px; }
+
+    // --- Danger zone -----------------------------------------------------
+    GroupHeader { text: @tr("DANGER ZONE"); }
+    SettingRow {
+        label: @tr("Clear library database");
+        description: @tr("Remove all indexed tracks. Your audio files are not deleted.");
+        SecondaryButton {
+            label: LibraryFoldersState.clearing-library ? @tr("Clearing...") : @tr("Clear all");
+            danger: true;
+            enabled: !LibraryFoldersState.clearing-library;
+            clicked => { LibraryManageActions.clear-library(); }
+        }
+    }
+}

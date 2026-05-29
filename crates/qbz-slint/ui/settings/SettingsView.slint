@@ -15,6 +15,7 @@ import { AudioSettings } from "AudioSettings.slint";
 import { PlaybackSettings } from "PlaybackSettings.slint";
 import { AppearanceSettings } from "AppearanceSettings.slint";
 import { OfflineSettings } from "OfflineSettings.slint";
+import { LocalLibrarySettings } from "LocalLibrarySettings.slint";
 import { ScrollView } from "std-widgets.slint";
 
 component SubNavItem inherits Rectangle {
@@ -139,6 +140,14 @@ export component SettingsView inherits Rectangle {
                             SettingsState.section = 3;
                         }
                     }
+                    SubNavItem {
+                        icon: @image-url("../assets/icons/hard-drive.svg");
+                        label: @tr("Local Library");
+                        active: SettingsState.section == 4;
+                        clicked => {
+                            SettingsState.section = 4;
+                        }
+                    }
                 }
             }
 
@@ -186,6 +195,7 @@ export component SettingsView inherits Rectangle {
                     // SettingsView-level callback forwarding is needed here.
                     if !SettingsState.loading && SettingsState.section == 2: AppearanceSettings { }
                     if !SettingsState.loading && SettingsState.section == 3: OfflineSettings { }
+                    if !SettingsState.loading && SettingsState.section == 4: LocalLibrarySettings { }
                 }
             }
         }

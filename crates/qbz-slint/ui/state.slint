@@ -508,6 +508,73 @@ export global LocalLibraryActions {
     callback artists-select(string /* artist name */);
 }
 
+// ============================ Local Library management ====================
+// The folder list + scan + maintenance + danger zone live under
+// Settings > Local Library (NOT the browse view). One row per registered
+// library folder; `Option<T>` maps to a "" / 0 sentinel + a Rust-computed
+// label where the raw value is ambiguous.
+
+// One registered library folder. Mirrors `qbz_library::LibraryFolder`
+// (8 DB columns) + a UI-owned `selected` checkbox + Rust-computed labels.
+export struct LibraryFolderItem {
+    id: int,                      // i64 folder id (small)
+    path: string,                 // absolute path
+    alias: string,                // "" when none
+    display-name: string,         // alias if non-empty else path (Rust-computed)
+    enabled: bool,
+    is-network: bool,
+    network-fs-type: string,      // "" when none (e.g. "nfs","cifs")
+    user-override-network: bool,
+    last-scan: int,               // unix seconds; 0 = never
+    last-scan-label: string,      // "Never" / localized date (Rust-computed)
+    accessible: bool,             // from the accessibility check; true until resolved
+    selected: bool,               // UI multi-select state
+}
+
+// The folder list + maintenance + danger-zone state (Settings > Local Library).
+export global LibraryFoldersState {
+    in property <[LibraryFolderItem]> folders: [];
+    in property <bool> loading: false;
+    in-out property <string> filter: "";       // folder search (alias??path substring)
+    in property <int> selected-count: 0;        // drives Edit(==1) / Remove(>0) enablement
+    in property <bool> cleaning-missing: false;
+    in property <string> cleanup-status: "";    // "Removed N of M" / "" (auto-clears, Rust-side)
+    in property <bool> clearing-library: false;
+}
+
+// Folder-settings modal state (separate from the playlist FolderEditState).
+export global LibFolderEditState {
+    in-out property <bool> open: false;
+    in property <int> folder-id: 0;
+    in-out property <string> alias: "";
+    in property <string> path: "";              // current path (updated after change-path)
+    in-out property <bool> enabled: true;
+    in-out property <bool> is-network: false;
+    in-out property <bool> user-override-network: false;
+    // QbzSelect index: 0 auto,1 cifs,2 nfs,3 sshfs,4 rclone,5 webdav,6 glusterfs,7 ceph,8 other.
+    in-out property <int> fs-type-index: 0;
+    in property <bool> accessible: true;
+    in property <bool> checking-accessible: false;
+    in property <string> last-scan-label: "";   // "Never" / date
+}
+
+export global LibraryManageActions {
+    callback load();                             // (re)load the folder list (panel init)
+    callback add-folder();                       // native dir picker (Rust)
+    callback remove-folders();                   // bulk-remove selected (confirm)
+    callback toggle-folder-select(int /* id */);
+    callback edit-folder(int /* id */);          // open the settings modal
+    callback save-folder-settings(int /* id */, string /* alias */, bool /* enabled */,
+                                  bool /* is-network */, string /* fs-type */, bool /* user-override */);
+    callback change-folder-path(int /* id */);   // picker -> update path
+    callback scan-all();
+    callback scan-folder(int /* id */);
+    callback stop-scan();
+    callback cleanup-missing();
+    callback clear-library();                    // two-step confirm
+    callback set-filter(string /* query */);
+}
+
 // Global toast state, driven by crate::toast. The Toast overlay (mounted
 // at the app root) renders whatever is here. The Rust layer owns timing
 // (show + auto-hide); the UI only sets `visible = false` on the close

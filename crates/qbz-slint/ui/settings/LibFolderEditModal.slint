@@ -1,0 +1,395 @@
+// Folder-settings modal for a registered Local Library folder (Tauri's
+// FolderSettingsModal). Alias, enabled, network override + fs-type,
+// accessibility status, change-path, last-scanned, scan-this-folder.
+//
+// Driven by LibFolderEditState / LibraryManageActions. Mounted at the
+// AppShell root (after the other global modals) so it overlays the whole
+// window and is not clipped by the Settings ScrollView (ADR-009: on top by
+// mount order, like FolderEditModal/EditPlaylistModal).
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Typography } from "../foundation/typography.slint";
+import { Radius } from "../foundation/radius.slint";
+import { LibFolderEditState, LibraryManageActions } from "../state.slint";
+import { QbzIcon } from "../primitives/QbzIcon.slint";
+import { QbzToggle } from "../primitives/QbzToggle.slint";
+import { QbzSelect } from "../primitives/QbzSelect.slint";
+import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
+import { LineEdit } from "std-widgets.slint";
+
+// One labeled section block.
+component Field inherits VerticalLayout {
+    in property <string> label;
+    spacing: 6px;
+    Text {
+        text: root.label;
+        color: Theme.text-muted;
+        font-size: Typography.legal;
+        font-weight: Typography.semibold;
+    }
+    @children
+}
+
+export component LibFolderEditModal inherits Rectangle {
+    visible: LibFolderEditState.open;
+
+    // Map the fs-type QbzSelect index to the stored label. Index 0 = "auto"
+    // (let detection decide); the rest map to the modal's option list.
+    function fs-type-string(i: int) -> string {
+        return i == 1 ? "cifs"
+            : i == 2 ? "nfs"
+            : i == 3 ? "sshfs"
+            : i == 4 ? "rclone"
+            : i == 5 ? "webdav"
+            : i == 6 ? "glusterfs"
+            : i == 7 ? "ceph"
+            : i == 8 ? "other"
+            : "auto";
+    }
+
+    if LibFolderEditState.open: Rectangle {
+        background: #000000bf;
+        TouchArea {
+            mouse-cursor: default;
+            clicked => { LibFolderEditState.open = false; }
+        }
+        Rectangle {
+            width: Math.min(root.width - 80px, 520px);
+            height: Math.min(root.height - 80px, panel.preferred-height);
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            border-radius: Radius.md;
+            background: Theme.surface-card;
+            border-width: 1px;
+            border-color: Theme.border-subtle;
+            drop-shadow-blur: 32px;
+            drop-shadow-color: #00000080;
+            // Swallow clicks so they don't reach the scrim.
+            TouchArea { }
+
+            panel := VerticalLayout {
+                padding: 22px;
+                spacing: 16px;
+
+                // Title + close.
+                HorizontalLayout {
+                    Text {
+                        text: @tr("Folder settings");
+                        color: Theme.text-primary;
+                        font-size: Typography.heading;
+                        font-weight: Typography.semibold;
+                        horizontal-stretch: 1;
+                        vertical-alignment: center;
+                    }
+                    close-x := TouchArea {
+                        width: 28px;
+                        height: 28px;
+                        mouse-cursor: pointer;
+                        clicked => { LibFolderEditState.open = false; }
+                        QbzIcon {
+                            source: @image-url("../assets/icons/x.svg");
+                            width: 17px;
+                            height: 17px;
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
+                            tint: close-x.has-hover ? Theme.text-primary : Theme.text-muted;
+                        }
+                    }
+                }
+
+                // Folder location + change-path + accessibility.
+                Field {
+                    label: @tr("Folder location");
+                    HorizontalLayout {
+                        spacing: 10px;
+                        VerticalLayout {
+                            alignment: center;
+                            QbzIcon {
+                                source: LibFolderEditState.is-network
+                                    ? @image-url("../assets/icons/network.svg")
+                                    : @image-url("../assets/icons/hard-drive.svg");
+                                width: 18px;
+                                height: 18px;
+                                tint: LibFolderEditState.is-network ? Theme.accent : Theme.text-secondary;
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            horizontal-stretch: 1;
+                            Text {
+                                text: LibFolderEditState.path;
+                                color: Theme.text-secondary;
+                                font-size: Typography.body;
+                                overflow: elide;
+                            }
+                        }
+                        // Change folder location.
+                        Rectangle {
+                            width: change-row.preferred-width + 22px;
+                            height: 32px;
+                            border-radius: Radius.sm;
+                            border-width: 1px;
+                            border-color: Theme.border-subtle;
+                            background: change-ta.has-hover ? Theme.surface-hover : Theme.surface-elevated;
+                            change-row := HorizontalLayout {
+                                x: (parent.width - self.width) / 2;
+                                spacing: 6px;
+                                VerticalLayout {
+                                    alignment: center;
+                                    QbzIcon {
+                                        source: @image-url("../assets/icons/folder-open.svg");
+                                        width: 14px;
+                                        height: 14px;
+                                        tint: Theme.text-secondary;
+                                    }
+                                }
+                                VerticalLayout {
+                                    alignment: center;
+                                    Text {
+                                        text: @tr("Change");
+                                        color: Theme.text-secondary;
+                                        font-size: Typography.legal;
+                                        font-weight: Typography.medium;
+                                    }
+                                }
+                            }
+                            change-ta := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => {
+                                    LibraryManageActions.change-folder-path(LibFolderEditState.folder-id);
+                                }
+                            }
+                        }
+                    }
+                    // Accessibility status.
+                    HorizontalLayout {
+                        spacing: 8px;
+                        if LibFolderEditState.checking-accessible: LoadingSpinner { size: 14px; }
+                        if !LibFolderEditState.checking-accessible: QbzIcon {
+                            source: LibFolderEditState.accessible
+                                ? @image-url("../assets/icons/check.svg")
+                                : @image-url("../assets/icons/x.svg");
+                            width: 14px;
+                            height: 14px;
+                            tint: LibFolderEditState.accessible ? #3fae6a : #e0564f;
+                        }
+                        Text {
+                            text: LibFolderEditState.checking-accessible
+                                ? @tr("Checking...")
+                                : (LibFolderEditState.accessible
+                                    ? @tr("Folder is accessible")
+                                    : @tr("Folder is not accessible"));
+                            color: Theme.text-muted;
+                            font-size: Typography.legal;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+
+                // Alias.
+                Field {
+                    label: @tr("Display name");
+                    LineEdit {
+                        placeholder-text: @tr("Optional friendly name");
+                        text <=> LibFolderEditState.alias;
+                    }
+                    Text {
+                        text: @tr("Shown instead of the full path in the folder list.");
+                        color: Theme.text-muted;
+                        font-size: Typography.legal;
+                    }
+                }
+
+                // Enabled.
+                HorizontalLayout {
+                    spacing: 10px;
+                    VerticalLayout {
+                        alignment: center;
+                        horizontal-stretch: 1;
+                        Text {
+                            text: @tr("Enabled");
+                            color: Theme.text-secondary;
+                            font-size: Typography.body;
+                        }
+                        Text {
+                            text: @tr("Disabled folders are skipped during scans.");
+                            color: Theme.text-muted;
+                            font-size: Typography.legal;
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        QbzToggle {
+                            checked: LibFolderEditState.enabled;
+                            toggled(v) => { LibFolderEditState.enabled = v; }
+                        }
+                    }
+                }
+
+                // Network override.
+                HorizontalLayout {
+                    spacing: 10px;
+                    VerticalLayout {
+                        alignment: center;
+                        horizontal-stretch: 1;
+                        Text {
+                            text: @tr("Network folder");
+                            color: Theme.text-secondary;
+                            font-size: Typography.body;
+                        }
+                        Text {
+                            text: @tr("Mark this folder as a network share (excluded when offline).");
+                            color: Theme.text-muted;
+                            font-size: Typography.legal;
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        QbzToggle {
+                            checked: LibFolderEditState.is-network;
+                            toggled(v) => {
+                                LibFolderEditState.is-network = v;
+                                LibFolderEditState.user-override-network = true;
+                            }
+                        }
+                    }
+                }
+
+                // FS type (network only).
+                if LibFolderEditState.is-network: Field {
+                    label: @tr("Network filesystem type");
+                    QbzSelect {
+                        menu-width: 200px;
+                        options: [
+                            @tr("Auto-detect"),
+                            "CIFS / SMB",
+                            "NFS",
+                            "SSHFS",
+                            "rclone",
+                            "WebDAV",
+                            "GlusterFS",
+                            "Ceph",
+                            @tr("Other"),
+                        ];
+                        current-index: LibFolderEditState.fs-type-index;
+                        selected(i) => { LibFolderEditState.fs-type-index = i; }
+                    }
+                }
+
+                // Last scanned.
+                HorizontalLayout {
+                    Text {
+                        text: @tr("Last scanned");
+                        color: Theme.text-muted;
+                        font-size: Typography.legal;
+                        horizontal-stretch: 1;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        text: LibFolderEditState.last-scan-label;
+                        color: Theme.text-secondary;
+                        font-size: Typography.legal;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle { height: 1px; background: Theme.border-subtle; }
+
+                // Footer.
+                HorizontalLayout {
+                    spacing: 10px;
+                    // Scan this folder.
+                    Rectangle {
+                        width: scan-row.preferred-width + 26px;
+                        height: 36px;
+                        border-radius: Radius.sm;
+                        property <bool> can-scan: LibFolderEditState.enabled && LibFolderEditState.accessible;
+                        opacity: self.can-scan ? 1.0 : 0.5;
+                        border-width: 1px;
+                        border-color: Theme.border-subtle;
+                        background: scan-ta.has-hover && self.can-scan ? Theme.surface-hover : Theme.surface-elevated;
+                        scan-row := HorizontalLayout {
+                            x: (parent.width - self.width) / 2;
+                            spacing: 7px;
+                            VerticalLayout {
+                                alignment: center;
+                                QbzIcon {
+                                    source: @image-url("../assets/icons/refresh-cw.svg");
+                                    width: 14px;
+                                    height: 14px;
+                                    tint: Theme.text-secondary;
+                                }
+                            }
+                            VerticalLayout {
+                                alignment: center;
+                                Text {
+                                    text: @tr("Scan this folder");
+                                    color: Theme.text-secondary;
+                                    font-size: Typography.body;
+                                    font-weight: Typography.medium;
+                                }
+                            }
+                        }
+                        scan-ta := TouchArea {
+                            mouse-cursor: parent.can-scan ? pointer : default;
+                            clicked => {
+                                if (parent.can-scan) {
+                                    LibraryManageActions.scan-folder(LibFolderEditState.folder-id);
+                                }
+                            }
+                        }
+                    }
+                    Rectangle { horizontal-stretch: 1; }
+                    // Cancel.
+                    Rectangle {
+                        width: cancel-label.preferred-width + 28px;
+                        height: 36px;
+                        border-radius: Radius.sm;
+                        background: cancel-ta.has-hover ? Theme.surface-hover : transparent;
+                        border-width: 1px;
+                        border-color: Theme.border-subtle;
+                        cancel-label := Text {
+                            text: @tr("Cancel");
+                            color: Theme.text-secondary;
+                            font-size: Typography.body;
+                            font-weight: Typography.medium;
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
+                        }
+                        cancel-ta := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { LibFolderEditState.open = false; }
+                        }
+                    }
+                    // Save.
+                    Rectangle {
+                        width: save-label.preferred-width + 36px;
+                        height: 36px;
+                        border-radius: Radius.sm;
+                        background: save-ta.has-hover ? Theme.accent-hover : Theme.accent;
+                        save-label := Text {
+                            text: @tr("Save");
+                            color: Theme.accent-text;
+                            font-size: Typography.body;
+                            font-weight: Typography.semibold;
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
+                        }
+                        save-ta := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                LibraryManageActions.save-folder-settings(
+                                    LibFolderEditState.folder-id,
+                                    LibFolderEditState.alias,
+                                    LibFolderEditState.enabled,
+                                    LibFolderEditState.is-network,
+                                    root.fs-type-string(LibFolderEditState.fs-type-index),
+                                    LibFolderEditState.user-override-network);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
