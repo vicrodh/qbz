@@ -130,10 +130,21 @@ type Runtime = Arc<AppRuntime<SlintAdapter>>;
 /// the player's self-contained `play_track`. Errors are logged, not
 /// surfaced — the poll loop keeps the UI consistent regardless.
 async fn play_audible(runtime: &Runtime, weak: &slint::Weak<AppWindow>, track_id: u64) {
-    // Route through the shared tier-walk: an offline-cached copy is preferred
-    // (decrypted to FLAC and played via play_data) before the player's own
-    // L1/L2 -> network path. The offline handle is None before login. The
-    // sink drives the padlock animation while the CMAF bundle decrypts.
+    // Source-aware: a LOCAL user file plays from disk via the play_data seam.
+    // Offline-cached + Qobuz keep the existing tier-walk below (unchanged), so
+    // streaming playback can't regress. The current queue track tells us which
+    // path to take via its `source`; the id guard avoids mis-routing when the
+    // current track and `track_id` momentarily disagree. Auto-advance, skip and
+    // play-all all flow through here, so they become source-aware for free.
+    if let Some(qt) = runtime.core().current_track().await {
+        if qt.id == track_id && qt.source.as_deref() == Some("local") {
+            play_local_file_audible(runtime, track_id).await;
+            return;
+        }
+    }
+    // Offline-cached copy (preferred, decrypted to FLAC + played via play_data)
+    // -> player L1/L2 -> Qobuz network. The offline handle is None before
+    // login. The sink drives the padlock while a CMAF bundle decrypts.
     let offline = crate::offline::get().await;
     let sink = crate::offline_cache::row_sink(weak.clone());
     if let Err(e) = runtime
@@ -145,74 +156,107 @@ async fn play_audible(runtime: &Runtime, weak: &slint::Weak<AppWindow>, track_id
     }
 }
 
-/// Play a single Local Library track (Tracks-tab rows). Mirrors Tauri's
-/// `v2_library_play_track` routing: offline-cached (`qobuz_download`) tracks
-/// reuse the shared tier-walk (`after_track_change` -> `play_track_resolved`
-/// -> offline resolve -> `play_data`), keyed by the Qobuz id; local user
-/// files are read from disk and handed to the player's `play_data` seam
-/// (which extracts the sample rate + drives the PROTECTED device init,
-/// untouched here). Single-track play (a 1-track queue) — album/queue +
-/// auto-advance land with the queue-advancement slice. Additive: the shared
-/// Qobuz `play_audible` path is unchanged.
-pub fn play_local_library_track(
+/// Audible step for a LOCAL user file: read it off-thread and hand the bytes
+/// to the player's `play_data` seam (which extracts the sample rate + drives
+/// the PROTECTED device init, untouched here). CUE virtual tracks share one
+/// file, so seek to the track start. `row_id` is the library row id. Called
+/// by `play_audible` when the current queue track's source is `"local"`.
+async fn play_local_file_audible(runtime: &Runtime, row_id: u64) {
+    let info = tokio::task::spawn_blocking(move || {
+        crate::library_db::with_db(|db| db.get_track(row_id as i64))
+    })
+    .await
+    .ok()
+    .flatten()
+    .flatten()
+    .map(|t| (t.file_path, t.cue_start_secs));
+    let Some((path, cue)) = info else {
+        log::error!("[qbz-slint] local play: track {row_id} not found");
+        return;
+    };
+    let read_path = path.clone();
+    let bytes = tokio::task::spawn_blocking(move || std::fs::read(&read_path))
+        .await
+        .ok()
+        .and_then(Result::ok);
+    let Some(bytes) = bytes else {
+        log::error!("[qbz-slint] local play: failed to read {path}");
+        return;
+    };
+    if let Err(e) = runtime.core().player().play_data(bytes, row_id) {
+        log::error!("[qbz-slint] local play: play_data {row_id} failed: {e}");
+        return;
+    }
+    if let Some(start) = cue {
+        if start > 0.0 {
+            tokio::time::sleep(std::time::Duration::from_millis(120)).await;
+            let _ = runtime.core().player().seek(start as u64);
+        }
+    }
+}
+
+/// Set a Local Library queue and start playback at `start`. Source-aware
+/// `play_audible` routes each track (local file vs offline vs Qobuz) and
+/// auto-advance flows through the same path, so a mixed-source album/list
+/// plays through. UI-thread async step.
+async fn play_local_tracks_now(
+    runtime: &Runtime,
+    weak: &slint::Weak<AppWindow>,
+    tracks: Vec<qbz_library::LocalTrack>,
+    start: usize,
+) {
+    if tracks.is_empty() {
+        return;
+    }
+    let queue: Vec<QueueTrack> = tracks.iter().map(local_queue_track).collect();
+    let start = start.min(queue.len() - 1);
+    let play_id = queue[start].id;
+    runtime.core().set_queue(queue, Some(start)).await;
+    after_track_change(runtime, weak, play_id).await;
+}
+
+/// Play a local/offline album (metadata-grouped): the whole album becomes the
+/// queue and auto-advances. `album_id` is the metadata group key.
+pub fn play_local_album(
     runtime: Runtime,
     weak: slint::Weak<AppWindow>,
     handle: tokio::runtime::Handle,
-    row_id: i64,
+    album_id: String,
 ) {
     handle.spawn(async move {
-        let track = tokio::task::spawn_blocking(move || {
-            crate::library_db::with_db(|db| db.get_track(row_id))
+        let tracks = tokio::task::spawn_blocking(move || {
+            crate::library_db::with_db(|db| db.get_album_tracks_metadata(&album_id))
         })
         .await
         .ok()
         .flatten()
-        .flatten();
-        let Some(track) = track else {
-            log::error!("[qbz-slint] local play: track {row_id} not found");
-            return;
-        };
-        let is_offline = track.source.as_deref() == Some("qobuz_download");
-        runtime
-            .core()
-            .set_queue(vec![local_queue_track(&track)], Some(0))
-            .await;
+        .unwrap_or_default();
+        play_local_tracks_now(&runtime, &weak, tracks, 0).await;
+    });
+}
 
-        if is_offline {
-            // Offline copy: reuse the shared tier-walk, keyed by the Qobuz id.
-            match track.qobuz_track_id {
-                Some(qid) => after_track_change(&runtime, &weak, qid as u64).await,
-                None => log::error!(
-                    "[qbz-slint] local play: qobuz_download row {row_id} has no qobuz_track_id"
-                ),
-            }
-            return;
-        }
-
-        // Local user file: refresh now-playing, then read the file off-thread
-        // and hand the bytes to the player (no Qobuz client, no network).
-        refresh_now_playing_meta(&runtime, &weak).await;
-        record_recent(&runtime).await;
-        let path = track.file_path.clone();
-        let bytes = tokio::task::spawn_blocking(move || std::fs::read(&path))
-            .await
-            .ok()
-            .and_then(Result::ok);
-        let Some(bytes) = bytes else {
-            log::error!("[qbz-slint] local play: failed to read {}", track.file_path);
-            return;
-        };
-        if let Err(e) = runtime.core().player().play_data(bytes, row_id as u64) {
-            log::error!("[qbz-slint] local play: play_data {row_id} failed: {e}");
-            return;
-        }
-        // CUE virtual tracks share one audio file — seek to the track start.
-        if let Some(start) = track.cue_start_secs {
-            if start > 0.0 {
-                tokio::time::sleep(std::time::Duration::from_millis(120)).await;
-                let _ = runtime.core().player().seek(start as u64);
-            }
-        }
+/// Play the Tracks-tab list starting at `start_track_id`: the matching set
+/// (current search) becomes the queue, so playback continues down the list.
+pub fn play_local_tracks_from(
+    runtime: Runtime,
+    weak: slint::Weak<AppWindow>,
+    handle: tokio::runtime::Handle,
+    query: String,
+    start_track_id: i64,
+) {
+    handle.spawn(async move {
+        let tracks = tokio::task::spawn_blocking(move || {
+            crate::library_db::with_db(|db| db.search_with_filter(query.trim(), 0, true, false))
+        })
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_default();
+        let start = tracks
+            .iter()
+            .position(|t| t.id == start_track_id)
+            .unwrap_or(0);
+        play_local_tracks_now(&runtime, &weak, tracks, start).await;
     });
 }
 

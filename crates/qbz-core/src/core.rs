@@ -600,6 +600,12 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
         queue.peek_upcoming(count)
     }
 
+    /// The current queue track, if any (source-aware playback routing).
+    pub async fn current_track(&self) -> Option<QueueTrack> {
+        let queue = self.queue.read().await;
+        queue.current()
+    }
+
     // ==================== Search & Catalog ====================
 
     /// Search for albums

@@ -65,6 +65,14 @@ impl QueueManager {
         }
     }
 
+    /// The track at the current playback index, if any.
+    pub fn current(&self) -> Option<QueueTrack> {
+        let state = self.state.lock().unwrap();
+        state
+            .current_index
+            .and_then(|idx| state.tracks.get(idx).cloned())
+    }
+
     /// Add a track to the end of the queue
     pub fn add_track(&self, track: QueueTrack) {
         let mut state = self.state.lock().unwrap();
