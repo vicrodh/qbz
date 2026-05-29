@@ -1,106 +1,212 @@
 // Local Library — the user's on-disk + Plex music, browsed inside QBZ.
 //
-// Greenfield Slint port. This shell renders the header stats + the four
-// browse tabs (Albums / Artists / Folders / Tracks). All folder management,
-// scan, maintenance, and danger-zone actions live under Settings > Local
-// Library, NOT in this view — the gear button routes there.
+// Greenfield Slint port. This view uses the app's MANDATORY fixed-chrome
+// header — the SAME one FavoritesView / Discover use: NavButtons (back/
+// forward) + title on row 1 with the tab menu floated right, per-tab action
+// buttons + toolbar on row 2, a 1px divider, then a single scrolling content
+// area below. No invented header, no pills (ADR-008): the tabs are underline
+// tabs (mirroring FavTab), and the settings affordance is a standalone
+// icon-only circle (the one circular shape ADR-008 permits).
 //
-// The per-tab bodies are filled slice by slice (Albums first). For now each
-// tab shows an empty placeholder so the wiring is visible end to end.
+// Folder management, scan, maintenance, and the danger zone do NOT live in
+// this view — they belong under Settings > Local Library. The gear routes
+// there.
+//
+// The per-tab bodies are filled slice by slice (Albums first). Until a slice
+// lands the content area shows an empty placeholder so the chrome wiring is
+// visible end to end.
 
 import { Theme } from "../foundation/semantic-colors.slint";
+import { Typography } from "../foundation/typography.slint";
 import { LocalLibraryState, LocalLibraryActions } from "../state.slint";
+import { NavButtons } from "../shell/NavButtons.slint";
+import { QbzIcon } from "../primitives/QbzIcon.slint";
 
-component TabButton inherits TouchArea {
+// One tab in the Local Library tab menu — underline style (ADR-008: NO
+// pills). 1:1 with Favorites' FavTab so the chrome reads identically.
+component LibTab inherits Rectangle {
     in property <string> label;
-    in property <bool> active;
-    height: 36px;
-    horizontal-stretch: 0;
+    in property <string> id;
+    in property <int> count;
+    callback selected(string);
+
+    property <bool> active: LocalLibraryState.active-tab == root.id;
+    height: 34px;
+    width: tab-row.preferred-width;
+
+    tab-row := HorizontalLayout {
+        padding-left: 4px;
+        padding-right: 4px;
+        spacing: 6px;
+        Text {
+            text: root.label;
+            color: root.active ? Theme.text-primary : Theme.text-muted;
+            font-size: Typography.body;
+            font-weight: root.active ? Typography.semibold : Typography.regular;
+            vertical-alignment: center;
+        }
+        if root.count > 0: Text {
+            text: root.count;
+            color: Theme.text-muted;
+            font-size: Typography.legal;
+            vertical-alignment: center;
+        }
+    }
+    // Active underline (NOT a pill background).
     Rectangle {
-        border-radius: 18px;
-        background: root.active
-            ? Theme.accent
-            : (root.has-hover ? Theme.surface-hover : transparent);
-        HorizontalLayout {
-            padding-left: 16px;
-            padding-right: 16px;
-            Text {
-                text: root.label;
-                vertical-alignment: center;
-                color: root.active ? Theme.accent-text : Theme.text-secondary;
-                font-size: 14px;
-                font-weight: root.active ? 700 : 500;
-            }
+        y: parent.height - 2px;
+        height: 2px;
+        width: parent.width;
+        background: root.active ? Theme.accent : transparent;
+        border-radius: 1px;
+    }
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.selected(root.id);
+        }
+    }
+}
+
+// The Local Library tabs as one floating group (row 1, right side). Order
+// mirrors the existing HeaderBar "Local Library" menu (Albums / Artists /
+// Folders / Tracks). Counts come from LocalLibraryState (0 until seeded).
+component LibTabMenu inherits HorizontalLayout {
+    spacing: 18px;
+    VerticalLayout {
+        alignment: center;
+        LibTab {
+            label: @tr("Albums");
+            id: "albums";
+            count: LocalLibraryState.album-count;
+            selected(id) => { LocalLibraryActions.select-tab(id); }
+        }
+    }
+    VerticalLayout {
+        alignment: center;
+        LibTab {
+            label: @tr("Artists");
+            id: "artists";
+            count: LocalLibraryState.artist-count;
+            selected(id) => { LocalLibraryActions.select-tab(id); }
+        }
+    }
+    VerticalLayout {
+        alignment: center;
+        LibTab {
+            label: @tr("Folders");
+            id: "folders";
+            count: LocalLibraryState.folder-count;
+            selected(id) => { LocalLibraryActions.select-tab(id); }
+        }
+    }
+    VerticalLayout {
+        alignment: center;
+        LibTab {
+            label: @tr("Tracks");
+            id: "tracks";
+            count: LocalLibraryState.track-count;
+            selected(id) => { LocalLibraryActions.select-tab(id); }
+        }
+    }
+}
+
+// Standalone icon-only circle (ADR-008 permits a full circle for an
+// icon-only control that stands alone) — matches NavButtons' history pair.
+// Used for the "Local Library settings" gear (management lives in Settings).
+component CircleIconBtn inherits Rectangle {
+    in property <image> icon;
+    callback clicked();
+    width: 28px;
+    height: 28px;
+    border-radius: 14px;
+    background: ta.has-hover ? Theme.surface-hover : Theme.surface-elevated;
+    QbzIcon {
+        source: root.icon;
+        width: 15px;
+        height: 15px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        tint: Theme.text-primary;
+    }
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked();
         }
     }
 }
 
 export component LocalLibraryView inherits Rectangle {
-    background: transparent;
+    background: Theme.surface-main;
 
     VerticalLayout {
-        padding: 24px;
-        spacing: 20px;
+        spacing: 0px;
 
-        // ---- Header: title + stats + gear (-> Settings > Local Library) ----
+        // ===================== FIXED CHROME =====================
+
+        // Row 1 — back/forward + title (left), tab menu + settings gear
+        // (right). Same structure as FavoritesView row 1.
         HorizontalLayout {
+            padding-left: 32px;
+            padding-right: 32px;
+            padding-top: 11px;
             spacing: 16px;
             VerticalLayout {
-                horizontal-stretch: 1;
-                spacing: 2px;
+                alignment: center;
+                NavButtons { }
+            }
+            VerticalLayout {
+                alignment: center;
                 Text {
                     text: @tr("Local Library");
                     color: Theme.text-primary;
-                    font-size: 28px;
-                    font-weight: 800;
-                }
-                Text {
-                    text: @tr("{} albums · {} artists · {} tracks",
-                        LocalLibraryState.album-count,
-                        LocalLibraryState.artist-count,
-                        LocalLibraryState.track-count);
-                    color: Theme.text-muted;
-                    font-size: 13px;
+                    font-size: Typography.section;
+                    font-weight: Typography.bold;
                 }
             }
-            gear := TouchArea {
-                width: 38px;
-                height: 38px;
-                clicked => { LocalLibraryActions.open-settings(); }
-                Rectangle {
-                    border-radius: 10px;
-                    background: gear.has-hover ? Theme.surface-hover : transparent;
-                    Image {
-                        source: @image-url("../assets/icons/settings.svg");
-                        width: 20px;
-                        height: 20px;
-                        colorize: Theme.text-secondary;
+            Rectangle { horizontal-stretch: 1; }
+            VerticalLayout {
+                alignment: center;
+                LibTabMenu { }
+            }
+            VerticalLayout {
+                alignment: center;
+                CircleIconBtn {
+                    icon: @image-url("../assets/icons/settings.svg");
+                    clicked => {
+                        LocalLibraryActions.open-settings();
                     }
                 }
             }
         }
 
-        // ---- Tab bar (Albums / Artists / Folders / Tracks) ----
+        Rectangle { height: 12px; }
+
+        // Row 2 — per-tab action buttons (left) + toolbar (right). Filled as
+        // each tab slice lands (Albums: play/shuffle + search/sort/view).
+        // vertical-stretch: 0 is load-bearing (see FavoritesView): without it
+        // an empty row grabs leftover height and inflates the sub-header.
         HorizontalLayout {
+            vertical-stretch: 0;
+            padding-left: 32px;
+            padding-right: 32px;
             spacing: 8px;
-            alignment: start;
-            for tab in [
-                { id: "albums", label: @tr("Albums") },
-                { id: "artists", label: @tr("Artists") },
-                { id: "folders", label: @tr("Folders") },
-                { id: "tracks", label: @tr("Tracks") },
-            ] : TabButton {
-                label: tab.label;
-                active: LocalLibraryState.active-tab == tab.id;
-                clicked => { LocalLibraryActions.select-tab(tab.id); }
-            }
+            Rectangle { horizontal-stretch: 1; }
         }
 
-        // ---- Body (placeholder until each tab slice lands) ----
+        Rectangle { height: 14px; }
+        Rectangle {
+            height: 1px;
+            background: Theme.border-subtle;
+        }
+
+        // ===================== SCROLLING CONTENT =====================
         Rectangle {
             vertical-stretch: 1;
-            background: Theme.surface-card;
-            border-radius: 12px;
+            clip: true;
+
+            // Placeholder until each tab slice lands (Albums is next).
             VerticalLayout {
                 alignment: center;
                 spacing: 6px;
@@ -108,14 +214,14 @@ export component LocalLibraryView inherits Rectangle {
                     text: @tr("Local Library port in progress");
                     horizontal-alignment: center;
                     color: Theme.text-secondary;
-                    font-size: 16px;
-                    font-weight: 600;
+                    font-size: Typography.body;
+                    font-weight: Typography.semibold;
                 }
                 Text {
-                    text: @tr("The “{}” tab is coming next.", LocalLibraryState.active-tab);
+                    text: @tr("Building the browse tabs slice by slice.");
                     horizontal-alignment: center;
                     color: Theme.text-muted;
-                    font-size: 13px;
+                    font-size: Typography.legal;
                 }
             }
         }
