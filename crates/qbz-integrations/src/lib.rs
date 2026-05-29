@@ -23,14 +23,22 @@
 //!
 //! The crate exposes async APIs that can be called from any async runtime.
 
+pub mod discogs;
 pub mod error;
 pub mod lastfm;
 pub mod listenbrainz;
 pub mod musicbrainz;
+pub mod remote_metadata;
 
 pub use error::{IntegrationError, IntegrationResult};
 
 // Re-export main types for convenience
+pub use discogs::DiscogsClient;
 pub use lastfm::{LastFmClient, LastFmSession};
 pub use listenbrainz::{ListenBrainzClient, ListenBrainzConfig, ListenType};
 pub use musicbrainz::{MusicBrainzClient, MusicBrainzConfig};
+pub use remote_metadata::{
+    discogs_extended_to_search_result, discogs_full_to_metadata,
+    musicbrainz_full_to_metadata, musicbrainz_release_to_search_result, RemoteAlbumMetadata,
+    RemoteAlbumSearchResult, RemoteProvider, RemoteTrackMetadata,
+};

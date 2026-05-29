@@ -138,6 +138,14 @@ fn populate(
     s.set_write_progress_current(0);
     s.set_write_progress_total(0);
     s.set_tracks(ModelRc::new(VecModel::from(rows)));
+    // Reset remote-lookup state.
+    s.set_remote_provider_index(0);
+    s.set_remote_searching(false);
+    s.set_remote_loading(false);
+    s.set_remote_results(ModelRc::new(VecModel::from(Vec::<crate::RemoteResultItem>::new())));
+    s.set_selected_result_id("".into());
+    s.set_show_remote_panel(false);
+    s.set_has_searched(false);
     s.set_open(true);
 }
 
@@ -377,6 +385,204 @@ pub fn save_tags(weak: Weak<AppWindow>, handle: tokio::runtime::Handle) {
         }
         let _ = directory_path; // reserved (explicit directory plumbing, if added later)
     });
+}
+
+// ============================== Remote lookup =============================
+
+/// Remote search/apply generation — a newer request supersedes a slow one.
+static REMOTE_GEN: AtomicU64 = AtomicU64::new(0);
+
+fn map_search(r: &qbz_integrations::RemoteAlbumSearchResult) -> crate::RemoteResultItem {
+    let provider = if matches!(r.provider, qbz_integrations::RemoteProvider::Discogs) {
+        "discogs"
+    } else {
+        "musicbrainz"
+    };
+    crate::RemoteResultItem {
+        provider: provider.into(),
+        provider_id: r.provider_id.clone().into(),
+        title: r.title.clone().into(),
+        artist: r.artist.clone().into(),
+        year: r.year.unwrap_or(0) as i32,
+        has_year: r.year.is_some(),
+        track_count: r.track_count.unwrap_or(0) as i32,
+        has_track_count: r.track_count.is_some(),
+        country: r.country.clone().unwrap_or_default().into(),
+        format: r.format.clone().unwrap_or_default().into(),
+        label: r.label.clone().unwrap_or_default().into(),
+        catalog_number: r.catalog_number.clone().unwrap_or_default().into(),
+    }
+}
+
+/// Search the selected provider (MusicBrainz/Discogs) for the current album
+/// title + artist. Generation-guarded so a slow reply can't clobber a newer one.
+pub fn search_remote(weak: Weak<AppWindow>, handle: tokio::runtime::Handle) {
+    let Some(w) = weak.upgrade() else {
+        return;
+    };
+    let s = w.global::<TagEditorState>();
+    let title = s.get_album_title().trim().to_string();
+    let artist = s.get_album_artist().trim().to_string();
+    let provider = s.get_remote_provider_index();
+    if title.is_empty() && artist.is_empty() {
+        crate::toast::error_weak(&weak, "Enter a title or artist to search");
+        return;
+    }
+    let gen = REMOTE_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+    s.set_remote_searching(true);
+
+    handle.spawn(async move {
+        let results: Result<Vec<crate::RemoteResultItem>, String> = if provider == 1 {
+            let dc = qbz_integrations::DiscogsClient::new();
+            dc.search_releases(&artist, &title, None, 12).await.map(|v| {
+                v.iter()
+                    .map(|r| map_search(&qbz_integrations::discogs_extended_to_search_result(r)))
+                    .collect()
+            })
+        } else {
+            let mb = qbz_integrations::MusicBrainzClient::new();
+            mb.search_releases_extended(&title, &artist, None, 12)
+                .await
+                .map(|resp| {
+                    resp.releases
+                        .iter()
+                        .map(|r| map_search(&qbz_integrations::musicbrainz_release_to_search_result(r)))
+                        .collect()
+                })
+                .map_err(|e| e.to_string())
+        };
+        let _ = weak.upgrade_in_event_loop(move |w| {
+            if REMOTE_GEN.load(Ordering::SeqCst) != gen {
+                return;
+            }
+            let s = w.global::<TagEditorState>();
+            s.set_remote_searching(false);
+            s.set_has_searched(true);
+            match results {
+                Ok(items) => {
+                    let empty = items.is_empty();
+                    s.set_remote_results(ModelRc::new(VecModel::from(items)));
+                    s.set_show_remote_panel(!empty);
+                }
+                Err(e) => {
+                    s.set_show_remote_panel(false);
+                    crate::toast::error(&w, format!("Search failed: {e}"));
+                }
+            }
+        });
+    });
+}
+
+/// Mark a result card selected.
+pub fn select_result(weak: Weak<AppWindow>, provider_id: String) {
+    let _ = weak.upgrade_in_event_loop(move |w| {
+        w.global::<TagEditorState>().set_selected_result_id(provider_id.into());
+    });
+}
+
+/// Fetch the selected result's full metadata and apply it (album fields +
+/// positional per-track titles). Generation-guarded.
+pub fn apply_remote(weak: Weak<AppWindow>, handle: tokio::runtime::Handle) {
+    let Some(w) = weak.upgrade() else {
+        return;
+    };
+    let s = w.global::<TagEditorState>();
+    let id = s.get_selected_result_id().to_string();
+    if id.is_empty() {
+        return;
+    }
+    let provider = s.get_remote_provider_index();
+    let gen = REMOTE_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+    s.set_remote_loading(true);
+
+    handle.spawn(async move {
+        let meta: Result<qbz_integrations::RemoteAlbumMetadata, String> = if provider == 1 {
+            match id.parse::<u64>() {
+                Ok(rid) => {
+                    let dc = qbz_integrations::DiscogsClient::new();
+                    dc.get_release_metadata(rid)
+                        .await
+                        .map(|m| qbz_integrations::discogs_full_to_metadata(&m))
+                }
+                Err(_) => Err("Invalid Discogs release id".to_string()),
+            }
+        } else {
+            let mb = qbz_integrations::MusicBrainzClient::new();
+            mb.get_release_with_tracks(&id)
+                .await
+                .map(|r| qbz_integrations::musicbrainz_full_to_metadata(&r))
+                .map_err(|e| e.to_string())
+        };
+        let _ = weak.upgrade_in_event_loop(move |w| {
+            if REMOTE_GEN.load(Ordering::SeqCst) != gen {
+                return;
+            }
+            let s = w.global::<TagEditorState>();
+            s.set_remote_loading(false);
+            match meta {
+                Ok(m) => {
+                    s.set_album_title(m.title.clone().into());
+                    s.set_album_artist(m.artist.clone().into());
+                    if let Some(y) = m.year {
+                        s.set_year_input(y.to_string().into());
+                    }
+                    if let Some(g) = m.genres.first() {
+                        s.set_genre(g.clone().into());
+                    }
+                    if let Some(c) = m.catalog_number.as_ref() {
+                        s.set_catalog_number(c.clone().into());
+                    }
+                    if m.disc_count > 0 {
+                        s.set_album_total_discs(m.disc_count as i32);
+                    }
+                    // Positional per-track title merge.
+                    let model = s.get_tracks();
+                    let local_n = model.row_count();
+                    let n = local_n.min(m.tracks.len());
+                    for i in 0..n {
+                        if let Some(mut row) = model.row_data(i) {
+                            row.title = m.tracks[i].title.clone().into();
+                            model.set_row_data(i, row);
+                        }
+                    }
+                    s.set_show_remote_panel(false);
+                    let remote_n = m.tracks.len();
+                    if remote_n > 0 && remote_n != local_n {
+                        crate::toast::warning(
+                            &w,
+                            "Track count differs from the result; titles applied by position",
+                        );
+                    }
+                }
+                Err(e) => {
+                    let lower = e.to_lowercase();
+                    if lower.contains("429") || lower.contains("rate") {
+                        crate::toast::error(&w, "Rate limited, try again shortly");
+                    } else {
+                        crate::toast::error(&w, "Failed to fetch metadata");
+                    }
+                }
+            }
+        });
+    });
+}
+
+/// Open the selected result's provider page in the system browser.
+pub fn open_in_browser(weak: Weak<AppWindow>) {
+    let Some(w) = weak.upgrade() else {
+        return;
+    };
+    let s = w.global::<TagEditorState>();
+    let id = s.get_selected_result_id().to_string();
+    if id.is_empty() {
+        return;
+    }
+    let url = if s.get_remote_provider_index() == 1 {
+        format!("https://www.discogs.com/release/{id}")
+    } else {
+        format!("https://musicbrainz.org/release/{id}")
+    };
+    let _ = open::that(url);
 }
 
 /// Re-fetch the album's tracks and re-apply the detail view, and reset the

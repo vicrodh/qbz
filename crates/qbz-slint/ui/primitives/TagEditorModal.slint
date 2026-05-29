@@ -12,6 +12,7 @@ import { Radius } from "../foundation/radius.slint";
 import { TagEditorState, TagEditorActions } from "../state.slint";
 import { QbzIcon } from "QbzIcon.slint";
 import { QbzSelect } from "QbzSelect.slint";
+import { LoadingSpinner } from "LoadingSpinner.slint";
 import { LineEdit, ScrollView } from "std-widgets.slint";
 
 // A labeled field block (label above the control).
@@ -142,6 +143,197 @@ export component TagEditorModal inherits Rectangle {
                     text: @tr("Total discs") + ": \{TagEditorState.album_total_discs}";
                     color: Theme.text-muted;
                     font-size: Typography.legal;
+                }
+
+                // Remote metadata lookup (MusicBrainz / Discogs).
+                Rectangle {
+                    border-radius: Radius.sm;
+                    border-width: 1px;
+                    border-color: Theme.border-subtle;
+                    background: Theme.surface-elevated;
+                    VerticalLayout {
+                        padding: 10px;
+                        spacing: 8px;
+                        // Provider + search.
+                        HorizontalLayout {
+                            spacing: 8px;
+                            VerticalLayout {
+                                alignment: center;
+                                QbzSelect {
+                                    menu-width: 150px;
+                                    sm: true;
+                                    options: ["MusicBrainz", "Discogs"];
+                                    current-index: TagEditorState.remote_provider_index;
+                                    selected(i) => {
+                                        TagEditorActions.set-provider(i);
+                                    }
+                                }
+                            }
+                            Rectangle {
+                                width: search-row.preferred-width + 26px;
+                                height: 32px;
+                                border-radius: Radius.sm;
+                                border-width: 1px;
+                                border-color: Theme.border-subtle;
+                                background: search-ta.has-hover ? Theme.surface-hover : Theme.surface-card;
+                                search-row := HorizontalLayout {
+                                    x: (parent.width - self.width) / 2;
+                                    spacing: 6px;
+                                    if TagEditorState.remote_searching: VerticalLayout {
+                                        alignment: center;
+                                        LoadingSpinner { size: 14px; }
+                                    }
+                                    if !TagEditorState.remote_searching: VerticalLayout {
+                                        alignment: center;
+                                        QbzIcon {
+                                            source: @image-url("../assets/icons/search.svg");
+                                            width: 14px;
+                                            height: 14px;
+                                            tint: Theme.text-secondary;
+                                        }
+                                    }
+                                    VerticalLayout {
+                                        alignment: center;
+                                        Text {
+                                            text: TagEditorState.remote_searching ? @tr("Searching…") : @tr("Search");
+                                            color: Theme.text-secondary;
+                                            font-size: Typography.legal;
+                                            font-weight: Typography.medium;
+                                        }
+                                    }
+                                }
+                                search-ta := TouchArea {
+                                    mouse-cursor: TagEditorState.remote_searching ? default : pointer;
+                                    clicked => {
+                                        if (!TagEditorState.remote_searching) {
+                                            TagEditorActions.search-remote();
+                                        }
+                                    }
+                                }
+                            }
+                            Rectangle { horizontal-stretch: 1; }
+                        }
+
+                        // No-results note.
+                        if TagEditorState.has_searched && !TagEditorState.remote_searching
+                            && TagEditorState.remote_results.length == 0: Text {
+                            text: @tr("No results, try a different search");
+                            color: Theme.text-muted;
+                            font-size: Typography.legal;
+                        }
+
+                        // Results — horizontal scroll of selectable cards.
+                        if TagEditorState.show_remote_panel
+                            && TagEditorState.remote_results.length > 0: Rectangle {
+                            height: 116px;
+                            ScrollView {
+                                vertical-scrollbar-policy: ScrollBarPolicy.always-off;
+                                HorizontalLayout {
+                                    spacing: 8px;
+                                    padding-bottom: 6px;
+                                    for r in TagEditorState.remote_results: Rectangle {
+                                        width: 200px;
+                                        border-radius: Radius.sm;
+                                        border-width: 1px;
+                                        property <bool> sel: r.provider_id == TagEditorState.selected_result_id;
+                                        border-color: self.sel ? Theme.accent : Theme.border-subtle;
+                                        background: self.sel ? Theme.surface-hover : Theme.surface-card;
+                                        VerticalLayout {
+                                            padding: 8px;
+                                            spacing: 3px;
+                                            Text {
+                                                text: r.title;
+                                                color: Theme.text-primary;
+                                                font-size: Typography.legal;
+                                                font-weight: Typography.semibold;
+                                                overflow: elide;
+                                            }
+                                            Text {
+                                                text: r.artist;
+                                                color: Theme.text-secondary;
+                                                font-size: Typography.legal;
+                                                overflow: elide;
+                                            }
+                                            Text {
+                                                text: (r.has-year ? "\{r.year}" : "—")
+                                                    + (r.has-track-count ? " · \{r.track-count} " + @tr("tracks") : "")
+                                                    + (r.country != "" ? " · " + r.country : "");
+                                                color: Theme.text-muted;
+                                                font-size: Typography.legal;
+                                                overflow: elide;
+                                            }
+                                            Text {
+                                                text: r.format != "" ? r.format : (r.label != "" ? r.label : "");
+                                                color: Theme.text-muted;
+                                                font-size: Typography.legal;
+                                                overflow: elide;
+                                            }
+                                        }
+                                        card-ta := TouchArea {
+                                            mouse-cursor: pointer;
+                                            clicked => {
+                                                TagEditorActions.select-result(r.provider_id);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Apply + open-in-browser (when a result is selected).
+                        if TagEditorState.selected_result_id != "": HorizontalLayout {
+                            spacing: 8px;
+                            Rectangle { horizontal-stretch: 1; }
+                            // Open in browser.
+                            Rectangle {
+                                width: 32px;
+                                height: 32px;
+                                border-radius: Radius.sm;
+                                border-width: 1px;
+                                border-color: Theme.border-subtle;
+                                background: ext-ta.has-hover ? Theme.surface-hover : Theme.surface-card;
+                                QbzIcon {
+                                    source: @image-url("../assets/icons/external-link.svg");
+                                    width: 14px;
+                                    height: 14px;
+                                    x: (parent.width - self.width) / 2;
+                                    y: (parent.height - self.height) / 2;
+                                    tint: Theme.text-secondary;
+                                }
+                                ext-ta := TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => {
+                                        TagEditorActions.open-in-browser();
+                                    }
+                                }
+                            }
+                            // Apply.
+                            Rectangle {
+                                width: apply-label.preferred-width + 28px;
+                                height: 32px;
+                                border-radius: Radius.sm;
+                                background: apply-ta.has-hover && !TagEditorState.remote_loading
+                                    ? Theme.accent-hover : Theme.accent;
+                                opacity: TagEditorState.remote_loading ? 0.6 : 1.0;
+                                apply-label := Text {
+                                    text: TagEditorState.remote_loading ? @tr("Loading…") : @tr("Apply");
+                                    color: Theme.accent-text;
+                                    font-size: Typography.legal;
+                                    font-weight: Typography.semibold;
+                                    x: (parent.width - self.width) / 2;
+                                    y: (parent.height - self.height) / 2;
+                                }
+                                apply-ta := TouchArea {
+                                    mouse-cursor: TagEditorState.remote_loading ? default : pointer;
+                                    clicked => {
+                                        if (!TagEditorState.remote_loading) {
+                                            TagEditorActions.apply-remote();
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
 
                 // Track table.

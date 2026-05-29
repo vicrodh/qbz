@@ -4187,6 +4187,42 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             });
     }
+    {
+        let weak = window.as_weak();
+        window
+            .global::<TagEditorActions>()
+            .on_set_provider(move |i| {
+                if let Some(w) = weak.upgrade() {
+                    w.global::<TagEditorState>().set_remote_provider_index(i);
+                }
+            });
+    }
+    {
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window
+            .global::<TagEditorActions>()
+            .on_search_remote(move || tag_editor::search_remote(weak.clone(), handle.clone()));
+    }
+    {
+        let weak = window.as_weak();
+        window
+            .global::<TagEditorActions>()
+            .on_select_result(move |id| tag_editor::select_result(weak.clone(), id.to_string()));
+    }
+    {
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window
+            .global::<TagEditorActions>()
+            .on_apply_remote(move || tag_editor::apply_remote(weak.clone(), handle.clone()));
+    }
+    {
+        let weak = window.as_weak();
+        window
+            .global::<TagEditorActions>()
+            .on_open_in_browser(move || tag_editor::open_in_browser(weak.clone()));
+    }
 
     // Local Library — Albums tab controls (search / sort re-query page 1;
     // load-more pages on scroll; retry) + the shared AlbumCollectionView's

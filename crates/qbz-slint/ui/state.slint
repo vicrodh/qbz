@@ -628,6 +628,23 @@ export struct TagTrackEdit {
     track_number: string,  // raw text (LineEdit); controller parses on save ("" = unset)
 }
 
+// One remote (MusicBrainz/Discogs) search-result card. Option fields map to
+// a 0/"" sentinel + a has_* companion where the zero value is valid.
+export struct RemoteResultItem {
+    provider: string,          // "musicbrainz" | "discogs"
+    provider_id: string,       // selection key + open-in-browser
+    title: string,
+    artist: string,
+    year: int,
+    has_year: bool,
+    track_count: int,
+    has_track_count: bool,
+    country: string,
+    format: string,
+    label: string,
+    catalog_number: string,
+}
+
 export global TagEditorState {
     in-out property <bool> open: false;
     in property <string> album_group_key;       // == LocalAlbum.id == directory_path
@@ -644,12 +661,25 @@ export global TagEditorState {
     in-out property <bool> saving: false;
     in-out property <int> write_progress_current: 0;
     in-out property <int> write_progress_total: 0;
+    // Remote lookup (MusicBrainz / Discogs).
+    in-out property <int> remote_provider_index: 0;   // 0 musicbrainz, 1 discogs
+    in-out property <bool> remote_searching: false;
+    in-out property <bool> remote_loading: false;      // apply (get full) in flight
+    in-out property <[RemoteResultItem]> remote_results: [];
+    in-out property <string> selected_result_id: "";   // "" = none
+    in-out property <bool> show_remote_panel: false;
+    in-out property <bool> has_searched: false;
 }
 
 export global TagEditorActions {
     callback close();
     callback save();
     callback set-persistence(int);   // QbzSelect index -> mode (controller maps)
+    callback set-provider(int);      // provider QbzSelect index
+    callback search-remote();
+    callback select-result(string /* provider_id */);
+    callback apply-remote();
+    callback open-in-browser();
 }
 
 // Global toast state, driven by crate::toast. The Toast overlay (mounted
