@@ -1966,22 +1966,50 @@ impl LibraryDatabase {
     /// bundles, else the parent dir), and returns `<folder>/cover.jpg` when
     /// that file exists. Frontend-agnostic (no `tauri::State`).
     pub fn resolve_album_cover_fallback(&self, group_key: &str) -> Option<String> {
+        // Common on-disk cover filenames (the offline-cache writes cover.jpg;
+        // ripped/local folders often use folder.jpg / front.*).
+        const NAMES: [&str; 6] = [
+            "cover.jpg",
+            "cover.png",
+            "folder.jpg",
+            "Folder.jpg",
+            "front.jpg",
+            "front.png",
+        ];
         let expr = crate::album_grouping::metadata_group_key_sql_expression();
-        let query = format!("SELECT file_path FROM local_tracks WHERE ({expr}) = ?1 LIMIT 1");
-        let file_path: String = self
-            .conn
-            .query_row(&query, rusqlite::params![group_key], |row| row.get(0))
-            .ok()?;
-        let p = std::path::Path::new(&file_path);
-        let folder = if p.is_dir() {
-            p.to_path_buf()
-        } else {
-            p.parent()?.to_path_buf()
-        };
-        let cover = folder.join("cover.jpg");
-        cover
-            .is_file()
-            .then(|| cover.to_string_lossy().into_owned())
+        // Scan several tracks, not just one: a CMAF album keeps each track in
+        // its own folder, and only some may carry a cover.jpg.
+        let query = format!("SELECT file_path FROM local_tracks WHERE ({expr}) = ?1 LIMIT 12");
+        let mut stmt = self.conn.prepare(&query).ok()?;
+        let paths: Vec<String> = stmt
+            .query_map(rusqlite::params![group_key], |row| row.get::<_, String>(0))
+            .ok()?
+            .filter_map(Result::ok)
+            .collect();
+        for fp in &paths {
+            let p = std::path::Path::new(fp);
+            // The track folder: the path itself for a CMAF bundle dir, else
+            // the parent of the audio file.
+            let Some(folder) = (if p.is_dir() {
+                Some(p.to_path_buf())
+            } else {
+                p.parent().map(|x| x.to_path_buf())
+            }) else {
+                continue;
+            };
+            // Check the folder and its parent (covers multi-disc layouts where
+            // the art sits one level up).
+            let dirs = [Some(folder.clone()), folder.parent().map(|x| x.to_path_buf())];
+            for dir in dirs.into_iter().flatten() {
+                for name in NAMES {
+                    let cover = dir.join(name);
+                    if cover.is_file() {
+                        return Some(cover.to_string_lossy().into_owned());
+                    }
+                }
+            }
+        }
+        None
     }
 
     fn get_albums_metadata_page_inner(
