@@ -94,6 +94,8 @@ pub enum ArtworkTarget {
     /// re-derived, so they must be matched by name). `gen` drops a stale paint
     /// after a reload/rescan.
     LocalArtistRowImage { index: usize, gen: u64 },
+    /// The cover of the dedicated Local Library album view (LocalAlbumState).
+    LocalAlbumViewCover,
     /// A card in FavoritesState.artists[index].
     FavoriteArtist { index: usize },
     /// A card in FavoritesState.labels[index].
@@ -615,14 +617,15 @@ fn apply_artwork(
             }
         }
         ArtworkTarget::LocalAlbumCard { index, gen } => {
-            // Drop the cover if a reload superseded the page it belongs to.
+            // Drop the cover if a reload superseded the set it belongs to.
             if !crate::local_library::albums_gen_current(gen) {
                 return;
             }
             let model = window.global::<crate::LocalLibraryState>().get_albums();
-            if let Some(mut item) = model.row_data(index) {
-                item.artwork = image;
-                model.set_row_data(index, item);
+            if let Some(item) = model.row_data(index) {
+                // Dual-set by id onto the full set + visible + grouped sections.
+                let id = item.id.to_string();
+                crate::local_library::set_local_album_artwork(window, &id, image);
             }
         }
         ArtworkTarget::LocalFolderCard { index } => {
@@ -650,6 +653,9 @@ fn apply_artwork(
                     crate::local_library::set_artist_row_image(window, &name, image);
                 }
             }
+        }
+        ArtworkTarget::LocalAlbumViewCover => {
+            window.global::<crate::LocalAlbumState>().set_cover(image);
         }
         ArtworkTarget::FavoriteArtist { index } => {
             let model = window.global::<crate::FavoritesState>().get_artists();

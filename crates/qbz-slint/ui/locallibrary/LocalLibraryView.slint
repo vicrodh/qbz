@@ -18,7 +18,7 @@
 
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
-import { LocalLibraryState, LocalLibraryActions, FolderNode, LocalArtistItem, AlphaJump } from "../state.slint";
+import { LocalLibraryState, LocalLibraryActions, FolderNode, LocalArtistItem, AlphaJump, LibAlbumFilterState } from "../state.slint";
 import { NavButtons } from "../shell/NavButtons.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { AlbumCollectionView } from "../discover/AlbumCollectionView.slint";
@@ -400,6 +400,36 @@ component LocalArtistRow inherits Rectangle {
     }
 }
 
+// One filter chip in the Albums quality/format/source popup. 6px radius (not
+// a pill — ADR-008; matches the GenreFilterPopup chip).
+component FilterChip inherits Rectangle {
+    in property <string> label;
+    in property <bool> active;
+    callback toggled();
+    height: 30px;
+    width: lbl.preferred-width + 22px;
+    border-radius: 6px;
+    border-width: 1px;
+    border-color: root.active ? Theme.accent : Theme.border-subtle;
+    background: root.active
+        ? Theme.accent
+        : (chip-ta.has-hover ? Theme.surface-hover : Theme.surface-elevated);
+    lbl := Text {
+        text: root.label;
+        color: root.active ? Theme.accent-text : Theme.text-secondary;
+        font-size: Typography.legal;
+        font-weight: root.active ? Typography.semibold : Typography.regular;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+    }
+    chip-ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.toggled();
+        }
+    }
+}
+
 export component LocalLibraryView inherits Rectangle {
     background: Theme.surface-main;
 
@@ -502,6 +532,78 @@ export component LocalLibraryView inherits Rectangle {
                                 : i == 3 ? "title-desc"
                                 : i == 4 ? "year-desc"
                                 : "year-asc");
+                        }
+                    }
+                }
+                // Group-by.
+                VerticalLayout {
+                    alignment: center;
+                    QbzSelect {
+                        menu-width: 160px;
+                        sm: true;
+                        options: [
+                            @tr("No grouping"),
+                            @tr("Group by letter"),
+                            @tr("Group by artist"),
+                        ];
+                        current-index: LocalLibraryState.albums-group == "alpha" ? 1
+                            : LocalLibraryState.albums-group == "artist" ? 2
+                            : 0;
+                        selected(i) => {
+                            LocalLibraryActions.albums-set-group(
+                                i == 1 ? "alpha" : i == 2 ? "artist" : "off");
+                        }
+                    }
+                }
+                // Quality/format/source filter (popup) + active-count badge.
+                VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: 34px;
+                        height: 30px;
+                        border-radius: 6px;
+                        border-width: 1px;
+                        border-color: LibAlbumFilterState.count > 0 ? Theme.accent : Theme.border-subtle;
+                        background: filt-ta.has-hover ? Theme.surface-hover : Theme.surface-elevated;
+                        QbzIcon {
+                            source: @image-url("../assets/icons/list-filter.svg");
+                            width: 15px;
+                            height: 15px;
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
+                            tint: LibAlbumFilterState.count > 0 ? Theme.accent : Theme.text-secondary;
+                        }
+                        if LibAlbumFilterState.count > 0: Rectangle {
+                            x: parent.width - self.width + 3px;
+                            y: -4px;
+                            width: 15px;
+                            height: 15px;
+                            border-radius: 7.5px;
+                            background: Theme.accent;
+                            Text {
+                                text: LibAlbumFilterState.count;
+                                color: Theme.accent-text;
+                                font-size: 9px;
+                                font-weight: Typography.bold;
+                                x: (parent.width - self.width) / 2;
+                                y: (parent.height - self.height) / 2;
+                            }
+                        }
+                        filt-ta := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                LibAlbumFilterState.open = !LibAlbumFilterState.open;
+                            }
+                        }
+                    }
+                }
+                // Grid/list view toggle.
+                VerticalLayout {
+                    alignment: center;
+                    ViewToggle {
+                        view-mode: LocalLibraryState.albums-view-mode;
+                        set-view(v) => {
+                            LocalLibraryActions.albums-set-view(v);
                         }
                     }
                 }
@@ -735,11 +837,13 @@ export component LocalLibraryView inherits Rectangle {
                         horizontal-alignment: center;
                     }
                 }
-                // Empty — search matched nothing.
+                // No-match — search or the quality/format/source filter emptied
+                // the visible set (the full set still has albums).
                 if !LocalLibraryState.albums-loading
                     && !LocalLibraryState.albums-load-failed
-                    && LocalLibraryState.albums.length == 0
-                    && LocalLibraryState.albums-search != "": VerticalLayout {
+                    && LocalLibraryState.albums.length > 0
+                    && LocalLibraryState.albums-visible.length == 0
+                    && LocalLibraryState.albums-grouped.length == 0: VerticalLayout {
                     alignment: center;
                     Text {
                         text: @tr("No albums match your search.");
@@ -748,21 +852,14 @@ export component LocalLibraryView inherits Rectangle {
                         horizontal-alignment: center;
                     }
                 }
-                // The grid — self-scrolling, paged on scroll-near-bottom.
+                // Grid / list / grouped — self-scrolling (full-load, derived).
                 if !LocalLibraryState.albums-loading
                     && !LocalLibraryState.albums-load-failed
-                    && LocalLibraryState.albums.length > 0: Rectangle {
+                    && (LocalLibraryState.albums-visible.length > 0
+                        || LocalLibraryState.albums-grouped.length > 0): Rectangle {
                     albums-flick := Flickable {
                         viewport-width: self.width;
                         viewport-height: albums-page.preferred-height;
-                        changed viewport-y => {
-                            if (-self.viewport-y + self.height >= self.viewport-height - 600px
-                                && LocalLibraryState.albums-has-more
-                                && !LocalLibraryState.albums-loading-more
-                                && !LocalLibraryState.albums-loading) {
-                                LocalLibraryActions.albums-load-more();
-                            }
-                        }
                         albums-page := VerticalLayout {
                             width: parent.width;
                             padding-left: 32px;
@@ -772,10 +869,12 @@ export component LocalLibraryView inherits Rectangle {
                             spacing: 0px;
                             alignment: start;
                             AlbumCollectionView {
-                                albums: LocalLibraryState.albums;
-                                is-grouped: false;
-                                view-mode: "grid";
-                                show-source: false;
+                                albums: LocalLibraryState.albums-visible;
+                                grouped: LocalLibraryState.albums-grouped;
+                                is-grouped: LocalLibraryState.albums-group != "off";
+                                view-mode: LocalLibraryState.albums-view-mode;
+                                // List view shows the SOURCE column (local/offline/plex).
+                                show-source: true;
                                 // Local albums aren't Qobuz-favoritable — hide the heart.
                                 show-favorite: false;
                                 // Always-visible source badge (local | qobuz-offline | plex).
@@ -790,15 +889,23 @@ export component LocalLibraryView inherits Rectangle {
                                     LocalLibraryActions.album-action(id, action);
                                 }
                             }
-                            if LocalLibraryState.albums-loading-more: HorizontalLayout {
-                                alignment: center;
-                                padding-top: 16px;
-                                LoadingSpinner { size: 24px; }
-                            }
+                        }
+                    }
+                    // A-Z jump strip (alpha grouping; proportional like the rail).
+                    if LocalLibraryState.albums-group == "alpha"
+                        && LocalLibraryState.albums-alpha.length > 0: AlphaStrip {
+                        x: parent.width - self.width - 2px;
+                        height: 100%;
+                        jumps: LocalLibraryState.albums-alpha;
+                        jump(ord, idx) => {
+                            albums-flick.viewport-y = -(ord / Math.max(1, LocalLibraryState.albums-alpha.length - 1))
+                                * Math.max(0, (albums-flick.viewport-height - albums-flick.height) / 1px) * 1px;
                         }
                     }
                     ListScrollbar {
-                        x: parent.width - self.width - 4px;
+                        x: LocalLibraryState.albums-group == "alpha"
+                            ? parent.width - self.width - 22px
+                            : parent.width - self.width - 4px;
                         width: 14px;
                         height: 100%;
                         viewport-height: albums-flick.viewport-height;
@@ -1560,4 +1667,209 @@ export component LocalLibraryView inherits Rectangle {
             }
         }
     }
+
+    // ===== Albums quality/format/source filter popup (overlay) =====
+    // Sibling of the content VerticalLayout (child of the view Rectangle), so
+    // it FLOATS over the content instead of taking a layout slot.
+    if LibAlbumFilterState.open: Rectangle {
+            // Click-out backdrop (covers the whole view).
+            TouchArea {
+                mouse-cursor: default;
+                clicked => {
+                    LibAlbumFilterState.open = false;
+                }
+            }
+            Rectangle {
+                width: 372px;
+                height: filt-col.preferred-height;
+                x: parent.width - self.width - 36px;
+                y: 92px;
+                background: Theme.surface-card;
+                border-radius: 10px;
+                border-width: 1px;
+                border-color: Theme.border-subtle;
+                drop-shadow-blur: 28px;
+                drop-shadow-color: #00000080;
+                TouchArea { }
+                filt-col := VerticalLayout {
+                    padding: 16px;
+                    spacing: 10px;
+
+                    HorizontalLayout {
+                        Text {
+                            text: @tr("Filter");
+                            color: Theme.text-primary;
+                            font-size: Typography.heading;
+                            font-weight: Typography.semibold;
+                            horizontal-stretch: 1;
+                            vertical-alignment: center;
+                        }
+                        if LibAlbumFilterState.count > 0: Rectangle {
+                            width: clr.preferred-width + 18px;
+                            height: 28px;
+                            border-radius: 6px;
+                            background: clr-ta.has-hover ? Theme.surface-hover : transparent;
+                            clr := Text {
+                                text: @tr("Clear");
+                                color: Theme.accent;
+                                font-size: Typography.legal;
+                                font-weight: Typography.medium;
+                                x: (parent.width - self.width) / 2;
+                                y: (parent.height - self.height) / 2;
+                            }
+                            clr-ta := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => {
+                                    LocalLibraryActions.albums-clear-filter();
+                                }
+                            }
+                        }
+                    }
+
+                    // Quality.
+                    Text {
+                        text: @tr("Quality");
+                        color: Theme.text-muted;
+                        font-size: Typography.legal;
+                        font-weight: Typography.semibold;
+                    }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        FilterChip {
+                            label: @tr("Hi-Res");
+                            active: LibAlbumFilterState.hires;
+                            toggled => {
+                                LibAlbumFilterState.hires = !LibAlbumFilterState.hires;
+                                LocalLibraryActions.albums-filter-changed();
+                            }
+                        }
+                        FilterChip {
+                            label: @tr("CD");
+                            active: LibAlbumFilterState.cd;
+                            toggled => {
+                                LibAlbumFilterState.cd = !LibAlbumFilterState.cd;
+                                LocalLibraryActions.albums-filter-changed();
+                            }
+                        }
+                        FilterChip {
+                            label: @tr("Lossy");
+                            active: LibAlbumFilterState.lossy;
+                            toggled => {
+                                LibAlbumFilterState.lossy = !LibAlbumFilterState.lossy;
+                                LocalLibraryActions.albums-filter-changed();
+                            }
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                    }
+
+                    // Format.
+                    Text {
+                        text: @tr("Format");
+                        color: Theme.text-muted;
+                        font-size: Typography.legal;
+                        font-weight: Typography.semibold;
+                    }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        FilterChip {
+                            label: "FLAC";
+                            active: LibAlbumFilterState.flac;
+                            toggled => {
+                                LibAlbumFilterState.flac = !LibAlbumFilterState.flac;
+                                LocalLibraryActions.albums-filter-changed();
+                            }
+                        }
+                        FilterChip {
+                            label: "ALAC";
+                            active: LibAlbumFilterState.alac;
+                            toggled => {
+                                LibAlbumFilterState.alac = !LibAlbumFilterState.alac;
+                                LocalLibraryActions.albums-filter-changed();
+                            }
+                        }
+                        FilterChip {
+                            label: "APE";
+                            active: LibAlbumFilterState.ape;
+                            toggled => {
+                                LibAlbumFilterState.ape = !LibAlbumFilterState.ape;
+                                LocalLibraryActions.albums-filter-changed();
+                            }
+                        }
+                        FilterChip {
+                            label: "WAV";
+                            active: LibAlbumFilterState.wav;
+                            toggled => {
+                                LibAlbumFilterState.wav = !LibAlbumFilterState.wav;
+                                LocalLibraryActions.albums-filter-changed();
+                            }
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                    }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        FilterChip {
+                            label: "MP3";
+                            active: LibAlbumFilterState.mp3;
+                            toggled => {
+                                LibAlbumFilterState.mp3 = !LibAlbumFilterState.mp3;
+                                LocalLibraryActions.albums-filter-changed();
+                            }
+                        }
+                        FilterChip {
+                            label: "AAC";
+                            active: LibAlbumFilterState.aac;
+                            toggled => {
+                                LibAlbumFilterState.aac = !LibAlbumFilterState.aac;
+                                LocalLibraryActions.albums-filter-changed();
+                            }
+                        }
+                        FilterChip {
+                            label: @tr("Other");
+                            active: LibAlbumFilterState.other;
+                            toggled => {
+                                LibAlbumFilterState.other = !LibAlbumFilterState.other;
+                                LocalLibraryActions.albums-filter-changed();
+                            }
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                    }
+
+                    // Source.
+                    Text {
+                        text: @tr("Source");
+                        color: Theme.text-muted;
+                        font-size: Typography.legal;
+                        font-weight: Typography.semibold;
+                    }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        FilterChip {
+                            label: @tr("Local");
+                            active: LibAlbumFilterState.local;
+                            toggled => {
+                                LibAlbumFilterState.local = !LibAlbumFilterState.local;
+                                LocalLibraryActions.albums-filter-changed();
+                            }
+                        }
+                        FilterChip {
+                            label: @tr("Offline cache");
+                            active: LibAlbumFilterState.offline;
+                            toggled => {
+                                LibAlbumFilterState.offline = !LibAlbumFilterState.offline;
+                                LocalLibraryActions.albums-filter-changed();
+                            }
+                        }
+                        FilterChip {
+                            label: "Plex";
+                            active: LibAlbumFilterState.plex;
+                            toggled => {
+                                LibAlbumFilterState.plex = !LibAlbumFilterState.plex;
+                                LocalLibraryActions.albums-filter-changed();
+                            }
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                    }
+                }
+            }
+        }
 }

@@ -332,7 +332,7 @@ export global DragActions {
 }
 
 // Which content view the shell shows.
-export enum ContentView { home, album, artist, settings, search, musician, label, label-releases, location, favorites, mix, playlist, discover-browse, playlist-manager, offline-manager, local-library }
+export enum ContentView { home, album, artist, settings, search, musician, label, label-releases, location, favorites, mix, playlist, discover-browse, playlist-manager, offline-manager, local-library, local-album }
 
 // In-app toast (transient notification). Mirrors Tauri's toastStore:
 // a single toast at a time (a new one replaces the current), auto-hidden
@@ -401,8 +401,15 @@ export global LocalLibraryState {
     // "artist-asc" | "artist-desc" | "title-asc" | "title-desc"
     //   | "year-desc" | "year-asc"
     in-out property <string> albums-sort: "artist-asc";
-    // "grid" | "list" — the list view toggle lands with the next slice.
+    // "grid" | "list" view toggle.
     in-out property <string> albums-view-mode: "grid";
+    // `albums` is the full mapped set (artwork-index target). `albums-visible`
+    // / `albums-grouped` are the search+filter+sort+group-derived render sets.
+    in property <[AlbumCardItem]> albums-visible: [];
+    in property <[DiscoverSection]> albums-grouped: [];
+    in-out property <string> albums-group: "off";        // off | alpha | artist
+    in property <[AlphaJump]> albums-alpha: [];           // A-Z jumps (alpha group)
+    in property <int> albums-shown: 0;                    // count after filter
 
     // --- Tracks tab (server-paginated flat list — the 16K-freeze fix) ---
     // Group-by / multi-select / per-row play land with the playback slice.
@@ -480,10 +487,16 @@ export global LocalLibraryActions {
     // --- Albums tab ---
     // Re-query page 1 with the current search text (server-side LIKE).
     callback albums-search(string /* query */);
-    // Set the sort key + re-query page 1 (server-side ORDER BY).
+    // Set the sort key + re-derive (in-memory, full-load).
     callback albums-set-sort(string /* sort key */);
-    // Fetch + append the next page (driven by scroll-near-bottom).
-    callback albums-load-more();
+    // Set group mode (off|alpha|artist) + re-derive.
+    callback albums-set-group(string /* mode */);
+    // Set grid|list view.
+    callback albums-set-view(string /* mode */);
+    // A quality/format/source filter toggle changed -> re-derive.
+    callback albums-filter-changed();
+    // Clear all quality/format/source filters.
+    callback albums-clear-filter();
     // Retry after a load error.
     callback albums-retry();
     // Open a local album's detail view (lands with the album-detail slice).
@@ -527,6 +540,68 @@ export global LocalLibraryActions {
     callback artists-search(string /* query */);
     // Select an artist -> filter their albums into the right pane.
     callback artists-select(string /* artist name */);
+}
+
+// Albums tab quality/format/source filter (1:1 with Tauri matchesQualityFilters:
+// OR within each group, AND between groups; an empty group matches all).
+export global LibAlbumFilterState {
+    in-out property <bool> open: false;
+    // Quality.
+    in-out property <bool> hires: false;
+    in-out property <bool> cd: false;
+    in-out property <bool> lossy: false;
+    // Format.
+    in-out property <bool> flac: false;
+    in-out property <bool> alac: false;
+    in-out property <bool> ape: false;
+    in-out property <bool> wav: false;
+    in-out property <bool> mp3: false;
+    in-out property <bool> aac: false;
+    in-out property <bool> other: false;
+    // Source.
+    in-out property <bool> local: false;
+    in-out property <bool> offline: false;
+    in-out property <bool> plex: false;
+    // Active-filter count (Rust-computed) for the toolbar badge.
+    in property <int> count: 0;
+}
+
+// Dedicated Local Library album detail (separate from the Qobuz AlbumView).
+// Reuses TrackRow / NavButtons / QualityBadge internals, but ONLY local
+// actions (play / shuffle / edit tags / add-to-playlist) — no Qobuz chrome.
+// When an album has multiple physical versions (distinct source folders),
+// `versions` drives a picker and the track list shows ONE version (no dups).
+// One physical version of a local album (a distinct source folder). The
+// picker shows the source icon + a quality/format label.
+export struct LocalAlbumVersion {
+    label: string,    // "24-bit / 96 kHz · FLAC"
+    source: string,   // "user" | "qobuz_download" | "plex" | ""
+}
+
+export global LocalAlbumState {
+    in property <string> id;             // metadata group key
+    in property <string> title;
+    in property <string> artist;
+    in property <string> info-line;       // "12 tracks · 48 min"
+    in property <string> quality-tier;    // hires | cd | ""
+    in property <string> quality-detail;  // "24-bit / 96 kHz"
+    in property <string> cover-url;
+    in property <image> cover;
+    in property <bool> loading: false;
+    in property <[TrackItem]> tracks: [];
+    // Versions (distinct copies). >1 -> show the picker. Sorted best-quality
+    // first, so version 0 is the highest-quality copy.
+    in property <[LocalAlbumVersion]> versions: [];
+    in-out property <int> version-index: 0;
+}
+
+export global LocalAlbumActions {
+    callback play-all();
+    callback shuffle();
+    callback edit-tags();
+    callback add-to-playlist();
+    callback play-track(string /* track id */);
+    callback select-version(int);
 }
 
 // ============================ Local Library management ====================

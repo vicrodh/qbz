@@ -422,45 +422,18 @@ fn navigate_album(
 /// the folder/embedded cover from disk. `group_key` is the album's metadata
 /// group key.
 fn navigate_local_album(
-    runtime: Arc<AppRuntime<SlintAdapter>>,
+    _runtime: Arc<AppRuntime<SlintAdapter>>,
     weak: slint::Weak<AppWindow>,
     handle: &tokio::runtime::Handle,
     image_cache: artwork::ImageCache,
     group_key: String,
 ) {
-    let _ = runtime;
-    handle.spawn(async move {
-        let _ = weak.upgrade_in_event_loop(|w| {
-            album::reset_album(&w);
-            w.global::<NavState>().set_view(ContentView::Album);
-        });
-        let gk = group_key.clone();
-        let tracks = tokio::task::spawn_blocking(move || {
-            let mut t = local_library::fetch_album_tracks_blocking(&gk);
-            playback::fill_missing_covers(&mut t);
-            t
-        })
-        .await
-        .unwrap_or_default();
-        let cover = tracks
-            .iter()
-            .find_map(|t| t.artwork_path.clone())
-            .unwrap_or_default();
-        let gk2 = group_key.clone();
-        let _ = weak.upgrade_in_event_loop(move |w| {
-            local_library::apply_local_album(&w, &gk2, tracks);
-        });
-        if !cover.is_empty() {
-            let art = qbz_models::ArtworkRef::LocalFile(cover);
-            if let Some((px, ww, hh)) =
-                artwork::fetch_and_decode_ref(&art, &image_cache, 448).await
-            {
-                let _ = weak.upgrade_in_event_loop(move |w| {
-                    album::apply_artwork(&w, &px, ww, hh);
-                });
-            }
-        }
+    let _ = weak.upgrade_in_event_loop(|w| {
+        w.global::<NavState>().set_view(ContentView::LocalAlbum);
+        update_nav_flags(&w);
     });
+    // The dedicated local album view owns the load (versions + cover).
+    local_library::open_local_album(weak, handle.clone(), image_cache, group_key);
 }
 
 /// Load an artist page and show the artist view, then fetch the portrait.
@@ -693,6 +666,9 @@ fn apply_entry(
         }
         nav::NavEntry::Album(id) => {
             navigate_album(runtime.clone(), weak.clone(), handle, image_cache.clone(), id);
+        }
+        nav::NavEntry::LocalAlbum(gk) => {
+            navigate_local_album(runtime.clone(), weak.clone(), handle, image_cache.clone(), gk);
         }
         nav::NavEntry::Artist(id) => {
             navigate_artist(runtime.clone(), weak.clone(), handle, image_cache.clone(), id);
@@ -4167,9 +4143,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         let weak = window.as_weak();
         let handle = tokio_rt.handle().clone();
+        let image_cache = image_cache.clone();
         window
             .global::<TagEditorActions>()
-            .on_save(move || tag_editor::save_tags(weak.clone(), handle.clone()));
+            .on_save(move || tag_editor::save_tags(weak.clone(), handle.clone(), image_cache.clone()));
     }
     {
         let weak = window.as_weak();
@@ -4224,41 +4201,156 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .on_open_in_browser(move || tag_editor::open_in_browser(weak.clone()));
     }
 
+    // Dedicated Local album view actions (play / shuffle / edit / add / version).
+    {
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window.global::<LocalAlbumActions>().on_play_all(move || {
+            if let Some(w) = weak.upgrade() {
+                let tracks = local_library::current_album_version_tracks(&w);
+                playback::play_local_tracks(runtime.clone(), weak.clone(), handle.clone(), tracks, 0, false);
+            }
+        });
+    }
+    {
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window.global::<LocalAlbumActions>().on_shuffle(move || {
+            if let Some(w) = weak.upgrade() {
+                let tracks = local_library::current_album_version_tracks(&w);
+                playback::play_local_tracks(runtime.clone(), weak.clone(), handle.clone(), tracks, 0, true);
+            }
+        });
+    }
+    {
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window.global::<LocalAlbumActions>().on_play_track(move |id| {
+            if let Some(w) = weak.upgrade() {
+                let tracks = local_library::current_album_version_tracks(&w);
+                let start = id
+                    .parse::<i64>()
+                    .ok()
+                    .and_then(|tid| tracks.iter().position(|t| t.id == tid))
+                    .unwrap_or(0);
+                playback::play_local_tracks(runtime.clone(), weak.clone(), handle.clone(), tracks, start, false);
+            }
+        });
+    }
+    {
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window.global::<LocalAlbumActions>().on_edit_tags(move || {
+            if let Some(w) = weak.upgrade() {
+                let idx = w.global::<LocalAlbumState>().get_version_index();
+                if let Some(dir) = local_library::album_version_dir(idx) {
+                    tag_editor::open_tag_editor(weak.clone(), handle.clone(), dir.clone(), dir);
+                }
+            }
+        });
+    }
+    {
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window.global::<LocalAlbumActions>().on_add_to_playlist(move || {
+            if let Some(w) = weak.upgrade() {
+                let tracks = local_library::current_album_version_tracks(&w);
+                let ids: Vec<String> = tracks
+                    .iter()
+                    .filter(|t| t.source.as_deref() != Some("plex"))
+                    .map(|t| t.id.to_string())
+                    .collect();
+                if !ids.is_empty() {
+                    playlist_picker::open_multi(&w, &ids, true);
+                    let runtime = runtime.clone();
+                    let weak2 = weak.clone();
+                    handle.spawn(async move {
+                        let pls = playlist_picker::load(&runtime).await;
+                        let _ = weak2.upgrade_in_event_loop(move |w| {
+                            playlist_picker::apply(&w, pls);
+                        });
+                    });
+                }
+            }
+        });
+    }
+    {
+        let weak = window.as_weak();
+        window.global::<LocalAlbumActions>().on_select_version(move |i| {
+            if let Some(w) = weak.upgrade() {
+                local_library::apply_album_version(&w, i);
+            }
+        });
+    }
+
     // Local Library — Albums tab controls (search / sort re-query page 1;
     // load-more pages on scroll; retry) + the shared AlbumCollectionView's
     // open / per-card actions (album-detail + playback land with later slices).
     {
         let weak = window.as_weak();
-        let handle = tokio_rt.handle().clone();
-        let image_cache = image_cache.clone();
         window
             .global::<LocalLibraryActions>()
             .on_albums_search(move |_query| {
-                // The query is two-way bound to albums-search; reload page 1.
-                local_library::reload_albums(weak.clone(), handle.clone(), image_cache.clone());
+                // Two-way bound to albums-search; re-derive in memory (full-load).
+                if let Some(w) = weak.upgrade() {
+                    local_library::derive_albums(&w);
+                }
             });
     }
     {
         let weak = window.as_weak();
-        let handle = tokio_rt.handle().clone();
-        let image_cache = image_cache.clone();
         window
             .global::<LocalLibraryActions>()
             .on_albums_set_sort(move |sort| {
                 if let Some(w) = weak.upgrade() {
                     w.global::<LocalLibraryState>().set_albums_sort(sort);
+                    local_library::derive_albums(&w);
                 }
-                local_library::reload_albums(weak.clone(), handle.clone(), image_cache.clone());
             });
     }
     {
         let weak = window.as_weak();
-        let handle = tokio_rt.handle().clone();
-        let image_cache = image_cache.clone();
         window
             .global::<LocalLibraryActions>()
-            .on_albums_load_more(move || {
-                local_library::load_more_albums(weak.clone(), handle.clone(), image_cache.clone());
+            .on_albums_set_group(move |mode| {
+                if let Some(w) = weak.upgrade() {
+                    w.global::<LocalLibraryState>().set_albums_group(mode);
+                    local_library::derive_albums(&w);
+                }
+            });
+    }
+    {
+        let weak = window.as_weak();
+        window
+            .global::<LocalLibraryActions>()
+            .on_albums_set_view(move |mode| {
+                if let Some(w) = weak.upgrade() {
+                    w.global::<LocalLibraryState>().set_albums_view_mode(mode);
+                }
+            });
+    }
+    {
+        let weak = window.as_weak();
+        window
+            .global::<LocalLibraryActions>()
+            .on_albums_filter_changed(move || {
+                if let Some(w) = weak.upgrade() {
+                    local_library::derive_albums(&w);
+                }
+            });
+    }
+    {
+        let weak = window.as_weak();
+        window
+            .global::<LocalLibraryActions>()
+            .on_albums_clear_filter(move || {
+                if let Some(w) = weak.upgrade() {
+                    local_library::clear_album_filter(&w);
+                }
             });
     }
     {
@@ -4279,6 +4371,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         window
             .global::<LocalLibraryActions>()
             .on_open_album(move |id| {
+                nav::record(nav::NavEntry::LocalAlbum(id.to_string()));
                 navigate_local_album(
                     runtime.clone(),
                     weak.clone(),

@@ -54,6 +54,9 @@ pub enum NavEntry {
     /// OfflineCacheManagerView). Session-scoped; no payload.
     OfflineManager,
     Album(String),
+    /// A Local Library album detail page (dedicated view, separate from the
+    /// Qobuz Album view); the string is the metadata group key.
+    LocalAlbum(String),
     Artist(String),
     Settings,
     /// A search results page; the string is the query.

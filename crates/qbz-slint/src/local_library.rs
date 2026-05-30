@@ -79,10 +79,7 @@ impl LibTab {
 // the result, covers load from the local filesystem via the source-aware
 // artwork pipeline.
 
-/// Albums fetched per page (chunk). Mirrors Tauri's chunked store (100).
-const ALBUMS_PAGE: u64 = 100;
-
-/// Generation guard, bumped on every page-1 (re)load. A stale in-flight
+/// Generation guard, bumped on every (re)load. A stale in-flight
 /// fetch (older search/sort) is discarded on apply, and an in-flight
 /// load-more is dropped once a reload supersedes it.
 static ALBUMS_GEN: AtomicU64 = AtomicU64::new(0);
@@ -165,169 +162,304 @@ fn local_quality(bit_depth: Option<u32>, sample_rate_hz: f64) -> (String, String
     )
 }
 
-/// Map the toolbar sort key to the DB's validated (sort_by, sort_dir).
-fn sort_params(sort: &str) -> (&'static str, &'static str) {
-    match sort {
-        "title-asc" => ("title", "asc"),
-        "title-desc" => ("title", "desc"),
-        "year-desc" => ("year", "desc"),
-        "year-asc" => ("year", "asc"),
-        "artist-desc" => ("artist", "desc"),
-        // Covers all six toolbar options; unknown input defaults to artist-asc.
-        _ => ("artist", "asc"),
+/// The full metadata-grouped LocalAlbum set — the FILTER SOURCE (the quality/
+/// format/source filters need raw bit_depth/format/source, which AlbumCardItem
+/// doesn't carry). Loaded once; `derive_albums` filters it by id.
+static LOCAL_ALBUMS: LazyLock<Mutex<Vec<qbz_library::LocalAlbum>>> =
+    LazyLock::new(|| Mutex::new(Vec::new()));
+
+fn local_albums() -> std::sync::MutexGuard<'static, Vec<qbz_library::LocalAlbum>> {
+    LOCAL_ALBUMS.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// Active quality/format/source filter (read once per derive from the global).
+#[derive(Clone, Copy, Default)]
+struct AlbumFilter {
+    hires: bool,
+    cd: bool,
+    lossy: bool,
+    flac: bool,
+    alac: bool,
+    ape: bool,
+    wav: bool,
+    mp3: bool,
+    aac: bool,
+    other: bool,
+    local: bool,
+    offline: bool,
+    plex: bool,
+}
+
+fn read_album_filter(window: &AppWindow) -> AlbumFilter {
+    let f = window.global::<crate::LibAlbumFilterState>();
+    AlbumFilter {
+        hires: f.get_hires(),
+        cd: f.get_cd(),
+        lossy: f.get_lossy(),
+        flac: f.get_flac(),
+        alac: f.get_alac(),
+        ape: f.get_ape(),
+        wav: f.get_wav(),
+        mp3: f.get_mp3(),
+        aac: f.get_aac(),
+        other: f.get_other(),
+        local: f.get_local(),
+        offline: f.get_offline(),
+        plex: f.get_plex(),
     }
 }
 
-/// Fetch one albums page off the UI thread (rusqlite is blocking). Returns
-/// (cards, total, has_more), or None if the DB can't be opened. Returns the
-/// plain `AlbumCard` (Send) — conversion to `AlbumCardItem` is UI-thread.
-fn fetch_albums_page(
-    offset: u64,
-    search: String,
-    sort: String,
-) -> Option<(Vec<crate::album_map::AlbumCard>, u64, bool)> {
-    let (sort_by, sort_dir) = sort_params(&sort);
-    let trimmed = search.trim();
-    let search_opt = if trimmed.is_empty() {
-        None
-    } else {
-        Some(trimmed)
-    };
-    crate::library_db::with_db(|db| {
-        let page = db.get_albums_metadata_page(
-            offset,
-            ALBUMS_PAGE,
-            search_opt,
-            sort_by,
-            sort_dir,
-            // include_qobuz_downloads: mirrors the `show_in_library`
-            // download-setting default (true). The user toggle lands with
-            // the Settings > Local Library integration.
-            true,
-            // exclude_network_folders / plex_cache_path: offline-network
-            // filtering and Plex are their own later slices.
-            false,
-            None,
-        )?;
-        let total = page.total;
-        let has_more = offset + (page.albums.len() as u64) < total;
-        let cards: Vec<crate::album_map::AlbumCard> = page
-            .albums
-            .into_iter()
-            .map(|a| {
-                let mut card = map_local_album(a);
-                // Offline-cached / folder albums sometimes have no backfilled
-                // artwork_path though a cover.jpg sits in the track folder —
-                // resolve it so the cover that exists on disk actually shows.
-                if card.artwork_url.is_empty() {
-                    if let Some(cover) = db.resolve_album_cover_fallback(&card.id) {
-                        card.artwork_url = cover;
-                    }
-                }
-                card
-            })
-            .collect();
-        Ok((cards, total, has_more))
-    })
+fn album_filter_count(f: &AlbumFilter) -> i32 {
+    [
+        f.hires, f.cd, f.lossy, f.flac, f.alac, f.ape, f.wav, f.mp3, f.aac, f.other, f.local,
+        f.offline, f.plex,
+    ]
+    .iter()
+    .filter(|b| **b)
+    .count() as i32
 }
 
-/// Build local-cover artwork jobs for a page of cards. The job url carries
-/// the local file path; `spawn_local_loads` decodes via `ArtworkRef::LocalFile`.
-/// `gen` is the albums generation at fetch time — a reload bumps it, so a
-/// cover decoded after the model was replaced is dropped on apply.
-fn album_artwork_jobs(
-    cards: &[crate::album_map::AlbumCard],
-    offset: usize,
-    gen: u64,
-) -> Vec<ArtworkJob> {
+/// 1:1 with Tauri `matchesQualityFilters`: OR within each group, AND between
+/// groups; an empty group passes everything.
+fn album_matches_filters(a: &qbz_library::LocalAlbum, f: &AlbumFilter) -> bool {
+    let format = a.format.to_string().to_lowercase();
+    let lossless = matches!(
+        format.as_str(),
+        "flac" | "wav" | "aiff" | "alac" | "ape" | "dsd" | "dsf" | "dff"
+    );
+    let lossy = matches!(format.as_str(), "mp3" | "aac" | "m4a" | "ogg" | "opus" | "wma");
+    let bit_depth = a.bit_depth.unwrap_or(16);
+
+    let q_active = f.hires || f.cd || f.lossy;
+    let passes_q = !q_active
+        || (f.hires && lossless && (bit_depth >= 24 || a.sample_rate > 48000.0))
+        || (f.cd && lossless && bit_depth <= 16 && a.sample_rate <= 48000.0)
+        || (f.lossy && lossy);
+
+    let fmt_active = f.flac || f.alac || f.ape || f.wav || f.mp3 || f.aac || f.other;
+    let passes_f = !fmt_active
+        || (f.flac && format == "flac")
+        || (f.alac && (format == "alac" || format == "m4a"))
+        || (f.ape && format == "ape")
+        || (f.wav && (format == "wav" || format == "wave"))
+        || (f.mp3 && format == "mp3")
+        || (f.aac && (format == "aac" || format == "m4a"))
+        || (f.other
+            && !matches!(
+                format.as_str(),
+                "flac" | "alac" | "ape" | "wav" | "wave" | "mp3" | "aac" | "m4a"
+            ));
+
+    let s_active = f.local || f.offline || f.plex;
+    let src = a.source.as_str();
+    let passes_s = !s_active
+        || (f.local && (src == "user" || src.is_empty()))
+        || (f.offline && src == "qobuz_download")
+        || (f.plex && src == "plex");
+
+    passes_q && passes_f && passes_s
+}
+
+/// Build LocalAlbumCard artwork jobs for the full `albums` set (gen-stamped).
+fn album_artwork_jobs(cards: &[crate::album_map::AlbumCard], gen: u64) -> Vec<ArtworkJob> {
     cards
         .iter()
         .enumerate()
         .filter(|(_, c)| !c.artwork_url.is_empty())
         .map(|(i, c)| ArtworkJob {
-            target: ArtworkTarget::LocalAlbumCard {
-                index: offset + i,
-                gen,
-            },
+            target: ArtworkTarget::LocalAlbumCard { index: i, gen },
             url: c.artwork_url.clone(),
         })
         .collect()
 }
 
-/// Replace the albums set with page 1 (UI thread). Converts the plain cards
-/// to `AlbumCardItem` here, where the non-Send `slint::Image` is allowed.
-fn apply_albums(
-    window: &AppWindow,
-    cards: Vec<crate::album_map::AlbumCard>,
-    total: u64,
-    has_more: bool,
-) {
-    let items: Vec<AlbumCardItem> = cards.into_iter().map(crate::album_map::to_item).collect();
+/// Set a freshly-decoded local-album cover (by id) on every rendered model:
+/// the full `albums` set + `albums-visible` + each `albums-grouped` section.
+pub fn set_local_album_artwork(window: &AppWindow, id: &str, image: slint::Image) {
     let s = window.global::<LocalLibraryState>();
-    let n = items.len() as i32;
-    s.set_albums(ModelRc::new(VecModel::from(items)));
-    s.set_albums_total(total as i32);
-    s.set_album_count(total as i32);
-    s.set_albums_next_offset(n);
-    s.set_albums_has_more(has_more);
-    s.set_albums_loading(false);
-    s.set_albums_loading_more(false);
-    s.set_albums_load_failed(false);
+    let set_in = |m: &ModelRc<AlbumCardItem>| {
+        for i in 0..m.row_count() {
+            if let Some(mut it) = m.row_data(i) {
+                if it.id.as_str() == id {
+                    it.artwork = image.clone();
+                    m.set_row_data(i, it);
+                    break;
+                }
+            }
+        }
+    };
+    set_in(&s.get_albums());
+    set_in(&s.get_albums_visible());
+    let grouped = s.get_albums_grouped();
+    for gi in 0..grouped.row_count() {
+        if let Some(sec) = grouped.row_data(gi) {
+            set_in(&sec.albums);
+        }
+    }
 }
 
-/// Append a fetched page onto the existing grid (UI thread).
-fn append_albums(
-    window: &AppWindow,
-    cards: Vec<crate::album_map::AlbumCard>,
-    total: u64,
-    has_more: bool,
-) {
-    let new_items: Vec<AlbumCardItem> =
-        cards.into_iter().map(crate::album_map::to_item).collect();
+/// Re-derive the rendered Albums sets (search + quality/format/source filter +
+/// sort + group + A-Z) from the full `albums` card set, filtered by id against
+/// the raw LocalAlbum cache. Mirrors `derive_folders` plus the filter.
+pub fn derive_albums(window: &AppWindow) {
     let s = window.global::<LocalLibraryState>();
-    let model = s.get_albums();
-    let mut combined: Vec<AlbumCardItem> = (0..model.row_count())
-        .filter_map(|i| model.row_data(i))
+    let query_owned = s.get_albums_search().to_lowercase();
+    let query = query_owned.trim();
+    let sort = s.get_albums_sort().to_string();
+    let group = s.get_albums_group().to_string();
+    let filter = read_album_filter(window);
+    window
+        .global::<crate::LibAlbumFilterState>()
+        .set_count(album_filter_count(&filter));
+
+    let matching: std::collections::HashSet<String> = {
+        let cache = local_albums();
+        cache
+            .iter()
+            .filter(|a| {
+                (query.is_empty()
+                    || a.title.to_lowercase().contains(query)
+                    || a.artist.to_lowercase().contains(query)
+                    || a.all_artists.to_lowercase().contains(query))
+                    && album_matches_filters(a, &filter)
+            })
+            .map(|a| a.id.clone())
+            .collect()
+    };
+
+    let all = s.get_albums();
+    let mut filtered: Vec<AlbumCardItem> = (0..all.row_count())
+        .filter_map(|i| all.row_data(i))
+        .filter(|c| matching.contains(&c.id.to_string()))
         .collect();
-    let added = new_items.len() as i32;
-    combined.extend(new_items);
-    s.set_albums(ModelRc::new(VecModel::from(combined)));
-    s.set_albums_next_offset(s.get_albums_next_offset() + added);
-    s.set_albums_total(total as i32);
-    s.set_album_count(total as i32);
-    s.set_albums_has_more(has_more);
-    s.set_albums_loading_more(false);
+    crate::album_map::sort_album_items(&mut filtered, &sort);
+    s.set_albums_shown(filtered.len() as i32);
+
+    let empty_sections = || ModelRc::new(VecModel::from(Vec::<DiscoverSection>::new()));
+    if group == "off" {
+        s.set_albums_visible(ModelRc::new(VecModel::from(filtered)));
+        s.set_albums_grouped(empty_sections());
+        s.set_albums_alpha(ModelRc::new(VecModel::from(Vec::<AlphaJump>::new())));
+        return;
+    }
+
+    let mut map: Vec<(String, Vec<AlbumCardItem>)> = Vec::new();
+    let mut index: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    for item in filtered {
+        let key = if group == "artist" {
+            let a = item.artist.to_string();
+            if a.is_empty() {
+                "Unknown".to_string()
+            } else {
+                a
+            }
+        } else {
+            folder_alpha_key(item.title.as_str())
+        };
+        let idx = *index.entry(key.clone()).or_insert_with(|| {
+            map.push((key.clone(), Vec::new()));
+            map.len() - 1
+        });
+        map[idx].1.push(item);
+    }
+    map.sort_by(|(a, _), (b, _)| match (a == "#", b == "#") {
+        (true, false) => std::cmp::Ordering::Greater,
+        (false, true) => std::cmp::Ordering::Less,
+        _ => a.to_lowercase().cmp(&b.to_lowercase()),
+    });
+    let jumps: Vec<AlphaJump> = map
+        .iter()
+        .enumerate()
+        .map(|(i, (k, _))| AlphaJump {
+            letter: k.clone().into(),
+            index: i as i32,
+        })
+        .collect();
+    let sections: Vec<DiscoverSection> = map
+        .into_iter()
+        .map(|(key, items)| DiscoverSection {
+            title: key.into(),
+            endpoint: "".into(),
+            albums: ModelRc::new(VecModel::from(items)),
+        })
+        .collect();
+    s.set_albums_grouped(ModelRc::new(VecModel::from(sections)));
+    s.set_albums_alpha(ModelRc::new(VecModel::from(jumps)));
+    s.set_albums_visible(ModelRc::new(VecModel::from(Vec::<AlbumCardItem>::new())));
 }
 
-/// Spawn the page-1 fetch and apply it (gen-guarded). Reads search/sort +
-/// spawns from the UI thread; the caller has set `albums-loading` + `gen`.
-fn spawn_albums_page_load(
+/// Clear all quality/format/source filters, then re-derive.
+pub fn clear_album_filter(window: &AppWindow) {
+    let f = window.global::<crate::LibAlbumFilterState>();
+    f.set_hires(false);
+    f.set_cd(false);
+    f.set_lossy(false);
+    f.set_flac(false);
+    f.set_alac(false);
+    f.set_ape(false);
+    f.set_wav(false);
+    f.set_mp3(false);
+    f.set_aac(false);
+    f.set_other(false);
+    f.set_local(false);
+    f.set_offline(false);
+    f.set_plex(false);
+    derive_albums(window);
+}
+
+/// Full-load the metadata-grouped albums off the UI thread (mapping + cover
+/// fallback resolution all happen on the blocking thread), store the raw cache
+/// + the mapped card set, then derive + spawn covers on the UI thread.
+fn spawn_albums_load(
     window: &AppWindow,
     handle: tokio::runtime::Handle,
     image_cache: ImageCache,
     gen: u64,
 ) {
-    let s = window.global::<LocalLibraryState>();
-    let search = s.get_albums_search().to_string();
-    let sort = s.get_albums_sort().to_string();
     let weak = window.as_weak();
     handle.spawn(async move {
-        let result = tokio::task::spawn_blocking(move || fetch_albums_page(0, search, sort))
+        let loaded: Option<(Vec<qbz_library::LocalAlbum>, Vec<crate::album_map::AlbumCard>)> =
+            tokio::task::spawn_blocking(|| {
+                crate::library_db::with_db(|db| {
+                    let albums = db.get_albums_metadata_grouped(false, true, false)?;
+                    let cards: Vec<crate::album_map::AlbumCard> = albums
+                        .iter()
+                        .map(|a| {
+                            let mut card = map_local_album(a.clone());
+                            if card.artwork_url.is_empty() {
+                                if let Some(cover) = db.resolve_album_cover_fallback(&card.id) {
+                                    card.artwork_url = cover;
+                                }
+                            }
+                            card
+                        })
+                        .collect();
+                    Ok((albums, cards))
+                })
+            })
             .await
             .ok()
             .flatten();
+
         let _ = weak.upgrade_in_event_loop(move |w| {
             if ALBUMS_GEN.load(Ordering::SeqCst) != gen {
                 return;
             }
-            match result {
-                Some((cards, total, has_more)) => {
-                    let jobs = album_artwork_jobs(&cards, 0, gen);
-                    apply_albums(&w, cards, total, has_more);
+            let s = w.global::<LocalLibraryState>();
+            match loaded {
+                Some((albums, cards)) => {
+                    *local_albums() = albums;
+                    let jobs = album_artwork_jobs(&cards, gen);
+                    let items: Vec<AlbumCardItem> =
+                        cards.into_iter().map(crate::album_map::to_item).collect();
+                    s.set_albums(ModelRc::new(VecModel::from(items.clone())));
+                    s.set_album_count(items.len() as i32);
+                    s.set_albums_loading(false);
+                    s.set_albums_load_failed(false);
+                    derive_albums(&w);
                     crate::artwork::spawn_local_loads(jobs, w.as_weak(), image_cache);
                 }
                 None => {
-                    let s = w.global::<LocalLibraryState>();
                     s.set_albums_loading(false);
                     s.set_albums_load_failed(true);
                 }
@@ -336,8 +468,7 @@ fn spawn_albums_page_load(
     });
 }
 
-/// (Re)load page 1 with the current search + sort. Bumps the generation so
-/// any older in-flight fetch is discarded on arrival.
+/// (Re)load the full album set, bumping the generation guard.
 pub fn reload_albums(
     weak: slint::Weak<AppWindow>,
     handle: tokio::runtime::Handle,
@@ -348,12 +479,11 @@ pub fn reload_albums(
         let s = w.global::<LocalLibraryState>();
         s.set_albums_loading(true);
         s.set_albums_load_failed(false);
-        spawn_albums_page_load(&w, handle, image_cache, gen);
+        spawn_albums_load(&w, handle, image_cache, gen);
     });
 }
 
-/// Load page 1 only if the albums set is empty and not already loading — the
-/// lazy per-tab fetch on first visit (re-entry keeps the loaded set + scroll).
+/// Load on first visit only (re-entry keeps the set + derived views).
 pub fn ensure_albums_loaded(
     weak: slint::Weak<AppWindow>,
     handle: tokio::runtime::Handle,
@@ -365,55 +495,8 @@ pub fn ensure_albums_loaded(
             let gen = ALBUMS_GEN.fetch_add(1, Ordering::SeqCst) + 1;
             s.set_albums_loading(true);
             s.set_albums_load_failed(false);
-            spawn_albums_page_load(&w, handle, image_cache, gen);
+            spawn_albums_load(&w, handle, image_cache, gen);
         }
-    });
-}
-
-/// Fetch + append the next page (driven by scroll-near-bottom). No-ops while
-/// a page is in flight or the catalog is exhausted; the in-flight result is
-/// dropped if a reload supersedes it.
-pub fn load_more_albums(
-    weak: slint::Weak<AppWindow>,
-    handle: tokio::runtime::Handle,
-    image_cache: ImageCache,
-) {
-    let _ = weak.upgrade_in_event_loop(move |w| {
-        let s = w.global::<LocalLibraryState>();
-        if !s.get_albums_has_more() || s.get_albums_loading_more() || s.get_albums_loading() {
-            return;
-        }
-        let offset = s.get_albums_next_offset().max(0) as u64;
-        let search = s.get_albums_search().to_string();
-        let sort = s.get_albums_sort().to_string();
-        let gen = ALBUMS_GEN.load(Ordering::SeqCst);
-        s.set_albums_loading_more(true);
-        let weak2 = w.as_weak();
-        handle.spawn(async move {
-            let result =
-                tokio::task::spawn_blocking(move || fetch_albums_page(offset, search, sort))
-                    .await
-                    .ok()
-                    .flatten();
-            let _ = weak2.upgrade_in_event_loop(move |w| {
-                let s = w.global::<LocalLibraryState>();
-                if ALBUMS_GEN.load(Ordering::SeqCst) != gen {
-                    s.set_albums_loading_more(false);
-                    return;
-                }
-                match result {
-                    Some((cards, total, has_more)) => {
-                        let base = s.get_albums().row_count();
-                        let jobs = album_artwork_jobs(&cards, base, gen);
-                        append_albums(&w, cards, total, has_more);
-                        crate::artwork::spawn_local_loads(jobs, w.as_weak(), image_cache);
-                    }
-                    None => {
-                        s.set_albums_loading_more(false);
-                    }
-                }
-            });
-        });
     });
 }
 
@@ -777,22 +860,163 @@ fn fmt_album_duration(secs: u64) -> String {
     }
 }
 
-/// Populate `AlbumState` from a local album's tracks (UI thread). The cover
-/// is loaded separately by the caller; `is-local` is set so playback routes
-/// to local. `group_key` is the metadata group key.
-pub fn apply_local_album(
-    window: &AppWindow,
-    group_key: &str,
-    tracks: Vec<qbz_library::LocalTrack>,
+// The open local album's versions (label, tracks) — a "version" is a distinct
+// physical copy (= a distinct source directory). Cached so the version picker
+// switches without a DB round-trip. Splitting by directory is what stops two
+// copies of the same album from merging into a duplicated track list.
+static ALBUM_VERSIONS: LazyLock<Mutex<Vec<(String, Vec<qbz_library::LocalTrack>)>>> =
+    LazyLock::new(|| Mutex::new(Vec::new()));
+
+fn album_versions() -> std::sync::MutexGuard<'static, Vec<(String, Vec<qbz_library::LocalTrack>)>> {
+    ALBUM_VERSIONS.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// Quality rank for ordering versions (hi-res first).
+fn version_rank(t: &qbz_library::LocalTrack) -> (u32, u64) {
+    (t.bit_depth.unwrap_or(0), t.sample_rate as u64)
+}
+
+/// A version's picker label: "24-bit / 96 kHz · FLAC" (quality + format).
+fn version_label(tracks: &[qbz_library::LocalTrack]) -> String {
+    match tracks.first() {
+        Some(t) => {
+            let (detail, _) = local_quality(t.bit_depth, t.sample_rate);
+            let fmt = t.format.to_string();
+            if detail.is_empty() {
+                fmt
+            } else {
+                format!("{detail} · {fmt}")
+            }
+        }
+        None => String::new(),
+    }
+}
+
+/// A version's source ("user" | "qobuz_download" | "plex" | "") — drives the
+/// picker's source icon.
+fn version_source(tracks: &[qbz_library::LocalTrack]) -> String {
+    tracks
+        .first()
+        .and_then(|t| t.source.clone())
+        .unwrap_or_default()
+}
+
+/// Load a local album (dedicated LocalAlbumView), splitting its tracks into
+/// VERSIONS by source directory so multiple copies don't merge into a
+/// duplicate-track list. Applies the best-quality version first; the picker
+/// switches versions in place. Does NOT touch nav — the caller sets the view.
+pub fn open_local_album(
+    weak: slint::Weak<AppWindow>,
+    handle: tokio::runtime::Handle,
+    image_cache: ImageCache,
+    group_key: String,
 ) {
+    let _ = weak.upgrade_in_event_loop(|w| {
+        let s = w.global::<crate::LocalAlbumState>();
+        s.set_loading(true);
+        s.set_tracks(ModelRc::new(VecModel::from(Vec::<TrackItem>::new())));
+        s.set_versions(ModelRc::new(VecModel::from(Vec::<crate::LocalAlbumVersion>::new())));
+        s.set_version_index(0);
+        s.set_cover(slint::Image::default());
+    });
+    let gk = group_key.clone();
+    handle.spawn(async move {
+        let tracks = tokio::task::spawn_blocking(move || {
+            let mut t = fetch_album_tracks_blocking(&gk);
+            // Backfill covers from cover.jpg/folder.jpg on disk (the DB may not
+            // have an artwork_path even when a cover sits in the folder).
+            crate::playback::fill_missing_covers(&mut t);
+            t
+        })
+        .await
+        .unwrap_or_default();
+        // Group by source directory (LocalTrack.album_group_key = the dir key).
+        let mut groups: std::collections::HashMap<String, Vec<qbz_library::LocalTrack>> =
+            std::collections::HashMap::new();
+        let mut order: Vec<String> = Vec::new();
+        for t in tracks {
+            let key = t.album_group_key.clone();
+            if !groups.contains_key(&key) {
+                order.push(key.clone());
+            }
+            groups.entry(key).or_default().push(t);
+        }
+        let mut versions: Vec<(String, Vec<qbz_library::LocalTrack>)> = order
+            .into_iter()
+            .filter_map(|k| {
+                groups.remove(&k).map(|mut v| {
+                    v.sort_by_key(|t| (t.disc_number.unwrap_or(1), t.track_number.unwrap_or(0)));
+                    (k, v)
+                })
+            })
+            .collect();
+        // Best quality first (so the default selection is the highest-res copy).
+        versions.sort_by(|a, b| {
+            let qa = a.1.iter().map(version_rank).max().unwrap_or((0, 0));
+            let qb = b.1.iter().map(version_rank).max().unwrap_or((0, 0));
+            qb.cmp(&qa)
+        });
+        // (label, source) per version — best-quality first (already sorted).
+        let infos: Vec<(String, String)> = versions
+            .iter()
+            .map(|(_, v)| (version_label(v), version_source(v)))
+            .collect();
+        // Album cover = the FIRST version (best quality first) that has a cover
+        // on disk; fall through versions; else empty (placeholder). Album-level
+        // + stable across version switches.
+        let album_cover = versions
+            .iter()
+            .find_map(|(_, v)| {
+                v.iter()
+                    .find_map(|t| t.artwork_path.clone().filter(|p| !p.is_empty()))
+            })
+            .unwrap_or_default();
+        *album_versions() = versions;
+        let _ = weak.upgrade_in_event_loop(move |w| {
+            let s = w.global::<crate::LocalAlbumState>();
+            s.set_id(group_key.into());
+            let vlist: Vec<crate::LocalAlbumVersion> = infos
+                .into_iter()
+                .map(|(label, source)| crate::LocalAlbumVersion {
+                    label: label.into(),
+                    source: source.into(),
+                })
+                .collect();
+            s.set_versions(ModelRc::new(VecModel::from(vlist)));
+            s.set_loading(false);
+            s.set_cover_url(album_cover.clone().into());
+            apply_album_version(&w, 0);
+            // Decode the album cover once (stable across version switches).
+            if !album_cover.is_empty() {
+                crate::artwork::spawn_local_loads(
+                    vec![ArtworkJob {
+                        target: ArtworkTarget::LocalAlbumViewCover,
+                        url: album_cover,
+                    }],
+                    w.as_weak(),
+                    image_cache,
+                );
+            }
+        });
+    });
+}
+
+/// Apply version `index` of the open album to LocalAlbumState (tracks, header,
+/// quality). Reads the cached versions; no DB round-trip. The cover is
+/// album-level (set once by `open_local_album`), so it is NOT touched here.
+pub fn apply_album_version(window: &AppWindow, index: i32) {
+    let versions = album_versions();
+    let Some((_, tracks)) = versions.get(index as usize) else {
+        return;
+    };
+    let s = window.global::<crate::LocalAlbumState>();
+    let group_key = s.get_id().to_string();
     let title = tracks
         .first()
         .map(|t| t.album_group_title.clone())
         .unwrap_or_default();
-    // Album artist: the common album-artist, else "Various Artists".
-    let artist_of = |t: &qbz_library::LocalTrack| {
-        t.album_artist.clone().unwrap_or_else(|| t.artist.clone())
-    };
+    let artist_of =
+        |t: &qbz_library::LocalTrack| t.album_artist.clone().unwrap_or_else(|| t.artist.clone());
     let artist = match tracks.first() {
         Some(first) => {
             let name = artist_of(first);
@@ -804,16 +1028,8 @@ pub fn apply_local_album(
         }
         None => String::new(),
     };
-    let cover = tracks
-        .iter()
-        .find_map(|t| t.artwork_path.clone())
-        .unwrap_or_default();
-    let cover_url = if cover.is_empty() {
-        String::new()
-    } else {
-        format!("file://{cover}")
-    };
-    // Quality from the highest-resolution track in the album.
+    let total_secs: u64 = tracks.iter().map(|t| t.duration_secs).sum();
+    let info_line = format!("{} tracks · {}", tracks.len(), fmt_album_duration(total_secs));
     let (tier, detail) = match tracks.iter().max_by_key(|t| t.bit_depth.unwrap_or(0)) {
         Some(t) => {
             let tier = match t.bit_depth {
@@ -825,41 +1041,36 @@ pub fn apply_local_album(
         }
         None => (String::new(), String::new()),
     };
-    let total_secs: u64 = tracks.iter().map(|t| t.duration_secs).sum();
-    let info_line = format!("{} tracks · {}", tracks.len(), fmt_album_duration(total_secs));
-    // Album source for the tag-editor pencil gate (hidden for Plex). Computed
-    // before `tracks` is consumed below.
-    let source = tracks
-        .first()
-        .and_then(|t| t.source.clone())
-        .unwrap_or_default();
     let items: Vec<TrackItem> = tracks
-        .into_iter()
+        .iter()
+        .cloned()
         .map(|t| {
             let mut it = map_local_track(t);
-            it.album_id = group_key.into();
+            it.album_id = group_key.clone().into();
             it
         })
         .collect();
-
-    let s = window.global::<crate::AlbumState>();
-    s.set_id(group_key.into());
-    s.set_is_local(true);
-    s.set_source(source.into());
     s.set_title(title.into());
     s.set_artist(artist.into());
-    s.set_artist_id("".into());
-    s.set_artwork_url(cover_url.into());
-    s.set_has_custom_cover(false);
+    s.set_info_line(info_line.into());
     s.set_quality_tier(tier.into());
     s.set_quality_detail(detail.into());
-    s.set_info_line(info_line.into());
-    s.set_label("".into());
-    s.set_description("".into());
-    s.set_description_short("".into());
-    s.set_awards(ModelRc::new(VecModel::from(Vec::<slint::SharedString>::new())));
     s.set_tracks(ModelRc::new(VecModel::from(items)));
-    s.set_loading(false);
+    s.set_version_index(index);
+}
+
+/// The source directory of version `index` (for the tag editor — a real dir).
+pub fn album_version_dir(index: i32) -> Option<String> {
+    album_versions().get(index as usize).map(|(dir, _)| dir.clone())
+}
+
+/// The currently-selected album version's tracks (play / shuffle / add / edit).
+pub fn current_album_version_tracks(window: &AppWindow) -> Vec<qbz_library::LocalTrack> {
+    let idx = window.global::<crate::LocalAlbumState>().get_version_index();
+    album_versions()
+        .get(idx as usize)
+        .map(|(_, v)| v.clone())
+        .unwrap_or_default()
 }
 
 // ============================ Folders (flat) ==============================
@@ -1604,14 +1815,29 @@ pub fn ensure_artists_loaded(
                 }
                 crate::artwork::spawn_local_loads(local_jobs, w.as_weak(), image_cache.clone());
                 crate::artwork::spawn_loads(http_jobs, w.as_weak(), image_cache.clone());
-                // Kick the capped Qobuz portrait fetch for missing rows.
+                // Kick the capped Qobuz portrait fetch for missing rows. Snapshot
+                // the names HERE (UI thread, sync) — fetch_missing_artist_images
+                // must NOT block the event loop to read the model.
                 if s.get_artists_fetch_images() {
+                    let mut names = Vec::new();
+                    for i in 0..artists.row_count() {
+                        if let Some(a) = artists.row_data(i) {
+                            if a.image_path.is_empty()
+                                && normalize_artist(&a.name.to_string()) != "various artists"
+                            {
+                                names.push(a.name.to_string());
+                            }
+                        }
+                    }
+                    s.set_artists_images_fetching(true);
+                    s.set_artists_images_fetched(0);
                     fetch_missing_artist_images(
                         runtime,
                         w.as_weak(),
                         handle_inner,
                         image_cache,
                         gen,
+                        names,
                     );
                 }
             });
@@ -1630,30 +1856,10 @@ pub fn fetch_missing_artist_images(
     handle: tokio::runtime::Handle,
     image_cache: ImageCache,
     gen: u64,
+    mut names: Vec<String>,
 ) {
-    // Snapshot the names missing a portrait, on the UI thread.
-    let (tx, rx) = std::sync::mpsc::channel::<Vec<String>>();
-    let _ = weak.upgrade_in_event_loop(move |w| {
-        let s = w.global::<LocalLibraryState>();
-        s.set_artists_images_fetching(true);
-        s.set_artists_images_fetched(0);
-        let flat = s.get_artists();
-        let mut names = Vec::new();
-        for i in 0..flat.row_count() {
-            if let Some(a) = flat.row_data(i) {
-                if !a.image_path.is_empty() {
-                    continue;
-                }
-                let name = a.name.to_string();
-                if normalize_artist(&name) == "various artists" {
-                    continue;
-                }
-                names.push(name);
-            }
-        }
-        let _ = tx.send(names);
-    });
-    let mut names = rx.recv().unwrap_or_default();
+    // `names` is snapshotted by the caller on the UI thread (NEVER block the
+    // event loop here — this can be invoked from inside an event-loop closure).
     names.truncate(50);
     if names.is_empty() {
         let _ = weak.upgrade_in_event_loop(|w| {

@@ -1,0 +1,348 @@
+// Dedicated Local Library album detail — SEPARATE from the Qobuz AlbumView.
+// Reuses the internal components (NavButtons, CircleAction, TrackRow,
+// QualityBadgeFull) but exposes ONLY local actions (play all / shuffle / edit
+// tags / add to playlist). When the album has multiple physical versions
+// (distinct source folders), a version picker switches the shown copy — so two
+// copies of the same album never merge into a duplicated track list.
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Typography } from "../foundation/typography.slint";
+import { LocalAlbumState, LocalAlbumActions, LocalAlbumVersion } from "../state.slint";
+import { NavButtons } from "../shell/NavButtons.slint";
+import { CircleAction } from "../primitives/CircleAction.slint";
+import { QbzIcon } from "../primitives/QbzIcon.slint";
+import { TrackRow } from "../primitives/TrackRow.slint";
+import { ListScrollbar } from "../primitives/ListScrollbar.slint";
+import { QualityBadgeFull } from "../primitives/QualityBadgeFull.slint";
+import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
+import { ListView } from "std-widgets.slint";
+
+// Source glyph for a version: hard-drive (local), Qobuz logo (offline cache),
+// Plex logo. The logos keep their own colors; the local glyph is tinted.
+component SourceIcon inherits Image {
+    in property <string> kind;
+    width: 14px;
+    height: 14px;
+    image-fit: contain;
+    source: root.kind == "qobuz_download"
+        ? @image-url("../assets/icons/qobuz-logo-filled.svg")
+        : (root.kind == "plex"
+            ? @image-url("../assets/icons/plex-logo.svg")
+            : @image-url("../assets/icons/hard-drive.svg"));
+    colorize: (root.kind == "qobuz_download" || root.kind == "plex")
+        ? transparent
+        : Theme.text-secondary;
+}
+
+// Version picker — selected display + dropdown, both with the source icon.
+component VersionPicker inherits Rectangle {
+    in property <[LocalAlbumVersion]> versions;
+    in property <int> current;
+    callback select(int);
+    height: 32px;
+    width: pick-row.preferred-width + 22px;
+    border-radius: 6px;
+    border-width: 1px;
+    border-color: Theme.border-subtle;
+    background: pick-ta.has-hover ? Theme.surface-hover : Theme.surface-elevated;
+
+    pick-row := HorizontalLayout {
+        x: (parent.width - self.width) / 2;
+        spacing: 7px;
+        VerticalLayout {
+            alignment: center;
+            SourceIcon { kind: root.versions[root.current].source; }
+        }
+        VerticalLayout {
+            alignment: center;
+            Text {
+                text: root.versions[root.current].label;
+                color: Theme.text-secondary;
+                font-size: Typography.legal;
+                vertical-alignment: center;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            QbzIcon {
+                source: @image-url("../assets/icons/chevron-down.svg");
+                width: 12px;
+                height: 12px;
+                tint: Theme.text-muted;
+            }
+        }
+    }
+    pick-ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            menu.show();
+        }
+    }
+    menu := PopupWindow {
+        x: 0;
+        y: parent.height + 4px;
+        width: 280px;
+        close-policy: close-on-click;
+        Rectangle {
+            background: Theme.surface-card;
+            border-radius: 8px;
+            border-width: 1px;
+            border-color: Theme.border-subtle;
+            drop-shadow-blur: 22px;
+            drop-shadow-color: #00000080;
+            VerticalLayout {
+                padding: 6px;
+                spacing: 1px;
+                for v[i] in root.versions: Rectangle {
+                    height: 34px;
+                    border-radius: 6px;
+                    background: i == root.current
+                        ? Theme.surface-elevated
+                        : (row-ta.has-hover ? Theme.surface-hover : transparent);
+                    HorizontalLayout {
+                        padding-left: 8px;
+                        padding-right: 8px;
+                        spacing: 8px;
+                        VerticalLayout {
+                            alignment: center;
+                            SourceIcon { kind: v.source; }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            horizontal-stretch: 1;
+                            Text {
+                                text: v.label;
+                                color: Theme.text-primary;
+                                font-size: Typography.legal;
+                                vertical-alignment: center;
+                                overflow: elide;
+                            }
+                        }
+                        if i == root.current: VerticalLayout {
+                            alignment: center;
+                            QbzIcon {
+                                source: @image-url("../assets/icons/check.svg");
+                                width: 12px;
+                                height: 12px;
+                                tint: Theme.accent;
+                            }
+                        }
+                    }
+                    row-ta := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            root.select(i);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+export component LocalAlbumView inherits Rectangle {
+    background: Theme.surface-main;
+
+    VerticalLayout {
+        spacing: 0px;
+
+        // --- History nav + header ---------------------------------------
+        // padding-top 11px matches Discover/Album so the [<] [>] pair sits at
+        // the same top margin across every view. vertical-stretch: 0 is
+        // load-bearing (FavoritesView lesson): without it this nested layout
+        // grabs the leftover height and the header balloons.
+        VerticalLayout {
+            vertical-stretch: 0;
+            padding-left: 32px;
+            padding-right: 32px;
+            padding-top: 11px;
+            spacing: 0px;
+
+            HorizontalLayout {
+                alignment: start;
+                NavButtons { }
+            }
+
+            Rectangle { height: 22px; }
+
+            HorizontalLayout {
+                spacing: 28px;
+
+                // Cover.
+                Rectangle {
+                    width: 200px;
+                    height: 200px;
+                    border-radius: 12px;
+                    background: Theme.surface-elevated;
+                    drop-shadow-blur: 32px;
+                    drop-shadow-color: #00000080;
+                    drop-shadow-offset-y: 8px;
+                    clip: true;
+                    Image {
+                        width: 100%;
+                        height: 100%;
+                        source: LocalAlbumState.cover;
+                        image-fit: cover;
+                    }
+                }
+
+                VerticalLayout {
+                    alignment: start;
+                    padding-top: 6px;
+                    spacing: 6px;
+                    horizontal-stretch: 1;
+
+                    Text {
+                        text: LocalAlbumState.title;
+                        color: Theme.text-primary;
+                        font-size: Typography.section;
+                        font-weight: Typography.bold;
+                        overflow: elide;
+                    }
+                    Text {
+                        text: LocalAlbumState.artist;
+                        color: Theme.text-secondary;
+                        font-size: Typography.heading;
+                        font-weight: Typography.bold;
+                        overflow: elide;
+                    }
+                    Text {
+                        text: LocalAlbumState.info-line;
+                        color: Theme.text-muted;
+                        font-size: Typography.body;
+                    }
+                    if LocalAlbumState.quality-tier != "": HorizontalLayout {
+                        alignment: start;
+                        QualityBadgeFull {
+                            tier: LocalAlbumState.quality-tier;
+                            detail: LocalAlbumState.quality-detail;
+                        }
+                    }
+
+                    Rectangle { height: 6px; }
+
+                    // Local-only action row.
+                    HorizontalLayout {
+                        alignment: start;
+                        spacing: 12px;
+                        CircleAction {
+                            icon: @image-url("../assets/icons/play-fill.svg");
+                            primary: true;
+                            diameter: 44px;
+                            clicked => {
+                                LocalAlbumActions.play-all();
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            CircleAction {
+                                icon: @image-url("../assets/icons/shuffle.svg");
+                                clicked => {
+                                    LocalAlbumActions.shuffle();
+                                }
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            CircleAction {
+                                icon: @image-url("../assets/icons/pencil.svg");
+                                clicked => {
+                                    LocalAlbumActions.edit-tags();
+                                }
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            CircleAction {
+                                icon: @image-url("../assets/icons/list-plus.svg");
+                                clicked => {
+                                    LocalAlbumActions.add-to-playlist();
+                                }
+                            }
+                        }
+                    }
+
+                    // Version picker (only when there are multiple copies).
+                    if LocalAlbumState.versions.length > 1: HorizontalLayout {
+                        alignment: start;
+                        spacing: 8px;
+                        VerticalLayout {
+                            alignment: center;
+                            Text {
+                                text: "\{LocalAlbumState.versions.length} " + @tr("versions") + ":";
+                                color: Theme.text-muted;
+                                font-size: Typography.legal;
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            VersionPicker {
+                                versions: LocalAlbumState.versions;
+                                current: LocalAlbumState.version-index;
+                                select(i) => {
+                                    LocalAlbumActions.select-version(i);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Rectangle { height: 16px; }
+        }
+
+        Rectangle {
+            height: 1px;
+            background: Theme.border-subtle;
+        }
+
+        // --- Track list -------------------------------------------------
+        Rectangle {
+            vertical-stretch: 1;
+            clip: true;
+
+            if LocalAlbumState.loading: VerticalLayout {
+                alignment: center;
+                HorizontalLayout {
+                    alignment: center;
+                    LoadingSpinner { size: 32px; }
+                }
+            }
+
+            if !LocalAlbumState.loading && LocalAlbumState.tracks.length > 0: Rectangle {
+                VerticalLayout {
+                    padding-left: 32px;
+                    padding-right: 32px;
+                    padding-top: 12px;
+                    tracks-list := ListView {
+                        vertical-scrollbar-policy: ScrollBarPolicy.always-off;
+                        for track[i] in LocalAlbumState.tracks: TrackRow {
+                            track: track;
+                            index: i;
+                            show-artwork: false;
+                            show-album: false;
+                            show-favorite: false;
+                            show-download: false;
+                            show-source: false;
+                            media-action(kind, id, action) => {
+                                // Local-only: ignore album/artist link clicks;
+                                // any other row action plays the track.
+                                if (kind != "album" && kind != "artist") {
+                                    LocalAlbumActions.play-track(id);
+                                }
+                            }
+                        }
+                    }
+                }
+                ListScrollbar {
+                    x: parent.width - self.width - 4px;
+                    width: 14px;
+                    height: 100%;
+                    viewport-height: tracks-list.viewport-height;
+                    visible-height: tracks-list.visible-height;
+                    viewport-y <=> tracks-list.viewport-y;
+                }
+            }
+        }
+    }
+}

@@ -158,7 +158,11 @@ pub fn close_tag_editor(weak: Weak<AppWindow>) {
 /// Persist the edits. Validates, gates the directory + CUE for direct mode,
 /// confirms direct-write once, then writes (sidecar or files) + updates the DB
 /// index on a blocking thread, and refreshes the open album.
-pub fn save_tags(weak: Weak<AppWindow>, handle: tokio::runtime::Handle) {
+pub fn save_tags(
+    weak: Weak<AppWindow>,
+    handle: tokio::runtime::Handle,
+    image_cache: crate::artwork::ImageCache,
+) {
     let Some(w) = weak.upgrade() else {
         return;
     };
@@ -379,7 +383,7 @@ pub fn save_tags(weak: Weak<AppWindow>, handle: tokio::runtime::Handle) {
         if ok {
             crate::toast::success_weak(&weak, "Album metadata saved");
             // Refresh the open album detail + reset browse models (D7).
-            refresh_after_save(weak.clone(), handle2.clone(), group_key.clone());
+            refresh_after_save(weak.clone(), handle2.clone(), image_cache.clone());
         } else {
             crate::toast::error_weak(&weak, format!("Couldn't save metadata: {err_msg}"));
         }
@@ -585,27 +589,23 @@ pub fn open_in_browser(weak: Weak<AppWindow>) {
     let _ = open::that(url);
 }
 
-/// Re-fetch the album's tracks and re-apply the detail view, and reset the
-/// LocalLibrary browse models so the tabs re-fetch on next visit. Avoids a
-/// full library reload (the 16K-track freeze).
-fn refresh_after_save(weak: Weak<AppWindow>, handle: tokio::runtime::Handle, group_key: String) {
-    handle.spawn(async move {
-        let gk = group_key.clone();
-        let tracks = tokio::task::spawn_blocking(move || {
-            crate::local_library::fetch_album_tracks_blocking(&gk)
-        })
-        .await
-        .unwrap_or_default();
-        let _ = weak.upgrade_in_event_loop(move |w| {
-            crate::local_library::apply_local_album(&w, &group_key, tracks);
-            // Reset browse models so Albums/Folders/Tracks/Artists re-fetch.
-            let s = w.global::<crate::LocalLibraryState>();
-            let empty_albums = ModelRc::new(VecModel::from(Vec::<crate::AlbumCardItem>::new()));
-            let empty_tracks = ModelRc::new(VecModel::from(Vec::<crate::TrackItem>::new()));
-            s.set_albums(empty_albums.clone());
-            s.set_folders(empty_albums);
-            s.set_tracks(empty_tracks);
-            s.set_artists(ModelRc::new(VecModel::from(Vec::<crate::LocalArtistItem>::new())));
-        });
+/// Re-open the local album view (re-splits versions with the new tags) and
+/// reset the LocalLibrary browse models so the tabs re-fetch. Avoids a full
+/// library reload (the 16K-track freeze).
+fn refresh_after_save(weak: Weak<AppWindow>, handle: tokio::runtime::Handle, image_cache: crate::artwork::ImageCache) {
+    let _ = weak.upgrade_in_event_loop(move |w| {
+        // Refresh the open local album detail (if any) by its metadata key.
+        let id = w.global::<crate::LocalAlbumState>().get_id().to_string();
+        if !id.is_empty() {
+            crate::local_library::open_local_album(w.as_weak(), handle.clone(), image_cache.clone(), id);
+        }
+        // Reset browse models so Albums/Folders/Tracks/Artists re-fetch.
+        let s = w.global::<crate::LocalLibraryState>();
+        let empty_albums = ModelRc::new(VecModel::from(Vec::<crate::AlbumCardItem>::new()));
+        let empty_tracks = ModelRc::new(VecModel::from(Vec::<crate::TrackItem>::new()));
+        s.set_albums(empty_albums.clone());
+        s.set_folders(empty_albums);
+        s.set_tracks(empty_tracks);
+        s.set_artists(ModelRc::new(VecModel::from(Vec::<crate::LocalArtistItem>::new())));
     });
 }

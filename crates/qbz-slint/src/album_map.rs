@@ -208,8 +208,12 @@ pub fn to_item(card: AlbumCard) -> AlbumCardItem {
 /// case-insensitive; any other key (e.g. `default`) leaves order intact.
 pub fn sort_album_items(items: &mut [AlbumCardItem], sort: &str) {
     match sort {
-        "oldest" => items.sort_by(|a, b| a.plain_year.as_str().cmp(b.plain_year.as_str())),
-        "newest" => items.sort_by(|a, b| b.plain_year.as_str().cmp(a.plain_year.as_str())),
+        "oldest" | "year-asc" => {
+            items.sort_by(|a, b| a.plain_year.as_str().cmp(b.plain_year.as_str()))
+        }
+        "newest" | "year-desc" => {
+            items.sort_by(|a, b| b.plain_year.as_str().cmp(a.plain_year.as_str()))
+        }
         "title-asc" => items.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase())),
         "title-desc" => items.sort_by(|a, b| b.title.to_lowercase().cmp(&a.title.to_lowercase())),
         "artist-asc" => {

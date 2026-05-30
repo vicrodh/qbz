@@ -269,11 +269,11 @@ export component AlbumListRow inherits Rectangle {
         // --- SOURCE (hideable) ----------------------------------------
         if root.show-source: Text {
             width: AlbumListCols.source;
-            text: root.album.source == "qobuz"
-                ? @tr("Qobuz")
-                : (root.album.source == "plex"
-                    ? @tr("Plex")
-                    : (root.album.source == "local" ? @tr("Local") : ""));
+            text: root.album.source == "qobuz" ? @tr("Qobuz")
+                : root.album.source == "qobuz_download" ? @tr("Offline")
+                : root.album.source == "plex" ? @tr("Plex")
+                : root.album.source == "local" ? @tr("Local")
+                : "";
             color: Theme.text-secondary;
             font-size: 12px;
             vertical-alignment: center;

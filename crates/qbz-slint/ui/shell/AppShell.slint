@@ -24,6 +24,7 @@ import { LyricsSidebar } from "LyricsSidebar.slint";
 import { HomeView } from "../discover/HomeView.slint";
 import { DiscoverBrowseView } from "../discover/DiscoverBrowseView.slint";
 import { AlbumPageView } from "../album/AlbumPageView.slint";
+import { LocalAlbumView } from "../album/LocalAlbumView.slint";
 import { ArtistPageView } from "../artist/ArtistPageView.slint";
 import { MusicianPageView } from "../musician/MusicianPageView.slint";
 import { LabelReleasesView } from "../label/LabelReleasesView.slint";
@@ -124,6 +125,8 @@ export component AppShell inherits Rectangle {
                         root.media-action(kind, id, action);
                     }
                 }
+                // Dedicated Local Library album detail (separate from AlbumView).
+                if NavState.view == ContentView.local-album: LocalAlbumView { }
                 if NavState.view == ContentView.artist: ArtistPageView {
                     open-album(id) => {
                         root.open-album(id);

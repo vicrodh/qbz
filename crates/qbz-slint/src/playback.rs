@@ -242,6 +242,36 @@ pub fn play_local_album(
     });
 }
 
+/// Play an explicit list of local tracks (already resolved — e.g. one album
+/// VERSION), starting at `start`. `shuffle` enables shuffle mode after the
+/// queue is set. Used by the dedicated Local album view so it plays the SHOWN
+/// version, never a re-merged metadata group.
+pub fn play_local_tracks(
+    runtime: Runtime,
+    weak: slint::Weak<AppWindow>,
+    handle: tokio::runtime::Handle,
+    tracks: Vec<qbz_library::LocalTrack>,
+    start: usize,
+    shuffle: bool,
+) {
+    if tracks.is_empty() {
+        return;
+    }
+    handle.spawn(async move {
+        play_local_tracks_now(&runtime, &weak, tracks, start).await;
+        if shuffle {
+            // No set_shuffle on core — toggle until it's on.
+            let mut on = runtime.core().toggle_shuffle().await;
+            if !on {
+                on = runtime.core().toggle_shuffle().await;
+            }
+            let _ = weak.upgrade_in_event_loop(move |w| {
+                w.global::<NowPlayingState>().set_shuffle(on);
+            });
+        }
+    });
+}
+
 /// Play everything under a folder (recursive), in path order — the whole
 /// subtree becomes the queue. Mirrors `play_local_album` but sources the
 /// tracks from the folder hierarchy instead of a metadata group.
