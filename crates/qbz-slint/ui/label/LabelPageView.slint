@@ -12,7 +12,7 @@
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
 import { Radius } from "../foundation/radius.slint";
-import { LabelState, LabelActions, TrackItem } from "../state.slint";
+import { LabelState, LabelActions, TrackItem, DragState } from "../state.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { TrackRow } from "../primitives/TrackRow.slint";
 import { CircleAction } from "../primitives/CircleAction.slint";
@@ -47,6 +47,9 @@ export component LabelPageView inherits Rectangle {
     background: Theme.surface-main;
 
     page-flickable := Flickable {
+        // Don't scroll while a track is being dragged out (keeps the row's
+        // pointer grab so the drag-end fires) — matches the other track views.
+        interactive: !DragState.active;
         viewport-width: self.width;
         viewport-height: page.preferred-height;
 

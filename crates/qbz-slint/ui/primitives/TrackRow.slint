@@ -105,6 +105,19 @@ export component TrackRow inherits Rectangle {
                 ta.dragging = false;
             }
         }
+        // Safety net: the `up` above only arrives if this TouchArea still holds
+        // the pointer grab. Inside a ListView (or a Flickable that didn't drop
+        // out of `interactive`), the scroll gesture can steal the grab mid-drag,
+        // so the `up` never reaches us and the ghost stays glued to the cursor.
+        // `pressed` flips to false on BOTH a normal release and a grab cancel,
+        // so ending the drag here guarantees it always clears. Both paths guard
+        // on `ta.dragging`, so whichever fires first wins and end() runs once.
+        changed pressed => {
+            if (!self.pressed && ta.dragging) {
+                DragActions.end();
+                ta.dragging = false;
+            }
+        }
         moved => {
             if (ta.pressed && root.draggable) {
                 if (!ta.dragging
