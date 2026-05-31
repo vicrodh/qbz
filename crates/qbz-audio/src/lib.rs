@@ -35,6 +35,8 @@ pub mod alsa_backend;
 pub mod alsa_error_handler;
 #[cfg(target_os = "linux")]
 pub mod pulse_backend;
+#[cfg(target_os = "linux")]
+pub mod jack_backend;
 pub mod alsa_direct;
 pub mod coreaudio_direct;
 pub mod analysis;
@@ -57,6 +59,8 @@ pub use alsa_backend::{
     resolve_stable_to_current_hw,
 };
 pub use alsa_direct::AlsaDirectStream;
+#[cfg(target_os = "linux")]
+pub use jack_backend::JackStream;
 pub use analysis::SpectralAnalyzer;
 pub use analyzer_tap::{AnalyzerMessage, AnalyzerTap};
 pub use backend::{

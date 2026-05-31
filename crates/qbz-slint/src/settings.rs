@@ -235,7 +235,8 @@ fn device_is_bit_perfect(backend: AudioBackendType, device: &qbz_audio::AudioDev
             alsa_section(&device.id, device.is_default, label) == AlsaSection::BitPerfect
         }
         AudioBackendType::PipeWire => device.is_hardware,
-        AudioBackendType::Pulse | AudioBackendType::SystemDefault => false,
+        // JACK never bit-perfect (resampled to the graph rate); no per-device concept.
+        AudioBackendType::Pulse | AudioBackendType::SystemDefault | AudioBackendType::Jack => false,
     }
 }
 
@@ -245,6 +246,7 @@ fn backend_label(t: AudioBackendType) -> String {
         AudioBackendType::Alsa => "ALSA",
         AudioBackendType::Pulse => "PulseAudio",
         AudioBackendType::SystemDefault => "System default",
+        AudioBackendType::Jack => "JACK",
     }
     .to_string()
 }

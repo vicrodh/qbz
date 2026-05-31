@@ -33,6 +33,15 @@ pub enum AudioBackendType {
     /// - Fallback for systems without PipeWire
     Pulse,
 
+    /// JACK backend (#263 Tier 3 — pro-audio routing). Linux-only in practice.
+    /// - QBZ appears as a first-class JACK client with stable ports
+    ///   (`qbz:out_FL` / `qbz:out_FR`), patchable in qjackctl/qpwgraph/Reaper
+    /// - Routing survives track changes (the client + ports live once)
+    /// - NOT bit-perfect: the JACK graph runs at ONE fixed rate (audio is
+    ///   resampled) — an opt-in routing-freedom mode; never touches the
+    ///   bit-perfect ALSA-exclusive / DAC-passthrough paths.
+    Jack,
+
     /// System default backend (non-Linux platforms)
     /// - Uses CPAL default host (CoreAudio on macOS, WASAPI on Windows)
     /// - Automatic device selection via OS audio system
@@ -286,6 +295,12 @@ impl BackendManager {
             if Self::is_pulse_available() {
                 backends.push(AudioBackendType::Pulse);
             }
+
+            // JACK (#263 Tier 3): foundation in place (jack_backend.rs + the enum +
+            // the factory) but NOT yet offered in the selector — the player wiring
+            // (StreamType::Jack + the dispatch + PlaybackEngine::Jack feeder/resampler)
+            // is still pending. Re-enable this push once that lands (Tier-3 handoff).
+            // backends.push(AudioBackendType::Jack);
         }
 
         #[cfg(not(target_os = "linux"))]
@@ -346,6 +361,20 @@ impl BackendManager {
                 #[cfg(not(target_os = "linux"))]
                 {
                     Err("PulseAudio backend only available on Linux".to_string())
+                }
+            }
+            AudioBackendType::Jack => {
+                // JACK streams are created directly in the player dispatch
+                // (qbz-player), NOT via the MixerDeviceSink AudioBackend trait.
+                // This arm exists only so the factory stays exhaustive; the
+                // returned backend is never used to open a JACK stream.
+                #[cfg(target_os = "linux")]
+                {
+                    Ok(Box::new(CpalDefaultBackend::new()?))
+                }
+                #[cfg(not(target_os = "linux"))]
+                {
+                    Err("JACK backend only available on Linux".to_string())
                 }
             }
         }

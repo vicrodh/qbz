@@ -47,6 +47,11 @@ alsa-sys = "0.4"
 # Pinned to v4 to share the transitive copy already pulled in by
 # secret-service/souvlaki and avoid duplicate zbus compiles.
 zbus = { version = "4", default-features = false, features = ["tokio"] }
+# JACK native backend (#263 Tier 3): QBZ as a first-class JACK client with stable
+# ports. Links libjack (provided by pipewire-jack on the rig). TODO(distribution):
+# feature-gate for Flatpak/distro builds that may not ship libjack — not blocking
+# while Tauri isn't being released.
+jack = "0.13"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # CoreAudio for device probing, sample rate switching, and (future) hog mode / exclusive mode
