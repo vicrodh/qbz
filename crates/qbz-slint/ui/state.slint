@@ -832,6 +832,16 @@ export global SidebarTooltipState {
     in-out property <length> anchor-y;  // window y (row top)
 }
 
+// Closed-sidebar playlists flyout. When the sidebar is fully closed there is no
+// playlist list on screen; a header button opens this popup over SidebarState's
+// entries (folders + playlists), capped at six visible rows with the rest
+// scrolling, plus an always-visible footer link to the Playlist Manager.
+export global SidebarPlaylistsPopupState {
+    in-out property <bool> open: false;
+    in-out property <length> anchor-x;  // window x (header button left)
+    in-out property <length> anchor-y;  // window y (below the button)
+}
+
 // The sidebar's playlists + folders. Populated by crate::sidebar on
 // shell entry and after create/delete/move.
 export global SidebarState {

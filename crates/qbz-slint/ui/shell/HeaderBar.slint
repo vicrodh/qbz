@@ -13,7 +13,7 @@ import { Spacing } from "../foundation/spacing.slint";
 import { Typography } from "../foundation/typography.slint";
 import { Layout } from "../foundation/layout.slint";
 import { Radius } from "../foundation/radius.slint";
-import { SessionState, NavState, ContentView, ShellState, HeaderMenuState, NavMenuEntry, SearchActions } from "../state.slint";
+import { SessionState, NavState, ContentView, ShellState, HeaderMenuState, NavMenuEntry, SearchActions, SidebarPlaylistsPopupState } from "../state.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 
 component NavTab inherits Rectangle {
@@ -227,6 +227,36 @@ component CompactNavBtn inherits Rectangle {
                 // avoids a leave/enter race when sliding between triggers.
                 HeaderMenuState.trigger-hovered = false;
             }
+        }
+    }
+}
+
+// Like CompactNavBtn, but instead of a section dropdown it opens the playlists
+// flyout (SidebarPlaylistsPopup). Shown in the closed-sidebar header cluster so
+// playlists stay reachable with the sidebar fully collapsed. Header buttons are
+// not inside a Flickable, so absolute-position needs no correction here.
+component CompactPlaylistsBtn inherits Rectangle {
+    width: 30px;
+    height: 30px;
+    border-radius: Radius.sm;
+    property <bool> active: SidebarPlaylistsPopupState.open;
+    background: root.active ? Theme.surface-elevated
+        : cp-ta.has-hover ? Theme.surface-hover : transparent;
+
+    QbzIcon {
+        source: @image-url("../assets/icons/list-music.svg");
+        width: 16px;
+        height: 16px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        tint: root.active ? Theme.text-primary : Theme.text-secondary;
+    }
+    cp-ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            SidebarPlaylistsPopupState.anchor-x = root.absolute-position.x;
+            SidebarPlaylistsPopupState.anchor-y = root.absolute-position.y + root.height + 6px;
+            SidebarPlaylistsPopupState.open = true;
         }
     }
 }
@@ -529,6 +559,18 @@ export component HeaderBar inherits Rectangle {
                         { label: @tr("Mixtapes"), icon: @image-url("../assets/icons/cassette-tape.svg"), has-glyph: true },
                     ];
                 }
+            }
+            // Thin separator, then the playlists flyout button (no sidebar list
+            // to reach playlists from while fully closed).
+            Rectangle {
+                width: 1px;
+                height: 18px;
+                y: (parent.height - self.height) / 2;
+                background: Theme.border-subtle;
+            }
+            VerticalLayout {
+                alignment: center;
+                CompactPlaylistsBtn { }
             }
         }
     }

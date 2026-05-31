@@ -13,6 +13,7 @@ import { HeaderBar } from "HeaderBar.slint";
 import { HeaderMenuOverlay } from "HeaderMenuOverlay.slint";
 import { SidebarFolderPopup } from "SidebarFolderPopup.slint";
 import { SidebarTooltip } from "SidebarTooltip.slint";
+import { SidebarPlaylistsPopup } from "SidebarPlaylistsPopup.slint";
 import { PlaylistPickerModal } from "../primitives/PlaylistPickerModal.slint";
 import { CreatePlaylistModal } from "../primitives/CreatePlaylistModal.slint";
 import { EditPlaylistModal } from "../primitives/EditPlaylistModal.slint";
@@ -302,6 +303,9 @@ export component AppShell inherits Rectangle {
 
     // Collapsed-sidebar hover tooltip (mini state) — name + folder count.
     SidebarTooltip { }
+
+    // Closed-sidebar playlists flyout (opened from the header playlists button).
+    SidebarPlaylistsPopup { }
 
     // Global "Add to playlist" picker overlay, opened from any track
     // context menu.

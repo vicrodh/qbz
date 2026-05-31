@@ -1,0 +1,201 @@
+// Closed-sidebar playlists flyout. With the sidebar fully closed there is no
+// playlist list anywhere, so a header button (CompactPlaylistsBtn) opens this
+// popup. It lists SidebarState's entries (folders + playlists, the same flat
+// tree the sidebar shows), six rows visible with the rest scrolling, and an
+// always-visible footer linking to the Playlist Manager. Rendered at the
+// AppShell level because the header clips its overflow.
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Radius } from "../foundation/radius.slint";
+import { QbzIcon } from "../primitives/QbzIcon.slint";
+import { ListScrollbar } from "../primitives/ListScrollbar.slint";
+import { SidebarPlaylistsPopupState, SidebarState, SidebarActions, SidebarEntry } from "../state.slint";
+
+// One entry row — a folder (bold, toggles expand) or a playlist (opens it).
+component PpRow inherits Rectangle {
+    in property <SidebarEntry> entry;
+    property <bool> is-folder: root.entry.kind == "folder";
+    height: 32px;
+    border-radius: 5px;
+    background: ta.has-hover ? Theme.surface-hover : transparent;
+    HorizontalLayout {
+        // Nested playlists indent under their folder, matching the sidebar.
+        padding-left: root.entry.indent ? 26px : 12px;
+        padding-right: 12px;
+        spacing: 8px;
+        VerticalLayout {
+            alignment: center;
+            QbzIcon {
+                source: root.is-folder
+                    ? (root.entry.expanded
+                        ? @image-url("../assets/icons/folder-open.svg")
+                        : @image-url("../assets/icons/folder.svg"))
+                    : @image-url("../assets/icons/list-music.svg");
+                width: 14px;
+                height: 14px;
+                tint: root.is-folder ? Theme.accent : Theme.text-muted;
+            }
+        }
+        Text {
+            text: root.entry.name;
+            color: root.is-folder ? Theme.text-primary : Theme.text-secondary;
+            font-size: 13px;
+            font-weight: root.is-folder ? 600 : 400;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            overflow: elide;
+        }
+        // Folder playlist count, right-aligned (matches the sidebar hover count).
+        if root.is-folder && root.entry.count > 0: Text {
+            text: root.entry.count;
+            color: Theme.text-muted;
+            font-size: 11px;
+            vertical-alignment: center;
+        }
+    }
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            if (root.is-folder) {
+                // Expand/collapse in place — re-renders the list, like the sidebar.
+                SidebarActions.toggle-folder(root.entry.id);
+            } else {
+                SidebarActions.open-playlist(root.entry.id);
+                SidebarPlaylistsPopupState.open = false;
+            }
+        }
+    }
+}
+
+export component SidebarPlaylistsPopup inherits Rectangle {
+    visible: SidebarPlaylistsPopupState.open;
+
+    property <length> row-h: 32px;
+    property <int> visible-rows: Math.min(SidebarState.entries.length, 6);
+    property <length> list-h: Math.max(root.row-h, root.visible-rows * root.row-h);
+
+    // Scrim — a click anywhere outside the panel closes the popup.
+    if SidebarPlaylistsPopupState.open: TouchArea {
+        clicked => {
+            SidebarPlaylistsPopupState.open = false;
+        }
+    }
+
+    if SidebarPlaylistsPopupState.open: Rectangle {
+        x: SidebarPlaylistsPopupState.anchor-x;
+        y: SidebarPlaylistsPopupState.anchor-y;
+        width: 248px;
+        // header(28) + list + divider(1) + footer(40) + paddings(8).
+        height: 28px + root.list-h + 1px + 40px + 8px;
+
+        Rectangle {
+            background: Theme.surface-main;
+            border-radius: Radius.sm;
+            border-width: 1px;
+            border-color: Theme.border-muted;
+            drop-shadow-blur: 24px;
+            drop-shadow-color: Theme.card-shadow;
+            drop-shadow-offset-y: 6px;
+
+            // Swallow clicks so the scrim doesn't close while interacting.
+            TouchArea { }
+
+            VerticalLayout {
+                padding-top: 4px;
+                padding-bottom: 4px;
+
+                // Section header.
+                HorizontalLayout {
+                    height: 24px;
+                    padding-left: 12px;
+                    padding-right: 12px;
+                    Text {
+                        text: @tr("PLAYLISTS");
+                        color: Theme.text-muted;
+                        font-size: 11px;
+                        font-weight: 600;
+                        letter-spacing: 0.5px;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                    }
+                }
+
+                // Entries — capped at six rows; scrolls beyond. The Flickable is
+                // unconditional (an empty list just renders no rows) so the
+                // sibling ListScrollbar can reference `pp-flick` — an id declared
+                // inside an `if` is not visible to a sibling `if`.
+                Rectangle {
+                    height: root.list-h;
+                    pp-flick := Flickable {
+                        width: 100%;
+                        height: 100%;
+                        viewport-width: self.width;
+                        viewport-height: SidebarState.entries.length * root.row-h;
+                        VerticalLayout {
+                            width: parent.width;
+                            alignment: start;
+                            for entry in SidebarState.entries: PpRow {
+                                entry: entry;
+                            }
+                        }
+                    }
+                    if SidebarState.entries.length > 6: ListScrollbar {
+                        x: parent.width - self.width;
+                        width: 10px;
+                        height: 100%;
+                        viewport-height: pp-flick.viewport-height;
+                        visible-height: pp-flick.height;
+                        viewport-y <=> pp-flick.viewport-y;
+                    }
+                    if SidebarState.entries.length == 0: Text {
+                        x: 12px;
+                        y: 8px;
+                        text: @tr("No playlists yet.");
+                        color: Theme.text-muted;
+                        font-size: 12px;
+                    }
+                }
+
+                Rectangle {
+                    height: 1px;
+                    background: Theme.border-subtle;
+                }
+
+                // Footer — always visible link to the Playlist Manager.
+                Rectangle {
+                    height: 40px;
+                    border-radius: 5px;
+                    background: footer-ta.has-hover ? Theme.surface-hover : transparent;
+                    HorizontalLayout {
+                        padding-left: 12px;
+                        padding-right: 12px;
+                        spacing: 8px;
+                        VerticalLayout {
+                            alignment: center;
+                            QbzIcon {
+                                source: @image-url("../assets/icons/library-big.svg");
+                                width: 15px;
+                                height: 15px;
+                                tint: Theme.text-secondary;
+                            }
+                        }
+                        Text {
+                            text: @tr("Manage playlists");
+                            color: Theme.text-secondary;
+                            font-size: 13px;
+                            vertical-alignment: center;
+                            horizontal-stretch: 1;
+                        }
+                    }
+                    footer-ta := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            SidebarActions.manage-playlists();
+                            SidebarPlaylistsPopupState.open = false;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
