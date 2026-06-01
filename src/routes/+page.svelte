@@ -357,7 +357,10 @@
     handleAddToFavorites,
     addToPlaylist,
     shareQobuzTrackLink,
-    shareSonglinkTrack
+    shareSonglinkTrack,
+    reorderQconnectQueueIfRemote,
+    removeQconnectQueueItemsIfRemote,
+    clearQconnectQueueIfRemote
   } from '$lib/services/trackActions';
   import {
     replacePlaybackQueue,
@@ -372,6 +375,7 @@
     QconnectRendererReportDebugPayload,
     QconnectRendererSnapshot
   } from '$lib/services/qconnectRemoteQueue';
+  import { resolveQconnectQueueDisplayItems } from '$lib/services/qconnectRemoteQueue';
   import {
     DEFAULT_QCONNECT_CONNECTION_STATUS,
     QCONNECT_DIAGNOSTIC_LOG_LIMIT,
@@ -3256,10 +3260,50 @@
     }
   }
 
+  // Resolve the remote queue_item_id for a local upcoming row.
+  //
+  // When a peer renderer owns playback the local queue sidebar shows a
+  // projection of the local backend `upcoming[]` (track_id only). The remote
+  // renderer keys mutations on the cloud's stable `queue_item_id`, which lives
+  // only in `qobuzConnectQueueSnapshot.queue_items`. We map the upcoming row to
+  // a queue_item_id by walking the remote display order: slice off everything up
+  // to and including the renderer's current track, then index into the remaining
+  // (upcoming) portion. We corroborate by track_id so a stale/misaligned
+  // snapshot returns null instead of a wrong id (which would silently mutate the
+  // wrong row on the renderer).
+  function resolveRemoteQueueItemIdForUpcoming(
+    upcomingIndex: number,
+    expectedTrackId: number | null
+  ): number | null {
+    const displayItems = resolveQconnectQueueDisplayItems(qobuzConnectQueueSnapshot);
+    if (displayItems.length === 0) return null;
+
+    const currentQueueItemId = qobuzConnectRendererSnapshot?.current_track?.queue_item_id ?? null;
+    let upcomingStart = 0;
+    if (currentQueueItemId != null) {
+      const currentPos = displayItems.findIndex(
+        (item) => item.queue_item_id === currentQueueItemId
+      );
+      if (currentPos >= 0) {
+        upcomingStart = currentPos + 1;
+      }
+    }
+
+    const target = displayItems[upcomingStart + upcomingIndex] ?? null;
+    if (!target) return null;
+    // Corroborate by track_id: if the local row and the remote slot disagree,
+    // the snapshot is out of sync — refuse rather than mutate the wrong item.
+    if (expectedTrackId != null && target.track_id !== expectedTrackId) return null;
+    return target.queue_item_id;
+  }
+
   // Clear the queue. If nothing is actively playing, also wipe the
   // now-playing slot so a stale track doesn't linger in NOW PLAYING
   // after the user pressed Clear.
   async function handleClearQueue() {
+    // When a peer renderer owns playback, route the clear to the remote queue
+    // and skip the local mutation entirely.
+    if (qconnectPeerRendererActive && (await clearQconnectQueueIfRemote())) return;
     const includeCurrent = !isPlaying;
     const success = await clearQueue({ includeCurrent });
     if (success) {
@@ -3274,6 +3318,20 @@
   }
 
   // Reorder tracks in the queue
+  //
+  // NOTE (P1-4, DONE_WITH_CONCERNS): the remote `queue_reorder_tracks` command
+  // needs the FULL target order as queue_item_ids for the whole renderer queue.
+  // This handler only receives local upcoming-relative from/to indices, and the
+  // local backend queue rows carry no queue_item_id. Reconstructing the complete
+  // remote order would require mapping every local row to a queue_item_id by
+  // track_id (ambiguous when a track_id appears more than once) AND splicing in
+  // the current track + autoplay items under the renderer's shuffle order — none
+  // of which can be derived reliably from a from/to index pair. Sending a partial
+  // or mis-ordered id list would silently corrupt the renderer queue, so we do
+  // NOT route reorder remotely. The local store reorder is left intact (under a
+  // peer renderer it simply doesn't propagate). Wiring this correctly needs the
+  // backend to expose per-row queue_item_ids in the projected queue, or a
+  // dedicated move-by-queue_item_id remote command.
   async function handleQueueReorder(fromIndex: number, toIndex: number) {
     const success = await moveQueueTrack(fromIndex, toIndex);
     if (!success) {
@@ -3283,6 +3341,18 @@
 
   // Remove a track from the upcoming queue by its position in the upcoming list (V2)
   async function handleRemoveFromQueue(upcomingIndex: number) {
+    // When a peer renderer owns playback, route the removal to the remote queue.
+    // Map the local upcoming index to the renderer's stable queue_item_id; only
+    // route if we can resolve it unambiguously (else fall through to local so we
+    // never mutate the wrong remote row).
+    if (qconnectPeerRendererActive) {
+      const state = await getBackendQueueState();
+      const expectedTrackId = state?.upcoming[upcomingIndex]?.id ?? null;
+      const queueItemId = resolveRemoteQueueItemIdForUpcoming(upcomingIndex, expectedTrackId);
+      if (queueItemId != null) {
+        if (await removeQconnectQueueItemsIfRemote([queueItemId])) return;
+      }
+    }
     try {
       await invoke('v2_remove_upcoming_track', { upcomingIndex });
       await syncQueueState(); // Refresh UI
