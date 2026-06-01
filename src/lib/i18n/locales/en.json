@@ -1810,6 +1810,7 @@
     "endpointLabel": "Endpoint",
     "lastErrorLabel": "Last error",
     "queueStateTitle": "Remote Queue",
+    "mixedQueueNotCast": "Mixed queue not cast to Qobuz Connect (contains local or Plex tracks).",
     "queueVersionLabel": "Version",
     "queueItemsLabel": "Queue items",
     "autoplayModeLabel": "Autoplay",

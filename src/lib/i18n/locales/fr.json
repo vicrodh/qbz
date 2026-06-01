@@ -1810,6 +1810,7 @@
     "endpointLabel": "Point d'accès",
     "lastErrorLabel": "Dernière erreur",
     "queueStateTitle": "File d'attente distante",
+    "mixedQueueNotCast": "File d'attente mixte non envoyée à Qobuz Connect (contient des pistes locales ou Plex).",
     "queueVersionLabel": "Version",
     "queueItemsLabel": "Éléments de la file",
     "autoplayModeLabel": "Lecture auto",

@@ -357,10 +357,13 @@
     handleAddToFavorites,
     addToPlaylist,
     shareQobuzTrackLink,
-    shareSonglinkTrack,
-    loadQconnectQueue
+    shareSonglinkTrack
   } from '$lib/services/trackActions';
-  import { replacePlaybackQueue } from '$lib/services/queuePlaybackService';
+  import {
+    replacePlaybackQueue,
+    assessQconnectQueueSync,
+    syncQconnectQueueFromTracks
+  } from '$lib/services/queuePlaybackService';
   import type {
     QconnectDiagnosticsPayload,
     QconnectQueueSnapshot,
@@ -5726,17 +5729,38 @@
               // Delay briefly so the QConnect session setup (ask_for_queue_state etc.)
               // completes before we try to push our queue.
               setTimeout(() => {
-                const queueState = getQueueState();
-                const trackIds = queueState.queue
-                  .map(item => item.trackId ?? parseInt(item.id))
-                  .filter((id): id is number => typeof id === 'number' && !isNaN(id) && id > 0);
-                if (trackIds.length > 0) {
-                  console.log('[QConnect] Pushing local queue to remote on connect (%d tracks)', trackIds.length);
-                  loadQconnectQueue(trackIds, 0).then(ok => {
-                    if (ok) console.log('[QConnect] Local queue pushed to remote on connect');
-                    else console.warn('[QConnect] Local queue NOT pushed on connect (rejected or failed)');
-                  }).catch(err => console.error('[QConnect] Local queue push on connect error:', err));
-                }
+                void (async () => {
+                  // Use the BACKEND queue snapshot: its tracks carry `source`
+                  // and `is_local`, which the frontend display queue
+                  // (getQueueState) does not. The mixed-queue guard needs them
+                  // to refuse pushing a local/Plex row id to a Qobuz renderer.
+                  const state = await getBackendQueueState();
+                  if (!state) {
+                    console.warn('[QConnect] On-connect push skipped: no backend queue snapshot');
+                    return;
+                  }
+                  const tracks = [
+                    ...state.history,
+                    ...(state.current_track ? [state.current_track] : []),
+                    ...state.upcoming
+                  ];
+                  // Start index = the current track's position in the ordered list.
+                  const startIndex = state.current_track ? state.history.length : 0;
+                  const assessment = assessQconnectQueueSync(tracks);
+                  if (!assessment.syncable) {
+                    console.warn('[QConnect] On-connect push refused: reason=%s blocked=%o',
+                      assessment.reason, assessment.blockedTrackIds);
+                    if (assessment.reason === 'queue_contains_non_qobuz_tracks') {
+                      showToast($t('qconnect.mixedQueueNotCast'), 'warning');
+                    }
+                    return;
+                  }
+                  console.log('[QConnect] Pushing local queue to remote on connect (%d tracks)', tracks.length);
+                  const ok = await syncQconnectQueueFromTracks(tracks, startIndex, 'on-connect-push');
+                  console.log(ok
+                    ? '[QConnect] Local queue pushed to remote on connect'
+                    : '[QConnect] Local queue NOT pushed on connect (rejected or failed)');
+                })().catch(err => console.error('[QConnect] Local queue push on connect error:', err));
               }, 2000);
             }
           }

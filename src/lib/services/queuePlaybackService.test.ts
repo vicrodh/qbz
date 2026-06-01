@@ -65,6 +65,16 @@ describe('assessQconnectQueueSync', () => {
       blockedTrackIds: []
     });
   });
+
+  it('refuses (not subset) when queue is mixed — on-connect contract', () => {
+    const r = assessQconnectQueueSync([
+      buildTrack(1, { source: 'qobuz' }),
+      buildTrack(2, { source: 'local' })
+    ]);
+    expect(r.syncable).toBe(false);
+    expect(r.reason).toBe('queue_contains_non_qobuz_tracks');
+    expect(r.trackIds).toEqual([]); // subset NOT returned
+  });
 });
 
 describe('assessQconnectQueueSync — offline-cache', () => {

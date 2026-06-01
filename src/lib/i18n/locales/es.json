@@ -1810,6 +1810,7 @@
     "endpointLabel": "Endpoint",
     "lastErrorLabel": "Ultimo error",
     "queueStateTitle": "Cola remota",
+    "mixedQueueNotCast": "La cola mixta no se envió a Qobuz Connect (tiene pistas locales o de Plex).",
     "queueVersionLabel": "Version",
     "queueItemsLabel": "Items en cola",
     "autoplayModeLabel": "Autoplay",
