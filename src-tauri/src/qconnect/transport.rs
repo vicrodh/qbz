@@ -281,6 +281,9 @@ pub(crate) async fn resolve_transport_config(
     let mut config = WsTransportConfig::default();
     config.endpoint_url = endpoint_url;
     config.jwt_qws = jwt_qws;
+    // gap #12: the real Qobuz endpoint must AUTHENTICATE; a missing JWT here is
+    // a hard credential error, not a silent skip.
+    config.require_jwt = true;
     config.reconnect_backoff_ms = options
         .reconnect_backoff_ms
         .unwrap_or(config.reconnect_backoff_ms);

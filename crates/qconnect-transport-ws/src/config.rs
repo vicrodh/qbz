@@ -2,6 +2,11 @@
 pub struct WsTransportConfig {
     pub endpoint_url: String,
     pub jwt_qws: Option<String>,
+    /// When `true`, a connect attempt with `jwt_qws == None` is a hard
+    /// credential error instead of silently skipping the AUTHENTICATE frame
+    /// (gap #12). Defaults to `false` so the InMemory / test transport path
+    /// keeps working without a JWT.
+    pub require_jwt: bool,
     pub reconnect_backoff_ms: u64,
     pub reconnect_backoff_max_ms: u64,
     /// Maximum number of consecutive reconnect attempts before the transport
@@ -25,6 +30,7 @@ impl Default for WsTransportConfig {
         Self {
             endpoint_url: String::new(),
             jwt_qws: None,
+            require_jwt: false,
             reconnect_backoff_ms: 2_000,
             reconnect_backoff_max_ms: 30_000,
             reconnect_max_attempts: Some(10),

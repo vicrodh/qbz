@@ -421,6 +421,38 @@ async fn run_native_transport_loop(
                 }
             }
             emit(&events_tx, TransportEvent::Authenticated);
+        } else if config.require_jwt {
+            // gap #12: the real Qobuz endpoint requires AUTHENTICATE. Silently
+            // skipping it leaves the session un-joinable; surface it as a hard
+            // credential error and route it through the existing bounded
+            // reconnect path (increment-only — issue #358 latch unaffected).
+            emit(
+                &events_tx,
+                TransportEvent::TransportError {
+                    stage: "authenticate".to_string(),
+                    message: "missing jwt_qws for endpoint that requires AUTHENTICATE".to_string(),
+                },
+            );
+            let _ = ws.close(None).await;
+            {
+                let mut guard = state.lock().await;
+                guard.connected = false;
+            }
+            emit(&events_tx, TransportEvent::Disconnected);
+            match handle_reconnect_delay(
+                &events_tx,
+                &mut shutdown_rx,
+                &mut reconnect_attempt,
+                &mut backoff,
+                max_backoff,
+                max_attempts,
+                "missing_authenticate_jwt".to_string(),
+            )
+            .await
+            {
+                ReconnectOutcome::Continue => continue,
+                ReconnectOutcome::Shutdown | ReconnectOutcome::Exhausted => break,
+            }
         }
 
         if config.auto_subscribe {
@@ -963,6 +995,15 @@ struct CloudPayload {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// gap #12: `require_jwt` must default to `false` so the InMemory / test
+    /// transport path keeps working without a JWT. Only the real Qobuz endpoint
+    /// (set in `resolve_transport_config`) flips it on.
+    #[test]
+    fn config_require_jwt_defaults_false_for_test_path() {
+        let cfg = WsTransportConfig::default();
+        assert!(!cfg.require_jwt);
+    }
 
     #[test]
     fn qcloud_frame_roundtrip() {

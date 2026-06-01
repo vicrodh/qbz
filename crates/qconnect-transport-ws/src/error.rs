@@ -20,4 +20,6 @@ pub enum WsTransportError {
     Serialization(String),
     #[error("internal transport error: {0}")]
     Internal(String),
+    #[error("missing AUTHENTICATE JWT for an endpoint that requires it")]
+    MissingAuthenticateJwt,
 }
