@@ -61,3 +61,25 @@ pub fn resolve_handoff_intent(origin: TrackOrigin) -> HandoffIntent {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use qbz_models::PlaybackSource;
+
+    #[test]
+    fn admission_matches_playback_source_predicate() {
+        let pairs = [
+            (TrackOrigin::QobuzOnline, PlaybackSource::Qobuz),
+            (TrackOrigin::LocalLibrary, PlaybackSource::Local),
+            (TrackOrigin::Plex, PlaybackSource::Plex),
+        ];
+        for (origin, source) in pairs {
+            assert_eq!(
+                evaluate_remote_queue_admission(origin).accepted,
+                source.is_qobuz_streamable(),
+                "admission/predicate disagree for {origin:?}",
+            );
+        }
+    }
+}

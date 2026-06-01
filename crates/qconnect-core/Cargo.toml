@@ -8,3 +8,4 @@ description = "UI-agnostic domain core for Qobuz Connect queue and concurrency"
 [dependencies]
 serde = { workspace = true }
 thiserror = { workspace = true }
+qbz-models = { path = "../qbz-models" }

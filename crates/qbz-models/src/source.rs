@@ -61,6 +61,13 @@ impl PlaybackSource {
     pub fn is_qobuz_streamable(self) -> bool {
         matches!(self, Self::Qobuz)
     }
+
+    /// The admission-side cast predicate. Offline-cache maps to castable (the
+    /// offline copy carries a valid Qobuz track id). This is the method the
+    /// QConnect gate consults; is_qobuz_streamable stays "streams live from Qobuz".
+    pub fn is_castable_to_qconnect(self) -> bool {
+        matches!(self, Self::Qobuz | Self::OfflineCache)
+    }
 }
 
 /// A reference to a piece of cover art, resolvable regardless of origin.
