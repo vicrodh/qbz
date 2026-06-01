@@ -90,6 +90,11 @@ pub(super) struct QconnectRemoteSyncState {
     pub(super) session_loop_mode: Option<i32>,
     /// Session topology — stored from session management events (types 81-87).
     pub(super) session: QconnectSessionState,
+    /// The session_uuid for which we last ran the full deferred renderer-join
+    /// body. Used to make the deferred join idempotent (P1-8): when a SESSION_STATE
+    /// arrives with the same session_uuid we skip the join reports but still
+    /// re-AskForRendererState.
+    pub(super) last_joined_session_uuid: Option<String>,
     pub(super) session_renderer_states: HashMap<i32, QconnectSessionRendererState>,
     /// Track of the most recent load attempt across paths (V2 play
     /// handoff and ensure_remote_track_loaded). Used to suppress

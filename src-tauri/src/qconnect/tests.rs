@@ -63,6 +63,15 @@ fn deferred_join_reason_is_reconnection_only_after_a_drop() {
 }
 
 #[test]
+fn reask_queue_state_stops_once_session_uuid_known_or_budget_spent() {
+    use super::service::should_reask_queue_state;
+    assert!(should_reask_queue_state(false, 0, 5));
+    assert!(should_reask_queue_state(false, 4, 5));
+    assert!(!should_reask_queue_state(false, 5, 5));
+    assert!(!should_reask_queue_state(true, 0, 5));
+}
+
+#[test]
 fn compute_connection_state_matrix() {
     use super::session::{compute_connection_state, ServerActiveState::*};
     let d = compute_connection_state(true, true, None, false);
