@@ -1053,3 +1053,30 @@ fn resolves_remote_previous_to_prior_item_even_mid_track() {
         }
     );
 }
+
+#[test]
+fn device_uuid_env_override_takes_precedence() {
+    // SAFETY: single-threaded test process for this var; restore after.
+    std::env::set_var("QBZ_QCONNECT_DEVICE_UUID", "env-override-uuid-123");
+    let uuid = super::transport::resolve_qconnect_device_uuid();
+    std::env::remove_var("QBZ_QCONNECT_DEVICE_UUID");
+    assert_eq!(uuid, "env-override-uuid-123");
+}
+
+#[test]
+fn device_uuid_persists_and_is_reused_across_calls() {
+    let tmp = std::env::temp_dir().join(format!(
+        "qbz_qconnect_uuid_test_{}.db",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_file(&tmp);
+
+    // First call generates and persists.
+    let first = super::transport::device_uuid_from_db(&tmp);
+    assert!(!first.trim().is_empty(), "generated uuid must be non-empty");
+    // Second call must return the SAME value (read back from disk, not a fresh v4).
+    let second = super::transport::device_uuid_from_db(&tmp);
+    assert_eq!(first, second, "device_uuid must be stable across calls");
+
+    let _ = std::fs::remove_file(&tmp);
+}
