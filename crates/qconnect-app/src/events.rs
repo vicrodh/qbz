@@ -31,6 +31,14 @@ pub enum QconnectAppEvent {
         action_uuid: String,
     },
     QueueResyncTriggered,
+    /// Renderer per-track playback failure (PlaybackErrorMessage). The frontend
+    /// maps streamable/network/not-found failures on the current item to an
+    /// auto-skip; other types surface a toast only.
+    PlaybackError {
+        queue_item_id: u64,
+        error_type: qconnect_protocol::ErrorType,
+        queue_version: Option<qconnect_core::QueueVersion>,
+    },
     /// Session management event from server (types 81-87, 97-101).
     /// These don't affect the queue reducer but provide session topology info.
     SessionManagementEvent {

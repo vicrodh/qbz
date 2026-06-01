@@ -9,8 +9,8 @@ use qconnect_core::{
 };
 use qconnect_protocol::{
     build_qconnect_outbound_envelope, build_qconnect_renderer_outbound_envelope,
-    parse_inbound_event, InboundEnvelope, QueueCommand, QueueCommandType, QueueEventType,
-    QueueServerEvent, RendererCommandType, RendererReport, RendererReportType,
+    decode_playback_error, parse_inbound_event, InboundEnvelope, QueueCommand, QueueCommandType,
+    QueueEventType, QueueServerEvent, RendererCommandType, RendererReport, RendererReportType,
     RendererServerCommand,
 };
 use qconnect_transport_ws::{TransportEvent, WsTransport, WsTransportConfig};
@@ -213,6 +213,20 @@ where
             TransportEvent::InboundRendererServerCommand(command) => {
                 self.apply_renderer_server_command(command).await?;
             }
+            TransportEvent::InboundPayloadBytes { payload, .. } => {
+                // The batch carries renderer per-track failures as a tag-3
+                // playback_error on a messages[] entry. The queue/renderer
+                // decoders ignore it, so decode it here off the raw batch bytes.
+                if let Some(error) = decode_playback_error(&payload) {
+                    self.sink
+                        .on_event(QconnectAppEvent::PlaybackError {
+                            queue_item_id: error.queue_item_id,
+                            error_type: error.error_type,
+                            queue_version: error.queue_version,
+                        })
+                        .await;
+                }
+            }
             TransportEvent::Authenticated
             | TransportEvent::Subscribed
             | TransportEvent::SessionEstablished
@@ -223,7 +237,6 @@ where
             | TransportEvent::TransportError { .. }
             | TransportEvent::CloudError { .. }
             | TransportEvent::InboundFrameDecoded { .. }
-            | TransportEvent::InboundPayloadBytes { .. }
             | TransportEvent::OutboundSent { .. } => {}
         }
         Ok(())
@@ -1249,6 +1262,54 @@ mod tests {
         assert_eq!(
             snap.last_server_queue_hash.as_deref(),
             Some(&[1u8, 2, 3, 4][..])
+        );
+    }
+
+    #[tokio::test]
+    async fn inbound_playback_error_emits_playback_error_app_event() {
+        use prost::Message as _;
+        use qconnect_protocol::{
+            ErrorType, PlaybackErrorMessage, QConnectMessage, QConnectMessages, QueueVersionRef,
+        };
+        use qconnect_transport_ws::TransportEvent;
+
+        let (app, sink, _transport, _events_rx) = build_connected_app().await;
+
+        let batch = QConnectMessages {
+            messages_time: None,
+            messages_id: None,
+            messages: vec![QConnectMessage {
+                message_type: Some(2), // PLAYBACK_ERROR
+                playback_error: Some(PlaybackErrorMessage {
+                    queue_version: Some(QueueVersionRef {
+                        major: Some(4),
+                        minor: Some(2),
+                    }),
+                    queue_item_id: Some(77),
+                    error_type: Some(5), // NETWORK_ERROR
+                }),
+                ..Default::default()
+            }],
+        };
+
+        app.handle_transport_event(TransportEvent::InboundPayloadBytes {
+            cloud_message_type: 0,
+            payload: batch.encode_to_vec(),
+        })
+        .await
+        .expect("handle playback-error frame");
+
+        let events = sink.snapshot().await;
+        assert!(
+            events.iter().any(|event| matches!(
+                event,
+                QconnectAppEvent::PlaybackError {
+                    queue_item_id: 77,
+                    error_type: ErrorType::NetworkError,
+                    ..
+                }
+            )),
+            "expected a PlaybackError app event for queue item 77 / NetworkError"
         );
     }
 

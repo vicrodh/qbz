@@ -19,3 +19,4 @@ log = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
+prost = "0.13"
