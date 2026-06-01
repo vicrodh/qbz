@@ -326,6 +326,14 @@ where
                 ) {
                     should_trigger_resync = true;
                 }
+
+                // queue_hash divergence seam. Inert today (local hash algorithm
+                // is a BLOCKING unknown -> compute_local_queue_hash returns None),
+                // so this never fires spurious resyncs. When the algorithm lands,
+                // a mismatch will pull the authoritative QueueState.
+                if queue_hashes_diverge(&state.queue) {
+                    should_trigger_resync = true;
+                }
             }
             snapshot = state.queue.clone();
         }
@@ -608,6 +616,28 @@ fn infer_buffer_state(playing_state: Option<i32>) -> Option<i32> {
         Some(1) => Some(1),
         Some(value) => Some(value),
         None => None,
+    }
+}
+
+/// BLOCKING OPEN QUESTION: the Qobuz `queue_hash` (field #100) algorithm is
+/// undocumented. Until it is verified, this returns `None`, which keeps
+/// `queue_hashes_diverge` inert so it can NOT fire spurious resyncs. Flipping
+/// this to a real implementation is the single switch that turns on divergence
+/// detection.
+fn compute_local_queue_hash(_queue: &QConnectQueueState) -> Option<Vec<u8>> {
+    None
+}
+
+/// Algorithm-agnostic divergence seam. Only reports divergence when BOTH a
+/// locally computed hash and a server-reported hash exist and differ. Because
+/// `compute_local_queue_hash` returns `None` today, this is always `false`.
+fn queue_hashes_diverge(queue: &QConnectQueueState) -> bool {
+    match (
+        compute_local_queue_hash(queue),
+        queue.last_server_queue_hash.as_ref(),
+    ) {
+        (Some(local), Some(server)) => &local != server,
+        _ => false,
     }
 }
 
@@ -968,7 +998,8 @@ mod tests {
 
     use crate::{QconnectAppEvent, QconnectEventSink};
 
-    use super::QconnectApp;
+    use super::{queue_hashes_diverge, QconnectApp};
+    use qconnect_core::QConnectQueueState;
     use qconnect_protocol::{
         QueueCommandType, QueueEventType, QueueServerEvent, RendererCommandType,
         RendererServerCommand,
@@ -1183,6 +1214,16 @@ mod tests {
         assert!(
             !sent.is_empty(),
             "expected ask-for-state resync after remove"
+        );
+    }
+
+    #[test]
+    fn queue_hashes_diverge_is_inert_without_local_algorithm() {
+        let mut queue = QConnectQueueState::default();
+        queue.last_server_queue_hash = Some(vec![9, 9, 9]);
+        assert!(
+            !queue_hashes_diverge(&queue),
+            "divergence detection must stay inert until the local hash algorithm is known"
         );
     }
 
