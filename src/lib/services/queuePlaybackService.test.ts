@@ -67,21 +67,16 @@ describe('assessQconnectQueueSync', () => {
   });
 });
 
-const track = (over: Partial<BackendQueueTrack>): BackendQueueTrack =>
-  ({ id: 1, title: 't', artist: 'a', album: 'al', duration_secs: 0, artwork_url: null,
-     hires: false, bit_depth: null, sample_rate: null, is_local: false, album_id: null,
-     artist_id: null, streamable: true, source: 'qobuz', parental_warning: false, ...over }) as BackendQueueTrack;
-
 describe('assessQconnectQueueSync — offline-cache', () => {
   it('treats qobuz_download as syncable (offline copy carries a Qobuz id)', () => {
-    const r = assessQconnectQueueSync([track({ id: 5, source: 'qobuz_download' })]);
+    const r = assessQconnectQueueSync([buildTrack(5, { source: 'qobuz_download' })]);
     expect(r.syncable).toBe(true);
     expect(r.trackIds).toEqual([5]);
     expect(r.blockedTrackIds).toEqual([]);
   });
   it('still blocks local and plex', () => {
     const r = assessQconnectQueueSync([
-      track({ id: 1, source: 'qobuz' }), track({ id: 2, source: 'local' }),
+      buildTrack(1, { source: 'qobuz' }), buildTrack(2, { source: 'local' }),
     ]);
     expect(r.syncable).toBe(false);
     expect(r.blockedTrackIds).toContain(2);

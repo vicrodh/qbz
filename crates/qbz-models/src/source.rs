@@ -64,6 +64,9 @@ impl PlaybackSource {
     /// The admission-side cast predicate. Offline-cache maps to castable (the
     /// offline copy carries a valid Qobuz track id). This is the method the
     /// QConnect gate consults; is_qobuz_streamable stays "streams live from Qobuz".
+    ///
+    /// Shared QConnect-admission gate primitive: this is the single predicate
+    /// both the Tauri and the upcoming Slint frontends call to gate casting.
     pub fn is_castable_to_qconnect(self) -> bool {
         matches!(self, Self::Qobuz | Self::OfflineCache)
     }
@@ -71,6 +74,9 @@ impl PlaybackSource {
 
 /// Admission-only origin tag. Unlike PlaybackSource, this has ExternalUnknown
 /// so the Qobuz Connect gate can default unknown/absent to *blocked* not *Qobuz*.
+///
+/// Shared QConnect-admission gate primitive consumed by the Slint port (its
+/// strict-parse companion for the cast gate); kept intentionally for that use.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TrackOriginTag {
     Qobuz,
@@ -82,6 +88,9 @@ pub enum TrackOriginTag {
 
 impl PlaybackSource {
     /// Strict parse for the admission path: unknown/absent → ExternalUnknown (blocked).
+    ///
+    /// Shared QConnect-admission gate primitive consumed by the Slint port (it
+    /// feeds the cast gate, where unknown origins must block, not default to Qobuz).
     pub fn from_source_str_strict(s: Option<&str>) -> TrackOriginTag {
         match s {
             Some("qobuz") => TrackOriginTag::Qobuz,

@@ -68,16 +68,17 @@ mod tests {
     use qbz_models::PlaybackSource;
 
     #[test]
-    fn admission_matches_playback_source_predicate() {
+    fn admission_matches_cast_predicate() {
         let pairs = [
             (TrackOrigin::QobuzOnline, PlaybackSource::Qobuz),
+            (TrackOrigin::QobuzOfflineCache, PlaybackSource::OfflineCache),
             (TrackOrigin::LocalLibrary, PlaybackSource::Local),
             (TrackOrigin::Plex, PlaybackSource::Plex),
         ];
         for (origin, source) in pairs {
             assert_eq!(
                 evaluate_remote_queue_admission(origin).accepted,
-                source.is_qobuz_streamable(),
+                source.is_castable_to_qconnect(),
                 "admission/predicate disagree for {origin:?}",
             );
         }
