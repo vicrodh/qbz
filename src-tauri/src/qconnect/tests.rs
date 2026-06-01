@@ -49,6 +49,20 @@ fn normalizes_renderer_volume() {
 }
 
 #[test]
+fn deferred_join_reason_is_reconnection_only_after_a_drop() {
+    use super::service::deferred_join_reason;
+    use super::{JOIN_SESSION_REASON_CONTROLLER_REQUEST, JOIN_SESSION_REASON_RECONNECTION};
+    assert_eq!(
+        deferred_join_reason(false),
+        JOIN_SESSION_REASON_CONTROLLER_REQUEST
+    );
+    assert_eq!(
+        deferred_join_reason(true),
+        JOIN_SESSION_REASON_RECONNECTION
+    );
+}
+
+#[test]
 fn maps_outbound_command_type_to_protocol_command_type() {
     assert_eq!(
         QconnectOutboundCommandType::JoinSession.to_queue_command_type(),

@@ -41,11 +41,22 @@ use super::{
     QconnectLifecycleState, QconnectMuteVolumeRequest, QconnectQueueVersionPayload,
     QconnectRemoteSyncState, QconnectSessionState, QconnectSetPlayerStateQueueItemPayload,
     QconnectSetPlayerStateRequest, QconnectSetVolumeRequest, QconnectVisibleQueueProjection,
-    AUDIO_QUALITY_HIRES_LEVEL2, BUFFER_STATE_OK, PLAYING_STATE_PAUSED, PLAYING_STATE_PLAYING,
+    AUDIO_QUALITY_HIRES_LEVEL2, BUFFER_STATE_OK, JOIN_SESSION_REASON_CONTROLLER_REQUEST,
+    JOIN_SESSION_REASON_RECONNECTION, PLAYING_STATE_PAUSED, PLAYING_STATE_PLAYING,
     PLAYING_STATE_STOPPED,
 };
 
-const JOIN_SESSION_REASON_CONTROLLER_REQUEST: i32 = 1;
+/// Pure selector for the JoinSession `reason`: a post-drop rejoin carries
+/// RECONNECTION, the first join from a fresh runtime carries CONTROLLER_REQUEST
+/// (P1-2).
+pub(super) fn deferred_join_reason(has_disconnected: bool) -> i32 {
+    if has_disconnected {
+        JOIN_SESSION_REASON_RECONNECTION
+    } else {
+        JOIN_SESSION_REASON_CONTROLLER_REQUEST
+    }
+}
+
 const QCONNECT_PLAY_TRACK_HANDOFF_WAIT_MS: u64 = 1_500;
 const QCONNECT_PLAY_TRACK_HANDOFF_POLL_MS: u64 = 50;
 
@@ -208,7 +219,12 @@ impl QconnectServiceState {
                                         evt.payload.get("session_uuid").and_then(|v| v.as_str())
                                     {
                                         renderer_joined = true;
-                                        deferred_renderer_join(&app_for_loop, session_uuid).await;
+                                        deferred_renderer_join(
+                                            &app_for_loop,
+                                            session_uuid,
+                                            deferred_join_reason(has_disconnected),
+                                        )
+                                        .await;
                                     } else {
                                         log::warn!("[QConnect] SESSION_STATE received but no session_uuid in payload: {}", evt.payload);
                                     }
@@ -1636,6 +1652,7 @@ async fn bootstrap_remote_presence(
 async fn deferred_renderer_join(
     app: &Arc<QconnectApp<NativeWsTransport, TauriQconnectEventSink>>,
     session_uuid: &str,
+    join_reason: i32,
 ) {
     let device_info = default_qconnect_device_info();
     let queue_version_ref = app.queue_state_snapshot().await.version;
@@ -1650,7 +1667,7 @@ async fn deferred_renderer_join(
         "session_uuid": session_uuid,
         "device_info": serde_json::to_value(&device_info).unwrap_or_default(),
         "is_active": true,
-        "reason": JOIN_SESSION_REASON_CONTROLLER_REQUEST,
+        "reason": join_reason,
         "initial_state": {
             "playing_state": PLAYING_STATE_STOPPED,
             "buffer_state": BUFFER_STATE_OK,

@@ -38,6 +38,13 @@ pub(super) const PLAYING_STATE_PLAYING: i32 = 2;
 pub(super) const PLAYING_STATE_PAUSED: i32 = 3;
 pub(super) const BUFFER_STATE_OK: i32 = 2;
 
+/// JoinSession `reason` wire values (proto tag 3): a first join from a fresh
+/// runtime is a controller request, a join after a transport drop carries the
+/// reconnection reason so the server treats it as session continuity rather
+/// than a brand-new controller (P1-2).
+pub(super) const JOIN_SESSION_REASON_CONTROLLER_REQUEST: i32 = 1;
+pub(super) const JOIN_SESSION_REASON_RECONNECTION: i32 = 2;
+
 /// Official "renderer LOST" silence budget. A *playing* active peer renderer
 /// that sends no RENDERER_STATE_UPDATED for this long is considered
 /// unreachable (webplayer arms setTimeout(...,12e3) on onPlayerStateUpdated
