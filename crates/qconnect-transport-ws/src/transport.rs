@@ -505,6 +505,18 @@ async fn run_native_transport_loop(
         // keep paying the lock cost.
         let mut session_established = false;
 
+        // Per-connection keepalive half-open tracking (gap #6). The deadline is
+        // ~2.5× the ping interval: a healthy peer answers within one interval,
+        // so two unanswered pings plus 2.5× silence is a confident half-open
+        // signal without being trigger-happy.
+        let keepalive_deadline_ms = config
+            .keepalive_interval_ms
+            .max(1_000)
+            .saturating_mul(5)
+            / 2;
+        let mut last_pong_at_ms = now_ms();
+        let mut outstanding_pings: u32 = 0;
+
         let disconnect_reason = loop {
             tokio::select! {
                 _ = shutdown_rx.changed() => {
@@ -536,9 +548,23 @@ async fn run_native_transport_loop(
                     }
                 }
                 _ = keepalive.tick() => {
+                    // Detect a half-open connection BEFORE sending the next ping:
+                    // if prior pings went unanswered past the deadline, the TCP
+                    // path is dead even though no read/write has errored yet.
+                    // Breaking falls into the existing increment-only reconnect
+                    // path (issue #358 latch unaffected).
+                    if keepalive_is_stale(
+                        now_ms(),
+                        last_pong_at_ms,
+                        outstanding_pings,
+                        keepalive_deadline_ms,
+                    ) {
+                        break "keepalive_timeout".to_string();
+                    }
                     if let Err(err) = ws.send(WsMessage::Ping(Vec::new().into())).await {
                         break format!("keepalive_ping_error:{err}");
                     }
+                    outstanding_pings = outstanding_pings.saturating_add(1);
                     emit(&events_tx, TransportEvent::KeepalivePingSent);
                 }
                 incoming = ws.next() => {
@@ -565,6 +591,8 @@ async fn run_native_transport_loop(
                             }
                         }
                         Some(Ok(WsMessage::Pong(_))) => {
+                            last_pong_at_ms = now_ms();
+                            outstanding_pings = 0;
                             emit(&events_tx, TransportEvent::KeepalivePongReceived);
                         }
                         Some(Ok(WsMessage::Ping(payload))) => {
@@ -939,6 +967,19 @@ fn now_ms() -> u64 {
         .as_millis() as u64
 }
 
+/// Pure half-open TCP detector (gap #6). Returns `true` only when at least two
+/// keepalive pings have gone unanswered AND the last pong is older than
+/// `max_silence_ms`. Requiring two outstanding pings avoids tearing down a
+/// healthy connection that simply missed a single pong window.
+fn keepalive_is_stale(
+    now_ms: u64,
+    last_pong_at_ms: u64,
+    outstanding_pings: u32,
+    max_silence_ms: u64,
+) -> bool {
+    outstanding_pings >= 2 && now_ms.saturating_sub(last_pong_at_ms) >= max_silence_ms
+}
+
 #[derive(Clone, PartialEq, ::prost::Message)]
 struct Authenticate {
     #[prost(uint32, optional, tag = "1")]
@@ -1003,6 +1044,21 @@ mod tests {
     fn config_require_jwt_defaults_false_for_test_path() {
         let cfg = WsTransportConfig::default();
         assert!(!cfg.require_jwt);
+    }
+
+    /// gap #6: half-open detection only fires after BOTH at least two
+    /// unanswered pings AND silence past the deadline. A single missed pong, or
+    /// recent silence with fewer than two outstanding pings, must NOT tear the
+    /// connection down.
+    #[test]
+    fn keepalive_stale_only_after_two_unanswered_pings_and_silence() {
+        let interval = 30_000u64;
+        let deadline = interval * 5 / 2;
+        let now = 1_000_000u64;
+        assert!(!keepalive_is_stale(now, now, 3, deadline));
+        assert!(!keepalive_is_stale(now, now - deadline - 1, 0, deadline));
+        assert!(!keepalive_is_stale(now, now - deadline - 1, 1, deadline));
+        assert!(keepalive_is_stale(now, now - deadline - 1, 2, deadline));
     }
 
     #[test]
