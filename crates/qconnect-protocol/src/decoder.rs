@@ -544,7 +544,10 @@ fn map_queue_state(payload: QueueStateMessage) -> Result<QueueServerEvent, Proto
             "shuffled_track_indexes": shuffled_indexes,
             "autoplay_mode": payload.autoplay_mode.unwrap_or(false),
             "autoplay_loading": payload.autoplay_loading.unwrap_or(false),
-            "autoplay_tracks": autoplay_tracks
+            "autoplay_tracks": autoplay_tracks,
+            // Field #100: previously decoded-then-dropped. Surfaced for the
+            // queue_hash divergence seam (algorithm is a BLOCKING unknown).
+            "server_queue_hash": payload.queue_hash
         }),
     })
 }

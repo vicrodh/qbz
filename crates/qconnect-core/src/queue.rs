@@ -36,6 +36,11 @@ pub struct QConnectQueueState {
     pub autoplay_loading: bool,
     pub autoplay_items: Vec<QueueItem>,
     pub updated_at_ms: u64,
+    /// Last `queue_hash` (field #100) reported by the server on a queue-state
+    /// confirmation. Surfaced for divergence detection; see the algorithm-agnostic
+    /// `queue_hashes_diverge` seam in qconnect-app (algorithm is a BLOCKING unknown).
+    #[serde(default)]
+    pub last_server_queue_hash: Option<Vec<u8>>,
 }
 
 impl Default for QConnectQueueState {
@@ -49,6 +54,7 @@ impl Default for QConnectQueueState {
             autoplay_loading: false,
             autoplay_items: Vec::new(),
             updated_at_ms: 0,
+            last_server_queue_hash: None,
         }
     }
 }

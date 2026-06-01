@@ -637,6 +637,12 @@ fn map_server_event(event: &QueueServerEvent, current: &QConnectQueueState) -> Q
                 next.shuffle_order = None;
             }
 
+            // Surface the server queue_hash (field #100). Only overwrite when the
+            // payload actually carries it, so an omitted hash leaves prior state.
+            if let Some(server_hash) = parse_bytes(&event.payload, "server_queue_hash") {
+                next.last_server_queue_hash = Some(server_hash);
+            }
+
             QueueEvent::QueueStateReplaced {
                 action_uuid: event.action_uuid.clone(),
                 state: next,
@@ -825,6 +831,21 @@ fn parse_queue_item_ids(payload: &Value) -> Vec<u64> {
 
 fn parse_u64(payload: &Value, field: &str) -> Option<u64> {
     payload.get(field).and_then(value_as_u64)
+}
+
+/// Parse a JSON byte array (e.g. the server `queue_hash` field #100) into bytes.
+/// Returns `None` when absent/null so an omitted hash does not clobber state.
+fn parse_bytes(payload: &Value, field: &str) -> Option<Vec<u8>> {
+    payload
+        .get(field)
+        .and_then(Value::as_array)
+        .map(|entries| {
+            entries
+                .iter()
+                .filter_map(value_as_u64)
+                .filter_map(|value| u8::try_from(value).ok())
+                .collect()
+        })
 }
 
 fn parse_bool(payload: &Value, field: &str, default: bool) -> bool {
@@ -1162,6 +1183,31 @@ mod tests {
         assert!(
             !sent.is_empty(),
             "expected ask-for-state resync after remove"
+        );
+    }
+
+    #[tokio::test]
+    async fn queue_state_event_surfaces_server_queue_hash() {
+        let (app, _sink, _transport, _events_rx) = build_connected_app().await;
+
+        app.apply_server_event(QueueServerEvent {
+            event_type: QueueEventType::SrvrCtrlQueueState,
+            action_uuid: None,
+            queue_version: Some(QueueVersion::new(1, 0)),
+            payload: json!({
+                "tracks": [],
+                "shuffle_mode": false,
+                "autoplay_tracks": [],
+                "server_queue_hash": [1, 2, 3, 4]
+            }),
+        })
+        .await
+        .expect("apply queue-state event");
+
+        let snap = app.queue_state_snapshot().await;
+        assert_eq!(
+            snap.last_server_queue_hash.as_deref(),
+            Some(&[1u8, 2, 3, 4][..])
         );
     }
 
