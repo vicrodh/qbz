@@ -53,6 +53,7 @@ mod offline_manager;
 mod playlist;
 mod playlist_manager;
 mod playlist_picker;
+mod quality;
 mod recently;
 mod search;
 mod settings;
@@ -2263,12 +2264,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     0,
                 ),
                 ("track", "play") => {
-                    if let Ok(track_id) = id.parse::<u64>() {
-                        playback::play_track_now(
+                    // Universal per-row play: queue the current view's VISIBLE
+                    // tracklist starting at the clicked track (see
+                    // playback::play_track_in_context). Every tracklist surface
+                    // routes here — album, playlist, favorites, label, mix,
+                    // artist, search.
+                    if let Some(w) = weak.upgrade() {
+                        playback::play_track_in_context(
+                            &w,
                             runtime.clone(),
                             weak.clone(),
                             handle.clone(),
-                            track_id,
+                            &id,
                         );
                     }
                 }
@@ -2483,6 +2490,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         w.invoke_open_artist(id.clone().into());
                     }
                 }
+                // Clickable album name (track rows) -> album page.
+                ("album", "open") => {
+                    if let Some(w) = weak.upgrade() {
+                        w.invoke_open_album(id.clone().into());
+                    }
+                }
                 ("artist", "play-top") => playback::play_artist_top_tracks(
                     runtime.clone(),
                     weak.clone(),
@@ -2680,16 +2693,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 }
-                ("mix-track", track_id) => {
-                    let idx = mix::index_of(track_id);
-                    let runtime = runtime.clone();
-                    let weak = weak.clone();
-                    let handle = handle.clone();
-                    handle.clone().spawn(async move {
-                        let tracks = mix::current_tracks();
-                        playback::play_tracks(runtime, weak, handle, tracks, idx);
-                    });
-                }
                 ("playlist", "cache") => {
                     if let Ok(pid) = id.parse::<u64>() {
                         offline_cache::cache_playlist(
@@ -2884,20 +2887,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 });
                             }
                         }
-                    }
-                }
-                ("playlist-track", track_id) => {
-                    // Queue the VISIBLE order starting at the clicked track, so
-                    // the tracks that follow it (not track 1) play next.
-                    if let Some(w) = weak.upgrade() {
-                        let (tracks, idx) = playlist::visible_play_context(&w, track_id);
-                        playback::play_tracks(
-                            runtime.clone(),
-                            weak.clone(),
-                            handle.clone(),
-                            tracks,
-                            idx,
-                        );
                     }
                 }
                 _ => {}

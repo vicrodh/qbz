@@ -363,6 +363,8 @@ fn map_track(index: usize, track: PageArtistTrack) -> TrackData {
         .map(|a| (a.name.display, a.id.to_string()))
         .unwrap_or_default();
     let album_id = track.album.map(|a| a.id).unwrap_or_default();
+    let bit_depth = track.audio_info.as_ref().and_then(|a| a.maximum_bit_depth);
+    let sample_rate = track.audio_info.as_ref().and_then(|a| a.maximum_sampling_rate);
     TrackData {
         id: track.id.to_string(),
         number: (index + 1).to_string(),
@@ -371,7 +373,8 @@ fn map_track(index: usize, track: PageArtistTrack) -> TrackData {
         artist_id,
         album_id,
         duration: mmss(track.duration.unwrap_or(0)),
-        quality_tier: tier(track.audio_info.and_then(|a| a.maximum_bit_depth)).to_string(),
+        quality_tier: tier(bit_depth).to_string(),
+        quality_detail: crate::quality::detail(bit_depth, sample_rate),
         explicit: track.parental_warning.unwrap_or(false),
     }
 }
@@ -495,6 +498,7 @@ pub fn apply_artist(window: &AppWindow, data: ArtistData) {
             album: "".into(),
             duration: track.duration.into(),
             quality_tier: track.quality_tier.into(),
+            quality_detail: track.quality_detail.into(),
             explicit: track.explicit,
             selected: false,
             artwork_url: "".into(),

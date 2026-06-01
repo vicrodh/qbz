@@ -22,6 +22,7 @@ import { TrackItem, DragActions, NowPlayingState, NavState } from "../state.slin
 import { QbzIcon } from "QbzIcon.slint";
 import { TrackPlayCell } from "TrackPlayCell.slint";
 import { TrackContextMenu } from "TrackContextMenu.slint";
+import { QualityBadgeFull } from "QualityBadgeFull.slint";
 
 export component TrackRow inherits Rectangle {
     in property <TrackItem> track;
@@ -382,16 +383,20 @@ export component TrackRow inherits Rectangle {
             horizontal-alignment: center;
             vertical-alignment: center;
         }
-        // Quality.
-        Text {
-            text: root.track.quality-tier == "hires"
-                ? "Hi-Res"
-                : (root.track.quality-tier == "cd" ? "CD" : "");
-            width: 70px;
-            color: Theme.text-muted;
-            font-size: Typography.legal;
-            horizontal-alignment: center;
-            vertical-alignment: center;
+        // Quality — bare badge (tier label + exact bit-depth / sample-rate),
+        // no chip background so it blends into the row.
+        HorizontalLayout {
+            width: 92px;
+            alignment: center;
+            VerticalLayout {
+                alignment: center;
+                QualityBadgeFull {
+                    tier: root.track.quality-tier;
+                    detail: root.track.quality-detail;
+                    show-icon: false;
+                    bare: true;
+                }
+            }
         }
 
         // Favorite — filled accent heart when favorited, outline heart

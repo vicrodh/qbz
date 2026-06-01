@@ -247,6 +247,9 @@ export struct TrackItem {
     album: string,
     duration: string,
     quality-tier: string,
+    // Exact bit-depth / sample-rate line, e.g. "24-bit / 96 kHz" — feeds the
+    // track-row quality badge (empty for unknown / where only the tier shows).
+    quality-detail: string,
     explicit: bool,
     selected: bool,
     artwork-url: string,

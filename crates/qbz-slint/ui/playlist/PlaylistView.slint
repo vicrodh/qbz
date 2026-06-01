@@ -555,7 +555,8 @@ export component PlaylistView inherits Rectangle {
                     font-size: Typography.legal;
                     horizontal-alignment: center;
                 }
-                Rectangle { width: 40px; }
+                // Play/cover cell — matches the row's 36px artwork cell.
+                Rectangle { width: 36px; }
                 Text {
                     text: @tr("Title");
                     color: Theme.text-muted;
@@ -577,11 +578,14 @@ export component PlaylistView inherits Rectangle {
                 }
                 Text {
                     text: @tr("Quality");
-                    width: 70px;
+                    width: 92px;
                     color: Theme.text-muted;
                     font-size: Typography.legal;
                     horizontal-alignment: center;
                 }
+                // Reserve the row's three trailing columns: favorite (28),
+                // offline/download (28), context-menu (32).
+                Rectangle { width: 28px; }
                 Rectangle { width: 28px; }
                 Rectangle { width: 32px; }
             }
@@ -612,29 +616,38 @@ export component PlaylistView inherits Rectangle {
             // without shrinking the list).
             Rectangle {
                 vertical-stretch: 1;
-                track-list := ListView {
-                    width: 100%;
-                    height: 100%;
-                    vertical-scrollbar-policy: ScrollBarPolicy.always-off;
-                    for track[i] in PlaylistState.tracks: TrackRow {
-                        track: track;
-                        index: i;
-                        show-artwork: true;
-                        show-album: true;
-                        show-favorite: true;
-                        show-reorder: PlaylistState.sort-field == "custom";
-                        multi-select-mode: PlaylistState.multi-select-mode;
-                        media-action(kind, id, action) => {
-                            if (action == "play") {
-                                root.play-track(id);
-                            } else {
-                                root.media-action(kind, id, action);
+                // The list sits in a right-padded layout so the custom
+                // scrollbar lands in the gutter instead of overlapping the
+                // rows, and the rows' right edge lines up with the column
+                // header (mirrors LocalLibrary > Tracks).
+                VerticalLayout {
+                    padding-right: 14px;
+                    track-list := ListView {
+                        vertical-stretch: 1;
+                        vertical-scrollbar-policy: ScrollBarPolicy.always-off;
+                        for track[i] in PlaylistState.tracks: TrackRow {
+                            track: track;
+                            index: i;
+                            show-artwork: true;
+                            show-album: true;
+                            show-favorite: true;
+                            show-reorder: PlaylistState.sort-field == "custom";
+                            multi-select-mode: PlaylistState.multi-select-mode;
+                            media-action(kind, id, action) => {
+                                if (action == "play") {
+                                    root.play-track(id);
+                                } else {
+                                    root.media-action(kind, id, action);
+                                }
                             }
                         }
                     }
                 }
                 ListScrollbar {
-                    x: parent.width - self.width - 4px;
+                    // Anchor to the VIEW's right edge like LocalLibrary > Tracks:
+                    // the +16px cancels `page`'s right padding so the scrollbar
+                    // sits 4px from the edge (not 4px from the padded content).
+                    x: parent.width - self.width - 4px + 16px;
                     width: 14px;
                     height: 100%;
                     viewport-height: track-list.viewport-height;

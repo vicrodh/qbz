@@ -68,6 +68,9 @@ pub struct TrackRowData {
     /// Detailed quality label, e.g. "Hi-Res 24-bit / 192 kHz". Used by the
     /// most-popular track hero (shown as text instead of an icon badge).
     pub quality_label: String,
+    /// Exact bit-depth / sample-rate line, e.g. "24-bit / 192 kHz" — feeds the
+    /// track-row quality badge (no tier prefix, unlike `quality_label`).
+    pub quality_detail: String,
     pub explicit: bool,
     pub artwork_url: String,
 }
@@ -226,6 +229,10 @@ pub fn map_track(track: Track) -> TrackRowData {
         duration: mmss(track.duration),
         quality_tier: tier(track.maximum_bit_depth).to_string(),
         quality_label: quality_label(track.maximum_bit_depth, track.maximum_sampling_rate),
+        quality_detail: crate::quality::detail(
+            track.maximum_bit_depth,
+            track.maximum_sampling_rate,
+        ),
         explicit: track.parental_warning,
         artwork_url,
     }
@@ -365,6 +372,7 @@ fn track_item(row: TrackRowData) -> TrackItem {
         album: "".into(),
         duration: row.duration.into(),
         quality_tier: row.quality_tier.into(),
+        quality_detail: row.quality_detail.into(),
         explicit: row.explicit,
         selected: false,
         artwork_url: row.artwork_url.into(),

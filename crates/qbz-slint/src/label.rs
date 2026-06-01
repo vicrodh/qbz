@@ -322,6 +322,7 @@ pub struct TopTrack {
     pub artwork_url: String,
     pub duration: String,
     pub quality_tier: String,
+    pub quality_detail: String,
 }
 
 #[derive(Clone)]
@@ -540,6 +541,12 @@ fn parse_top_track(raw: &Value) -> TopTrack {
         .and_then(|a| a.get("maximum_bit_depth"))
         .and_then(|v| v.as_u64())
         .or_else(|| raw.get("maximum_bit_depth").and_then(|v| v.as_u64()));
+    let sample_rate = raw
+        .get("audio_info")
+        .and_then(|a| a.get("maximum_sampling_rate"))
+        .and_then(|v| v.as_f64())
+        .or_else(|| raw.get("maximum_sampling_rate").and_then(|v| v.as_f64()));
+    let bit_depth = bit_depth.map(|b| b as u32);
     TopTrack {
         id,
         title,
@@ -548,7 +555,8 @@ fn parse_top_track(raw: &Value) -> TopTrack {
         album_id,
         artwork_url,
         duration: mmss(duration as u32),
-        quality_tier: tier(bit_depth.map(|b| b as u32)).to_string(),
+        quality_tier: tier(bit_depth).to_string(),
+        quality_detail: crate::quality::detail(bit_depth, sample_rate),
     }
 }
 
@@ -755,6 +763,7 @@ fn top_track_to_item(t: &TopTrack) -> TrackItem {
         album: "".into(),
         duration: t.duration.clone().into(),
         quality_tier: t.quality_tier.clone().into(),
+        quality_detail: t.quality_detail.clone().into(),
         explicit: false,
         selected: false,
         artwork_url: t.artwork_url.clone().into(),

@@ -636,6 +636,12 @@ fn map_local_track(t: qbz_library::LocalTrack) -> TrackItem {
         album: t.album.into(),
         duration: fmt_duration(t.duration_secs).into(),
         quality_tier: tier.into(),
+        quality_detail: if tier == "mp3" {
+            String::new()
+        } else {
+            crate::quality::detail(t.bit_depth, Some(t.sample_rate))
+        }
+        .into(),
         explicit: false,
         selected: false,
         artwork_url: t.artwork_path.unwrap_or_default().into(),

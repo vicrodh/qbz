@@ -208,7 +208,7 @@ export component AppShell inherits Rectangle {
                 if NavState.view == ContentView.local-library: LocalLibraryView { }
                 if NavState.view == ContentView.mix: MixView {
                     play-track(id) => {
-                        root.media-action("mix-track", id, "play");
+                        root.media-action("track", id, "play");
                     }
                     play-all => {
                         root.media-action("mix", "", "play-all");
@@ -225,7 +225,7 @@ export component AppShell inherits Rectangle {
                 }
                 if NavState.view == ContentView.playlist: PlaylistView {
                     play-track(id) => {
-                        root.media-action("playlist-track", id, "play");
+                        root.media-action("track", id, "play");
                     }
                     play-all => {
                         root.media-action("playlist", "", "play-all");

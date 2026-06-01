@@ -14,12 +14,15 @@
 use std::sync::{Arc, OnceLock};
 
 use qbz_app::shell::AppRuntime;
-use qbz_models::{Quality, QueueTrack, RepeatMode};
-use slint::ComponentHandle;
+use qbz_models::{Quality, QueueTrack, RepeatMode, Track};
+use slint::{ComponentHandle, Model, ModelRc};
 
 use crate::adapter::SlintAdapter;
 use crate::queue::QueueController;
-use crate::{AppWindow, NowPlayingState};
+use crate::{
+    AlbumState, AppWindow, ArtistState, ContentView, FavoritesState, LabelState, NavState,
+    NowPlayingState, PlaylistState, SearchState, TrackItem,
+};
 
 /// The Queue sidebar controller, published once the shell is up so the
 /// playback paths (album/track play, skip, auto-advance) can refresh the
@@ -671,6 +674,56 @@ async fn record_recent(runtime: &Runtime) {
 
 /// Play `album_id` from `start_index`: fetch the album, build the queue,
 /// hand it to the core, and start audio on the start track.
+/// Fetch an album and build its play queue (genre/quality meta cached for
+/// the Recently Played card). Shared by `play_album` (start at a positional
+/// index) and `play_album_from` (start at a clicked track id). Returns None
+/// and toasts on failure / an empty album.
+async fn fetch_album_for_play(
+    runtime: &Runtime,
+    weak: &slint::Weak<AppWindow>,
+    album_id: &str,
+) -> Option<Vec<QueueTrack>> {
+    let album = match runtime.core().get_album(album_id).await {
+        Ok(album) => album,
+        Err(e) => {
+            log::error!("[qbz-slint] playback: get_album {album_id} failed: {e}");
+            crate::toast::error_weak(weak, "Couldn't load this album");
+            return None;
+        }
+    };
+
+    let album_title = album.title.clone();
+    let album_artist = album.artist.name.clone();
+    let album_artwork = album.image.best().cloned().unwrap_or_default();
+    // Cache the album's genre / release date / quality so the Recently
+    // Played card the play records carries them (no extra fetch).
+    crate::recently::remember_album_meta(&album.id, album_card_meta(&album));
+
+    let tracks: Vec<QueueTrack> = album
+        .tracks
+        .as_ref()
+        .map(|container| container.items.as_slice())
+        .unwrap_or_default()
+        .iter()
+        .map(|track| {
+            make_queue_track(
+                track,
+                &album.id,
+                &album_title,
+                &album_artist,
+                &album_artwork,
+            )
+        })
+        .collect();
+
+    if tracks.is_empty() {
+        log::warn!("[qbz-slint] playback: album {album_id} has no tracks");
+        crate::toast::error_weak(weak, "This album has no playable tracks");
+        return None;
+    }
+    Some(tracks)
+}
+
 pub fn play_album(
     runtime: Runtime,
     weak: slint::Weak<AppWindow>,
@@ -679,48 +732,39 @@ pub fn play_album(
     start_index: usize,
 ) {
     handle.spawn(async move {
-        let album = match runtime.core().get_album(&album_id).await {
-            Ok(album) => album,
-            Err(e) => {
-                log::error!("[qbz-slint] playback: get_album {album_id} failed: {e}");
-                crate::toast::error_weak(&weak, "Couldn't load this album");
-                return;
-            }
-        };
-
-        let album_title = album.title.clone();
-        let album_artist = album.artist.name.clone();
-        let album_artwork = album.image.best().cloned().unwrap_or_default();
-        // Cache the album's genre / release date / quality so the Recently
-        // Played card the play records below carries them (no extra fetch).
-        crate::recently::remember_album_meta(&album.id, album_card_meta(&album));
-
-        let tracks: Vec<QueueTrack> = album
-            .tracks
-            .as_ref()
-            .map(|container| container.items.as_slice())
-            .unwrap_or_default()
-            .iter()
-            .map(|track| {
-                make_queue_track(
-                    track,
-                    &album.id,
-                    &album_title,
-                    &album_artist,
-                    &album_artwork,
-                )
-            })
-            .collect();
-
-        if tracks.is_empty() {
-            log::warn!("[qbz-slint] playback: album {album_id} has no tracks");
-            crate::toast::error_weak(&weak, "This album has no playable tracks");
+        let Some(tracks) = fetch_album_for_play(&runtime, &weak, &album_id).await else {
             return;
-        }
-
+        };
         let start = start_index.min(tracks.len() - 1);
         let start_track_id = tracks[start].id;
+        runtime.core().set_queue(tracks, Some(start)).await;
+        after_track_change(&runtime, &weak, start_track_id).await;
+        refresh_sidebar(true);
+    });
+}
 
+/// Play an album starting at the clicked track id (queues the tracks that
+/// follow). `visible_ids` is the album view's VISIBLE row order — the queue
+/// is reordered/filtered to match it, so the album track-search filter is
+/// respected. Anchoring on the id keeps the start correct regardless.
+pub fn play_album_from(
+    runtime: Runtime,
+    weak: slint::Weak<AppWindow>,
+    handle: tokio::runtime::Handle,
+    album_id: String,
+    visible_ids: Vec<String>,
+    clicked_id: String,
+) {
+    handle.spawn(async move {
+        let Some(tracks) = fetch_album_for_play(&runtime, &weak, &album_id).await else {
+            return;
+        };
+        let tracks = reorder_queue_by_visible(tracks, &visible_ids);
+        let start = tracks
+            .iter()
+            .position(|t| t.id.to_string() == clicked_id)
+            .unwrap_or(0);
+        let start_track_id = tracks[start].id;
         runtime.core().set_queue(tracks, Some(start)).await;
         after_track_change(&runtime, &weak, start_track_id).await;
         refresh_sidebar(true);
@@ -731,6 +775,44 @@ pub fn play_album(
 /// first track. Wired to the Popular Tracks "play all" CircleAction
 /// in ArtistPageView. Re-fetches the artist page so the queue
 /// carries the same audio metadata the page row uses.
+/// Fetch the artist page and build the Popular-tracks play queue. Shared by
+/// `play_artist_top_tracks` (start at 0) and `play_artist_top_from` (start at
+/// a clicked track id). Returns None and toasts on failure / no top tracks.
+async fn fetch_artist_top_for_play(
+    runtime: &Runtime,
+    weak: &slint::Weak<AppWindow>,
+    artist_id: &str,
+) -> Option<Vec<QueueTrack>> {
+    let id: u64 = match artist_id.parse() {
+        Ok(id) => id,
+        Err(_) => {
+            log::warn!("[qbz-slint] play-top: invalid artist id {artist_id}");
+            return None;
+        }
+    };
+    let page = match runtime.core().get_artist_page(id, None).await {
+        Ok(page) => page,
+        Err(e) => {
+            log::error!("[qbz-slint] play-top: get_artist_page failed: {e}");
+            crate::toast::error_weak(weak, "Couldn't load this artist");
+            return None;
+        }
+    };
+    let artist_name = page.name.display.clone();
+    let tracks: Vec<QueueTrack> = page
+        .top_tracks
+        .unwrap_or_default()
+        .into_iter()
+        .map(|track| make_top_track_queue(track, &artist_name))
+        .collect();
+    if tracks.is_empty() {
+        log::warn!("[qbz-slint] play-top: artist {artist_id} has no top tracks");
+        crate::toast::error_weak(weak, "No top tracks available for this artist");
+        return None;
+    }
+    Some(tracks)
+}
+
 pub fn play_artist_top_tracks(
     runtime: Runtime,
     weak: slint::Weak<AppWindow>,
@@ -738,35 +820,39 @@ pub fn play_artist_top_tracks(
     artist_id: String,
 ) {
     handle.spawn(async move {
-        let id: u64 = match artist_id.parse() {
-            Ok(id) => id,
-            Err(_) => {
-                log::warn!("[qbz-slint] play-top: invalid artist id {artist_id}");
-                return;
-            }
-        };
-        let page = match runtime.core().get_artist_page(id, None).await {
-            Ok(page) => page,
-            Err(e) => {
-                log::error!("[qbz-slint] play-top: get_artist_page failed: {e}");
-                crate::toast::error_weak(&weak, "Couldn't load this artist");
-                return;
-            }
-        };
-        let artist_name = page.name.display.clone();
-        let tracks: Vec<QueueTrack> = page
-            .top_tracks
-            .unwrap_or_default()
-            .into_iter()
-            .map(|track| make_top_track_queue(track, &artist_name))
-            .collect();
-        if tracks.is_empty() {
-            log::warn!("[qbz-slint] play-top: artist {artist_id} has no top tracks");
-            crate::toast::error_weak(&weak, "No top tracks available for this artist");
+        let Some(tracks) = fetch_artist_top_for_play(&runtime, &weak, &artist_id).await else {
             return;
-        }
+        };
         let start_track_id = tracks[0].id;
         runtime.core().set_queue(tracks, Some(0)).await;
+        after_track_change(&runtime, &weak, start_track_id).await;
+        refresh_sidebar(true);
+    });
+}
+
+/// Play the artist's Popular tracks starting at the clicked track id (queues
+/// the tracks that follow it). `visible_ids` is the Popular-tracks VISIBLE row
+/// order — the queue is reordered/filtered to match, so the in-page search
+/// filter is respected. Re-fetches the page like `play_artist_top_tracks`.
+pub fn play_artist_top_from(
+    runtime: Runtime,
+    weak: slint::Weak<AppWindow>,
+    handle: tokio::runtime::Handle,
+    artist_id: String,
+    visible_ids: Vec<String>,
+    clicked_id: String,
+) {
+    handle.spawn(async move {
+        let Some(tracks) = fetch_artist_top_for_play(&runtime, &weak, &artist_id).await else {
+            return;
+        };
+        let tracks = reorder_queue_by_visible(tracks, &visible_ids);
+        let start = tracks
+            .iter()
+            .position(|t| t.id.to_string() == clicked_id)
+            .unwrap_or(0);
+        let start_track_id = tracks[start].id;
+        runtime.core().set_queue(tracks, Some(start)).await;
         after_track_change(&runtime, &weak, start_track_id).await;
         refresh_sidebar(true);
     });
@@ -869,6 +955,292 @@ pub fn play_track_now(
         after_track_change(&runtime, &weak, track_id).await;
         refresh_sidebar(true);
     });
+}
+
+/// "m:ss" / "h:mm:ss" -> seconds (for a queue row built off a display string).
+fn mmss_to_secs(s: &str) -> u64 {
+    s.split(':')
+        .filter_map(|p| p.trim().parse::<u64>().ok())
+        .fold(0u64, |acc, v| acc * 60 + v)
+}
+
+/// Build a `QueueTrack` from a visible Slint `TrackItem` row. Used for views
+/// that render Qobuz tracks but keep no full-`Track` cache (search): the
+/// audio is resolved by id at play time, so the row's display fields suffice
+/// to seed the queue. Returns None for rows whose id is not numeric.
+fn track_item_to_queue(it: &TrackItem) -> Option<QueueTrack> {
+    let id = it.id.as_str().parse::<u64>().ok()?;
+    let album_id = {
+        let a = it.album_id.to_string();
+        if a.is_empty() {
+            None
+        } else {
+            Some(a)
+        }
+    };
+    Some(QueueTrack {
+        id,
+        title: it.title.to_string(),
+        version: None,
+        artist: it.artist.to_string(),
+        album: it.album.to_string(),
+        duration_secs: mmss_to_secs(it.duration.as_str()),
+        artwork_url: {
+            let u = it.artwork_url.to_string();
+            if u.is_empty() {
+                None
+            } else {
+                Some(u)
+            }
+        },
+        hires: it.quality_tier.as_str() == "hires",
+        bit_depth: None,
+        sample_rate: None,
+        is_local: it.source.as_str() == "local",
+        album_id: album_id.clone(),
+        artist_id: it.artist_id.as_str().parse::<u64>().ok(),
+        streamable: true,
+        source: {
+            let s = it.source.to_string();
+            Some(if s.is_empty() {
+                "qobuz".to_string()
+            } else {
+                s
+            })
+        },
+        parental_warning: it.explicit,
+        source_item_id_hint: album_id,
+    })
+}
+
+/// The ids of a view's VISIBLE `TrackItem` model rows, in order.
+fn model_ids(model: &ModelRc<TrackItem>) -> Vec<String> {
+    (0..model.row_count())
+        .filter_map(|i| model.row_data(i).map(|it| it.id.to_string()))
+        .collect()
+}
+
+/// Re-order (and filter) a freshly-built queue to match a view's VISIBLE
+/// order: keep only the tracks the user can see, in the order they see them.
+/// Used by the re-fetch views (album / artist top tracks) so an active
+/// in-page search filter is respected. Empty `visible_ids` (or no overlap)
+/// leaves the canonical order untouched.
+fn reorder_queue_by_visible(queue: Vec<QueueTrack>, visible_ids: &[String]) -> Vec<QueueTrack> {
+    if visible_ids.is_empty() {
+        return queue;
+    }
+    let pos: std::collections::HashMap<String, usize> = queue
+        .iter()
+        .enumerate()
+        .map(|(i, q)| (q.id.to_string(), i))
+        .collect();
+    let order: Vec<usize> = visible_ids
+        .iter()
+        .filter_map(|id| pos.get(id).copied())
+        .collect();
+    if order.is_empty() {
+        return queue;
+    }
+    let mut slots: Vec<Option<QueueTrack>> = queue.into_iter().map(Some).collect();
+    order.iter().filter_map(|&i| slots[i].take()).collect()
+}
+
+/// Build a play queue (+ start index) from a view's VISIBLE `TrackItem`
+/// model, starting at `clicked_id`. The model IS the visible order, so this
+/// never goes out of sync with what the user sees. Used by views with no
+/// full-`Track` cache (search).
+fn queue_from_model(
+    model: &ModelRc<TrackItem>,
+    clicked_id: &str,
+) -> (Vec<QueueTrack>, Option<usize>) {
+    let mut queue: Vec<QueueTrack> = Vec::with_capacity(model.row_count());
+    let mut found: Option<usize> = None;
+    for i in 0..model.row_count() {
+        if let Some(it) = model.row_data(i) {
+            if let Some(qt) = track_item_to_queue(&it) {
+                if it.id.as_str() == clicked_id {
+                    found = Some(queue.len());
+                }
+                queue.push(qt);
+            }
+        }
+    }
+    // `found` is None when the clicked track is not a list row (e.g. the
+    // search "most popular" hero card) — the caller decides what to do.
+    (queue, found)
+}
+
+/// Build a play queue (+ start index) from a view's VISIBLE `TrackItem`
+/// model and its authoritative `Vec<Track>` cache: the queue follows the
+/// visible order (so custom sort / search filter are respected) and starts
+/// at `clicked_id`. Falls back to the cache order if the visible/cache
+/// mapping comes up empty.
+fn order_by_visible(
+    model: &ModelRc<TrackItem>,
+    cache: Vec<Track>,
+    clicked_id: &str,
+) -> Option<(Vec<Track>, usize)> {
+    let visible_ids: Vec<String> = (0..model.row_count())
+        .filter_map(|i| model.row_data(i).map(|it| it.id.to_string()))
+        .collect();
+    let by_id: std::collections::HashMap<String, Track> =
+        cache.iter().map(|t| (t.id.to_string(), t.clone())).collect();
+    let ordered: Vec<Track> = visible_ids
+        .iter()
+        .filter_map(|id| by_id.get(id).cloned())
+        .collect();
+    // The clicked track must resolve inside the visible list; if it does not
+    // (orphan/hero row, or a cache miss), return None so the caller plays just
+    // that track rather than starting the queue at the wrong row.
+    let idx = ordered
+        .iter()
+        .position(|t| t.id.to_string() == clicked_id)?;
+    Some((ordered, idx))
+}
+
+/// Hand a prebuilt `QueueTrack` queue to the core and start at `start`.
+/// Callers guard against an empty queue.
+fn play_queue(
+    runtime: Runtime,
+    weak: slint::Weak<AppWindow>,
+    handle: tokio::runtime::Handle,
+    queue: Vec<QueueTrack>,
+    start: usize,
+) {
+    let start = start.min(queue.len() - 1);
+    let first_id = queue[start].id;
+    handle.spawn(async move {
+        runtime.core().set_queue(queue, Some(start)).await;
+        after_track_change(&runtime, &weak, first_id).await;
+        refresh_sidebar(true);
+    });
+}
+
+/// Per-row "play this track" for EVERY tracklist surface. Builds the queue
+/// from the CURRENT view's VISIBLE list and starts at the clicked track, so
+/// the tracks that visually follow it play next — regardless of context
+/// (playlist custom sort, album, favorites filter, artist top tracks, ...).
+///
+/// This is the single entry point for clicking/double-clicking a track row.
+/// It replaces a scatter of per-view paths that each got it wrong: the album
+/// row played a lone track (no queue), and the playlist/mix rows always
+/// started at track 1 (the clicked id was read from the wrong media-action
+/// slot). Do NOT reintroduce per-view play arms — route everything here.
+pub fn play_track_in_context(
+    window: &AppWindow,
+    runtime: Runtime,
+    weak: slint::Weak<AppWindow>,
+    handle: tokio::runtime::Handle,
+    clicked_id: &str,
+) {
+    let view = window.global::<NavState>().get_view();
+    match view {
+        // Views with an authoritative Vec<Track> cache: order it by the
+        // visible model so sort/filter are respected.
+        ContentView::Playlist => {
+            if let Some((tracks, idx)) = order_by_visible(
+                &window.global::<PlaylistState>().get_tracks(),
+                crate::playlist::current_tracks(),
+                clicked_id,
+            ) {
+                play_tracks(runtime, weak, handle, tracks, idx);
+                return;
+            }
+        }
+        ContentView::Favorites => {
+            if let Some((tracks, idx)) = order_by_visible(
+                &window.global::<FavoritesState>().get_tracks_visible(),
+                crate::favorites::play_tracks(),
+                clicked_id,
+            ) {
+                play_tracks(runtime, weak, handle, tracks, idx);
+                return;
+            }
+        }
+        ContentView::Label => {
+            if let Some((tracks, idx)) = order_by_visible(
+                &window.global::<LabelState>().get_top_tracks(),
+                crate::label::top_tracks_for_play(),
+                clicked_id,
+            ) {
+                play_tracks(runtime, weak, handle, tracks, idx);
+                return;
+            }
+        }
+        ContentView::Mix => {
+            // Mix has no custom sort/filter, so the cache order is the
+            // visible order; anchor on the clicked id.
+            let tracks = crate::mix::current_tracks();
+            if tracks.iter().any(|t| t.id.to_string() == clicked_id) {
+                let idx = crate::mix::index_of(clicked_id);
+                play_tracks(runtime, weak, handle, tracks, idx);
+                return;
+            }
+        }
+        // Search keeps no full-Track cache — build the queue straight off
+        // the visible model (Qobuz tracks resolve by id at play time).
+        ContentView::Search => {
+            let model = window.global::<SearchState>().get_tracks();
+            let (queue, found) = queue_from_model(&model, clicked_id);
+            if let Some(idx) = found {
+                play_queue(runtime, weak, handle, queue, idx);
+                return;
+            }
+            // The "most popular" hero is a top-track card, not a results row.
+            // Play it as the queue head, then the visible results, so it acts
+            // like a first-class track (clicking it queues what follows).
+            let ss = window.global::<SearchState>();
+            if ss.get_most_popular_kind().as_str() == "track" {
+                let hero = ss.get_most_popular_track();
+                if hero.id.as_str() == clicked_id {
+                    if let Some(hq) = track_item_to_queue(&hero) {
+                        let mut q = queue;
+                        q.insert(0, hq);
+                        play_queue(runtime, weak, handle, q, 0);
+                        return;
+                    }
+                }
+            }
+        }
+        // Re-fetch views: build the queue from the catalog, reorder it to the
+        // VISIBLE row order (so an in-page search filter is respected), and
+        // start at the clicked id. (Local albums are routed earlier.)
+        ContentView::Album => {
+            let album_id = window.global::<AlbumState>().get_id().to_string();
+            if !album_id.is_empty() {
+                let visible_ids = model_ids(&window.global::<AlbumState>().get_tracks());
+                play_album_from(
+                    runtime,
+                    weak,
+                    handle,
+                    album_id,
+                    visible_ids,
+                    clicked_id.to_string(),
+                );
+                return;
+            }
+        }
+        ContentView::Artist => {
+            let artist_id = window.global::<ArtistState>().get_id().to_string();
+            if !artist_id.is_empty() {
+                let visible_ids = model_ids(&window.global::<ArtistState>().get_top_tracks());
+                play_artist_top_from(
+                    runtime,
+                    weak,
+                    handle,
+                    artist_id,
+                    visible_ids,
+                    clicked_id.to_string(),
+                );
+                return;
+            }
+        }
+        _ => {}
+    }
+    // No resolvable list context (Home, Discover, ...): play just the track.
+    if let Ok(tid) = clicked_id.parse::<u64>() {
+        play_track_now(runtime, weak, handle, tid);
+    }
 }
 
 /// Build a queue from a list of catalog tracks (each carrying its own

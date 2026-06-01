@@ -14,6 +14,12 @@ export component QualityBadgeFull inherits Rectangle {
     in property <string> tier;
     // Exact quality, e.g. "24-bit / 96 kHz".
     in property <string> detail;
+    // Whether to show the format icon (Hi-Res / CD / MP3 mark). The track-row
+    // variant turns it off.
+    in property <bool> show-icon: true;
+    // "bare" = no chip background or border, text centered — blends into a
+    // track row instead of looking like a contained badge.
+    in property <bool> bare: false;
 
     property <string> tier-label: root.tier == "hires"
         ? "HI-RES"
@@ -21,20 +27,21 @@ export component QualityBadgeFull inherits Rectangle {
 
     visible: root.tier != "";
     height: 36px;
-    width: Math.max(content.preferred-width, 136px);
+    width: root.bare ? content.preferred-width : Math.max(content.preferred-width, 136px);
     border-radius: 4px;
-    background: Theme.surface-hover;
-    border-width: 1px;
+    background: root.bare ? transparent : Theme.surface-hover;
+    border-width: root.bare ? 0px : 1px;
     border-color: Theme.border-subtle;
 
     content := HorizontalLayout {
-        padding-left: 10px;
-        padding-right: 10px;
-        spacing: 6px;
+        padding-left: root.bare ? 0px : 10px;
+        padding-right: root.bare ? 0px : 10px;
+        spacing: root.bare ? 0px : 6px;
+        alignment: root.bare ? center : start;
 
         // Format icon. The Hi-Res brand mark keeps its own colors; the
         // CD / MP3 marks render in muted grey.
-        VerticalLayout {
+        if root.show-icon: VerticalLayout {
             alignment: center;
             if root.tier == "hires": Image {
                 source: @image-url("../assets/hi-res.svg");
@@ -65,12 +72,14 @@ export component QualityBadgeFull inherits Rectangle {
                 font-size: 8px;
                 font-weight: 100;
                 letter-spacing: 0.5px;
+                horizontal-alignment: root.bare ? center : left;
             }
             Text {
                 text: root.detail;
                 color: #999999;
                 font-size: 9px;
                 font-weight: 100;
+                horizontal-alignment: root.bare ? center : left;
             }
         }
     }

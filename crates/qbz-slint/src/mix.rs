@@ -152,6 +152,11 @@ fn to_item(track: &Track) -> TrackItem {
             None => "",
         }
         .into(),
+        quality_detail: crate::quality::detail(
+            track.maximum_bit_depth,
+            track.maximum_sampling_rate,
+        )
+        .into(),
         explicit: track.parental_warning,
         selected: false,
         artwork_url: track

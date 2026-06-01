@@ -121,6 +121,7 @@ pub struct TrackCard {
     pub genre: String,
     pub duration: String,
     pub quality_tier: String,
+    pub quality_detail: String,
     pub explicit: bool,
     pub artwork_url: String,
 }
@@ -356,6 +357,10 @@ fn map_track(track: Track) -> TrackCard {
         genre,
         duration: mmss(track.duration),
         quality_tier: album_map::tier(track.maximum_bit_depth).to_string(),
+        quality_detail: crate::quality::detail(
+            track.maximum_bit_depth,
+            track.maximum_sampling_rate,
+        ),
         explicit: track.parental_warning,
         artwork_url,
     }
@@ -409,6 +414,7 @@ pub fn apply_favorites(window: &AppWindow, data: FavData) {
                     album: t.album.into(),
                     duration: t.duration.into(),
                     quality_tier: t.quality_tier.into(),
+                    quality_detail: t.quality_detail.into(),
                     explicit: t.explicit,
                     selected: false,
                     artwork_url: t.artwork_url.into(),

@@ -61,6 +61,7 @@ pub struct TrackData {
     pub album_id: String,
     pub duration: String,
     pub quality_tier: String,
+    pub quality_detail: String,
     pub explicit: bool,
 }
 
@@ -107,7 +108,7 @@ fn map_album(album: Album) -> AlbumData {
     let info_line = parts.join("   •   ");
 
     let quality_tier = tier(album.maximum_bit_depth).to_string();
-    let quality_detail = quality_detail(album.maximum_bit_depth, album.maximum_sampling_rate);
+    let quality_detail = crate::quality::detail(album.maximum_bit_depth, album.maximum_sampling_rate);
     let description = album
         .description
         .as_deref()
@@ -175,18 +176,6 @@ fn truncate_words(text: &str, max: usize) -> String {
 }
 
 /// "24-bit / 96 kHz" — the quality-badge detail string.
-fn quality_detail(bit_depth: Option<u32>, sample_rate: Option<f64>) -> String {
-    let hi_res = matches!(bit_depth, Some(depth) if depth >= 24);
-    let depth = bit_depth.unwrap_or(if hi_res { 24 } else { 16 });
-    let rate = sample_rate.unwrap_or(if hi_res { 96.0 } else { 44.1 });
-    let rate = if rate.fract().abs() < f64::EPSILON {
-        format!("{}", rate as i64)
-    } else {
-        format!("{rate}")
-    };
-    format!("{depth}-bit / {rate} kHz")
-}
-
 /// Crude HTML strip for Qobuz album descriptions. Break and paragraph
 // The previous local strip_html lived here; moved to
 // `crate::strip_html` so artist and album views share the same
@@ -212,6 +201,10 @@ fn map_track(track: Track) -> TrackData {
         album_id: String::new(),
         duration: mmss(track.duration),
         quality_tier: tier(track.maximum_bit_depth).to_string(),
+        quality_detail: crate::quality::detail(
+            track.maximum_bit_depth,
+            track.maximum_sampling_rate,
+        ),
         explicit: track.parental_warning,
     }
 }
@@ -258,6 +251,7 @@ pub fn apply_album(window: &AppWindow, data: AlbumData) {
             album: "".into(),
             duration: track.duration.into(),
             quality_tier: track.quality_tier.into(),
+            quality_detail: track.quality_detail.into(),
             explicit: track.explicit,
             selected: false,
             artwork_url: "".into(),
