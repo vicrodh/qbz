@@ -19,5 +19,7 @@
 #        THREADS=16 ./scripts/slint-dev.sh   # override frontend threads
 set -euo pipefail
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/.."
-export RUSTFLAGS="-C target-feature=+aes,+ssse3 -Z threads=${THREADS:-8}"
+# `mold` (faster linker) + more frontend threads only cut COMPILE time — they
+# don't change the optimised binary, so release perf measurements stay valid.
+export RUSTFLAGS="-C target-feature=+aes,+ssse3 -C link-arg=-fuse-ld=mold -Z threads=${THREADS:-16}"
 exec cargo +nightly run --release --manifest-path crates/Cargo.toml -p qbz-slint "$@"
