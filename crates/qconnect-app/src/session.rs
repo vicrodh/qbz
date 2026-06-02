@@ -237,6 +237,123 @@ pub struct QconnectRendererInfo {
     pub volume_remote_control: Option<i32>,
 }
 
+/// Resolved local-device identity injected by the frontend adapter into the
+/// session layer. Lets `refresh_local_renderer_id` stay frontend-agnostic: the
+/// Tauri adapter resolves it from its persisted device uuid + device-info
+/// builder, the Slint adapter from the shared qbz-app identity — qconnect-app
+/// never depends on the persistence/transport crates.
+#[derive(Debug, Clone, Default)]
+pub struct LocalIdentity {
+    pub device_uuid: String,
+    pub friendly_name: Option<String>,
+    pub brand: Option<String>,
+    pub model: Option<String>,
+    pub device_type: Option<i32>,
+}
+
+/// Snapshot of the last reported file (stream) audio quality, used to dedup
+/// outbound RndrSrvrFileAudioQualityChanged reports. Moved here with the
+/// session topology so the relocated sync accumulator is self-contained.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct QconnectFileAudioQualitySnapshot {
+    pub sampling_rate: i32,
+    pub bit_depth: i32,
+    pub nb_channels: i32,
+    pub audio_quality: i32,
+}
+
+/// Whether the active renderer permits remote volume control. Absent capability
+/// (None) defaults to allowed; only an explicit non-ALLOWED value disables.
+pub fn renderer_allows_remote_volume(info: &QconnectRendererInfo) -> bool {
+    matches!(info.volume_remote_control, None | Some(1))
+}
+
+/// Resolve the local renderer id within the session by matching the injected
+/// local identity: first by exact device_uuid, then by a unique device
+/// fingerprint (name+brand+model+type), then a looser name+type fingerprint.
+/// Identical resolution order to the prior Tauri-side fn; identity is now data.
+pub fn refresh_local_renderer_id(session: &mut QconnectSessionState, identity: &LocalIdentity) {
+    if let Some(renderer_id) = session
+        .renderers
+        .iter()
+        .find(|renderer| renderer.device_uuid.as_deref() == Some(identity.device_uuid.as_str()))
+        .map(|renderer| renderer.renderer_id)
+    {
+        session.local_renderer_id = Some(renderer_id);
+        return;
+    }
+
+    let local_friendly_name = identity.friendly_name.as_deref();
+    let local_brand = identity.brand.as_deref();
+    let local_model = identity.model.as_deref();
+    let local_device_type = identity.device_type;
+
+    // Some server ADD_RENDERER payloads omit device_uuid for the local renderer.
+    // Fall back to a unique device fingerprint so controller-side handoff logic
+    // can still distinguish local vs peer renderers.
+    if let Some(renderer_id) = find_unique_renderer_id(session, |renderer| {
+        renderer.friendly_name.as_deref() == local_friendly_name
+            && renderer.brand.as_deref() == local_brand
+            && renderer.model.as_deref() == local_model
+            && renderer.device_type == local_device_type
+    }) {
+        session.local_renderer_id = Some(renderer_id);
+        return;
+    }
+
+    if let Some(renderer_id) = find_unique_renderer_id(session, |renderer| {
+        renderer.friendly_name.as_deref() == local_friendly_name
+            && renderer.device_type == local_device_type
+    }) {
+        session.local_renderer_id = Some(renderer_id);
+        return;
+    }
+
+    session.local_renderer_id = None;
+}
+
+pub fn normalize_active_renderer_id(value: Option<i64>) -> Option<i32> {
+    value
+        .filter(|renderer_id| *renderer_id >= 0)
+        .and_then(|renderer_id| i32::try_from(renderer_id).ok())
+}
+
+pub fn is_peer_renderer_active(session: &QconnectSessionState) -> bool {
+    match (session.active_renderer_id, session.local_renderer_id) {
+        (Some(active_renderer_id), Some(local_renderer_id)) => {
+            active_renderer_id != local_renderer_id
+        }
+        _ => false,
+    }
+}
+
+pub fn is_local_renderer_active(session: &QconnectSessionState) -> bool {
+    match (session.active_renderer_id, session.local_renderer_id) {
+        (Some(active_renderer_id), Some(local_renderer_id)) => {
+            active_renderer_id == local_renderer_id
+        }
+        _ => false,
+    }
+}
+
+pub fn find_unique_renderer_id(
+    session: &QconnectSessionState,
+    predicate: impl Fn(&QconnectRendererInfo) -> bool,
+) -> Option<i32> {
+    let mut matches = session
+        .renderers
+        .iter()
+        .filter(|renderer| predicate(renderer))
+        .map(|renderer| renderer.renderer_id);
+
+    let first = matches.next()?;
+    if matches.next().is_some() {
+        return None;
+    }
+
+    Some(first)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

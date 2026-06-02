@@ -15,10 +15,12 @@ pub use startup::{compute_effective_startup, QconnectStartupMode};
 pub use error::QconnectAppError;
 pub use events::{NoOpEventSink, QconnectAppEvent, QconnectEventSink};
 pub use session::{
-    compute_connection_state, deferred_join_reason, quality_from_max_audio_quality,
-    should_arm_renderer_watchdog, should_reask_queue_state, ConnectionDecision,
-    QconnectLifecycleState, QconnectRendererInfo, QconnectSessionRendererState,
-    QconnectSessionState, RendererStatus, ServerActiveState,
+    compute_connection_state, deferred_join_reason, find_unique_renderer_id,
+    is_local_renderer_active, is_peer_renderer_active, normalize_active_renderer_id,
+    quality_from_max_audio_quality, refresh_local_renderer_id, renderer_allows_remote_volume,
+    should_arm_renderer_watchdog, should_reask_queue_state, ConnectionDecision, LocalIdentity,
+    QconnectFileAudioQualitySnapshot, QconnectLifecycleState, QconnectRendererInfo,
+    QconnectSessionRendererState, QconnectSessionState, RendererStatus, ServerActiveState,
     JOIN_SESSION_REASON_CONTROLLER_REQUEST, JOIN_SESSION_REASON_RECONNECTION,
     QCONNECT_RENDERER_LOST_TIMEOUT_MS,
 };

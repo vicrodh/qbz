@@ -13,7 +13,7 @@ use super::queue_resolution::{
     find_cursor_index_by_queue_item_id, normalize_current_queue_item_id_from_queue_state,
     ordered_queue_cursors, QconnectOrderedQueueCursor,
 };
-use super::transport::{default_qconnect_device_info, resolve_qconnect_device_uuid};
+use super::transport::default_qconnect_device_info;
 use super::{
     QconnectQueueVersionPayload, QconnectRemoteSyncState, QconnectVisibleQueueProjection,
 };
@@ -31,6 +31,14 @@ pub(super) use qconnect_app::{compute_connection_state, ServerActiveState};
 /// command surface keeps the same serialized shape.
 pub use qconnect_app::{QconnectRendererInfo, QconnectSessionRendererState, QconnectSessionState};
 
+/// Pure session mutators + the file-audio-quality snapshot type also moved to
+/// qconnect-app (slice 2+4). Re-exported so existing `super::session::…` /
+/// `super::…` references compile unchanged.
+pub(super) use qconnect_app::{
+    find_unique_renderer_id, is_local_renderer_active, is_peer_renderer_active,
+    normalize_active_renderer_id, renderer_allows_remote_volume, QconnectFileAudioQualitySnapshot,
+};
+
 pub(super) fn queue_item_snapshot_for_cursor(
     queue: &QConnectQueueState,
     cursor: QconnectOrderedQueueCursor,
@@ -44,14 +52,6 @@ pub(super) fn queue_item_snapshot_for_cursor(
         }
         QconnectOrderedQueueCursor::Autoplay(index) => queue.autoplay_items.get(index).cloned(),
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct QconnectFileAudioQualitySnapshot {
-    pub(super) sampling_rate: i32,
-    pub(super) bit_depth: i32,
-    pub(super) nb_channels: i32,
-    pub(super) audio_quality: i32,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -71,76 +71,21 @@ pub(crate) struct QconnectRendererReportDebugEvent {
     pub(super) resolution_strategy: String,
 }
 
-/// Whether the active renderer permits remote volume control. Absent capability
-/// (None) defaults to allowed; only an explicit non-ALLOWED value disables.
-pub(super) fn renderer_allows_remote_volume(info: &QconnectRendererInfo) -> bool {
-    matches!(info.volume_remote_control, None | Some(1))
-}
-
+/// Thin Tauri wrapper: resolves this device's identity (uuid + device-info)
+/// adapter-side, then delegates to the frontend-agnostic resolver in
+/// qconnect-app. qconnect-app stays identity-free. The eager device-info build
+/// is idempotent and side-effect-free (env reads + the cached uuid), so the
+/// resolved renderer id is identical to the prior in-place implementation.
 pub(super) fn refresh_local_renderer_id(session: &mut QconnectSessionState) {
-    let local_device_uuid = resolve_qconnect_device_uuid();
-    if let Some(renderer_id) = session
-        .renderers
-        .iter()
-        .find(|renderer| renderer.device_uuid.as_deref() == Some(local_device_uuid.as_str()))
-        .map(|renderer| renderer.renderer_id)
-    {
-        session.local_renderer_id = Some(renderer_id);
-        return;
-    }
-
-    let local_device_info = default_qconnect_device_info();
-    let local_friendly_name = local_device_info.friendly_name.as_deref();
-    let local_brand = local_device_info.brand.as_deref();
-    let local_model = local_device_info.model.as_deref();
-    let local_device_type = local_device_info.device_type;
-
-    // Some server ADD_RENDERER payloads omit device_uuid for the local renderer.
-    // Fall back to a unique device fingerprint so controller-side handoff logic
-    // can still distinguish local vs peer renderers.
-    if let Some(renderer_id) = find_unique_renderer_id(session, |renderer| {
-        renderer.friendly_name.as_deref() == local_friendly_name
-            && renderer.brand.as_deref() == local_brand
-            && renderer.model.as_deref() == local_model
-            && renderer.device_type == local_device_type
-    }) {
-        session.local_renderer_id = Some(renderer_id);
-        return;
-    }
-
-    if let Some(renderer_id) = find_unique_renderer_id(session, |renderer| {
-        renderer.friendly_name.as_deref() == local_friendly_name
-            && renderer.device_type == local_device_type
-    }) {
-        session.local_renderer_id = Some(renderer_id);
-        return;
-    }
-
-    session.local_renderer_id = None;
-}
-
-pub(super) fn normalize_active_renderer_id(value: Option<i64>) -> Option<i32> {
-    value
-        .filter(|renderer_id| *renderer_id >= 0)
-        .and_then(|renderer_id| i32::try_from(renderer_id).ok())
-}
-
-pub(super) fn is_peer_renderer_active(session: &QconnectSessionState) -> bool {
-    match (session.active_renderer_id, session.local_renderer_id) {
-        (Some(active_renderer_id), Some(local_renderer_id)) => {
-            active_renderer_id != local_renderer_id
-        }
-        _ => false,
-    }
-}
-
-pub(super) fn is_local_renderer_active(session: &QconnectSessionState) -> bool {
-    match (session.active_renderer_id, session.local_renderer_id) {
-        (Some(active_renderer_id), Some(local_renderer_id)) => {
-            active_renderer_id == local_renderer_id
-        }
-        _ => false,
-    }
+    let info = default_qconnect_device_info();
+    let identity = qconnect_app::LocalIdentity {
+        device_uuid: info.device_uuid.unwrap_or_default(),
+        friendly_name: info.friendly_name,
+        brand: info.brand,
+        model: info.model,
+        device_type: info.device_type,
+    };
+    qconnect_app::refresh_local_renderer_id(session, &identity);
 }
 
 pub(super) fn sync_session_renderer_active_flags(state: &mut QconnectRemoteSyncState) {
@@ -167,24 +112,6 @@ pub(super) fn ensure_session_renderer_state(
             active,
             ..Default::default()
         })
-}
-
-pub(super) fn find_unique_renderer_id(
-    session: &QconnectSessionState,
-    predicate: impl Fn(&QconnectRendererInfo) -> bool,
-) -> Option<i32> {
-    let mut matches = session
-        .renderers
-        .iter()
-        .filter(|renderer| predicate(renderer))
-        .map(|renderer| renderer.renderer_id);
-
-    let first = matches.next()?;
-    if matches.next().is_some() {
-        return None;
-    }
-
-    Some(first)
 }
 
 pub(super) fn build_session_renderer_snapshot(
