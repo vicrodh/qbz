@@ -38,8 +38,14 @@ pub enum QconnectLifecycleState {
 
 /// Playing-state wire value for PLAYING. Mirrors the Tauri adapter's
 /// `PLAYING_STATE_PLAYING` (the renderer reports playing_state == 2 while
-/// actively playing). Kept private to the moved liveness predicate.
-const PLAYING_STATE_PLAYING: i32 = 2;
+/// actively playing). `pub(crate)` so the relocated session-apply/watchdog
+/// logic in `app.rs` reads the same constant.
+pub(crate) const PLAYING_STATE_PLAYING: i32 = 2;
+
+/// Playing-state wire value for UNKNOWN (== 0). The freeze path stamps a dead
+/// renderer's cached `playing_state` to UNKNOWN so the projection stops lying.
+/// Mirrors the Tauri adapter's `PLAYING_STATE_UNKNOWN`.
+pub(crate) const PLAYING_STATE_UNKNOWN: i32 = 0;
 
 /// JoinSession `reason` wire values (proto tag 3): a first join from a fresh
 /// runtime is a controller request, a join after a transport drop carries the

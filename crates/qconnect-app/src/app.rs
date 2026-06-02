@@ -18,9 +18,14 @@ use serde_json::Value;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
+use crate::session::{
+    is_peer_renderer_active, normalize_active_renderer_id, refresh_local_renderer_id,
+    should_arm_renderer_watchdog, LocalIdentity, QconnectRendererInfo, RendererStatus,
+    PLAYING_STATE_PLAYING, PLAYING_STATE_UNKNOWN, QCONNECT_RENDERER_LOST_TIMEOUT_MS,
+};
 use crate::{
-    QconnectAppError, QconnectAppEvent, QconnectEventSink, QconnectRemoteSyncState,
-    QconnectRuntimeState,
+    ensure_session_renderer_state, sync_session_renderer_active_flags, QconnectAppError,
+    QconnectAppEvent, QconnectEventSink, QconnectRemoteSyncState, QconnectRuntimeState,
 };
 
 pub struct QconnectApp<TTransport, TSink>
@@ -1028,6 +1033,418 @@ fn session_management_event_completes_pending_action(
     }
 }
 
+/// Post-lock work returned by [`QconnectApp::apply_session_management_event`].
+/// The adapter runs the CoreBridge side-effects (remote loop mode,
+/// local-playback handoff, projection alignment) from these flags in order,
+/// then drives the freeze + watchdog via
+/// [`QconnectApp::freeze_active_renderer_projection`] /
+/// [`QconnectApp::arm_renderer_watchdog`] — preserving the exact post-lock
+/// ordering of the prior inline Tauri implementation.
+#[derive(Debug, Default, Clone)]
+pub struct SessionApplyOutcome {
+    /// Active renderer whose remote projection should be re-aligned into CoreBridge.
+    pub remote_projection_renderer_id: Option<i32>,
+    /// Stop local playback because an active peer renderer now owns playback.
+    pub sync_local_playback: bool,
+    /// Apply this remote loop mode to CoreBridge.
+    pub apply_loop_mode: Option<i32>,
+    /// Active peer renderer left gracefully (ACTIVE_DISCONNECTED) — freeze it.
+    pub disconnected_renderer_id: Option<i32>,
+    /// Arm the 12s liveness watchdog for (renderer_id, generation).
+    pub watchdog_arm: Option<(i32, u64)>,
+}
+
+/// Bump the watchdog epoch, invalidating any in-flight 12s liveness task.
+/// Returns the new generation (captured when arming so the spawned task knows
+/// which epoch it belongs to). Relocated from the Tauri sink (slice 2+4).
+fn bump_watchdog_generation(state: &mut QconnectRemoteSyncState) -> u64 {
+    state.watchdog_generation = state.watchdog_generation.wrapping_add(1);
+    state.watchdog_generation
+}
+
+impl<TTransport, TSink> QconnectApp<TTransport, TSink>
+where
+    TTransport: WsTransport + 'static,
+    TSink: QconnectEventSink + 'static,
+{
+    /// Apply a server session-management event (types 81-87, 97-101) to the
+    /// shared remote-sync accumulator under ONE lock, returning the post-lock
+    /// work the adapter must drive.
+    ///
+    /// Relocated from the Tauri event sink (slice 2+4): the locked critical
+    /// section is byte-identical. The only differences are (a) the lock handle
+    /// is `self.sync`, (b) local identity is injected as `identity` so the crate
+    /// stays frontend-agnostic (`refresh_local_renderer_id` takes it instead of
+    /// resolving device-info itself), and (c) the post-lock dispatch is RETURNED
+    /// via [`SessionApplyOutcome`] rather than run inline — the CoreBridge
+    /// materialization stays adapter-side because it is the renderer-engine seam
+    /// (slice 6). The early `return`s (missing required fields) yield a default
+    /// outcome so the adapter's post-lock block does nothing, exactly as the
+    /// prior `return;` skipped it.
+    pub async fn apply_session_management_event(
+        &self,
+        message_type: &str,
+        payload: &Value,
+        identity: &LocalIdentity,
+    ) -> SessionApplyOutcome {
+        let mut remote_projection_renderer_id: Option<i32> = None;
+        let mut sync_local_playback = false;
+        let mut apply_loop_mode: Option<i32> = None;
+        let mut disconnected_renderer_id: Option<i32> = None;
+        let mut watchdog_arm: Option<(i32, u64)> = None;
+        let mut state = self.sync.lock().await;
+        match message_type {
+            "MESSAGE_TYPE_SRVR_CTRL_SESSION_STATE" => {
+                if let Some(uuid) = payload.get("session_uuid").and_then(Value::as_str) {
+                    state.session.session_uuid = Some(uuid.to_string());
+                }
+                state.session.active_renderer_id = normalize_active_renderer_id(
+                    payload.get("active_renderer_id").and_then(Value::as_i64),
+                );
+                if let Some(loop_mode) = payload
+                    .get("loop_mode")
+                    .and_then(Value::as_i64)
+                    .and_then(|value| i32::try_from(value).ok())
+                {
+                    state.session_loop_mode = Some(loop_mode);
+                    apply_loop_mode = Some(loop_mode);
+                }
+                if let (Some(active_renderer_id), Some(loop_mode)) =
+                    (state.session.active_renderer_id, state.session_loop_mode)
+                {
+                    let renderer_state =
+                        ensure_session_renderer_state(&mut state, active_renderer_id);
+                    renderer_state.loop_mode = Some(loop_mode);
+                    renderer_state.updated_at_ms = now_ms();
+                }
+                sync_session_renderer_active_flags(&mut state);
+                sync_local_playback = true;
+            }
+            "MESSAGE_TYPE_SRVR_CTRL_ADD_RENDERER" => {
+                if let Some(renderer_id) = payload.get("renderer_id").and_then(Value::as_i64) {
+                    let renderer_id = renderer_id as i32;
+                    // Don't add duplicates
+                    if !state
+                        .session
+                        .renderers
+                        .iter()
+                        .any(|r| r.renderer_id == renderer_id)
+                    {
+                        let device_info = payload.get("device_info");
+                        state.session.renderers.push(QconnectRendererInfo {
+                            renderer_id,
+                            device_uuid: device_info
+                                .and_then(|d| d.get("device_uuid"))
+                                .and_then(Value::as_str)
+                                .map(String::from),
+                            friendly_name: device_info
+                                .and_then(|d| d.get("friendly_name"))
+                                .and_then(Value::as_str)
+                                .map(String::from),
+                            brand: device_info
+                                .and_then(|d| d.get("brand"))
+                                .and_then(Value::as_str)
+                                .map(String::from),
+                            model: device_info
+                                .and_then(|d| d.get("model"))
+                                .and_then(Value::as_str)
+                                .map(String::from),
+                            device_type: device_info
+                                .and_then(|d| d.get("device_type"))
+                                .and_then(Value::as_i64)
+                                .map(|v| v as i32),
+                            volume_remote_control: device_info
+                                .and_then(|d| d.get("capabilities"))
+                                .and_then(|c| c.get("volume_remote_control"))
+                                .and_then(Value::as_i64)
+                                .map(|v| v as i32),
+                        });
+                        refresh_local_renderer_id(&mut state.session, identity);
+                    }
+                    let _ = ensure_session_renderer_state(&mut state, renderer_id);
+                    sync_session_renderer_active_flags(&mut state);
+                }
+            }
+            "MESSAGE_TYPE_SRVR_CTRL_UPDATE_RENDERER" => {
+                if let Some(renderer_id) = payload.get("renderer_id").and_then(Value::as_i64) {
+                    let renderer_id = renderer_id as i32;
+                    if let Some(existing) = state
+                        .session
+                        .renderers
+                        .iter_mut()
+                        .find(|r| r.renderer_id == renderer_id)
+                    {
+                        let device_info = payload.get("device_info");
+                        if let Some(device_uuid) = device_info
+                            .and_then(|d| d.get("device_uuid"))
+                            .and_then(Value::as_str)
+                        {
+                            existing.device_uuid = Some(device_uuid.to_string());
+                        }
+                        if let Some(name) = device_info
+                            .and_then(|d| d.get("friendly_name"))
+                            .and_then(Value::as_str)
+                        {
+                            existing.friendly_name = Some(name.to_string());
+                        }
+                        if let Some(brand) = device_info
+                            .and_then(|d| d.get("brand"))
+                            .and_then(Value::as_str)
+                        {
+                            existing.brand = Some(brand.to_string());
+                        }
+                        if let Some(model) = device_info
+                            .and_then(|d| d.get("model"))
+                            .and_then(Value::as_str)
+                        {
+                            existing.model = Some(model.to_string());
+                        }
+                        if let Some(device_type) = device_info
+                            .and_then(|d| d.get("device_type"))
+                            .and_then(Value::as_i64)
+                        {
+                            existing.device_type = Some(device_type as i32);
+                        }
+                        if let Some(vrc) = device_info
+                            .and_then(|d| d.get("capabilities"))
+                            .and_then(|c| c.get("volume_remote_control"))
+                            .and_then(Value::as_i64)
+                        {
+                            existing.volume_remote_control = Some(vrc as i32);
+                        }
+                        refresh_local_renderer_id(&mut state.session, identity);
+                    }
+                    let _ = ensure_session_renderer_state(&mut state, renderer_id);
+                    sync_session_renderer_active_flags(&mut state);
+                }
+            }
+            "MESSAGE_TYPE_SRVR_CTRL_REMOVE_RENDERER" => {
+                if let Some(renderer_id) = payload.get("renderer_id").and_then(Value::as_i64) {
+                    let renderer_id = renderer_id as i32;
+                    state
+                        .session
+                        .renderers
+                        .retain(|r| r.renderer_id != renderer_id);
+                    state.session_renderer_states.remove(&renderer_id);
+                    refresh_local_renderer_id(&mut state.session, identity);
+                    sync_session_renderer_active_flags(&mut state);
+                }
+            }
+            "MESSAGE_TYPE_SRVR_CTRL_ACTIVE_RENDERER_CHANGED" => {
+                state.session.active_renderer_id = normalize_active_renderer_id(
+                    payload.get("active_renderer_id").and_then(Value::as_i64),
+                );
+                if let (Some(active_renderer_id), Some(loop_mode)) =
+                    (state.session.active_renderer_id, state.session_loop_mode)
+                {
+                    let renderer_state =
+                        ensure_session_renderer_state(&mut state, active_renderer_id);
+                    renderer_state.loop_mode = Some(loop_mode);
+                    renderer_state.updated_at_ms = now_ms();
+                }
+                apply_loop_mode = state.session_loop_mode;
+                sync_session_renderer_active_flags(&mut state);
+                remote_projection_renderer_id = state.session.active_renderer_id;
+                sync_local_playback = true;
+                // P0-1: active-renderer change disarms any pending liveness task.
+                bump_watchdog_generation(&mut state);
+            }
+            "MESSAGE_TYPE_SRVR_CTRL_RENDERER_STATE_UPDATED" => {
+                let Some(renderer_id) = payload.get("renderer_id").and_then(Value::as_i64) else {
+                    return SessionApplyOutcome::default();
+                };
+                let player_state = payload.get("player_state");
+                let renderer_state = ensure_session_renderer_state(&mut state, renderer_id as i32);
+
+                if let Some(playing_state) = player_state
+                    .and_then(|value| value.get("playing_state"))
+                    .and_then(Value::as_i64)
+                    .and_then(|value| i32::try_from(value).ok())
+                {
+                    renderer_state.playing_state = Some(playing_state);
+                }
+
+                if let Some(current_position_ms) = player_state
+                    .and_then(|value| value.get("current_position"))
+                    .and_then(Value::as_i64)
+                    .and_then(|value| u64::try_from(value).ok())
+                {
+                    renderer_state.current_position_ms = Some(current_position_ms);
+                }
+
+                if let Some(current_queue_item_id) = player_state
+                    .and_then(|value| value.get("current_queue_item_id"))
+                    .and_then(Value::as_i64)
+                {
+                    renderer_state.current_queue_item_id =
+                        u64::try_from(current_queue_item_id).ok();
+                }
+
+                renderer_state.updated_at_ms = now_ms();
+                // Snapshot the just-written playing_state for the watchdog decision
+                // (the &mut borrow ends here so we can re-read state.session below).
+                let this_playing_state = renderer_state.playing_state;
+                remote_projection_renderer_id = Some(renderer_id as i32);
+                sync_local_playback = true;
+
+                let is_active_peer = state.session.active_renderer_id
+                    == Some(renderer_id as i32)
+                    && is_peer_renderer_active(&state.session)
+                    && renderer_id != -1;
+
+                // P0-2: graceful disconnect. status==ACTIVE_DISCONNECTED(2) for
+                // the active remote renderer (id != -1) means the renderer left
+                // cleanly — freeze the projection so the UI stops lying.
+                let status =
+                    RendererStatus::from_wire(payload.get("status").and_then(Value::as_i64));
+                if status == RendererStatus::ActiveDisconnected && is_active_peer {
+                    disconnected_renderer_id = Some(renderer_id as i32);
+                }
+
+                // P0-1 liveness watchdog. Any RENDERER_STATE_UPDATED for the
+                // active peer resets the timer (bump generation); arm a fresh 12s
+                // task only while PLAYING. A non-playing update disarms (bump
+                // only, no spawn).
+                let new_generation = bump_watchdog_generation(&mut state);
+                if should_arm_renderer_watchdog(this_playing_state, is_active_peer) {
+                    watchdog_arm = Some((renderer_id as i32, new_generation));
+                }
+            }
+            "MESSAGE_TYPE_SRVR_CTRL_VOLUME_CHANGED" => {
+                let Some(renderer_id) = payload.get("renderer_id").and_then(Value::as_i64) else {
+                    return SessionApplyOutcome::default();
+                };
+                let Some(volume) = payload
+                    .get("volume")
+                    .and_then(Value::as_i64)
+                    .and_then(|value| i32::try_from(value).ok())
+                else {
+                    return SessionApplyOutcome::default();
+                };
+
+                let renderer_state = ensure_session_renderer_state(&mut state, renderer_id as i32);
+                renderer_state.volume = Some(volume);
+                renderer_state.updated_at_ms = now_ms();
+            }
+            "MESSAGE_TYPE_SRVR_CTRL_VOLUME_MUTED" => {
+                let Some(renderer_id) = payload.get("renderer_id").and_then(Value::as_i64) else {
+                    return SessionApplyOutcome::default();
+                };
+                let Some(muted) = payload.get("value").and_then(Value::as_bool) else {
+                    return SessionApplyOutcome::default();
+                };
+
+                let renderer_state = ensure_session_renderer_state(&mut state, renderer_id as i32);
+                renderer_state.muted = Some(muted);
+                renderer_state.updated_at_ms = now_ms();
+            }
+            "MESSAGE_TYPE_SRVR_CTRL_MAX_AUDIO_QUALITY_CHANGED" => {
+                let Some(renderer_id) = payload.get("renderer_id").and_then(Value::as_i64) else {
+                    return SessionApplyOutcome::default();
+                };
+                let Some(max_audio_quality) = payload
+                    .get("max_audio_quality")
+                    .and_then(Value::as_i64)
+                    .and_then(|value| i32::try_from(value).ok())
+                else {
+                    return SessionApplyOutcome::default();
+                };
+
+                let renderer_state = ensure_session_renderer_state(&mut state, renderer_id as i32);
+                renderer_state.max_audio_quality = Some(max_audio_quality);
+                renderer_state.updated_at_ms = now_ms();
+            }
+            "MESSAGE_TYPE_SRVR_CTRL_LOOP_MODE_SET" => {
+                let Some(loop_mode) = payload
+                    .get("loop_mode")
+                    .and_then(Value::as_i64)
+                    .and_then(|value| i32::try_from(value).ok())
+                else {
+                    return SessionApplyOutcome::default();
+                };
+                state.session_loop_mode = Some(loop_mode);
+                apply_loop_mode = Some(loop_mode);
+                if let Some(active_renderer_id) = state.session.active_renderer_id {
+                    let renderer_state =
+                        ensure_session_renderer_state(&mut state, active_renderer_id);
+                    renderer_state.loop_mode = Some(loop_mode);
+                    renderer_state.updated_at_ms = now_ms();
+                }
+            }
+            _ => {}
+        }
+
+        SessionApplyOutcome {
+            remote_projection_renderer_id,
+            sync_local_playback,
+            apply_loop_mode,
+            disconnected_renderer_id,
+            watchdog_arm,
+        }
+    }
+
+    /// Arm the generation-guarded 12s renderer-liveness watchdog (P0-1). Spawns
+    /// a task holding a cheap clone of self. On wake it re-locks the sync
+    /// accumulator and no-ops unless its captured epoch is still current AND the
+    /// renderer is still the active peer AND still nominally PLAYING; only then
+    /// does it freeze the projection and emit `RendererUnreachable`. Modeled on
+    /// `watch_pending_action_timeout`; relocated from the Tauri sink (slice 2+4).
+    pub fn arm_renderer_watchdog(&self, renderer_id: i32, generation: u64) {
+        let app = self.clone();
+        tokio::spawn(async move {
+            app.run_renderer_watchdog(renderer_id, generation).await;
+        });
+    }
+
+    async fn run_renderer_watchdog(&self, renderer_id: i32, generation: u64) {
+        tokio::time::sleep(Duration::from_millis(QCONNECT_RENDERER_LOST_TIMEOUT_MS)).await;
+        let fire = {
+            let state = self.sync.lock().await;
+            state.watchdog_generation == generation
+                && state.session.active_renderer_id == Some(renderer_id)
+                && is_peer_renderer_active(&state.session)
+                && state
+                    .session_renderer_states
+                    .get(&renderer_id)
+                    .and_then(|r| r.playing_state)
+                    == Some(PLAYING_STATE_PLAYING)
+        };
+        if fire {
+            log::warn!(
+                "[QConnect] Renderer {renderer_id} silent for {}ms — marking unreachable",
+                QCONNECT_RENDERER_LOST_TIMEOUT_MS
+            );
+            self.freeze_active_renderer_projection(
+                renderer_id,
+                QconnectAppEvent::RendererUnreachable { renderer_id },
+            )
+            .await;
+        }
+    }
+
+    /// Force the active renderer's cached projection to UNKNOWN/stopped and emit
+    /// the freeze event through the sink. Shared by ACTIVE_DISCONNECTED (P0-2)
+    /// and the silence watchdog (P0-1). Relocated from the Tauri sink (slice
+    /// 2+4): the state mutation + `self.sink.on_event(freeze_event)` is
+    /// byte-identical. The sink's mapper arm for `RendererUnreachable` /
+    /// `RendererDisconnected` ONLY emits the dedicated channel (+ the blanket
+    /// event); it does NOT route back into apply or call this helper again, so it
+    /// cannot re-arm the watchdog or recurse.
+    pub async fn freeze_active_renderer_projection(
+        &self,
+        renderer_id: i32,
+        freeze_event: QconnectAppEvent,
+    ) {
+        {
+            let mut state = self.sync.lock().await;
+            let renderer_state = ensure_session_renderer_state(&mut state, renderer_id);
+            renderer_state.playing_state = Some(PLAYING_STATE_UNKNOWN);
+            renderer_state.updated_at_ms = now_ms();
+        }
+        self.sink.on_event(freeze_event).await;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
@@ -1036,6 +1453,7 @@ mod tests {
     use qconnect_core::QueueVersion;
     use qconnect_transport_ws::InMemoryWsTransport;
 
+    use crate::session::{LocalIdentity, QconnectRendererInfo};
     use crate::QconnectRemoteSyncState;
     use serde_json::json;
     use tokio::sync::Mutex;
@@ -1092,6 +1510,190 @@ mod tests {
         let events_rx = app.subscribe_transport_events();
         app.connect(test_config()).await.expect("connect");
         (app, sink, transport, events_rx)
+    }
+
+    fn renderer_info(renderer_id: i32, device_uuid: &str) -> QconnectRendererInfo {
+        QconnectRendererInfo {
+            renderer_id,
+            device_uuid: Some(device_uuid.to_string()),
+            friendly_name: None,
+            brand: None,
+            model: None,
+            device_type: None,
+            volume_remote_control: None,
+        }
+    }
+
+    fn local_identity(device_uuid: &str) -> LocalIdentity {
+        LocalIdentity {
+            device_uuid: device_uuid.to_string(),
+            ..Default::default()
+        }
+    }
+
+    /// Seed a local(1) + peer(2) topology with the peer as the active renderer.
+    async fn seed_local_and_active_peer(app: &QconnectApp<InMemoryWsTransport, TestSink>) {
+        let handle = app.sync_handle();
+        let mut state = handle.lock().await;
+        state.session.local_renderer_id = Some(1);
+        state.session.active_renderer_id = Some(2);
+        state.session.renderers = vec![renderer_info(1, "local-uuid"), renderer_info(2, "peer-uuid")];
+    }
+
+    /// SESSION_STATE writes session topology under the sync lock and reports the
+    /// post-lock work (loop mode + local-playback handoff) in the outcome.
+    #[tokio::test]
+    async fn apply_session_state_sets_topology_and_returns_outcome() {
+        let (app, _sink, _transport, _rx) = build_connected_app().await;
+        let outcome = app
+            .apply_session_management_event(
+                "MESSAGE_TYPE_SRVR_CTRL_SESSION_STATE",
+                &json!({ "session_uuid": "sess-1", "active_renderer_id": 2, "loop_mode": 3 }),
+                &local_identity("local-uuid"),
+            )
+            .await;
+        assert!(outcome.sync_local_playback);
+        assert_eq!(outcome.apply_loop_mode, Some(3));
+        let handle = app.sync_handle();
+        let state = handle.lock().await;
+        assert_eq!(state.session.session_uuid.as_deref(), Some("sess-1"));
+        assert_eq!(state.session.active_renderer_id, Some(2));
+        assert_eq!(state.session_loop_mode, Some(3));
+    }
+
+    /// A RENDERER_STATE_UPDATED for a PLAYING active peer arms the watchdog and
+    /// reports the renderer for projection.
+    #[tokio::test]
+    async fn renderer_state_updated_arms_watchdog_for_playing_active_peer() {
+        let (app, _sink, _transport, _rx) = build_connected_app().await;
+        seed_local_and_active_peer(&app).await;
+        let outcome = app
+            .apply_session_management_event(
+                "MESSAGE_TYPE_SRVR_CTRL_RENDERER_STATE_UPDATED",
+                &json!({ "renderer_id": 2, "player_state": { "playing_state": 2 } }),
+                &local_identity("local-uuid"),
+            )
+            .await;
+        let (renderer_id, _generation) = outcome
+            .watchdog_arm
+            .expect("watchdog should arm for a playing active peer");
+        assert_eq!(renderer_id, 2);
+        assert_eq!(outcome.remote_projection_renderer_id, Some(2));
+    }
+
+    /// The full arm -> 12s silence -> fire path: emits RendererUnreachable and
+    /// freezes the cached projection to UNKNOWN(0).
+    #[tokio::test(start_paused = true)]
+    async fn watchdog_fires_after_silence_and_freezes_projection() {
+        let (app, sink, _transport, _rx) = build_connected_app().await;
+        seed_local_and_active_peer(&app).await;
+        let outcome = app
+            .apply_session_management_event(
+                "MESSAGE_TYPE_SRVR_CTRL_RENDERER_STATE_UPDATED",
+                &json!({ "renderer_id": 2, "player_state": { "playing_state": 2 } }),
+                &local_identity("local-uuid"),
+            )
+            .await;
+        let (renderer_id, generation) = outcome.watchdog_arm.expect("arm");
+        app.arm_renderer_watchdog(renderer_id, generation);
+
+        tokio::task::yield_now().await;
+        tokio::time::advance(std::time::Duration::from_millis(12_000 + 10)).await;
+        tokio::task::yield_now().await;
+
+        let events = sink.snapshot().await;
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, QconnectAppEvent::RendererUnreachable { renderer_id: 2 })),
+            "expected RendererUnreachable for renderer 2"
+        );
+        let handle = app.sync_handle();
+        let state = handle.lock().await;
+        assert_eq!(
+            state
+                .session_renderer_states
+                .get(&2)
+                .and_then(|r| r.playing_state),
+            Some(0),
+            "frozen renderer playing_state must be UNKNOWN(0)"
+        );
+    }
+
+    /// Atomicity regression: a stale-epoch watchdog must no-op. A subsequent
+    /// non-playing update bumps the epoch (disarm) without arming a new task, so
+    /// the first task wakes to a superseded generation and does NOT fire.
+    #[tokio::test(start_paused = true)]
+    async fn watchdog_disarmed_by_epoch_bump_does_not_fire() {
+        let (app, sink, _transport, _rx) = build_connected_app().await;
+        seed_local_and_active_peer(&app).await;
+        let armed = app
+            .apply_session_management_event(
+                "MESSAGE_TYPE_SRVR_CTRL_RENDERER_STATE_UPDATED",
+                &json!({ "renderer_id": 2, "player_state": { "playing_state": 2 } }),
+                &local_identity("local-uuid"),
+            )
+            .await;
+        let (renderer_id, generation) = armed.watchdog_arm.expect("arm");
+        app.arm_renderer_watchdog(renderer_id, generation);
+
+        // A paused update bumps the watchdog epoch and does NOT arm a new task.
+        let disarm = app
+            .apply_session_management_event(
+                "MESSAGE_TYPE_SRVR_CTRL_RENDERER_STATE_UPDATED",
+                &json!({ "renderer_id": 2, "player_state": { "playing_state": 3 } }),
+                &local_identity("local-uuid"),
+            )
+            .await;
+        assert!(disarm.watchdog_arm.is_none());
+
+        tokio::task::yield_now().await;
+        tokio::time::advance(std::time::Duration::from_millis(12_000 + 10)).await;
+        tokio::task::yield_now().await;
+
+        let events = sink.snapshot().await;
+        assert!(
+            !events
+                .iter()
+                .any(|e| matches!(e, QconnectAppEvent::RendererUnreachable { .. })),
+            "stale-epoch watchdog must not fire after a disarming bump"
+        );
+    }
+
+    /// ACTIVE_DISCONNECTED(status==2) for the active peer reports the
+    /// disconnected renderer; freezing emits RendererDisconnected + UNKNOWN(0).
+    #[tokio::test]
+    async fn active_disconnected_reports_id_and_freeze_emits() {
+        let (app, sink, _transport, _rx) = build_connected_app().await;
+        seed_local_and_active_peer(&app).await;
+        let outcome = app
+            .apply_session_management_event(
+                "MESSAGE_TYPE_SRVR_CTRL_RENDERER_STATE_UPDATED",
+                &json!({ "renderer_id": 2, "status": 2, "player_state": { "playing_state": 2 } }),
+                &local_identity("local-uuid"),
+            )
+            .await;
+        assert_eq!(outcome.disconnected_renderer_id, Some(2));
+
+        app.freeze_active_renderer_projection(
+            2,
+            QconnectAppEvent::RendererDisconnected { renderer_id: 2 },
+        )
+        .await;
+
+        let events = sink.snapshot().await;
+        assert!(events
+            .iter()
+            .any(|e| matches!(e, QconnectAppEvent::RendererDisconnected { renderer_id: 2 })));
+        let handle = app.sync_handle();
+        let state = handle.lock().await;
+        assert_eq!(
+            state
+                .session_renderer_states
+                .get(&2)
+                .and_then(|r| r.playing_state),
+            Some(0)
+        );
     }
 
     #[tokio::test(start_paused = true)]

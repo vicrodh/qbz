@@ -11,7 +11,7 @@ mod state;
 pub mod startup;
 mod sync_state;
 
-pub use app::QconnectApp;
+pub use app::{QconnectApp, SessionApplyOutcome};
 pub use startup::{compute_effective_startup, QconnectStartupMode};
 pub use error::QconnectAppError;
 pub use events::{NoOpEventSink, QconnectAppEvent, QconnectEventSink};
@@ -36,4 +36,6 @@ pub use qconnect_core::{
 };
 pub use qconnect_protocol::{QueueCommandType, RendererReport, RendererReportType};
 pub use state::QconnectRuntimeState;
-pub use sync_state::QconnectRemoteSyncState;
+pub use sync_state::{
+    ensure_session_renderer_state, sync_session_renderer_active_flags, QconnectRemoteSyncState,
+};

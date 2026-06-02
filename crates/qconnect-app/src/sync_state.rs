@@ -61,3 +61,36 @@ pub struct QconnectRemoteSyncState {
     /// pause/stop/active-change/disconnect, which also bump it.
     pub watchdog_generation: u64,
 }
+
+/// Set each cached renderer's `active` flag to match the session's current
+/// active renderer id. Pure mutation over the relocated accumulator; relocated
+/// from the Tauri adapter (slice 2+4) so the shared session-apply logic in
+/// `app.rs` and the Tauri adapter both call one definition.
+pub fn sync_session_renderer_active_flags(state: &mut QconnectRemoteSyncState) {
+    for (renderer_id, renderer_state) in &mut state.session_renderer_states {
+        renderer_state.active = state
+            .session
+            .active_renderer_id
+            .map(|active_renderer_id| active_renderer_id == *renderer_id);
+    }
+}
+
+/// Get-or-insert the cached per-renderer state for `renderer_id`, seeding its
+/// `active` flag from the session's current active renderer. Pure mutation;
+/// relocated from the Tauri adapter (slice 2+4). Byte-identical behavior.
+pub fn ensure_session_renderer_state(
+    state: &mut QconnectRemoteSyncState,
+    renderer_id: i32,
+) -> &mut QconnectSessionRendererState {
+    let active = state
+        .session
+        .active_renderer_id
+        .map(|active_renderer_id| active_renderer_id == renderer_id);
+    state
+        .session_renderer_states
+        .entry(renderer_id)
+        .or_insert_with(|| QconnectSessionRendererState {
+            active,
+            ..Default::default()
+        })
+}
