@@ -5382,6 +5382,7 @@ dependencies = [
  "async-trait",
  "log",
  "qbz-models",
+ "qbz-player",
  "qconnect-core",
  "qconnect-protocol",
  "qconnect-transport-ws",

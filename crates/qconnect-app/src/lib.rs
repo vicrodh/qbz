@@ -6,6 +6,7 @@ mod app;
 mod error;
 mod events;
 mod feature_flags;
+mod renderer_engine;
 pub mod session;
 mod state;
 pub mod startup;
@@ -38,6 +39,7 @@ pub use qconnect_core::{
     RendererCommand, TrackOrigin,
 };
 pub use qconnect_protocol::{QueueCommandType, RendererReport, RendererReportType};
+pub use renderer_engine::QconnectRendererEngine;
 pub use state::QconnectRuntimeState;
 pub use sync_state::{
     ensure_session_renderer_state, sync_session_renderer_active_flags, QconnectRemoteSyncState,

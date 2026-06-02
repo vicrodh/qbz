@@ -10,6 +10,11 @@ qconnect-core = { path = "../qconnect-core" }
 qconnect-protocol = { path = "../qconnect-protocol" }
 qconnect-transport-ws = { path = "../qconnect-transport-ws" }
 qbz-models = { path = "../qbz-models" }
+# Renderer-engine seam (slice 6): the trait carries qbz_player::PlaybackState
+# (read by the echo gate + should_reload). qbz-player does NOT depend on
+# qconnect-app, so there is no cycle. play_data/play_streaming_dynamic are
+# reached ONLY through the trait's start_track_stream and are never modified.
+qbz-player = { path = "../qbz-player" }
 async-trait = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
