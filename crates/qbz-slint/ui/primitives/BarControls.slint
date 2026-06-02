@@ -1,0 +1,100 @@
+// Shared now-playing-bar control primitives. Extracted from PlayerBar so the
+// transport cluster (TransportControls) and the bar's right cluster can both
+// use them without duplicating definitions.
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Radius } from "../foundation/radius.slint";
+import { QbzIcon } from "QbzIcon.slint";
+import { TooltipState } from "../state.slint";
+
+// Square, compact icon button with a hover tooltip.
+export component IconButton inherits Rectangle {
+    in property <image> icon;
+    in property <length> icon-size: 16px;
+    in property <bool> active: false;
+    in property <string> tooltip;
+    // Footprint width; the right-cluster buttons are narrower (28) than the
+    // transport (32) so they pack tighter.
+    in property <length> btn-width: 32px;
+    callback clicked();
+
+    width: root.btn-width;
+    height: 32px;
+    border-radius: Radius.sm;
+    background: ta.has-hover ? Theme.surface-hover : transparent;
+
+    QbzIcon {
+        source: root.icon;
+        width: root.icon-size;
+        height: root.icon-size;
+        // Pixel-snap the centring so fine SVGs don't render blurry.
+        x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+        y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+        tint: root.active
+            ? Theme.accent
+            : (ta.has-hover ? Theme.text-primary : Theme.text-secondary);
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked();
+        }
+        changed has-hover => {
+            if (self.has-hover && root.tooltip != "") {
+                TooltipState.text = root.tooltip;
+                TooltipState.anchor-x = root.absolute-position.x + root.width / 2;
+                TooltipState.anchor-y = root.absolute-position.y;
+                TooltipState.show = true;
+            } else if (!self.has-hover) {
+                TooltipState.show = false;
+            }
+        }
+    }
+}
+
+// Primary play/pause button. `circle` = the New layout's filled white disc;
+// `circle: false` = the Classic layout's plain glyph (no disc, tinted like the
+// other transport icons, accent on hover — a 1:1 of the Tauri play button).
+export component PlayButton inherits Rectangle {
+    in property <image> icon;
+    in property <string> tooltip;
+    in property <bool> circle: true;
+    callback clicked();
+
+    width: root.circle ? 38px : 34px;
+    height: root.circle ? 38px : 34px;
+    border-radius: root.circle ? 19px : Radius.sm;
+    background: root.circle
+        ? (ta.has-hover ? #ffffffd6 : #ffffff)
+        : (ta.has-hover ? Theme.surface-hover : transparent);
+
+    QbzIcon {
+        source: root.icon;
+        // 20px glyph in both modes (matches Tauri's size=20 play/pause).
+        width: 20px;
+        height: 20px;
+        x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+        y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+        tint: root.circle
+            ? #000000
+            : (ta.has-hover ? Theme.accent : Theme.text-primary);
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked();
+        }
+        changed has-hover => {
+            if (self.has-hover && root.tooltip != "") {
+                TooltipState.text = root.tooltip;
+                TooltipState.anchor-x = root.absolute-position.x + root.width / 2;
+                TooltipState.anchor-y = root.absolute-position.y;
+                TooltipState.show = true;
+            } else if (!self.has-hover) {
+                TooltipState.show = false;
+            }
+        }
+    }
+}

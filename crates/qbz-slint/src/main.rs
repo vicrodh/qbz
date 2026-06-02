@@ -1734,6 +1734,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         log::info!("[qbz-slint] using system font: {font}");
         window.set_system_font(font.into());
     }
+
+    // Now-playing bar layout (New = 0 / Classic = 1) — restore the persisted
+    // choice before the shell renders so the bar opens in the right mode.
+    window
+        .global::<ShellState>()
+        .set_npb_mode(crate::ui_prefs::npb_mode_index(&crate::ui_prefs::load().npb_mode));
+
     let app_runtime = Arc::new(AppRuntime::new(SlintAdapter::new(window.as_weak())));
 
     // MusicBrainz cache — opens a SQLite store at
@@ -2256,6 +2263,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
             match (kind.as_str(), action.as_str()) {
+                // Now-playing bar layout switch (New / Classic). Persisted to
+                // ui_prefs so the choice survives restarts. Small/Large/window
+                // modes are disabled in the menu until those layouts land.
+                ("npb-view", mode @ ("new" | "classic")) => {
+                    if let Some(w) = weak.upgrade() {
+                        w.global::<ShellState>()
+                            .set_npb_mode(crate::ui_prefs::npb_mode_index(mode));
+                        let mut prefs = crate::ui_prefs::load();
+                        prefs.npb_mode = mode.to_string();
+                        crate::ui_prefs::save(&prefs);
+                    }
+                }
                 ("album", "play") => playback::play_album(
                     runtime.clone(),
                     weak.clone(),

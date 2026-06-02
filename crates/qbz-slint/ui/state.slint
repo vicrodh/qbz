@@ -1882,6 +1882,10 @@ export global ShellState {
     // Section navigation placement: the sections (Discover/Library/Local
     // Library/My QBZ) now live in the sidebar and open right-flyout menus.
     in-out property <bool> nav-in-sidebar: true;
+    // Now-playing bar layout mode: 0 = New (default), 1 = Classic. Persisted
+    // in ui_prefs.json (`npb_mode` "new"|"classic"); set on startup from the
+    // store and on the player bar's "Now Playing view" menu select.
+    in-out property <int> npb-mode: 0;
 }
 
 // Authenticated user, for the header user element.

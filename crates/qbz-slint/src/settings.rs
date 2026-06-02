@@ -171,7 +171,7 @@ pub struct SettingsSnapshot {
 /// when a deliberate, non-shared mode is engaged (colours the led).
 fn output_labels(audio: &qbz_audio::settings::AudioSettings) -> (String, String, bool, bool) {
     let (backend_label, backend_active) = match audio.backend_type {
-        Some(AudioBackendType::PipeWire) => ("PIPE", true),
+        Some(AudioBackendType::PipeWire) => ("PIPEWIRE", true),
         Some(AudioBackendType::Alsa) => ("ALSA", true),
         Some(AudioBackendType::Jack) => ("JACK", true),
         Some(AudioBackendType::Pulse) => ("PULS", true),

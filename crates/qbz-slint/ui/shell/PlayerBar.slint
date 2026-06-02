@@ -15,93 +15,14 @@ import { QbzSlider } from "../primitives/QbzSlider.slint";
 import { QbzToggle } from "../primitives/QbzToggle.slint";
 import { ContextMenu } from "../primitives/ContextMenu.slint";
 import { ContextMenuItem } from "../primitives/ContextMenuItem.slint";
+import { IconButton, PlayButton } from "../primitives/BarControls.slint";
 import { SeekBar } from "SeekBar.slint";
 import { SongCard } from "SongCard.slint";
+import { TransportControls } from "TransportControls.slint";
 import { NowPlayingState, ShellState, AppearanceState, SettingsState, TooltipState } from "../state.slint";
 
-// Square, compact icon button with a hover tooltip.
-component IconButton inherits Rectangle {
-    in property <image> icon;
-    in property <length> icon-size: 16px;
-    in property <bool> active: false;
-    in property <string> tooltip;
-    // Footprint width; the right-cluster buttons are narrower (28) than the
-    // transport (32) so they pack tighter.
-    in property <length> btn-width: 32px;
-    callback clicked();
-
-    width: root.btn-width;
-    height: 32px;
-    border-radius: Radius.sm;
-    background: ta.has-hover ? Theme.surface-hover : transparent;
-
-    QbzIcon {
-        source: root.icon;
-        width: root.icon-size;
-        height: root.icon-size;
-        // Pixel-snap the centring so fine SVGs don't render blurry.
-        x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
-        y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
-        tint: root.active
-            ? Theme.accent
-            : (ta.has-hover ? Theme.text-primary : Theme.text-secondary);
-    }
-
-    ta := TouchArea {
-        mouse-cursor: pointer;
-        clicked => {
-            root.clicked();
-        }
-        changed has-hover => {
-            if (self.has-hover && root.tooltip != "") {
-                TooltipState.text = root.tooltip;
-                TooltipState.anchor-x = root.absolute-position.x + root.width / 2;
-                TooltipState.anchor-y = root.absolute-position.y;
-                TooltipState.show = true;
-            } else if (!self.has-hover) {
-                TooltipState.show = false;
-            }
-        }
-    }
-}
-
-// Primary, filled play/pause button.
-component PlayButton inherits Rectangle {
-    in property <image> icon;
-    in property <string> tooltip;
-    callback clicked();
-
-    width: 38px;
-    height: 38px;
-    border-radius: 19px;
-    background: ta.has-hover ? #ffffffd6 : #ffffff;
-
-    QbzIcon {
-        source: root.icon;
-        width: 20px;
-        height: 20px;
-        x: (parent.width - self.width) / 2;
-        y: (parent.height - self.height) / 2;
-        tint: #000000;
-    }
-
-    ta := TouchArea {
-        mouse-cursor: pointer;
-        clicked => {
-            root.clicked();
-        }
-        changed has-hover => {
-            if (self.has-hover && root.tooltip != "") {
-                TooltipState.text = root.tooltip;
-                TooltipState.anchor-x = root.absolute-position.x + root.width / 2;
-                TooltipState.anchor-y = root.absolute-position.y;
-                TooltipState.show = true;
-            } else if (!self.has-hover) {
-                TooltipState.show = false;
-            }
-        }
-    }
-}
+// IconButton + PlayButton now live in primitives/BarControls.slint (shared
+// with TransportControls). ConnectButton + ToggleRow stay local (bar-only).
 
 // Qobuz Connect button — monitor-speaker glyph; golden over a soft golden tint
 // when a remote renderer owns playback. The renderer name lives in the song
@@ -210,7 +131,12 @@ export component PlayerBar inherits Rectangle {
     property <float> side-frac: root.width >= 1920px
         ? 0.25
         : (root.width >= 1366px ? 0.30 : 0.39);
-    property <float> centre-frac: 1.0 - 2.0 * root.side-frac;
+    // Classic uses a fixed ~32.4/35.2/32.4 split (the centre song card is 12%
+    // narrower than a plain 40% so it isn't oversized in the open view); New
+    // uses the responsive side fraction above. BOTH modes keep the two side
+    // columns equal so the centre column stays dead centre.
+    property <float> col-side: ShellState.npb-mode == 1 ? 0.324 : root.side-frac;
+    property <float> col-centre: 1.0 - 2.0 * root.col-side;
 
     VerticalLayout {
         Rectangle { height: 6px; }
@@ -247,17 +173,19 @@ export component PlayerBar inherits Rectangle {
             padding-right: 6px;
             spacing: 0px;
 
-            // LEFT column (responsive 39/30/25%) — song card; audio stamp
-            // floats to its right wall.
+            // LEFT column. New = the song card (audio stamp floats to its
+            // right wall). Classic = the transport cluster hugging the left
+            // edge with a plain play glyph (the Tauri arrangement).
             Rectangle {
-                width: (parent.width - 12px) * root.side-frac;
+                width: (parent.width - 12px) * root.col-side;
                 clip: true;
-                // SongCard fills the column (a layout fills its Rectangle
-                // parent), so its text column can stretch and push the audio
+                // New: SongCard (a Rectangle) fills the column by default (a
+                // Rectangle child takes 100% of its parent), so its inner
+                // HorizontalLayout's stretch text column can push the audio
                 // stamp to the right wall. Vertical centring is handled by the
                 // card's own sub-columns. Do NOT wrap it in an `alignment:
                 // start` layout — that forces preferred sizing and kills both.
-                SongCard {
+                if ShellState.npb-mode == 0: SongCard {
                     // Fill the controls-row height (bar - top6 - seek20
                     // - gap6 - bottom6 = bar - 38).
                     art-size: Layout.player-bar-height - 38px;
@@ -273,166 +201,91 @@ export component PlayerBar inherits Rectangle {
                     open-context(kind, id) => {
                         root.media-action(kind, id, "open");
                     }
+                    track-info() => {
+                        root.media-action("track", NowPlayingState.track-id, "track-info");
+                    }
+                }
+                // Classic: transport cluster, left-aligned, plain play glyph.
+                if ShellState.npb-mode == 1: VerticalLayout {
+                    alignment: center;
+                    HorizontalLayout {
+                        alignment: start;
+                        TransportControls {
+                            play-circle: false;
+                            classic-actions: true;
+                            media-action(k, i, a) => {
+                                root.media-action(k, i, a);
+                            }
+                        }
+                    }
                 }
             }
 
-            // CENTRE column (responsive 22/40/50%) — symmetric transport,
-            // absolutely centred at every width.
+            // CENTRE column. New = the transport cluster (symmetric, filled
+            // disc, absolutely centred). Classic = the glass song card, centred.
             Rectangle {
-                width: (parent.width - 12px) * root.centre-frac;
+                width: (parent.width - 12px) * root.col-centre;
                 clip: true;
-                VerticalLayout {
+                // New: centred transport, PLAY on the window centre.
+                if ShellState.npb-mode == 0: VerticalLayout {
                     alignment: center;
                     HorizontalLayout {
                         alignment: center;
-                        spacing: 2px;
-
-                VerticalLayout {
-                    alignment: center;
-                    IconButton {
-                        icon: @image-url("../assets/icons/info.svg");
-                        tooltip: @tr("Track info");
-                        clicked => {
-                            if (NowPlayingState.has-track) {
-                                root.media-action("track", NowPlayingState.track-id, "track-info");
+                        TransportControls {
+                            play-circle: true;
+                            media-action(k, i, a) => {
+                                root.media-action(k, i, a);
                             }
                         }
                     }
                 }
-                VerticalLayout {
-                    alignment: center;
-                    IconButton {
-                        icon: @image-url("../assets/icons/shuffle.svg");
-                        icon-size: 16px;
-                        tooltip: @tr("Shuffle");
-                        active: NowPlayingState.shuffle;
-                        clicked => {
-                            NowPlayingState.toggle-shuffle();
-                        }
+                // Classic: a contained glass card, centred and content-sized
+                // (clamped 354-718 like Tauri) so the audio stamp stays close
+                // to the track info instead of drifting to a far wall.
+                // Classic: the glass song card, mounted DIRECTLY in the column
+                // (a Rectangle child fills its Rectangle parent — exactly like
+                // the New layout). That fill is what lets the text column stretch
+                // and push the audio stamp FLUSH to the card's right edge. A
+                // VerticalLayout wrapper here breaks the fill and floats the
+                // stamp with a trailing gap — do NOT reintroduce one.
+                //
+                // `max-width` is the cap: the card grows with the window only up
+                // to here, then stays put, so the audio stamp settles at a
+                // consistent right edge instead of drifting across a too-wide
+                // card. `height` + `y` float it (centred) in the 72px row.
+                if ShellState.npb-mode == 1: SongCard {
+                    glass: true;
+                    // Fixed cap. `max-width` is IGNORED on a hand-positioned
+                    // Rectangle (only layouts honour it) — set the width
+                    // directly: 520px cap on big screens, the full column when
+                    // it is narrower. The text column then stretches inside this
+                    // fixed card and pins the 140px audio stamp to its right edge.
+                    width: Math.min(parent.width, 520px);
+                    height: 60px;
+                    y: (parent.height - self.height) / 2;
+                    art-size: 56px;
+                    // Full-size 1:1-Tauri stamp at every width.
+                    compact-stamp: false;
+                    narrow: root.width < 1366px;
+                    open-album(id) => {
+                        root.open-album(id);
+                    }
+                    open-artist(id) => {
+                        root.open-artist(id);
+                    }
+                    open-context(kind, id) => {
+                        root.media-action(kind, id, "open");
+                    }
+                    track-info() => {
+                        root.media-action("track", NowPlayingState.track-id, "track-info");
                     }
                 }
-                VerticalLayout {
-                    alignment: center;
-                    IconButton {
-                        icon: @image-url("../assets/icons/skip-back.svg");
-                        tooltip: @tr("Previous");
-                        clicked => {
-                            NowPlayingState.previous();
-                        }
-                    }
-                }
-                VerticalLayout {
-                    alignment: center;
-                    PlayButton {
-                        icon: NowPlayingState.playing
-                            ? @image-url("../assets/icons/pause.svg")
-                            : @image-url("../assets/icons/play-fill.svg");
-                        tooltip: NowPlayingState.playing ? @tr("Pause") : @tr("Play");
-                        clicked => {
-                            NowPlayingState.toggle-play();
-                        }
-                    }
-                }
-                VerticalLayout {
-                    alignment: center;
-                    IconButton {
-                        icon: @image-url("../assets/icons/skip-forward.svg");
-                        tooltip: @tr("Next");
-                        clicked => {
-                            NowPlayingState.next();
-                        }
-                    }
-                }
-                VerticalLayout {
-                    alignment: center;
-                    IconButton {
-                        icon: NowPlayingState.repeat-mode == 2
-                            ? @image-url("../assets/icons/repeat-1.svg")
-                            : @image-url("../assets/icons/repeat.svg");
-                        icon-size: 16px;
-                        tooltip: @tr("Repeat");
-                        active: NowPlayingState.repeat-mode != 0;
-                        clicked => {
-                            NowPlayingState.cycle-repeat();
-                        }
-                    }
-                }
-                // "+" — grouped add menu.
-                VerticalLayout {
-                    alignment: center;
-                    Rectangle {
-                        width: 32px;
-                        height: 32px;
-                        IconButton {
-                            icon: @image-url("../assets/icons/plus.svg");
-                            icon-size: 16px;
-                            tooltip: @tr("Add to…");
-                            clicked => {
-                                add-menu.show();
-                            }
-                        }
-                        add-menu := PopupWindow {
-                            x: 0px;
-                            y: -222px;
-                            width: 232px;
-                            height: 214px;
-                            close-policy: close-on-click;
-                            ContextMenu {
-                                ContextMenuItem {
-                                    icon: @image-url("../assets/icons/heart.svg");
-                                    label: @tr("Add to library");
-                                    clicked => {
-                                        root.media-action("track", NowPlayingState.track-id, "favorite");
-                                    }
-                                }
-                                ContextMenuItem {
-                                    icon: @image-url("../assets/icons/list-music.svg");
-                                    label: @tr("Add to playlist");
-                                    clicked => {
-                                        root.media-action("track", NowPlayingState.track-id, "add-to-playlist");
-                                    }
-                                }
-                                ContextMenuItem {
-                                    icon: @image-url("../assets/icons/list-end.svg");
-                                    label: @tr("Add to queue");
-                                    clicked => {
-                                        root.media-action("track", NowPlayingState.track-id, "queue");
-                                    }
-                                }
-                                ContextMenuItem {
-                                    icon: @image-url("../assets/icons/list-plus.svg");
-                                    label: @tr("Play next");
-                                    clicked => {
-                                        root.media-action("track", NowPlayingState.track-id, "play-next");
-                                    }
-                                }
-                                ContextMenuItem {
-                                    icon: @image-url("../assets/icons/cassette-tape.svg");
-                                    label: @tr("Add to mixtape");
-                                    clicked => {
-                                        root.media-action("track", NowPlayingState.track-id, "add-to-mixtape");
-                                    }
-                                }
-                                ContextMenuItem {
-                                    icon: @image-url("../assets/icons/disc-3.svg");
-                                    label: @tr("Add album to collection");
-                                    enabled: NowPlayingState.album-id != "";
-                                    clicked => {
-                                        root.media-action("album", NowPlayingState.album-id, "favorite");
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            }
             }
 
             // RIGHT column (responsive 39/30/25%, symmetric with the song
             // card) — secondary actions + volume, clustered at the right wall.
             Rectangle {
-                width: (parent.width - 12px) * root.side-frac;
+                width: (parent.width - 12px) * root.col-side;
                 clip: true;
                 HorizontalLayout {
                     alignment: end;
@@ -709,17 +562,25 @@ export component PlayerBar inherits Rectangle {
                         }
                         layout-menu := PopupWindow {
                             x: 32px - 196px;
-                            y: -210px;
+                            y: -242px;
                             width: 196px;
-                            height: 202px;
+                            height: 234px;
                             close-policy: close-on-click;
                             ContextMenu {
                                 ContextMenuItem {
                                     icon: @image-url("../assets/icons/panel-left.svg");
-                                    label: @tr("Default");
-                                    selected: true;
+                                    label: @tr("New");
+                                    selected: ShellState.npb-mode == 0;
                                     clicked => {
-                                        root.media-action("npb-view", "", "default");
+                                        root.media-action("npb-view", "", "new");
+                                    }
+                                }
+                                ContextMenuItem {
+                                    icon: @image-url("../assets/icons/panel-right-close.svg");
+                                    label: @tr("Classic");
+                                    selected: ShellState.npb-mode == 1;
+                                    clicked => {
+                                        root.media-action("npb-view", "", "classic");
                                     }
                                 }
                                 ContextMenuItem {

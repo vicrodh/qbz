@@ -52,7 +52,7 @@ component OutputBadge inherits Rectangle {
     in property <color> on-color: #22c55e;
     in property <string> tooltip;
 
-    height: 15px;
+    // Height comes from the leds row (set per stamp size); fill it.
     border-radius: 3px;
     background: root.active ? root.on-color.with-alpha(0.16) : Theme.surface-hover;
     border-width: 1px;
@@ -82,17 +82,28 @@ component OutputBadge inherits Rectangle {
     }
 }
 
-export component SongCard inherits HorizontalLayout {
+export component SongCard inherits Rectangle {
     in property <length> art-size: 60px;
     in property <bool> show-art: true;
     in property <bool> show-badges: true;
     // Below the responsive break the stamp shrinks 10% (proportional) so it
     // keeps clear of the controls column; above the break it is full size.
     in property <bool> narrow: false;
+    // Classic layout: render as a contained card (elevated bg + subtle shadow,
+    // NO border — Tauri's card has none, and the border is what made the album
+    // art read as inset/framed instead of flush). New (glass=false) stays
+    // edge-to-edge transparent.
+    in property <bool> glass: false;
+    // Classic non-responsive view uses the FULL-size audio stamp (1:1 Tauri);
+    // New and the responsive (narrow) view keep the compact stamp.
+    in property <bool> compact-stamp: true;
 
     callback open-album(string);
     callback open-artist(string);
     callback open-context(string /* kind */, string /* id */);
+    // Opens the track-info panel. In Tauri this fires from the title click; the
+    // bar surfaces it as an explicit small (i) affordance instead.
+    callback track-info();
 
     property <string> ctx-kind: NowPlayingState.context-id != ""
         ? NowPlayingState.context-kind
@@ -101,11 +112,30 @@ export component SongCard inherits HorizontalLayout {
         ? NowPlayingState.context-id
         : NowPlayingState.album-id;
 
-    spacing: 11px;
-    // Default (stretch) alignment: the text column (the only stretch child)
-    // absorbs the leftover and PUSHES the audio stamp to the right wall. Do NOT
-    // set `alignment: start` here — that forces preferred sizing, kills the
-    // stretch, and collapses the album to zero width.
+    // Geometry helpers for the absolutely-pinned audio stamp.
+    property <length> pad: root.glass ? 2px : 0px;
+    property <length> stamp-w: root.compact-stamp ? (root.narrow ? 94px : 104px) : 140px;
+    property <bool> has-stamp: root.show-badges && NowPlayingState.has-track;
+
+    background: root.glass ? Theme.surface-elevated : transparent;
+    border-radius: root.glass ? 8px : 0px;
+    // No border — keeps the album art flush with the card (Tauri parity).
+    drop-shadow-blur: root.glass ? 8px : 0px;
+    drop-shadow-color: root.glass ? Theme.card-shadow : transparent;
+
+    HorizontalLayout {
+        // Cover + song info ONLY. This row stops BEFORE the audio stamp, which
+        // is pinned absolutely to the card's right edge (see the bottom of this
+        // component). Fixed deterministic widths: cover 56 | 11 | song info
+        // (fills the rest, truncates with ellipsis). The 4px gap to the stamp
+        // is reserved by the width formula.
+        x: root.pad;
+        y: 0;
+        height: root.height;
+        width: root.has-stamp
+            ? root.width - 2 * root.pad - root.stamp-w - 4px
+            : root.width - 2 * root.pad;
+        spacing: 0px;
 
     // --- Cover / idle cat ------------------------------------------------
     if root.show-art: VerticalLayout {
@@ -156,6 +186,9 @@ export component SongCard inherits HorizontalLayout {
         }
     }
 
+    // Fixed gap: cover -> song info.
+    if root.show-art: Rectangle { width: 11px; }
+
     // --- Title + context/artist/album + renderer badge -------------------
     VerticalLayout {
         horizontal-stretch: 1;
@@ -166,6 +199,9 @@ export component SongCard inherits HorizontalLayout {
         spacing: 4px;
         // Title — elides, and on hover shows the full text in a tooltip ONLY
         // when it is actually truncated (the audio stamp ate into it).
+        // Title — elides. Clicking it opens track info (the transport's (i)
+        // is the second trigger, 1:1 with Tauri's title-click). Hovering a
+        // truncated title shows the full text in a tooltip.
         Rectangle {
             title-txt := Text {
                 width: 100%;
@@ -178,6 +214,12 @@ export component SongCard inherits HorizontalLayout {
                 overflow: elide;
             }
             ttta := TouchArea {
+                mouse-cursor: NowPlayingState.has-track ? pointer : default;
+                clicked => {
+                    if (NowPlayingState.has-track) {
+                        root.track-info();
+                    }
+                }
                 changed has-hover => {
                     if (self.has-hover && NowPlayingState.has-track
                         && title-txt.preferred-width > self.width) {
@@ -287,68 +329,69 @@ export component SongCard inherits HorizontalLayout {
         }
     }
 
-    // --- Breathing room before the audio stamp (tightened to shift it left)
-    if root.show-badges && NowPlayingState.has-track: Rectangle { width: 2px; }
+    }
 
-    // --- Audio stamp: quality badge over two leds, a fixed rectangle -----
-    if root.show-badges && NowPlayingState.has-track: VerticalLayout {
-        alignment: center;
-        VerticalLayout {
-            width: root.narrow ? 94px : 104px;
-            spacing: 3px;
+    // --- Audio stamp: quality badge over two leds. ABSOLUTELY pinned to the
+    // card's right edge (x = card width - padding - stamp width), vertically
+    // centred, so it is ALWAYS flush right no matter how the song-info column
+    // lays out. Deterministic fix for the trailing gap — does NOT rely on the
+    // text column's stretch reaching the edge.
+    if root.has-stamp: VerticalLayout {
+        x: root.width - root.pad - root.stamp-w;
+        y: (root.height - self.height) / 2;
+        width: root.stamp-w;
+        spacing: root.compact-stamp ? 3px : 2px;
 
-            Rectangle {
-                height: root.narrow ? 26px : 29px;
-                QualityBadgeFull {
-                    x: 0;
-                    y: 0;
-                    width: parent.width;
-                    height: parent.height;
-                    compact: true;
-                    show-icon: true;
-                    scale-factor: root.narrow ? 0.9 : 1.0;
-                    tier: NowPlayingState.quality-tier;
-                    detail: NowPlayingState.quality-detail;
-                }
-                qta := TouchArea {
-                    changed has-hover => {
-                        if (self.has-hover) {
-                            TooltipState.text = @tr("Stored audio quality");
-                            TooltipState.anchor-x = parent.absolute-position.x + parent.width / 2;
-                            TooltipState.anchor-y = parent.absolute-position.y;
-                            TooltipState.show = true;
-                        } else {
-                            TooltipState.show = false;
-                        }
+        Rectangle {
+            height: root.compact-stamp ? (root.narrow ? 26px : 29px) : 36px;
+            QualityBadgeFull {
+                x: 0;
+                y: 0;
+                width: parent.width;
+                height: parent.height;
+                compact: root.compact-stamp;
+                show-icon: true;
+                scale-factor: root.compact-stamp && root.narrow ? 0.9 : 1.0;
+                tier: NowPlayingState.quality-tier;
+                detail: NowPlayingState.quality-detail;
+            }
+            qta := TouchArea {
+                changed has-hover => {
+                    if (self.has-hover) {
+                        TooltipState.text = @tr("Stored audio quality");
+                        TooltipState.anchor-x = parent.absolute-position.x + parent.width / 2;
+                        TooltipState.anchor-y = parent.absolute-position.y;
+                        TooltipState.show = true;
+                    } else {
+                        TooltipState.show = false;
                     }
                 }
             }
+        }
 
-            // Backend + mode leds side-by-side; while casting they fuse into
-            // one purple led.
-            HorizontalLayout {
-                spacing: 3px;
-                if !NowPlayingState.cast-active: OutputBadge {
-                    horizontal-stretch: 1;
-                    label: SettingsState.output-backend-label;
-                    active: SettingsState.output-backend-active;
-                    on-color: #5b8def;
-                    tooltip: @tr("Audio backend");
-                }
-                if !NowPlayingState.cast-active: OutputBadge {
-                    horizontal-stretch: 1;
-                    label: SettingsState.output-mode-label;
-                    active: SettingsState.output-mode-active;
-                    on-color: #22c55e;
-                    tooltip: @tr("Output mode");
-                }
-                if NowPlayingState.cast-active: OutputBadge {
-                    horizontal-stretch: 1;
-                    label: NowPlayingState.cast-protocol == "dlna" ? "DLNA" : "CAST";
-                    active: true;
-                    on-color: #a855f7;
-                    tooltip: @tr("Casting");
-                }
+        HorizontalLayout {
+            height: root.compact-stamp ? 15px : 18px;
+            spacing: root.compact-stamp ? 3px : 2px;
+            if !NowPlayingState.cast-active: OutputBadge {
+                horizontal-stretch: 1;
+                label: SettingsState.output-backend-label;
+                active: SettingsState.output-backend-active;
+                on-color: #5b8def;
+                tooltip: @tr("Audio backend");
+            }
+            if !NowPlayingState.cast-active: OutputBadge {
+                horizontal-stretch: 1;
+                label: SettingsState.output-mode-label;
+                active: SettingsState.output-mode-active;
+                on-color: #22c55e;
+                tooltip: @tr("Output mode");
+            }
+            if NowPlayingState.cast-active: OutputBadge {
+                horizontal-stretch: 1;
+                label: NowPlayingState.cast-protocol == "dlna" ? "DLNA" : "CAST";
+                active: true;
+                on-color: #a855f7;
+                tooltip: @tr("Casting");
             }
         }
     }

@@ -1,0 +1,228 @@
+// Now-playing transport cluster: shuffle, previous, play/pause, next, repeat,
+// and a trailing add affordance. Extracted from PlayerBar so the same cluster
+// can sit in the CENTRE column (New layout) or the LEFT column (Classic layout)
+// without duplicating popups.
+//
+// `play-circle`   = New filled disc vs Classic plain glyph.
+// `classic-actions` = New keeps the grouped "+" add menu; Classic swaps it for
+//                     an inline one-click add-to-playlist + a favorite toggle
+//                     (filled-heart state), 1:1 with the Tauri Classic transport.
+// The track-info "(i)" lives in the song card, not here.
+//
+// Reads NowPlayingState + QueueState directly; bubbles add/menu actions through
+// `media-action` to PlayerBar.
+
+import { IconButton, PlayButton } from "../primitives/BarControls.slint";
+import { ContextMenu } from "../primitives/ContextMenu.slint";
+import { ContextMenuItem } from "../primitives/ContextMenuItem.slint";
+import { QbzIcon } from "../primitives/QbzIcon.slint";
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Radius } from "../foundation/radius.slint";
+import { NowPlayingState, QueueState, TooltipState } from "../state.slint";
+
+export component TransportControls inherits HorizontalLayout {
+    // New layout = filled white disc; Classic = plain glyph.
+    in property <bool> play-circle: true;
+    // Classic = inline add-to-playlist + favorite; New = grouped "+" menu.
+    in property <bool> classic-actions: false;
+    callback media-action(string /* kind */, string /* id */, string /* action */);
+
+    spacing: 2px;
+
+    // Track info — the first control (left of shuffle), 1:1 with the other
+    // views. The song-card title is the second trigger. Keeping it here also
+    // restores PLAY's symmetric centring (3 controls each side) in New.
+    VerticalLayout {
+        alignment: center;
+        IconButton {
+            icon: @image-url("../assets/icons/info.svg");
+            tooltip: @tr("Track info");
+            clicked => {
+                if (NowPlayingState.has-track) {
+                    root.media-action("track", NowPlayingState.track-id, "track-info");
+                }
+            }
+        }
+    }
+    VerticalLayout {
+        alignment: center;
+        IconButton {
+            icon: @image-url("../assets/icons/shuffle.svg");
+            icon-size: 16px;
+            tooltip: @tr("Shuffle");
+            active: NowPlayingState.shuffle;
+            clicked => {
+                NowPlayingState.toggle-shuffle();
+            }
+        }
+    }
+    VerticalLayout {
+        alignment: center;
+        IconButton {
+            icon: @image-url("../assets/icons/skip-back.svg");
+            tooltip: @tr("Previous");
+            clicked => {
+                NowPlayingState.previous();
+            }
+        }
+    }
+    VerticalLayout {
+        alignment: center;
+        PlayButton {
+            circle: root.play-circle;
+            icon: NowPlayingState.playing
+                ? @image-url("../assets/icons/pause.svg")
+                : @image-url("../assets/icons/play-fill.svg");
+            tooltip: NowPlayingState.playing ? @tr("Pause") : @tr("Play");
+            clicked => {
+                NowPlayingState.toggle-play();
+            }
+        }
+    }
+    VerticalLayout {
+        alignment: center;
+        IconButton {
+            icon: @image-url("../assets/icons/skip-forward.svg");
+            tooltip: @tr("Next");
+            clicked => {
+                NowPlayingState.next();
+            }
+        }
+    }
+    VerticalLayout {
+        alignment: center;
+        IconButton {
+            icon: NowPlayingState.repeat-mode == 2
+                ? @image-url("../assets/icons/repeat-1.svg")
+                : @image-url("../assets/icons/repeat.svg");
+            icon-size: 16px;
+            tooltip: @tr("Repeat");
+            active: NowPlayingState.repeat-mode != 0;
+            clicked => {
+                NowPlayingState.cycle-repeat();
+            }
+        }
+    }
+
+    // New: "+" — grouped add menu.
+    if !root.classic-actions: VerticalLayout {
+        alignment: center;
+        Rectangle {
+            width: 32px;
+            height: 32px;
+            IconButton {
+                icon: @image-url("../assets/icons/plus.svg");
+                icon-size: 16px;
+                tooltip: @tr("Add to…");
+                clicked => {
+                    add-menu.show();
+                }
+            }
+            add-menu := PopupWindow {
+                x: 0px;
+                y: -222px;
+                width: 232px;
+                height: 214px;
+                close-policy: close-on-click;
+                ContextMenu {
+                    ContextMenuItem {
+                        icon: @image-url("../assets/icons/heart.svg");
+                        label: @tr("Add to library");
+                        clicked => {
+                            root.media-action("track", NowPlayingState.track-id, "favorite");
+                        }
+                    }
+                    ContextMenuItem {
+                        icon: @image-url("../assets/icons/list-music.svg");
+                        label: @tr("Add to playlist");
+                        clicked => {
+                            root.media-action("track", NowPlayingState.track-id, "add-to-playlist");
+                        }
+                    }
+                    ContextMenuItem {
+                        icon: @image-url("../assets/icons/list-end.svg");
+                        label: @tr("Add to queue");
+                        clicked => {
+                            root.media-action("track", NowPlayingState.track-id, "queue");
+                        }
+                    }
+                    ContextMenuItem {
+                        icon: @image-url("../assets/icons/list-plus.svg");
+                        label: @tr("Play next");
+                        clicked => {
+                            root.media-action("track", NowPlayingState.track-id, "play-next");
+                        }
+                    }
+                    ContextMenuItem {
+                        icon: @image-url("../assets/icons/cassette-tape.svg");
+                        label: @tr("Add to mixtape");
+                        clicked => {
+                            root.media-action("track", NowPlayingState.track-id, "add-to-mixtape");
+                        }
+                    }
+                    ContextMenuItem {
+                        icon: @image-url("../assets/icons/disc-3.svg");
+                        label: @tr("Add album to collection");
+                        enabled: NowPlayingState.album-id != "";
+                        clicked => {
+                            root.media-action("album", NowPlayingState.album-id, "favorite");
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Classic: inline add-to-playlist (one click) — 1:1 with Tauri.
+    if root.classic-actions: VerticalLayout {
+        alignment: center;
+        IconButton {
+            icon: @image-url("../assets/icons/plus.svg");
+            icon-size: 16px;
+            tooltip: @tr("Add to playlist");
+            clicked => {
+                root.media-action("track", NowPlayingState.track-id, "add-to-playlist");
+            }
+        }
+    }
+    // Classic: inline favorite toggle with filled-heart state — 1:1 with Tauri.
+    if root.classic-actions: VerticalLayout {
+        alignment: center;
+        Rectangle {
+            width: 32px;
+            height: 32px;
+            border-radius: Radius.sm;
+            background: fav-ta.has-hover ? Theme.surface-hover : transparent;
+            QbzIcon {
+                source: QueueState.now-playing-favorite
+                    ? @image-url("../assets/icons/heart-filled.svg")
+                    : @image-url("../assets/icons/heart.svg");
+                width: 16px;
+                height: 16px;
+                x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                tint: QueueState.now-playing-favorite
+                    ? Theme.favorite
+                    : (fav-ta.has-hover ? Theme.text-primary : Theme.text-secondary);
+            }
+            fav-ta := TouchArea {
+                mouse-cursor: pointer;
+                clicked => {
+                    QueueState.toggle-now-playing-favorite();
+                }
+                changed has-hover => {
+                    if (self.has-hover) {
+                        TooltipState.text = QueueState.now-playing-favorite
+                            ? @tr("Remove from favorites")
+                            : @tr("Add to favorites");
+                        TooltipState.anchor-x = parent.absolute-position.x + parent.width / 2;
+                        TooltipState.anchor-y = parent.absolute-position.y;
+                        TooltipState.show = true;
+                    } else {
+                        TooltipState.show = false;
+                    }
+                }
+            }
+        }
+    }
+}

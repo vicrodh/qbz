@@ -34,6 +34,9 @@ pub const STREAMING_QUALITIES: &[StreamingQuality] = &[
 /// Default streaming-quality key (`Hi-Res+`).
 pub const DEFAULT_STREAMING_QUALITY: &str = "hires_plus";
 
+/// Default now-playing bar layout key (`New`).
+pub const DEFAULT_NPB_MODE: &str = "new";
+
 /// Persisted UI preferences. New fields must default sanely so an older
 /// file (missing the field) still deserializes.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,17 +44,35 @@ pub struct UiPrefs {
     /// Streaming-quality key — one of `STREAMING_QUALITIES[*].key`.
     #[serde(default = "default_streaming_quality")]
     pub streaming_quality: String,
+    /// Now-playing bar layout: `"new"` | `"classic"`. Maps to
+    /// `ShellState.npb-mode` (0 / 1).
+    #[serde(default = "default_npb_mode")]
+    pub npb_mode: String,
 }
 
 fn default_streaming_quality() -> String {
     DEFAULT_STREAMING_QUALITY.to_string()
 }
 
+fn default_npb_mode() -> String {
+    DEFAULT_NPB_MODE.to_string()
+}
+
 impl Default for UiPrefs {
     fn default() -> Self {
         Self {
             streaming_quality: default_streaming_quality(),
+            npb_mode: default_npb_mode(),
         }
+    }
+}
+
+/// Map a persisted npb-mode key to the `ShellState.npb-mode` int
+/// (New = 0, Classic = 1). Unknown keys fall back to New.
+pub fn npb_mode_index(key: &str) -> i32 {
+    match key {
+        "classic" => 1,
+        _ => 0,
     }
 }
 
