@@ -7,6 +7,7 @@ mod error;
 mod events;
 mod feature_flags;
 pub mod queue_resolution;
+pub mod renderer;
 mod renderer_engine;
 pub mod session;
 mod state;
