@@ -15,6 +15,11 @@ use crate::core_bridge::CoreBridge;
 /// this module compile unchanged.
 use qconnect_app::quality_from_max_audio_quality;
 
+use async_trait::async_trait;
+use qbz_models::{Quality, QueueTrack, RepeatMode, Track};
+use qbz_player::PlaybackState;
+use qconnect_app::QconnectRendererEngine;
+
 use super::QconnectRemoteSyncState;
 
 const LOAD_ATTEMPT_DEDUP_WINDOW: Duration = Duration::from_secs(5);
@@ -49,7 +54,7 @@ async fn load_remote_track_into_player(
         .map(|track| u64::from(track.duration))
         .unwrap_or(0);
 
-    match stream_remote_track_into_player(bridge, track_id, duration_secs, &stream_url.url).await {
+    match stream_remote_track_into_player(bridge, track_id, duration_secs, 0, &stream_url.url).await {
         Ok(()) => Ok(()),
         Err(stream_err) => {
             log::warn!(
@@ -115,6 +120,7 @@ async fn stream_remote_track_into_player(
     bridge: &CoreBridge,
     track_id: u64,
     duration_secs: u64,
+    start_position_secs: u64,
     url: &str,
 ) -> Result<(), String> {
     let stream_info = probe_remote_stream_info(url).await?;
@@ -138,7 +144,7 @@ async fn stream_remote_track_into_player(
             stream_info.content_length,
             stream_info.speed_mbps,
             duration_secs,
-            0, // QConnect tracks always start from 0; resume is local-only
+            start_position_secs, // QConnect callers pass 0; resume is local-only
         )
         .map_err(|err| format!("start streaming remote track {track_id}: {err}"))?;
 
@@ -342,4 +348,126 @@ async fn download_remote_audio(url: &str) -> Result<Vec<u8>, String> {
         .await
         .map_err(|err| format!("read remote audio bytes failed: {err}"))?;
     Ok(bytes.to_vec())
+}
+
+/// `CoreBridge` as the Tauri QConnect renderer engine (slice 6, step 5).
+///
+/// Every transport/queue/catalog method is the SAME one-line forward `CoreBridge`
+/// already does to `QbzCore`, so the bytes the audio thread sees are identical to
+/// the pre-trait call graph. The forwards spell out `CoreBridge::method(self, ..)`
+/// (not `self.method(..)`) to call the inherent method unambiguously and never
+/// recurse into this trait impl.
+///
+/// `start_track_stream` is the verbatim body of `load_remote_track_into_player` +
+/// `stream_remote_track_into_player` (the probe-derived sample_rate/channels/
+/// bit_depth flow straight into `play_streaming_dynamic` — never defaulted) with
+/// the quality/duration resolution lifted to the caller. The protected seams
+/// (`play_streaming_dynamic` / `play_data`) and the HTTP feeder stay impl-side;
+/// `BufferWriter` never crosses the `qconnect-app` boundary.
+#[async_trait]
+impl QconnectRendererEngine for CoreBridge {
+    // ---- transport (sync) ----
+    fn resume(&self) -> Result<(), String> {
+        CoreBridge::resume(self)
+    }
+    fn pause(&self) -> Result<(), String> {
+        CoreBridge::pause(self)
+    }
+    fn stop(&self) -> Result<(), String> {
+        CoreBridge::stop(self)
+    }
+    fn seek(&self, position_secs: u64) -> Result<(), String> {
+        CoreBridge::seek(self, position_secs)
+    }
+    fn set_volume(&self, fraction: f32) -> Result<(), String> {
+        CoreBridge::set_volume(self, fraction)
+    }
+    fn get_playback_state(&self) -> PlaybackState {
+        CoreBridge::get_playback_state(self)
+    }
+
+    // ---- queue / mode (async) ----
+    async fn set_repeat_mode(&self, mode: RepeatMode) {
+        CoreBridge::set_repeat_mode(self, mode).await
+    }
+    async fn set_shuffle(&self, enabled: bool) {
+        CoreBridge::set_shuffle(self, enabled).await
+    }
+    async fn get_all_queue_tracks(&self) -> (Vec<QueueTrack>, Option<usize>) {
+        CoreBridge::get_all_queue_tracks(self).await
+    }
+    async fn set_queue(&self, tracks: Vec<QueueTrack>, start_index: Option<usize>) {
+        CoreBridge::set_queue(self, tracks, start_index).await
+    }
+    async fn set_queue_with_order(
+        &self,
+        tracks: Vec<QueueTrack>,
+        start_index: Option<usize>,
+        shuffle_enabled: bool,
+        shuffle_order: Option<Vec<usize>>,
+    ) {
+        CoreBridge::set_queue_with_order(self, tracks, start_index, shuffle_enabled, shuffle_order)
+            .await
+    }
+    async fn clear_queue(&self, keep_current: bool) {
+        CoreBridge::clear_queue(self, keep_current).await
+    }
+    async fn play_index(&self, index: usize) -> Option<QueueTrack> {
+        CoreBridge::play_index(self, index).await
+    }
+
+    // ---- catalog (async) ----
+    async fn get_track(&self, track_id: u64) -> Result<Track, String> {
+        CoreBridge::get_track(self, track_id).await
+    }
+    async fn get_tracks_batch(&self, track_ids: &[u64]) -> Result<Vec<Track>, String> {
+        CoreBridge::get_tracks_batch(self, track_ids).await
+    }
+
+    // ---- protected audio seam (the only protected touch) ----
+    async fn start_track_stream(
+        &self,
+        track_id: u64,
+        quality: Quality,
+        duration_secs: u64,
+        start_position_secs: u64,
+    ) -> Result<(), String> {
+        let stream_url = self
+            .get_stream_url(track_id, quality)
+            .await
+            .map_err(|err| format!("resolve stream url for remote track {track_id}: {err}"))?;
+
+        match stream_remote_track_into_player(
+            self,
+            track_id,
+            duration_secs,
+            start_position_secs,
+            &stream_url.url,
+        )
+        .await
+        {
+            Ok(()) => Ok(()),
+            Err(stream_err) => {
+                log::warn!(
+                    "[QConnect] Streaming handoff unavailable for track {}: {}. Falling back to full download.",
+                    track_id,
+                    stream_err
+                );
+                let audio_data = download_remote_audio(&stream_url.url).await?;
+                self.player()
+                    .play_data(audio_data, track_id)
+                    .map_err(|err| format!("play remote track {track_id}: {err}"))?;
+                Ok(())
+            }
+        }
+    }
+
+    // ---- report-back source (read-only of the live output config) ----
+    fn current_output_format(&self) -> Option<(u32, u32)> {
+        let player = self.player();
+        Some((
+            player.state.get_sample_rate(),
+            player.state.get_bit_depth(),
+        ))
+    }
 }
