@@ -76,6 +76,11 @@ pub struct RemoteNowPlaying {
     /// reported a volume yet — the bar then clamps to a safe 50% instead of
     /// reflecting QBZ's local 100, so a drag never nukes the AVR.
     pub volume: Option<i32>,
+    /// The peer's current track id (from the effective remote renderer
+    /// snapshot's `current_track`; 0 when none). The poll loop edge-detects a
+    /// change against its last-seen value to refresh the bar/queue meta when
+    /// the peer advances a track on its own.
+    pub track_id: u64,
 }
 
 /// Process-wide QConnect service singleton (one per app, like the playback
@@ -432,12 +437,40 @@ impl SlintQconnectService {
         *self.last_pushed_queue_ids.lock().await = None;
 
         if let Some(runtime) = runtime {
+            // FIX #20: disarm the in-flight liveness watchdog BEFORE aborting the
+            // event loop. A watchdog armed while a peer was playing fires
+            // ~seconds later and emits RendererUnreachable (spurious error toast +
+            // lingering golden cast badge) if we don't bump the generation it
+            // captured. run_renderer_watchdog no-ops on a generation mismatch
+            // (app.rs `run_renderer_watchdog`), so bumping the shared field here
+            // neutralizes any pending watchdog task. `watchdog_generation` is a
+            // public field on QconnectRemoteSyncState; mutate it directly.
+            {
+                let mut state = runtime.sync_state.lock().await;
+                state.watchdog_generation = state.watchdog_generation.wrapping_add(1);
+            }
             if let Err(err) = runtime.app.disconnect().await {
                 let mut guard = self.inner.lock().await;
                 guard.last_error = Some(format!("qconnect disconnect failed: {err}"));
             }
             runtime.event_loop.abort();
         }
+
+        // Clear the UI: no session = no renderers in the picker, and no remote
+        // playback state. Without this the last device list + is-remote/cast
+        // state linger after turning Connect off.
+        let _ = self.window.upgrade_in_event_loop(|w| {
+            use slint::ComponentHandle;
+            let dev = w.global::<crate::QconnectDevState>();
+            dev.set_devices(slint::ModelRc::new(
+                slint::VecModel::<crate::QconnectDevice>::default(),
+            ));
+            dev.set_active_renderer_id(-1);
+            let np = w.global::<crate::NowPlayingState>();
+            np.set_is_remote(false);
+            np.set_cast_target("".into());
+            np.set_volume_locked(false);
+        });
 
         Ok(())
     }
@@ -646,6 +679,158 @@ impl SlintQconnectService {
         true
     }
 
+    /// Controller play-next routing: when QBZ is CONTROLLING a peer renderer and
+    /// the user does "Play next" on QBZ, route the track to the peer's queue
+    /// (insert right after the peer's CURRENT track) instead of mutating only the
+    /// LOCAL queue (which the peer never sees). Returns `true` when handled (the
+    /// caller MUST NOT enqueue locally) and `false` when no peer is active (the
+    /// caller does the existing local insert, byte-unchanged).
+    ///
+    /// Mirrors the webplayer `queue_insert_tracks` path: a single command with a
+    /// fresh `context_uuid`, `autoplay_reset: false`, `autoplay_loading: false`,
+    /// and `insert_after` = the renderer's current queue_item_id (omitted when
+    /// unknown). Admission is the SAME single-track rule as the queue sync: a
+    /// `local` / `plex` track is refused (a renderer can't play a local/Plex id;
+    /// offline `qobuz_download` IS eligible). On refusal it toasts + returns
+    /// `true` (handled — do NOT add it locally while controlling). The cloud
+    /// echoes a `QueueUpdated` that `materialize_remote_queue` applies to the
+    /// local queue, so we never mutate the local queue here (avoids divergence).
+    pub async fn play_next_on_peer_if_active(&self, track_id: u64, source: Option<&str>) -> bool {
+        let peer_active = self.is_peer_renderer_active().await;
+        if !peer_active {
+            return false;
+        }
+
+        if !self.is_track_castable(track_id, source) {
+            log::info!(
+                "[QConnect] play_next_on_peer: track {track_id} not Qobuz-castable; refusing"
+            );
+            crate::toast::error_weak(&self.window, "Track not castable to Qobuz Connect");
+            dev_push_event(
+                &self.window,
+                format!("-> play_next REFUSED (non-Qobuz track {track_id})"),
+            );
+            // Handled: do NOT add a non-castable track to the local queue while a
+            // peer owns playback.
+            return true;
+        }
+
+        // Resolve insert_after from the peer's current track (omit when unknown).
+        let insert_after = self
+            .effective_remote_renderer_snapshot()
+            .await
+            .ok()
+            .flatten()
+            .and_then(|(renderer, _queue, _session)| {
+                renderer
+                    .current_track
+                    .as_ref()
+                    .and_then(|item| i64::try_from(item.queue_item_id).ok())
+            });
+
+        let mut payload = json!({
+            "track_ids": [track_id as i64],
+            "context_uuid": Uuid::new_v4().to_string(),
+            "autoplay_reset": false,
+            "autoplay_loading": false,
+        });
+        if let Some(insert_after) = insert_after {
+            payload["insert_after"] = json!(insert_after);
+        }
+
+        match self
+            .send_command(QueueCommandType::CtrlSrvrQueueInsertTracks, payload)
+            .await
+        {
+            Ok(_) => {
+                log::info!(
+                    "[QConnect] play_next_on_peer: inserted track {track_id} (after={insert_after:?})"
+                );
+                dev_push_event(
+                    &self.window,
+                    format!("-> play_next QueueInsertTracks {track_id} after={insert_after:?}"),
+                );
+            }
+            Err(err) => {
+                log::warn!("[QConnect] play_next_on_peer: insert failed: {err}");
+                // Still handled: a peer owns playback; never fall back to local.
+            }
+        }
+        true
+    }
+
+    /// Controller add-to-queue routing: when QBZ is CONTROLLING a peer renderer
+    /// and the user does "Add to queue" on QBZ, append the track to the peer's
+    /// queue instead of mutating only the LOCAL queue. Returns `true` when handled
+    /// and `false` when no peer is active (caller does the existing local append).
+    ///
+    /// Mirrors the webplayer `queue_add_tracks` path: a single append command with
+    /// a fresh `context_uuid`, `autoplay_reset: false`, `autoplay_loading: false`.
+    /// Same admission + echo handling as `play_next_on_peer_if_active`.
+    pub async fn add_to_queue_on_peer_if_active(&self, track_id: u64, source: Option<&str>) -> bool {
+        let peer_active = self.is_peer_renderer_active().await;
+        if !peer_active {
+            return false;
+        }
+
+        if !self.is_track_castable(track_id, source) {
+            log::info!(
+                "[QConnect] add_to_queue_on_peer: track {track_id} not Qobuz-castable; refusing"
+            );
+            crate::toast::error_weak(&self.window, "Track not castable to Qobuz Connect");
+            dev_push_event(
+                &self.window,
+                format!("-> add_to_queue REFUSED (non-Qobuz track {track_id})"),
+            );
+            return true;
+        }
+
+        let payload = json!({
+            "track_ids": [track_id as i64],
+            "context_uuid": Uuid::new_v4().to_string(),
+            "autoplay_reset": false,
+            "autoplay_loading": false,
+        });
+
+        match self
+            .send_command(QueueCommandType::CtrlSrvrQueueAddTracks, payload)
+            .await
+        {
+            Ok(_) => {
+                log::info!("[QConnect] add_to_queue_on_peer: appended track {track_id}");
+                dev_push_event(
+                    &self.window,
+                    format!("-> add_to_queue QueueAddTracks {track_id}"),
+                );
+            }
+            Err(err) => {
+                log::warn!("[QConnect] add_to_queue_on_peer: append failed: {err}");
+            }
+        }
+        true
+    }
+
+    /// True when a PEER renderer currently owns playback (controller mode). Reads
+    /// the session under the sync-state lock. Shared by the play-next /
+    /// add-to-queue routing entry points.
+    async fn is_peer_renderer_active(&self) -> bool {
+        let guard = self.inner.lock().await;
+        let Some(runtime) = guard.runtime.as_ref() else {
+            return false;
+        };
+        let state = runtime.sync_state.lock().await;
+        is_peer_renderer_active(&state.session)
+    }
+
+    /// Single-track castability check, mirroring `sync_local_queue_if_changed`'s
+    /// all-or-nothing rule: castable = a positive id whose `source` is not
+    /// `local` / `plex` (offline `qobuz_download` IS eligible; the default/None
+    /// is treated as `qobuz`).
+    fn is_track_castable(&self, track_id: u64, source: Option<&str>) -> bool {
+        let source = source.unwrap_or("qobuz").to_ascii_lowercase();
+        track_id > 0 && source != "local" && source != "plex"
+    }
+
     // -----------------------------------------------------------------------
     // CONTROLLER-mode transport routing (`*_if_remote`). Mirror of the Tauri
     // `src-tauri/src/qconnect/service.rs` adapter. Return contract:
@@ -686,6 +871,26 @@ impl SlintQconnectService {
             if should_clear_transport_pending {
                 log::info!(
                     "[QConnect] Clearing superseded pending transport control before sending next SET_PLAYER_STATE"
+                );
+                state.pending.clear();
+            }
+        }
+
+        if matches!(command_type, QueueCommandType::CtrlSrvrSetVolume) {
+            // A rapid volume drag fires SetVolume faster than the cloud echoes
+            // SrvrCtrlVolumeChanged. Supersede the in-flight volume command
+            // (latest-wins) so a drag never spams "pending queue action already
+            // active". Mirrors the SetPlayerState supersede above.
+            let state_handle = app.state_handle();
+            let mut state = state_handle.lock().await;
+            let should_clear_volume_pending = state
+                .pending
+                .current()
+                .map(|pending| pending.is_set_volume_action)
+                .unwrap_or(false);
+            if should_clear_volume_pending {
+                log::info!(
+                    "[QConnect] Clearing superseded pending volume before sending next SET_VOLUME"
                 );
                 state.pending.clear();
             }
@@ -821,6 +1026,11 @@ impl SlintQconnectService {
             updated_at_ms: renderer.updated_at_ms,
             playing: renderer.playing_state == Some(PLAYING_STATE_PLAYING),
             volume: renderer.volume,
+            track_id: renderer
+                .current_track
+                .as_ref()
+                .map(|item| item.track_id)
+                .unwrap_or(0),
         })
     }
 

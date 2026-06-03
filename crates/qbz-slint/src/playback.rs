@@ -1578,6 +1578,20 @@ pub fn enqueue_album_next(
 /// Enqueue a single track at the end of the current queue.
 pub fn enqueue_track(runtime: Runtime, weak: slint::Weak<AppWindow>, handle: tokio::runtime::Handle, track_id: u64) {
     handle.spawn(async move {
+        // QConnect CONTROLLER mode: when a PEER renderer owns playback, route the
+        // add-to-queue to the peer's queue instead of mutating only the LOCAL
+        // queue (the peer never sees a local-only enqueue). Returns false in every
+        // non-controller situation, so the local append below runs unchanged.
+        if let Some(svc) = crate::qconnect_service::service() {
+            // Single-track enqueue always builds a Qobuz catalog track
+            // (`make_queue_track` source = "qobuz"), so it is always castable.
+            if svc
+                .add_to_queue_on_peer_if_active(track_id, Some("qobuz"))
+                .await
+            {
+                return;
+            }
+        }
         let track = match runtime.core().get_track(track_id).await {
             Ok(track) => track,
             Err(e) => {
@@ -1614,6 +1628,20 @@ pub fn play_track_next(
     track_id: u64,
 ) {
     handle.spawn(async move {
+        // QConnect CONTROLLER mode: route "Play next" to the peer's queue (insert
+        // after the peer's current track) instead of mutating only the LOCAL queue.
+        // Returns false in every non-controller situation, so the local insert
+        // below runs unchanged.
+        if let Some(svc) = crate::qconnect_service::service() {
+            // Single-track play-next always builds a Qobuz catalog track
+            // (`make_queue_track` source = "qobuz"), so it is always castable.
+            if svc
+                .play_next_on_peer_if_active(track_id, Some("qobuz"))
+                .await
+            {
+                return;
+            }
+        }
         let track = match runtime.core().get_track(track_id).await {
             Ok(track) => track,
             Err(e) => {
@@ -1989,6 +2017,13 @@ pub fn start_poll_loop(
         let mut report_tick: u64 = 0;
         const QCONNECT_REPORT_EVERY_N_TICKS: u64 = 4;
 
+        // QConnect CONTROLLER mode: the peer's last-seen current track id. When
+        // the peer advances a track on its own, this edge-detects the change so
+        // the bar/queue meta refresh from the core cursor (which the sink already
+        // aligned to the peer's track). Reset to 0 when the peer branch is not
+        // taken so re-entering controller mode refreshes meta.
+        let mut last_peer_track_id: u64 = 0;
+
         let mut ticker = tokio::time::interval(std::time::Duration::from_millis(450));
         loop {
             ticker.tick().await;
@@ -2007,6 +2042,17 @@ pub fn start_poll_loop(
                 Some(svc) => svc.remote_now_playing().await,
                 None => None,
             } {
+                // The peer changed track on its own → refresh the bar/queue meta
+                // from the core cursor (the event sink already aligned it to the
+                // peer's track via sync_active_renderer_projection). This resets
+                // position to 0, which is correct on a track change; the per-tick
+                // position push below immediately re-applies the peer's real
+                // position. Done BEFORE the per-tick push so peer values win.
+                if remote.track_id != last_peer_track_id {
+                    refresh_now_playing_meta(&runtime, &weak).await;
+                    refresh_sidebar(true);
+                    last_peer_track_id = remote.track_id;
+                }
                 // Duration from the core queue's current track (aligned to the
                 // peer's track by the sink). Zero when unknown — clamp is skipped.
                 let duration_secs = runtime
@@ -2061,6 +2107,10 @@ pub fn start_poll_loop(
                 seen_position = 0;
                 continue;
             }
+
+            // Not in controller mode (no peer / returned to local): reset the
+            // peer-track edge var so re-entering the peer state refreshes meta.
+            last_peer_track_id = 0;
 
             let event = runtime.core().player().get_playback_event();
 

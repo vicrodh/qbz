@@ -58,6 +58,14 @@ pub struct SlintQconnectEventSink {
     /// Window handle for UI surfacing: the DEV modal, the device picker, and the
     /// cast-aware now-playing state (is-remote / cast-target / volume-locked).
     window: slint::Weak<AppWindow>,
+    /// FIX #13: previous "a peer is the active renderer" state, tracked across
+    /// `apply_session_management_event` calls. On a false->true transition (QBZ
+    /// becomes a CONTROLLER) we fire one `ask_for_active_renderer_state` to fetch
+    /// the peer's full state (incl. `current_queue_item_id`), so the bar/queue
+    /// resolve the peer's CURRENT track immediately instead of staying stale
+    /// until the peer changes track. Edge-detected to avoid spamming on every
+    /// periodic state-update frame.
+    last_peer_active: std::sync::atomic::AtomicBool,
 }
 
 impl SlintQconnectEventSink {
@@ -73,6 +81,7 @@ impl SlintQconnectEventSink {
             sync_state,
             app: Arc::new(OnceLock::new()),
             window,
+            last_peer_active: std::sync::atomic::AtomicBool::new(false),
         }
     }
 
@@ -291,6 +300,28 @@ impl SlintQconnectEventSink {
 
         if let Some((renderer_id, generation)) = outcome.watchdog_arm {
             app.arm_renderer_watchdog(renderer_id, generation);
+        }
+
+        // FIX #13: when QBZ transitions INTO controller mode (a PEER becomes the
+        // active renderer), the peer's periodic state-update frames carry
+        // `current_queue_item_id: null` (position-only), so on the transition the
+        // cursor/projection can't resolve the peer's CURRENT track and the bar/
+        // queue stay stale until the peer next changes track. Fetch the peer's
+        // FULL state once on the false->true edge so the existing align +
+        // projection + poll-loop refresh resolve the real current track now.
+        let peer_active_now = {
+            let state = self.sync_state.lock().await;
+            is_peer_renderer_active(&state.session)
+        };
+        let was_peer_active = self
+            .last_peer_active
+            .swap(peer_active_now, std::sync::atomic::Ordering::Relaxed);
+        if peer_active_now && !was_peer_active {
+            if let Err(err) = app.ask_for_active_renderer_state().await {
+                log::warn!(
+                    "[QConnect] controller entry: ask_for_active_renderer_state failed: {err}"
+                );
+            }
         }
     }
 

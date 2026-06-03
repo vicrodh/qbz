@@ -4,6 +4,9 @@ export global Layout {
     // Max sidebar width (also the default). The drag handle clamps to this.
     out property <length> sidebar-width: 260px;
     out property <length> header-height: 42px;
-    out property <length> player-bar-height: 110px;
+    // 112 (was 110): +2px so the now-playing card / album art / audio stamp
+    // get a touch more height — the "playing on <device>" line was cramped.
+    // The New-layout art-size tracks this (`player-bar-height - 38`).
+    out property <length> player-bar-height: 112px;
     out property <length> hairline: 1px;
 }

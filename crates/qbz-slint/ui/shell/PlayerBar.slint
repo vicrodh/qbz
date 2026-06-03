@@ -143,7 +143,7 @@ export component PlayerBar inherits Rectangle {
     // The local ALSA-Direct lock (bit-perfect) is LIFTED when controlling a peer
     // (the `!is-remote` term) so the user CAN adjust the remote renderer; the
     // peer half is the sink-pushed NowPlayingState.volume-locked.
-    property <bool> vol-locked: (SettingsState.alsa-plugin-is-hw && !NowPlayingState.is-remote)
+    property <bool> vol-locked: (SettingsState.backend-is-alsa && SettingsState.alsa-plugin-is-hw && !NowPlayingState.is-remote)
         || NowPlayingState.volume-locked;
 
     VerticalLayout {
@@ -306,7 +306,9 @@ export component PlayerBar inherits Rectangle {
                         width: 28px;
                         height: 32px;
                         ConnectButton {
-                            active: NowPlayingState.is-remote;
+                            // Golden whenever a Qobuz Connect session is on — whether
+                            // qbz is the renderer or controlling a peer (not just is-remote).
+                            active: NowPlayingState.qconnect-connected;
                             tooltip: @tr("Qobuz Connect");
                             clicked => {
                                 qconnect-menu.show();
