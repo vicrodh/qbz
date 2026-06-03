@@ -5281,6 +5281,7 @@ dependencies = [
  "chrono",
  "dirs 5.0.1",
  "env_logger",
+ "futures-util",
  "image",
  "log",
  "open",
@@ -5293,6 +5294,8 @@ dependencies = [
  "qbz-library",
  "qbz-models",
  "qbz-offline-cache",
+ "qbz-player",
+ "qconnect-app",
  "reqwest",
  "rfd",
  "rusqlite",
@@ -5302,6 +5305,7 @@ dependencies = [
  "slint-build",
  "tokio",
  "urlencoding",
+ "uuid",
 ]
 
 [[package]]

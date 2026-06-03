@@ -39,6 +39,10 @@ chrono = { workspace = true, features = ["unstable-locales"] }
 qbz-app = { path = "../qbz-app" }
 qbz-audio = { path = "../qbz-audio" }
 qbz-core = { path = "../qbz-core" }
+qbz-player = { path = "../qbz-player" }
+qconnect-app = { path = "../qconnect-app" }
+futures-util = { workspace = true }
+uuid = { version = "1", features = ["v4"] }
 qbz-library = { path = "../qbz-library" }
 qbz-offline-cache = { path = "../qbz-offline-cache" }
 qbz-models = { path = "../qbz-models" }

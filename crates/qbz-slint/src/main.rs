@@ -39,6 +39,7 @@ mod nav;
 mod play_history;
 mod strip_html;
 mod playback;
+mod qconnect_engine;
 mod queue;
 mod drag;
 mod folders;
