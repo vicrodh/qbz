@@ -6,6 +6,7 @@
 // content well); no hairline borders.
 
 import { Theme } from "../foundation/semantic-colors.slint";
+import { Layout } from "../foundation/layout.slint";
 import { Radius } from "../foundation/radius.slint";
 import { NavState, ContentView, ShellState } from "../state.slint";
 import { Sidebar } from "Sidebar.slint";
@@ -117,6 +118,23 @@ export component AppShell inherits Rectangle {
                     padding-bottom: 8px;
 
                     Rectangle {
+                        // EXPLICIT height = window - header - player bar - this
+                        // VL's bottom padding. A Slint `VerticalLayout` ignores an
+                        // explicit `height` (it sizes to content), and a layout
+                        // does not auto-fill its parent Rectangle — so the content
+                        // row could not stretch on its own and collapsed once the
+                        // right panels (which used to drive the height) became
+                        // conditionally mounted. A Rectangle DOES take an explicit
+                        // height, so we size the content area arithmetically; the
+                        // height then cascades UP (this -> VL -> frame -> row ->
+                        // shell). `root.height` is the AppShell height (pinned to
+                        // the window in app.slint).
+                        //
+                        // NOTE: `Layout.player-bar-height` is the single source of
+                        // truth for the bar height (New + Classic both use it).
+                        // When the Small / Large bar layouts land with a DIFFERENT
+                        // height, make that value mode-aware and this stays correct.
+                        height: root.height - Layout.header-height - Layout.player-bar-height - 8px;
                         vertical-stretch: 1;
                         background: Theme.surface-main;
                             border-radius: Radius.md;
@@ -277,11 +295,31 @@ export component AppShell inherits Rectangle {
                     }
             }
 
-            // Right-side panels — layout siblings of the content area, so
-            // they shrink the content rather than overlaying it. Always
-            // present; each animates its own width open/closed.
-            QueueSidebar { }
-            LyricsSidebar { }
+            // Right-side panel column — Queue and/or Lyrics stacked vertically,
+            // sharing the height (Feishin-style). A layout sibling of the content
+            // (shrinks it, no overlay). The column width animates 0<->240 (= the
+            // open left-sidebar width); it collapses only when BOTH are closed.
+            // When both are open each section vertical-stretches to half; when
+            // only one is open it fills.
+            Rectangle {
+                width: (ShellState.queue-open || ShellState.lyrics-open) ? 280px : 0px;
+                clip: true;
+                animate width { duration: 160ms; easing: ease-in-out; }
+                background: Theme.surface-card;
+                VerticalLayout {
+                    spacing: 0px;
+                    if ShellState.queue-open: QueueSidebar {
+                        vertical-stretch: 1;
+                    }
+                    if ShellState.queue-open && ShellState.lyrics-open: Rectangle {
+                        height: 1px;
+                        background: Theme.border-subtle;
+                    }
+                    if ShellState.lyrics-open: LyricsSidebar {
+                        vertical-stretch: 1;
+                    }
+                }
+            }
         }
 
         PlayerBar {

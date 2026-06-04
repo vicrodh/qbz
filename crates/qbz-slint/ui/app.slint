@@ -75,6 +75,14 @@ export component AppWindow inherits Window {
     }
 
     if root.screen == AppScreen.shell: AppShell {
+        // Fill the window. A conditionally-mounted child sizes to its PREFERRED
+        // size by default, so without this the shell sized to its content — fine
+        // while the right panels were always mounted (tall content), but once
+        // they became conditional, with both closed the shell collapsed to the
+        // top with dead space below. Bind to the real window size (`root` here is
+        // the AppWindow); `100%` did not pin it.
+        width: root.width;
+        height: root.height;
         open-album(id) => {
             root.open-album(id);
         }

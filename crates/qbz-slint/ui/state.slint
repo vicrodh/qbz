@@ -1877,8 +1877,13 @@ export global ShellState {
     public function cycle-sidebar() {
         root.sidebar-state = Math.mod(root.sidebar-state + 1, 3);
     }
-    // 0 = none, 1 = queue, 2 = lyrics
-    in-out property <int> right-panel: 0;
+    // Right-side panels — independent now: Queue and Lyrics can BOTH be open
+    // at once, stacked vertically in a shared right column (Feishin-style). Each
+    // is toggled from its bar button and closed from its own X. The column is
+    // visible when either is open. (Replaces the old exclusive `right-panel` int
+    // where lyrics closed queue and vice-versa.)
+    in-out property <bool> queue-open: false;
+    in-out property <bool> lyrics-open: false;
     // Section navigation placement: the sections (Discover/Library/Local
     // Library/My QBZ) now live in the sidebar and open right-flyout menus.
     in-out property <bool> nav-in-sidebar: true;

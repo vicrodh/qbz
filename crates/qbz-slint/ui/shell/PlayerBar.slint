@@ -34,7 +34,7 @@ component ConnectButton inherits Rectangle {
 
     property <color> gold: #e0b341;
 
-    width: 28px;
+    width: 32px;
     height: 32px;
     border-radius: Radius.sm;
     background: root.active
@@ -60,7 +60,9 @@ component ConnectButton inherits Rectangle {
             root.clicked();
         }
         changed has-hover => {
-            if (self.has-hover && root.tooltip != "" && !root.active) {
+            // Always show the tooltip — even when active/connected (the old
+            // `!root.active` gate hid "Qobuz Connect: On").
+            if (self.has-hover && root.tooltip != "") {
                 TooltipState.text = root.tooltip;
                 TooltipState.anchor-x = root.absolute-position.x + root.width / 2;
                 TooltipState.anchor-y = root.absolute-position.y;
@@ -194,12 +196,20 @@ export component PlayerBar inherits Rectangle {
                 // card's own sub-columns. Do NOT wrap it in an `alignment:
                 // start` layout — that forces preferred sizing and kills both.
                 if ShellState.npb-mode == 0: SongCard {
-                    // Fill the controls-row height (bar - top6 - seek20
-                    // - gap6 - bottom6 = bar - 38).
+                    // EXPLICIT height (= controls-row height). Without it the
+                    // inner `height: root.height` formed a binding loop that sized
+                    // the card to the TEXT content (~50px) instead of the cover
+                    // (72px), so the audio stamp centred against the wrong height
+                    // and floated above the album art. Mirror classic: fixed
+                    // height + y-centre in the column.
+                    height: Layout.player-bar-height - 38px;
+                    y: (parent.height - self.height) / 2;
                     art-size: Layout.player-bar-height - 38px;
-                    // Below 1366px shrink the stamp 10% so it stays
-                    // clear of the controls column; full size above.
-                    narrow: root.width < 1366px;
+                    // Homologate the stamp with classic: full-size badge + LEDs,
+                    // not the compact variant.
+                    compact-stamp: false;
+                    // New mode: output indicators as dot LEDs, not chips.
+                    dot-leds: true;
                     open-album(id) => {
                         root.open-album(id);
                     }
@@ -263,15 +273,20 @@ export component PlayerBar inherits Rectangle {
                 // card. `height` + `y` float it (centred) in the 72px row.
                 if ShellState.npb-mode == 1: SongCard {
                     glass: true;
+                    // Dot LEDs in classic too (user preference); the full-size
+                    // quality badge is kept (compact-stamp stays false).
+                    dot-leds: true;
                     // Fixed cap. `max-width` is IGNORED on a hand-positioned
                     // Rectangle (only layouts honour it) — set the width
-                    // directly: 520px cap on big screens, the full column when
+                    // directly: 560px cap on big screens, the full column when
                     // it is narrower. The text column then stretches inside this
                     // fixed card and pins the 140px audio stamp to its right edge.
-                    width: Math.min(parent.width, 520px);
-                    height: 60px;
+                    width: Math.min(parent.width, 560px);
+                    // +4px taller (2px top/bottom) so the title + audio stamp are
+                    // not glued to the card edge; art + stamp grow in step.
+                    height: 64px;
                     y: (parent.height - self.height) / 2;
-                    art-size: 56px;
+                    art-size: 60px;
                     // Full-size 1:1-Tauri stamp at every width.
                     compact-stamp: false;
                     narrow: root.width < 1366px;
@@ -303,13 +318,15 @@ export component PlayerBar inherits Rectangle {
                 VerticalLayout {
                     alignment: center;
                     Rectangle {
-                        width: 28px;
+                        width: 32px;
                         height: 32px;
                         ConnectButton {
                             // Golden whenever a Qobuz Connect session is on — whether
                             // qbz is the renderer or controlling a peer (not just is-remote).
                             active: NowPlayingState.qconnect-connected;
-                            tooltip: @tr("Qobuz Connect");
+                            tooltip: NowPlayingState.qconnect-connected
+                                ? @tr("Qobuz Connect: On")
+                                : @tr("Qobuz Connect: Off");
                             clicked => {
                                 qconnect-menu.show();
                             }
@@ -506,12 +523,12 @@ export component PlayerBar inherits Rectangle {
                 VerticalLayout {
                     alignment: center;
                     Rectangle {
-                        width: 28px;
+                        width: 32px;
                         height: 32px;
                         IconButton {
                             icon: @image-url("../assets/icons/cast.svg");
                             icon-size: 16px;
-                            btn-width: 28px;
+                            btn-width: 32px;
                             tooltip: @tr("Cast");
                             active: NowPlayingState.cast-active;
                             clicked => {
@@ -609,12 +626,12 @@ export component PlayerBar inherits Rectangle {
                 VerticalLayout {
                     alignment: center;
                     Rectangle {
-                        width: 28px;
+                        width: 32px;
                         height: 32px;
                         IconButton {
                             icon: @image-url("../assets/icons/settings-2.svg");
                             icon-size: 16px;
-                            btn-width: 28px;
+                            btn-width: 32px;
                             tooltip: @tr("Audio settings");
                             active: SettingsState.normalization;
                             clicked => {
@@ -657,12 +674,12 @@ export component PlayerBar inherits Rectangle {
                 VerticalLayout {
                     alignment: center;
                     Rectangle {
-                        width: 28px;
+                        width: 32px;
                         height: 32px;
                         IconButton {
                             icon: @image-url("../assets/icons/layout-grid.svg");
                             icon-size: 16px;
-                            btn-width: 28px;
+                            btn-width: 32px;
                             tooltip: @tr("Now Playing view");
                             clicked => {
                                 layout-menu.show();
@@ -742,11 +759,11 @@ export component PlayerBar inherits Rectangle {
                     IconButton {
                         icon: @image-url("../assets/icons/mic-vocal.svg");
                         icon-size: 16px;
-                        btn-width: 28px;
+                        btn-width: 32px;
                         tooltip: @tr("Lyrics");
-                        active: ShellState.right-panel == 2;
+                        active: ShellState.lyrics-open;
                         clicked => {
-                            ShellState.right-panel = ShellState.right-panel == 2 ? 0 : 2;
+                            ShellState.lyrics-open = !ShellState.lyrics-open;
                         }
                     }
                 }
@@ -761,7 +778,7 @@ export component PlayerBar inherits Rectangle {
                             ? @image-url("../assets/icons/volume-x.svg")
                             : @image-url("../assets/icons/volume-2.svg");
                         icon-size: 16px;
-                        btn-width: 28px;
+                        btn-width: 32px;
                         tooltip: NowPlayingState.muted ? @tr("Unmute") : @tr("Mute");
                         active: NowPlayingState.muted;
                         clicked => {
@@ -791,7 +808,7 @@ export component PlayerBar inherits Rectangle {
                     IconButton {
                         icon: @image-url("../assets/icons/minus.svg");
                         icon-size: 15px;
-                        btn-width: 28px;
+                        btn-width: 32px;
                         tooltip: @tr("Volume down");
                         clicked => {
                             if (!root.vol-locked) {
@@ -805,7 +822,7 @@ export component PlayerBar inherits Rectangle {
                     IconButton {
                         icon: @image-url("../assets/icons/plus.svg");
                         icon-size: 15px;
-                        btn-width: 28px;
+                        btn-width: 32px;
                         tooltip: @tr("Volume up");
                         clicked => {
                             if (!root.vol-locked) {
@@ -823,11 +840,11 @@ export component PlayerBar inherits Rectangle {
                     IconButton {
                         icon: @image-url("../assets/icons/list-ordered.svg");
                         icon-size: 16px;
-                        btn-width: 28px;
+                        btn-width: 32px;
                         tooltip: @tr("Queue");
-                        active: ShellState.right-panel == 1;
+                        active: ShellState.queue-open;
                         clicked => {
-                            ShellState.right-panel = ShellState.right-panel == 1 ? 0 : 1;
+                            ShellState.queue-open = !ShellState.queue-open;
                         }
                     }
                 }

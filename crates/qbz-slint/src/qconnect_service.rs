@@ -448,6 +448,14 @@ impl SlintQconnectService {
             {
                 let mut state = runtime.sync_state.lock().await;
                 state.watchdog_generation = state.watchdog_generation.wrapping_add(1);
+                // Clear the session topology + per-renderer cache so that any
+                // event still in flight when the loop aborts cannot recompute
+                // `is_peer_renderer_active() == true` and resurrect the golden
+                // render badge AFTER we clear is-remote/cast-target below
+                // (tokio `abort()` is not instantaneous; the sink can run one
+                // more `refresh_now_playing_remote_state` from a stale session).
+                state.session = QconnectSessionState::default();
+                state.session_renderer_states.clear();
             }
             if let Err(err) = runtime.app.disconnect().await {
                 let mut guard = self.inner.lock().await;

@@ -125,8 +125,14 @@ component QueueRow inherits Rectangle {
     callback clicked();
     callback remove();
 
-    height: 52px;
-    background: ta.has-hover ? Theme.surface-hover : transparent;
+    // Compact rows with a subtle zebra so they read as distinct without the
+    // tall, airy spacing they had before.
+    height: 44px;
+    background: ta.has-hover
+        ? Theme.surface-hover
+        : (Math.mod(root.index, 2) == 1
+            ? Theme.surface-elevated.with-alpha(0.35)
+            : transparent);
     border-radius: Radius.sm;
 
     // Declared before the content so the context-menu button (which has
@@ -143,24 +149,24 @@ component QueueRow inherits Rectangle {
     HorizontalLayout {
         padding-left: Spacing.sm;
         padding-right: Spacing.xs;
-        padding-top: 6px;
-        padding-bottom: 6px;
-        spacing: 10px;
+        padding-top: 4px;
+        padding-bottom: 4px;
+        spacing: 9px;
 
         // Leading: track number (UP NEXT) or thumbnail (History).
         if root.show-number: VerticalLayout {
             alignment: center;
-            width: 26px;
+            width: 22px;
             Text {
                 text: (root.index + 1);
                 color: Theme.text-muted;
-                font-size: 13px;
+                font-size: 12px;
                 horizontal-alignment: center;
             }
         }
         if !root.show-number: Rectangle {
-            width: 40px;
-            height: 40px;
+            width: 34px;
+            height: 34px;
             border-radius: 4px;
             background: Theme.surface-elevated;
             clip: true;
@@ -183,7 +189,7 @@ component QueueRow inherits Rectangle {
                 Text {
                     text: root.item.title;
                     color: Theme.text-primary;
-                    font-size: 13px;
+                    font-size: 12px;
                     font-weight: Typography.medium;
                     overflow: elide;
                 }
@@ -195,7 +201,7 @@ component QueueRow inherits Rectangle {
             Text {
                 text: root.item.artist;
                 color: Theme.text-muted;
-                font-size: 11px;
+                font-size: 10px;
                 overflow: elide;
             }
         }
@@ -274,24 +280,20 @@ component QueueRow inherits Rectangle {
 }
 
 export component QueueSidebar inherits Rectangle {
-    // Always present; the width animates 0 <-> 320 so the panel slides
-    // in smoothly, matching the left sidebar's collapse animation.
-    width: ShellState.right-panel == 1 ? 320px : 0px;
+    // Width is owned by the right-panel column in AppShell (which animates it);
+    // this fills that column and vertical-stretches to its share of the height.
     clip: true;
-    animate width { duration: 160ms; easing: ease-in-out; }
     background: Theme.surface-card;
 
     // True when the Queue tab has nothing to show at all.
     property <bool> queue-empty:
         !QueueState.has-current && QueueState.upcoming-total == 0;
 
-    // Pull a fresh queue snapshot whenever the panel slides open — the
-    // queue may have changed (or been restored) while it was closed.
-    property <int> panel-state: ShellState.right-panel;
-    changed panel-state => {
-        if (self.panel-state == 1) {
-            QueueState.panel-opened();
-        }
+    // The panel is conditionally mounted (`if queue-open` at the AppShell mount
+    // site, ADR-010), so it is CREATED each time it opens — pull a fresh queue
+    // snapshot on `init` (the queue may have changed/been restored while closed).
+    init => {
+        QueueState.panel-opened();
     }
 
     VerticalLayout {
@@ -341,7 +343,7 @@ export component QueueSidebar inherits Rectangle {
                 alignment: center;
                 CloseButton {
                     clicked => {
-                        ShellState.right-panel = 0;
+                        ShellState.queue-open = false;
                     }
                 }
             }
@@ -361,8 +363,8 @@ export component QueueSidebar inherits Rectangle {
                 viewport-height: queue-body.preferred-height;
 
                 queue-body := VerticalLayout {
-                    padding: Spacing.md;
-                    spacing: Spacing.md;
+                    padding: 10px;
+                    spacing: 12px;
 
                     // NOW PLAYING section.
                     if QueueState.has-current: VerticalLayout {
@@ -378,14 +380,19 @@ export component QueueSidebar inherits Rectangle {
                         Rectangle {
                             background: Theme.surface-elevated;
                             border-radius: Radius.sm;
-                            height: 68px;
+                            // Same height as a queue row — the bg + section
+                            // separator are enough to distinguish it.
+                            height: 44px;
                             HorizontalLayout {
-                                padding: 10px;
-                                spacing: 12px;
+                                padding-left: 6px;
+                                padding-right: 6px;
+                                padding-top: 4px;
+                                padding-bottom: 4px;
+                                spacing: 9px;
                                 // Artwork.
                                 Rectangle {
-                                    width: 48px;
-                                    height: 48px;
+                                    width: 34px;
+                                    height: 34px;
                                     border-radius: 4px;
                                     background: Theme.surface-card;
                                     clip: true;
@@ -400,13 +407,13 @@ export component QueueSidebar inherits Rectangle {
                                 VerticalLayout {
                                     horizontal-stretch: 1;
                                     alignment: center;
-                                    spacing: 3px;
+                                    spacing: 2px;
                                     HorizontalLayout {
                                         spacing: 5px;
                                         Text {
                                             text: QueueState.now-playing.title;
                                             color: Theme.text-primary;
-                                            font-size: Typography.body;
+                                            font-size: 12px;
                                             font-weight: Typography.medium;
                                             overflow: elide;
                                         }
@@ -418,7 +425,7 @@ export component QueueSidebar inherits Rectangle {
                                     Text {
                                         text: QueueState.now-playing.artist;
                                         color: Theme.text-muted;
-                                        font-size: 12px;
+                                        font-size: 10px;
                                         overflow: elide;
                                     }
                                 }
@@ -426,8 +433,8 @@ export component QueueSidebar inherits Rectangle {
                                 VerticalLayout {
                                     alignment: center;
                                     fav := Rectangle {
-                                        width: 32px;
-                                        height: 32px;
+                                        width: 28px;
+                                        height: 28px;
                                         border-radius: Radius.sm;
                                         background: fav-ta.has-hover
                                             ? Theme.surface-hover
@@ -564,7 +571,7 @@ export component QueueSidebar inherits Rectangle {
                 viewport-height: history-body.preferred-height;
 
                 history-body := VerticalLayout {
-                    padding: Spacing.md;
+                    padding: 10px;
                     spacing: 8px;
 
                     Text {
@@ -651,12 +658,12 @@ export component QueueSidebar inherits Rectangle {
                 }
             }
 
-            // Spacer.
-            Rectangle { horizontal-stretch: 1; }
-
-            // Action 4 — inline queue search field.
+            // Inline queue search field — flexes to fill the space left of the
+            // four actions so it never overflows / overlaps at the narrower
+            // (240px) panel width.
             Rectangle {
-                width: 150px;
+                horizontal-stretch: 1;
+                min-width: 90px;
                 height: 30px;
                 border-radius: Radius.sm;
                 background: Theme.surface-elevated;

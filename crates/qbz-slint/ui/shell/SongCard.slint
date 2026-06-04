@@ -28,7 +28,10 @@ component MetaLink inherits TouchArea {
     // and free to shrink to nothing so the audio stamp stays at the wall.
     max-width: link-text.preferred-width;
     min-width: 0px;
-    height: link-text.preferred-height;
+    // Fill the meta-row height (driven by the context icon) and centre the text
+    // inside, so the artist·album line is vertically centred with the icon — a
+    // fixed preferred-height left it sitting ~1-2px above the icon/dot.
+    vertical-stretch: 1;
     mouse-cursor: pointer;
     clicked => {
         root.activated();
@@ -36,6 +39,7 @@ component MetaLink inherits TouchArea {
     link-text := Text {
         x: 0;
         width: parent.width;
+        height: 100%;
         text: root.label;
         color: root.has-hover ? Theme.text-primary : Theme.text-muted;
         font-size: 12px;
@@ -44,31 +48,42 @@ component MetaLink inherits TouchArea {
     }
 }
 
-// One output led (backend / mode). Fills its allotted slot so a row of leds is
-// a fixed width; coloured when a deliberate mode is engaged.
-component OutputBadge inherits Rectangle {
+// One output indicator rendered as a dot LED + a constant-colour label (New
+// mode). The dot is `circle-dot` (colored) when the mode is engaged, `circle`
+// (muted) when off; the LABEL never changes colour — it stays the quality-badge
+// text grey so only the dot signals state. Content-sized so a row of these
+// left-packs; the parent stamp width is fixed so the row never reflows.
+component DotLed inherits Rectangle {
     in property <string> label;
     in property <bool> active: false;
     in property <color> on-color: #22c55e;
     in property <string> tooltip;
 
-    // Height comes from the leds row (set per stamp size); fill it.
-    border-radius: 3px;
-    background: root.active ? root.on-color.with-alpha(0.16) : Theme.surface-hover;
-    border-width: 1px;
-    border-color: root.active ? root.on-color.with-alpha(0.5) : Theme.border-subtle;
-
-    Text {
-        text: root.label;
-        x: (parent.width - self.width) / 2;
-        y: (parent.height - self.height) / 2;
-        color: root.active ? root.on-color : Theme.text-muted;
-        font-size: 8px;
-        font-weight: 600;
-        letter-spacing: 0.3px;
+    HorizontalLayout {
+        spacing: 4px;
+        VerticalLayout {
+            alignment: center;
+            QbzIcon {
+                source: root.active
+                    ? @image-url("../assets/icons/circle-dot.svg")
+                    : @image-url("../assets/icons/circle.svg");
+                width: 9px;
+                height: 9px;
+                tint: root.active ? root.on-color : Theme.text-muted;
+            }
+        }
+        Text {
+            // Quality-badge text grey — constant regardless of on/off.
+            text: root.label;
+            color: #b0b0b0;
+            font-size: 8px;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+            vertical-alignment: center;
+        }
     }
 
-    ta := TouchArea {
+    TouchArea {
         changed has-hover => {
             if (self.has-hover && root.tooltip != "") {
                 TooltipState.text = root.tooltip;
@@ -97,6 +112,12 @@ export component SongCard inherits Rectangle {
     // Classic non-responsive view uses the FULL-size audio stamp (1:1 Tauri);
     // New and the responsive (narrow) view keep the compact stamp.
     in property <bool> compact-stamp: true;
+    // New mode renders the output indicators as dot LEDs (circle-dot on /
+    // circle off + a constant-colour label) instead of the bordered OutputBadge
+    // chips; classic keeps the chips. The stamp is widened so the longest labels
+    // (PIPEWIRE + DACPASS) fit while the stamp width stays constant regardless of
+    // which backend/mode is shown.
+    in property <bool> dot-leds: false;
 
     callback open-album(string);
     callback open-artist(string);
@@ -114,7 +135,16 @@ export component SongCard inherits Rectangle {
 
     // Geometry helpers for the absolutely-pinned audio stamp.
     property <length> pad: root.glass ? 2px : 0px;
-    property <length> stamp-w: root.compact-stamp ? (root.narrow ? 94px : 104px) : 140px;
+    // Classic (glass) gets an extra right inset so the stamp clears the visible
+    // card border by roughly the same margin it has top/bottom (auto-centred).
+    // Test value — bump if it still reads tight.
+    property <length> stamp-right-margin: root.glass ? 2px : 0px;
+    property <length> stamp-w: root.dot-leds
+        // Hug the content so there is no dead space to the right: the dot-LED row
+        // (circle + PIPEWIRE/DACPASS) is ~116px and the full quality badge ~125px.
+        // Width is constant per mode so the stamp never reflows as labels change.
+        ? (root.compact-stamp ? (root.narrow ? 116px : 120px) : 128px)
+        : (root.compact-stamp ? (root.narrow ? 94px : 104px) : 140px);
     property <bool> has-stamp: root.show-badges && NowPlayingState.has-track;
 
     background: root.glass ? Theme.surface-elevated : transparent;
@@ -238,15 +268,18 @@ export component SongCard inherits Rectangle {
 
             // Context (layers) button — opens the page playback came from.
             if SettingsState.show-context-icon: Rectangle {
-                width: 18px;
+                width: 16px;
                 height: 18px;
                 border-radius: 3px;
                 background: ctxta.has-hover ? Theme.surface-hover : transparent;
                 QbzIcon {
-                    source: @image-url("../assets/icons/layers.svg");
+                    // disc-album, pinned flush-LEFT (x:0): centering the glyph in
+                    // its box left a ~2px indent so the artist·album line started
+                    // further right than the title above it and read as misaligned.
+                    source: @image-url("../assets/icons/disc-album.svg");
                     width: 13px;
                     height: 13px;
-                    x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                    x: 0;
                     y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
                     tint: ctxta.has-hover ? Theme.text-primary : Theme.text-muted;
                 }
@@ -304,29 +337,10 @@ export component SongCard inherits Rectangle {
                 }
             }
         }
-
-        // Remote-renderer badge — only when a peer renderer owns playback.
-        if NowPlayingState.has-track
-            && NowPlayingState.is-remote
-            && NowPlayingState.cast-target != "": HorizontalLayout {
-            spacing: 4px;
-            alignment: start;
-            VerticalLayout {
-                alignment: center;
-                QbzIcon {
-                    source: @image-url("../assets/icons/monitor-speaker.svg");
-                    width: 11px;
-                    height: 11px;
-                    tint: #e0b341;
-                }
-            }
-            Text {
-                text: NowPlayingState.cast-target;
-                color: #e0b341;
-                font-size: 10px;
-                vertical-alignment: center;
-            }
-        }
+        // The remote-renderer badge used to live here (below artist·album). It
+        // now moves into the audio-stamp LED row (when a peer/cast device owns
+        // playback the LOCAL output LEDs are meaningless, so the stamp shows the
+        // render target there instead).
     }
 
     }
@@ -337,13 +351,25 @@ export component SongCard inherits Rectangle {
     // lays out. Deterministic fix for the trailing gap — does NOT rely on the
     // text column's stretch reaching the edge.
     if root.has-stamp: VerticalLayout {
-        x: root.width - root.pad - root.stamp-w;
-        y: (root.height - self.height) / 2;
+        x: root.width - root.pad - root.stamp-right-margin - root.stamp-w;
+        // This column FILLS the card height (an absolutely-positioned
+        // VerticalLayout takes the parent's height), so `alignment: center` is
+        // what middle-aligns the badge+LEDs block — exactly like the text
+        // column. Earlier y-math could never centre it: self.height == root.height
+        // made `(root.height - self.height) / 2 == 0`, and a VerticalLayout
+        // top-packs its fixed-height children by default → the stamp sat at the
+        // top.
+        y: 0;
+        height: root.height;
+        alignment: center;
         width: root.stamp-w;
-        spacing: root.compact-stamp ? 3px : 2px;
+        // A bit more breathing room between the badge and the LEDs so the stamp
+        // fills the (taller, item-2) card and centres with only a small margin
+        // instead of floating with dead space below the LEDs.
+        spacing: 4px;
 
         Rectangle {
-            height: root.compact-stamp ? (root.narrow ? 26px : 29px) : 36px;
+            height: root.compact-stamp ? (root.narrow ? 26px : 29px) : 38px;
             QualityBadgeFull {
                 x: 0;
                 y: 0;
@@ -358,7 +384,7 @@ export component SongCard inherits Rectangle {
             qta := TouchArea {
                 changed has-hover => {
                     if (self.has-hover) {
-                        TooltipState.text = @tr("Stored audio quality");
+                        TooltipState.text = NowPlayingState.quality-detail;
                         TooltipState.anchor-x = parent.absolute-position.x + parent.width / 2;
                         TooltipState.anchor-y = parent.absolute-position.y;
                         TooltipState.show = true;
@@ -370,28 +396,57 @@ export component SongCard inherits Rectangle {
         }
 
         HorizontalLayout {
-            height: root.compact-stamp ? 15px : 18px;
-            spacing: root.compact-stamp ? 3px : 2px;
-            if !NowPlayingState.cast-active: OutputBadge {
+            height: root.compact-stamp ? 13px : 15px;
+            spacing: 8px;
+            // Render-target row stretches so the device name elides; the local
+            // dot LEDs left-pack at their natural width.
+            alignment: (NowPlayingState.is-remote && NowPlayingState.cast-target != "")
+                ? stretch
+                : start;
+
+            // A peer/cast device owns playback → show the render TARGET instead
+            // of the (now meaningless) local output LEDs.
+            if NowPlayingState.is-remote && NowPlayingState.cast-target != "": HorizontalLayout {
                 horizontal-stretch: 1;
+                spacing: 4px;
+                VerticalLayout {
+                    alignment: center;
+                    QbzIcon {
+                        source: @image-url("../assets/icons/monitor-speaker.svg");
+                        width: root.compact-stamp ? 11px : 13px;
+                        height: root.compact-stamp ? 11px : 13px;
+                        tint: #e0b341;
+                    }
+                }
+                Text {
+                    horizontal-stretch: 1;
+                    text: NowPlayingState.cast-target;
+                    color: #e0b341;
+                    font-size: root.compact-stamp ? 8px : 9px;
+                    font-weight: 600;
+                    overflow: elide;
+                    vertical-alignment: center;
+                }
+            }
+            // Local-network cast (Chromecast / DLNA), no QConnect peer → protocol.
+            if NowPlayingState.cast-active && !NowPlayingState.is-remote: DotLed {
+                label: NowPlayingState.cast-protocol == "dlna" ? "DLNA" : "CAST";
+                active: true;
+                on-color: #a855f7;
+                tooltip: @tr("Casting");
+            }
+            // Local output → backend + mode dot LEDs.
+            if !NowPlayingState.is-remote && !NowPlayingState.cast-active: DotLed {
                 label: SettingsState.output-backend-label;
                 active: SettingsState.output-backend-active;
                 on-color: #5b8def;
                 tooltip: @tr("Audio backend");
             }
-            if !NowPlayingState.cast-active: OutputBadge {
-                horizontal-stretch: 1;
+            if !NowPlayingState.is-remote && !NowPlayingState.cast-active: DotLed {
                 label: SettingsState.output-mode-label;
                 active: SettingsState.output-mode-active;
                 on-color: #22c55e;
                 tooltip: @tr("Output mode");
-            }
-            if NowPlayingState.cast-active: OutputBadge {
-                horizontal-stretch: 1;
-                label: NowPlayingState.cast-protocol == "dlna" ? "DLNA" : "CAST";
-                active: true;
-                on-color: #a855f7;
-                tooltip: @tr("Casting");
             }
         }
     }

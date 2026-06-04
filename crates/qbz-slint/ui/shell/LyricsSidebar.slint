@@ -37,11 +37,9 @@ component CloseButton inherits Rectangle {
 }
 
 export component LyricsSidebar inherits Rectangle {
-    // Always present; the width animates 0 <-> 320 so the panel slides
-    // in smoothly, matching the left sidebar's collapse animation.
-    width: ShellState.right-panel == 2 ? 320px : 0px;
+    // Width is owned by the right-panel column in AppShell; this fills it and
+    // vertical-stretches to its share of the height (stacked under the queue).
     clip: true;
-    animate width { duration: 160ms; easing: ease-in-out; }
     background: Theme.surface-card;
 
     VerticalLayout {
@@ -57,7 +55,8 @@ export component LyricsSidebar inherits Rectangle {
             Text {
                 text: @tr("Lyrics");
                 color: Theme.text-primary;
-                font-size: Typography.heading;
+                // Homologated with the Queue / History tab size.
+                font-size: Typography.body;
                 font-weight: Typography.semibold;
                 vertical-alignment: center;
                 horizontal-stretch: 1;
@@ -66,7 +65,7 @@ export component LyricsSidebar inherits Rectangle {
                 alignment: center;
                 CloseButton {
                     clicked => {
-                        ShellState.right-panel = 0;
+                        ShellState.lyrics-open = false;
                     }
                 }
             }

@@ -213,8 +213,8 @@ export component TransportControls inherits HorizontalLayout {
                 changed has-hover => {
                     if (self.has-hover) {
                         TooltipState.text = QueueState.now-playing-favorite
-                            ? @tr("Remove from favorites")
-                            : @tr("Add to favorites");
+                            ? @tr("Remove from library")
+                            : @tr("Add to library");
                         TooltipState.anchor-x = parent.absolute-position.x + parent.width / 2;
                         TooltipState.anchor-y = parent.absolute-position.y;
                         TooltipState.show = true;
