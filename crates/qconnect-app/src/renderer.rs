@@ -150,11 +150,22 @@ fn is_recent_load_attempt(state: &QconnectRemoteSyncState, track_id: u64) -> boo
 /// Records the attempt BEFORE dispatching the load (the audio thread updates
 /// `playback_state.track_id` only after the engine appends the source, so the
 /// recording must precede the load to close the echo window).
+///
+/// `start_position_secs` is the position to resume the stream at. For a normal
+/// peer track-change the cloud sends position ~0, so this is 0 (a fresh track).
+/// On a TAKEBACK whose first load lands here (SetActive arrived before the cloud
+/// knew our current_track, so the force-stream couldn't fire), the SetState
+/// carries the peer's real position and we resume there instead of streaming
+/// from 0 and then trying to seek forward — a forward seek past the buffered
+/// watermark is silently ignored by the audio thread, so streaming from 0 left
+/// the first takeback playing from the start (bad for audiobooks). The protected
+/// bit-perfect seams + the HTTP feeder live behind `start_track_stream`.
 pub async fn ensure_remote_track_loaded(
     engine: &impl QconnectRendererEngine,
     sync_state: &Arc<Mutex<QconnectRemoteSyncState>>,
     track_id: u64,
     max_audio_quality: Option<i32>,
+    start_position_secs: u64,
 ) -> Result<(), String> {
     {
         let state = sync_state.lock().await;
@@ -178,10 +189,59 @@ pub async fn ensure_remote_track_loaded(
         .await
         .map(|track| u64::from(track.duration))
         .unwrap_or(0);
-    // QConnect tracks always start from 0; resume is local-only. The protected
-    // bit-perfect seams + the HTTP feeder live behind `start_track_stream`.
     engine
-        .start_track_stream(track_id, quality, duration_secs, 0)
+        .start_track_stream(track_id, quality, duration_secs, start_position_secs)
+        .await
+}
+
+/// Force a (re)stream of `track_id` at `start_position_secs` when BECOMING the
+/// active renderer (takeback). Unlike [`ensure_remote_track_loaded`], this does
+/// NOT short-circuit on a matching `playback_state.track_id`: a prior
+/// controller->renderer handoff tore the local stream down via `engine.stop()`
+/// (audio buffer cleared, `has_loaded_audio` false) while `current_track_id`
+/// still reports the old track, so the plain track-id guard would skip the load
+/// and the following `resume()` would fail with "no audio data available".
+///
+/// It DOES skip when the engine is already streaming this exact track with audio
+/// loaded (`track_id` matches AND `has_loaded_audio`), so a spurious SetActive
+/// during live renderer playback never restarts the current track; and it keeps
+/// the dedup window so the SetActive->SetState echo doesn't double-load.
+///
+/// `start_position_secs` resumes at the handed-off position (the cloud carries
+/// the peer's last position in `renderer_state.current_position_ms`), so a long
+/// track / audiobook does not restart from 0. Resume is honored by the protected
+/// `play_streaming_dynamic` session-resume path behind `start_track_stream`.
+pub async fn force_remote_track_stream(
+    engine: &impl QconnectRendererEngine,
+    sync_state: &Arc<Mutex<QconnectRemoteSyncState>>,
+    track_id: u64,
+    max_audio_quality: Option<i32>,
+    start_position_secs: u64,
+) -> Result<(), String> {
+    let playback_state = engine.get_playback_state();
+    if playback_state.track_id == track_id && engine.has_loaded_audio() {
+        return Ok(());
+    }
+
+    {
+        let state = sync_state.lock().await;
+        if is_recent_load_attempt(&state, track_id) {
+            return Ok(());
+        }
+    }
+    {
+        let mut state = sync_state.lock().await;
+        state.last_load_attempt = Some((track_id, Instant::now()));
+    }
+
+    let quality = quality_from_max_audio_quality(max_audio_quality);
+    let duration_secs = engine
+        .get_track(track_id)
+        .await
+        .map(|track| u64::from(track.duration))
+        .unwrap_or(0);
+    engine
+        .start_track_stream(track_id, quality, duration_secs, start_position_secs)
         .await
 }
 
@@ -275,11 +335,22 @@ pub async fn apply_renderer_command(
                         // by align_queue_cursor + ensure_remote_track_loaded
                         // below; legitimate seek-to-start from a peer
                         // controller can use the seek path with target>1s.
+                        // Resume the load at the cloud's reported position (same
+                        // source the seek block below uses). For a normal peer
+                        // track-change this is ~0; on a takeback whose first load
+                        // lands here it is the peer's position, so we stream from
+                        // there instead of from 0 + an ignored forward seek.
+                        let start_position_secs = renderer_state
+                            .current_position_ms
+                            .or(*current_position_ms)
+                            .map(|ms| ms / 1000)
+                            .unwrap_or(0);
                         if let Err(err) = ensure_remote_track_loaded(
                             engine,
                             sync_state,
                             command_track.track_id,
                             projection_renderer_state.max_audio_quality,
+                            start_position_secs,
                         )
                         .await
                         {
@@ -372,18 +443,30 @@ pub async fn apply_renderer_command(
         }
         RendererCommand::SetActive { active } => {
             if *active {
-                // Becoming the active renderer: preload the current track so
-                // playback can start immediately on the next SetState.
+                // Becoming the active renderer (takeback). FORCE a stream of the
+                // current track instead of a plain ensure-loaded: a prior
+                // controller->renderer transition tore the local stream down via
+                // engine.stop() (audio buffer cleared, has_loaded_audio=false)
+                // while current_track_id still reports the old track, so the
+                // track-id guard in ensure_remote_track_loaded would skip the load
+                // and the next SetState's resume() would fail with "no audio data
+                // available". Resume at the handed-off position so a long
+                // track / audiobook does not restart from 0.
                 if let Some(current) = renderer_state.current_track.as_ref() {
-                    if let Err(err) = ensure_remote_track_loaded(
+                    let start_position_secs = renderer_state
+                        .current_position_ms
+                        .map(|ms| ms / 1000)
+                        .unwrap_or(0);
+                    if let Err(err) = force_remote_track_stream(
                         engine,
                         sync_state,
                         current.track_id,
                         renderer_state.max_audio_quality,
+                        start_position_secs,
                     )
                     .await
                     {
-                        log::warn!("[QConnect] SetActive(true) preload failed: {err}");
+                        log::warn!("[QConnect] SetActive(true) force-stream failed: {err}");
                     }
                 }
             } else {
@@ -762,6 +845,7 @@ mod tests {
         play_indexes: Vec<usize>,
         get_tracks_batch: u32,
         start_track_streams: Vec<u64>,
+        start_positions: Vec<u64>,
     }
 
     /// Records every engine call; serves canned `PlaybackState` + queue snapshot.
@@ -770,6 +854,7 @@ mod tests {
         playback: PlaybackState,
         queue_tracks: Vec<QueueTrack>,
         queue_index: Option<usize>,
+        loaded_audio: bool,
     }
 
     impl MockEngine {
@@ -779,6 +864,7 @@ mod tests {
                 playback: PlaybackState::default(),
                 queue_tracks: Vec::new(),
                 queue_index: None,
+                loaded_audio: false,
             }
         }
 
@@ -811,6 +897,9 @@ mod tests {
         }
         fn get_playback_state(&self) -> PlaybackState {
             self.playback.clone()
+        }
+        fn has_loaded_audio(&self) -> bool {
+            self.loaded_audio
         }
         async fn set_repeat_mode(&self, _mode: RepeatMode) {
             self.calls().set_repeat_modes += 1;
@@ -854,9 +943,11 @@ mod tests {
             track_id: u64,
             _quality: Quality,
             _duration_secs: u64,
-            _start_position_secs: u64,
+            start_position_secs: u64,
         ) -> Result<(), String> {
-            self.calls().start_track_streams.push(track_id);
+            let mut calls = self.calls();
+            calls.start_track_streams.push(track_id);
+            calls.start_positions.push(start_position_secs);
             Ok(())
         }
         fn current_output_format(&self) -> Option<(u32, u32)> {
@@ -911,10 +1002,10 @@ mod tests {
     async fn ensure_remote_track_loaded_dedups_within_window() {
         let engine = MockEngine::new(); // playback track_id 0 != 42 → would reload
         let sync = sync();
-        ensure_remote_track_loaded(&engine, &sync, 42, None)
+        ensure_remote_track_loaded(&engine, &sync, 42, None, 0)
             .await
             .unwrap();
-        ensure_remote_track_loaded(&engine, &sync, 42, None)
+        ensure_remote_track_loaded(&engine, &sync, 42, None, 0)
             .await
             .unwrap();
         assert_eq!(engine.calls().start_track_streams, vec![42]);
@@ -929,7 +1020,7 @@ mod tests {
             ..Default::default()
         };
         let sync = sync();
-        ensure_remote_track_loaded(&engine, &sync, 42, None)
+        ensure_remote_track_loaded(&engine, &sync, 42, None, 0)
             .await
             .unwrap();
         assert!(engine.calls().start_track_streams.is_empty());
@@ -1057,5 +1148,97 @@ mod tests {
                 "shuffle enabled once authoritative order present"
             );
         }
+    }
+
+    /// #1 (takeback) — becoming the active renderer FORCE-streams the current
+    /// track even though `playback_state.track_id` still matches: the prior
+    /// controller->renderer stop() cleared the audio buffer but left the stale
+    /// track id, so the plain track-id guard would skip the load and the next
+    /// SetState's resume() would fail with "no audio data available". Also
+    /// resumes at the handed-off position, not 0.
+    #[tokio::test]
+    async fn set_active_force_streams_on_takeback_when_audio_torn_down() {
+        let mut engine = MockEngine::new();
+        engine.playback = PlaybackState {
+            track_id: 7, // stale id left by stop(); audio is gone
+            ..Default::default()
+        };
+        engine.loaded_audio = false;
+        let sync = sync();
+        let cmd = RendererCommand::SetActive { active: true };
+        let renderer_state = QConnectRendererState {
+            current_track: Some(qi(7, 0)),
+            current_position_ms: Some(45_000),
+            ..Default::default()
+        };
+        apply_renderer_command(&engine, &sync, &cmd, &renderer_state)
+            .await
+            .unwrap();
+        let calls = engine.calls();
+        assert_eq!(
+            calls.start_track_streams,
+            vec![7],
+            "takeback must force a stream even when the track id matches"
+        );
+        assert_eq!(
+            calls.start_positions,
+            vec![45],
+            "takeback must resume at the handed-off position (45s), not 0"
+        );
+    }
+
+    /// #1 (no-interrupt) — a SetActive(true) while the renderer is ALREADY
+    /// streaming this exact track with audio loaded must NOT restart it (guards
+    /// against a spurious activation tearing down live playback).
+    #[tokio::test]
+    async fn set_active_does_not_restart_when_already_streaming() {
+        let mut engine = MockEngine::new();
+        engine.playback = PlaybackState {
+            track_id: 7,
+            ..Default::default()
+        };
+        engine.loaded_audio = true; // live playback in progress
+        let sync = sync();
+        let cmd = RendererCommand::SetActive { active: true };
+        let renderer_state = QConnectRendererState {
+            current_track: Some(qi(7, 0)),
+            current_position_ms: Some(45_000),
+            ..Default::default()
+        };
+        apply_renderer_command(&engine, &sync, &cmd, &renderer_state)
+            .await
+            .unwrap();
+        assert!(
+            engine.calls().start_track_streams.is_empty(),
+            "must not restart an already-streaming track on a spurious SetActive"
+        );
+    }
+
+    /// #1 (takeback first-load via SetState) — when the FIRST load on a takeback
+    /// lands in the SetState path (SetActive arrived before current_track was
+    /// known, so the force-stream couldn't fire), the load must stream at the
+    /// cloud's reported position, not 0 — so a mid-track takeback resumes where
+    /// the peer was instead of restarting (a forward seek past the buffered
+    /// watermark is silently ignored, so streaming from 0 stuck at the start).
+    #[tokio::test]
+    async fn apply_renderer_command_setstate_streams_at_reported_position() {
+        let engine = MockEngine::new(); // playback track_id 0 → fresh load
+        let sync = sync();
+        let cmd = RendererCommand::SetState {
+            playing_state: Some(PLAYING_STATE_PLAYING),
+            current_position_ms: Some(118_000),
+            current_track: Some(qi(7, 1)),
+            next_track: None,
+        };
+        apply_renderer_command(&engine, &sync, &cmd, &QConnectRendererState::default())
+            .await
+            .unwrap();
+        let calls = engine.calls();
+        assert_eq!(calls.start_track_streams, vec![7], "fresh takeback load");
+        assert_eq!(
+            calls.start_positions,
+            vec![118],
+            "takeback load must resume at the cloud position (118s), not 0"
+        );
     }
 }

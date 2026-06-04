@@ -39,6 +39,15 @@ pub trait QconnectRendererEngine: Send + Sync {
     /// MUST NOT be cached/stale — the echo filter and the #387 seek-diff gate
     /// depend on its freshness.
     fn get_playback_state(&self) -> PlaybackState;
+    /// Whether the audio thread currently holds decodable audio for the loaded
+    /// track. Distinct from `get_playback_state().track_id`: `stop()` clears the
+    /// audio buffer + flips this false but LEAVES `current_track_id` untouched,
+    /// so after a controller->renderer handoff (which stopped local playback) the
+    /// track id can still match the target while NO audio is buffered. The
+    /// takeback force-stream reads this to know a reload is required even when the
+    /// track id matches (`should_reload_remote_track` alone would skip it and the
+    /// following resume would fail with "no audio data available").
+    fn has_loaded_audio(&self) -> bool;
 
     // ---- queue / mode (async) ----
     async fn set_repeat_mode(&self, mode: RepeatMode);

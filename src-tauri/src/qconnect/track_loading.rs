@@ -299,6 +299,9 @@ impl QconnectRendererEngine for CoreBridge {
     fn get_playback_state(&self) -> PlaybackState {
         CoreBridge::get_playback_state(self)
     }
+    fn has_loaded_audio(&self) -> bool {
+        self.player().has_loaded_audio()
+    }
 
     // ---- queue / mode (async) ----
     async fn set_repeat_mode(&self, mode: RepeatMode) {

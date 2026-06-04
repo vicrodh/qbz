@@ -72,6 +72,9 @@ impl QconnectRendererEngine for SlintRendererEngine {
     fn get_playback_state(&self) -> PlaybackState {
         self.core().get_playback_state()
     }
+    fn has_loaded_audio(&self) -> bool {
+        self.core().player().has_loaded_audio()
+    }
 
     // ---- queue / mode (async) ----
     async fn set_repeat_mode(&self, mode: RepeatMode) {
