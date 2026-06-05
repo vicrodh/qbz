@@ -81,6 +81,13 @@ pub struct RemoteNowPlaying {
     /// change against its last-seen value to refresh the bar/queue meta when
     /// the peer advances a track on its own.
     pub track_id: u64,
+    /// The peer's shuffle flag, so the controller bar's shuffle button reflects
+    /// the REMOTE state (the poll loop only updated this for local playback).
+    pub shuffle_mode: bool,
+    /// The peer's repeat mode, already mapped to the UI's `repeat-mode`
+    /// (0=off, 1=all, 2=one) from the QConnect wire loop_mode (1=off, 3=all,
+    /// 2=one), so the controller bar's repeat button reflects the REMOTE state.
+    pub repeat_mode: i32,
 }
 
 /// Process-wide QConnect service singleton (one per app, like the playback
@@ -1051,6 +1058,16 @@ impl SlintQconnectService {
             }
         }
 
+        // Dev diagnostic: dump the EXACT outbound payload for the player-state
+        // command (pause/resume/seek/skip) so a test can diff QBZ's command
+        // field-for-field against a working controller (e.g. WebPlayer pausing an
+        // iOS renderer). Gated to SetPlayerState so a volume drag never spams it.
+        // Answers "do we log who sends what when QBZ != renderer": yes, now.
+        if matches!(command_type, QueueCommandType::CtrlSrvrSetPlayerState) {
+            log::info!("[QConnect] --> outbound SetPlayerState payload={payload}");
+            dev_push_event(&self.window, format!("-> SetPlayerState {payload}"));
+        }
+
         let command = app.build_queue_command(command_type, payload).await;
         app.send_queue_command(command)
             .await
@@ -1174,7 +1191,7 @@ impl SlintQconnectService {
     /// snapshot (`playing_state == PLAYING`). Title/artist/art come from the
     /// materialized local core queue, so only these three fields are needed here.
     pub async fn remote_now_playing(&self) -> Option<RemoteNowPlaying> {
-        let (renderer, _queue, _session) =
+        let (renderer, queue, _session) =
             self.effective_remote_renderer_snapshot().await.ok().flatten()?;
         Some(RemoteNowPlaying {
             position_ms: renderer.current_position_ms.unwrap_or(0),
@@ -1186,6 +1203,20 @@ impl SlintQconnectService {
                 .as_ref()
                 .map(|item| item.track_id)
                 .unwrap_or(0),
+            // The shuffle BUTTON reflects the cloud-authoritative QUEUE shuffle
+            // flag, NOT the per-renderer `renderer.shuffle_mode` — the cloud never
+            // populates the per-renderer shuffle field for a peer (it stays None),
+            // so reading it lit the button only by luck (worked for one peer type,
+            // not the other). `QConnectQueueState.shuffle_mode` is always present.
+            // Matches Tauri (queueStore `isShuffle = queueState.shuffle`).
+            shuffle_mode: queue.shuffle_mode,
+            // QConnect wire loop_mode (1=off, 3=all, 2=one) -> UI repeat-mode
+            // (0=off, 1=all, 2=one). Unknown / off -> 0.
+            repeat_mode: match renderer.loop_mode {
+                Some(3) => 1,
+                Some(2) => 2,
+                _ => 0,
+            },
         })
     }
 
@@ -1344,7 +1375,7 @@ impl SlintQconnectService {
     /// `toggle_remote_renderer_playback_if_active`.
     pub async fn toggle_remote_renderer_playback_if_active(&self) -> Result<bool, String> {
         let remote_context = self.effective_remote_renderer_snapshot().await?;
-        let Some((renderer, queue, session)) = remote_context else {
+        let Some((renderer, _queue, session)) = remote_context else {
             let reason = {
                 let guard = self.inner.lock().await;
                 let Some(runtime) = guard.runtime.as_ref() else {
@@ -1368,46 +1399,22 @@ impl SlintQconnectService {
             Some(PLAYING_STATE_PLAYING) => PLAYING_STATE_PAUSED,
             _ => PLAYING_STATE_PLAYING,
         };
-        let current_position = renderer
-            .current_position_ms
-            .and_then(|value| i32::try_from(value).ok());
-        // Resolve the current queue item from the CORE-aligned cursor, NOT the
-        // renderer snapshot. `align_queue_cursor` keeps the core on the peer's
-        // ACTUAL track even when the peer reports a null `current_queue_item_id`
-        // (iOS does this continuously while playing). The renderer snapshot's
-        // `current_track`, by contrast, goes stale on a null-qid report
-        // (`build_effective_renderer_snapshot` only refreshes it when the qid is
-        // Some), and sending that stale qid made iOS REJECT the pause (the
-        // official Qobuz client CAN pause iOS, so this was our bug, not an iOS
-        // limitation — only remote VOLUME is genuinely refused by iOS). WebPlayer
-        // reports its qid, so the core and the snapshot agree there: no change.
-        // Falls back to omitting the item (a bare play/pause the renderer applies
-        // to whatever it is currently on) rather than ever sending a stale qid.
-        let current_queue_item = self
-            .runtime
-            .core()
-            .current_track()
-            .await
-            .and_then(|core_track| {
-                queue
-                    .queue_items
-                    .iter()
-                    .find(|item| item.track_id == core_track.id)
-                    .map(|item| item.queue_item_id)
-            })
-            .and_then(|queue_item_id| i32::try_from(queue_item_id).ok())
-            .map(|queue_item_id| QconnectSetPlayerStateQueueItemPayload {
-                queue_version: Some(QconnectQueueVersionPayload {
-                    major: queue.version.major,
-                    minor: queue.version.minor,
-                }),
-                id: Some(queue_item_id),
-            });
-
+        // BARE play/pause: send ONLY `playing_state` — no `current_position`, no
+        // `current_queue_item`. Evidence (controller-of-iOS log 2026-06-05,
+        // 23:07:59): iOS ACCEPTS the pause (it reports playing_state=PAUSED) but
+        // then AUTO-RESUMES to PLAYING within the same second, with NO play command
+        // from QBZ in between — even though the qid (0) and queue_version (12.4) QBZ
+        // sent were CORRECT (verified against iOS's own SetState). Attaching a
+        // (possibly-stale) `current_position` + a `current_queue_item` makes iOS
+        // treat the command as a SEEK / set-state and bounce back to playing; a
+        // pure transport toggle needs neither — the renderer pauses/resumes its own
+        // current item in place. WebPlayer-as-renderer (verified working) pauses
+        // fine on a bare command too, so this does not regress it. (Only remote
+        // VOLUME is genuinely refused by iOS.)
         let payload = serde_json::to_value(QconnectSetPlayerStateRequest {
             playing_state: Some(next_playing_state),
-            current_position,
-            current_queue_item,
+            current_position: None,
+            current_queue_item: None,
         })
         .map_err(|err| format!("serialize toggle_play request: {err}"))?;
 
@@ -1541,24 +1548,61 @@ impl SlintQconnectService {
         ))
     }
 
-    /// Toggle shuffle on the active PEER renderer. Mirrors the Tauri
-    /// `toggle_shuffle_if_remote`.
+    /// True whenever a QConnect transport/session is established (renderer OR
+    /// controller). Mirrors the Tauri `status().transport_connected` gate that
+    /// `v2_toggle_shuffle` / `v2_set_repeat_mode` use: shuffle/repeat are
+    /// QUEUE-state operations the cloud OWNS, so they go to the cloud whenever
+    /// connected, regardless of who is the active renderer.
+    async fn transport_connected(&self) -> bool {
+        let app = {
+            let guard = self.inner.lock().await;
+            match guard.runtime.as_ref() {
+                Some(runtime) => Arc::clone(&runtime.app),
+                None => return false,
+            }
+        };
+        app.state_handle().lock().await.transport_connected
+    }
+
+    /// Toggle shuffle through the CLOUD whenever connected (renderer OR
+    /// controller) — exactly like Tauri `v2_toggle_shuffle`, which gates on
+    /// `transport_connected`, NOT on a peer being active.
+    ///
+    /// WS-AUTHORITATIVE (load-bearing): QBZ sends ONLY `{shuffle_mode,
+    /// shuffle_seed, shuffle_pivot_queue_item_id}` — never a local order. The
+    /// cloud generates the order and echoes it; QBZ applies ONLY that echoed
+    /// order (inbound SetShuffleMode is flag-only + materialize applies the
+    /// cloud's `shuffled_track_indexes`). The local `playback::toggle_shuffle`
+    /// path (which DOES invent a local random order — the documented failure
+    /// mode) is reachable ONLY when NOT connected (this returns `Ok(false)` then,
+    /// so the caller runs it offline). The previous peer-only gate let that local
+    /// path run while connected-as-renderer, which both did nothing visible AND
+    /// risked the divergent-order bug.
     pub async fn toggle_shuffle_if_remote(&self) -> Result<bool, String> {
-        let remote_context = self.effective_remote_renderer_snapshot().await?;
-        let Some((renderer, queue, session)) = remote_context else {
+        if !self.transport_connected().await {
+            // Offline: caller runs the local shuffle path.
             return Ok(false);
+        }
+        // UN-gated snapshot: returns Some even when QBZ ITSELF is the active
+        // renderer (effective_remote_* returns None then). Mirrors Tauri
+        // queue_snapshot()/renderer_snapshot().
+        let Some((renderer, queue, session)) = self.effective_active_renderer_snapshot().await?
+        else {
+            // Connected but no active renderer yet — do NOT fall through to the
+            // local reshuffle (it would diverge from the cloud). Handled no-op.
+            return Ok(true);
         };
 
-        let current_shuffle = renderer.shuffle_mode.unwrap_or(false);
-        let next_shuffle = !current_shuffle;
+        // Toggle from the cloud-authoritative QUEUE shuffle flag (matches Tauri
+        // `!queue.shuffle_mode`), not the per-renderer field which the cloud
+        // never populates for a peer.
+        let next_shuffle = !queue.shuffle_mode;
 
-        // The cloud REQUIRES a `shuffle_seed` when enabling shuffle ("shuffleSeed
-        // is undefined" error otherwise) and uses it to generate the authoritative
-        // order — WS-authoritative is preserved: QBZ supplies only a seed + pivot,
-        // never a local order, and applies only the cloud's echoed order. No `rand`
-        // crate here (unlike Tauri), so seed from the wall clock; mask to i32::MAX
-        // so it fits the wire `fixed32` as a positive value. The pivot keeps the
-        // currently-playing track at the front of the shuffled order. Mirrors the
+        // The cloud REQUIRES a `shuffle_seed` when enabling ("shuffleSeed is
+        // undefined" otherwise) and uses it to GENERATE the order — QBZ supplies
+        // only the seed + pivot, never an order. No `rand` crate here (unlike
+        // Tauri); seed from the wall clock, masked to i32::MAX for the wire
+        // `fixed32`. Pivot keeps the current track at the front. Mirrors the
         // Tauri `apply_qconnect_shuffle_mode` payload.
         let shuffle_seed: Option<u32> = next_shuffle.then(|| {
             let nanos = std::time::SystemTime::now()
@@ -1582,22 +1626,26 @@ impl SlintQconnectService {
         self.send_command(QueueCommandType::CtrlSrvrSetShuffleMode, payload)
             .await?;
 
-        log::info!("[QConnect] toggle_shuffle handoff -> {next_shuffle}");
+        log::info!("[QConnect] shuffle -> {next_shuffle} (cloud, active={:?})", session.active_renderer_id);
         dev_push_event(
             &self.window,
-            format!("controller shuffle -> {next_shuffle} (active={:?})", session.active_renderer_id),
+            format!("shuffle -> {next_shuffle} (active={:?})", session.active_renderer_id),
         );
 
         Ok(true)
     }
 
-    /// Cycle repeat mode on the active PEER renderer. QConnect loop wire values:
-    /// 1=off, 3=all, 2=one; cycle off->all->one->off. Mirrors the Tauri
-    /// `cycle_repeat_if_remote`.
+    /// Cycle repeat through the CLOUD whenever connected (renderer OR
+    /// controller) — like Tauri `v2_set_repeat_mode` (gate = transport_connected).
+    /// QConnect loop wire values: 1=off, 3=all, 2=one; cycle off->all->one->off.
+    /// Returns `Ok(false)` ONLY when NOT connected so the caller runs local.
     pub async fn cycle_repeat_if_remote(&self) -> Result<bool, String> {
-        let remote_context = self.effective_remote_renderer_snapshot().await?;
-        let Some((renderer, _queue, session)) = remote_context else {
+        if !self.transport_connected().await {
             return Ok(false);
+        }
+        let Some((renderer, _queue, session)) = self.effective_active_renderer_snapshot().await?
+        else {
+            return Ok(true);
         };
 
         let current_loop = renderer.loop_mode.unwrap_or(1);
@@ -1611,10 +1659,10 @@ impl SlintQconnectService {
         self.send_command(QueueCommandType::CtrlSrvrSetLoopMode, payload)
             .await?;
 
-        log::info!("[QConnect] cycle_repeat handoff -> {next_loop}");
+        log::info!("[QConnect] repeat -> {next_loop} (cloud, active={:?})", session.active_renderer_id);
         dev_push_event(
             &self.window,
-            format!("controller repeat -> {next_loop} (active={:?})", session.active_renderer_id),
+            format!("repeat -> {next_loop} (active={:?})", session.active_renderer_id),
         );
 
         Ok(true)

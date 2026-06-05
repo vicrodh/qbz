@@ -162,14 +162,25 @@ pub struct QconnectQueueVersionPayload {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct QconnectSetPlayerStateQueueItemPayload {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub queue_version: Option<QconnectQueueVersionPayload>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<i32>,
 }
 
+// `skip_serializing_if` is LOAD-BEARING here: a `None` field must be OMITTED, not
+// serialized as JSON `null`. The protocol mapper rejects a `current_queue_item`
+// that is present-but-null ("must be an object") and aborts the whole send, so a
+// bare play/pause toggle (which sends only `playing_state`) would never reach the
+// wire without these. Each SetPlayerState field is independently optional per the
+// protocol, so omitting them is the intended "do one or several" behavior.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct QconnectSetPlayerStateRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub playing_state: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub current_position: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub current_queue_item: Option<QconnectSetPlayerStateQueueItemPayload>,
 }
 

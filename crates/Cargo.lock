@@ -5231,7 +5231,7 @@ dependencies = [
  "anyhow",
  "base64",
  "chrono",
- "dirs",
+ "dirs 6.0.0",
  "futures-util",
  "log",
  "md-5",

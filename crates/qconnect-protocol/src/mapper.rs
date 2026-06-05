@@ -882,6 +882,13 @@ fn parse_set_player_state_queue_item(
     let nested = payload
         .get("current_queue_item")
         .or_else(|| payload.get("currentQueueItem"));
+    // A present-but-null `current_queue_item` means "no item" — a bare play/pause
+    // toggle. Treat it as ABSENT rather than hard-failing the whole command encode
+    // (the old behavior aborted the send before it reached the wire). Defense in
+    // depth alongside `skip_serializing_if` on the request struct.
+    if matches!(nested, Some(Value::Null)) {
+        return Ok(None);
+    }
     let source = match nested {
         Some(value) => value,
         None => payload,
@@ -1094,6 +1101,39 @@ mod tests {
             queue_item.queue_version.as_ref().and_then(|v| v.minor),
             Some(3)
         );
+    }
+
+    #[test]
+    fn encodes_bare_set_player_state_pause_without_queue_item() {
+        // A bare play/pause toggle sends ONLY playing_state — the renderer
+        // pauses/resumes its current item in place. Two shapes must both encode
+        // cleanly with NO current_queue_item: the key omitted (via
+        // skip_serializing_if), and present-but-null (defense in depth). The old
+        // mapper rejected the null shape ("must be an object") and aborted the
+        // whole send, which is why pause-to-an-iOS-renderer silently failed.
+        for payload in [
+            json!({ "playing_state": 3 }),
+            json!({ "playing_state": 3, "current_position": null, "current_queue_item": null }),
+        ] {
+            let command = QueueCommand::new(
+                QueueCommandType::CtrlSrvrSetPlayerState,
+                "132db70b-d293-4576-bfd6-747c40ab764f",
+                QueueVersion::new(5, 3),
+                payload,
+            );
+            let encoded =
+                encode_queue_command_batch(&command).expect("bare pause must encode (not abort)");
+            let decoded = QConnectMessages::decode(encoded.as_slice()).expect("decode batch");
+            let player_state = decoded.messages[0]
+                .ctrl_srvr_set_player_state
+                .as_ref()
+                .expect("player state payload");
+            assert_eq!(player_state.playing_state, Some(3));
+            assert!(
+                player_state.current_queue_item.is_none(),
+                "bare pause must carry NO current_queue_item (qid 0 is the placeholder iOS rejects)"
+            );
+        }
     }
 
     #[test]

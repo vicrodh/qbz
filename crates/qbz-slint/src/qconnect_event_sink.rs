@@ -241,6 +241,30 @@ impl SlintQconnectEventSink {
     async fn refresh_local_ui(&self) {
         crate::playback::refresh_now_playing_meta(&self.runtime, &self.window).await;
         crate::playback::refresh_sidebar(true);
+        self.refresh_transport_modes().await;
+    }
+
+    /// Reflect the cloud-authoritative shuffle/repeat on the bar buttons from the
+    /// materialized CORE queue. The inbound SetShuffleMode / QueueUpdated update
+    /// the CORE queue (the cloud's order + flags), but never the UI button — this
+    /// pushes them. Lightweight (no card/art refresh) so it is safe to call on a
+    /// standalone shuffle/loop command without resetting the now-playing card.
+    /// Matches Tauri, whose button reads `queue.shuffle` (not a per-renderer
+    /// field the cloud never populates for a peer).
+    async fn refresh_transport_modes(&self) {
+        let qs = self.runtime.core().get_queue_state().await;
+        let shuffle_on = qs.shuffle;
+        let repeat_mode = match qs.repeat {
+            qbz_models::RepeatMode::Off => 0,
+            qbz_models::RepeatMode::All => 1,
+            qbz_models::RepeatMode::One => 2,
+        };
+        let _ = self.window.upgrade_in_event_loop(move |w| {
+            use slint::ComponentHandle;
+            let np = w.global::<crate::NowPlayingState>();
+            np.set_shuffle(shuffle_on);
+            np.set_repeat_mode(repeat_mode);
+        });
     }
 
     /// Wire the owning app after construction. Idempotent (OnceLock).
@@ -485,11 +509,17 @@ impl QconnectEventSink for SlintQconnectEventSink {
                     self.report_active_renderer_ready().await;
                 }
                 // A SetState changes the current track / play-state — reflect it
-                // in the QBZ now-playing card + queue cursor highlight. (Other
-                // commands — volume/mute/shuffle/loop — don't move the track, so
-                // skip the card/art refresh.)
+                // in the QBZ now-playing card + queue cursor highlight. A
+                // standalone SetShuffleMode / SetLoopMode does NOT move the track,
+                // so only refresh the lightweight shuffle/repeat button state (a
+                // full refresh would reset the now-playing card position/art).
                 if matches!(command, RendererCommand::SetState { .. }) {
                     self.refresh_local_ui().await;
+                } else if matches!(
+                    command,
+                    RendererCommand::SetShuffleMode { .. } | RendererCommand::SetLoopMode { .. }
+                ) {
+                    self.refresh_transport_modes().await;
                 }
             }
             QconnectAppEvent::RendererUnreachable { renderer_id } => {
