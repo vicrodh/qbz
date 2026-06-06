@@ -25,6 +25,9 @@ use qbz_app::shell::AppRuntime;
 #[cfg(target_os = "linux")]
 mod linux;
 
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+mod mac_win;
+
 /// Shared runtime handle type used across the Slint app.
 pub(crate) type Runtime = Arc<AppRuntime<SlintAdapter>>;
 
@@ -76,7 +79,14 @@ impl TrayHandle {
             h.set_icon_theme(theme);
             return;
         }
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        {
+            // The TrayIcon is !Send and lives on the main thread — re-theme it
+            // there.
+            let _ = slint::invoke_from_event_loop(move || mac_win::set_icon_theme(&theme));
+            return;
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
         let _ = theme;
     }
 }
@@ -130,11 +140,21 @@ pub fn init(
             .expect("spawn tray init thread");
     }
 
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     {
-        // macOS / Windows tray lands with the CustomApplicationHandler slice.
+        // tray-icon's TrayIcon is !Send and (on macOS) must be built on the
+        // main thread with NSApplication already running — create it on the
+        // Slint event loop.
+        let _ = slint::invoke_from_event_loop(move || {
+            mac_win::create(runtime, weak, handle, &theme_override);
+            let _ = TRAY.set(TrayHandle::default());
+        });
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+    {
         let _ = (runtime, weak, handle, theme_override);
-        log::info!("[tray] no tray backend on this platform yet");
+        log::info!("[tray] no tray backend on this platform");
     }
 }
 
@@ -170,6 +190,9 @@ pub(crate) fn show_window(weak: &slint::Weak<AppWindow>) {
         w.window().with_winit_window(|win| {
             win.focus_window();
         });
+        // Restore the Dock icon when coming back from the menu bar.
+        #[cfg(target_os = "macos")]
+        mac_win::set_dock_icon_hidden(false);
     });
 }
 
@@ -181,6 +204,11 @@ pub(crate) fn hide_window(weak: &slint::Weak<AppWindow>) {
         if let Err(e) = w.hide() {
             log::error!("[tray] window hide failed: {e}");
         }
+        // Spotify-style opt-in: drop the Dock icon while closed to the menu bar.
+        #[cfg(target_os = "macos")]
+        if crate::tray_settings::get().mac_hide_dock {
+            mac_win::set_dock_icon_hidden(true);
+        }
     });
 }
 
@@ -189,6 +217,16 @@ pub(crate) fn hide_window(weak: &slint::Weak<AppWindow>) {
 /// response) so the next tray toggle knows to show.
 pub(crate) fn set_window_shown(shown: bool) {
     WINDOW_SHOWN.store(shown, Ordering::Relaxed);
+}
+
+/// Apply the macOS Dock-icon activation policy (`.accessory` hides the Dock
+/// icon, `.regular` keeps it). No-op off macOS. Must be called on the main
+/// thread (it is, from the close handlers / window hide-show).
+pub(crate) fn set_mac_dock_hidden(hidden: bool) {
+    #[cfg(target_os = "macos")]
+    mac_win::set_dock_icon_hidden(hidden);
+    #[cfg(not(target_os = "macos"))]
+    let _ = hidden;
 }
 
 /// Quit the whole app from a tray action (any thread).
@@ -270,7 +308,9 @@ pub(crate) fn dispatch_previous(
 
 /// Step the local volume by `ticks` notches of 5% (positive = up). Mirrors the
 /// Tauri `tray:volume_delta` handler. Local-only for now (remote-renderer
-/// volume forwarding is a later refinement).
+/// volume forwarding is a later refinement). Linux-only: scroll-to-volume is a
+/// StatusNotifierItem feature the macOS/Windows tray doesn't expose.
+#[cfg(target_os = "linux")]
 pub(crate) fn dispatch_volume_delta(
     runtime: Runtime,
     weak: slint::Weak<AppWindow>,

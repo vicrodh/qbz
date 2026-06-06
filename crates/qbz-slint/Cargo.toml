@@ -67,5 +67,24 @@ qbz-credentials = { path = "../qbz-credentials" }
 [target.'cfg(target_os = "linux")'.dependencies]
 ksni = { version = "0.3", features = ["blocking"] }
 
+# macOS (NSStatusItem) + Windows (Shell_NotifyIcon) tray via the tao team's
+# tray-icon crate. Re-exports muda as tray_icon::menu. Windows is built but
+# not shipped/tested.
+[target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
+tray-icon = "0.24"
+
+# macOS Dock-icon activation-policy toggle. Pinned to tray-icon's objc2 0.6 /
+# app-kit 0.3 series (NOT winit's 0.5) so MainThreadMarker/NSApplication unify
+# with tray-icon. setActivationPolicy is gated behind the NSRunningApplication
+# feature.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = [
+    "std",
+    "NSApplication",
+    "NSResponder",
+    "NSRunningApplication",
+] }
+
 [build-dependencies]
 slint-build = "1.16"

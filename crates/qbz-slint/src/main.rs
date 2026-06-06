@@ -6637,11 +6637,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // with quit_on_last_window_closed = false (so a tray-hide keeps the app
     // alive) — without this, the native close would leave a headless process.
     window.window().on_close_requested(move || {
-        if tray_settings::get().close_to_tray && tray::handle().is_some() {
+        let settings = tray_settings::get();
+        if settings.close_to_tray && tray::handle().is_some() {
             // Slint performs the hide (destroys the surface) for HideWindow;
             // we only sync the shown flag so the next tray toggle shows it.
             log::info!("[qbz-slint] close-to-tray (WM close): hiding to tray");
             tray::set_window_shown(false);
+            // macOS: drop the Dock icon if the user opted in (no-op elsewhere).
+            if settings.mac_hide_dock {
+                tray::set_mac_dock_hidden(true);
+            }
             slint::CloseRequestResponse::HideWindow
         } else {
             log::info!("[qbz-slint] WM close requested: quitting");
