@@ -125,9 +125,20 @@ component QueueRow inherits Rectangle {
     callback clicked();
     callback remove();
 
+    // Drag-reorder (UP NEXT only). `page-local-index` is the 0-based row within
+    // the visible page (NOT the page-global display `index`). The parent owns the
+    // list-level drag state; the row reports gestures in WINDOW coords.
+    in property <int> page-local-index;
+    in property <bool> drag-source: false;   // this row is the one being dragged
+    callback drag-begin(int /* page-local index */, length /* row window-top */);
+    callback drag-update(length /* pointer window-y */);
+    callback drag-end();
+
     // Compact rows with a subtle zebra so they read as distinct without the
     // tall, airy spacing they had before.
     height: 44px;
+    // Dim the row that is being dragged.
+    opacity: root.drag-source ? 0.4 : 1.0;
     background: ta.has-hover
         ? Theme.surface-hover
         : (Math.mod(root.index, 2) == 1
@@ -141,8 +152,46 @@ component QueueRow inherits Rectangle {
     // menu-button clicks — making the [...] just skip to the track.
     ta := TouchArea {
         mouse-cursor: pointer;
+        property <length> down-y;
+        property <bool> dragging: false;
         clicked => {
-            root.clicked();
+            // Suppress the release-click that ends a reorder (must not also play).
+            if (!ta.dragging) {
+                root.clicked();
+            }
+        }
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.down) {
+                // absolute-position double-counts this row's own layout offset
+                // inside the Flickable; subtract root.{x,y} to recover the true
+                // window Y (scroll-safe). See reference_slint_absolute_position_flickable.
+                ta.down-y = root.absolute-position.y - root.y + ta.mouse-y;
+                ta.dragging = false;
+            }
+            if (e.kind == PointerEventKind.up && ta.dragging) {
+                root.drag-end();
+                ta.dragging = false;
+            }
+        }
+        // Safety net: a Flickable/ListView can steal the grab mid-drag, so `up`
+        // may never arrive. `pressed` flips false on release AND grab-cancel.
+        changed pressed => {
+            if (!self.pressed && ta.dragging) {
+                root.drag-end();
+                ta.dragging = false;
+            }
+        }
+        moved => {
+            if (ta.pressed) {
+                if (!ta.dragging
+                    && Math.abs(root.absolute-position.y - root.y + ta.mouse-y - ta.down-y) > 6px) {
+                    ta.dragging = true;
+                    root.drag-begin(root.page-local-index, root.absolute-position.y - root.y);
+                }
+                if (ta.dragging) {
+                    root.drag-update(root.absolute-position.y - root.y + ta.mouse-y);
+                }
+            }
         }
     }
 
@@ -289,6 +338,36 @@ export component QueueSidebar inherits Rectangle {
     property <bool> queue-empty:
         !QueueState.has-current && QueueState.upcoming-total == 0;
 
+    // --- UP NEXT drag-reorder state (component-local; NOT the DragState global,
+    // which drives the track->playlist ghost drag). All indices are PAGE-LOCAL.
+    property <bool> reorder-active: false;
+    property <int> reorder-from: -1;        // page-local index of the dragged row
+    property <int> reorder-over: -1;        // insertion slot 0..N
+    // Window-Y of the upcoming list's first-row top, captured exactly at
+    // drag-begin (row top - row*44px); pointer-Y is converted to a slot against it.
+    property <length> reorder-list-top;
+    // Live pointer window-Y during the drag, for positioning the floating ghost.
+    property <length> reorder-pointer-y;
+
+    // Pointer window-Y -> insertion slot [0..N]. Rows are a fixed 44px stacked
+    // with 0 spacing; the +0.5 row rounds the boundary to row centers (top half
+    // of row k -> slot k, bottom half -> slot k+1).
+    pure function slot-from-pointer(win-y: length) -> int {
+        return Math.max(0, Math.min(QueueState.upcoming-page.length,
+            Math.floor((win-y - root.reorder-list-top) / 44px + 0.5)));
+    }
+    function commit-reorder() {
+        root.reorder-active = false;
+        // Fire only a real move. `to == from` and `to == from+1` both drop back
+        // onto the same gap (no-op), matching move_track's from==to early return.
+        if (root.reorder-over != root.reorder-from
+            && root.reorder-over != root.reorder-from + 1) {
+            QueueState.reorder(root.reorder-from, root.reorder-over);
+        }
+        root.reorder-from = -1;
+        root.reorder-over = -1;
+    }
+
     // The panel is conditionally mounted (`if queue-open` at the AppShell mount
     // site, ADR-010), so it is CREATED each time it opens — pull a fresh queue
     // snapshot on `init` (the queue may have changed/been restored while closed).
@@ -359,6 +438,16 @@ export component QueueSidebar inherits Rectangle {
 
             // ===== Queue tab =====
             if QueueState.tab == 0: Flickable {
+                // Drag-scroll is DISABLED on purpose: a row drag-reorder lives
+                // inside this Flickable, and Slint 1.16 cannot freeze the scroll
+                // for the drag without stranding the Flickable's internal
+                // `pressed_time` (it swallows the `Released` while !interactive),
+                // which then phantom-scrolls on the next slide. Keeping it always
+                // non-interactive lets the row TouchArea own the grab cleanly and
+                // never enters that stuck state. Wheel scroll still works (the
+                // Flickable only short-circuits non-wheel events); pagination
+                // covers long lists.
+                interactive: false;
                 viewport-width: self.width;
                 viewport-height: queue-body.preferred-height;
 
@@ -479,20 +568,53 @@ export component QueueSidebar inherits Rectangle {
                             font-weight: Typography.semibold;
                             letter-spacing: 0.5px;
                         }
-                        // Page of upcoming rows.
-                        VerticalLayout {
-                            spacing: 0px;
-                            for item[idx] in QueueState.upcoming-page: QueueRow {
-                                item: item;
-                                index: QueueState.page-start - 1 + idx;
-                                show-number: true;
-                                removable: true;
-                                clicked => {
-                                    QueueState.play-upcoming(idx);
+                        // Page of upcoming rows + drop-indicator overlay. Explicit
+                        // height (rows are a fixed 44px, spacing 0) so the wrapping
+                        // Rectangle does not collapse — a VerticalLayout does not
+                        // auto-size its parent Rectangle.
+                        Rectangle {
+                            height: QueueState.upcoming-page.length * 44px;
+                            VerticalLayout {
+                                spacing: 0px;
+                                for item[idx] in QueueState.upcoming-page: QueueRow {
+                                    item: item;
+                                    index: QueueState.page-start - 1 + idx;
+                                    page-local-index: idx;
+                                    show-number: true;
+                                    removable: true;
+                                    drag-source: root.reorder-active && root.reorder-from == idx;
+                                    clicked => {
+                                        QueueState.play-upcoming(idx);
+                                    }
+                                    remove => {
+                                        QueueState.remove-upcoming(idx);
+                                    }
+                                    drag-begin(local-idx, row-top) => {
+                                        root.reorder-active = true;
+                                        root.reorder-from = local-idx;
+                                        root.reorder-over = local-idx;
+                                        root.reorder-list-top = row-top - local-idx * 44px;
+                                    }
+                                    drag-update(pointer-y) => {
+                                        root.reorder-over = root.slot-from-pointer(pointer-y);
+                                        root.reorder-pointer-y = pointer-y;
+                                    }
+                                    drag-end => {
+                                        root.commit-reorder();
+                                    }
                                 }
-                                remove => {
-                                    QueueState.remove-upcoming(idx);
-                                }
+                            }
+                            // Drop indicator: a 2px accent line at the insertion
+                            // slot, hidden for the two no-op slots (from, from+1).
+                            if root.reorder-active
+                                && root.reorder-over != root.reorder-from
+                                && root.reorder-over != root.reorder-from + 1: Rectangle {
+                                x: 0;
+                                y: root.reorder-over * 44px - 1px;
+                                width: parent.width;
+                                height: 2px;
+                                background: Theme.accent;
+                                border-radius: 1px;
                             }
                         }
                         // Paginator — plain text controls, no pills. Only
@@ -705,6 +827,41 @@ export component QueueSidebar inherits Rectangle {
                             vertical-alignment: center;
                         }
                     }
+                }
+            }
+        }
+
+    }
+
+    // Floating drag ghost — a pill following the pointer with the dragged track's
+    // title, so it's clear something is being moved. A free-positioned child of
+    // the panel ROOT (NOT a layout child — a VerticalLayout would ignore its x/y
+    // and stack it), declared last so it renders above the list. Converts the live
+    // pointer window-Y into this panel's local space.
+    if root.reorder-active
+            && root.reorder-from >= 0
+            && root.reorder-from < QueueState.upcoming-page.length: Rectangle {
+        x: Spacing.md;
+        y: root.reorder-pointer-y - root.absolute-position.y - self.height / 2;
+        width: parent.width - 2 * Spacing.md;
+        height: 34px;
+        background: Theme.surface-elevated;
+        border-radius: Radius.sm;
+        border-width: 1px;
+        border-color: Theme.accent;
+        opacity: 0.95;
+        HorizontalLayout {
+            padding-left: Spacing.sm;
+            padding-right: Spacing.sm;
+            VerticalLayout {
+                alignment: center;
+                horizontal-stretch: 1;
+                Text {
+                    text: QueueState.upcoming-page[root.reorder-from].title;
+                    color: Theme.text-primary;
+                    font-size: 12px;
+                    font-weight: Typography.medium;
+                    overflow: elide;
                 }
             }
         }

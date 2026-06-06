@@ -2071,6 +2071,11 @@ export global QueueState {
     callback play-history(int);
     // Remove the upcoming entry at `index` within the current page slice.
     callback remove-upcoming(int);
+    // Reorder the upcoming list: move the page-local row `from` to the insertion
+    // slot `to` (0 = before the first upcoming row, N = after the last). The Rust
+    // controller resolves the page-local indices to queue-wide upcoming indices
+    // and routes to the cloud when connected (WS-authoritative).
+    callback reorder(int /* from */, int /* to */);
     // Empty the queue.
     callback clear-queue();
     // Toggle the favorite state of the now-playing track.

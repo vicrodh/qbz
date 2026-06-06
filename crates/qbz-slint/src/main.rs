@@ -3247,6 +3247,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         {
             let c = controller.clone();
+            qs.on_reorder(move |from, to| {
+                c.reorder(from.max(0) as usize, to.max(0) as usize);
+            });
+        }
+        {
+            let c = controller.clone();
             qs.on_clear_queue(move || c.clear());
         }
         {

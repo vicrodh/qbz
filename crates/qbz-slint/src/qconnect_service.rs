@@ -19,6 +19,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use qbz_app::shell::AppRuntime;
 use qconnect_app::queue_resolution::{
+    find_cursor_index_by_queue_item_id, find_cursor_index_by_track_id, ordered_queue_cursors,
     resolve_controller_queue_item_from_snapshots, resolve_queue_item_ids_from_queue_state,
     QconnectRemoteSkipDirection,
 };
@@ -29,8 +30,9 @@ use qconnect_app::{
     build_effective_renderer_snapshot, ensure_session_renderer_state, is_local_renderer_active,
     is_peer_renderer_active, renderer_allows_remote_volume, QConnectQueueState,
     QConnectRendererState, QconnectApp, QconnectAppEvent, QconnectEventSink,
-    QconnectFileAudioQualitySnapshot, QconnectLifecycleState, QconnectRemoteSyncState,
-    QconnectSessionState, QueueCommandType, RendererReport, RendererReportType, SessionLoopHost,
+    queue_item_snapshot_for_cursor, QconnectFileAudioQualitySnapshot, QconnectLifecycleState,
+    QconnectRemoteSyncState, QconnectSessionState, QueueCommandType, RendererReport,
+    RendererReportType, SessionLoopHost,
 };
 use qconnect_transport_ws::{NativeWsTransport, WsTransportConfig};
 use serde_json::{json, Value};
@@ -210,6 +212,120 @@ pub struct SlintQconnectService {
     /// echo `QueueUpdated` lands (which would otherwise double-push on the next
     /// track tick). Cleared on disconnect.
     last_pushed_queue_ids: Mutex<Option<Vec<u64>>>,
+}
+
+/// Slint-local mirror of the Tauri `QconnectVisibleQueueProjection` reduced to
+/// the pieces the reorder payload needs: the current track's queue_item_id (the
+/// anchor) and the ordered upcoming queue_item_ids. Built from the cloud queue +
+/// renderer snapshot via the shared `qconnect-app` cursor helpers (no Tauri-local
+/// code). Stores only ids so it needs no `qconnect-core::QueueItem` import.
+struct VisibleUpcomingProjection {
+    current_track_qid: Option<u64>,
+    upcoming_qids: Vec<u64>,
+}
+
+/// Rebuild the visible upcoming projection (current anchor + ordered upcoming
+/// queue_item_ids) from a cloud queue + renderer snapshot, mirroring the Tauri
+/// `build_visible_queue_projection` using the SHARED qconnect-app cursor helpers.
+fn build_visible_upcoming_projection(
+    queue: &QConnectQueueState,
+    renderer: &QConnectRendererState,
+) -> VisibleUpcomingProjection {
+    let cursors = ordered_queue_cursors(queue);
+
+    let current_index = find_cursor_index_by_queue_item_id(
+        &cursors,
+        queue,
+        renderer.current_track.as_ref().map(|i| i.queue_item_id),
+    )
+    .or_else(|| {
+        find_cursor_index_by_track_id(
+            &cursors,
+            queue,
+            renderer.current_track.as_ref().map(|i| i.track_id),
+        )
+    });
+
+    let next_index = find_cursor_index_by_queue_item_id(
+        &cursors,
+        queue,
+        renderer.next_track.as_ref().map(|i| i.queue_item_id),
+    )
+    .or_else(|| {
+        find_cursor_index_by_track_id(
+            &cursors,
+            queue,
+            renderer.next_track.as_ref().map(|i| i.track_id),
+        )
+    });
+
+    // (current_track, start_index): the upcoming list starts AFTER the current
+    // track; if the current is unknown but the next is, infer the current from
+    // the cursor before next. Mirrors the Tauri projection.
+    let (current_track_qid, start_index) = if let Some(index) = current_index {
+        (
+            queue_item_snapshot_for_cursor(queue, cursors[index]).map(|i| i.queue_item_id),
+            index.saturating_add(1),
+        )
+    } else if let Some(index) = next_index {
+        let inferred = index
+            .checked_sub(1)
+            .and_then(|c| cursors.get(c).copied())
+            .and_then(|cur| queue_item_snapshot_for_cursor(queue, cur))
+            .map(|i| i.queue_item_id);
+        (inferred, index)
+    } else {
+        (None, 0)
+    };
+
+    let upcoming_qids = cursors
+        .into_iter()
+        .skip(start_index)
+        .filter_map(|cur| queue_item_snapshot_for_cursor(queue, cur))
+        .map(|i| i.queue_item_id)
+        .collect();
+
+    VisibleUpcomingProjection {
+        current_track_qid,
+        upcoming_qids,
+    }
+}
+
+/// 1:1 port of the Tauri `build_qconnect_reorder_payload`. `from_index`/
+/// `to_index` index INTO the visible upcoming list. None when out of range,
+/// `Some({})` for a no-op, else the wire payload (moved id + insert_after anchor).
+fn build_reorder_payload(
+    projection: &VisibleUpcomingProjection,
+    from_index: usize,
+    to_index: usize,
+) -> Option<Value> {
+    let len = projection.upcoming_qids.len();
+    if from_index >= len || to_index >= len {
+        return None;
+    }
+    if from_index == to_index {
+        return Some(json!({}));
+    }
+
+    let mut ids = projection.upcoming_qids.clone();
+    let moved = ids.remove(from_index);
+    let insert_position = if from_index < to_index {
+        to_index.saturating_sub(1)
+    } else {
+        to_index
+    };
+    let insert_after = if insert_position == 0 {
+        projection.current_track_qid
+    } else {
+        ids.get(insert_position - 1).copied()
+    };
+
+    Some(json!({
+        "queue_item_ids": [moved as i64],
+        "insert_after": insert_after.map(|v| v as i64),
+        "autoplay_reset": false,
+        "autoplay_loading": false,
+    }))
 }
 
 impl SlintQconnectService {
@@ -1665,6 +1781,65 @@ impl SlintQconnectService {
             format!("repeat -> {next_loop} (active={:?})", session.active_renderer_id),
         );
 
+        Ok(true)
+    }
+
+    /// Reorder the upcoming queue through the CLOUD whenever connected (renderer
+    /// OR controller) — like Tauri `v2_move_queue_track` (gate = transport_connected,
+    /// NOT peer-active; queue order is cloud-owned). WS-AUTHORITATIVE: QBZ sends
+    /// only `{queue_item_ids:[moved], insert_after}`; the cloud reorders and echoes
+    /// a QueueUpdated that materialize applies. The local `move_track` path runs
+    /// ONLY when NOT connected (this returns `Ok(false)` then).
+    ///
+    /// `from_q` / `to_q` are queue-wide UPCOMING indices (0 = first upcoming).
+    pub async fn reorder_upcoming_if_remote(
+        &self,
+        from_q: usize,
+        to_q: usize,
+    ) -> Result<bool, String> {
+        if !self.transport_connected().await {
+            return Ok(false);
+        }
+        // UN-gated snapshot (Some even when QBZ itself is the active renderer),
+        // matching toggle_shuffle_if_remote.
+        let Some((renderer, queue, session)) = self.effective_active_renderer_snapshot().await?
+        else {
+            // Connected but no active renderer yet — handled no-op (do NOT fall
+            // through to a local reorder that would diverge from the cloud).
+            return Ok(true);
+        };
+
+        let projection = build_visible_upcoming_projection(&queue, &renderer);
+        let len = projection.upcoming_qids.len();
+        if len == 0 {
+            return Ok(true);
+        }
+        // Clamp into the projection's [0, len) index space (the core path may pass
+        // to_q == len for an append-to-end slot).
+        let from_index = from_q.min(len - 1);
+        let to_index = to_q.min(len - 1);
+        if from_index == to_index {
+            return Ok(true);
+        }
+
+        let Some(payload) = build_reorder_payload(&projection, from_index, to_index) else {
+            return Ok(true); // out of range / nothing to do — handled
+        };
+
+        self.send_command(QueueCommandType::CtrlSrvrQueueReorderTracks, payload)
+            .await?;
+
+        log::info!(
+            "[QConnect] reorder upcoming {from_index} -> {to_index} (cloud, active={:?})",
+            session.active_renderer_id
+        );
+        dev_push_event(
+            &self.window,
+            format!(
+                "reorder {from_index} -> {to_index} (active={:?})",
+                session.active_renderer_id
+            ),
+        );
         Ok(true)
     }
 
