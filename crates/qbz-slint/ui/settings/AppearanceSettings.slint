@@ -700,12 +700,11 @@ export component AppearanceSettings inherits VerticalLayout {
     Rectangle { height: 12px; }
 
     // ===================================================================
-    // SYSTEM TRAY
+    // SYSTEM TRAY  (macOS: "MENU BAR")
     // ===================================================================
-    GroupHeader { text: @tr("SYSTEM TRAY"); }
+    GroupHeader { text: AppearanceState.is-macos ? @tr("MENU BAR") : @tr("SYSTEM TRAY"); }
 
     SettingRow {
-        unsupported: true;
         label: @tr("Enable tray icon");
         description: @tr("Show icon in system tray (requires restart)");
         QbzToggle {
@@ -716,24 +715,18 @@ export component AppearanceSettings inherits VerticalLayout {
             }
         }
     }
+    // NOTE: a separate "Minimize to tray" toggle is intentionally absent.
+    // Redirecting the window-manager minimize button to the tray requires
+    // owning that button (custom window chrome), which is not built yet, and
+    // Wayland forbids a client from intercepting the compositor's minimize.
+    // Until custom chrome lands, the option is HIDDEN (not shown disabled) and
+    // this row reads "Close to tray". When custom chrome exists, merge the two
+    // into a single "Minimize/Close to tray" control.
     SettingRow {
-        unsupported: true;
-        label: @tr("Minimize to tray");
-        description: @tr("Hide window to tray when minimizing");
-        enabled: AppearanceState.tray-enable;
-        QbzToggle {
-            checked: AppearanceState.tray-minimize-to-tray;
-            enabled: AppearanceState.tray-enable;
-            toggled(v) => {
-                AppearanceState.tray-minimize-to-tray = v;
-                AppearanceState.appearance-bool("tray-minimize-to-tray", v);
-            }
-        }
-    }
-    SettingRow {
-        unsupported: true;
         label: @tr("Close to tray");
-        description: @tr("Hide window to tray instead of quitting");
+        description: AppearanceState.is-macos
+            ? @tr("Keep playing in the menu bar instead of quitting when you close the window")
+            : @tr("Keep playing in the tray instead of quitting when you close the window");
         enabled: AppearanceState.tray-enable;
         QbzToggle {
             checked: AppearanceState.tray-close-to-tray;
@@ -744,8 +737,23 @@ export component AppearanceSettings inherits VerticalLayout {
             }
         }
     }
+    // macOS-only: switch the activation policy to .accessory while closed to
+    // the menu bar (no Dock icon). Off = Spotify-style (keep the Dock icon).
     SettingRow {
-        unsupported: true;
+        visible: AppearanceState.is-macos;
+        label: @tr("Hide Dock icon when closed to menu bar");
+        description: @tr("Run as a menu-bar-only app while the window is closed. Off keeps the Dock icon (like Spotify)");
+        enabled: AppearanceState.tray-enable && AppearanceState.tray-close-to-tray;
+        QbzToggle {
+            checked: AppearanceState.tray-mac-hide-dock;
+            enabled: AppearanceState.tray-enable && AppearanceState.tray-close-to-tray;
+            toggled(v) => {
+                AppearanceState.tray-mac-hide-dock = v;
+                AppearanceState.appearance-bool("tray-mac-hide-dock", v);
+            }
+        }
+    }
+    SettingRow {
         label: @tr("Tray icon variant");
         description: @tr("Pick a mono glyph to match your panel (Plasma, GNOME's permanently dark top bar) or the full colour vinyl logo");
         QbzSelect {

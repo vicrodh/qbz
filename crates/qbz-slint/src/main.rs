@@ -64,6 +64,8 @@ mod settings;
 mod share;
 mod sidebar;
 mod toast;
+mod tray;
+mod tray_settings;
 mod ui_prefs;
 
 use std::sync::Arc;
@@ -94,10 +96,34 @@ async fn enter_shell(
     // settings live in the per-user library.db).
     library_db::set_user(session.user_id);
 
+    // Bind tray settings to this user (per-user tray_settings.db, shared with
+    // the Tauri build) and snapshot them to seed the settings UI.
+    tray_settings::init_for_user(session.user_id);
+    let tray = tray_settings::get();
+
+    // Create the system tray from this user's persisted settings (gated by
+    // enable_tray). Reflects the chosen icon variant. On Linux the ksni
+    // service runs on its own thread; macOS/Windows are no-ops until the
+    // tray-icon slice lands.
+    tray::init(
+        runtime.clone(),
+        weak.clone(),
+        tokio::runtime::Handle::current(),
+        tray.tray_icon_theme.clone(),
+        tray.enable_tray,
+    );
+
     let _ = weak.upgrade_in_event_loop(move |w| {
         let state = w.global::<SessionState>();
         state.set_user_name(session.display_name.into());
         state.set_subscription(session.subscription.into());
+        // Seed the tray settings UI from the persisted per-user store.
+        let appearance = w.global::<AppearanceState>();
+        appearance.set_tray_enable(tray.enable_tray);
+        appearance.set_tray_minimize_to_tray(tray.minimize_to_tray);
+        appearance.set_tray_close_to_tray(tray.close_to_tray);
+        appearance.set_tray_mac_hide_dock(tray.mac_hide_dock);
+        appearance.set_tray_icon_theme_index(tray_settings::icon_theme_index(&tray.tray_icon_theme));
         w.global::<HomeState>().set_loading(true);
         w.set_screen(AppScreen::Shell);
     });
@@ -1751,6 +1777,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .global::<ShellState>()
         .set_npb_mode(crate::ui_prefs::npb_mode_index(&crate::ui_prefs::load().npb_mode));
 
+    // Tell the tray settings UI which platform it's on so it can show the
+    // macOS-only controls ("Menu Bar" header, hide-Dock toggle) and hide the
+    // Linux/Windows-only minimize-to-tray row.
+    window
+        .global::<AppearanceState>()
+        .set_is_macos(cfg!(target_os = "macos"));
+
     let app_runtime = Arc::new(AppRuntime::new(SlintAdapter::new(window.as_weak())));
 
     // MusicBrainz cache — opens a SQLite store at
@@ -2231,6 +2264,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             handle.spawn(async move {
                 settings::handle_release_device(settings_ctx, runtime, weak).await;
             });
+        });
+    }
+
+    // Appearance settings persistence. The toggles/selects set their
+    // AppearanceState property locally, then fire these generic callbacks so
+    // the choice survives restart. Tray keys persist to the shared per-user
+    // tray_settings store; unknown keys are logged (other appearance settings
+    // are wired as they land).
+    {
+        let appearance = window.global::<AppearanceState>();
+        appearance.on_appearance_bool(|key, value| match key.as_str() {
+            "tray-enable" => tray_settings::set_enable_tray(value),
+            "tray-minimize-to-tray" => tray_settings::set_minimize_to_tray(value),
+            "tray-close-to-tray" => tray_settings::set_close_to_tray(value),
+            "tray-mac-hide-dock" => tray_settings::set_mac_hide_dock(value),
+            other => log::debug!("[qbz-slint] unhandled appearance-bool '{other}'"),
+        });
+        appearance.on_appearance_select(|key, index| match key.as_str() {
+            "tray-icon-theme" => {
+                tray_settings::set_icon_theme_index(index);
+                // Re-theme the running tray icon live (no restart).
+                if let Some(t) = tray::handle() {
+                    t.set_icon_theme(tray_settings::theme_for_index(index));
+                }
+            }
+            other => log::debug!("[qbz-slint] unhandled appearance-select '{other}'"),
         });
     }
 
@@ -6557,9 +6616,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             });
     }
 
-    window.on_close_app(|| {
-        log::info!("[qbz-slint] closing");
-        let _ = slint::quit_event_loop();
+    window.on_close_app({
+        let weak = window.as_weak();
+        move || {
+            // Custom titlebar close button. Hide to tray when close-to-tray is
+            // enabled and the tray is live; otherwise quit.
+            if tray_settings::get().close_to_tray && tray::handle().is_some() {
+                log::info!("[qbz-slint] close-to-tray (titlebar): hiding to tray");
+                tray::hide_window(&weak);
+            } else {
+                log::info!("[qbz-slint] closing");
+                let _ = slint::quit_event_loop();
+            }
+        }
+    });
+
+    // Intercept the window-manager close (native titlebar X / compositor
+    // close). Mirrors the custom titlebar: hide to tray when close-to-tray is
+    // on + the tray is live, otherwise quit. Required because the loop runs
+    // with quit_on_last_window_closed = false (so a tray-hide keeps the app
+    // alive) — without this, the native close would leave a headless process.
+    window.window().on_close_requested(move || {
+        if tray_settings::get().close_to_tray && tray::handle().is_some() {
+            // Slint performs the hide (destroys the surface) for HideWindow;
+            // we only sync the shown flag so the next tray toggle shows it.
+            log::info!("[qbz-slint] close-to-tray (WM close): hiding to tray");
+            tray::set_window_shown(false);
+            slint::CloseRequestResponse::HideWindow
+        } else {
+            log::info!("[qbz-slint] WM close requested: quitting");
+            let _ = slint::quit_event_loop();
+            slint::CloseRequestResponse::HideWindow
+        }
     });
 
     window.on_open_tos(|| {
@@ -6570,6 +6658,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     log::info!("[qbz-slint] window ready");
-    window.run()?;
+    // NOT `window.run()`: that quits the event loop when the last window
+    // closes, which would kill the app the moment the window hides to tray.
+    // `run_event_loop_until_quit()` keeps the loop alive until an explicit
+    // `quit_event_loop()` (custom titlebar / WM close when not close-to-tray /
+    // tray Quit), so hide-to-tray works.
+    window.show()?;
+    slint::run_event_loop_until_quit()?;
     Ok(())
 }

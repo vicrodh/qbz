@@ -518,6 +518,10 @@ fn fmt_remaining(position: u64, duration: u64) -> String {
 pub(crate) async fn refresh_now_playing_meta(runtime: &Runtime, weak: &slint::Weak<AppWindow>) {
     let state = runtime.core().get_queue_state().await;
     let Some(track) = state.current_track else {
+        // No current track → clear the tray tooltip (Linux).
+        if let Some(t) = crate::tray::handle() {
+            t.clear_track();
+        }
         let _ = weak.upgrade_in_event_loop(|w| {
             w.global::<NowPlayingState>().set_has_track(false);
         });
@@ -548,6 +552,11 @@ pub(crate) async fn refresh_now_playing_meta(runtime: &Runtime, weak: &slint::We
     } else {
         crate::quality::detail(track.bit_depth, track.sample_rate)
     };
+
+    // Mirror the now-playing metadata into the system tray tooltip (Linux).
+    if let Some(t) = crate::tray::handle() {
+        t.set_track(title.clone(), artist.clone(), album.clone());
+    }
 
     let _ = weak.upgrade_in_event_loop(move |w| {
         let np = w.global::<NowPlayingState>();
@@ -2392,6 +2401,14 @@ pub fn start_poll_loop(
             if track_id != 0 {
                 last_track_id = track_id;
                 seen_position = position;
+            }
+            // Reflect play/pause into the tray tooltip on transition only
+            // (Linux), so the "Middle-click to pause/play" hint stays correct
+            // without spamming the updater channel every tick.
+            if is_playing != was_playing {
+                if let Some(t) = crate::tray::handle() {
+                    t.set_playing(is_playing);
+                }
             }
             was_playing = is_playing;
 

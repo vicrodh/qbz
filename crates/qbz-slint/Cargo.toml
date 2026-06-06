@@ -22,6 +22,12 @@ slint = { version = "1.16", default-features = false, features = [
     "accessibility",
     "compat-1-2",
 ] }
+# Direct access to the winit backend for the system tray: WinitWindowAccessor
+# (hide/show the OS window without quitting the event loop) and, later, the
+# CustomApplicationHandler (tray event pump + close-to-tray intercept). MUST be
+# pinned to the exact version Slint resolves (1.16.1) — i-slint-backend-winit
+# does not follow semver, and a mismatch makes with_winit_window() return None.
+i-slint-backend-winit = "=1.16.1"
 log = { workspace = true }
 env_logger = "0.11"
 tokio = { workspace = true }
@@ -52,6 +58,14 @@ qbz-integrations = { path = "../qbz-integrations" }
 rusqlite = { version = "0.31", features = ["bundled"] }
 qbz-cache = { path = "../qbz-cache" }
 qbz-credentials = { path = "../qbz-credentials" }
+
+# Linux system tray via StatusNotifierItem. Same crate + rationale as the
+# Tauri build (src-tauri/Cargo.toml): libayatana-appindicator never dispatches
+# primary-activate (left-click), so we use ksni's pure-Rust SNI which exposes
+# Activate / SecondaryActivate / Scroll. macOS/Windows use `tray-icon` instead
+# (added with the CustomApplicationHandler slice).
+[target.'cfg(target_os = "linux")'.dependencies]
+ksni = { version = "0.3", features = ["blocking"] }
 
 [build-dependencies]
 slint-build = "1.16"

@@ -1432,9 +1432,15 @@ export global AppearanceState {
     in-out property <bool> show-purchases: false;
 
     // --- SYSTEM TRAY -------------------------------------------------------
+    // `is-macos` is set once from Rust (cfg!(target_os = "macos")) so the tray
+    // section can swap the header to "Menu Bar" and show macOS-only controls.
+    in-out property <bool> is-macos: false;
     in-out property <bool> tray-enable: true;
     in-out property <bool> tray-minimize-to-tray: false;
     in-out property <bool> tray-close-to-tray: false;
+    // macOS-only: hide the Dock icon when closed to the menu bar (.accessory
+    // activation policy). Off = Spotify-style (keep the Dock icon).
+    in-out property <bool> tray-mac-hide-dock: false;
     in-out property <[string]> tray-icon-themes: ["Auto", "Mono light", "Mono dark", "Color"];
     in-out property <int> tray-icon-theme-index: 0;
 
