@@ -107,31 +107,50 @@ pub fn create(
 
     TRAY.with(|t| *t.borrow_mut() = Some(tray));
 
-    // Drain tray + menu events on the main thread.
+    // A bare `cargo run` binary is NOT a bundled .app. Without an explicit
+    // Regular activation policy + activation, macOS never dispatches
+    // NSStatusItem menu-item actions (the menu shows, items are enabled, but
+    // clicking them fires nothing — exactly the observed symptom). Forcing the
+    // app Regular + active makes AppKit route the menu item target-action.
+    #[cfg(target_os = "macos")]
+    ensure_regular_active_app();
+
+    // Menu clicks: use muda's event HANDLER, not channel polling. On macOS an
+    // open NSMenu runs a modal tracking loop that blocks the slint::Timer, so a
+    // polled MenuEvent would sit in the channel until the next loop wake — the
+    // "menu items do nothing" symptom. The handler fires immediately on the
+    // AppKit main thread; the dispatch helpers marshal onto / wake the Slint
+    // loop themselves (slint::Weak is Send+Sync, satisfying the handler bound).
+    let pump_weak = weak.clone();
+    MenuEvent::set_event_handler(Some(move |event: MenuEvent| {
+        log::info!("[tray] menu item activated: {}", event.id.0);
+        match event.id.0.as_str() {
+            "play_pause" => {
+                super::dispatch_play_pause(runtime.clone(), weak.clone(), handle.clone())
+            }
+            "next" => super::dispatch_next(runtime.clone(), weak.clone(), handle.clone()),
+            "previous" => super::dispatch_previous(runtime.clone(), weak.clone(), handle.clone()),
+            "show_hide" => super::toggle_window(&weak),
+            "quit" => super::quit(),
+            other => log::debug!("[tray] unhandled menu id '{other}'"),
+        }
+    }));
+
+    // Left-click on the menu-bar item: polled from a main-thread timer. No
+    // modal loop is involved for a plain icon click, so polling works (this is
+    // the path the user confirmed working).
     let timer = slint::Timer::default();
     timer.start(
         slint::TimerMode::Repeated,
         std::time::Duration::from_millis(120),
-        move || pump(&runtime, &weak, &handle),
+        move || pump(&pump_weak),
     );
     PUMP_TIMER.with(|t| *t.borrow_mut() = Some(timer));
 
     log::info!("[tray] menu-bar item initialized (theme={theme_override})");
 }
 
-fn pump(runtime: &Runtime, weak: &slint::Weak<AppWindow>, handle: &tokio::runtime::Handle) {
-    while let Ok(ev) = MenuEvent::receiver().try_recv() {
-        match ev.id.0.as_str() {
-            "play_pause" => {
-                super::dispatch_play_pause(runtime.clone(), weak.clone(), handle.clone())
-            }
-            "next" => super::dispatch_next(runtime.clone(), weak.clone(), handle.clone()),
-            "previous" => super::dispatch_previous(runtime.clone(), weak.clone(), handle.clone()),
-            "show_hide" => super::toggle_window(weak),
-            "quit" => super::quit(),
-            other => log::debug!("[tray] unhandled menu id '{other}'"),
-        }
-    }
+fn pump(weak: &slint::Weak<AppWindow>) {
     while let Ok(ev) = TrayIconEvent::receiver().try_recv() {
         if let TrayIconEvent::Click {
             button: MouseButton::Left,
@@ -157,6 +176,23 @@ pub fn set_icon_theme(theme: &str) {
             let _ = is_template;
         }
     });
+}
+
+/// Force the app to a Regular, active application so macOS dispatches
+/// NSStatusItem menu-item actions (a bare `cargo run` binary otherwise isn't
+/// treated as a foreground app and the menu's target-action never fires).
+/// Main thread only.
+#[cfg(target_os = "macos")]
+fn ensure_regular_active_app() {
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy};
+
+    let Some(mtm) = MainThreadMarker::new() else {
+        return;
+    };
+    let app = NSApplication::sharedApplication(mtm);
+    app.setActivationPolicy(NSApplicationActivationPolicy::Regular);
+    app.activate();
 }
 
 /// Switch the macOS activation policy: `.accessory` hides the Dock icon
