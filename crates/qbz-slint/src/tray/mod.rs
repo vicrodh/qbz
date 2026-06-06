@@ -25,8 +25,8 @@ use qbz_app::shell::AppRuntime;
 #[cfg(target_os = "linux")]
 mod linux;
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
-mod mac_win;
+#[cfg(target_os = "macos")]
+mod macos;
 
 /// Shared runtime handle type used across the Slint app.
 pub(crate) type Runtime = Arc<AppRuntime<SlintAdapter>>;
@@ -79,14 +79,14 @@ impl TrayHandle {
             h.set_icon_theme(theme);
             return;
         }
-        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        #[cfg(target_os = "macos")]
         {
-            // The TrayIcon is !Send and lives on the main thread — re-theme it
-            // there.
-            let _ = slint::invoke_from_event_loop(move || mac_win::set_icon_theme(&theme));
+            // The NSStatusItem is !Send and lives on the main thread — re-theme
+            // it there.
+            let _ = slint::invoke_from_event_loop(move || macos::set_icon_theme(&theme));
             return;
         }
-        #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
         let _ = theme;
     }
 }
@@ -140,18 +140,17 @@ pub fn init(
             .expect("spawn tray init thread");
     }
 
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[cfg(target_os = "macos")]
     {
-        // tray-icon's TrayIcon is !Send and (on macOS) must be built on the
-        // main thread with NSApplication already running — create it on the
-        // Slint event loop.
+        // The NSStatusItem is !Send and must be built on the main thread with
+        // NSApplication already running — create it on the Slint event loop.
         let _ = slint::invoke_from_event_loop(move || {
-            mac_win::create(runtime, weak, handle, &theme_override);
+            macos::create(runtime, weak, handle, &theme_override);
             let _ = TRAY.set(TrayHandle::default());
         });
     }
 
-    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {
         let _ = (runtime, weak, handle, theme_override);
         log::info!("[tray] no tray backend on this platform");
@@ -192,7 +191,7 @@ pub(crate) fn show_window(weak: &slint::Weak<AppWindow>) {
         });
         // Restore the Dock icon when coming back from the menu bar.
         #[cfg(target_os = "macos")]
-        mac_win::set_dock_icon_hidden(false);
+        macos::set_dock_icon_hidden(false);
     });
 }
 
@@ -207,7 +206,7 @@ pub(crate) fn hide_window(weak: &slint::Weak<AppWindow>) {
         // Spotify-style opt-in: drop the Dock icon while closed to the menu bar.
         #[cfg(target_os = "macos")]
         if crate::tray_settings::get().mac_hide_dock {
-            mac_win::set_dock_icon_hidden(true);
+            macos::set_dock_icon_hidden(true);
         }
     });
 }
@@ -224,7 +223,7 @@ pub(crate) fn set_window_shown(shown: bool) {
 /// thread (it is, from the close handlers / window hide-show).
 pub(crate) fn set_mac_dock_hidden(hidden: bool) {
     #[cfg(target_os = "macos")]
-    mac_win::set_dock_icon_hidden(hidden);
+    macos::set_dock_icon_hidden(hidden);
     #[cfg(not(target_os = "macos"))]
     let _ = hidden;
 }

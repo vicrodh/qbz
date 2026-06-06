@@ -68,23 +68,35 @@ qbz-credentials = { path = "../qbz-credentials" }
 [target.'cfg(target_os = "linux")'.dependencies]
 ksni = { version = "0.3", features = ["blocking"] }
 
-# macOS (NSStatusItem) + Windows (Shell_NotifyIcon) tray via the tao team's
-# tray-icon crate. Re-exports muda as tray_icon::menu. Windows is built but
-# not shipped/tested.
-[target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
-tray-icon = "0.24"
-
-# macOS Dock-icon activation-policy toggle. Pinned to tray-icon's objc2 0.6 /
-# app-kit 0.3 series (NOT winit's 0.5) so MainThreadMarker/NSApplication unify
-# with tray-icon. setActivationPolicy is gated behind the NSRunningApplication
-# feature.
+# macOS menu-bar tray (NSStatusItem), hand-rolled directly on objc2 0.5 /
+# app-kit 0.2 — the SAME objc2 generation winit 0.30 uses — so the NSMenu lives
+# in winit's NSApplication runtime and `[NSApp sendAction:]` dispatches the menu
+# item target-action. A second `muda` (from tray-icon) registers a duplicate
+# `MudaMenuItem` objc class and either silently fails to dispatch (objc2 0.6) or
+# panics at startup (objc2 0.5), so tray-icon/muda is dropped on macOS. Windows
+# has no tray for now (untested/unshipped).
 [target.'cfg(target_os = "macos")'.dependencies]
-objc2 = "0.6"
-objc2-app-kit = { version = "0.3", default-features = false, features = [
+objc2 = "0.5"
+objc2-foundation = { version = "0.2", default-features = false, features = [
+    "std",
+    "NSData",
+    "NSString",
+] }
+objc2-app-kit = { version = "0.2", default-features = false, features = [
     "std",
     "NSApplication",
     "NSResponder",
     "NSRunningApplication",
+    "NSStatusBar",
+    "NSStatusItem",
+    "NSStatusBarButton",
+    "NSMenu",
+    "NSMenuItem",
+    "NSImage",
+    "NSButton",
+    "NSControl",
+    "NSView",
+    "NSEvent",
 ] }
 
 [build-dependencies]
