@@ -8,6 +8,7 @@ register('es', () => import('./locales/es.json'));
 register('fr', () => import('./locales/fr.json'));
 register('de', () => import('./locales/de.json'));
 register('pt', () => import('./locales/pt.json'));
+register('ru', () => import('./locales/ru.json'));
 
 // Initialize i18n
 export function initI18n() {
@@ -52,6 +53,7 @@ export const locales = [
   { code: 'fr', name: 'French', nativeName: 'Français' },
   { code: 'de', name: 'German', nativeName: 'Deutsch' },
   { code: 'pt', name: 'Portuguese', nativeName: 'Português' },
+  { code: 'ru', name: 'Russian', nativeName: 'Русский' },
 ] as const;
 
 export type LocaleCode = (typeof locales)[number]['code'];
