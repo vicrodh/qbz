@@ -126,7 +126,7 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 # cross-distro breakage (GitHub #161, #162).
 # On macOS, let mupdf vendor everything (no GTK conflicts, and system libs
 # don't support x86_64 cross-compilation from Apple Silicon).
-mupdf = { version = "0.6", default-features = false, features = ["system-fonts"] }
+mupdf = { version = "0.7", default-features = false, features = ["system-fonts"] }
 
 # URL opening
 open = "5"
