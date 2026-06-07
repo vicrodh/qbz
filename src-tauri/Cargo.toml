@@ -162,7 +162,7 @@ futures-util = "0.3"
 
 # Platform-specific dependencies
 [target.'cfg(target_os = "linux")'.dependencies]
-tauri-plugin-dialog = { version = "2.7.0" }
+tauri-plugin-dialog = { version = "2.7.1" }
 ashpd = { version = "0.13", default-features = false, features = ["tokio", "notification", "inhibit", "secret"] }
 mupdf = { version = "0.6", features = ["sys-lib-zlib", "sys-lib-harfbuzz", "sys-lib-freetype"] }
 # Linux tray via StatusNotifierItem with primary-activate support.
@@ -172,11 +172,11 @@ mupdf = { version = "0.6", features = ["sys-lib-zlib", "sys-lib-harfbuzz", "sys-
 ksni = { version = "0.3", features = ["blocking"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-tauri-plugin-dialog = { version = "2.7.0" }
+tauri-plugin-dialog = { version = "2.7.1" }
 notify-rust = "4.16.1"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-tauri-plugin-dialog = { version = "2.7.0" }
+tauri-plugin-dialog = { version = "2.7.1" }
 
 [dev-dependencies]
 tempfile = "3"
