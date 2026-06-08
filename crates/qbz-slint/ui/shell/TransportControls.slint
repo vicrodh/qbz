@@ -70,6 +70,7 @@ export component TransportControls inherits HorizontalLayout {
         alignment: center;
         PlayButton {
             circle: root.play-circle;
+            loading: NowPlayingState.loading;
             icon: NowPlayingState.playing
                 ? @image-url("../assets/icons/pause.svg")
                 : @image-url("../assets/icons/play-fill.svg");

@@ -7,7 +7,7 @@
 
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
-import { LocalAlbumState, LocalAlbumActions, LocalAlbumVersion } from "../state.slint";
+import { LocalAlbumState, LocalAlbumActions, LocalAlbumVersion, NowPlayingState } from "../state.slint";
 import { NavButtons } from "../shell/NavButtons.slint";
 import { CircleAction } from "../primitives/CircleAction.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
@@ -229,6 +229,10 @@ export component LocalAlbumView inherits Rectangle {
                             icon: @image-url("../assets/icons/play-fill.svg");
                             primary: true;
                             diameter: 44px;
+                            // Spin only while THIS album's first track is fetching
+                            // (local album-id == the now-playing track's album_id).
+                            loading: NowPlayingState.loading
+                                && NowPlayingState.album-id == LocalAlbumState.id;
                             clicked => {
                                 LocalAlbumActions.play-all();
                             }

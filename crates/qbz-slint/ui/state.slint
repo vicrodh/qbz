@@ -2106,6 +2106,12 @@ export global NowPlayingState {
     // it has no DB row, so favorite / add-to-playlist / track-info are gated off.
     in property <bool> is-ephemeral: false;
     in property <bool> playing: false;
+    // Fetch/resolve in flight for the track being started — no audio yet.
+    // Set the instant a play is requested (before the Plex/Qobuz/local
+    // resolve) and cleared once the poll loop sees the audio advancing.
+    // Drives the fetch spinner on the bar, the active track row, and the
+    // album play button.
+    in property <bool> loading: false;
     in property <int> position-secs: 0;
     in property <int> duration-secs: 0;
     in property <float> progress: 0.0;   // 0..1

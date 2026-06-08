@@ -154,10 +154,62 @@ const PLAYBACK_QUALITY: Quality = Quality::UltraHiRes;
 /// Convenience alias for the runtime handle threaded through every call.
 type Runtime = Arc<AppRuntime<SlintAdapter>>;
 
+/// The track id whose audible fetch/resolve is currently in flight (the
+/// "loading" track). Set the instant a play is initiated (top of
+/// `play_audible`, before the multi-second Plex/Qobuz/local resolve) and
+/// read by the poll loop to clear the spinner once THAT track's audio is
+/// actually advancing. A NEW play overwrites it, so a superseded fetch never
+/// keeps the spinner up for the wrong track. `0` = nothing loading.
+static PENDING_PLAY_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Epoch-millis when the in-flight play was initiated — the poll-loop watchdog
+/// force-clears the spinner if audio never starts within `LOADING_WATCHDOG_MS`
+/// (a play the engine accepted but that silently never advances — e.g. an
+/// undecodable-but-valid-looking file — would otherwise spin forever).
+static PENDING_PLAY_AT_MS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Generous ceiling: a real fetch (even a large hi-res Plex whole-file
+/// download on a slow LAN) starts audio well under this; only a silently-stuck
+/// play crosses it.
+const LOADING_WATCHDOG_MS: u64 = 45_000;
+
+/// Mark `track_id` as the in-flight play and raise the now-playing "loading"
+/// flag (drives the fetch spinner on the bar, the active track row, and the
+/// album play button). Source-agnostic — covers Plex (~10s resolve), the
+/// Qobuz tier-walk, and slow local reads.
+fn set_loading(weak: &slint::Weak<AppWindow>, track_id: u64) {
+    PENDING_PLAY_ID.store(track_id, std::sync::atomic::Ordering::Relaxed);
+    PENDING_PLAY_AT_MS.store(now_ms(), std::sync::atomic::Ordering::Relaxed);
+    let _ = weak.upgrade_in_event_loop(|w| {
+        w.global::<NowPlayingState>().set_loading(true);
+    });
+}
+
+/// Clear the loading flag if (and only if) the in-flight play is still
+/// `track_id` — so a fetch that has been superseded by a newer play does not
+/// wipe the newer play's spinner. Pass `0` to force-clear unconditionally
+/// (queue finished / hard stop).
+fn clear_loading(weak: &slint::Weak<AppWindow>, track_id: u64) {
+    if track_id != 0
+        && PENDING_PLAY_ID.load(std::sync::atomic::Ordering::Relaxed) != track_id
+    {
+        return;
+    }
+    PENDING_PLAY_ID.store(0, std::sync::atomic::Ordering::Relaxed);
+    let _ = weak.upgrade_in_event_loop(|w| {
+        w.global::<NowPlayingState>().set_loading(false);
+    });
+}
+
 /// Run the audible step for `track_id`: grab the Qobuz client and call
 /// the player's self-contained `play_track`. Errors are logged, not
 /// surfaced — the poll loop keeps the UI consistent regardless.
 async fn play_audible(runtime: &Runtime, weak: &slint::Weak<AppWindow>, track_id: u64) {
+    // Raise the fetch spinner the instant playback is requested — BEFORE the
+    // resolve/download/buffer below (the Plex resolve alone is ~10s). The bar
+    // already adopted the new track meta in `refresh_now_playing_meta`; this
+    // bridges the silent gap until the poll loop sees the audio advancing.
+    set_loading(weak, track_id);
     // QConnect CONTROLLER mode: when a PEER renderer owns playback, route the
     // new play to the peer instead of playing locally. `play_on_peer_if_active`
     // returns false in every non-controller situation (disconnected, renderer
@@ -165,6 +217,10 @@ async fn play_audible(runtime: &Runtime, weak: &slint::Weak<AppWindow>, track_id
     // runs byte-unchanged and renderer / local playback do not regress.
     if let Some(svc) = crate::qconnect_service::service() {
         if svc.play_on_peer_if_active(track_id).await {
+            // A peer owns audio: there is no local fetch wait, so drop the
+            // spinner immediately (the peer-state branch in the poll loop owns
+            // the bar from here).
+            clear_loading(weak, track_id);
             return;
         }
     }
@@ -178,7 +234,7 @@ async fn play_audible(runtime: &Runtime, weak: &slint::Weak<AppWindow>, track_id
         if qt.id == track_id {
             match qt.source.as_deref() {
                 Some("local") | Some("ephemeral") => {
-                    play_local_file_audible(runtime, track_id).await;
+                    play_local_file_audible(runtime, weak, track_id).await;
                     return;
                 }
                 Some("plex") => {
@@ -189,7 +245,7 @@ async fn play_audible(runtime: &Runtime, weak: &slint::Weak<AppWindow>, track_id
                         .source_item_id_hint
                         .clone()
                         .unwrap_or_else(|| track_id.to_string());
-                    play_plex_audible(runtime, track_id, rating_key).await;
+                    play_plex_audible(runtime, weak, track_id, rating_key).await;
                     return;
                 }
                 _ => {}
@@ -207,6 +263,9 @@ async fn play_audible(runtime: &Runtime, weak: &slint::Weak<AppWindow>, track_id
         .await
     {
         log::error!("[qbz-slint] playback: play_track {track_id} failed: {e}");
+        // The fetch failed: no audio will advance, so the poll loop would never
+        // clear the spinner. Drop it now (only if this play is still current).
+        clear_loading(weak, track_id);
     }
 }
 
@@ -215,7 +274,11 @@ async fn play_audible(runtime: &Runtime, weak: &slint::Weak<AppWindow>, track_id
 /// the PROTECTED device init, untouched here). CUE virtual tracks share one
 /// file, so seek to the track start. `row_id` is the library row id. Called
 /// by `play_audible` when the current queue track's source is `"local"`.
-async fn play_local_file_audible(runtime: &Runtime, row_id: u64) {
+async fn play_local_file_audible(
+    runtime: &Runtime,
+    weak: &slint::Weak<AppWindow>,
+    row_id: u64,
+) {
     // Ephemeral tracks (synthetic id >= 2^48) resolve from the in-memory
     // session, never the DB. Everything downstream (read bytes, play_data, CUE
     // seek) is identical to a real local file.
@@ -257,6 +320,7 @@ async fn play_local_file_audible(runtime: &Runtime, row_id: u64) {
     };
     let Some((path, cue)) = info else {
         log::error!("[qbz-slint] local play: track {row_id} not found");
+        clear_loading(weak, row_id);
         return;
     };
     let read_path = path.clone();
@@ -266,10 +330,12 @@ async fn play_local_file_audible(runtime: &Runtime, row_id: u64) {
         .and_then(Result::ok);
     let Some(bytes) = bytes else {
         log::error!("[qbz-slint] local play: failed to read {path}");
+        clear_loading(weak, row_id);
         return;
     };
     if let Err(e) = runtime.core().player().play_data(bytes, row_id) {
         log::error!("[qbz-slint] local play: play_data {row_id} failed: {e}");
+        clear_loading(weak, row_id);
         return;
     }
     if let Some(start) = cue {
@@ -288,10 +354,16 @@ async fn play_local_file_audible(runtime: &Runtime, row_id: u64) {
 /// `sampling_rate_hz`/`bit_depth` are display-only and never touched here.
 /// `play_id` is the queue id (numeric rating key); `rating_key` is the string
 /// key the resolve needs.
-async fn play_plex_audible(runtime: &Runtime, play_id: u64, rating_key: String) {
+async fn play_plex_audible(
+    runtime: &Runtime,
+    weak: &slint::Weak<AppWindow>,
+    play_id: u64,
+    rating_key: String,
+) {
     let cfg = crate::plex_settings::get();
     if cfg.base_url.is_empty() || cfg.token.is_empty() {
         log::error!("[qbz-slint] plex play: no Plex credentials configured");
+        clear_loading(weak, play_id);
         return;
     }
     let resolved = match qbz_plex::plex_resolve_track_media(
@@ -304,11 +376,13 @@ async fn play_plex_audible(runtime: &Runtime, play_id: u64, rating_key: String) 
         Ok(r) => r,
         Err(e) => {
             log::error!("[qbz-slint] plex play: resolve {rating_key} failed: {e}");
+            clear_loading(weak, play_id);
             return;
         }
     };
     if let Err(e) = runtime.core().player().play_data(resolved.bytes, play_id) {
         log::error!("[qbz-slint] plex play: play_data {play_id} failed: {e}");
+        clear_loading(weak, play_id);
     }
 }
 
@@ -383,6 +457,7 @@ pub async fn wipe_ephemeral_if_playing(runtime: &Runtime, weak: &slint::Weak<App
     }
     let _ = runtime.core().stop();
     runtime.core().clear_queue(false).await;
+    clear_loading(weak, 0);
     let _ = weak.upgrade_in_event_loop(|w| {
         w.global::<NowPlayingState>().set_has_track(false);
     });
@@ -2555,6 +2630,12 @@ pub fn start_poll_loop(
                     np.set_shuffle(shuffle_on);
                     np.set_repeat_mode(repeat_mode);
                 });
+                // A peer owns audio — there is no local fetch wait, so the bar's
+                // fetch spinner must never linger here. Force-clear it (only on
+                // the edge — avoid re-posting set_loading(false) every tick).
+                if PENDING_PLAY_ID.load(std::sync::atomic::Ordering::Relaxed) != 0 {
+                    clear_loading(&weak, 0);
+                }
                 // Reset the LOCAL edge trackers so when control returns to QBZ
                 // the end-of-track / gapless / transition logic re-detects from a
                 // clean slate (the local player was stopped while peer-active).
@@ -2714,6 +2795,33 @@ pub fn start_poll_loop(
                 np.set_volume(volume.clamp(0.0, 1.0));
             });
 
+            // Clear the fetch spinner once the audio for the in-flight play is
+            // actually advancing: a non-zero track with the clock moving
+            // (`position > 0`) is unambiguous proof the requested track started
+            // (is_playing alone can flip true transiently before the sink emits
+            // the id). Keyed to PENDING_PLAY_ID so a superseded fetch doesn't
+            // wipe a newer play's spinner; the keyed clear is a no-op if the
+            // current audio is a different (already-cleared) id.
+            if track_id != 0 && is_playing && position > 0 {
+                clear_loading(&weak, track_id);
+            } else {
+                // Watchdog: a play the engine accepted but that never advances
+                // (undecodable-but-valid-looking file, zero-frame stream) would
+                // otherwise spin forever. Force-clear after the generous ceiling.
+                let pending = PENDING_PLAY_ID.load(std::sync::atomic::Ordering::Relaxed);
+                if pending != 0
+                    && now_ms().saturating_sub(
+                        PENDING_PLAY_AT_MS.load(std::sync::atomic::Ordering::Relaxed),
+                    ) > LOADING_WATCHDOG_MS
+                {
+                    log::warn!(
+                        "[qbz-slint] loading watchdog: track {pending} never started after {}ms, clearing spinner",
+                        LOADING_WATCHDOG_MS
+                    );
+                    clear_loading(&weak, 0);
+                }
+            }
+
             // --- QConnect: outbound renderer state report -----------------
             // When QBZ is the ACTIVE LOCAL renderer (controlled by a remote
             // controller like the iOS app), report our playback state so the
@@ -2784,6 +2892,8 @@ pub fn start_poll_loop(
                     refresh_sidebar(true);
                 } else {
                     log::info!("[qbz-slint] playback: queue finished");
+                    // Nothing more will play — force-clear any lingering spinner.
+                    clear_loading(&weak, 0);
                     let _ = weak.upgrade_in_event_loop(|w| {
                         let np = w.global::<NowPlayingState>();
                         np.set_playing(false);

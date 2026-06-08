@@ -5,6 +5,7 @@
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Radius } from "../foundation/radius.slint";
 import { QbzIcon } from "QbzIcon.slint";
+import { LoadingSpinner } from "LoadingSpinner.slint";
 import { TooltipState } from "../state.slint";
 
 // Square, compact icon button with a hover tooltip.
@@ -60,6 +61,9 @@ export component PlayButton inherits Rectangle {
     in property <image> icon;
     in property <string> tooltip;
     in property <bool> circle: true;
+    // While a play is resolving/downloading (no audio yet) the glyph is
+    // swapped for a spinner so the click reads as "heard, audio is coming".
+    in property <bool> loading: false;
     callback clicked();
 
     width: root.circle ? 38px : 34px;
@@ -69,7 +73,7 @@ export component PlayButton inherits Rectangle {
         ? (ta.has-hover ? #ffffffd6 : #ffffff)
         : (ta.has-hover ? Theme.surface-hover : transparent);
 
-    QbzIcon {
+    if !root.loading: QbzIcon {
         source: root.icon;
         // 20px glyph in both modes (matches Tauri's size=20 play/pause).
         width: 20px;
@@ -79,6 +83,14 @@ export component PlayButton inherits Rectangle {
         tint: root.circle
             ? #000000
             : (ta.has-hover ? Theme.accent : Theme.text-primary);
+    }
+
+    if root.loading: LoadingSpinner {
+        size: 20px;
+        // Dark on the solid white disc, accent on the plain-glyph variant.
+        tint: root.circle ? #000000 : Theme.accent;
+        x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+        y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
     }
 
     ta := TouchArea {

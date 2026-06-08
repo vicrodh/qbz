@@ -11,6 +11,7 @@ import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { QualityBadgeFull } from "../primitives/QualityBadgeFull.slint";
+import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
 import { NowPlayingState, SettingsState, TooltipState } from "../state.slint";
 
 // Clickable artist/album link. Elides and shares the row width through a
@@ -212,6 +213,21 @@ export component SongCard inherits Rectangle {
                 opacity: 1.0 - self.ph;
                 font-size: 8px + self.ph * 4px;
                 font-italic: true;
+            }
+
+            // Fetch overlay: while the requested track is resolving/downloading
+            // (no audio yet), dim the cover and show the spinner so the click is
+            // acknowledged. Cleared by the poll loop once audio advances.
+            if NowPlayingState.has-track && NowPlayingState.loading: Rectangle {
+                width: 100%;
+                height: 100%;
+                background: #000000aa;
+                LoadingSpinner {
+                    size: root.art-size * 0.5;
+                    tint: #ffffff;
+                    x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                    y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                }
             }
         }
     }

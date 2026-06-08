@@ -6,6 +6,7 @@
 
 import { Theme } from "../foundation/semantic-colors.slint";
 import { QbzIcon } from "QbzIcon.slint";
+import { LoadingSpinner } from "LoadingSpinner.slint";
 import { TooltipState } from "../state.slint";
 
 export component CircleAction inherits Rectangle {
@@ -13,6 +14,8 @@ export component CircleAction inherits Rectangle {
     in property <bool> primary: false;
     // Stays "pressed" — same surface as hover, icon tinted accent.
     in property <bool> active: false;
+    // While the album's first track is fetching, the icon swaps for a spinner.
+    in property <bool> loading: false;
     in property <length> diameter: 40px;
     // Optional hover tooltip (empty = none), using the global TooltipOverlay.
     in property <string> tooltip;
@@ -29,7 +32,7 @@ export component CircleAction inherits Rectangle {
     border-width: root.primary ? 0px : 1.5px;
     border-color: #ffffffcc;
 
-    QbzIcon {
+    if !root.loading: QbzIcon {
         source: root.icon;
         width: root.primary ? 19px : 17px;
         height: root.primary ? 19px : 17px;
@@ -38,6 +41,14 @@ export component CircleAction inherits Rectangle {
         tint: root.active
             ? Theme.accent
             : (root.primary ? #000000 : #ffffff);
+    }
+
+    if root.loading: LoadingSpinner {
+        size: root.diameter * 0.45;
+        // Dark on the solid white primary disc, white on the ghost variant.
+        tint: root.primary ? #000000 : #ffffff;
+        x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+        y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
     }
 
     ta := TouchArea {

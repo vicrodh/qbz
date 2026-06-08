@@ -9,7 +9,7 @@ import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
 import { Radius } from "../foundation/radius.slint";
 import { Spacing } from "../foundation/spacing.slint";
-import { AlbumState, AlbumActions, ArtworkActions, NavState, ContentView, DragState } from "../state.slint";
+import { AlbumState, AlbumActions, ArtworkActions, NavState, ContentView, DragState, NowPlayingState } from "../state.slint";
 import { TrackRow } from "../primitives/TrackRow.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { ContextMenu } from "../primitives/ContextMenu.slint";
@@ -24,6 +24,8 @@ import { NavButtons } from "../shell/NavButtons.slint";
 component CircleAction inherits Rectangle {
     in property <image> icon;
     in property <bool> primary: false;
+    // While the album's first track is fetching, the icon swaps for a spinner.
+    in property <bool> loading: false;
     in property <length> diameter: 40px;
     callback clicked();
 
@@ -36,13 +38,20 @@ component CircleAction inherits Rectangle {
     border-width: 1px;
     border-color: ta.has-hover ? Theme.text-disabled : Theme.border-subtle;
 
-    QbzIcon {
+    if !root.loading: QbzIcon {
         source: root.icon;
         width: root.primary ? 19px : 17px;
         height: root.primary ? 19px : 17px;
         x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
         y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
         tint: ta.has-hover ? Theme.text-primary : Theme.text-secondary;
+    }
+
+    if root.loading: LoadingSpinner {
+        size: root.diameter * 0.45;
+        tint: Theme.accent;
+        x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+        y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
     }
 
     ta := TouchArea {
@@ -330,6 +339,9 @@ export component AlbumPageView inherits Rectangle {
                             icon: @image-url("../assets/icons/play-fill.svg");
                             primary: true;
                             diameter: 44px;
+                            // Spin only while THIS album's first track is fetching.
+                            loading: NowPlayingState.loading
+                                && NowPlayingState.album-id == AlbumState.id;
                             clicked => {
                                 root.media-action("album", AlbumState.id, "play");
                             }

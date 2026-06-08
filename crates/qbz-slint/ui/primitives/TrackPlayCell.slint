@@ -78,9 +78,14 @@ export component TrackPlayCell inherits Rectangle {
     property <bool> is-active:
         NowPlayingState.has-track && NowPlayingState.track-id == root.track-id;
     property <bool> is-playing: root.is-active && NowPlayingState.playing;
+    // This row is the track being fetched/resolved (no audio yet). The global
+    // loading flag + active-row match means only the one loading row spins,
+    // and it clears automatically when the flag clears.
+    property <bool> is-loading: root.is-active && NowPlayingState.loading;
     property <bool> show-overlay: root.row-hovered || root.is-active;
-    // The animated bars show only while playing and the row is at rest.
-    property <bool> show-bars: root.is-playing && !root.row-hovered;
+    // The animated bars show only while playing, the row is at rest, and the
+    // track isn't still fetching (the spinner wins during the fetch window).
+    property <bool> show-bars: root.is-playing && !root.row-hovered && !root.is-loading;
 
     width: root.show-artwork ? root.art-size : root.number-width;
     height: root.show-artwork ? root.art-size : 40px;
@@ -118,7 +123,19 @@ export component TrackPlayCell inherits Rectangle {
             x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
             y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
         }
-        if root.show-overlay && !root.show-bars: QbzIcon {
+        // Fetch spinner — wins over the play glyph while the active row is
+        // still resolving/downloading (same rotating loader as the offline
+        // download states).
+        if root.is-loading: Image {
+            width: 20px;
+            height: 20px;
+            x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+            y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+            source: @image-url("../assets/icons/loader-circle.svg");
+            colorize: #ffffff;
+            transform-rotation: ((animation-tick() / 1ms) * 0.36) * 1deg;
+        }
+        if root.show-overlay && !root.show-bars && !root.is-loading: QbzIcon {
             source: (root.is-playing && root.row-hovered)
                 ? @image-url("../assets/icons/pause.svg")
                 : @image-url("../assets/icons/play-fill.svg");
@@ -146,7 +163,18 @@ export component TrackPlayCell inherits Rectangle {
             x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
             y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
         }
-        if root.show-overlay && !root.show-bars: QbzIcon {
+        // Fetch spinner — wins over the play glyph / number while the active
+        // row is still resolving/downloading.
+        if root.is-loading: Image {
+            width: 16px;
+            height: 16px;
+            x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+            y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+            source: @image-url("../assets/icons/loader-circle.svg");
+            colorize: Theme.accent;
+            transform-rotation: ((animation-tick() / 1ms) * 0.36) * 1deg;
+        }
+        if root.show-overlay && !root.show-bars && !root.is-loading: QbzIcon {
             source: (root.is-playing && root.row-hovered)
                 ? @image-url("../assets/icons/pause.svg")
                 : @image-url("../assets/icons/play-fill.svg");
