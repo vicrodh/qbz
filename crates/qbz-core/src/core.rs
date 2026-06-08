@@ -625,6 +625,27 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
         result
     }
 
+    /// Patch the cached quality of any queued Plex track whose `rating_key`
+    /// matches one of `updates` (`(rating_key, bit_depth, sample_rate_khz)`).
+    /// Frontend-agnostic hook for the Plex quality-hydration path: a track
+    /// hydrated while it is already enqueued/playing carries a frozen quality
+    /// snapshot, so this upgrades it in place. Returns true if the CURRENT
+    /// track was patched — the caller then re-pushes the now-playing stamp.
+    pub async fn patch_plex_queue_quality(
+        &self,
+        updates: &[(String, Option<u32>, Option<f64>)],
+    ) -> bool {
+        let queue = self.queue.write().await;
+        let current_patched = queue.patch_plex_quality(updates);
+        if current_patched {
+            self.emit(CoreEvent::QueueUpdated {
+                state: queue.get_state(),
+            })
+            .await;
+        }
+        current_patched
+    }
+
     // ==================== Search & Catalog ====================
 
     /// Search for albums

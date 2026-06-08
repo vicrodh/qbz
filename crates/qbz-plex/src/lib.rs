@@ -312,6 +312,14 @@ fn open_plex_cache_db() -> Result<Connection, String> {
 }
 
 fn build_plex_client() -> Result<reqwest::Client, String> {
+    build_plex_client_with_timeout(Duration::from_secs(120))
+}
+
+/// Build the LAN Plex client with a caller-chosen request timeout. Quality
+/// hydration uses a short (~5s) bound per metadata call so a single dead/slow
+/// `rating_key` cannot stall the batch (matches the Svelte 5000 ms per-call
+/// timeout); normal browsing keeps the generous 120s default.
+fn build_plex_client_with_timeout(timeout: Duration) -> Result<reqwest::Client, String> {
     let mut headers = HeaderMap::new();
     headers.insert("X-Plex-Product", HeaderValue::from_static("QBZ"));
     headers.insert("X-Plex-Version", HeaderValue::from_static("0.1-poc"));
@@ -327,7 +335,7 @@ fn build_plex_client() -> Result<reqwest::Client, String> {
 
     reqwest::Client::builder()
         .default_headers(headers)
-        .timeout(Duration::from_secs(120))
+        .timeout(timeout)
         .connect_timeout(Duration::from_secs(8))
         .build()
         .map_err(|e| format!("Failed to create Plex HTTP client: {}", e))
@@ -803,9 +811,21 @@ pub async fn plex_get_track_metadata(
     rating_key: String,
 ) -> Result<PlexTrack, String> {
     let client = build_plex_client()?;
-    let base = normalize_base_url(&base_url);
+    plex_get_track_metadata_with_client(&client, &base_url, &token, &rating_key).await
+}
+
+/// Shared metadata fetch that reuses an existing client. The hydration path
+/// passes a short-timeout client so it bounds each per-track call without
+/// rebuilding a client per `rating_key`.
+async fn plex_get_track_metadata_with_client(
+    client: &reqwest::Client,
+    base_url: &str,
+    token: &str,
+    rating_key: &str,
+) -> Result<PlexTrack, String> {
+    let base = normalize_base_url(base_url);
     let detail_url = format!("{base}/library/metadata/{rating_key}");
-    let url = with_token(&detail_url, &token);
+    let url = with_token(&detail_url, token);
 
     let xml = client
         .get(url)
@@ -822,6 +842,59 @@ pub async fn plex_get_track_metadata(
         .into_iter()
         .next()
         .ok_or_else(|| "Plex track metadata not found".to_string())
+}
+
+/// Hydrate real per-track quality for a set of Plex `rating_keys`.
+///
+/// Frontend-agnostic orchestration over the two existing primitives:
+/// `plex_get_track_metadata` (the real per-track `container` / `samplingRate` /
+/// `bitDepth` the bulk `/all` list omits) is fetched per key, then
+/// `plex_cache_update_track_quality` persists the result (COALESCE write-back,
+/// so a NULL field never erases an existing value). The keys come from the
+/// DB-NULL queue (`plex_cache_get_tracks_needing_hydration`) — NOT a value
+/// heuristic — so a genuine 16/44.1 FLAC is written once and never re-probed.
+///
+/// Calls run in batches of `BATCH`, sequentially within a batch (matching the
+/// Svelte reference), each bounded to ~5s by the client timeout. Failures and
+/// timeouts are skipped so one dead key cannot abort the batch. Returns the
+/// successfully-fetched updates so the caller can refresh in-memory state
+/// without re-reading the cache.
+pub async fn plex_hydrate_album_quality(
+    base_url: String,
+    token: String,
+    rating_keys: Vec<String>,
+) -> Result<Vec<PlexTrackQualityUpdate>, String> {
+    const BATCH: usize = 5;
+    if rating_keys.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // Short per-call bound (5s) so a slow/dead rating_key can't stall the batch.
+    let client = build_plex_client_with_timeout(Duration::from_secs(5))?;
+    let mut updates: Vec<PlexTrackQualityUpdate> = Vec::with_capacity(rating_keys.len());
+
+    for chunk in rating_keys.chunks(BATCH) {
+        for key in chunk {
+            match plex_get_track_metadata_with_client(&client, &base_url, &token, key).await {
+                Ok(track) => updates.push(PlexTrackQualityUpdate {
+                    rating_key: track.rating_key,
+                    container: track.container,
+                    sampling_rate_hz: track.sampling_rate_hz,
+                    bit_depth: track.bit_depth,
+                }),
+                Err(_) => continue, // skip dead/410/timeout keys, keep the batch alive
+            }
+        }
+    }
+
+    // Persist (COALESCE write-back). Fire the DB write here so the caller's
+    // single await gives both fetched + persisted; persistence MUST complete
+    // before the UI refresh (fixes the Svelte fire-and-forget race).
+    if !updates.is_empty() {
+        plex_cache_update_track_quality(updates.clone())?;
+    }
+
+    Ok(updates)
 }
 
 pub async fn plex_auth_pin_start(client_identifier: String) -> Result<PlexPinStartResult, String> {

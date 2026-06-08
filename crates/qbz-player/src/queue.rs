@@ -73,6 +73,46 @@ impl QueueManager {
             .and_then(|idx| state.tracks.get(idx).cloned())
     }
 
+    /// Patch the cached quality (bit depth + sample rate) of every queued track
+    /// whose Plex `rating_key` matches one of `updates`. Used by the Plex
+    /// quality-hydration path so a track that gets hydrated while it is already
+    /// enqueued/playing has its frozen quality snapshot upgraded in place. Plex
+    /// rows carry their `rating_key` in `source_item_id_hint`. `sample_rate` is
+    /// in kHz to match the enqueue-time snapshot (`local_queue_track`). Returns
+    /// true if the CURRENT track was among those patched (the caller then
+    /// re-pushes the now-playing stamp).
+    pub fn patch_plex_quality(&self, updates: &[(String, Option<u32>, Option<f64>)]) -> bool {
+        if updates.is_empty() {
+            return false;
+        }
+        let mut state = self.state.lock().unwrap();
+        let current_idx = state.current_index;
+        let mut current_patched = false;
+        for (idx, track) in state.tracks.iter_mut().enumerate() {
+            if track.source.as_deref() != Some("plex") {
+                continue;
+            }
+            let Some(key) = track.source_item_id_hint.as_deref() else {
+                continue;
+            };
+            if let Some((_, bit_depth, sample_rate)) =
+                updates.iter().find(|(k, _, _)| k == key)
+            {
+                if let Some(bd) = *bit_depth {
+                    track.bit_depth = Some(bd);
+                    track.hires = bd > 16;
+                }
+                if let Some(sr) = *sample_rate {
+                    track.sample_rate = Some(sr);
+                }
+                if current_idx == Some(idx) {
+                    current_patched = true;
+                }
+            }
+        }
+        current_patched
+    }
+
     /// Add a track to the end of the queue
     pub fn add_track(&self, track: QueueTrack) {
         let mut state = self.state.lock().unwrap();

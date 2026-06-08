@@ -48,6 +48,30 @@ pub(crate) fn refresh_sidebar(with_favorites: bool) {
     }
 }
 
+/// Apply Plex quality updates to any queued track (by `rating_key`) and, if
+/// the CURRENTLY-playing track was among them, re-push the now-playing stamp so
+/// the player-bar quality badge agrees with the freshly-hydrated value. Reaches
+/// the runtime through the global queue controller (the hydration path runs in
+/// a detail-view context that does not carry the runtime). No-op before the
+/// controller is registered or when nothing matches. `updates` is
+/// `(rating_key, bit_depth, sample_rate_khz)`.
+pub fn apply_plex_quality_to_queue(updates: Vec<(String, Option<u32>, Option<f64>)>) {
+    if updates.is_empty() {
+        return;
+    }
+    let Some(controller) = QUEUE_CONTROLLER.get() else {
+        return;
+    };
+    let runtime = controller.runtime().clone();
+    let weak = controller.weak().clone();
+    controller.handle().spawn(async move {
+        let current_patched = runtime.core().patch_plex_queue_quality(&updates).await;
+        if current_patched {
+            refresh_now_playing_meta(&runtime, &weak).await;
+        }
+    });
+}
+
 /// Shared post-track-change step: update the now-playing card, record the
 /// play in the recently-played store, and start audio for `track_id`.
 /// Used by the queue controller's play paths.

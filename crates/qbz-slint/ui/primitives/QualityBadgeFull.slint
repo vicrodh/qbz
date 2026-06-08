@@ -30,7 +30,9 @@ export component QualityBadgeFull inherits Rectangle {
 
     property <string> tier-label: root.tier == "hires"
         ? "HI-RES"
-        : (root.tier == "mp3" ? "MP3" : "CD");
+        : (root.tier == "mp3"
+            ? "MP3"
+            : (root.tier == "lossless" ? "LOSSLESS" : "CD"));
 
     visible: root.tier != "";
     height: (root.compact ? 29px : 36px) * root.scale-factor;
@@ -66,6 +68,14 @@ export component QualityBadgeFull inherits Rectangle {
             }
             if root.tier == "mp3": QbzIcon {
                 source: @image-url("../assets/mp3.svg");
+                width: (root.compact ? 13px : 16px) * root.scale-factor;
+                height: (root.compact ? 13px : 16px) * root.scale-factor;
+                tint: #b0b0b0;
+            }
+            // Un-hydrated lossless (filetype known, bit-depth/rate not yet):
+            // reuse the neutral disc mark; the detail line carries "FLAC".
+            if root.tier == "lossless": QbzIcon {
+                source: @image-url("../assets/cd.svg");
                 width: (root.compact ? 13px : 16px) * root.scale-factor;
                 height: (root.compact ? 13px : 16px) * root.scale-factor;
                 tint: #b0b0b0;

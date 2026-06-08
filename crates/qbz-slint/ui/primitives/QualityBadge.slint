@@ -10,13 +10,16 @@ import { Radius } from "../foundation/radius.slint";
 import { QbzIcon } from "QbzIcon.slint";
 
 export component QualityBadge inherits Rectangle {
-    // "hires" | "cd" | "mp3" | "" — empty hides the badge entirely.
+    // "hires" | "cd" | "mp3" | "lossless" | "" — empty hides the badge entirely.
     in property <string> tier;
     // Exact quality string for the hover tooltip.
     in property <string> label;
+    // For the "lossless" tier (un-hydrated filetype, e.g. an un-hydrated Plex
+    // FLAC): the bare filetype to print, e.g. "FLAC".
+    in property <string> detail;
 
     visible: root.tier != "";
-    width: root.tier == "hires" ? 42px : 30px;
+    width: root.tier == "hires" ? 42px : (root.tier == "lossless" ? 36px : 30px);
     height: 30px;
 
     if root.tier == "hires": Image {
@@ -60,6 +63,25 @@ export component QualityBadge inherits Rectangle {
             source: @image-url("../assets/mp3.svg");
             image-fit: contain;
             tint: #b0b0b0;
+        }
+    }
+    // Un-hydrated lossless: the bit-depth/rate isn't known yet, but the
+    // filetype is — show it as a neutral text chip (e.g. "FLAC") rather than
+    // disappearing. Upgrades to the cd/hires badge once hydrated.
+    if root.tier == "lossless": Rectangle {
+        width: 36px;
+        height: 30px;
+        border-radius: 3px;
+        background: Theme.surface-elevated;
+        border-width: 1px;
+        border-color: Theme.border-subtle;
+        Text {
+            x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+            y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+            text: root.detail;
+            color: #b0b0b0;
+            font-size: 9px;
+            font-weight: Typography.medium;
         }
     }
 

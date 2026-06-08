@@ -154,6 +154,19 @@ impl QueueController {
         }
     }
 
+    /// Accessors so background flows (e.g. Plex quality hydration) reachable
+    /// only through the global controller can re-push now-playing without
+    /// threading the runtime through every detail-view entry point.
+    pub fn runtime(&self) -> &Runtime {
+        &self.runtime
+    }
+    pub fn weak(&self) -> &slint::Weak<AppWindow> {
+        &self.weak
+    }
+    pub fn handle(&self) -> &tokio::runtime::Handle {
+        &self.handle
+    }
+
     /// Pull a fresh full queue snapshot, re-apply the search filter and
     /// current page, and push the result onto `QueueState`. Spawns on the
     /// tokio runtime; safe to call from any thread.

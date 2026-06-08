@@ -113,16 +113,12 @@ pub fn albums_gen_current(gen: u64) -> bool {
 pub fn map_local_album(a: qbz_library::LocalAlbum) -> crate::album_map::AlbumCard {
     // Format-first classification (mirrors Tauri): a lossy format (MP3) gets
     // the dedicated MP3 badge tier, never CD.
-    let tier = if a.format.to_string().eq_ignore_ascii_case("mp3") {
-        "mp3"
-    } else {
-        match a.bit_depth {
-            Some(b) if b >= 24 => "hires",
-            Some(_) => "cd",
-            None => "",
-        }
-    };
-    let (quality_detail, quality_label) = local_quality(a.bit_depth, a.sample_rate);
+    // One shared classifier (see crate::quality::badge) so the card, the
+    // album-detail header and the track rows can never disagree — and so an
+    // un-hydrated lossless Plex album shows a generic "FLAC" badge instead of
+    // nothing. `a.sample_rate` is Hz; `badge` normalizes it to kHz (guarded).
+    let (tier, quality_detail, quality_label) =
+        crate::quality::badge(&a.format.to_string(), a.bit_depth, Some(a.sample_rate));
     let year = a.year.map(|y| y.to_string()).unwrap_or_default();
     let track_count = if a.track_count > 0 {
         a.track_count.to_string()
@@ -708,16 +704,11 @@ fn fmt_duration(secs: u64) -> String {
 /// non-Send `slint::Image`). Local tracks aren't Qobuz-linkable, so the
 /// artist/album link ids are empty (the row renders them as plain text).
 fn map_local_track(t: qbz_library::LocalTrack) -> TrackItem {
-    // Format-first classification (mirrors Tauri): MP3/lossy → MP3 tier.
-    let tier = if t.format.to_string().eq_ignore_ascii_case("mp3") {
-        "mp3"
-    } else {
-        match t.bit_depth {
-            Some(b) if b >= 24 => "hires",
-            Some(_) => "cd",
-            None => "",
-        }
-    };
+    // One shared classifier (crate::quality::badge) — same source the album
+    // card + header use, so all surfaces agree; an un-hydrated lossless track
+    // shows a generic "FLAC" detail. `t.sample_rate` is Hz; badge normalizes.
+    let (tier, quality_detail, _) =
+        crate::quality::badge(&t.format.to_string(), t.bit_depth, Some(t.sample_rate));
     TrackItem {
         id: t.id.to_string().into(),
         number: t.track_number.map(|n| n.to_string()).unwrap_or_default().into(),
@@ -726,12 +717,7 @@ fn map_local_track(t: qbz_library::LocalTrack) -> TrackItem {
         album: t.album.into(),
         duration: fmt_duration(t.duration_secs).into(),
         quality_tier: tier.into(),
-        quality_detail: if tier == "mp3" {
-            String::new()
-        } else {
-            crate::quality::detail(t.bit_depth, Some(t.sample_rate))
-        }
-        .into(),
+        quality_detail: quality_detail.into(),
         explicit: false,
         selected: false,
         artwork_url: t.artwork_path.unwrap_or_default().into(),
@@ -1144,6 +1130,7 @@ pub fn open_local_album(
         s.set_cover(slint::Image::default());
     });
     let gk = group_key.clone();
+    let hydrate_handle = handle.clone();
     handle.spawn(async move {
         let tracks = tokio::task::spawn_blocking(move || {
             let mut t = fetch_album_tracks_blocking(&gk);
@@ -1210,6 +1197,16 @@ pub fn open_local_album(
             s.set_loading(false);
             s.set_cover_url(album_cover.clone().into());
             apply_album_version(&w, 0);
+            // Plex quality hydration (slice 6): if this is a Plex album, the
+            // cached rows may carry NULL/incomplete quality (the bulk `/all`
+            // list omits bitDepth/samplingRate). The cached badge is already
+            // painted above (KEEP it — a partial badge beats nothing); now
+            // hydrate the real per-track quality in the background and fan the
+            // result out to every badge surface so they agree.
+            let gk_for_hydrate = w.global::<crate::LocalAlbumState>().get_id().to_string();
+            if gk_for_hydrate.starts_with("plex:") {
+                spawn_plex_quality_hydration(w.as_weak(), hydrate_handle.clone(), gk_for_hydrate);
+            }
             // Decode the album cover once (stable across version switches).
             // Plex-aware: a Plex album's cover is a raw `/library/...` thumb
             // path that needs the token (PlexThumb), not a local file read.
@@ -1261,12 +1258,11 @@ pub fn apply_album_version(window: &AppWindow, index: i32) {
     let info_line = format!("{} tracks · {}", tracks.len(), fmt_album_duration(total_secs));
     let (tier, detail) = match tracks.iter().max_by_key(|t| t.bit_depth.unwrap_or(0)) {
         Some(t) => {
-            let tier = match t.bit_depth {
-                Some(b) if b >= 24 => "hires",
-                Some(_) => "cd",
-                None => "",
-            };
-            (tier.to_string(), local_quality(t.bit_depth, t.sample_rate).0)
+            // Same shared classifier as the card + rows (badge), so the header
+            // matches them; un-hydrated lossless → generic "FLAC".
+            let (tier, detail, _) =
+                crate::quality::badge(&t.format.to_string(), t.bit_depth, Some(t.sample_rate));
+            (tier.to_string(), detail)
         }
         None => (String::new(), String::new()),
     };
@@ -1286,6 +1282,305 @@ pub fn apply_album_version(window: &AppWindow, index: i32) {
     s.set_quality_detail(detail.into());
     s.set_tracks(ModelRc::new(VecModel::from(items)));
     s.set_version_index(index);
+}
+
+// ======================= Plex quality hydration (slice 6) =================
+// Album-open trigger: a Plex album's cached rows often carry NULL/incomplete
+// quality (the bulk `/library/sections/.../all` list omits bitDepth and
+// samplingRate). We fetch the real per-track quality on open, AWAIT the SQLite
+// write-back (qbz_plex persists via COALESCE so a NULL incoming value never
+// erases an existing one), then fan the result out to every badge surface so
+// they agree:
+//   (1) album-CARD grid badge  — re-read the album aggregate, patch the 3 album
+//                                 models + the raw LOCAL_ALBUMS filter source.
+//   (2) album-DETAIL header + per-row + audio-specs — rebuild album_versions()
+//                                 from the hydrated cache, re-run apply_album_version.
+//   (3) flat Tracks-tab rows    — patch matching rows in `tracks`/`tracks-visible`
+//                                 + the tracks_current() selection cache by id.
+//   (4) now-playing STAMP       — if a hydrated track is the current queue track,
+//                                 patch its frozen snapshot and re-push.
+//
+// "Needs hydration" is the DB-NULL definition (bit_depth IS NULL OR sample_rate
+// is 0) — NOT a value heuristic; a genuine 16/44.1 FLAC is written once and
+// never re-probed (fixes the Tauri isLikelyFallbackPlexQuality bug).
+
+/// Spawn the album-open Plex quality hydration. Reads the just-loaded version
+/// tracks to find which Plex rating_keys still need hydration, hydrates them
+/// (awaiting the persist), then refreshes all four badge surfaces.
+fn spawn_plex_quality_hydration(
+    weak: slint::Weak<AppWindow>,
+    handle: tokio::runtime::Handle,
+    group_key: String,
+) {
+    // Collect rating_keys whose cached quality is still incomplete. The Plex
+    // LocalTrack carries the rating_key in `file_path` and the cached quality in
+    // `bit_depth` / `sample_rate` (0.0 == unknown).
+    let needing: Vec<String> = {
+        let versions = album_versions();
+        let mut keys: Vec<String> = versions
+            .iter()
+            .flat_map(|(_, tracks)| tracks.iter())
+            .filter(|t| t.source.as_deref() == Some("plex"))
+            .filter(|t| t.bit_depth.is_none() || t.sample_rate <= 0.0)
+            .map(|t| t.file_path.clone())
+            .collect();
+        keys.sort();
+        keys.dedup();
+        keys
+    };
+    if needing.is_empty() {
+        return;
+    }
+
+    let plex = crate::plex_settings::get();
+    if plex.base_url.is_empty() || plex.token.is_empty() {
+        return;
+    }
+
+    handle.spawn(async move {
+        let updates = match qbz_plex::plex_hydrate_album_quality(
+            plex.base_url.clone(),
+            plex.token.clone(),
+            needing,
+        )
+        .await
+        {
+            Ok(u) if !u.is_empty() => u,
+            _ => return, // nothing fetched/persisted → leave the cached badge as-is
+        };
+
+        // Surface 4 (now-playing): if any hydrated track is the current queue
+        // track, patch its frozen snapshot and re-push the stamp. Fire-and-forget
+        // through the global queue controller.
+        let queue_updates: Vec<(String, Option<u32>, Option<f64>)> = updates
+            .iter()
+            .map(|u| {
+                let khz = u.sampling_rate_hz.map(|hz| hz as f64 / 1000.0);
+                (u.rating_key.clone(), u.bit_depth, khz)
+            })
+            .collect();
+        crate::playback::apply_plex_quality_to_queue(queue_updates);
+
+        // Re-read the now-hydrated album tracks + the album aggregate off the UI
+        // thread (both are blocking SQLite reads).
+        let gk = group_key.clone();
+        let plex_path = plex_cache_db_path();
+        let reread = tokio::task::spawn_blocking(move || {
+            let tracks = qbz_plex::plex_cache_get_album_tracks(gk.clone())
+                .unwrap_or_default()
+                .into_iter()
+                .map(map_plex_cached_to_local_track)
+                .collect::<Vec<_>>();
+            // The album aggregate (MAX over tracks) is a pure runtime query; the
+            // refreshed Plex track quality flows into it automatically.
+            let album = plex_path.as_deref().and_then(|p| {
+                crate::library_db::with_db(|db| {
+                    let page = db.get_albums_metadata_page(
+                        0,
+                        ALBUMS_FULL_LOAD_LIMIT,
+                        None,
+                        "artist",
+                        "asc",
+                        false,
+                        true,
+                        Some(p),
+                    )?;
+                    Ok(page.albums.into_iter().find(|a| a.id == gk))
+                })
+                .flatten()
+            });
+            (tracks, album)
+        })
+        .await
+        .unwrap_or_else(|_| (Vec::new(), None));
+
+        let (hydrated_tracks, hydrated_album) = reread;
+        if hydrated_tracks.is_empty() {
+            return;
+        }
+
+        let updated_rows: Vec<(String, Option<u32>, u32)> = updates
+            .iter()
+            .map(|u| (u.rating_key.clone(), u.bit_depth, u.sampling_rate_hz.unwrap_or(0)))
+            .collect();
+
+        let _ = weak.upgrade_in_event_loop(move |w| {
+            refresh_open_album_after_hydration(&w, &group_key, hydrated_tracks);
+            if let Some(album) = hydrated_album {
+                refresh_album_card_quality(&w, &album);
+            }
+            refresh_track_rows_quality(&w, &updated_rows);
+        });
+    });
+}
+
+/// Surface 2 — rebuild the open album's version tracks from the hydrated cache
+/// rows and re-run `apply_album_version` so the header MAX badge, the audio
+/// specs, and the per-row badges all recompute from the real quality. No-op if
+/// the open album changed while we were hydrating.
+fn refresh_open_album_after_hydration(
+    window: &AppWindow,
+    group_key: &str,
+    hydrated_tracks: Vec<qbz_library::LocalTrack>,
+) {
+    let s = window.global::<crate::LocalAlbumState>();
+    if s.get_id().to_string() != group_key {
+        return; // user navigated away; the album-detail surface is no longer this album
+    }
+    // Re-split into versions by source dir, mirroring open_local_album.
+    let mut groups: std::collections::HashMap<String, Vec<qbz_library::LocalTrack>> =
+        std::collections::HashMap::new();
+    let mut order: Vec<String> = Vec::new();
+    for t in hydrated_tracks {
+        let key = t.album_group_key.clone();
+        if !groups.contains_key(&key) {
+            order.push(key.clone());
+        }
+        groups.entry(key).or_default().push(t);
+    }
+    let mut versions: Vec<(String, Vec<qbz_library::LocalTrack>)> = order
+        .into_iter()
+        .filter_map(|k| {
+            groups.remove(&k).map(|mut v| {
+                v.sort_by_key(|t| (t.disc_number.unwrap_or(1), t.track_number.unwrap_or(0)));
+                (k, v)
+            })
+        })
+        .collect();
+    versions.sort_by(|a, b| {
+        let qa = a.1.iter().map(version_rank).max().unwrap_or((0, 0));
+        let qb = b.1.iter().map(version_rank).max().unwrap_or((0, 0));
+        qb.cmp(&qa)
+    });
+    let index = s.get_version_index().max(0);
+    *album_versions() = versions;
+    apply_album_version(window, index);
+}
+
+/// Surface 1 — patch the album-CARD grid badge for one album across all three
+/// rendered album models (`albums`, `albums-visible`, each `albums-grouped`
+/// section) AND the raw `LOCAL_ALBUMS` filter source, recomputing tier/label/
+/// detail from the freshly aggregated quality. Mirrors `set_local_album_artwork`
+/// (refresh-one-row across every collection — the Tauri bug was patching only
+/// one collection, leaving the grid badge stale).
+fn refresh_album_card_quality(window: &AppWindow, album: &qbz_library::LocalAlbum) {
+    let card = map_local_album(album.clone());
+    let tier: slint::SharedString = card.quality_tier.clone().into();
+    let label: slint::SharedString = card.quality_label.clone().into();
+    let detail: slint::SharedString = card.quality_detail.clone().into();
+    let id = album.id.clone();
+
+    let s = window.global::<LocalLibraryState>();
+    let patch_in = |m: &ModelRc<AlbumCardItem>| {
+        for i in 0..m.row_count() {
+            if let Some(mut it) = m.row_data(i) {
+                if it.id.as_str() == id {
+                    it.quality_tier = tier.clone();
+                    it.quality_label = label.clone();
+                    it.quality_detail = detail.clone();
+                    m.set_row_data(i, it);
+                    break;
+                }
+            }
+        }
+    };
+    patch_in(&s.get_albums());
+    patch_in(&s.get_albums_visible());
+    let grouped = s.get_albums_grouped();
+    for gi in 0..grouped.row_count() {
+        if let Some(sec) = grouped.row_data(gi) {
+            patch_in(&sec.albums);
+        }
+    }
+    // Keep the raw filter source consistent so a re-derive (search/filter/sort)
+    // doesn't snap the badge back to the stale MAX.
+    {
+        let mut cache = local_albums();
+        if let Some(a) = cache.iter_mut().find(|a| a.id == id) {
+            a.bit_depth = album.bit_depth;
+            a.sample_rate = album.sample_rate;
+            a.format = album.format.clone();
+        }
+    }
+}
+
+/// Surface 3 — patch the flat Tracks-tab row badges (and the `tracks_current()`
+/// selection cache) for the hydrated Plex tracks, matched by their namespaced
+/// row id. Patches in place (no model rebuild) to avoid re-grouping the 16K-row
+/// set — the same reason Tauri used an override map instead of a `tracks`
+/// reassignment.
+fn refresh_track_rows_quality(window: &AppWindow, updates: &[(String, Option<u32>, u32)]) {
+    if updates.is_empty() {
+        return;
+    }
+    // Map rating_key -> namespaced TrackItem id string (matches map_plex_cached_to_local_track).
+    let by_id: std::collections::HashMap<String, (Option<u32>, u32)> = {
+        let cache = tracks_current();
+        let mut m = std::collections::HashMap::new();
+        for t in cache.iter() {
+            if t.source.as_deref() != Some("plex") {
+                continue;
+            }
+            if let Some((_, bd, sr)) = updates.iter().find(|(rk, _, _)| *rk == t.file_path) {
+                m.insert(t.id.to_string(), (*bd, *sr));
+            }
+        }
+        m
+    };
+    if by_id.is_empty() {
+        return;
+    }
+
+    // Patch the in-memory selection cache so a later derive_tracks keeps quality.
+    {
+        let mut cache = tracks_current();
+        for t in cache.iter_mut() {
+            if t.source.as_deref() != Some("plex") {
+                continue;
+            }
+            if let Some((_, bd, sr)) = updates.iter().find(|(rk, _, _)| *rk == t.file_path) {
+                if bd.is_some() {
+                    t.bit_depth = *bd;
+                }
+                if *sr > 0 {
+                    t.sample_rate = *sr as f64;
+                }
+            }
+        }
+    }
+
+    let recompute = |bd: Option<u32>, sr: u32| -> (slint::SharedString, slint::SharedString) {
+        let tier = match bd {
+            Some(b) if b >= 24 => "hires",
+            Some(_) => "cd",
+            None => "",
+        };
+        let detail = if tier.is_empty() {
+            String::new()
+        } else {
+            crate::quality::detail(bd, Some(sr as f64))
+        };
+        (tier.into(), detail.into())
+    };
+
+    let s = window.global::<LocalLibraryState>();
+    let patch_in = |m: &ModelRc<TrackItem>| {
+        for i in 0..m.row_count() {
+            if let Some(mut it) = m.row_data(i) {
+                if it.source.as_str() != "plex" {
+                    continue;
+                }
+                if let Some((bd, sr)) = by_id.get(it.id.as_str()) {
+                    let (tier, detail) = recompute(*bd, *sr);
+                    it.quality_tier = tier;
+                    it.quality_detail = detail;
+                    m.set_row_data(i, it);
+                }
+            }
+        }
+    };
+    patch_in(&s.get_tracks());
+    patch_in(&s.get_tracks_visible());
 }
 
 /// The source directory of version `index` (for the tag editor — a real dir).
