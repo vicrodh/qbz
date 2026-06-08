@@ -58,6 +58,8 @@ mod offline_cache;
 mod offline_manager;
 mod playlist;
 mod playlist_manager;
+mod plex_auth;
+mod plex_settings;
 mod playlist_picker;
 mod quality;
 mod recently;
@@ -102,6 +104,10 @@ async fn enter_shell(
     // the Tauri build) and snapshot them to seed the settings UI.
     tray_settings::init_for_user(session.user_id);
     let tray = tray_settings::get();
+
+    // Bind Plex connection settings to this user (per-user plex_settings.db,
+    // Slint-only). Seeded into PlexSettingsState lazily on panel open.
+    plex_settings::init_for_user(session.user_id);
 
     // Create the system tray from this user's persisted settings (gated by
     // enable_tray). Reflects the chosen icon variant. On Linux the ksni
@@ -4503,6 +4509,109 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         window
             .global::<LibraryManageActions>()
             .on_stop_scan(move || local_library_settings::stop_scan());
+    }
+
+    // Settings > Plex — connection + library selection (LAN-only). The PIN
+    // poll, ping, library sync, and disconnect/clear-cache all live in
+    // `plex_auth`; the persisted store is the per-user `plex_settings.db`.
+    {
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window
+            .global::<PlexAuthActions>()
+            .on_load(move || plex_auth::load(weak.clone(), handle.clone()));
+    }
+    {
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window
+            .global::<PlexAuthActions>()
+            .on_enable_toggle(move |b| plex_auth::enable_toggle(weak.clone(), handle.clone(), b));
+    }
+    {
+        window
+            .global::<PlexAuthActions>()
+            .on_collapse_toggle(move |b| plex_auth::collapse_toggle(b));
+    }
+    {
+        let weak = window.as_weak();
+        window
+            .global::<PlexAuthActions>()
+            .on_set_server_url(move |url| plex_auth::set_server_url(weak.clone(), url.to_string()));
+    }
+    {
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window
+            .global::<PlexAuthActions>()
+            .on_generate_code(move || plex_auth::generate_code(weak.clone(), handle.clone()));
+    }
+    {
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window
+            .global::<PlexAuthActions>()
+            .on_open_auth_url(move || plex_auth::open_auth_url(weak.clone(), handle.clone()));
+    }
+    {
+        let weak = window.as_weak();
+        window
+            .global::<PlexAuthActions>()
+            .on_copy_code(move || plex_auth::copy_code(weak.clone()));
+    }
+    {
+        window
+            .global::<PlexAuthActions>()
+            .on_manual_token_toggle(move |b| plex_auth::manual_token_toggle(b));
+    }
+    {
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window
+            .global::<PlexAuthActions>()
+            .on_set_token(move |tok| plex_auth::set_token(weak.clone(), handle.clone(), tok.to_string()));
+    }
+    {
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window
+            .global::<PlexAuthActions>()
+            .on_ping(move || plex_auth::ping(weak.clone(), handle.clone()));
+    }
+    {
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window
+            .global::<PlexAuthActions>()
+            .on_load_sections(move || plex_auth::load_sections(weak.clone(), handle.clone()));
+    }
+    {
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window
+            .global::<PlexAuthActions>()
+            .on_toggle_section(move |key| {
+                plex_auth::toggle_section(weak.clone(), handle.clone(), key.to_string())
+            });
+    }
+    {
+        window
+            .global::<PlexAuthActions>()
+            .on_metadata_write_toggle(move |b| plex_auth::metadata_write_toggle(b));
+    }
+    {
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window
+            .global::<PlexAuthActions>()
+            .on_disconnect(move || plex_auth::disconnect(weak.clone(), handle.clone()));
+    }
+    {
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window
+            .global::<PlexAuthActions>()
+            .on_clear_cache(move || plex_auth::clear_cache(weak.clone(), handle.clone()));
     }
 
     // Tag editor (local album metadata) — open via on_media_action("album",

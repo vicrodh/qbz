@@ -52,6 +52,7 @@ qconnect-transport-ws = { path = "../qconnect-transport-ws" }
 futures-util = { workspace = true }
 uuid = { version = "1", features = ["v4"] }
 qbz-library = { path = "../qbz-library" }
+qbz-plex = { path = "../qbz-plex" }
 qbz-offline-cache = { path = "../qbz-offline-cache" }
 qbz-models = { path = "../qbz-models" }
 qbz-qobuz = { path = "../qbz-qobuz" }

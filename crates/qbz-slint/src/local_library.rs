@@ -4,8 +4,14 @@
 //! This module owns the per-tab navigation and (slice by slice) the data
 //! loading for the four browse tabs: Albums / Artists / Folders / Tracks.
 //! It reads the shared per-user `library.db` through the already
-//! frontend-agnostic `qbz-library` crate (see `library_db::with_db`), and
-//! Plex through the `qbz-plex` core crate.
+//! frontend-agnostic `qbz-library` crate (see `library_db::with_db`).
+//!
+//! NOTE (2026-06-07): Plex is NOT yet wired into this view. The Slint Plex
+//! port is in progress — spec at
+//! `qbz-nix-docs/plex-integration/2026-06-07-plex-slint-build-spec.md`.
+//! Until it lands there is no Plex play path, queue builder, creds
+//! plumbing, or hydration trigger here, and the Albums tab uses the
+//! non-Plex query (see the Albums-tab note below).
 //!
 //! Folder management, scan, maintenance, and the danger zone do NOT live in
 //! this view — they belong under Settings > Local Library. The view's gear
@@ -72,12 +78,15 @@ impl LibTab {
 
 // =============================== Albums tab ===============================
 //
-// The Albums tab browses the metadata-grouped local albums via the
-// server-paginated `get_albums_metadata_page` (the performant path that
-// scales past the documented 16K-row freeze). Sort + search are pushed to
-// SQL; the grid pages on scroll. The shared `AlbumCollectionView` renders
-// the result, covers load from the local filesystem via the source-aware
-// artwork pipeline.
+// The Albums tab browses the metadata-grouped local albums via
+// `get_albums_metadata_grouped` (the non-Plex grouped path). Sort + search
+// are pushed to SQL; the grid pages on scroll. The shared
+// `AlbumCollectionView` renders the result, covers load from the local
+// filesystem via the source-aware artwork pipeline.
+//
+// TODO (Plex port, slice 3): switch to `get_albums_metadata_page(…,
+// Some(plex_cache_path))` so the `plex_aggregated` union surfaces Plex
+// albums in the grid. See the build spec referenced in the module header.
 
 /// Generation guard, bumped on every (re)load. A stale in-flight
 /// fetch (older search/sort) is discarded on apply, and an in-flight

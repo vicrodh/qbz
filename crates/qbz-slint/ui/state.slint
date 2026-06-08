@@ -780,6 +780,75 @@ export global LibraryManageActions {
     callback set-filter(string /* query */);
 }
 
+// ============================ Plex connection =============================
+// Settings > Local Library > Plex. A LAN-only Plex Media Server connection:
+// PIN-based auth (or manual token), library-section multi-select, and the
+// per-section track caching that downstream browse views read. State is
+// Rust-backed (qbz_app::settings::plex store + qbz-plex core); the controller
+// lives in `plex_auth`. ADR-008: no pills. Status is a (key, args) pair so the
+// Rust side can localize without 5-file JSON sync — `status-text` is the
+// already-resolved label, `status-kind` drives the highlight style.
+
+// One Plex music-library section row + its UI selection + cached track count.
+export struct PlexSectionItem {
+    key: string,        // Plex Directory@key
+    title: string,      // section title
+    count: int,         // cached track count (plex_cache_get_tracks(key).len())
+    selected: bool,     // membership in selected_section_keys
+}
+
+export global PlexSettingsState {
+    // --- Persisted toggles -------------------------------------------------
+    in-out property <bool> enabled: false;          // master toggle (default OFF)
+    in-out property <bool> ui-collapsed: false;      // collapse chevron
+    in-out property <bool> metadata-write-enabled: false;
+
+    // --- Connection --------------------------------------------------------
+    // server-url is the RAW host-form text the user types; base-url is the
+    // Rust-resolved proto://host:port (set after resolve).
+    in-out property <string> server-url: "";
+    in property <string> base-url: "";
+    in property <string> token: "";                 // "" = not authenticated
+    in-out property <bool> manual-token-mode: false;
+    in-out property <string> token-input: "";        // manual-token field buffer
+
+    // Derived gates (computed Rust-side, pushed in).
+    in property <bool> is-local-address: true;       // isLocalPlexAddress(server-url)
+    in property <bool> can-use: false;               // enabled && local && base!="" && token!=""
+
+    // --- PIN flow ----------------------------------------------------------
+    in property <bool> pin-busy: false;              // PIN start / poll in flight
+    in property <string> pin-code: "";               // "" = no active code
+    in property <string> pin-auth-url: "";
+
+    // --- General busy + status --------------------------------------------
+    in property <bool> busy: false;                  // ping / sync / auto-setup
+    // Status as a resolved label + kind (0 none, 1 info, 2 connected/ok, 3 error).
+    in property <string> status-text: "";
+    in property <int> status-kind: 0;
+
+    // --- Library sections --------------------------------------------------
+    in property <[PlexSectionItem]> sections: [];
+}
+
+export global PlexAuthActions {
+    callback enable-toggle(bool);
+    callback collapse-toggle(bool);
+    callback set-server-url(string /* host-form */);
+    callback generate-code();                        // PIN start + begin poll
+    callback open-auth-url();
+    callback copy-code();
+    callback manual-token-toggle(bool);
+    callback set-token(string /* token */);          // save manual token
+    callback ping();                                 // check connection
+    callback load-sections();                        // get libraries
+    callback toggle-section(string /* key */);
+    callback metadata-write-toggle(bool);
+    callback disconnect();                            // confirm + reset
+    callback clear-cache();                          // confirm + plex_cache_clear
+    callback load();                                 // panel init: seed from store + warm cache
+}
+
 // ============================ Tag editor ==================================
 // Local-album metadata editor (Settings-independent modal launched from the
 // local album detail). Sidecar (default) + opt-in direct file-write. Remote

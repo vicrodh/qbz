@@ -5471,6 +5471,7 @@ dependencies = [
  "qbz-models",
  "qbz-offline-cache",
  "qbz-player",
+ "qbz-plex",
  "qbz-qobuz",
  "qconnect-app",
  "qconnect-transport-ws",

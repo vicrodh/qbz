@@ -9,12 +9,13 @@
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
 import { Radius } from "../foundation/radius.slint";
-import { LibraryFoldersState, LibraryManageActions, LibraryScanState } from "../state.slint";
+import { LibraryFoldersState, LibraryManageActions, LibraryScanState, PlexSettingsState, PlexAuthActions } from "../state.slint";
 import { SettingRow } from "SettingRow.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { QbzCheckbox } from "../primitives/QbzCheckbox.slint";
+import { QbzToggle } from "../primitives/QbzToggle.slint";
 import { ExpandableSearch } from "../primitives/ExpandableSearch.slint";
-import { ScrollView } from "std-widgets.slint";
+import { ScrollView, LineEdit } from "std-widgets.slint";
 
 component GroupHeader inherits Text {
     color: Theme.text-muted;
@@ -162,9 +163,11 @@ export component LocalLibrarySettings inherits VerticalLayout {
     spacing: 4px;
 
     // Lazy-load the folder list each time the panel is shown (the `if
-    // section==4` mount in SettingsView creates this fresh on entry).
+    // section==4` mount in SettingsView creates this fresh on entry). The
+    // Plex panel below self-loads here too (seed from store + warm cache).
     init => {
         LibraryManageActions.load();
+        PlexAuthActions.load();
     }
 
     // --- Library folders -------------------------------------------------
@@ -350,6 +353,339 @@ export component LocalLibrarySettings inherits VerticalLayout {
             danger: true;
             enabled: !LibraryFoldersState.clearing-library;
             clicked => { LibraryManageActions.clear-library(); }
+        }
+    }
+
+    Rectangle { height: 28px; }
+
+    // ===================================================================
+    // PLEX — LAN-only Plex Media Server connection (Settings > Plex).
+    // Body renders only when `enabled && !ui-collapsed`. ADR-008: no pills.
+    // ===================================================================
+    // Header row: title + master toggle + collapse chevron.
+    HorizontalLayout {
+        spacing: 10px;
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            spacing: 2px;
+            HorizontalLayout {
+                spacing: 8px;
+                GroupHeader { text: @tr("PLEX"); vertical-alignment: center; }
+                // Collapse chevron (only meaningful when enabled).
+                if PlexSettingsState.enabled: VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: 20px;
+                        height: 20px;
+                        border-radius: Radius.sm;
+                        background: chev-ta.has-hover ? Theme.surface-hover : transparent;
+                        QbzIcon {
+                            source: PlexSettingsState.ui-collapsed
+                                ? @image-url("../assets/icons/chevron-right.svg")
+                                : @image-url("../assets/icons/chevron-down.svg");
+                            width: 14px;
+                            height: 14px;
+                            x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                            y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                            tint: Theme.text-secondary;
+                        }
+                        chev-ta := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                PlexSettingsState.ui-collapsed = !PlexSettingsState.ui-collapsed;
+                                PlexAuthActions.collapse-toggle(PlexSettingsState.ui-collapsed);
+                            }
+                        }
+                    }
+                }
+            }
+            Text {
+                text: @tr("Connect a Plex Media Server on your local network.");
+                color: Theme.text-muted;
+                font-size: 12px;
+                wrap: word-wrap;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            QbzToggle {
+                checked: PlexSettingsState.enabled;
+                toggled(v) => {
+                    PlexSettingsState.enabled = v;
+                    PlexAuthActions.enable-toggle(v);
+                }
+            }
+        }
+    }
+
+    // Body — only when enabled and not collapsed.
+    if PlexSettingsState.enabled && !PlexSettingsState.ui-collapsed: VerticalLayout {
+        spacing: 4px;
+
+        Rectangle { height: 10px; }
+
+        // --- Server address ------------------------------------------------
+        SettingRow {
+            label: @tr("Server address");
+            description: @tr("Only local network servers are supported.");
+            HorizontalLayout {
+                width: 240px;
+                VerticalLayout {
+                    alignment: center;
+                    horizontal-stretch: 1;
+                    LineEdit {
+                        text: PlexSettingsState.server-url;
+                        placeholder-text: @tr("http://127.0.0.1:32400");
+                        edited(s) => {
+                            PlexSettingsState.server-url = s;
+                        }
+                        accepted(s) => {
+                            PlexAuthActions.set-server-url(s);
+                        }
+                    }
+                }
+            }
+        }
+
+        // LAN-only inline warning (read-only indicator).
+        if !PlexSettingsState.is-local-address && PlexSettingsState.server-url != "": Text {
+            text: @tr("Only local network servers are supported.");
+            color: #e0564f;
+            font-size: Typography.legal;
+            wrap: word-wrap;
+        }
+
+        Rectangle { height: 8px; }
+
+        // --- Authorize (PIN) ----------------------------------------------
+        // Hidden in manual-token mode.
+        if !PlexSettingsState.manual-token-mode: SettingRow {
+            label: @tr("Authorize");
+            description: @tr("Generate a code and sign in to Plex in your browser.");
+            VerticalLayout {
+                alignment: center;
+                SecondaryButton {
+                    label: PlexSettingsState.pin-busy ? @tr("Working...") : @tr("Generate code");
+                    enabled: PlexSettingsState.enabled
+                        && PlexSettingsState.is-local-address
+                        && !PlexSettingsState.pin-busy;
+                    clicked => { PlexAuthActions.generate-code(); }
+                }
+            }
+        }
+
+        // --- Code block (only while a code exists) ------------------------
+        if PlexSettingsState.pin-code != "": SettingRow {
+            label: @tr("Link code");
+            description: @tr("Enter this code at the Plex sign-in page.");
+            HorizontalLayout {
+                spacing: 8px;
+                VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: code-text.preferred-width + 20px;
+                        height: 34px;
+                        border-radius: Radius.sm;
+                        border-width: 1px;
+                        border-color: Theme.border-subtle;
+                        background: Theme.surface-elevated;
+                        code-text := Text {
+                            x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                            y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                            text: PlexSettingsState.pin-code;
+                            color: Theme.text-primary;
+                            font-size: Typography.body;
+                            font-weight: Typography.semibold;
+                            letter-spacing: 1.5px;
+                        }
+                    }
+                }
+                SecondaryButton {
+                    label: @tr("Copy code");
+                    clicked => { PlexAuthActions.copy-code(); }
+                }
+                SecondaryButton {
+                    label: @tr("Open Plex sign-in");
+                    clicked => { PlexAuthActions.open-auth-url(); }
+                }
+            }
+        }
+
+        Rectangle { height: 8px; }
+
+        // --- Manual token toggle + field ----------------------------------
+        SettingRow {
+            label: @tr("Enter token manually");
+            description: @tr("Use an existing X-Plex-Token instead of the PIN flow.");
+            VerticalLayout {
+                alignment: center;
+                QbzToggle {
+                    checked: PlexSettingsState.manual-token-mode;
+                    toggled(v) => {
+                        PlexSettingsState.manual-token-mode = v;
+                        PlexAuthActions.manual-token-toggle(v);
+                    }
+                }
+            }
+        }
+        if PlexSettingsState.manual-token-mode: SettingRow {
+            label: @tr("Token");
+            HorizontalLayout {
+                width: 240px;
+                VerticalLayout {
+                    alignment: center;
+                    horizontal-stretch: 1;
+                    LineEdit {
+                        text: PlexSettingsState.token-input;
+                        placeholder-text: @tr("X-Plex-Token");
+                        input-type: password;
+                        edited(s) => {
+                            PlexSettingsState.token-input = s;
+                        }
+                        accepted(s) => {
+                            PlexAuthActions.set-token(s);
+                        }
+                    }
+                }
+            }
+        }
+
+        Rectangle { height: 14px; }
+
+        // --- Connection actions -------------------------------------------
+        SettingRow {
+            label: @tr("Check connection");
+            description: @tr("Verify the server is reachable.");
+            VerticalLayout {
+                alignment: center;
+                SecondaryButton {
+                    label: @tr("Check connection");
+                    enabled: PlexSettingsState.can-use && !PlexSettingsState.busy;
+                    clicked => { PlexAuthActions.ping(); }
+                }
+            }
+        }
+        SettingRow {
+            label: @tr("Libraries");
+            description: @tr("Fetch your Plex music libraries.");
+            VerticalLayout {
+                alignment: center;
+                SecondaryButton {
+                    label: @tr("Get libraries");
+                    enabled: PlexSettingsState.can-use && !PlexSettingsState.busy;
+                    clicked => { PlexAuthActions.load-sections(); }
+                }
+            }
+        }
+
+        // Status line (resolved (key,args) -> text; highlighted when ok).
+        if PlexSettingsState.status-text != "": Text {
+            text: PlexSettingsState.status-text;
+            color: PlexSettingsState.status-kind == 3
+                ? #e0564f
+                : (PlexSettingsState.status-kind == 2 ? #3fae6a : Theme.text-muted);
+            font-size: Typography.legal;
+            wrap: word-wrap;
+        }
+
+        Rectangle { height: 6px; }
+
+        // --- Section multi-select grid ------------------------------------
+        if PlexSettingsState.sections.length > 0: VerticalLayout {
+            spacing: 2px;
+            GroupHeader { text: @tr("MUSIC LIBRARIES"); }
+            Rectangle { height: 4px; }
+            Rectangle {
+                height: Math.min(PlexSettingsState.sections.length * 44px, 264px);
+                ScrollView {
+                    horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
+                    VerticalLayout {
+                        spacing: 2px;
+                        for sec in PlexSettingsState.sections: Rectangle {
+                            height: 42px;
+                            border-radius: Radius.sm;
+                            background: sec-ta.has-hover ? Theme.surface-hover : transparent;
+                            HorizontalLayout {
+                                padding-left: 10px;
+                                padding-right: 12px;
+                                spacing: 12px;
+                                VerticalLayout {
+                                    alignment: center;
+                                    QbzCheckbox {
+                                        checked: sec.selected;
+                                        toggled => { PlexAuthActions.toggle-section(sec.key); }
+                                    }
+                                }
+                                VerticalLayout {
+                                    alignment: center;
+                                    horizontal-stretch: 1;
+                                    Text {
+                                        text: sec.title;
+                                        color: Theme.text-primary;
+                                        font-size: Typography.body;
+                                        overflow: elide;
+                                    }
+                                }
+                                VerticalLayout {
+                                    alignment: center;
+                                    Text {
+                                        text: @tr("({} tracks)", sec.count);
+                                        color: Theme.text-muted;
+                                        font-size: Typography.legal;
+                                    }
+                                }
+                            }
+                            sec-ta := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => { PlexAuthActions.toggle-section(sec.key); }
+                            }
+                        }
+                    }
+                }
+            }
+            Rectangle { height: 14px; }
+        }
+
+        // --- Metadata write toggle ----------------------------------------
+        SettingRow {
+            label: @tr("Write metadata to Plex (experimental)");
+            description: @tr("Allow QBZ to write track metadata back to your Plex server.");
+            VerticalLayout {
+                alignment: center;
+                QbzToggle {
+                    checked: PlexSettingsState.metadata-write-enabled;
+                    toggled(v) => {
+                        PlexSettingsState.metadata-write-enabled = v;
+                        PlexAuthActions.metadata-write-toggle(v);
+                    }
+                }
+            }
+        }
+
+        Rectangle { height: 18px; }
+
+        // --- Disconnect / Clear cache (danger) ----------------------------
+        GroupHeader { text: @tr("PLEX DANGER ZONE"); }
+        SettingRow {
+            label: @tr("Disconnect");
+            description: @tr("Sign out of Plex and clear the local cache.");
+            SecondaryButton {
+                label: @tr("Disconnect");
+                danger: true;
+                enabled: PlexSettingsState.token != "";
+                clicked => { PlexAuthActions.disconnect(); }
+            }
+        }
+        SettingRow {
+            label: @tr("Clear cache");
+            description: @tr("Remove cached Plex libraries and tracks. Your sign-in is kept.");
+            SecondaryButton {
+                label: @tr("Clear cache");
+                danger: true;
+                enabled: PlexSettingsState.token != "";
+                clicked => { PlexAuthActions.clear-cache(); }
+            }
         }
     }
 }
