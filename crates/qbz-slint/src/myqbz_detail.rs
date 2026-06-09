@@ -53,6 +53,38 @@ thread_local! {
     /// that survives the client-side re-derive.
     static INLINE_CACHE: std::cell::RefCell<std::collections::HashMap<String, Vec<TrackItem>>> =
         std::cell::RefCell::new(std::collections::HashMap::new());
+
+    /// Per-collection view-prefs "hydrated" gate (mirrors Tauri's
+    /// `prefsHydrated`). `false` from `reset` until `apply` has restored the
+    /// stored prefs; while `false` every toolbar persist is suppressed so an
+    /// early setter can't clobber the about-to-be-restored prefs. UI thread.
+    static PREFS_HYDRATED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Persist the open collection's current toolbar prefs (spec 12 §18), gated on
+/// the hydrated flag so a setter firing before `apply` restores the stored
+/// prefs cannot clobber them. The persisted fields are the five §18 fields
+/// (view-mode / sort / sort-dir / type-filter / source flags); search +
+/// select-mode stay transient. UI thread.
+pub fn persist_prefs(window: &AppWindow) {
+    if !PREFS_HYDRATED.with(|c| c.get()) {
+        return;
+    }
+    let state = window.global::<MyQbzDetailState>();
+    let id = state.get_id().to_string();
+    if id.is_empty() {
+        return;
+    }
+    let prefs = crate::myqbz_view_prefs::Prefs {
+        view_mode: state.get_view_mode().to_string(),
+        sort_by: state.get_sort().to_string(),
+        sort_dir: state.get_sort_dir().to_string(),
+        type_filter: state.get_type_filter().to_string(),
+        src_qobuz: state.get_src_qobuz(),
+        src_plex: state.get_src_plex(),
+        src_local: state.get_src_local(),
+    };
+    crate::myqbz_view_prefs::save(&id, &prefs);
 }
 
 /// Stable per-item key for the inline-tracks cache (`source|source_item_id`).
@@ -364,12 +396,14 @@ pub fn set_sort(window: &AppWindow, field: &str) {
         state.set_sort(field.into());
         state.set_sort_dir("asc".into());
     }
+    persist_prefs(window);
     refresh_view(window);
 }
 
 /// Single-select the type filter.
 pub fn set_type_filter(window: &AppWindow, value: &str) {
     window.global::<MyQbzDetailState>().set_type_filter(value.into());
+    persist_prefs(window);
     refresh_view(window);
 }
 
@@ -382,6 +416,7 @@ pub fn toggle_source_filter(window: &AppWindow, kind: &str) {
         "local" => state.set_src_local(!state.get_src_local()),
         _ => {}
     }
+    persist_prefs(window);
     refresh_view(window);
 }
 
@@ -396,7 +431,17 @@ pub fn reset_filters(window: &AppWindow) {
     state.set_src_local(false);
     state.set_sort("position".into());
     state.set_sort_dir("asc".into());
+    persist_prefs(window);
     refresh_view(window);
+}
+
+/// Set the view-mode (list|grid|expanded) + persist it (spec 12 §18). The
+/// expanded-mode inline-track fetch stays in `main.rs` (it needs the runtime +
+/// handle); this only updates state + persists so the per-collection prefs
+/// remember the chosen mode.
+pub fn set_view_mode(window: &AppWindow, mode: &str) {
+    window.global::<MyQbzDetailState>().set_view_mode(mode.into());
+    persist_prefs(window);
 }
 
 /// Toggle multi-select edit mode. Leaving clears any selection.
@@ -665,6 +710,10 @@ pub fn reset(window: &AppWindow) {
     // Drop the inline-tracks cache — a different collection's tracks must not
     // leak into the freshly-opened one.
     INLINE_CACHE.with(|cell| cell.borrow_mut().clear());
+    // Close the persist gate until `apply` restores this collection's prefs —
+    // any toolbar setter that fires meanwhile must NOT overwrite stored prefs
+    // with the in-flight defaults (mirrors Tauri's prefsHydrated).
+    PREFS_HYDRATED.with(|c| c.set(false));
     let state = window.global::<MyQbzDetailState>();
     state.set_loading(true);
     state.set_found(true);
@@ -678,7 +727,9 @@ pub fn reset(window: &AppWindow) {
     state.set_cover_count(0);
     state.set_selected_count(0);
     state.set_select_mode(false);
-    // Toolbar is session-scoped per the slice spec: reset to defaults on open.
+    // Toolbar -> defaults during load; `apply` then restores this collection's
+    // persisted view-prefs (spec 12 §18) over these. Search + select-mode stay
+    // transient (never persisted) so they always start fresh.
     state.set_search("".into());
     state.set_sort("position".into());
     state.set_sort_dir("asc".into());
@@ -724,6 +775,21 @@ pub fn apply(window: &AppWindow, c: MixtapeCollection) {
     }
 
     apply_hero_mosaic(&state, &c);
+
+    // Restore this collection's persisted view-prefs over the reset defaults
+    // (spec 12 §18). `load` returns the §18 defaults when nothing is stored, so
+    // a never-opened collection lands on list/position/asc/all/empty exactly as
+    // before. Open the persist gate AFTER applying so the restore itself isn't
+    // re-persisted (and so subsequent setter-driven persists are live).
+    let prefs = crate::myqbz_view_prefs::load(c.id.as_str());
+    state.set_view_mode(prefs.view_mode.into());
+    state.set_sort(prefs.sort_by.into());
+    state.set_sort_dir(prefs.sort_dir.into());
+    state.set_type_filter(prefs.type_filter.into());
+    state.set_src_qobuz(prefs.src_qobuz);
+    state.set_src_plex(prefs.src_plex);
+    state.set_src_local(prefs.src_local);
+    PREFS_HYDRATED.with(|cell| cell.set(true));
 
     FULL_ITEMS.with(|cell| *cell.borrow_mut() = c.items);
     refresh_view(window);

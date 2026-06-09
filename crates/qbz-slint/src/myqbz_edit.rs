@@ -224,6 +224,9 @@ pub fn delete(
                 Ok(()) => {
                     es.set_open(false);
                     es.set_mode("".into());
+                    // Clean up the deleted collection's persisted view-prefs key
+                    // so it doesn't orphan in the store (spec 12 §18 / §11.3).
+                    crate::myqbz_view_prefs::remove(&id);
                     // Navigate back: re-applies the previous grid entry, which
                     // re-lists collections from the DB (the deleted one is gone).
                     w.global::<NavState>().invoke_request_back();

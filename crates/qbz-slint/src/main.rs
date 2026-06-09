@@ -44,6 +44,7 @@ mod myqbz_edit;
 mod myqbz_mix;
 mod myqbz_play;
 mod myqbz_prefs;
+mod myqbz_view_prefs;
 mod nav;
 mod play_history;
 mod strip_html;
@@ -135,6 +136,11 @@ async fn enter_shell(
     // (per-user myqbz_branding.json). Seeded into MyQbzBrandingState below so
     // the sidebar row + Settings row reflect the persisted values on entry.
     myqbz_prefs::init_for_user(session.user_id);
+
+    // Bind per-collection DETAIL view-prefs (toolbar viewMode/sort/filter) to
+    // this user (per-user collection_view_prefs.json). Restored on collection
+    // open, cleared on delete (spec 12 §18).
+    myqbz_view_prefs::init_for_user(session.user_id);
 
     // Create the system tray from this user's persisted settings (gated by
     // enable_tray). Reflects the chosen icon variant. On Linux the ksni
@@ -2471,7 +2477,8 @@ fn wire_myqbz_detail(
         let handle = tokio_rt.handle().clone();
         window.global::<Act>().on_set_view_mode(move |mode| {
             if let Some(w) = weak.upgrade() {
-                w.global::<MyQbzDetailState>().set_view_mode(mode.clone());
+                // Sets view-mode + persists the per-collection prefs (spec §18).
+                myqbz_detail::set_view_mode(&w, mode.as_str());
                 // Entering expanded mode: fetch every expandable item's tracks
                 // (spec §8 — tracks render directly under each row).
                 if mode == "expanded" {
@@ -2583,13 +2590,20 @@ fn wire_myqbz_detail(
         let runtime = app_runtime.clone();
         let weak = window.as_weak();
         let handle = tokio_rt.handle().clone();
+        let image_cache = image_cache.clone();
         window.global::<Act>().on_shuffle(move || {
             let Some(w) = weak.upgrade() else { return };
             let id = w.global::<MyQbzDetailState>().get_id().to_string();
             if id.is_empty() {
                 return;
             }
-            myqbz_play::shuffle(runtime.clone(), weak.clone(), handle.clone(), id);
+            myqbz_play::shuffle(
+                runtime.clone(),
+                weak.clone(),
+                handle.clone(),
+                image_cache.clone(),
+                id,
+            );
         });
     }
 
