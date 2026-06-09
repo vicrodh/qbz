@@ -1061,6 +1061,10 @@ export global SidebarActions {
     callback edit-folder(string /* id */);
     callback hide-playlist(string /* id */);
     callback hide-folder(string /* id */);
+    // Add a playlist to a Mixtape/Collection (opens the AddToMixtapeModal with
+    // the playlist as a 1-item payload; restricts to mixtapes since a playlist
+    // can't go in a Collection).
+    callback add-to-mixtape(string /* playlist id */);
     // Filter `menu-folders` by a case-insensitive substring of the
     // move-to-folder search box (Rust does the substring match).
     callback search-folders(string /* query */);
@@ -1711,6 +1715,10 @@ export global MyQbzDetailActions {
     // Per-row affordances.
     callback play-item(string /* source-item-id */);
     callback item-action(string /* source-item-id */, string /* action */);
+    // Remove ONE item from the collection by its 0-based persisted position
+    // (the row menu's "Remove from collection"). Routes to the audited bulk
+    // remover with a single position so compaction + reload + toast are reused.
+    callback remove-item(int /* position */);
     // Toggle one row's selection (select-mode).
     callback toggle-item-select(int /* position */);
     // --- Expanded view-mode inline tracks (spec 12 §8) --------------------

@@ -119,6 +119,7 @@ component SidebarRow inherits Rectangle {
     callback edit-folder(string);
     callback hide-playlist(string);
     callback hide-folder(string);
+    callback add-to-mixtape(string);
     // Fires on row hover enter/leave so the sidebar can reveal the scrollbar
     // while the pointer is anywhere over the scrollable list.
     callback hover-changed(bool);
@@ -401,6 +402,14 @@ component SidebarRow inherits Rectangle {
                 label: @tr("Hide from sidebar");
                 clicked => {
                     root.hide-playlist(root.entry.id);
+                    menu.close();
+                }
+            }
+            if !root.is-folder: ContextMenuItem {
+                icon: @image-url("../assets/icons/cassette-tape.svg");
+                label: @tr("Add to Mixtape/Collection");
+                clicked => {
+                    root.add-to-mixtape(root.entry.id);
                     menu.close();
                 }
             }
@@ -866,6 +875,9 @@ export component Sidebar inherits Rectangle {
                     }
                     hide-folder(id) => {
                         SidebarActions.hide-folder(id);
+                    }
+                    add-to-mixtape(id) => {
+                        SidebarActions.add-to-mixtape(id);
                     }
                     hover-changed(h) => {
                         pl-sb.hover-rows = h ? pl-sb.hover-rows + 1 : Math.max(0, pl-sb.hover-rows - 1);

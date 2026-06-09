@@ -422,6 +422,14 @@ component DetailRow inherits Rectangle {
                     x: menu-btn.width - 184px;
                     y: 28px;
                     width: 184px;
+                    // Explicit height: without it the PopupWindow's box does not
+                    // resolve and the in-flow rows below paint over it (the only
+                    // PopupWindow in the codebase that omitted this). 4 items
+                    // (32px) + 1 separator (1px) + padding (8px) + spacing (4px).
+                    height: 145px;
+                    // Act-and-dismiss menu — match the app idiom (close on any
+                    // click; items also act before the implicit close).
+                    close-policy: PopupClosePolicy.close-on-click;
                     Rectangle {
                         background: Theme.surface-main;
                         border-width: 1px;
@@ -445,14 +453,14 @@ component DetailRow inherits Rectangle {
                             RowMenuItem {
                                 icon: @image-url("../assets/icons/list-music.svg");
                                 label: @tr("Add to queue");
-                                chosen => { MyQbzDetailActions.item-action(root.item.source-item-id, "play-later"); }
+                                chosen => { MyQbzDetailActions.item-action(root.item.source-item-id, "add-to-queue"); }
                             }
                             Rectangle { height: 1px; background: Theme.surface-elevated; }
                             RowMenuItem {
                                 icon: @image-url("../assets/icons/trash-2.svg");
                                 label: @tr("Remove from collection");
                                 destructive: true;
-                                chosen => { MyQbzDetailActions.item-action(root.item.source-item-id, "remove"); }
+                                chosen => { MyQbzDetailActions.remove-item(root.item.position); }
                             }
                         }
                     }
@@ -765,6 +773,11 @@ export component MixtapeDetailView inherits Rectangle {
                                     x: 0;
                                     y: 44px;
                                     width: 220px;
+                                    // Explicit height (same fix as row-menu) sized
+                                    // to the MAX item set: 7 items (32px) + 2
+                                    // separators (1px) + padding (8px) + spacing.
+                                    height: 250px;
+                                    close-policy: PopupClosePolicy.close-on-click;
                                     Rectangle {
                                         background: Theme.surface-main;
                                         border-width: 1px;
@@ -918,6 +931,15 @@ export component MixtapeDetailView inherits Rectangle {
                         }
                         filter-menu := PopupWindow {
                             x: 0; y: 36px; width: 200px;
+                            // Explicit height (same fix as row-menu): 2 section
+                            // headers (20px) + 7 options (30px) + 1 separator
+                            // (1px) + padding (8px) + spacing.
+                            height: 280px;
+                            // The Type/Source toggles act-and-keep-open is NOT
+                            // wanted here — these are radio/checkbox options that
+                            // should stay open while you toggle several, so use
+                            // close-on-click-outside (matches the sidebar menu).
+                            close-policy: PopupClosePolicy.close-on-click-outside;
                             Rectangle {
                                 background: Theme.surface-main;
                                 border-width: 1px;

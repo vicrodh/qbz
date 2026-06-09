@@ -203,6 +203,17 @@ pub fn playlist_name_desc(id: u64) -> Option<(String, String)> {
     NAME_DESC.lock().ok().and_then(|nd| nd.get(&id).cloned())
 }
 
+/// Total track count for `id`, from the last loaded playlist cache. Used by the
+/// sidebar "Add to Mixtape/Collection" context action to populate the AddItem
+/// `track_count` (the SidebarEntry struct doesn't carry it). Returns None when
+/// the playlist is unknown.
+pub fn playlist_track_count(id: u64) -> Option<u32> {
+    CACHE
+        .lock()
+        .ok()
+        .and_then(|c| c.playlists.iter().find(|p| p.id == id).map(|p| p.tracks_count))
+}
+
 /// Store the freshly-loaded data and render it.
 pub fn apply(window: &AppWindow, data: SidebarData) {
     if let Ok(mut cache) = CACHE.lock() {

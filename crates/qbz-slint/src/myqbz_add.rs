@@ -159,9 +159,10 @@ pub fn load_rows(restrict_to_mixtape: bool, items: &[AddItem]) -> Vec<LoadedRow>
             if restrict_to_mixtape {
                 cols.retain(|c| c.kind == CollectionKind::Mixtape);
             } else {
-                // Albums can land in a Mixtape or a Collection, but NEVER an
-                // auto-generated ArtistCollection.
-                cols.retain(|c| c.kind != CollectionKind::ArtistCollection);
+                // An album can be added to ANY collection kind — Mixtape,
+                // Collection, OR Artist Collection. Tauri allows adding an album
+                // to an artist_collection (the user can augment a built
+                // discography), so no kind restriction here.
             }
 
             // Sort by last_played_at ?? updated_at DESC.

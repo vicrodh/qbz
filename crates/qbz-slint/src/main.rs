@@ -2989,6 +2989,31 @@ fn wire_myqbz_detail(
             });
     }
 
+    // --- Per-row REMOVE (single item) -----------------------------------
+    // Routes ONE position through the audited bulk remover (remove-highest-
+    // first compaction + clear-selection + toast + reload) with a 1-element
+    // vec, so single-row remove reuses the exact same code path as the bulk
+    // "remove-selected" action — no duplicated removal logic.
+    {
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        let image_cache = image_cache.clone();
+        window.global::<Act>().on_remove_item(move |position| {
+            let Some(w) = weak.upgrade() else { return };
+            let id = w.global::<MyQbzDetailState>().get_id().to_string();
+            if id.is_empty() {
+                return;
+            }
+            myqbz_edit::remove_selected(
+                weak.clone(),
+                handle.clone(),
+                image_cache.clone(),
+                id,
+                vec![position],
+            );
+        });
+    }
+
     // --- Expanded view-mode: inline tracks under every album/playlist (§8) -
     // Fired when the expanded view-mode becomes active; fetches each
     // expandable item's tracks (skipping already-cached rows).
@@ -7850,6 +7875,47 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 es.set_description(description.into());
                 es.set_busy(false);
                 es.set_open(true);
+            });
+    }
+    {
+        // Add to Mixtape/Collection (sidebar playlist context menu) — build a
+        // 1-item playlist payload from the cached SidebarEntry row + the cached
+        // track count, then open the global AddToMixtapeModal. Because the
+        // item_type is "playlist", `open_add_to_mixtape` computes restrict=true
+        // → the picker lists mixtapes only and hides the "+ Collections" chip (a
+        // playlist can't live in a Collection). Mirrors the PlaylistManager path.
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window
+            .global::<SidebarActions>()
+            .on_add_to_mixtape(move |id| {
+                use slint::Model;
+                let Some(w) = weak.upgrade() else { return };
+                let model = w.global::<SidebarState>().get_entries();
+                let Some(row) = (0..model.row_count())
+                    .filter_map(|i| model.row_data(i))
+                    .find(|e| e.kind == "playlist" && e.id == id)
+                else {
+                    return;
+                };
+                let artwork = row.url1.to_string();
+                let item = myqbz_add::AddItem {
+                    item_type: "playlist".into(),
+                    source: "qobuz".into(),
+                    source_item_id: id.to_string(),
+                    title: row.name.to_string(),
+                    subtitle: None,
+                    artwork_url: (!artwork.is_empty()).then_some(artwork),
+                    year: None,
+                    // SidebarEntry doesn't carry the count; pull it from the
+                    // sidebar cache by id (None if unknown — it's optional).
+                    track_count: id
+                        .parse::<u64>()
+                        .ok()
+                        .and_then(sidebar::playlist_track_count)
+                        .map(|n| n as i32),
+                };
+                open_add_to_mixtape(weak.clone(), handle.clone(), vec![item]);
             });
     }
     {
