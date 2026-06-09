@@ -83,79 +83,160 @@ component IconBtn inherits Rectangle {
     }
 }
 
-// One folder row.
+// Shared column geometry for the folder table (header + rows MUST match).
+// checkbox 20 · folder (stretch) · last-scan 120 · status 84 · actions 76.
+component FolderTableHeader inherits Rectangle {
+    height: 26px;
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 12px;
+        spacing: 12px;
+        Rectangle { width: 20px; }
+        Text {
+            text: @tr("FOLDER");
+            horizontal-stretch: 1;
+            color: Theme.text-muted;
+            font-size: Typography.legal;
+            letter-spacing: 0.5px;
+            vertical-alignment: center;
+        }
+        Text {
+            text: @tr("LAST SCAN");
+            width: 120px;
+            color: Theme.text-muted;
+            font-size: Typography.legal;
+            letter-spacing: 0.5px;
+            vertical-alignment: center;
+        }
+        Text {
+            text: @tr("STATUS");
+            width: 84px;
+            color: Theme.text-muted;
+            font-size: Typography.legal;
+            letter-spacing: 0.5px;
+            vertical-alignment: center;
+        }
+        Rectangle { width: 76px; }
+    }
+}
+
+// One folder row — a compact table row aligned to FolderTableHeader's columns.
 component FolderRow inherits Rectangle {
     in property <string> display-name;
+    in property <string> last-scan-label;
     in property <bool> enabled-folder;
     in property <bool> is-network;
     in property <bool> accessible;
     in property <bool> selected;
+    in property <bool> scanning;
     callback toggle();
-    height: 48px;
+    callback sync();
+    callback remove();
+    height: 40px;
     border-radius: Radius.sm;
     background: root.selected
         ? Theme.surface-elevated
         : (ta.has-hover ? Theme.surface-hover : transparent);
+
+    // Declared FIRST so it sits BENEATH the per-row IconBtns: their own
+    // TouchAreas (on top) take their clicks (sync/remove), while clicks on the
+    // empty row area fall through to here to toggle selection. (Was last —
+    // i.e. on top — which swallowed the button clicks into a select-toggle.)
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.toggle(); }
+    }
 
     HorizontalLayout {
         padding-left: 10px;
         padding-right: 12px;
         spacing: 12px;
 
+        // Select.
         VerticalLayout {
+            width: 20px;
             alignment: center;
             QbzCheckbox {
                 checked: root.selected;
                 toggled => { root.toggle(); }
             }
         }
-        VerticalLayout {
-            alignment: center;
-            QbzIcon {
-                source: root.is-network
-                    ? @image-url("../assets/icons/network.svg")
-                    : @image-url("../assets/icons/hard-drive.svg");
-                width: 18px;
-                height: 18px;
-                tint: root.is-network
-                    ? (root.accessible ? #3fae6a : #e0564f)
-                    : Theme.text-secondary;
-            }
-        }
-        VerticalLayout {
-            alignment: center;
+        // FOLDER: type glyph + name.
+        HorizontalLayout {
             horizontal-stretch: 1;
-            Text {
-                text: root.display-name;
-                color: root.enabled-folder ? Theme.text-primary : Theme.text-muted;
-                font-size: Typography.body;
-                overflow: elide;
+            spacing: 8px;
+            VerticalLayout {
+                alignment: center;
+                QbzIcon {
+                    source: root.is-network
+                        ? @image-url("../assets/icons/network.svg")
+                        : @image-url("../assets/icons/hard-drive.svg");
+                    width: 16px;
+                    height: 16px;
+                    tint: root.is-network
+                        ? (root.accessible ? #3fae6a : #e0564f)
+                        : Theme.text-secondary;
+                }
             }
-        }
-        // Square status badge (ADR-008: plain text, not a pill).
-        if !root.enabled-folder || (root.is-network && !root.accessible): VerticalLayout {
-            alignment: center;
-            Rectangle {
-                width: badge-text.preferred-width + 16px;
-                height: 22px;
-                border-radius: Radius.sm;
-                background: Theme.surface-elevated;
-                border-width: 1px;
-                border-color: !root.enabled-folder ? Theme.border-subtle : #e0564f;
-                badge-text := Text {
-                    x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
-                    y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
-                    text: !root.enabled-folder ? @tr("Disabled") : @tr("Unavailable");
-                    color: !root.enabled-folder ? Theme.text-muted : #e0564f;
-                    font-size: Typography.legal;
-                    font-weight: Typography.medium;
+            VerticalLayout {
+                alignment: center;
+                horizontal-stretch: 1;
+                Text {
+                    text: root.display-name;
+                    color: root.enabled-folder ? Theme.text-primary : Theme.text-muted;
+                    font-size: Typography.body;
+                    overflow: elide;
                 }
             }
         }
-    }
-    ta := TouchArea {
-        mouse-cursor: pointer;
-        clicked => { root.toggle(); }
+        // LAST SCAN.
+        VerticalLayout {
+            width: 120px;
+            alignment: center;
+            Text {
+                text: root.last-scan-label;
+                color: Theme.text-muted;
+                font-size: Typography.legal;
+                overflow: elide;
+            }
+        }
+        // STATUS.
+        VerticalLayout {
+            width: 84px;
+            alignment: center;
+            Text {
+                text: !root.enabled-folder
+                    ? @tr("Disabled")
+                    : ((root.is-network && !root.accessible) ? @tr("Unavailable") : @tr("Active"));
+                color: (root.is-network && !root.accessible && root.enabled-folder)
+                    ? #e0564f
+                    : Theme.text-muted;
+                font-size: Typography.legal;
+                font-weight: Typography.medium;
+                overflow: elide;
+            }
+        }
+        // ACTIONS: per-folder sync + delete (recycled IconBtns).
+        HorizontalLayout {
+            width: 76px;
+            spacing: 4px;
+            alignment: end;
+            VerticalLayout {
+                alignment: center;
+                IconBtn {
+                    icon: @image-url("../assets/icons/refresh-cw.svg");
+                    enabled: root.enabled-folder && !root.scanning;
+                    clicked => { root.sync(); }
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                IconBtn {
+                    icon: @image-url("../assets/icons/trash-2.svg");
+                    clicked => { root.remove(); }
+                }
+            }
+        }
     }
 }
 
@@ -223,19 +304,33 @@ export component LocalLibrarySettings inherits VerticalLayout {
         color: Theme.text-muted;
         font-size: Typography.body;
     }
-    if LibraryFoldersState.folders.length > 0: Rectangle {
-        height: Math.min(LibraryFoldersState.folders.length * 50px, 380px);
-        ScrollView {
-            horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
-            VerticalLayout {
-                spacing: 2px;
-                for f in LibraryFoldersState.folders: FolderRow {
-                    display-name: f.display-name;
-                    enabled-folder: f.enabled;
-                    is-network: f.is-network;
-                    accessible: f.accessible;
-                    selected: f.selected;
-                    toggle => { LibraryManageActions.toggle-folder-select(f.id); }
+    // Compact table: sticky header + a scrolling body (internal scroll, capped
+    // height) aligned to the same columns. Rows recycle the sync/delete buttons.
+    if LibraryFoldersState.folders.length > 0: VerticalLayout {
+        spacing: 0px;
+        FolderTableHeader { }
+        Rectangle {
+            height: 1px;
+            background: Theme.border-subtle;
+        }
+        Rectangle {
+            height: Math.min(LibraryFoldersState.folders.length * 41px, 360px);
+            ScrollView {
+                horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
+                VerticalLayout {
+                    spacing: 1px;
+                    for f in LibraryFoldersState.folders: FolderRow {
+                        display-name: f.display-name;
+                        last-scan-label: f.last-scan-label;
+                        enabled-folder: f.enabled;
+                        is-network: f.is-network;
+                        accessible: f.accessible;
+                        selected: f.selected;
+                        scanning: LibraryScanState.scanning;
+                        toggle => { LibraryManageActions.toggle-folder-select(f.id); }
+                        sync => { LibraryManageActions.scan-folder(f.id); }
+                        remove => { LibraryManageActions.remove-folder(f.id); }
+                    }
                 }
             }
         }
@@ -259,14 +354,20 @@ export component LocalLibrarySettings inherits VerticalLayout {
                     }
                     // Stop scan.
                     Rectangle {
-                        width: stop-row.preferred-width + 22px;
+                        // Size to content. The inner HorizontalLayout fills this
+                        // Rectangle, so the old `x: (parent-self)/2` centering
+                        // collapsed to 0 and the glyph touched the border — use
+                        // explicit padding on the row instead (same fix as the
+                        // album VersionPicker).
+                        width: stop-row.preferred-width;
                         height: 30px;
                         border-radius: Radius.sm;
                         border-width: 1px;
                         border-color: #e0564f;
                         background: stop-ta.has-hover ? #e0564f22 : transparent;
                         stop-row := HorizontalLayout {
-                            x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                            padding-left: 12px;
+                            padding-right: 12px;
                             spacing: 6px;
                             VerticalLayout {
                                 alignment: center;

@@ -177,7 +177,8 @@ export component TagEditorModal inherits Rectangle {
                                 border-color: Theme.border-subtle;
                                 background: search-ta.has-hover ? Theme.surface-hover : Theme.surface-card;
                                 search-row := HorizontalLayout {
-                                    x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                                    padding-left: 13px;
+                                    padding-right: 13px;
                                     spacing: 6px;
                                     if TagEditorState.remote_searching: VerticalLayout {
                                         alignment: center;

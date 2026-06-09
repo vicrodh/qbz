@@ -132,7 +132,8 @@ export component LibFolderEditModal inherits Rectangle {
                             border-color: Theme.border-subtle;
                             background: change-ta.has-hover ? Theme.surface-hover : Theme.surface-elevated;
                             change-row := HorizontalLayout {
-                                x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                                padding-left: 11px;
+                                padding-right: 11px;
                                 spacing: 6px;
                                 VerticalLayout {
                                     alignment: center;
@@ -309,7 +310,8 @@ export component LibFolderEditModal inherits Rectangle {
                         border-color: Theme.border-subtle;
                         background: scan-ta.has-hover && self.can-scan ? Theme.surface-hover : Theme.surface-elevated;
                         scan-row := HorizontalLayout {
-                            x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                            padding-left: 13px;
+                            padding-right: 13px;
                             spacing: 7px;
                             VerticalLayout {
                                 alignment: center;
