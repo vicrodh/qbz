@@ -17,6 +17,9 @@ export component CircleAction inherits Rectangle {
     // While the album's first track is fetching, the icon swaps for a spinner.
     in property <bool> loading: false;
     in property <length> diameter: 40px;
+    // When false the button dims and the click is gated (e.g. an empty
+    // collection's hero CTAs). Additive — existing callers default to enabled.
+    in property <bool> enabled: true;
     // Optional hover tooltip (empty = none), using the global TooltipOverlay.
     in property <string> tooltip;
     callback clicked();
@@ -24,6 +27,7 @@ export component CircleAction inherits Rectangle {
     width: root.diameter;
     height: root.diameter;
     border-radius: root.diameter / 2;
+    opacity: root.enabled ? 1.0 : 0.4;
     // Overlay-matched contrast: solid white for the primary play, semi-
     // transparent white fill + bright 1.5px ring otherwise.
     background: root.primary
@@ -52,9 +56,11 @@ export component CircleAction inherits Rectangle {
     }
 
     ta := TouchArea {
-        mouse-cursor: pointer;
+        mouse-cursor: root.enabled ? pointer : default;
         clicked => {
-            root.clicked();
+            if (root.enabled) {
+                root.clicked();
+            }
         }
         changed has-hover => {
             if (self.has-hover && root.tooltip != "") {

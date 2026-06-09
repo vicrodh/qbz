@@ -7,22 +7,35 @@ import { Typography } from "../foundation/typography.slint";
 export component QbzPrimaryButton inherits Rectangle {
     in property <string> label;
     in property <bool> enabled: true;
+    // Destructive variant (e.g. the Delete confirm) — a red fill instead of the
+    // accent. Additive; existing callers default to the accent primary.
+    in property <bool> destructive: false;
     callback clicked();
 
     height: 48px;
     border-radius: Radius.sm;
     opacity: root.enabled ? 1.0 : 0.5;
-    background: ta.has-hover && root.enabled ? Theme.accent-hover : Theme.accent;
+    background: root.destructive
+        ? (ta.has-hover && root.enabled ? #e57373d9 : #e57373)
+        : (ta.has-hover && root.enabled ? Theme.accent-hover : Theme.accent);
 
     animate background { duration: 150ms; }
 
-    Text {
-        text: root.label;
-        color: Theme.accent-text;
-        font-size: Typography.button;
-        font-weight: Typography.semibold;
-        horizontal-alignment: center;
-        vertical-alignment: center;
+    // A padded layout drives the preferred-width (label + 20px each side) so the
+    // button auto-sizes as a footer chip inside an `alignment: end` row, while
+    // still stretching full-width when the parent layout stretches it (login).
+    HorizontalLayout {
+        alignment: center;
+        padding-left: 20px;
+        padding-right: 20px;
+        Text {
+            text: root.label;
+            color: Theme.accent-text;
+            font-size: Typography.button;
+            font-weight: Typography.semibold;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
     }
 
     ta := TouchArea {

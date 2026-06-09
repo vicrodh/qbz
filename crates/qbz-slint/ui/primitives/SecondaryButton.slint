@@ -1,0 +1,50 @@
+// Labeled SECONDARY button — the subdued sibling of QbzPrimaryButton, used for
+// Cancel / Back actions. Promoted to a shared primitive from the inline copy in
+// AppearanceSettings so the My QBZ modals + the Discography Builder footer read
+// identically (the button audit, spec 12c). A bordered surface-elevated chip
+// with a centered label; `enabled` dims + gates the click.
+//
+// Default 160px width matches AppearanceSettings; callers that need an
+// auto-width chip (the right-aligned modal footers) set `width` explicitly.
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Radius } from "../foundation/radius.slint";
+import { Typography } from "../foundation/typography.slint";
+
+export component SecondaryButton inherits Rectangle {
+    in property <string> label;
+    in property <bool> enabled: true;
+    callback clicked();
+
+    height: 34px;
+    border-radius: Radius.sm;
+    border-width: 1px;
+    border-color: Theme.border-subtle;
+    background: ta.has-hover && root.enabled ? Theme.surface-hover : Theme.surface-elevated;
+    opacity: root.enabled ? 1.0 : 0.4;
+
+    // Padded layout → preferred-width = label + 16px each side, so the button
+    // auto-sizes as a footer chip; AppearanceSettings sets `width: 160px`
+    // explicitly to keep its original fixed footprint.
+    HorizontalLayout {
+        alignment: center;
+        padding-left: 16px;
+        padding-right: 16px;
+        Text {
+            text: root.label;
+            color: Theme.text-secondary;
+            font-size: Typography.body;
+            font-weight: Typography.medium;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+    ta := TouchArea {
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => {
+            if (root.enabled) {
+                root.clicked();
+            }
+        }
+    }
+}

@@ -21,6 +21,8 @@ import { Radius } from "../foundation/radius.slint";
 import { MyQbzAddState, MyQbzAddActions, MyQbzAddRow } from "../state.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
+import { QbzPrimaryButton } from "../primitives/QbzPrimaryButton.slint";
+import { SecondaryButton } from "../primitives/SecondaryButton.slint";
 import { LineEdit } from "std-widgets.slint";
 
 // A single labelled radio option in the create-panel Kind toggle.
@@ -156,50 +158,45 @@ component AddPickRow inherits Rectangle {
     }
 }
 
-// A small footer button (Cancel / Back / create-buttons).
-component FooterButton inherits Rectangle {
+// The icon+label "+ Mixtapes / + Collections" picker-footer chips. Kept as a
+// local secondary pill (rule #3 of the button audit: legitimately icon+label,
+// so it does NOT collapse to the icon-only CircleAction). The leading icon sits
+// in a centered [icon · gap · label] group — never jammed at the left edge.
+component FooterIconButton inherits Rectangle {
     in property <string> label;
-    in property <bool> primary: false;
-    in property <bool> enabled-look: true;
     in property <image> icon;
-    in property <bool> has-icon: false;
     callback clicked();
     height: 38px;
     border-radius: Radius.sm;
-    opacity: root.enabled-look ? 1.0 : 0.5;
-    background: root.primary
-        ? (ta.has-hover ? #ffffffd6 : Theme.accent)
-        : (ta.has-hover ? Theme.surface-hover : Theme.surface-elevated);
-    border-width: root.primary ? 0px : 1px;
+    background: ta.has-hover ? Theme.surface-hover : Theme.surface-elevated;
+    border-width: 1px;
     border-color: Theme.border-subtle;
     HorizontalLayout {
-        padding-left: root.primary ? 20px : 16px;
-        padding-right: root.primary ? 20px : 16px;
+        padding-left: 16px;
+        padding-right: 16px;
         spacing: 6px;
         alignment: center;
-        if root.has-icon: VerticalLayout {
+        VerticalLayout {
             alignment: center;
             QbzIcon {
                 source: root.icon;
                 width: 14px;
                 height: 14px;
-                tint: root.primary ? #ffffff : Theme.text-primary;
+                tint: Theme.text-primary;
             }
         }
         Text {
             text: root.label;
-            color: root.primary ? #ffffff : Theme.text-primary;
+            color: Theme.text-primary;
             font-size: Typography.body;
             font-weight: Typography.semibold;
             vertical-alignment: center;
         }
     }
     ta := TouchArea {
-        mouse-cursor: root.enabled-look ? pointer : default;
+        mouse-cursor: pointer;
         clicked => {
-            if (root.enabled-look) {
-                root.clicked();
-            }
+            root.clicked();
         }
     }
 }
@@ -376,10 +373,9 @@ export component AddToMixtapeModal inherits Rectangle {
                         HorizontalLayout {
                             padding: 12px;
                             spacing: 8px;
-                            FooterButton {
+                            FooterIconButton {
                                 horizontal-stretch: 1;
                                 label: @tr("Mixtapes");
-                                has-icon: true;
                                 icon: @image-url("../assets/icons/plus.svg");
                                 clicked => {
                                     MyQbzAddActions.show-create("mixtape");
@@ -387,10 +383,9 @@ export component AddToMixtapeModal inherits Rectangle {
                             }
                             // Hidden for track/playlist payloads (collections hold
                             // whole albums only).
-                            if !MyQbzAddState.restrict-to-mixtape: FooterButton {
+                            if !MyQbzAddState.restrict-to-mixtape: FooterIconButton {
                                 horizontal-stretch: 1;
                                 label: @tr("Collections");
-                                has-icon: true;
                                 icon: @image-url("../assets/icons/plus.svg");
                                 clicked => {
                                     MyQbzAddActions.show-create("collection");
@@ -460,25 +455,25 @@ export component AddToMixtapeModal inherits Rectangle {
                     }
                     // Spacer pushes the footer down.
                     Rectangle { vertical-stretch: 1; }
-                    // Footer: Back + Create & Add.
+                    // Footer: Back (secondary) + Create & Add (primary) —
+                    // the app's shared labeled primitives.
                     HorizontalLayout {
                         alignment: end;
                         spacing: 8px;
-                        FooterButton {
+                        SecondaryButton {
                             label: @tr("Back");
-                            enabled-look: !MyQbzAddState.create-busy;
+                            height: 38px;
+                            enabled: !MyQbzAddState.create-busy;
                             clicked => {
                                 MyQbzAddActions.create-back();
                             }
                         }
-                        FooterButton {
+                        QbzPrimaryButton {
                             label: @tr("Create & Add");
-                            primary: true;
-                            enabled-look: root.can-create;
+                            height: 38px;
+                            enabled: root.can-create;
                             clicked => {
-                                if (root.can-create) {
-                                    MyQbzAddActions.create-and-add();
-                                }
+                                MyQbzAddActions.create-and-add();
                             }
                         }
                     }

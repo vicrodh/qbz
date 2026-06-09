@@ -14,6 +14,8 @@ import { Typography } from "../foundation/typography.slint";
 import { DiscoBuilderState, DiscoBuilderActions, DiscoGroup, DiscoCandidate } from "../state.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { QualityBadgeFull } from "../primitives/QualityBadgeFull.slint";
+import { QbzPrimaryButton } from "../primitives/QbzPrimaryButton.slint";
+import { SecondaryButton } from "../primitives/SecondaryButton.slint";
 
 // ── Concrete dark-theme values (spec §0) ──────────────────────────────────
 // Resolved here as global consts so the whole view shares one source.
@@ -314,8 +316,8 @@ component CandidateRow inherits Rectangle {
                             source: @image-url("../assets/icons/check.svg");
                             width: 11px;
                             height: 11px;
-                            x: (parent.width - self.width) / 2;
-                            y: (parent.height - self.height) / 2;
+                            x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                            y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
                             tint: D.btn-primary-text;
                         }
                         TouchArea {
@@ -718,8 +720,8 @@ export component DiscographyBuilderView inherits Rectangle {
                                                 source: @image-url("../assets/icons/check.svg");
                                                 width: 11px;
                                                 height: 11px;
-                                                x: (parent.width - self.width) / 2;
-                                                y: (parent.height - self.height) / 2;
+                                                x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                                                y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
                                                 tint: D.btn-primary-text;
                                             }
                                             // Indeterminate dash.
@@ -728,8 +730,8 @@ export component DiscographyBuilderView inherits Rectangle {
                                                 width: 9px;
                                                 height: 2px;
                                                 background: D.accent;
-                                                x: (parent.width - self.width) / 2;
-                                                y: (parent.height - self.height) / 2;
+                                                x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                                                y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
                                             }
                                             TouchArea {
                                                 mouse-cursor: pointer;
@@ -819,64 +821,30 @@ export component DiscographyBuilderView inherits Rectangle {
                         font-size: 13px;
                     }
                 }
-                // .footer-actions.
+                // .footer-actions — the app's shared labeled primitives.
                 HorizontalLayout {
                     spacing: 8px;
                     alignment: end;
-                    // Cancel (secondary-btn).
-                    Rectangle {
-                        width: cancel-row.preferred-width + 32px;
+                    property <bool> create-disabled:
+                        DiscoBuilderState.creating
+                        || DiscoBuilderState.selected-count == 0
+                        || DiscoBuilderState.collection-name == "";
+                    // Cancel (secondary).
+                    SecondaryButton {
+                        label: @tr("Cancel");
                         height: 36px;
-                        background: cancel-ta.has-hover ? D.bg-hover : D.bg-secondary;
-                        border-radius: 8px;
-                        border-width: 1px;
-                        border-color: D.bg-tertiary;
-                        cancel-row := HorizontalLayout {
-                            alignment: center;
-                            Text {
-                                text: @tr("Cancel");
-                                color: D.text-primary;
-                                font-size: 13px;
-                                font-weight: 600;
-                                vertical-alignment: center;
-                            }
-                        }
-                        cancel-ta := TouchArea {
-                            mouse-cursor: pointer;
-                            clicked => {
-                                DiscoBuilderActions.back();
-                            }
+                        clicked => {
+                            DiscoBuilderActions.back();
                         }
                     }
-                    // Create (primary-btn).
-                    create-btn := Rectangle {
-                        property <bool> disabled:
-                            DiscoBuilderState.creating
-                            || DiscoBuilderState.selected-count == 0
-                            || DiscoBuilderState.collection-name == "";
-                        width: create-row.preferred-width + 40px;
+                    // Create (primary).
+                    QbzPrimaryButton {
+                        label: DiscoBuilderState.creating
+                            ? @tr("Loading...") : @tr("Create Collection");
                         height: 36px;
-                        background: D.accent;
-                        border-radius: 8px;
-                        opacity: create-btn.disabled ? 0.45 : 1.0;
-                        create-row := HorizontalLayout {
-                            alignment: center;
-                            Text {
-                                text: DiscoBuilderState.creating
-                                    ? @tr("Loading...") : @tr("Create Collection");
-                                color: D.btn-primary-text;
-                                font-size: 13px;
-                                font-weight: 600;
-                                vertical-alignment: center;
-                            }
-                        }
-                        TouchArea {
-                            mouse-cursor: create-btn.disabled ? default : pointer;
-                            clicked => {
-                                if (!create-btn.disabled) {
-                                    DiscoBuilderActions.create();
-                                }
-                            }
+                        enabled: !parent.create-disabled;
+                        clicked => {
+                            DiscoBuilderActions.create();
                         }
                     }
                 }

@@ -23,6 +23,8 @@ import { Radius } from "../foundation/radius.slint";
 import { MyQbzMixState, MyQbzMixActions } from "../state.slint";
 import { QbzSlider } from "../primitives/QbzSlider.slint";
 import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
+import { QbzPrimaryButton } from "../primitives/QbzPrimaryButton.slint";
+import { SecondaryButton } from "../primitives/SecondaryButton.slint";
 
 export component MyQbzMixModal inherits Rectangle {
     visible: MyQbzMixState.open;
@@ -150,61 +152,28 @@ export component MyQbzMixModal inherits Rectangle {
                     }
                 }
 
-                // --- Footer (.tm-actions, right-aligned) -----------------
+                // --- Footer (.tm-actions, right-aligned) — shared primitives
                 HorizontalLayout {
                     alignment: end;
                     spacing: 12px;
 
                     // Cancel (secondary).
-                    Rectangle {
-                        width: cancel-label.preferred-width + 32px;
+                    SecondaryButton {
+                        label: @tr("Cancel");
                         height: 38px;
-                        border-radius: Radius.sm;
-                        background: cancel-ta.has-hover ? Theme.surface-hover : Theme.surface-elevated;
-                        border-width: 1px;
-                        border-color: Theme.border-subtle;
-                        cancel-label := Text {
-                            text: @tr("Cancel");
-                            color: Theme.text-primary;
-                            font-size: Typography.body;
-                            font-weight: Typography.semibold;
-                            x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
-                            y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
-                        }
-                        cancel-ta := TouchArea {
-                            mouse-cursor: MyQbzMixState.busy ? default : pointer;
-                            clicked => {
-                                if (!MyQbzMixState.busy) {
-                                    MyQbzMixActions.close();
-                                }
-                            }
+                        enabled: !MyQbzMixState.busy;
+                        clicked => {
+                            MyQbzMixActions.close();
                         }
                     }
 
                     // Shuffle / Add to queue (primary) — mixModal.confirm.
-                    Rectangle {
-                        width: confirm-label.preferred-width + 40px;
+                    QbzPrimaryButton {
+                        label: @tr("Add to queue");
                         height: 38px;
-                        border-radius: Radius.sm;
-                        opacity: root.can-shuffle ? 1.0 : 0.5;
-                        background: confirm-ta.has-hover && root.can-shuffle
-                            ? #ffffffd6
-                            : Theme.accent;
-                        confirm-label := Text {
-                            text: @tr("Add to queue");
-                            color: #ffffff;
-                            font-size: Typography.body;
-                            font-weight: Typography.semibold;
-                            x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
-                            y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
-                        }
-                        confirm-ta := TouchArea {
-                            mouse-cursor: root.can-shuffle ? pointer : default;
-                            clicked => {
-                                if (root.can-shuffle) {
-                                    MyQbzMixActions.shuffle();
-                                }
-                            }
+                        enabled: root.can-shuffle;
+                        clicked => {
+                            MyQbzMixActions.shuffle();
                         }
                     }
                 }

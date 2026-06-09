@@ -16,6 +16,8 @@ import { Typography } from "../foundation/typography.slint";
 import { Radius } from "../foundation/radius.slint";
 import { MyQbzEditState, MyQbzEditActions } from "../state.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
+import { QbzPrimaryButton } from "../primitives/QbzPrimaryButton.slint";
+import { SecondaryButton } from "../primitives/SecondaryButton.slint";
 import { LineEdit, TextEdit } from "std-widgets.slint";
 
 export component MyQbzEditModal inherits Rectangle {
@@ -96,67 +98,35 @@ export component MyQbzEditModal inherits Rectangle {
                     wrap: word-wrap;
                 }
 
-                // --- Footer (m-footer) -----------------------------------
+                // --- Footer (m-footer) — shared labeled primitives -------
                 HorizontalLayout {
                     alignment: end;
                     spacing: 8px;
 
                     // Cancel (secondary).
-                    Rectangle {
-                        width: cancel-label.preferred-width + 32px;
+                    SecondaryButton {
+                        label: @tr("Cancel");
                         height: 38px;
-                        border-radius: Radius.sm;
-                        background: cancel-ta.has-hover ? Theme.surface-hover : Theme.surface-elevated;
-                        border-width: 1px;
-                        border-color: Theme.border-subtle;
-                        cancel-label := Text {
-                            text: @tr("Cancel");
-                            color: Theme.text-primary;
-                            font-size: Typography.body;
-                            font-weight: Typography.semibold;
-                            x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
-                            y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
-                        }
-                        cancel-ta := TouchArea {
-                            mouse-cursor: MyQbzEditState.busy ? default : pointer;
-                            clicked => {
-                                if (!MyQbzEditState.busy) {
-                                    MyQbzEditActions.close();
-                                }
-                            }
+                        enabled: !MyQbzEditState.busy;
+                        clicked => {
+                            MyQbzEditActions.close();
                         }
                     }
 
                     // Submit — primary (rename/description) or destructive
-                    // (delete).
-                    Rectangle {
-                        width: submit-label.preferred-width + 40px;
+                    // (delete) variant of the shared QbzPrimaryButton.
+                    QbzPrimaryButton {
+                        label: root.is-delete ? @tr("Delete") : @tr("Save");
                         height: 38px;
-                        border-radius: Radius.sm;
-                        opacity: root.can-submit ? 1.0 : 0.5;
-                        background: root.is-delete
-                            ? (submit-ta.has-hover ? #e57373d9 : #e57373)
-                            : (submit-ta.has-hover ? #ffffffd6 : Theme.accent);
-                        submit-label := Text {
-                            text: root.is-delete ? @tr("Delete") : @tr("Save");
-                            color: #ffffff;
-                            font-size: Typography.body;
-                            font-weight: Typography.semibold;
-                            x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
-                            y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
-                        }
-                        submit-ta := TouchArea {
-                            mouse-cursor: root.can-submit ? pointer : default;
-                            clicked => {
-                                if (root.can-submit) {
-                                    if (root.is-rename) {
-                                        MyQbzEditActions.submit-rename();
-                                    } else if (root.is-description) {
-                                        MyQbzEditActions.submit-description();
-                                    } else {
-                                        MyQbzEditActions.confirm-delete();
-                                    }
-                                }
+                        destructive: root.is-delete;
+                        enabled: root.can-submit;
+                        clicked => {
+                            if (root.is-rename) {
+                                MyQbzEditActions.submit-rename();
+                            } else if (root.is-description) {
+                                MyQbzEditActions.submit-description();
+                            } else {
+                                MyQbzEditActions.confirm-delete();
                             }
                         }
                     }

@@ -25,52 +25,13 @@ import { Typography } from "../foundation/typography.slint";
 import { Radius } from "../foundation/radius.slint";
 import { MyQbzDetailState, MyQbzDetailActions, MixtapeDetailItem, TrackItem, NavState } from "../state.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
+import { CircleAction } from "../primitives/CircleAction.slint";
 import { TrackRow } from "../primitives/TrackRow.slint";
 import { QualityBadgeFull } from "../primitives/QualityBadgeFull.slint";
 import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
 import { ListScrollbar } from "../primitives/ListScrollbar.slint";
 import { MultiSelectBar } from "../primitives/MultiSelectBar.slint";
 import { CollectionMosaic } from "CollectionMosaic.slint";
-
-// --- Hero action button (.action-btn-circle family) ---------------------
-// Ghost circle (translucent fill + faint ring) homologated with the album /
-// playlist transport rows; `.primary` keeps the same ghost look (the Tauri
-// CTA fills accent but our transport row family is ghost everywhere). `enabled`
-// dims + disables (item-count == 0).
-component ActionCircle inherits Rectangle {
-    in property <image> icon;
-    in property <bool> primary: false;
-    in property <length> diameter: 44px;
-    in property <bool> enabled: true;
-    in property <length> glyph: 19px;
-    callback clicked();
-
-    width: root.diameter;
-    height: root.diameter;
-    border-radius: root.diameter / 2;
-    opacity: root.enabled ? 1.0 : 0.4;
-    background: root.primary
-        ? (ac-ta.has-hover ? #ffffffd6 : #ffffff)
-        : (ac-ta.has-hover ? Theme.surface-hover : transparent);
-    border-width: root.primary ? 0px : 1px;
-    border-color: ac-ta.has-hover ? Theme.text-disabled : Theme.border-subtle;
-    QbzIcon {
-        source: root.icon;
-        width: root.glyph;
-        height: root.glyph;
-        x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
-        y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
-        tint: root.primary ? #000000 : (ac-ta.has-hover ? Theme.text-primary : Theme.text-secondary);
-    }
-    ac-ta := TouchArea {
-        mouse-cursor: root.enabled ? pointer : default;
-        clicked => {
-            if (root.enabled) {
-                root.clicked();
-            }
-        }
-    }
-}
 
 // --- One sort / type-filter dropdown row --------------------------------
 component MenuOption inherits Rectangle {
@@ -874,22 +835,21 @@ export component MixtapeDetailView inherits Rectangle {
                     HorizontalLayout {
                         spacing: 8px;
                         alignment: start;
-                        // (1) Play — primary.
-                        ActionCircle {
+                        // (1) Play — primary (filled white disc + black glyph;
+                        // the shared CircleAction.primary, spec §3.6).
+                        CircleAction {
                             icon: @image-url("../assets/icons/play-fill.svg");
                             primary: true;
                             diameter: 44px;
-                            glyph: 20px;
                             enabled: MyQbzDetailState.item-count > 0;
                             clicked => { MyQbzDetailActions.play-all(); }
                         }
                         // (2) Shuffle.
                         VerticalLayout {
                             alignment: center;
-                            ActionCircle {
+                            CircleAction {
                                 icon: @image-url("../assets/icons/shuffle.svg");
                                 diameter: 40px;
-                                glyph: 18px;
                                 enabled: MyQbzDetailState.item-count > 0;
                                 clicked => { MyQbzDetailActions.shuffle(); }
                             }
@@ -897,10 +857,9 @@ export component MixtapeDetailView inherits Rectangle {
                         // (3) DJ-mix (DjIcon) — STUB click (modal is a later slice).
                         VerticalLayout {
                             alignment: center;
-                            ActionCircle {
+                            CircleAction {
                                 icon: @image-url("../assets/icons/turntable.svg");
                                 diameter: 40px;
-                                glyph: 18px;
                                 enabled: MyQbzDetailState.item-count > 0;
                                 clicked => { MyQbzDetailActions.dj-mix(); }
                             }
@@ -911,10 +870,9 @@ export component MixtapeDetailView inherits Rectangle {
                             overflow-anchor := Rectangle {
                                 width: 40px;
                                 height: 40px;
-                                ActionCircle {
+                                CircleAction {
                                     icon: @image-url("../assets/icons/ellipsis.svg");
                                     diameter: 40px;
-                                    glyph: 18px;
                                     clicked => { overflow-menu.show(); }
                                 }
                                 overflow-menu := PopupWindow {

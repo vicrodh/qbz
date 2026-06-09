@@ -14,6 +14,8 @@ import { Typography } from "../foundation/typography.slint";
 import { Radius } from "../foundation/radius.slint";
 import { MyQbzCreateState, MyQbzCreateActions } from "../state.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
+import { QbzPrimaryButton } from "../primitives/QbzPrimaryButton.slint";
+import { SecondaryButton } from "../primitives/SecondaryButton.slint";
 import { LineEdit } from "std-widgets.slint";
 
 // A single labelled radio option in the Kind toggle.
@@ -163,55 +165,26 @@ export component CreateMyQbzModal inherits Rectangle {
                     }
                 }
 
-                // Cancel + Create.
+                // Cancel + Create — the app's shared labeled primitives
+                // (auto-width, 38px footer chips).
                 HorizontalLayout {
                     alignment: end;
                     spacing: 8px;
                     // Cancel (secondary).
-                    Rectangle {
-                        width: cancel-label.preferred-width + 32px;
+                    SecondaryButton {
+                        label: @tr("Cancel");
                         height: 38px;
-                        border-radius: Radius.sm;
-                        background: cancel-ta.has-hover ? Theme.surface-hover : Theme.surface-elevated;
-                        border-width: 1px;
-                        border-color: Theme.border-subtle;
-                        cancel-label := Text {
-                            text: @tr("Cancel");
-                            color: Theme.text-primary;
-                            font-size: Typography.body;
-                            font-weight: Typography.semibold;
-                            x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
-                            y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
-                        }
-                        cancel-ta := TouchArea {
-                            mouse-cursor: pointer;
-                            clicked => {
-                                MyQbzCreateActions.close();
-                            }
+                        clicked => {
+                            MyQbzCreateActions.close();
                         }
                     }
                     // Create (primary) — label reuses the empty-state CTA.
-                    Rectangle {
-                        width: create-label.preferred-width + 40px;
+                    QbzPrimaryButton {
+                        label: root.is-mixtape ? @tr("+ New Mixtape") : @tr("+ New Collection");
                         height: 38px;
-                        border-radius: Radius.sm;
-                        opacity: root.can-create ? 1.0 : 0.5;
-                        background: create-ta.has-hover ? #ffffffd6 : Theme.accent;
-                        create-label := Text {
-                            text: root.is-mixtape ? @tr("+ New Mixtape") : @tr("+ New Collection");
-                            color: #ffffff;
-                            font-size: Typography.body;
-                            font-weight: Typography.semibold;
-                            x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
-                            y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
-                        }
-                        create-ta := TouchArea {
-                            mouse-cursor: root.can-create ? pointer : default;
-                            clicked => {
-                                if (root.can-create) {
-                                    MyQbzCreateActions.submit();
-                                }
-                            }
+                        enabled: root.can-create;
+                        clicked => {
+                            MyQbzCreateActions.submit();
                         }
                     }
                 }
