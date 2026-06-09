@@ -95,14 +95,18 @@ component ToolBtn inherits Rectangle {
     callback clicked();
     height: 30px;
     border-radius: 6px;
-    width: row.preferred-width + (root.label == "" ? 16px : 20px);
+    // Width = the layout's natural size (its own symmetric padding included), so
+    // the content is centred by the padding rather than an absolute x offset that
+    // fought the width and pushed the glyph off-centre.
+    width: row.preferred-width;
     background: (root.active && root.fill-active)
         ? Theme.accent
         : (cb-ta.has-hover ? Theme.surface-hover : Theme.surface-elevated);
     border-width: 1px;
     border-color: (root.active && !root.fill-active) ? Theme.accent : Theme.border-subtle;
     row := HorizontalLayout {
-        x: root.label == "" ? 8px : 10px;
+        padding-left: root.label == "" ? 8px : 10px;
+        padding-right: root.label == "" ? 8px : 10px;
         height: 100%;
         spacing: 6px;
         alignment: center;
