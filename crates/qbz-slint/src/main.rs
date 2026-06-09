@@ -43,6 +43,7 @@ mod myqbz_detail;
 mod myqbz_edit;
 mod myqbz_mix;
 mod myqbz_play;
+mod myqbz_prefs;
 mod nav;
 mod play_history;
 mod strip_html;
@@ -130,6 +131,11 @@ async fn enter_shell(
     // Slint-only). Seeded into PlexSettingsState lazily on panel open.
     plex_settings::init_for_user(session.user_id);
 
+    // Bind "My QBZ" nav branding (custom label + icon) to this user
+    // (per-user myqbz_branding.json). Seeded into MyQbzBrandingState below so
+    // the sidebar row + Settings row reflect the persisted values on entry.
+    myqbz_prefs::init_for_user(session.user_id);
+
     // Create the system tray from this user's persisted settings (gated by
     // enable_tray). Reflects the chosen icon variant. On Linux the ksni
     // service runs on its own thread; macOS/Windows are no-ops until the
@@ -162,6 +168,9 @@ async fn enter_shell(
         appearance.set_tray_close_to_tray(tray.close_to_tray);
         appearance.set_tray_mac_hide_dock(tray.mac_hide_dock);
         appearance.set_tray_icon_theme_index(tray_settings::icon_theme_index(&tray.tray_icon_theme));
+        // Seed the My QBZ branding (label + icon) from the per-user store so
+        // the sidebar row + Settings row paint the custom values immediately.
+        myqbz_prefs::seed(&w);
         w.global::<HomeState>().set_loading(true);
         w.set_screen(AppScreen::Shell);
     });
@@ -3644,6 +3653,39 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
             other => log::debug!("[qbz-slint] unhandled appearance-select '{other}'"),
+        });
+    }
+
+    // "My QBZ" nav branding (Settings > Appearance) — persist the label /
+    // custom icon per-user and re-seed MyQbzBrandingState so the sidebar row
+    // updates live. Re-homed from the Tauri sidebar context-menu modal (DQ3).
+    {
+        let branding = window.global::<MyQbzBrandingState>();
+        // Label: persist (blank coerces to "My QBZ" in the store) and push the
+        // coerced value onto the shared `label` property so the sidebar row
+        // updates live. We set only `label` (not a full re-seed) so the bound
+        // LineEdit isn't disturbed mid-edit beyond the documented blank->default
+        // coercion. The icon state is left untouched here.
+        let weak = window.as_weak();
+        branding.on_set_label(move |label| {
+            let coerced = myqbz_prefs::set_label(label.as_str());
+            if let Some(w) = weak.upgrade() {
+                w.global::<MyQbzBrandingState>().set_label(coerced.into());
+            }
+        });
+        // Change icon: async native picker; persists + re-seeds on pick.
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        branding.on_pick_icon(move || {
+            myqbz_prefs::pick_icon(weak.clone(), handle.clone());
+        });
+        // Reset icon: clear the custom path, re-seed to the default glyph.
+        let weak = window.as_weak();
+        branding.on_reset_icon(move || {
+            myqbz_prefs::reset_icon();
+            if let Some(w) = weak.upgrade() {
+                myqbz_prefs::seed(&w);
+            }
         });
     }
 

@@ -15,7 +15,7 @@ import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { SidebarPlaylistCollage } from "../primitives/SidebarPlaylistCollage.slint";
 import { ContextMenu } from "../primitives/ContextMenu.slint";
 import { ContextMenuItem } from "../primitives/ContextMenuItem.slint";
-import { ShellState, SidebarState, SidebarActions, SidebarEntry, DragState, HeaderMenuState, NavMenuEntry, SidebarFolderPopupState, SidebarTooltipState } from "../state.slint";
+import { ShellState, SidebarState, SidebarActions, SidebarEntry, DragState, HeaderMenuState, NavMenuEntry, SidebarFolderPopupState, SidebarTooltipState, MyQbzBrandingState } from "../state.slint";
 import { ScrollView, LineEdit } from "std-widgets.slint";
 
 // A single context-menu item row.
@@ -501,6 +501,10 @@ component SidebarNavRow inherits Rectangle {
     in property <int> tab-index;
     in property <[NavMenuEntry]> items;
     in property <int> home-item: -1;
+    // When true the leading icon is a user-supplied image rendered as-is
+    // (no theme tint). Used by the My QBZ row to show a custom icon with its
+    // own colours; default branded glyphs stay tinted via QbzIcon.
+    in property <bool> raw-icon: false;
     property <bool> active: HeaderMenuState.open-index == root.tab-index;
 
     height: 34px;
@@ -528,7 +532,15 @@ component SidebarNavRow inherits Rectangle {
         alignment: ShellState.sidebar-mini ? center : start;
         VerticalLayout {
             alignment: center;
-            QbzIcon {
+            // Custom user icon — rendered raw (no tint) so its own colours show.
+            if root.raw-icon: Image {
+                source: root.icon;
+                image-fit: contain;
+                width: 16px;
+                height: 16px;
+            }
+            // Default branded glyph — tinted to the theme text colour.
+            if !root.raw-icon: QbzIcon {
                 source: root.icon;
                 width: 16px;
                 height: 16px;
@@ -616,8 +628,15 @@ export component Sidebar inherits Rectangle {
             }
             SidebarNavRow {
                 tab-index: 3;
-                icon: @image-url("../assets/icons/my-qbz.svg");
-                label: @tr("My QBZ");
+                // Label + icon are user-customizable (Settings > Appearance).
+                // The icon is the custom user image when set (rendered raw) or
+                // the default branded glyph (tinted). The label coerces back to
+                // "My QBZ" on the Rust side when cleared.
+                icon: MyQbzBrandingState.has-custom-icon
+                    ? MyQbzBrandingState.custom-icon
+                    : @image-url("../assets/icons/my-qbz.svg");
+                label: MyQbzBrandingState.label;
+                raw-icon: MyQbzBrandingState.has-custom-icon;
                 items: [
                     { label: @tr("Mixtapes"), icon: @image-url("../assets/icons/cassette.svg"), has-glyph: true, route: "myqbz-mixtapes" },
                     { label: @tr("Collections"), icon: @image-url("../assets/icons/collection.svg"), has-glyph: true, route: "myqbz-collections" },

@@ -2130,6 +2130,43 @@ export global AppearanceState {
     callback appearance-action(string /* key */);
 }
 
+// "My QBZ" navigation branding (custom label + icon), surfaced in
+// Settings > Appearance and reflected on the sidebar "My QBZ" row.
+//
+// Mirrors the Tauri `myQbzNavStore` contract (label default "My QBZ",
+// icon default the branded /my-qbz.svg). Persistence is per-user JSON
+// (see crate::myqbz_prefs); these properties are the live UI mirror and
+// the callbacks are the action surface (the Rust side persists + re-seeds).
+//
+//  - `label`     : the current label (never empty — blank input coerces
+//                  back to the default "My QBZ" string on the Rust side).
+//  - `custom-icon` : the user's image, loaded straight from the picked file
+//                  path and rendered as-is (no tint). Only meaningful when
+//                  `has-custom-icon` is true; otherwise the consumer falls
+//                  back to the default branded glyph in markup (mask-tinted
+//                  via QbzIcon on the sidebar). The default glyph stays a
+//                  compile-time `@image-url` — the Rust side never decodes it.
+//  - `has-custom-icon` : true when a usable user image is set. A stale /
+//                  deleted custom path falls back to the default on the Rust
+//                  side (the seed loads the file; a load failure clears the
+//                  flag without mutating the store), so this flag tracks "a
+//                  usable custom icon is present".
+export global MyQbzBrandingState {
+    in-out property <string> label: "My QBZ";
+    in-out property <image> custom-icon;
+    in-out property <bool> has-custom-icon: false;
+
+    // Commit a new label (trimmed-empty coerces to the default on the Rust
+    // side, which also re-seeds `label`). Fired on the text input's edit.
+    callback set-label(string /* label */);
+    // Open the native image picker; on pick, persist the path, load it, and
+    // re-seed `icon` + `has-custom-icon`. No-op on cancel.
+    callback pick-icon();
+    // Reset the icon to the default branded glyph (clears the persisted
+    // custom path). The label is reset separately by clearing the input.
+    callback reset-icon();
+}
+
 // One entry of a nav-tab dropdown.
 export struct NavMenuEntry {
     label: string,

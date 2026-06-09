@@ -14,7 +14,7 @@ import { Theme } from "../foundation/semantic-colors.slint";
 import { ThemeState } from "../foundation/theme-state.slint";
 import { Typography } from "../foundation/typography.slint";
 import { Radius } from "../foundation/radius.slint";
-import { AppearanceState, SidebarState, ShellState, ToastState } from "../state.slint";
+import { AppearanceState, SidebarState, ShellState, ToastState, MyQbzBrandingState } from "../state.slint";
 import { QbzToggle } from "../primitives/QbzToggle.slint";
 import { QbzSelect } from "../primitives/QbzSelect.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
@@ -295,6 +295,64 @@ export component AppearanceSettings inherits VerticalLayout {
             checked: ShellState.nav-in-sidebar;
             toggled(v) => {
                 ShellState.nav-in-sidebar = v;
+            }
+        }
+    }
+    // "My QBZ" nav branding — rename + change-icon, re-homed from the Tauri
+    // sidebar context-menu modal (DQ3). The label input commits on edit
+    // (blank coerces to "My QBZ" in Rust); the icon picker / reset persist a
+    // custom image path. The sidebar "My QBZ" row reflects both live.
+    SettingRow {
+        label: @tr("My QBZ");
+        description: @tr("Rename the My QBZ hub and pick a custom icon. Leave the name blank to restore the default.");
+        HorizontalLayout {
+            spacing: 8px;
+            // Icon preview — the user image as-is (custom) or the default
+            // branded glyph tinted to text colour (matches the picker preview
+            // being a raw image, not the sidebar's accent mask).
+            Rectangle {
+                width: 34px;
+                height: 34px;
+                border-radius: Radius.sm;
+                border-width: 1px;
+                border-color: Theme.border-subtle;
+                background: Theme.surface-elevated;
+                if MyQbzBrandingState.has-custom-icon: Image {
+                    source: MyQbzBrandingState.custom-icon;
+                    image-fit: contain;
+                    width: 22px;
+                    height: 22px;
+                }
+                if !MyQbzBrandingState.has-custom-icon: QbzIcon {
+                    source: @image-url("../assets/icons/my-qbz.svg");
+                    width: 18px;
+                    height: 18px;
+                    tint: Theme.text-secondary;
+                }
+            }
+            // Label input — commits on edit; the placeholder is the default.
+            VerticalLayout {
+                alignment: center;
+                width: 150px;
+                name-edit := LineEdit {
+                    text: MyQbzBrandingState.label;
+                    placeholder-text: @tr("My QBZ");
+                    edited(s) => {
+                        MyQbzBrandingState.set-label(s);
+                    }
+                }
+            }
+            SecondaryButton {
+                label: @tr("Change icon...");
+                clicked => {
+                    MyQbzBrandingState.pick-icon();
+                }
+            }
+            SecondaryButton {
+                label: @tr("Reset");
+                clicked => {
+                    MyQbzBrandingState.reset-icon();
+                }
             }
         }
     }
