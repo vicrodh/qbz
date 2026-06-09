@@ -59,6 +59,13 @@ pub enum NavEntry {
     /// The Offline Cache Manager — the manage-downloads surface (Tauri's
     /// OfflineCacheManagerView). Session-scoped; no payload.
     OfflineManager,
+    /// The My QBZ > Mixtapes index grid (read-only in this slice). Toolbar
+    /// state (sort/view/search) is session-scoped in the controller, so the
+    /// entry carries no payload.
+    Mixtapes,
+    /// The My QBZ > Collections index grid (read-only in this slice). Same
+    /// session-scoped toolbar; no payload.
+    Collections,
     Album(String),
     /// A Local Library album detail page (dedicated view, separate from the
     /// Qobuz Album view); the string is the metadata group key.

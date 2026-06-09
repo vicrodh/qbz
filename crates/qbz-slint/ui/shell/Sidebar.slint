@@ -616,11 +616,11 @@ export component Sidebar inherits Rectangle {
             }
             SidebarNavRow {
                 tab-index: 3;
-                icon: @image-url("../assets/icons/cassette-tape.svg");
+                icon: @image-url("../assets/icons/my-qbz.svg");
                 label: @tr("My QBZ");
                 items: [
-                    { label: @tr("Collections"), icon: @image-url("../assets/icons/library-big.svg"), has-glyph: true },
-                    { label: @tr("Mixtapes"), icon: @image-url("../assets/icons/cassette-tape.svg"), has-glyph: true },
+                    { label: @tr("Mixtapes"), icon: @image-url("../assets/icons/cassette.svg"), has-glyph: true, route: "myqbz-mixtapes" },
+                    { label: @tr("Collections"), icon: @image-url("../assets/icons/collection.svg"), has-glyph: true, route: "myqbz-collections" },
                 ];
             }
         }

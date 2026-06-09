@@ -1,0 +1,121 @@
+// CollectionMosaic — the artwork renderer for Mixtapes & Collections cards,
+// list rows and empty states (Tauri's CollectionMosaic.svelte). Ported as a
+// new component modeled on PmCollage's layout discipline (clip + radius +
+// 1px gaps), but with the MyQBZ-specific rules:
+//
+//   - custom-cover (has-custom-cover) -> single full-bleed cover (precedence)
+//   - else empty (cover-count == 0) -> centered kind glyph
+//       mixtape -> cassette, artist_collection -> user, collection -> library-big
+//       icon size = round(size * 0.4), muted, opacity 0.6
+//   - else collage:
+//       cols = (kind == "collection" && item-count >= 9) ? 3 : 2
+//       2x2 (4 cells) for everything else; cells padded with empty squares
+//
+// The covers + decoded images live on the MixtapeCardItem (cover-count,
+// url1..url9 / cover1..cover9). Rust pre-decides cover-count (0 / 4 / 9) and
+// pre-downscales the Qobuz URLs per cell. This component only lays them out.
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Radius } from "../foundation/radius.slint";
+import { MixtapeCardItem } from "../state.slint";
+import { QbzIcon } from "../primitives/QbzIcon.slint";
+
+// One mosaic cell: the cover when present, else an empty --bg-tertiary square.
+// Defined before CollectionMosaic (Slint has no forward references within a
+// file).
+component MosaicCell inherits Rectangle {
+    in property <string> url;
+    in property <image> cover-image;
+    in property <length> cell;
+    width: root.cell;
+    height: root.cell;
+    background: Theme.surface-elevated;   // empty-cell var(--bg-tertiary)
+    clip: true;
+    if root.url != "": Image {
+        width: 100%;
+        height: 100%;
+        source: root.cover-image;
+        image-fit: cover;
+    }
+}
+
+export component CollectionMosaic inherits Rectangle {
+    in property <MixtapeCardItem> item;
+    in property <length> size: 184px;
+    // For the empty state the caller passes an explicit kind (e.g. "mixtape"
+    // / "collection") when the item itself is empty; falls back to item.kind.
+    in property <string> empty-kind: "";
+
+    width: root.size;
+    height: root.size;
+    border-radius: Radius.sm;        // 8px outer radius (Tauri).
+    clip: true;
+    background: Theme.surface-elevated;   // var(--bg-tertiary)
+
+    property <int> n: root.item.cover-count;
+    property <string> kind: root.empty-kind != "" ? root.empty-kind : root.item.kind;
+    // 3x3 only for a Collection with >= 9 items; everything else 2x2.
+    property <bool> grid3: root.kind == "collection" && root.item.item-count >= 9;
+    property <length> gap: 2px;
+
+    // --- custom cover (precedence) -> single full-bleed image -----------
+    if root.item.has-custom-cover: Image {
+        width: 100%;
+        height: 100%;
+        source: root.item.custom-cover;
+        image-fit: cover;
+    }
+
+    // --- empty -> kind glyph --------------------------------------------
+    if !root.item.has-custom-cover && root.n == 0: QbzIcon {
+        source: root.kind == "mixtape"
+            ? @image-url("../assets/icons/cassette-tape.svg")
+            : root.kind == "artist_collection"
+                ? @image-url("../assets/icons/user.svg")
+                : @image-url("../assets/icons/library-big.svg");
+        width: Math.round(root.size * 0.4 / 1px) * 1px;
+        height: Math.round(root.size * 0.4 / 1px) * 1px;
+        x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+        y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+        tint: Theme.text-muted;
+        opacity: 0.6;
+    }
+
+    // --- collage: 2x2 ---------------------------------------------------
+    if !root.item.has-custom-cover && root.n > 0 && !root.grid3: VerticalLayout {
+        spacing: root.gap;
+        HorizontalLayout {
+            spacing: root.gap;
+            MosaicCell { url: root.item.url1; cover-image: root.item.cover1; cell: (root.size - root.gap) / 2; }
+            MosaicCell { url: root.item.url2; cover-image: root.item.cover2; cell: (root.size - root.gap) / 2; }
+        }
+        HorizontalLayout {
+            spacing: root.gap;
+            MosaicCell { url: root.item.url3; cover-image: root.item.cover3; cell: (root.size - root.gap) / 2; }
+            MosaicCell { url: root.item.url4; cover-image: root.item.cover4; cell: (root.size - root.gap) / 2; }
+        }
+    }
+
+    // --- collage: 3x3 (collection + >=9 items) --------------------------
+    if !root.item.has-custom-cover && root.n > 0 && root.grid3: VerticalLayout {
+        spacing: root.gap;
+        HorizontalLayout {
+            spacing: root.gap;
+            MosaicCell { url: root.item.url1; cover-image: root.item.cover1; cell: (root.size - 2 * root.gap) / 3; }
+            MosaicCell { url: root.item.url2; cover-image: root.item.cover2; cell: (root.size - 2 * root.gap) / 3; }
+            MosaicCell { url: root.item.url3; cover-image: root.item.cover3; cell: (root.size - 2 * root.gap) / 3; }
+        }
+        HorizontalLayout {
+            spacing: root.gap;
+            MosaicCell { url: root.item.url4; cover-image: root.item.cover4; cell: (root.size - 2 * root.gap) / 3; }
+            MosaicCell { url: root.item.url5; cover-image: root.item.cover5; cell: (root.size - 2 * root.gap) / 3; }
+            MosaicCell { url: root.item.url6; cover-image: root.item.cover6; cell: (root.size - 2 * root.gap) / 3; }
+        }
+        HorizontalLayout {
+            spacing: root.gap;
+            MosaicCell { url: root.item.url7; cover-image: root.item.cover7; cell: (root.size - 2 * root.gap) / 3; }
+            MosaicCell { url: root.item.url8; cover-image: root.item.cover8; cell: (root.size - 2 * root.gap) / 3; }
+            MosaicCell { url: root.item.url9; cover-image: root.item.cover9; cell: (root.size - 2 * root.gap) / 3; }
+        }
+    }
+}

@@ -35,6 +35,7 @@ mod label;
 mod location_view;
 mod mix;
 mod musician;
+mod myqbz;
 mod nav;
 mod play_history;
 mod strip_html;
@@ -100,6 +101,18 @@ async fn enter_shell(
     // Bind the local library DB to this user (folders / playlist
     // settings live in the per-user library.db).
     library_db::set_user(session.user_id);
+
+    // Run the Mixtapes & Collections schema migrations against the same
+    // per-user library.db (the mixtape tables live in that file). Mirrors
+    // the Tauri build's session_lifecycle.rs `run_mixtape_migrations`.
+    // Best-effort: log on error, never block shell entry.
+    library_db::with_db(|db| {
+        Ok(db.with_connection(|conn| {
+            if let Err(e) = qbz_mixtape::schema::run_mixtape_migrations(conn) {
+                log::error!("[qbz-slint] mixtape migrations failed: {e}");
+            }
+        }))
+    });
 
     // Bind tray settings to this user (per-user tray_settings.db, shared with
     // the Tauri build) and snapshot them to seed the settings UI.
@@ -716,6 +729,8 @@ fn scope_for(entry: &nav::NavEntry) -> String {
         nav::NavEntry::Playlist(_) => "playlist".into(),
         nav::NavEntry::PlaylistManager => "playlist-manager".into(),
         nav::NavEntry::OfflineManager => "offline-manager".into(),
+        nav::NavEntry::Mixtapes => "mixtapes".into(),
+        nav::NavEntry::Collections => "collections".into(),
         nav::NavEntry::Album(_) => "album".into(),
         nav::NavEntry::LocalAlbum(_) => "local-album".into(),
         nav::NavEntry::Artist(_) => "artist".into(),
@@ -860,6 +875,22 @@ fn apply_entry(
                 w.global::<NavState>().set_view(ContentView::OfflineManager);
             });
             offline_manager::load(w2, handle.clone());
+        }
+        nav::NavEntry::Mixtapes => {
+            myqbz::navigate(
+                weak.clone(),
+                handle.clone(),
+                image_cache.clone(),
+                qbz_models::mixtape::CollectionKind::Mixtape,
+            );
+        }
+        nav::NavEntry::Collections => {
+            myqbz::navigate(
+                weak.clone(),
+                handle.clone(),
+                image_cache.clone(),
+                qbz_models::mixtape::CollectionKind::Collection,
+            );
         }
         nav::NavEntry::Location {
             mbid,
@@ -1811,6 +1842,137 @@ fn wire_playlist_manager(
                     });
                 });
             });
+    }
+}
+
+/// Wire the My QBZ (Mixtapes & Collections) index grids. READ-ONLY slice:
+/// `open-card` / `create-*` are logging STUBS; the toolbar callbacks
+/// (search / sort / view / kind-filter / reset) drive `crate::myqbz` rebuilds
+/// + re-issue mosaic artwork jobs. Mirrors `wire_playlist_manager`.
+fn wire_myqbz(window: &AppWindow, image_cache: &artwork::ImageCache) {
+    use myqbz::Grid;
+
+    // Re-issue mosaic artwork jobs for a grid after a toolbar rebuild (the
+    // row set / order changed, so visible cards need their covers reloaded).
+    fn refresh_covers(window: &AppWindow, grid: Grid, image_cache: &artwork::ImageCache) {
+        let jobs = myqbz::artwork_jobs(window, grid);
+        artwork::spawn_loads(jobs, window.as_weak(), image_cache.clone());
+    }
+
+    // --- STUBS (read-only boundary) -------------------------------------
+    {
+        window.global::<MyQbzActions>().on_open_card(move |id| {
+            log::info!("[qbz-slint] myqbz open-card({id}) — detail not yet wired (read-only slice)");
+        });
+    }
+    {
+        window.global::<MyQbzActions>().on_create_mixtape(move || {
+            log::info!("[qbz-slint] myqbz create-mixtape — not yet wired (read-only slice)");
+        });
+    }
+    {
+        window.global::<MyQbzActions>().on_create_collection(move || {
+            log::info!("[qbz-slint] myqbz create-collection — not yet wired (read-only slice)");
+        });
+    }
+
+    // --- Mixtapes toolbar -----------------------------------------------
+    {
+        let weak = window.as_weak();
+        let image_cache = image_cache.clone();
+        window
+            .global::<MyQbzActions>()
+            .on_mix_search_changed(move |query| {
+                if let Some(w) = weak.upgrade() {
+                    w.global::<MyQbzState>().set_mix_search(query);
+                    myqbz::rebuild(&w, Grid::Mixtapes);
+                    refresh_covers(&w, Grid::Mixtapes, &image_cache);
+                }
+            });
+    }
+    {
+        let weak = window.as_weak();
+        let image_cache = image_cache.clone();
+        window.global::<MyQbzActions>().on_mix_set_sort(move |field| {
+            if let Some(w) = weak.upgrade() {
+                myqbz::set_sort(&w, Grid::Mixtapes, field.as_str());
+                refresh_covers(&w, Grid::Mixtapes, &image_cache);
+            }
+        });
+    }
+    {
+        let weak = window.as_weak();
+        window.global::<MyQbzActions>().on_mix_set_view(move |view| {
+            if let Some(w) = weak.upgrade() {
+                w.global::<MyQbzState>().set_mix_view(view);
+            }
+        });
+    }
+    {
+        let weak = window.as_weak();
+        let image_cache = image_cache.clone();
+        window.global::<MyQbzActions>().on_mix_reset(move || {
+            if let Some(w) = weak.upgrade() {
+                myqbz::reset(&w, Grid::Mixtapes);
+                refresh_covers(&w, Grid::Mixtapes, &image_cache);
+            }
+        });
+    }
+
+    // --- Collections toolbar --------------------------------------------
+    {
+        let weak = window.as_weak();
+        let image_cache = image_cache.clone();
+        window
+            .global::<MyQbzActions>()
+            .on_col_search_changed(move |query| {
+                if let Some(w) = weak.upgrade() {
+                    w.global::<MyQbzState>().set_col_search(query);
+                    myqbz::rebuild(&w, Grid::Collections);
+                    refresh_covers(&w, Grid::Collections, &image_cache);
+                }
+            });
+    }
+    {
+        let weak = window.as_weak();
+        let image_cache = image_cache.clone();
+        window.global::<MyQbzActions>().on_col_set_sort(move |field| {
+            if let Some(w) = weak.upgrade() {
+                myqbz::set_sort(&w, Grid::Collections, field.as_str());
+                refresh_covers(&w, Grid::Collections, &image_cache);
+            }
+        });
+    }
+    {
+        let weak = window.as_weak();
+        window.global::<MyQbzActions>().on_col_set_view(move |view| {
+            if let Some(w) = weak.upgrade() {
+                w.global::<MyQbzState>().set_col_view(view);
+            }
+        });
+    }
+    {
+        let weak = window.as_weak();
+        let image_cache = image_cache.clone();
+        window
+            .global::<MyQbzActions>()
+            .on_col_set_kind_filter(move |kind| {
+                if let Some(w) = weak.upgrade() {
+                    w.global::<MyQbzState>().set_col_kind_filter(kind);
+                    myqbz::rebuild(&w, Grid::Collections);
+                    refresh_covers(&w, Grid::Collections, &image_cache);
+                }
+            });
+    }
+    {
+        let weak = window.as_weak();
+        let image_cache = image_cache.clone();
+        window.global::<MyQbzActions>().on_col_reset(move || {
+            if let Some(w) = weak.upgrade() {
+                myqbz::reset(&w, Grid::Collections);
+                refresh_covers(&w, Grid::Collections, &image_cache);
+            }
+        });
     }
 }
 
@@ -4445,6 +4607,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 return;
             }
+            // My QBZ — Mixtapes / Collections index grids (read-only slice).
+            // Record history + navigate (loads via myqbz::navigate), mirroring
+            // the Favorites / Local Library per-route pattern.
+            if route == "myqbz-mixtapes" {
+                nav::record(nav::NavEntry::Mixtapes);
+                if let Some(w) = weak.upgrade() {
+                    update_nav_flags(&w);
+                }
+                myqbz::navigate(
+                    weak.clone(),
+                    handle.clone(),
+                    image_cache.clone(),
+                    qbz_models::mixtape::CollectionKind::Mixtape,
+                );
+                return;
+            }
+            if route == "myqbz-collections" {
+                nav::record(nav::NavEntry::Collections);
+                if let Some(w) = weak.upgrade() {
+                    update_nav_flags(&w);
+                }
+                myqbz::navigate(
+                    weak.clone(),
+                    handle.clone(),
+                    image_cache.clone(),
+                    qbz_models::mixtape::CollectionKind::Collection,
+                );
+                return;
+            }
             // Discover tabs — switch to Home and select the tab. The
             // section sets are already cached from the initial load,
             // so this just swaps the visible set + re-fires artwork.
@@ -6266,6 +6457,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // === Playlist Manager actions ======================================
     wire_playlist_manager(&window, &app_runtime, &tokio_rt, &image_cache);
+    wire_myqbz(&window, &image_cache);
     {
         let weak = window.as_weak();
         window

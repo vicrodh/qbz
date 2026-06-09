@@ -345,7 +345,7 @@ export global DragActions {
 }
 
 // Which content view the shell shows.
-export enum ContentView { home, album, artist, settings, search, musician, label, label-releases, location, favorites, mix, playlist, discover-browse, playlist-manager, offline-manager, local-library, local-album }
+export enum ContentView { home, album, artist, settings, search, musician, label, label-releases, location, favorites, mix, playlist, discover-browse, playlist-manager, offline-manager, local-library, local-album, mixtapes, collections }
 
 // In-app toast (transient notification). Mirrors Tauri's toastStore:
 // a single toast at a time (a new one replaces the current), auto-hidden
@@ -1383,6 +1383,88 @@ export global OfflineManagerActions {
     callback clear-all();
     callback open-folder();
     callback play-track(string /* track id */);
+}
+
+// === My QBZ — Mixtapes & Collections (read-only index grids) ============
+// Mirrors PlaylistManagerState/PmPlaylistItem. Both the Mixtapes grid and the
+// Collections grid render `MixtapeCardItem`s; the Rust controller (crate::myqbz)
+// filters by kind and precomputes every display string, so the views do no
+// per-row lookups. Mosaic covers (up to 4, or 9 for a 3x3 Collection) are
+// decoded into the item by the artwork pipeline.
+//
+// READ-ONLY SCOPE (Phase-2 Slice 2): the grids DISPLAY rows + route from the
+// sidebar. Card click (open detail) and "+ New" (create) are STUBS that log
+// "not yet wired" — wired in later slices.
+export struct MixtapeCardItem {
+    id: string,
+    name: string,
+    // "mixtape" | "collection" | "artist_collection".
+    kind: string,
+    // Eyebrow label, uppercase ("MIXTAPE" | "COLLECTION" | "ARTIST").
+    label: string,
+    // "5 albums" / "1 album" — ICU-plural rendered in Rust (always "album(s)"
+    // regardless of item_type, matching the PSD).
+    meta: string,
+    // Item count (drives the 3x3-vs-2x2 mosaic rule + sort).
+    item-count: int,
+    play-count: int,
+    // updated_at epoch ms (sort key).
+    updated-at: int,
+    // Custom user-uploaded cover (decoded local file); empty when none. When
+    // present it full-bleeds the mosaic (precedence over the collage).
+    custom-cover: image,
+    has-custom-cover: bool,
+    // Mosaic cell count actually used: 0 (empty -> kind glyph), or 4 / 9.
+    cover-count: int,
+    // Up to 9 collage cover slots (only 0-3 used for 2x2; 0-8 for a 3x3
+    // Collection with >=9 items). URLs are pre-downscaled in Rust.
+    url1: string, url2: string, url3: string, url4: string,
+    url5: string, url6: string, url7: string, url8: string, url9: string,
+    cover1: image, cover2: image, cover3: image, cover4: image,
+    cover5: image, cover6: image, cover7: image, cover8: image, cover9: image,
+}
+
+export global MyQbzState {
+    // The Mixtapes grid set (kind == mixtape), filtered + sorted.
+    in property <[MixtapeCardItem]> mixtapes: [];
+    // The Collections grid set (kind == collection | artist_collection),
+    // filtered (by kind-filter) + sorted.
+    in property <[MixtapeCardItem]> collections: [];
+    in property <bool> loading: false;
+    // --- Mixtapes toolbar (session-scoped) ---
+    in-out property <string> mix-search;
+    // "position" | "name" | "items" | "updated".
+    in-out property <string> mix-sort: "position";
+    // "asc" | "desc".
+    in-out property <string> mix-sort-dir: "asc";
+    // "grid" | "list".
+    in-out property <string> mix-view: "grid";
+    // --- Collections toolbar (session-scoped) ---
+    in-out property <string> col-search;
+    in-out property <string> col-sort: "position";
+    in-out property <string> col-sort-dir: "asc";
+    in-out property <string> col-view: "grid";
+    // "all" | "collection" | "artist_collection".
+    in-out property <string> col-kind-filter: "all";
+}
+
+export global MyQbzActions {
+    // Card click -> open detail (STUB: logs in this slice).
+    callback open-card(string /* id */);
+    // "+ New Mixtape" / "+ New Collection" (STUB: logs in this slice).
+    callback create-mixtape();
+    callback create-collection();
+    // --- Mixtapes toolbar ---
+    callback mix-search-changed(string /* query */);
+    callback mix-set-sort(string /* field */);
+    callback mix-set-view(string /* grid|list */);
+    callback mix-reset();
+    // --- Collections toolbar ---
+    callback col-search-changed(string /* query */);
+    callback col-set-sort(string /* field */);
+    callback col-set-view(string /* grid|list */);
+    callback col-set-kind-filter(string /* all|collection|artist_collection */);
+    callback col-reset();
 }
 
 // Folder editor modal — create + edit (icon preset, solid color, custom

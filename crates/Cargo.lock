@@ -5487,6 +5487,7 @@ dependencies = [
  "qbz-integrations",
  "qbz-library",
  "qbz-media-controls",
+ "qbz-mixtape",
  "qbz-models",
  "qbz-offline-cache",
  "qbz-player",

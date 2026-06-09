@@ -141,6 +141,13 @@ pub enum ArtworkTarget {
     /// One collage cover slot (0-3) of a tree row's playlist
     /// (`PlaylistManagerState.tree[index].playlist`).
     PmTreeCover { index: usize, slot: usize },
+    /// One mosaic cover slot (0-8) of a My QBZ Mixtapes-grid card
+    /// (`MyQbzState.mixtapes[index]`). Up to 9 slots (3x3 Collections);
+    /// mixtapes use only 0-3.
+    MyQbzMixtapeCover { index: usize, slot: usize },
+    /// One mosaic cover slot (0-8) of a My QBZ Collections-grid card
+    /// (`MyQbzState.collections[index]`).
+    MyQbzCollectionCover { index: usize, slot: usize },
 }
 
 impl ArtworkTarget {
@@ -159,6 +166,9 @@ impl ArtworkTarget {
             ArtworkTarget::SidebarPlaylistCover { .. } => 48,
             // Playlist Manager collage tiles render at ~70-140px.
             ArtworkTarget::PmPlaylistCover { .. } | ArtworkTarget::PmTreeCover { .. } => 160,
+            // My QBZ mosaic tiles render at ~60-92px (184/2 or 184/3 grid).
+            ArtworkTarget::MyQbzMixtapeCover { .. }
+            | ArtworkTarget::MyQbzCollectionCover { .. } => 160,
             _ => DECODE_SIZE,
         }
     }
@@ -892,6 +902,20 @@ fn apply_artwork(
                     _ => return,
                 }
                 model.set_row_data(index, row);
+            }
+        }
+        ArtworkTarget::MyQbzMixtapeCover { index, slot } => {
+            let model = window.global::<crate::MyQbzState>().get_mixtapes();
+            if let Some(mut item) = model.row_data(index) {
+                crate::myqbz::set_mosaic_cover(&mut item, slot, image);
+                model.set_row_data(index, item);
+            }
+        }
+        ArtworkTarget::MyQbzCollectionCover { index, slot } => {
+            let model = window.global::<crate::MyQbzState>().get_collections();
+            if let Some(mut item) = model.row_data(index) {
+                crate::myqbz::set_mosaic_cover(&mut item, slot, image);
+                model.set_row_data(index, item);
             }
         }
     }

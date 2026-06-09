@@ -55,6 +55,7 @@ qbz-library = { path = "../qbz-library" }
 qbz-plex = { path = "../qbz-plex" }
 qbz-offline-cache = { path = "../qbz-offline-cache" }
 qbz-models = { path = "../qbz-models" }
+qbz-mixtape = { path = "../qbz-mixtape" }
 qbz-qobuz = { path = "../qbz-qobuz" }
 qbz-integrations = { path = "../qbz-integrations" }
 rusqlite = { version = "0.31", features = ["bundled"] }

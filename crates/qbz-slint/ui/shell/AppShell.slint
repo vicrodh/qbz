@@ -43,6 +43,8 @@ import { FavoritesView } from "../favorites/FavoritesView.slint";
 import { MixView } from "../mix/MixView.slint";
 import { PlaylistView } from "../playlist/PlaylistView.slint";
 import { PlaylistManagerView } from "../playlist/PlaylistManagerView.slint";
+import { MixtapesView } from "../myqbz/MixtapesView.slint";
+import { CollectionsView } from "../myqbz/CollectionsView.slint";
 import { OfflineManagerView } from "../offline/OfflineManagerView.slint";
 import { LocalLibraryView } from "../locallibrary/LocalLibraryView.slint";
 import { SettingsView } from "../settings/SettingsView.slint";
@@ -229,6 +231,8 @@ export component AppShell inherits Rectangle {
                     }
                 }
                 if NavState.view == ContentView.playlist-manager: PlaylistManagerView { }
+                if NavState.view == ContentView.mixtapes: MixtapesView { }
+                if NavState.view == ContentView.collections: CollectionsView { }
                 if NavState.view == ContentView.offline-manager: OfflineManagerView { }
                 if NavState.view == ContentView.local-library: LocalLibraryView { }
                 if NavState.view == ContentView.mix: MixView {

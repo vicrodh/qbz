@@ -1,0 +1,321 @@
+// My QBZ > Mixtapes — the index/landing grid of the user's mixtapes
+// (Tauri's MixtapesView.svelte). READ-ONLY in this slice: the grid DISPLAYS
+// rows and routes from the sidebar; the create CTA + card click are STUBS
+// (MyQbzActions.create-mixtape / open-card just log "not yet wired").
+//
+// Every px / token is verbatim from spec 10. Root padding 8 8 100 18 (left
+// 18 lines up with sidebar-accessed views; bottom 100 clears the player bar).
+// Grid = fixed 208px auto-fill columns, justify-start (cards never stretch).
+// Two distinct empty states: zero-mixtapes (big mosaic+title+CTA) vs
+// search-matched-none (small "No results found").
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Typography } from "../foundation/typography.slint";
+import { MyQbzState, MyQbzActions, MixtapeCardItem, NavState } from "../state.slint";
+import { QbzIcon } from "../primitives/QbzIcon.slint";
+import { ListScrollbar } from "../primitives/ListScrollbar.slint";
+import { CollectionMosaic } from "CollectionMosaic.slint";
+import {
+    PrimaryCta, MyQbzSearch, ControlBtn, ViewModeGroup, MyQbzCard, MyQbzListRow,
+} from "MyQbzShared.slint";
+
+// One sort dropdown row (space-between label + trailing arrow on active).
+// Defined before MixtapesView (Slint has no forward references in a file).
+component SortItem inherits Rectangle {
+    in property <string> label;
+    in property <bool> selected: false;
+    in property <string> indicator: "";
+    callback activated();
+    height: 32px;
+    border-radius: 4px;
+    background: item-ta.has-hover ? Theme.surface-hover : transparent;
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        Text {
+            text: root.label;
+            color: root.selected ? Theme.accent : Theme.text-secondary;
+            font-size: 13px;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+        }
+        if root.indicator != "": Text {
+            text: root.indicator;
+            color: Theme.text-muted;
+            font-size: 11px;
+            vertical-alignment: center;
+        }
+    }
+    item-ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.activated(); }
+    }
+}
+
+export component MixtapesView inherits Rectangle {
+    // Fixed grid geometry (spec 10: 208px columns, 20px gap, 12px-padded
+    // card -> 184 mosaic). card-h matches MyQbzCard's computed height.
+    property <length> card-w: 208px;
+    property <length> grid-gap: 20px;
+    property <length> card-h: 184px + 12px + 12px + 16px + 2 * 18px + 12px + 16px + 12px;
+
+    property <string> active-sort-label:
+        MyQbzState.mix-sort == "name" ? @tr("Name")
+        : MyQbzState.mix-sort == "items" ? @tr("Items")
+        : MyQbzState.mix-sort == "updated" ? @tr("Recently updated")
+        : @tr("Position");
+    property <string> sort-arrow: MyQbzState.mix-sort-dir == "asc" ? "↑" : "↓";
+    property <bool> has-active-filters:
+        MyQbzState.mix-sort != "position" || MyQbzState.mix-sort-dir != "asc";
+
+    background: Theme.surface-main;
+
+    flick := Flickable {
+        viewport-width: self.width;
+        viewport-height: page.preferred-height;
+        // Scroll-position restore on back/forward (see nav::scope_for).
+        property <string> sr-armed: NavState.restore-scope;
+        function sr-restore() {
+            if (NavState.restore-scope == "mixtapes" && self.viewport-height > self.height) {
+                self.viewport-y = NavState.scroll-restore;
+                NavState.restore-scope = "";
+            }
+        }
+        init => { self.sr-restore(); }
+        changed sr-armed => { self.sr-restore(); }
+        changed viewport-height => { self.sr-restore(); }
+        changed viewport-y => { NavState.report-scroll(self.viewport-y); }
+
+        page := VerticalLayout {
+            width: parent.width;
+            // .mixtapes-view padding: 8 8 100 18.
+            padding-top: 8px;
+            padding-right: 8px;
+            padding-bottom: 100px;
+            padding-left: 18px;
+            spacing: 0px;
+            alignment: start;
+
+            // --- Back button (.back-btn) -------------------------------
+            Rectangle {
+                height: 16px + 8px + 24px;  // icon row + top/bottom margins
+                back-row := HorizontalLayout {
+                    y: 8px;
+                    height: 16px;
+                    width: self.preferred-width;
+                    spacing: 8px;
+                    VerticalLayout {
+                        alignment: center;
+                        QbzIcon {
+                            source: @image-url("../assets/icons/arrow-left.svg");
+                            width: 16px;
+                            height: 16px;
+                            tint: back-ta.has-hover ? Theme.text-secondary : Theme.text-muted;
+                        }
+                    }
+                    Text {
+                        text: @tr("Back");
+                        color: back-ta.has-hover ? Theme.text-secondary : Theme.text-muted;
+                        font-size: 14px;
+                        vertical-alignment: center;
+                    }
+                }
+                back-ta := TouchArea {
+                    width: back-row.preferred-width;
+                    height: 16px;
+                    y: 8px;
+                    mouse-cursor: pointer;
+                    clicked => { NavState.request-back(); }
+                }
+            }
+
+            // --- Header (.view-header) ---------------------------------
+            HorizontalLayout {
+                height: 38px;
+                VerticalLayout {
+                    alignment: center;
+                    horizontal-stretch: 1;
+                    Text {
+                        text: @tr("Mixtapes");
+                        color: Theme.text-primary;
+                        font-size: 24px;
+                        font-weight: Typography.bold;
+                        vertical-alignment: center;
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    PrimaryCta {
+                        label: @tr("+ New Mixtape");
+                        show-plus: true;
+                        clicked => { MyQbzActions.create-mixtape(); }
+                    }
+                }
+            }
+            Rectangle { height: 16px; }
+
+            // ====================== EMPTY STATE ========================
+            if MyQbzState.mixtapes.length == 0 && MyQbzState.mix-search == "" && !MyQbzState.loading: VerticalLayout {
+                padding-top: 80px;
+                padding-bottom: 80px;
+                spacing: 16px;
+                alignment: start;
+                HorizontalLayout {
+                    alignment: center;
+                    CollectionMosaic {
+                        size: 160px;
+                        empty-kind: "mixtape";
+                    }
+                }
+                HorizontalLayout {
+                    alignment: center;
+                    Text {
+                        text: @tr("No mixtapes yet");
+                        color: Theme.text-secondary;
+                        font-size: 18px;
+                        font-weight: Typography.semibold;
+                    }
+                }
+                HorizontalLayout {
+                    alignment: center;
+                    PrimaryCta {
+                        label: @tr("+ New Mixtape");
+                        show-plus: false;
+                        clicked => { MyQbzActions.create-mixtape(); }
+                    }
+                }
+            }
+
+            // ====================== POPULATED ==========================
+            if MyQbzState.mixtapes.length > 0 || MyQbzState.mix-search != "": VerticalLayout {
+                spacing: 0px;
+                alignment: start;
+
+                // --- Toolbar (.list-controls) --------------------------
+                HorizontalLayout {
+                    height: 32px;
+                    spacing: 8px;
+                    MyQbzSearch {
+                        placeholder: @tr("Search mixtapes…");
+                        query <=> MyQbzState.mix-search;
+                        edited(q) => { MyQbzActions.mix-search-changed(q); }
+                    }
+                    // Sort dropdown.
+                    Rectangle {
+                        width: sort-btn.width;
+                        sort-btn := ControlBtn {
+                            icon: @image-url("../assets/icons/arrow-up-down.svg");
+                            label: root.active-sort-label;
+                            indicator: root.sort-arrow;
+                            clicked => { sort-menu.show(); }
+                        }
+                        sort-menu := PopupWindow {
+                            x: 0; y: 36px; width: 180px;
+                            Rectangle {
+                                background: Theme.surface-main;
+                                border-width: 1px;
+                                border-color: Theme.surface-elevated;
+                                border-radius: 8px;
+                                drop-shadow-blur: 24px;
+                                drop-shadow-color: #00000066;
+                                VerticalLayout {
+                                    padding: 4px;
+                                    spacing: 1px;
+                                    SortItem {
+                                        label: @tr("Position");
+                                        selected: MyQbzState.mix-sort == "position";
+                                        indicator: MyQbzState.mix-sort == "position" ? root.sort-arrow : "";
+                                        activated => { MyQbzActions.mix-set-sort("position"); }
+                                    }
+                                    SortItem {
+                                        label: @tr("Name");
+                                        selected: MyQbzState.mix-sort == "name";
+                                        indicator: MyQbzState.mix-sort == "name" ? root.sort-arrow : "";
+                                        activated => { MyQbzActions.mix-set-sort("name"); }
+                                    }
+                                    SortItem {
+                                        label: @tr("Items");
+                                        selected: MyQbzState.mix-sort == "items";
+                                        indicator: MyQbzState.mix-sort == "items" ? root.sort-arrow : "";
+                                        activated => { MyQbzActions.mix-set-sort("items"); }
+                                    }
+                                    SortItem {
+                                        label: @tr("Recently updated");
+                                        selected: MyQbzState.mix-sort == "updated";
+                                        indicator: MyQbzState.mix-sort == "updated" ? root.sort-arrow : "";
+                                        activated => { MyQbzActions.mix-set-sort("updated"); }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    // Reset (only when filters active).
+                    if root.has-active-filters: ControlBtn {
+                        icon: @image-url("../assets/icons/rotate-ccw.svg");
+                        subtle: true;
+                        clicked => { MyQbzActions.mix-reset(); }
+                    }
+                    // Spacer pushes the view-mode group flush right (margin-left:auto).
+                    Rectangle { horizontal-stretch: 1; }
+                    VerticalLayout {
+                        alignment: center;
+                        ViewModeGroup {
+                            view: MyQbzState.mix-view;
+                            set-view(v) => { MyQbzActions.mix-set-view(v); }
+                        }
+                    }
+                }
+                Rectangle { height: 16px; }
+
+                // --- Body: search-empty -------------------------------
+                if MyQbzState.mixtapes.length == 0 && MyQbzState.mix-search != "": Rectangle {
+                    height: 80px;
+                    Text {
+                        text: @tr("No results found");
+                        color: Theme.text-muted;
+                        font-size: 13px;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                        y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                    }
+                }
+
+                // --- Body: GRID ---------------------------------------
+                if MyQbzState.mixtapes.length > 0 && MyQbzState.mix-view == "grid": grid := Rectangle {
+                    property <int> columns: Math.max(1,
+                        Math.floor((self.width + root.grid-gap) / (root.card-w + root.grid-gap)));
+                    property <int> rows: Math.ceil(MyQbzState.mixtapes.length / self.columns);
+                    height: self.rows > 0
+                        ? self.rows * root.card-h + Math.max(0, self.rows - 1) * root.grid-gap
+                        : 0px;
+                    for item[i] in MyQbzState.mixtapes: MyQbzCard {
+                        x: Math.mod(i, grid.columns) * (root.card-w + root.grid-gap);
+                        y: Math.floor(i / grid.columns) * (root.card-h + root.grid-gap);
+                        item: item;
+                        clicked => { MyQbzActions.open-card(item.id); }
+                    }
+                }
+
+                // --- Body: LIST ---------------------------------------
+                if MyQbzState.mixtapes.length > 0 && MyQbzState.mix-view == "list": VerticalLayout {
+                    spacing: 4px;
+                    for item in MyQbzState.mixtapes: MyQbzListRow {
+                        item: item;
+                        clicked => { MyQbzActions.open-card(item.id); }
+                    }
+                }
+            }
+        }
+    }
+
+    ListScrollbar {
+        x: parent.width - self.width - 4px;
+        y: 0px;
+        width: 14px;
+        height: parent.height;
+        viewport-height: flick.viewport-height;
+        visible-height: flick.height;
+        viewport-y <=> flick.viewport-y;
+    }
+}

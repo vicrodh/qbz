@@ -1,0 +1,346 @@
+// Shared MyQBZ index widgets — the toolbar controls + grid card + list row,
+// reused 1:1 by both MixtapesView and CollectionsView (the Svelte vocabulary
+// is intentionally identical between the two index views). Every px / token
+// here is verbatim from spec 10/11.
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Typography } from "../foundation/typography.slint";
+import { Radius } from "../foundation/radius.slint";
+import { MixtapeCardItem } from "../state.slint";
+import { QbzIcon } from "../primitives/QbzIcon.slint";
+import { CollectionMosaic } from "CollectionMosaic.slint";
+
+// --- Primary CTA ("+ New Mixtape" / "+ New Collection") -----------------
+// Header instance shows a Plus icon AND the label (which already starts with
+// "+ " — verbatim, not a bug). Empty-state instance is text-only.
+export component PrimaryCta inherits Rectangle {
+    in property <string> label;
+    in property <bool> show-plus: true;
+    callback clicked();
+    height: 38px;                       // padding 10px*2 + ~18 line
+    width: row.preferred-width + 40px;  // 20px horizontal padding each side
+    border-radius: 8px;
+    background: cta-ta.has-hover ? Theme.accent-hover : Theme.accent;
+    row := HorizontalLayout {
+        x: 20px;
+        height: 100%;
+        spacing: 8px;
+        alignment: center;
+        if root.show-plus: VerticalLayout {
+            alignment: center;
+            QbzIcon {
+                source: @image-url("../assets/icons/plus.svg");
+                width: 16px;
+                height: 16px;
+                tint: Theme.accent-text;
+            }
+        }
+        Text {
+            text: root.label;
+            color: Theme.accent-text;
+            font-size: 14px;
+            font-weight: Typography.semibold;
+            vertical-alignment: center;
+        }
+    }
+    cta-ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// --- Search box ---------------------------------------------------------
+export component MyQbzSearch inherits Rectangle {
+    in property <string> placeholder;
+    in-out property <string> query;
+    callback edited(string);
+    height: 32px;
+    min-width: 220px;
+    border-radius: 6px;
+    property <bool> has-query: root.query != "";
+    background: (input.has-focus || root.has-query) ? Theme.surface-main : Theme.surface-card;
+    border-width: 1px;
+    border-color: (input.has-focus || root.has-query) ? Theme.accent : Theme.surface-elevated;
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 8px;
+        VerticalLayout {
+            alignment: center;
+            QbzIcon {
+                source: @image-url("../assets/icons/search.svg");
+                width: 14px;
+                height: 14px;
+                tint: Theme.text-muted;
+            }
+        }
+        Rectangle {
+            horizontal-stretch: 1;
+            clip: true;
+            input := TextInput {
+                width: 100%;
+                height: 100%;
+                vertical-alignment: center;
+                color: Theme.text-primary;
+                font-size: 13px;
+                text <=> root.query;
+                edited => { root.edited(self.text); }
+            }
+            if root.query == "": Text {
+                text: root.placeholder;
+                color: Theme.text-muted;
+                font-size: 13px;
+                vertical-alignment: center;
+            }
+        }
+        // Clear (X) — only when query non-empty.
+        if root.has-query: VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 18px;
+                height: 18px;
+                border-radius: 9px;
+                background: clear-ta.has-hover ? Theme.surface-elevated : transparent;
+                QbzIcon {
+                    source: @image-url("../assets/icons/x.svg");
+                    width: 12px;
+                    height: 12px;
+                    x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                    y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                    tint: clear-ta.has-hover ? Theme.text-primary : Theme.text-muted;
+                }
+                clear-ta := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        root.query = "";
+                        root.edited("");
+                    }
+                }
+            }
+        }
+    }
+}
+
+// --- Generic control button (sort / filter / reset / view-seg base) -----
+export component ControlBtn inherits Rectangle {
+    in property <image> icon;
+    in property <string> label;       // "" -> icon-only
+    in property <string> indicator;   // sort arrow "↑"/"↓" or ""
+    in property <bool> active: false;
+    in property <bool> subtle: false;
+    callback clicked();
+    height: 32px;
+    border-radius: 6px;
+    width: row.preferred-width + (root.subtle ? 16px : 20px);
+    background: btn-ta.has-hover ? Theme.surface-hover : Theme.surface-card;
+    border-width: 1px;
+    border-color: root.active ? Theme.accent : Theme.surface-elevated;
+    row := HorizontalLayout {
+        x: root.subtle ? 8px : 10px;
+        height: 100%;
+        spacing: 6px;
+        alignment: center;
+        VerticalLayout {
+            alignment: center;
+            QbzIcon {
+                source: root.icon;
+                width: 14px;
+                height: 14px;
+                tint: root.active
+                    ? Theme.accent
+                    : (root.subtle ? Theme.text-muted : Theme.text-primary);
+            }
+        }
+        if root.label != "": Text {
+            text: root.label;
+            color: root.active ? Theme.accent : Theme.text-primary;
+            font-size: 13px;
+            vertical-alignment: center;
+        }
+        if root.indicator != "": Text {
+            text: root.indicator;
+            color: Theme.text-muted;
+            font-size: 11px;
+            vertical-alignment: center;
+        }
+    }
+    btn-ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// --- Segmented list/grid view toggle ------------------------------------
+// One segment of the toggle; defined before ViewModeGroup (no forward refs).
+// Slint Rectangles have no per-side border, so the group draws ONE outer
+// border + corner rounds and the segments fill it; a 1px divider sits between
+// them (the `.seg` shared-border look from the PSD).
+component ViewSeg inherits Rectangle {
+    in property <image> icon;
+    in property <bool> active: false;
+    callback clicked();
+    height: 30px;   // 32px group - 2*1px outer border
+    width: 31px;
+    background: root.active
+        ? Theme.accent
+        : (seg-ta.has-hover ? Theme.surface-hover : transparent);
+    QbzIcon {
+        source: root.icon;
+        width: 14px;
+        height: 14px;
+        x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+        y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+        tint: root.active ? Theme.accent-text : Theme.text-primary;
+    }
+    seg-ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// Two joined buttons (List | Grid) reading as one pill; active fills accent.
+export component ViewModeGroup inherits Rectangle {
+    in property <string> view;     // "grid" | "list"
+    callback set-view(string);
+    height: 32px;
+    width: 64px;
+    border-radius: 6px;
+    border-width: 1px;
+    border-color: Theme.surface-elevated;
+    background: Theme.surface-card;
+    clip: true;
+    HorizontalLayout {
+        spacing: 0px;
+        ViewSeg {
+            icon: @image-url("../assets/icons/list.svg");
+            active: root.view == "list";
+            clicked => { root.set-view("list"); }
+        }
+        // 1px divider between the segments.
+        Rectangle {
+            width: 1px;
+            background: Theme.surface-elevated;
+        }
+        ViewSeg {
+            icon: @image-url("../assets/icons/layout-grid.svg");
+            active: root.view == "grid";
+            clicked => { root.set-view("grid"); }
+        }
+    }
+}
+
+// --- Grid card ----------------------------------------------------------
+// 208px column; 12px padding -> 184px mosaic. Eyebrow + 2-line name (reserve
+// 2 lines so cards align) + album-count meta.
+export component MyQbzCard inherits Rectangle {
+    in property <MixtapeCardItem> item;
+    callback clicked();
+    width: 208px;
+    height: 184px + 12px + 12px + 16px + 2 * 18px + 12px + 16px + 12px;
+    border-radius: 8px;
+    background: card-ta.has-hover ? Theme.surface-hover : Theme.surface-card;
+    border-width: 1px;
+    border-color: card-ta.has-hover ? Theme.surface-hover : Theme.surface-elevated;
+    VerticalLayout {
+        padding: 12px;
+        spacing: 12px;
+        alignment: start;
+        CollectionMosaic {
+            item: root.item;
+            size: 184px;
+        }
+        // card-label (eyebrow) — accent, uppercase, +4px top margin.
+        Rectangle { height: 4px; }
+        Text {
+            text: root.item.label;
+            color: Theme.accent;
+            font-size: 10px;
+            font-weight: Typography.semibold;
+            letter-spacing: 1.2px;
+        }
+        // card-name — 2-line clamp; reserve 2 lines (~36px at 14px/1.3).
+        Text {
+            text: root.item.name;
+            color: Theme.text-primary;
+            font-size: 14px;
+            font-weight: Typography.semibold;
+            wrap: word-wrap;
+            overflow: elide;
+            height: 36px;
+            width: 100%;
+        }
+        Text {
+            text: root.item.meta;
+            color: Theme.text-muted;
+            font-size: 12px;
+        }
+    }
+    card-ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// --- List row -----------------------------------------------------------
+// 48px cover + name (single-line ellipsis) + sub (label · count).
+export component MyQbzListRow inherits Rectangle {
+    in property <MixtapeCardItem> item;
+    callback clicked();
+    height: 64px;
+    border-radius: 6px;
+    background: row-ta.has-hover ? Theme.surface-hover : transparent;
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 12px;
+        alignment: start;
+        VerticalLayout {
+            alignment: center;
+            CollectionMosaic {
+                item: root.item;
+                size: 48px;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            spacing: 2px;
+            horizontal-stretch: 1;
+            Text {
+                text: root.item.name;
+                color: Theme.text-primary;
+                font-size: 14px;
+                font-weight: Typography.semibold;
+                overflow: elide;
+                width: 100%;
+            }
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: start;
+                Text {
+                    text: root.item.label;
+                    color: Theme.accent;
+                    font-size: 10px;
+                    font-weight: Typography.semibold;
+                    letter-spacing: 1.2px;
+                    vertical-alignment: center;
+                }
+                Text {
+                    text: "·";
+                    color: Theme.text-muted;
+                    font-size: 12px;
+                    vertical-alignment: center;
+                }
+                Text {
+                    text: root.item.meta;
+                    color: Theme.text-muted;
+                    font-size: 12px;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+    row-ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}

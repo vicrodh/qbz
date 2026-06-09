@@ -1,0 +1,387 @@
+// My QBZ > Collections — the index grid of the user's Collections + Artist
+// Collections (Tauri's CollectionsView.svelte). Same vocabulary as Mixtapes
+// plus the kind-filter dropdown (.filter-count badge + 3-item menu). The 3x3
+// mosaic appears only for a `collection` with >= 9 items (handled inside
+// CollectionMosaic). READ-ONLY in this slice: create CTA + card click STUB.
+//
+// Every px / token verbatim from spec 11. Root padding 8 8 100 18.
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Typography } from "../foundation/typography.slint";
+import { MyQbzState, MyQbzActions, MixtapeCardItem, NavState } from "../state.slint";
+import { QbzIcon } from "../primitives/QbzIcon.slint";
+import { ListScrollbar } from "../primitives/ListScrollbar.slint";
+import { CollectionMosaic } from "CollectionMosaic.slint";
+import {
+    PrimaryCta, MyQbzSearch, ControlBtn, ViewModeGroup, MyQbzCard, MyQbzListRow,
+} from "MyQbzShared.slint";
+
+// One dropdown row (sort or kind-filter). Sort rows show a trailing arrow;
+// filter rows show a trailing Check on the selected kind.
+component ColMenuItem inherits Rectangle {
+    in property <string> label;
+    in property <bool> selected: false;
+    in property <string> indicator: "";   // sort arrow
+    in property <bool> check: false;       // kind-filter check
+    callback activated();
+    height: 32px;
+    border-radius: 4px;
+    background: item-ta.has-hover ? Theme.surface-hover : transparent;
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 8px;
+        Text {
+            text: root.label;
+            color: root.selected ? Theme.accent : Theme.text-secondary;
+            font-size: 13px;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+        }
+        if root.indicator != "": Text {
+            text: root.indicator;
+            color: Theme.text-muted;
+            font-size: 11px;
+            vertical-alignment: center;
+        }
+        if root.check: VerticalLayout {
+            alignment: center;
+            QbzIcon {
+                source: @image-url("../assets/icons/check.svg");
+                width: 12px;
+                height: 12px;
+                tint: Theme.accent;
+            }
+        }
+    }
+    item-ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.activated(); }
+    }
+}
+
+
+export component CollectionsView inherits Rectangle {
+    property <length> card-w: 208px;
+    property <length> grid-gap: 20px;
+    property <length> card-h: 184px + 12px + 12px + 16px + 2 * 18px + 12px + 16px + 12px;
+
+    property <string> active-sort-label:
+        MyQbzState.col-sort == "name" ? @tr("Name")
+        : MyQbzState.col-sort == "items" ? @tr("Items")
+        : MyQbzState.col-sort == "updated" ? @tr("Recently updated")
+        : @tr("Position");
+    property <string> sort-arrow: MyQbzState.col-sort-dir == "asc" ? "↑" : "↓";
+    property <bool> has-active-filters:
+        MyQbzState.col-kind-filter != "all"
+        || MyQbzState.col-sort != "position"
+        || MyQbzState.col-sort-dir != "asc";
+
+    background: Theme.surface-main;
+
+    flick := Flickable {
+        viewport-width: self.width;
+        viewport-height: page.preferred-height;
+        property <string> sr-armed: NavState.restore-scope;
+        function sr-restore() {
+            if (NavState.restore-scope == "collections" && self.viewport-height > self.height) {
+                self.viewport-y = NavState.scroll-restore;
+                NavState.restore-scope = "";
+            }
+        }
+        init => { self.sr-restore(); }
+        changed sr-armed => { self.sr-restore(); }
+        changed viewport-height => { self.sr-restore(); }
+        changed viewport-y => { NavState.report-scroll(self.viewport-y); }
+
+        page := VerticalLayout {
+            width: parent.width;
+            padding-top: 8px;
+            padding-right: 8px;
+            padding-bottom: 100px;
+            padding-left: 18px;
+            spacing: 0px;
+            alignment: start;
+
+            // --- Back button -------------------------------------------
+            Rectangle {
+                height: 16px + 8px + 24px;
+                back-row := HorizontalLayout {
+                    y: 8px;
+                    height: 16px;
+                    width: self.preferred-width;
+                    spacing: 8px;
+                    VerticalLayout {
+                        alignment: center;
+                        QbzIcon {
+                            source: @image-url("../assets/icons/arrow-left.svg");
+                            width: 16px;
+                            height: 16px;
+                            tint: back-ta.has-hover ? Theme.text-secondary : Theme.text-muted;
+                        }
+                    }
+                    Text {
+                        text: @tr("Back");
+                        color: back-ta.has-hover ? Theme.text-secondary : Theme.text-muted;
+                        font-size: 14px;
+                        vertical-alignment: center;
+                    }
+                }
+                back-ta := TouchArea {
+                    width: back-row.preferred-width;
+                    height: 16px;
+                    y: 8px;
+                    mouse-cursor: pointer;
+                    clicked => { NavState.request-back(); }
+                }
+            }
+
+            // --- Header ------------------------------------------------
+            HorizontalLayout {
+                height: 38px;
+                VerticalLayout {
+                    alignment: center;
+                    horizontal-stretch: 1;
+                    Text {
+                        text: @tr("Collections");
+                        color: Theme.text-primary;
+                        font-size: 24px;
+                        font-weight: Typography.bold;
+                        vertical-alignment: center;
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    PrimaryCta {
+                        label: @tr("+ New Collection");
+                        show-plus: true;
+                        clicked => { MyQbzActions.create-collection(); }
+                    }
+                }
+            }
+            Rectangle { height: 16px; }
+
+            // ====================== EMPTY STATE ========================
+            if MyQbzState.collections.length == 0 && MyQbzState.col-search == "" && MyQbzState.col-kind-filter == "all" && !MyQbzState.loading: VerticalLayout {
+                padding-top: 80px;
+                padding-bottom: 80px;
+                spacing: 16px;
+                alignment: start;
+                HorizontalLayout {
+                    alignment: center;
+                    CollectionMosaic {
+                        size: 160px;
+                        empty-kind: "collection";
+                    }
+                }
+                HorizontalLayout {
+                    alignment: center;
+                    Text {
+                        text: @tr("No collections yet");
+                        color: Theme.text-secondary;
+                        font-size: 18px;
+                        font-weight: Typography.semibold;
+                    }
+                }
+                HorizontalLayout {
+                    alignment: center;
+                    PrimaryCta {
+                        label: @tr("+ New Collection");
+                        show-plus: false;
+                        clicked => { MyQbzActions.create-collection(); }
+                    }
+                }
+            }
+
+            // ====================== POPULATED ==========================
+            if MyQbzState.collections.length > 0 || MyQbzState.col-search != "" || MyQbzState.col-kind-filter != "all": VerticalLayout {
+                spacing: 0px;
+                alignment: start;
+
+                // --- Toolbar -------------------------------------------
+                HorizontalLayout {
+                    height: 32px;
+                    spacing: 8px;
+                    MyQbzSearch {
+                        placeholder: @tr("Search collections…");
+                        query <=> MyQbzState.col-search;
+                        edited(q) => { MyQbzActions.col-search-changed(q); }
+                    }
+                    // Sort dropdown.
+                    Rectangle {
+                        width: sort-btn.width;
+                        sort-btn := ControlBtn {
+                            icon: @image-url("../assets/icons/arrow-up-down.svg");
+                            label: root.active-sort-label;
+                            indicator: root.sort-arrow;
+                            clicked => { sort-menu.show(); }
+                        }
+                        sort-menu := PopupWindow {
+                            x: 0; y: 36px; width: 180px;
+                            Rectangle {
+                                background: Theme.surface-main;
+                                border-width: 1px;
+                                border-color: Theme.surface-elevated;
+                                border-radius: 8px;
+                                drop-shadow-blur: 24px;
+                                drop-shadow-color: #00000066;
+                                VerticalLayout {
+                                    padding: 4px;
+                                    spacing: 1px;
+                                    ColMenuItem {
+                                        label: @tr("Position");
+                                        selected: MyQbzState.col-sort == "position";
+                                        indicator: MyQbzState.col-sort == "position" ? root.sort-arrow : "";
+                                        activated => { MyQbzActions.col-set-sort("position"); }
+                                    }
+                                    ColMenuItem {
+                                        label: @tr("Name");
+                                        selected: MyQbzState.col-sort == "name";
+                                        indicator: MyQbzState.col-sort == "name" ? root.sort-arrow : "";
+                                        activated => { MyQbzActions.col-set-sort("name"); }
+                                    }
+                                    ColMenuItem {
+                                        label: @tr("Items");
+                                        selected: MyQbzState.col-sort == "items";
+                                        indicator: MyQbzState.col-sort == "items" ? root.sort-arrow : "";
+                                        activated => { MyQbzActions.col-set-sort("items"); }
+                                    }
+                                    ColMenuItem {
+                                        label: @tr("Recently updated");
+                                        selected: MyQbzState.col-sort == "updated";
+                                        indicator: MyQbzState.col-sort == "updated" ? root.sort-arrow : "";
+                                        activated => { MyQbzActions.col-set-sort("updated"); }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    // Kind-filter dropdown.
+                    Rectangle {
+                        width: filter-btn.width;
+                        filter-btn := ControlBtn {
+                            icon: @image-url("../assets/icons/list-filter.svg");
+                            label: @tr("Filter");
+                            active: MyQbzState.col-kind-filter != "all";
+                            clicked => { filter-menu.show(); }
+                        }
+                        // .filter-count badge (always "1" when a kind is set).
+                        if MyQbzState.col-kind-filter != "all": Rectangle {
+                            x: filter-btn.width - self.width - 6px;
+                            y: 4px;
+                            width: 16px;
+                            height: 16px;
+                            border-radius: 8px;
+                            background: Theme.accent;
+                            Text {
+                                text: "1";
+                                color: Theme.accent-text;
+                                font-size: 10px;
+                                font-weight: Typography.semibold;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+                        filter-menu := PopupWindow {
+                            x: 0; y: 36px; width: 180px;
+                            Rectangle {
+                                background: Theme.surface-main;
+                                border-width: 1px;
+                                border-color: Theme.surface-elevated;
+                                border-radius: 8px;
+                                drop-shadow-blur: 24px;
+                                drop-shadow-color: #00000066;
+                                VerticalLayout {
+                                    padding: 4px;
+                                    spacing: 1px;
+                                    ColMenuItem {
+                                        label: @tr("All kinds");
+                                        selected: MyQbzState.col-kind-filter == "all";
+                                        check: MyQbzState.col-kind-filter == "all";
+                                        activated => { MyQbzActions.col-set-kind-filter("all"); }
+                                    }
+                                    ColMenuItem {
+                                        label: @tr("Collections");
+                                        selected: MyQbzState.col-kind-filter == "collection";
+                                        check: MyQbzState.col-kind-filter == "collection";
+                                        activated => { MyQbzActions.col-set-kind-filter("collection"); }
+                                    }
+                                    ColMenuItem {
+                                        label: @tr("Artist Collections");
+                                        selected: MyQbzState.col-kind-filter == "artist_collection";
+                                        check: MyQbzState.col-kind-filter == "artist_collection";
+                                        activated => { MyQbzActions.col-set-kind-filter("artist_collection"); }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    // Reset.
+                    if root.has-active-filters: ControlBtn {
+                        icon: @image-url("../assets/icons/rotate-ccw.svg");
+                        subtle: true;
+                        clicked => { MyQbzActions.col-reset(); }
+                    }
+                    Rectangle { horizontal-stretch: 1; }
+                    VerticalLayout {
+                        alignment: center;
+                        ViewModeGroup {
+                            view: MyQbzState.col-view;
+                            set-view(v) => { MyQbzActions.col-set-view(v); }
+                        }
+                    }
+                }
+                Rectangle { height: 16px; }
+
+                // --- Body: search/filter-empty -------------------------
+                if MyQbzState.collections.length == 0: Rectangle {
+                    height: 80px;
+                    Text {
+                        text: @tr("No results found");
+                        color: Theme.text-muted;
+                        font-size: 13px;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                        y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                    }
+                }
+
+                // --- Body: GRID ---------------------------------------
+                if MyQbzState.collections.length > 0 && MyQbzState.col-view == "grid": grid := Rectangle {
+                    property <int> columns: Math.max(1,
+                        Math.floor((self.width + root.grid-gap) / (root.card-w + root.grid-gap)));
+                    property <int> rows: Math.ceil(MyQbzState.collections.length / self.columns);
+                    height: self.rows > 0
+                        ? self.rows * root.card-h + Math.max(0, self.rows - 1) * root.grid-gap
+                        : 0px;
+                    for item[i] in MyQbzState.collections: MyQbzCard {
+                        x: Math.mod(i, grid.columns) * (root.card-w + root.grid-gap);
+                        y: Math.floor(i / grid.columns) * (root.card-h + root.grid-gap);
+                        item: item;
+                        clicked => { MyQbzActions.open-card(item.id); }
+                    }
+                }
+
+                // --- Body: LIST ---------------------------------------
+                if MyQbzState.collections.length > 0 && MyQbzState.col-view == "list": VerticalLayout {
+                    spacing: 4px;
+                    for item in MyQbzState.collections: MyQbzListRow {
+                        item: item;
+                        clicked => { MyQbzActions.open-card(item.id); }
+                    }
+                }
+            }
+        }
+    }
+
+    ListScrollbar {
+        x: parent.width - self.width - 4px;
+        y: 0px;
+        width: 14px;
+        height: parent.height;
+        viewport-height: flick.viewport-height;
+        visible-height: flick.height;
+        viewport-y <=> flick.viewport-y;
+    }
+}
