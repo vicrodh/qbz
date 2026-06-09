@@ -200,6 +200,22 @@ component DetailRow inherits Rectangle {
         background: #ffffff0a;
     }
 
+    // Row click (open the item) — declared BEFORE the cell layout so it sits
+    // BEHIND the per-cell TouchAreas (checkbox / play / title / subtitle / ⋯).
+    // In Slint a later-declared element paints ON TOP, so the cell TouchAreas
+    // below capture their own clicks and row-ta only catches the gaps. (It used
+    // to be declared LAST — frontmost — which ate every click incl. the ⋯ button,
+    // so the menu never opened and the whole row just opened the album.)
+    row-ta := TouchArea {
+        clicked => {
+            if (root.select-mode) {
+                MyQbzDetailActions.toggle-item-select(root.item.position);
+            } else {
+                MyQbzDetailActions.open-item(root.item.source, root.item.item-type, root.item.source-item-id);
+            }
+        }
+    }
+
     HorizontalLayout {
         padding-left: 12px;
         padding-right: 12px;
@@ -465,18 +481,6 @@ component DetailRow inherits Rectangle {
                         }
                     }
                 }
-            }
-        }
-    }
-
-    // Row click (outside the interactive cells) — open the item.
-    row-ta := TouchArea {
-        // Sits below the cell TouchAreas (title/subtitle/play/menu/checkbox).
-        clicked => {
-            if (root.select-mode) {
-                MyQbzDetailActions.toggle-item-select(root.item.position);
-            } else {
-                MyQbzDetailActions.open-item(root.item.source, root.item.item-type, root.item.source-item-id);
             }
         }
     }
