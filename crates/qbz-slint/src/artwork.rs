@@ -207,6 +207,10 @@ pub fn open_cache() -> ImageCache {
 /// resolve cover art. Set once at startup.
 static SHARED_CACHE: std::sync::OnceLock<ImageCache> = std::sync::OnceLock::new();
 
+/// Total-request timeout: without one, a half-up network (DNS blackhole,
+/// captive portal) pins a `MAX_CONCURRENT` semaphore permit indefinitely.
+const HTTP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
 /// Process-wide async HTTP client for artwork downloads. A single client pools
 /// connections / reuses keep-alive across all concurrent artwork jobs
 /// (`MAX_CONCURRENT` = 16), instead of `reqwest::get` building a fresh client +
@@ -214,8 +218,12 @@ static SHARED_CACHE: std::sync::OnceLock<ImageCache> = std::sync::OnceLock::new(
 /// rustls per the workspace default; if the builder fails, fall back to the
 /// default client (equivalent to `Client::new()`), keeping this infallible —
 /// matching the silent-fallback style of `open_cache`.
-static HTTP: std::sync::LazyLock<reqwest::Client> =
-    std::sync::LazyLock::new(|| reqwest::Client::builder().build().unwrap_or_default());
+static HTTP: std::sync::LazyLock<reqwest::Client> = std::sync::LazyLock::new(|| {
+    reqwest::Client::builder()
+        .timeout(HTTP_TIMEOUT)
+        .build()
+        .unwrap_or_default()
+});
 
 /// Publish the image cache for `shared_cache()` consumers. Call once.
 pub fn set_shared_cache(cache: ImageCache) {
@@ -225,6 +233,21 @@ pub fn set_shared_cache(cache: ImageCache) {
 /// The shared image cache, if `set_shared_cache` has run.
 pub fn shared_cache() -> Option<ImageCache> {
     SHARED_CACHE.get().cloned()
+}
+
+/// Disk-cache lookup for a remote artwork URL: the cached file's path, or
+/// `None` on miss / unopened cache. Never touches the network — offline
+/// consumers (MPRIS art, artwork save-as) use this instead of downloading.
+pub fn cached_path_for(url: &str) -> Option<std::path::PathBuf> {
+    let cache = shared_cache()?;
+    let guard = cache.lock().ok()?;
+    guard.as_ref()?.get(url)
+}
+
+/// `file://` form of [`cached_path_for`], for the MPRIS `artUrl` property.
+pub fn cached_file_url_for(url: &str) -> Option<String> {
+    let path = cached_path_for(url)?;
+    ArtworkRef::LocalFile(path.to_string_lossy().into_owned()).to_mpris_url()
 }
 
 /// Build a Slint image from decoded RGBA8 pixels. Returns an empty image
@@ -365,6 +388,10 @@ async fn fetch_cached_http(url: &str, cache: &ImageCache) -> Option<Vec<u8>> {
 
     match cached_path {
         Some(path) => tokio::fs::read(&path).await.ok(),
+        // Offline: a miss must not burn a network attempt (or pin a semaphore
+        // permit) — fail soft to the placeholder; nothing negative is cached,
+        // so the cover retries naturally once back online.
+        None if crate::offline_mode::engine().is_offline() => None,
         None => {
             let downloaded = HTTP.get(url).send().await.ok()?.bytes().await.ok()?.to_vec();
             if let Ok(guard) = cache.lock() {

@@ -1023,6 +1023,23 @@ pub(crate) async fn refresh_now_playing_meta(runtime: &Runtime, weak: &slint::We
         t.set_track(title.clone(), artist.clone(), album.clone());
     }
 
+    // Offline: desktop widgets can't fetch an https artUrl. Swap remote covers
+    // for the shared disk-cache copy (file://) when present; local/Plex art
+    // keeps its normal URL (already file:// / LAN Plex). On a cache miss MPRIS
+    // gets no art, while the notification keeps the remote URL so its own md5
+    // disk cache can still serve it (the offline flag below blocks the
+    // download).
+    let offline = crate::offline_mode::engine().is_offline();
+    let mut mpris_art = artwork.to_mpris_url();
+    let mut notify_art = mpris_art.clone();
+    if offline {
+        if let qbz_models::ArtworkRef::Remote(url) = &artwork {
+            let cached = crate::artwork::cached_file_url_for(url);
+            notify_art = cached.clone().or(notify_art);
+            mpris_art = cached;
+        }
+    }
+
     // Push to the OS media controls (MPRIS / SMTC / MediaRemote). The app icon
     // GNOME shows comes from the MPRIS DesktopEntry; `art_url` is the album art
     // (`mpris:artUrl`) — remote Qobuz covers pass through, local covers become a
@@ -1033,7 +1050,7 @@ pub(crate) async fn refresh_now_playing_meta(runtime: &Runtime, weak: &slint::We
             artist: artist.clone(),
             album: album.clone(),
             duration: (duration > 0).then(|| std::time::Duration::from_secs(duration as u64)),
-            art_url: artwork.to_mpris_url(),
+            art_url: mpris_art,
         });
         mc.set_playback(
             qbz_media_controls::PlaybackStatus::Playing,
@@ -1051,7 +1068,7 @@ pub(crate) async fn refresh_now_playing_meta(runtime: &Runtime, weak: &slint::We
             album: album.clone(),
             bit_depth: track.bit_depth,
             sample_rate: track.sample_rate,
-            art_url: artwork.to_mpris_url(),
+            art_url: notify_art,
         };
         tokio::spawn(async move {
             if let Some(svc) = crate::qconnect_service::service() {
@@ -1059,7 +1076,7 @@ pub(crate) async fn refresh_now_playing_meta(runtime: &Runtime, weak: &slint::We
                     return;
                 }
             }
-            qbz_media_controls::show_track_notification(notify_meta).await;
+            qbz_media_controls::show_track_notification(notify_meta, offline).await;
         });
     }
 

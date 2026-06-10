@@ -126,8 +126,11 @@ fn http_client() -> &'static reqwest::blocking::Client {
 
 /// Resolve `url` to a local image file: a `file://`/`asset://` URL maps
 /// straight through, an http(s) URL is downloaded and cached by md5(url).
+/// `offline` = local paths + md5 cache hits only, never the HTTP download —
+/// the verdict is injected by the caller so this crate stays frontend-agnostic
+/// (no dependency on the app's offline-mode engine).
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-fn cache_artwork(url: &str) -> Result<PathBuf, String> {
+fn cache_artwork(url: &str, offline: bool) -> Result<PathBuf, String> {
     use md5::{Digest, Md5};
     use std::io::Write;
 
@@ -143,6 +146,10 @@ fn cache_artwork(url: &str) -> Result<PathBuf, String> {
     let cache_path = artwork_cache_dir()?.join(format!("{hash}.jpg"));
     if cache_path.exists() {
         return Ok(cache_path);
+    }
+
+    if offline {
+        return Err("offline: artwork not cached locally".to_string());
     }
 
     let response = http_client()
@@ -215,8 +222,9 @@ fn prepare_icon_bytes(path: &std::path::Path) -> Result<Vec<u8>, String> {
 
 /// Show a track-change notification. Fire-and-forget: every failure is logged,
 /// none propagated. Must be called from within a tokio runtime (it uses
-/// `spawn_blocking` for the HTTP/image work).
-pub async fn show_track_notification(meta: NotificationMeta) {
+/// `spawn_blocking` for the HTTP/image work). `offline` skips the artwork
+/// HTTP download (local paths / disk-cache hits still render an icon).
+pub async fn show_track_notification(meta: NotificationMeta, offline: bool) {
     let body = build_body(&meta);
     log::info!(
         "[notify] track notification: {} by {}",
@@ -234,7 +242,7 @@ pub async fn show_track_notification(meta: NotificationMeta) {
 
         if let Some(url) = meta.art_url.clone() {
             let prepared = tokio::task::spawn_blocking(move || -> Result<Vec<u8>, String> {
-                let path = cache_artwork(&url)?;
+                let path = cache_artwork(&url, offline)?;
                 prepare_icon_bytes(&path)
             })
             .await;
@@ -265,7 +273,7 @@ pub async fn show_track_notification(meta: NotificationMeta) {
     {
         let _ = tokio::task::spawn_blocking(move || {
             let _ = notify_rust::set_application("com.blitzfc.qbz");
-            let artwork_path = meta.art_url.as_deref().and_then(|url| match cache_artwork(url) {
+            let artwork_path = meta.art_url.as_deref().and_then(|url| match cache_artwork(url, offline) {
                 Ok(path) => Some(path),
                 Err(e) => {
                     log::debug!("[notify] could not cache artwork: {e}");
@@ -287,6 +295,7 @@ pub async fn show_track_notification(meta: NotificationMeta) {
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {
         let _ = body;
+        let _ = offline;
         log::info!("[notify] desktop notifications not implemented on this platform");
     }
 }
