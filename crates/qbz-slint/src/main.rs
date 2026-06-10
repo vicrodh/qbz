@@ -1687,6 +1687,19 @@ fn playlist_remove_rows(
     });
 }
 
+/// True while the OPEN view is a playlist detail whose rows ride the merged
+/// queue snapshot (LOCAL detail / offline subset / ONLINE mixed detail) —
+/// the guard for consulting snapshot row ids from the universal track arms.
+/// Only then may a row id be a library row id / synthetic Plex id; a stale
+/// snapshot id could otherwise collide with a genuine Qobuz catalog id from
+/// another surface (both are small integers).
+fn snapshot_detail_open(w: &AppWindow) -> bool {
+    w.global::<NavState>().get_view() == ContentView::Playlist
+        && (w.global::<PlaylistState>().get_is_local()
+            || w.global::<PlaylistState>().get_offline_subset()
+            || playlist::is_mixed())
+}
+
 /// Type a LocalLibrary row for the drag payload: Plex rows carry their
 /// rating key (their row id is synthetic — never resolvable in
 /// `local_tracks`), everything else its real library row id.
@@ -4781,6 +4794,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     id,
                 ),
                 ("track", "queue") => {
+                    // SOURCE-TYPED routing first (spec §3.2, mirrors the
+                    // add-to-playlist arm): on a snapshot-backed playlist
+                    // detail a local row's id is a library row id and a plex
+                    // row's a synthetic 2^40 id — the catalog path below
+                    // would mis-resolve them (wrong-track hazard / silent
+                    // failure). The merged snapshot carries the ready,
+                    // source-aware QueueTrack; enqueue it directly.
+                    // DELIBERATE Tauri deviation for plex rows: Tauri renders
+                    // Play Next / Add to Queue as silent no-ops there (spec
+                    // §1.6.2) — Slint's queue carries plex rows fine, so we
+                    // wire them instead of porting the dead entries.
+                    if let Some(w) = weak.upgrade() {
+                        if snapshot_detail_open(&w) {
+                            if let Some(qt) = local_playlist::queue_track_for_row(&id) {
+                                if matches!(qt.source.as_deref(), Some("local") | Some("plex")) {
+                                    playback::enqueue_queue_tracks(
+                                        runtime.clone(),
+                                        weak.clone(),
+                                        handle.clone(),
+                                        vec![qt],
+                                        false,
+                                    );
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                    // Qobuz rows (incl. offline copies with real catalog
+                    // ids): the existing path — QConnect single-track
+                    // admission + fresh fetch.
                     if let Ok(track_id) = id.parse::<u64>() {
                         playback::enqueue_track(
                             runtime.clone(),
@@ -4912,6 +4955,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     id,
                 ),
                 ("track", "play-next") => {
+                    // Source-typed routing — see the ("track","queue") arm
+                    // (same seam, insert-next instead of append).
+                    if let Some(w) = weak.upgrade() {
+                        if snapshot_detail_open(&w) {
+                            if let Some(qt) = local_playlist::queue_track_for_row(&id) {
+                                if matches!(qt.source.as_deref(), Some("local") | Some("plex")) {
+                                    playback::enqueue_queue_tracks(
+                                        runtime.clone(),
+                                        weak.clone(),
+                                        handle.clone(),
+                                        vec![qt],
+                                        true,
+                                    );
+                                    return;
+                                }
+                            }
+                        }
+                    }
                     if let Ok(track_id) = id.parse::<u64>() {
                         playback::play_track_next(
                             runtime.clone(),
@@ -4955,6 +5016,57 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         );
                     }
                 }
+                ("track", "recache") => {
+                    // "Refresh offline copy" (cached-state menu entry, spec
+                    // §3.5): remove + re-download, sequenced.
+                    if let Ok(track_id) = id.parse::<u64>() {
+                        offline_cache::refresh_cached(
+                            runtime.clone(),
+                            weak.clone(),
+                            handle.clone(),
+                            track_id,
+                        );
+                    }
+                }
+                ("track", "remove-from-playlist") => {
+                    // Per-row removal on the playlist detail (spec §3.1).
+                    // Ownership-gated in the UI (PlaylistState.is-owner —
+                    // DELIBERATE: Tauri's available branch renders it
+                    // un-gated on followed playlists where the owner-only
+                    // API rejects, §1.6.1; we port the intent, not the
+                    // hole). One-row ride on the same namespace-split seam
+                    // as the bulk removal; the reload re-merges the sidecar.
+                    let Some(w) = weak.upgrade() else { return };
+                    if w.global::<NavState>().get_view() != ContentView::Playlist {
+                        return;
+                    }
+                    if w.global::<PlaylistState>().get_is_local() {
+                        local_playlist::remove_rows_by_ids(
+                            &w,
+                            runtime.clone(),
+                            weak.clone(),
+                            handle.clone(),
+                            image_cache.clone(),
+                            vec![id.to_string()],
+                        );
+                        return;
+                    }
+                    let pid = w.global::<PlaylistState>().get_id().to_string();
+                    let Some(row) = playlist::row_for_id(&id) else {
+                        log::warn!("[qbz-slint] remove-from-playlist: row {id} not loaded");
+                        return;
+                    };
+                    if let Ok(pid) = pid.parse::<u64>() {
+                        playlist_remove_rows(
+                            runtime.clone(),
+                            weak.clone(),
+                            handle.clone(),
+                            image_cache.clone(),
+                            pid,
+                            vec![row],
+                        );
+                    }
+                }
                 ("track", "create-radio") => playback::play_track_radio(
                     runtime.clone(),
                     weak.clone(),
@@ -4978,11 +5090,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // surface (both are small integers). The ONLINE mixed
                     // Qobuz detail shares the snapshot (E11), so its
                     // local/plex rows type their refs the same way.
-                    let in_local_detail = w.global::<NavState>().get_view()
-                        == ContentView::Playlist
-                        && (w.global::<PlaylistState>().get_is_local()
-                            || w.global::<PlaylistState>().get_offline_subset()
-                            || playlist::is_mixed());
+                    let in_local_detail = snapshot_detail_open(&w);
                     let local_ref: Option<String> = if id.starts_with("plex:") {
                         // Unresolved Plex row in a playlist detail — the id
                         // already carries the rating key.
@@ -5525,6 +5633,91 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if let Some(w) = weak.upgrade() {
                         playlist::select_all(&w);
                     }
+                }
+                ("playlist", "play-next-selected") | ("playlist", "queue-selected") => {
+                    // Bulk Play next / Add to queue over the selection
+                    // (Tauri's BulkActionBar split-button, spec §1.5) —
+                    // source-aware: rows resolve through the merged queue
+                    // snapshot (local/plex/cached keep their source — the
+                    // T2 fix-forward) or the pure-Qobuz Track cache.
+                    if let Some(w) = weak.upgrade() {
+                        let next = action == "play-next-selected";
+                        let tracks = playlist::selected_queue_tracks(&w);
+                        if tracks.is_empty() {
+                            toast::error(&w, "Nothing playable in the selection");
+                            return;
+                        }
+                        // Selection clears, mode stays on (LL precedent).
+                        playlist::clear_selection(&w);
+                        playback::enqueue_queue_tracks(
+                            runtime.clone(),
+                            weak.clone(),
+                            handle.clone(),
+                            tracks,
+                            next,
+                        );
+                    }
+                }
+                ("playlist", "add-selected-to-playlist") => {
+                    // Bulk Add to playlist (spec §1.5). The picker is
+                    // single-mode (catalog ids XOR local-mode refs), so:
+                    // Qobuz rows ride the catalog flow; a selection with NO
+                    // Qobuz rows rides the local-mode flow ("plex:<key>" /
+                    // library row ids — per-row parity for sidecar rows); a
+                    // MIXED selection follows Tauri (Qobuz rows only,
+                    // sidecar rows skipped + logged).
+                    let Some(w) = weak.upgrade() else { return };
+                    let rows = playlist::selected_rows(&w);
+                    if rows.is_empty() {
+                        return;
+                    }
+                    let mut qobuz_ids: Vec<String> = Vec::new();
+                    let mut local_refs: Vec<String> = Vec::new();
+                    for row in &rows {
+                        match row.source.as_str() {
+                            "local" => local_refs.push(row.id.clone()),
+                            "plex" => {
+                                if row.id.starts_with("plex:") {
+                                    local_refs.push(row.id.clone());
+                                } else if let Some(key) =
+                                    local_playlist::plex_key_for_row(&row.id)
+                                {
+                                    local_refs.push(format!("plex:{key}"));
+                                } else {
+                                    log::warn!(
+                                        "[qbz-slint] bulk add-to-playlist: no rating key for plex row {} — skipped",
+                                        row.id
+                                    );
+                                }
+                            }
+                            _ => {
+                                if row.id.parse::<u64>().is_ok() {
+                                    qobuz_ids.push(row.id.clone());
+                                }
+                            }
+                        }
+                    }
+                    if !qobuz_ids.is_empty() {
+                        if !local_refs.is_empty() {
+                            log::info!(
+                                "[qbz-slint] bulk add-to-playlist: mixed selection — {} sidecar row(s) skipped (single-mode picker; Tauri §1.5 behavior)",
+                                local_refs.len()
+                            );
+                        }
+                        playlist_picker::open_multi(&w, &qobuz_ids, false);
+                    } else if !local_refs.is_empty() {
+                        playlist_picker::open_multi(&w, &local_refs, true);
+                    } else {
+                        return;
+                    }
+                    let runtime = runtime.clone();
+                    let weak = weak.clone();
+                    handle.spawn(async move {
+                        let playlists = playlist_picker::load(&runtime).await;
+                        let _ = weak.upgrade_in_event_loop(move |w| {
+                            playlist_picker::apply(&w, playlists);
+                        });
+                    });
                 }
                 ("playlist", "remove-selected") => {
                     if let Some(w) = weak.upgrade() {

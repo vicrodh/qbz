@@ -11,7 +11,7 @@ use std::sync::{LazyLock, Mutex};
 
 use qbz_app::shell::AppRuntime;
 use qbz_core::FrontendAdapter;
-use qbz_models::Track;
+use qbz_models::{QueueTrack, Track};
 use slint::{ComponentHandle, ModelRc, VecModel};
 
 use crate::artwork::{ArtworkJob, ArtworkTarget};
@@ -354,7 +354,7 @@ pub struct PlaylistData {
 /// ALL claimants — local first, then plex, in stable claim order — instead
 /// of Tauri's Map collapse (E1/E2 fix-forward; healing repairs the stored
 /// data separately). Display numbering is the emit order (contiguous).
-fn interleave_rows(qobuz: Vec<Track>, sidecar: Vec<LoadedRow>) -> Vec<LoadedRow> {
+pub(crate) fn interleave_rows(qobuz: Vec<Track>, sidecar: Vec<LoadedRow>) -> Vec<LoadedRow> {
     let qobuz_to_row = |(i, t): (usize, Track)| LoadedRow {
         position: i as i32,
         item: RowItem::Qobuz(Box::new(t)),
@@ -744,20 +744,26 @@ pub fn recount_selected(window: &AppWindow) {
 
 /// Enter/leave edit mode. Leaving clears any selection.
 pub fn set_multi_select(window: &AppWindow, on: bool) {
-    let state = window.global::<PlaylistState>();
     if !on {
-        let model = state.get_tracks();
-        for i in 0..model.row_count() {
-            if let Some(mut item) = model.row_data(i) {
-                if item.selected {
-                    item.selected = false;
-                    model.set_row_data(i, item);
-                }
+        clear_selection(window);
+    }
+    window.global::<PlaylistState>().set_multi_select_mode(on);
+}
+
+/// Clear the selection WITHOUT leaving multi-select mode — the bulk
+/// queueing actions keep the mode active (LocalLibrary bulk precedent).
+pub fn clear_selection(window: &AppWindow) {
+    let state = window.global::<PlaylistState>();
+    let model = state.get_tracks();
+    for i in 0..model.row_count() {
+        if let Some(mut item) = model.row_data(i) {
+            if item.selected {
+                item.selected = false;
+                model.set_row_data(i, item);
             }
         }
-        state.set_selected_count(0);
     }
-    state.set_multi_select_mode(on);
+    state.set_selected_count(0);
 }
 
 /// Toggle select-all: select every row, or clear if all are selected.
@@ -802,6 +808,83 @@ pub fn selected_rows(window: &AppWindow) -> Vec<SelectedRow> {
             source: t.source.to_string(),
         })
         .collect()
+}
+
+/// A single row (id + source) by display id — the per-row "Remove from
+/// playlist" menu entry rides the same namespace-split seam as the bulk
+/// selection, with a one-row set. UI thread.
+pub fn row_for_id(id: &str) -> Option<SelectedRow> {
+    FULL_ITEMS.with(|cell| {
+        cell.borrow()
+            .iter()
+            .find(|item| item.id.as_str() == id)
+            .map(|item| SelectedRow {
+                id: item.id.to_string(),
+                source: item.source.to_string(),
+            })
+    })
+}
+
+/// The selected rows as ready-to-enqueue, SOURCE-AWARE QueueTracks in
+/// visible order — the bulk Play next / Add to queue (spec §1.5). Rows of
+/// a snapshot-backed detail (local / offline subset / online mixed)
+/// resolve through `local_playlist`'s merged queue snapshot, which keeps
+/// each row's source (local/plex/cached — the T2 fix-forward: Tauri's
+/// bulk path rebuilds catalog tracks and drops `source`); pure-Qobuz
+/// details resolve through the loaded `CURRENT` Track cache. Unplayable
+/// rows (file:/broken:/unresolved) drop out. UI thread.
+pub fn selected_queue_tracks(window: &AppWindow) -> Vec<QueueTrack> {
+    let model = window.global::<PlaylistState>().get_tracks();
+    let qobuz = current_tracks();
+    let mut out: Vec<QueueTrack> = Vec::new();
+    for i in 0..model.row_count() {
+        let Some(item) = model.row_data(i) else {
+            continue;
+        };
+        if !item.selected {
+            continue;
+        }
+        let id = item.id.to_string();
+        // Snapshot first (covers ALL sources of the mixed/local detail;
+        // empty for pure-Qobuz details, see clear_open_snapshot).
+        if let Some(qt) = crate::local_playlist::queue_track_for_row(&id) {
+            out.push(qt);
+            continue;
+        }
+        // Pure-Qobuz detail: build from the loaded Track cache.
+        if let Some(track) = id
+            .parse::<u64>()
+            .ok()
+            .and_then(|tid| qobuz.iter().find(|t| t.id == tid))
+        {
+            let (album_id, album_title, album_artwork) = track
+                .album
+                .as_ref()
+                .map(|a| {
+                    (
+                        a.id.clone(),
+                        a.title.clone(),
+                        a.image.best().cloned().unwrap_or_default(),
+                    )
+                })
+                .unwrap_or_default();
+            let album_artist = track
+                .performer
+                .as_ref()
+                .map(|p| p.name.clone())
+                .unwrap_or_default();
+            out.push(crate::playback::make_queue_track(
+                track,
+                &album_id,
+                &album_title,
+                &album_artist,
+                &album_artwork,
+            ));
+        } else {
+            log::warn!("[qbz-slint] bulk queue: row {id} not resolvable — skipped");
+        }
+    }
+    out
 }
 
 /// The removal split of a row set, by id namespace.

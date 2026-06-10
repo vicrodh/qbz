@@ -2580,31 +2580,23 @@ pub fn enqueue_playlist(
                 return;
             }
         };
-        let tracks: Vec<QueueTrack> = playlist
-            .tracks
-            .as_ref()
-            .map(|container| container.items.as_slice())
-            .unwrap_or_default()
+        let qobuz_tracks: Vec<Track> = playlist.tracks.map(|c| c.items).unwrap_or_default();
+        // MIXED playlists (T2 fix-forward, spec §1.3): merge the local/Plex
+        // sidecar rows at their stored slots so a card/hero enqueue carries
+        // EVERY row WITH its source — Tauri's hero arms rebuild catalog-only
+        // tracks and drop `source`, crashing plex auto-advance; our merged
+        // rows enqueue as the source-aware QueueTracks the detail plays.
+        // Pure-Qobuz playlists read an empty sidecar and are unchanged.
+        let qobuz_count = qobuz_tracks.len() as u32;
+        let sidecar = tokio::task::spawn_blocking(move || {
+            crate::local_playlist::read_sidecar_rows_blocking(pid, qobuz_count, true)
+        })
+        .await
+        .unwrap_or_default();
+        let rows = crate::playlist::interleave_rows(qobuz_tracks, sidecar);
+        let tracks: Vec<QueueTrack> = rows
             .iter()
-            .map(|track| {
-                let (album_id, album_title, album_artwork) = track
-                    .album
-                    .as_ref()
-                    .map(|a| {
-                        (
-                            a.id.clone(),
-                            a.title.clone(),
-                            a.image.best().cloned().unwrap_or_default(),
-                        )
-                    })
-                    .unwrap_or_default();
-                let album_artist = track
-                    .performer
-                    .as_ref()
-                    .map(|p| p.name.clone())
-                    .unwrap_or_default();
-                make_queue_track(track, &album_id, &album_title, &album_artist, &album_artwork)
-            })
+            .filter_map(|row| crate::local_playlist::row_queue_track(&row.item))
             .collect();
         if tracks.is_empty() {
             return;
@@ -2699,6 +2691,50 @@ pub fn enqueue_tracks(
             }
         }
         refresh_sidebar(false);
+    });
+}
+
+/// Append (or insert-next) a batch of already-built, SOURCE-AWARE
+/// QueueTracks — the playlist detail's per-row / bulk Play next + Add to
+/// queue route their snapshot rows here (local/plex/cached rows keep their
+/// source, so `play_audible` resolves each through its own path). QConnect
+/// CONTROLLER mode rides the same batch admission as `enqueue_playlist`:
+/// all-or-nothing — a non-castable (local/plex) row refuses the whole batch
+/// with a toast while a peer owns playback, exactly like the other
+/// source-typed batch paths.
+pub fn enqueue_queue_tracks(
+    runtime: Runtime,
+    weak: slint::Weak<AppWindow>,
+    handle: tokio::runtime::Handle,
+    tracks: Vec<QueueTrack>,
+    next: bool,
+) {
+    if tracks.is_empty() {
+        return;
+    }
+    handle.spawn(async move {
+        if let Some(svc) = crate::qconnect_service::service() {
+            let routed: Vec<(u64, Option<String>)> =
+                tracks.iter().map(|qt| (qt.id, qt.source.clone())).collect();
+            let handled = if next {
+                svc.play_next_batch_on_peer_if_active(&routed).await
+            } else {
+                svc.add_to_queue_batch_on_peer_if_active(&routed).await
+            };
+            if handled {
+                return;
+            }
+        }
+        if next {
+            // Reverse so the inserted block keeps the selection's order.
+            for track in tracks.into_iter().rev() {
+                runtime.core().add_track_next(track).await;
+            }
+        } else {
+            runtime.core().add_tracks(tracks).await;
+        }
+        refresh_sidebar(false);
+        crate::toast::success_weak(&weak, if next { "Playing next" } else { "Added to queue" });
     });
 }
 

@@ -16,6 +16,10 @@ export component ContextMenuItem inherits Rectangle {
     in property <bool> enabled: true;
     // Optional trailing check, for single-choice menus (the selected row).
     in property <bool> selected: false;
+    // Destructive action (Remove from playlist / Remove offline copy) —
+    // red icon + label, mirroring Tauri's TrackMenu danger rows. Same red
+    // as the MultiSelectBar danger button.
+    in property <bool> danger: false;
     callback clicked();
 
     height: root.shown ? 33px : 0px;
@@ -34,12 +38,16 @@ export component ContextMenuItem inherits Rectangle {
                 source: root.icon;
                 width: 15px;
                 height: 15px;
-                tint: ta.has-hover ? Theme.text-primary : Theme.text-secondary;
+                tint: root.danger
+                    ? #ef4444
+                    : (ta.has-hover ? Theme.text-primary : Theme.text-secondary);
             }
         }
         Text {
             text: root.label;
-            color: ta.has-hover ? Theme.text-primary : Theme.text-secondary;
+            color: root.danger
+                ? #ef4444
+                : (ta.has-hover ? Theme.text-primary : Theme.text-secondary);
             font-size: 13px;
             vertical-alignment: center;
             horizontal-stretch: 1;

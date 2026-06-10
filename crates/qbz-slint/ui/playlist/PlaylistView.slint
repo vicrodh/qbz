@@ -6,7 +6,7 @@
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
 import { Radius } from "../foundation/radius.slint";
-import { PlaylistState, PlaylistActions, DragState, NavState, OfflineState } from "../state.slint";
+import { PlaylistState, PlaylistActions, DragState, NavState, OfflineState, BulkAction } from "../state.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { TrackRow } from "../primitives/TrackRow.slint";
 import { ExpandableSearch } from "../primitives/ExpandableSearch.slint";
@@ -114,6 +114,24 @@ export component PlaylistView inherits Rectangle {
     property <bool> show-description: false;
     // "Upload to Qobuz" confirm modal (local playlists, D8).
     property <bool> show-upload-confirm: false;
+
+    // Bulk-bar action sets (typed properties — a ternary over bare array
+    // literals can't coerce to [BulkAction]). Tauri parity (spec §1.5):
+    // Play next / Add to queue / Add to playlist over the selection,
+    // Remove owner-only — followed playlists keep the queueing actions.
+    property <[BulkAction]> bulk-actions-owner: [
+        { id: "select-all", label: @tr("Select all"), danger: false, needs-selection: false },
+        { id: "play-next-selected", label: @tr("Play next"), danger: false, needs-selection: true },
+        { id: "queue-selected", label: @tr("Add to queue"), danger: false, needs-selection: true },
+        { id: "add-selected-to-playlist", label: @tr("Add to playlist"), danger: false, needs-selection: true },
+        { id: "remove-selected", label: @tr("Remove"), danger: true, needs-selection: true },
+    ];
+    property <[BulkAction]> bulk-actions-follower: [
+        { id: "select-all", label: @tr("Select all"), danger: false, needs-selection: false },
+        { id: "play-next-selected", label: @tr("Play next"), danger: false, needs-selection: true },
+        { id: "queue-selected", label: @tr("Add to queue"), danger: false, needs-selection: true },
+        { id: "add-selected-to-playlist", label: @tr("Add to playlist"), danger: false, needs-selection: true },
+    ];
 
     // Label for the active sort field.
     property <string> sort-label:
@@ -418,8 +436,11 @@ export component PlaylistView inherits Rectangle {
                                 }
                             }
                         }
-                        // Select tracks (multi-select edit mode).
-                        if PlaylistState.is-owner && PlaylistState.tracks.length > 0: VerticalLayout {
+                        // Select tracks (multi-select edit mode). NOT
+                        // ownership-gated (Tauri parity, spec §1.5: followed
+                        // playlists get select mode for bulk queueing too);
+                        // only the bar's Remove action is owner-gated.
+                        if PlaylistState.tracks.length > 0: VerticalLayout {
                             horizontal-stretch: 0;
                             alignment: center;
                             CircleAction {
@@ -620,13 +641,13 @@ export component PlaylistView inherits Rectangle {
             }
             Rectangle { height: 6px; }
 
-            // Bulk action bar — visible in edit mode.
+            // Bulk action bar — visible in edit mode (action sets defined
+            // as bulk-actions-owner / bulk-actions-follower above).
             if PlaylistState.multi-select-mode: MultiSelectBar {
                 selected-count: PlaylistState.selected-count;
-                actions: [
-                    { id: "select-all", label: @tr("Select all"), danger: false, needs-selection: false },
-                    { id: "remove-selected", label: @tr("Remove"), danger: true, needs-selection: true },
-                ];
+                actions: PlaylistState.is-owner
+                    ? root.bulk-actions-owner
+                    : root.bulk-actions-follower;
                 action(id) => {
                     root.media-action("playlist", "", id);
                 }
@@ -684,6 +705,19 @@ export component PlaylistView inherits Rectangle {
                             // editable repo order (B2), written via repo::reorder.
                             show-reorder: PlaylistState.sort-field == "custom"
                                 || (PlaylistState.is-local && PlaylistState.sort-field == "default");
+                            // Per-row "Remove from playlist" — ownership-gated
+                            // BY DESIGN (spec §1.6.1: Tauri's available branch
+                            // renders it un-gated on followed playlists and the
+                            // owner-only API rejects; we port the intent, not
+                            // the hole). Local details set is-owner true; the
+                            // read-only offline subset sets it false.
+                            remove-from-playlist-action: PlaylistState.is-owner;
+                            // Track Info is DEAD on this surface (no
+                            // ("track","track-info") arm yet — backlog
+                            // project_track_info); hidden per spec §3.3 instead
+                            // of rendering a no-op entry. Other surfaces keep
+                            // the default until their own audit.
+                            track-info-action: false;
                             multi-select-mode: PlaylistState.multi-select-mode;
                             media-action(kind, id, action) => {
                                 if (action == "play") {

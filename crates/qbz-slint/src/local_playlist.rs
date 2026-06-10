@@ -304,6 +304,16 @@ pub fn plex_key_for_row(id: &str) -> Option<String> {
         .and_then(|q| q.source_item_id_hint.clone())
 }
 
+/// The ready, SOURCE-AWARE QueueTrack of an open-detail row by display id
+/// (any source — snapshot rows are built to enqueue as-is). `None` for
+/// rows not in the open snapshot: unplayable rows (file:/broken:/
+/// unresolved) and any id while no snapshot-backed detail is open. The
+/// per-row / bulk Play next + Add to queue routing reads this (spec §3.2).
+pub fn queue_track_for_row(id: &str) -> Option<QueueTrack> {
+    let queue = CURRENT_QUEUE.lock().ok()?;
+    queue.iter().find(|q| q.id.to_string() == id).cloned()
+}
+
 /// Local-mode picker ref for an open-detail row id: `"plex:<key>"` for
 /// resolved Plex rows, `"<library row id>"` for local file rows. `None`
 /// for Qobuz/offline-copy rows (those ride the catalog-id flow) and for
@@ -765,7 +775,7 @@ pub async fn load(runtime: &Runtime, playlist_id: &str) -> Option<LocalPlaylistD
 }
 
 /// Build the queue track for a resolved row, if it is playable.
-fn row_queue_track(item: &RowItem) -> Option<QueueTrack> {
+pub(crate) fn row_queue_track(item: &RowItem) -> Option<QueueTrack> {
     match item {
         RowItem::Qobuz(track) => {
             let (album_id, album_title, album_artwork) = track
@@ -1585,9 +1595,8 @@ pub fn move_row(
 
 // ──────────────────────── removal (multi-select) ────────────────────────
 
-/// Remove the selected rows from the open local playlist (repo positions,
-/// highest first so each removal's compaction never shifts a pending one),
-/// then reload the detail. UI thread entry; DB work off-thread.
+/// Remove the selected rows from the open local playlist, then reload the
+/// detail. UI thread entry; DB work off-thread.
 pub fn remove_selected(
     window: &AppWindow,
     runtime: Runtime,
@@ -1595,10 +1604,6 @@ pub fn remove_selected(
     handle: tokio::runtime::Handle,
     image_cache: ImageCache,
 ) {
-    let playlist_id = window.global::<PlaylistState>().get_id().to_string();
-    if !is_local_id(&playlist_id) {
-        return;
-    }
     let model = window.global::<PlaylistState>().get_tracks();
     let selected: Vec<String> = (0..model.row_count())
         .filter_map(|i| model.row_data(i))
@@ -1608,15 +1613,35 @@ pub fn remove_selected(
     if selected.is_empty() {
         return;
     }
+    crate::playlist::set_multi_select(window, false);
+    remove_rows_by_ids(window, runtime, weak, handle, image_cache, selected);
+}
+
+/// Remove rows from the open LOCAL playlist by display id (repo positions
+/// through the open snapshot's position map, removed highest first so each
+/// removal's compaction never shifts a pending one), then reload. Shared
+/// by the bulk Remove and the per-row "Remove from playlist" menu entry
+/// (spec §3.1 step 4). UI thread entry; DB work off-thread.
+pub fn remove_rows_by_ids(
+    window: &AppWindow,
+    runtime: Runtime,
+    weak: slint::Weak<AppWindow>,
+    handle: tokio::runtime::Handle,
+    image_cache: ImageCache,
+    ids: Vec<String>,
+) {
+    let playlist_id = window.global::<PlaylistState>().get_id().to_string();
+    if !is_local_id(&playlist_id) {
+        return;
+    }
     let mut positions: Vec<i32> = {
         let map = ROW_POSITIONS.lock().map(|m| m.clone()).unwrap_or_default();
-        selected.iter().filter_map(|id| map.get(id).copied()).collect()
+        ids.iter().filter_map(|id| map.get(id).copied()).collect()
     };
     positions.sort_unstable_by(|a, b| b.cmp(a));
     if positions.is_empty() {
         return;
     }
-    crate::playlist::set_multi_select(window, false);
     let handle2 = handle.clone();
     handle.spawn(async move {
         let pid = playlist_id.clone();

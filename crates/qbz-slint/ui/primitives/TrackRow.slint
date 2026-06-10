@@ -57,6 +57,12 @@ export component TrackRow inherits Rectangle {
     // on library row ids (spec §3.4). The SourceGlyph keeps reading the
     // unchanged source field.
     in property <bool> force-local-menu: false;
+    // Playlist-detail per-row "Remove from playlist" — the surface gates
+    // it (PlaylistView: ownership, spec §3.1). Default off everywhere else.
+    in property <bool> remove-from-playlist-action: false;
+    // Track Info menu entry visibility — a surface whose Track Info is
+    // dead hides it (spec §3.3); default on keeps other surfaces unchanged.
+    in property <bool> track-info-action: true;
     // Custom-order reorder controls (up/down chevrons) at the leading
     // edge — used by the playlist custom sort.
     in property <bool> show-reorder: false;
@@ -623,6 +629,11 @@ export component TrackRow inherits Rectangle {
         // playlists accept tracks offline (D7/D8) and the picker already
         // hides the Qobuz set offline.
         playlist-action: root.track.source != "ephemeral";
+        remove-from-playlist-action: root.remove-from-playlist-action;
+        track-info-action: root.track-info-action;
+        // Cached-state-aware offline entry (Refresh/Remove when cached) —
+        // straight from the row model.
+        cache-status: root.track.cache-status;
         media-action(k, i, a) => {
             root.media-action(k, i, a);
         }
