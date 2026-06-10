@@ -86,19 +86,35 @@ impl QobuzClient {
             log::info!("[Bundle] Using cached tokens (version {})", version);
             *self.tokens.write().await = Some(cached.into());
 
-            let client = self.http.clone();
-            let tokens_arc = Arc::clone(&self.tokens);
-            tokio::spawn(async move {
-                if let Some(fresh) = bundle::refresh_bundle_if_changed(&client, &version).await {
-                    *tokens_arc.write().await = Some(fresh);
-                    log::info!("[Bundle] Background refresh applied rotated tokens");
+            // Cache reads are never gated, but the background refresh is a
+            // network request — gate it once before cloning the client into
+            // the spawned task, skipping the refresh instead of failing the
+            // warm start.
+            match self.http() {
+                Ok(client) => {
+                    let client = client.clone();
+                    let tokens_arc = Arc::clone(&self.tokens);
+                    tokio::spawn(async move {
+                        if let Some(fresh) =
+                            bundle::refresh_bundle_if_changed(&client, &version).await
+                        {
+                            *tokens_arc.write().await = Some(fresh);
+                            log::info!("[Bundle] Background refresh applied rotated tokens");
+                        }
+                    });
                 }
-            });
+                Err(_) => {
+                    log::info!("[Bundle] Offline mode - skipping background bundle refresh");
+                }
+            }
             return Ok(true);
         }
 
         log::info!("[Bundle] No cached tokens, extracting from Qobuz...");
-        let tokens = bundle::extract_and_cache_bundle_tokens(&self.http).await?;
+        // Cold start: a live bundle fetch is a network request — gated on
+        // purpose so an offline cold start fails fast instead of waiting out
+        // the network timeouts.
+        let tokens = bundle::extract_and_cache_bundle_tokens(self.http()?).await?;
         *self.tokens.write().await = Some(tokens);
         Ok(false)
     }
@@ -133,6 +149,16 @@ impl QobuzClient {
         &self.http
     }
 
+    /// The single offline choke point (D3): every Qobuz HTTP request flows
+    /// through here. While offline mode is active, fail fast with a typed,
+    /// non-transient error instead of timing out against the network.
+    fn http(&self) -> Result<&Client> {
+        if crate::offline_gate::is_offline() {
+            return Err(ApiError::OfflineMode);
+        }
+        Ok(&self.http)
+    }
+
     /// Get validated secret (validates on first use)
     async fn secret(&self) -> Result<String> {
         // Check if we already have a validated secret
@@ -164,7 +190,7 @@ impl QobuzClient {
 
         let url = endpoints::build_url(paths::TRACK_GET_FILE_URL);
         let response = self
-            .http
+            .http()?
             .get(&url)
             .headers(self.api_headers().await?)
             .query(&[
@@ -184,7 +210,7 @@ impl QobuzClient {
     pub async fn login(&self, email: &str, password: &str) -> Result<UserSession> {
         let url = endpoints::build_url(paths::USER_LOGIN);
         let response = self
-            .http
+            .http()?
             .get(&url)
             .headers(self.api_headers().await?)
             .query(&[("email", email), ("password", password)])
@@ -253,7 +279,7 @@ impl QobuzClient {
 
         log::info!("[OAuth] Exchanging code for token via /oauth/callback");
         let callback_response = self
-            .http
+            .http()?
             .get(&callback_url)
             .headers(headers)
             .query(&[
@@ -295,7 +321,7 @@ impl QobuzClient {
         );
 
         let login_response = self
-            .http
+            .http()?
             .post(&user_login_url)
             .headers(auth_headers)
             .header("Content-Type", "text/plain;charset=UTF-8")
@@ -351,7 +377,7 @@ impl QobuzClient {
 
         log::info!("[OAuth] Restoring session from saved token");
         let resp = self
-            .http
+            .http()?
             .post(&user_login_url)
             .headers(headers)
             .header("Content-Type", "text/plain;charset=UTF-8")
@@ -462,7 +488,7 @@ impl QobuzClient {
         query_params.push(("request_sig", &sig));
 
         let response = self
-            .http
+            .http()?
             .get(url)
             .headers(self.api_headers().await?)
             .query(&query_params)
@@ -489,7 +515,7 @@ impl QobuzClient {
         query_params.push(("request_sig", &sig));
 
         let response = self
-            .http
+            .http()?
             .get(url)
             .headers(self.authenticated_headers().await?)
             .query(&query_params)
@@ -530,7 +556,7 @@ impl QobuzClient {
         }
 
         let http_response = self
-            .http
+            .http()?
             .get(&url)
             .headers(self.api_headers().await?)
             .query(&params)
@@ -576,7 +602,7 @@ impl QobuzClient {
         }
 
         let http_response = self
-            .http
+            .http()?
             .get(&url)
             .headers(self.api_headers().await?)
             .query(&params)
@@ -622,7 +648,7 @@ impl QobuzClient {
         }
 
         let http_response = self
-            .http
+            .http()?
             .get(&url)
             .headers(self.api_headers().await?)
             .query(&params)
@@ -650,7 +676,7 @@ impl QobuzClient {
         let ts_str = timestamp.to_string();
 
         let http_response = self
-            .http
+            .http()?
             .get(&url)
             .headers(self.api_headers().await?)
             .query(&[
@@ -817,7 +843,7 @@ impl QobuzClient {
         let offset_str = offset.to_string();
 
         let http_response = self
-            .http
+            .http()?
             .get(&url)
             .headers(self.authenticated_headers().await?)
             .query(&[
@@ -920,7 +946,7 @@ impl QobuzClient {
     pub async fn get_album_suggest(&self, album_id: &str) -> Result<AlbumSuggestResponse> {
         let url = endpoints::build_url(paths::ALBUM_SUGGEST);
         let http_response = self
-            .http
+            .http()?
             .get(&url)
             .headers(self.api_headers().await?)
             .query(&[("album_id", album_id)])
@@ -952,7 +978,7 @@ impl QobuzClient {
             "track_to_analysed": [],
         });
         let http_response = self
-            .http
+            .http()?
             .post(&url)
             .headers(self.authenticated_headers().await?)
             .json(&body)
@@ -992,7 +1018,7 @@ impl QobuzClient {
     async fn get_radio(&self, path: &str, key: &str, id: &str) -> Result<RadioResponse> {
         let url = endpoints::build_url(path);
         let http_response = self
-            .http
+            .http()?
             .get(&url)
             .headers(self.authenticated_headers().await?)
             .query(&[(key, id)])
@@ -1451,7 +1477,7 @@ impl QobuzClient {
         log::debug!("[API] get_tracks_batch POST ({} IDs)", track_ids.len());
 
         let http_response = self
-            .http
+            .http()?
             .post(&url)
             .headers(headers)
             .query(&[("request_ts", timestamp.to_string()), ("request_sig", sig)])
@@ -1532,11 +1558,16 @@ impl QobuzClient {
                 let headers = self.api_headers().await?;
                 let secret = self.secret().await.unwrap_or_default();
 
+                // Offline gate checked ONCE for the whole page batch (the
+                // first page above already passed through it) — not inside
+                // the per-page loop.
+                let gated_http = self.http()?;
+
                 // Launch all page requests concurrently
                 let futures: Vec<_> = offsets
                     .iter()
                     .map(|&offset| {
-                        let http = &self.http;
+                        let http = gated_http;
                         let url = &url;
                         let headers = headers.clone();
                         let pid = playlist_id.to_string();
@@ -1958,7 +1989,7 @@ impl QobuzClient {
         log::debug!("[API] get_label_list POST ({} ids)", label_ids.len());
 
         let response: Value = self
-            .http
+            .http()?
             .post(&url)
             .headers(headers)
             .query(&[("request_ts", timestamp.to_string()), ("request_sig", sig)])
@@ -1988,7 +2019,7 @@ impl QobuzClient {
 
         log::debug!("Sending stream URL request...");
         let response = self
-            .http
+            .http()?
             .get(&url)
             .headers(self.authenticated_headers().await?)
             .query(&[
@@ -2112,7 +2143,7 @@ impl QobuzClient {
         let signature = sign_get_favorites(timestamp, &secret);
 
         let http_response = self
-            .http
+            .http()?
             .get(&url)
             .headers(self.authenticated_headers().await?)
             .query(&[
@@ -2167,7 +2198,7 @@ impl QobuzClient {
         let ts_str = timestamp.to_string();
 
         let http_response = self
-            .http
+            .http()?
             .get(&url)
             .headers(self.api_headers().await?)
             .query(&[
@@ -2484,7 +2515,7 @@ impl QobuzClient {
 
         let url = endpoints::build_url(paths::SESSION_START);
         let response = self
-            .http
+            .http()?
             .post(&url)
             .headers(self.authenticated_headers().await?)
             .form(&[
@@ -2562,7 +2593,7 @@ impl QobuzClient {
                     );
 
                     let response = self
-                        .http
+                        .http()?
                         .get(&url)
                         .headers(headers)
                         .query(&[
@@ -2625,5 +2656,43 @@ impl QobuzClient {
 impl Default for QobuzClient {
     fn default() -> Self {
         Self::new().expect("Failed to create client")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// With the offline gate closed, any public API method must fail fast
+    /// with the typed `ApiError::OfflineMode` — no network access, no
+    /// connect timeout. The gate is process-global and tests run in
+    /// parallel, so the shared lock serializes gate-touching tests and the
+    /// drop guard reopens the gate even if the test panics.
+    #[tokio::test]
+    async fn offline_gate_fails_fast_with_typed_error() {
+        let _lock = crate::offline_gate::test_lock()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _reset = crate::offline_gate::TestGateReset;
+
+        crate::offline_gate::set_offline(true);
+
+        let client = QobuzClient::new().expect("client construction is local-only");
+        let started = std::time::Instant::now();
+        let result = client.get_album_suggest("0060254735180").await;
+        let elapsed = started.elapsed();
+
+        let err = result.err().expect("offline gate must fail the request");
+        assert!(
+            matches!(err, ApiError::OfflineMode),
+            "expected ApiError::OfflineMode, got: {err}"
+        );
+        // OfflineMode must never be retried by the retry layer.
+        assert!(!err.is_transient(), "OfflineMode must be non-transient");
+        // Fail-fast: well under the 10s connect timeout — proves no network.
+        assert!(
+            elapsed < std::time::Duration::from_secs(1),
+            "offline gate took {elapsed:?} — it must not touch the network"
+        );
     }
 }

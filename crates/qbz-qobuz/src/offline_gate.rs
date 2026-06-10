@@ -31,12 +31,35 @@ pub fn is_offline() -> bool {
     OFFLINE.load(Ordering::Relaxed)
 }
 
+/// Serializes tests that flip the process-global gate (tests run in
+/// parallel). Shared crate-wide so client.rs tests and the tests below
+/// take the same lock.
+#[cfg(test)]
+pub(crate) fn test_lock() -> &'static std::sync::Mutex<()> {
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    &LOCK
+}
+
+/// Drop guard that reopens the gate, so a panicking test cannot leak a
+/// closed gate into other tests in this process.
+#[cfg(test)]
+pub(crate) struct TestGateReset;
+
+#[cfg(test)]
+impl Drop for TestGateReset {
+    fn drop(&mut self) {
+        set_offline(false);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn gate_toggles() {
+        let _lock = test_lock().lock().unwrap_or_else(|p| p.into_inner());
+        let _reset = TestGateReset;
         set_offline(false);
         assert!(!is_offline());
         set_offline(true);
