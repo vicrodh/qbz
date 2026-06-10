@@ -1202,12 +1202,51 @@ fn fmt_remaining(position: u64, duration: u64) -> String {
 static NOTIFY_LAST_TRACK: std::sync::atomic::AtomicU64 =
     std::sync::atomic::AtomicU64::new(u64::MAX);
 
+/// Last `(track id, resolved art URL)` pushed to the OS media controls'
+/// metadata. `refresh_now_playing_meta` re-runs on resume/seek/quality-patch,
+/// and the deferred art upgrade re-enters too, so metadata is only re-pushed
+/// when this key actually changes — the track-id dedupe extended to the art
+/// field (B11 local-first artwork). `None` = nothing pushed yet / cleared.
+static MPRIS_LAST_META: std::sync::Mutex<Option<(u64, Option<String>)>> =
+    std::sync::Mutex::new(None);
+
+/// Compare-and-record the MPRIS metadata dedupe key. Returns `true` when
+/// `key` differs from the last pushed value (→ caller pushes now), recording
+/// it as the new last-pushed value. A poisoned lock falls back to pushing.
+fn mpris_meta_changed(key: &(u64, Option<String>)) -> bool {
+    match MPRIS_LAST_META.lock() {
+        Ok(mut last) => {
+            if last.as_ref() == Some(key) {
+                false
+            } else {
+                *last = Some(key.clone());
+                true
+            }
+        }
+        Err(_) => true,
+    }
+}
+
+/// Track id of the last pushed MPRIS metadata — the staleness check for the
+/// deferred art-upgrade task (a new track / stop makes the upgrade moot).
+fn mpris_meta_track() -> Option<u64> {
+    MPRIS_LAST_META
+        .lock()
+        .ok()
+        .and_then(|last| last.as_ref().map(|(id, _)| *id))
+}
+
 pub(crate) async fn refresh_now_playing_meta(runtime: &Runtime, weak: &slint::Weak<AppWindow>) {
     let state = runtime.core().get_queue_state().await;
     let Some(track) = state.current_track else {
         // No current track → clear the tray tooltip (Linux) + stop media controls.
         // Reset the notify guard so replaying the same track after a stop fires.
         NOTIFY_LAST_TRACK.store(u64::MAX, std::sync::atomic::Ordering::Relaxed);
+        // Reset the metadata dedupe too, so replaying the same track after a
+        // stop re-pushes MPRIS metadata (and pending art upgrades go stale).
+        if let Ok(mut last) = MPRIS_LAST_META.lock() {
+            *last = None;
+        }
         if let Some(t) = crate::tray::handle() {
             t.clear_track();
         }
@@ -1266,39 +1305,102 @@ pub(crate) async fn refresh_now_playing_meta(runtime: &Runtime, weak: &slint::We
         t.set_track(title.clone(), artist.clone(), album.clone());
     }
 
-    // Offline: desktop widgets can't fetch an https artUrl. Swap remote covers
-    // for the shared disk-cache copy (file://) when present; local/Plex art
-    // keeps its normal URL (already file:// / LAN Plex). On a cache miss MPRIS
-    // gets no art, while the notification keeps the remote URL so its own md5
-    // disk cache can still serve it (the offline flag below blocks the
-    // download).
+    // LOCAL-FIRST artwork for desktop surfaces (B11) — online AND offline:
+    // remote covers resolve through the shared disk-image cache first; a hit
+    // hands MPRIS a file:// URL and the notification the same local copy (no
+    // widget re-downloads what the app already cached, and some widgets fetch
+    // https poorly). On a miss: online passes the remote URL through (and arms
+    // the deferred upgrade below); offline keeps slice-3b's exact semantics —
+    // MPRIS gets no art (widgets can't fetch https), while the notification
+    // keeps the remote URL so its own md5 disk cache can still serve it (the
+    // offline flag below blocks the download). Local/Plex refs keep their
+    // normal URL (already file:// / LAN Plex).
     let offline = crate::offline_mode::engine().is_offline();
     let mut mpris_art = artwork.to_mpris_url();
     let mut notify_art = mpris_art.clone();
-    if offline {
-        if let qbz_models::ArtworkRef::Remote(url) = &artwork {
-            let cached = crate::artwork::cached_file_url_for(url);
-            notify_art = cached.clone().or(notify_art);
-            mpris_art = cached;
+    // Remote URL whose disk-cache copy has not landed yet (online miss) —
+    // the song-card fetch usually caches it moments after the track change,
+    // so a deferred task re-resolves and upgrades the MPRIS art in place.
+    let mut upgrade_art_url: Option<String> = None;
+    if let qbz_models::ArtworkRef::Remote(url) = &artwork {
+        match crate::artwork::cached_file_url_for(url) {
+            Some(cached) => {
+                notify_art = Some(cached.clone());
+                mpris_art = Some(cached);
+            }
+            None if offline => {
+                mpris_art = None;
+            }
+            None => {
+                if !url.is_empty() {
+                    upgrade_art_url = Some(url.clone());
+                }
+            }
         }
     }
 
     // Push to the OS media controls (MPRIS / SMTC / MediaRemote). The app icon
     // GNOME shows comes from the MPRIS DesktopEntry; `art_url` is the album art
-    // (`mpris:artUrl`) — remote Qobuz covers pass through, local covers become a
-    // file:// URI, matching the Tauri `normalizeCoverUrlForMetadata` workaround.
+    // (`mpris:artUrl`) — cached covers become a file:// URI (matching the Tauri
+    // `normalizeCoverUrlForMetadata` workaround), uncached remote covers pass
+    // through online. Metadata is de-duped on (track id, resolved art): this
+    // refresh re-runs on resume/seek/quality-patch with identical values, so
+    // only an actual change (new track, or the art upgrading remote → file://)
+    // re-pushes. `set_playback` stays unconditional.
     if let Some(mc) = crate::media_controls::handle() {
-        mc.set_metadata(&qbz_media_controls::TrackMeta {
-            title: title.clone(),
-            artist: artist.clone(),
-            album: album.clone(),
-            duration: (duration > 0).then(|| std::time::Duration::from_secs(duration as u64)),
-            art_url: mpris_art,
-        });
+        if mpris_meta_changed(&(track.id, mpris_art.clone())) {
+            mc.set_metadata(&qbz_media_controls::TrackMeta {
+                title: title.clone(),
+                artist: artist.clone(),
+                album: album.clone(),
+                duration: (duration > 0).then(|| std::time::Duration::from_secs(duration as u64)),
+                art_url: mpris_art,
+            });
+        }
         mc.set_playback(
             qbz_media_controls::PlaybackStatus::Playing,
             Some(std::time::Duration::ZERO),
         );
+
+        // Deferred art upgrade (online cache miss): the now-playing bar's own
+        // fetch (`load_now_playing_artwork` below) stores the SAME url in the
+        // shared disk cache moments after the track change. Poll briefly and,
+        // once the file lands, re-push the same metadata with the file:// URL.
+        // Gated by the same (track id, art) dedupe so it fires at most once,
+        // and bails as soon as another track (or a stop) takes over. The poll
+        // ceiling matches the artwork HTTP timeout (10s).
+        if let Some(url) = upgrade_art_url {
+            let track_id = track.id;
+            let title = title.clone();
+            let artist = artist.clone();
+            let album = album.clone();
+            tokio::spawn(async move {
+                const UPGRADE_TRIES: u32 = 20;
+                for _ in 0..UPGRADE_TRIES {
+                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                    if mpris_meta_track() != Some(track_id) {
+                        return; // stale: track changed or playback stopped
+                    }
+                    let Some(file_url) = crate::artwork::cached_file_url_for(&url) else {
+                        continue; // not cached yet — keep waiting
+                    };
+                    let Some(mc) = crate::media_controls::handle() else {
+                        return;
+                    };
+                    if mpris_meta_changed(&(track_id, Some(file_url.clone()))) {
+                        mc.set_metadata(&qbz_media_controls::TrackMeta {
+                            title,
+                            artist,
+                            album,
+                            duration: (duration > 0)
+                                .then(|| std::time::Duration::from_secs(duration as u64)),
+                            art_url: Some(file_url),
+                        });
+                    }
+                    return;
+                }
+            });
+        }
     }
 
     // Desktop "now playing" notification (1:1 with the Tauri path). De-dupe so
