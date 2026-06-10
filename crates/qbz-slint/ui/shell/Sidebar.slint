@@ -15,7 +15,7 @@ import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { SidebarPlaylistCollage } from "../primitives/SidebarPlaylistCollage.slint";
 import { ContextMenu } from "../primitives/ContextMenu.slint";
 import { ContextMenuItem } from "../primitives/ContextMenuItem.slint";
-import { ShellState, SidebarState, SidebarActions, SidebarEntry, DragState, HeaderMenuState, NavMenuEntry, SidebarFolderPopupState, SidebarTooltipState, MyQbzBrandingState } from "../state.slint";
+import { ShellState, SidebarState, SidebarActions, SidebarEntry, DragState, HeaderMenuState, NavMenuEntry, SidebarFolderPopupState, SidebarTooltipState, MyQbzBrandingState, OfflineState } from "../state.slint";
 import { ScrollView, LineEdit } from "std-widgets.slint";
 
 // A single context-menu item row.
@@ -514,10 +514,15 @@ component SidebarNavRow inherits Rectangle {
     // (no theme tint). Used by the My QBZ row to show a custom icon with its
     // own colours; default branded glyphs stay tinted via QbzIcon.
     in property <bool> raw-icon: false;
+    // Offline gating: the row stays visible (layout stability) but dims and
+    // ignores the pointer — the TouchArea is disabled, so neither click nor
+    // hover can open the flyout.
+    in property <bool> disabled: false;
     property <bool> active: HeaderMenuState.open-index == root.tab-index;
 
     height: 34px;
     border-radius: 6px;
+    opacity: root.disabled ? 0.5 : 1.0;
     background: nav-ta.has-hover ? Theme.surface-hover : transparent;
 
     // Publish this row's menu into the shared overlay, anchored to the right
@@ -566,6 +571,7 @@ component SidebarNavRow inherits Rectangle {
         }
     }
     nav-ta := TouchArea {
+        enabled: !root.disabled;
         mouse-cursor: pointer;
         clicked => {
             root.open-menu();
@@ -605,6 +611,9 @@ export component Sidebar inherits Rectangle {
                 tab-index: 0;
                 icon: @image-url("../assets/icons/compass.svg");
                 label: @tr("Discover");
+                // Qobuz-only section — inert while offline (Local Library and
+                // My QBZ below stay active).
+                disabled: OfflineState.offline;
                 home-item: 0;
                 items: [
                     { label: @tr("Home"), has-glyph: false, route: "discover-home" },
@@ -616,6 +625,8 @@ export component Sidebar inherits Rectangle {
                 tab-index: 1;
                 icon: @image-url("../assets/icons/music-library-2.svg");
                 label: @tr("Library");
+                // Qobuz favorites — inert while offline.
+                disabled: OfflineState.offline;
                 items: [
                     { label: @tr("Tracks"), icon: @image-url("../assets/icons/music.svg"), has-glyph: true, route: "favorites-tracks" },
                     { label: @tr("Albums"), icon: @image-url("../assets/icons/disc.svg"), has-glyph: true, route: "favorites-albums" },

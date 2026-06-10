@@ -111,6 +111,12 @@ static PREFETCH_SEMAPHORE: tokio::sync::Semaphore =
 /// so the track later plays via `play_data` (a cache hit) and is gapless
 /// eligible. Concurrency is bounded by `PREFETCH_SEMAPHORE`.
 async fn kick_prefetch(runtime: &Runtime) {
+    // Offline: the prefetch is a pure NETWORK warmer (offline-cached tracks
+    // play through the offline tier without it), so skip entirely — every
+    // attempt would just bounce off the API offline gate and spam the log.
+    if crate::offline_mode::engine().is_offline() {
+        return;
+    }
     let upcoming = runtime.core().peek_upcoming(PREFETCH_LOOKAHEAD).await;
     if upcoming.is_empty() {
         return;
@@ -201,10 +207,162 @@ fn clear_loading(weak: &slint::Weak<AppWindow>, track_id: u64) {
     });
 }
 
+/// Maximum consecutive offline-unavailable tracks the queue walk skips
+/// before giving up (Tauri #467 parity: `MAX_OFFLINE_SKIPS = 5`).
+const MAX_OFFLINE_SKIPS: usize = 5;
+
+/// Offline playability verdict for one queue track (offline-MODE slice 3d).
+#[derive(PartialEq)]
+enum OfflinePlayability {
+    Playable,
+    /// No offline source for this track (Qobuz without a cached copy, or
+    /// Plex under REAL offline).
+    Unavailable,
+    /// The track IS offline-cached but the D4 subscription grace window has
+    /// elapsed — gets its own honest message.
+    GraceExpired,
+}
+
+/// Decide whether `track` can play under the CURRENT offline status.
+/// Online → always playable (the normal path pays one status read).
+/// Offline:
+/// - local / ephemeral → playable (file presence is the player's own
+///   failure path)
+/// - plex → induced offline only (a LAN Plex server may be reachable;
+///   under real offline it is not — Tauri parity)
+/// - qobuz (incl. "qobuz_download" copies, which keep the real Qobuz id)
+///   → offline-cached AND within the D4 subscription grace window
+fn offline_playability(track: &QueueTrack) -> OfflinePlayability {
+    let status = crate::offline_mode::engine().status();
+    if !status.is_offline() {
+        return OfflinePlayability::Playable;
+    }
+    if track.is_local {
+        return OfflinePlayability::Playable;
+    }
+    match track.source.as_deref() {
+        Some("local") | Some("ephemeral") => OfflinePlayability::Playable,
+        Some("plex") => {
+            if status.mode == qbz_app::offline_mode::OfflineMode::InducedOffline {
+                OfflinePlayability::Playable
+            } else {
+                OfflinePlayability::Unavailable
+            }
+        }
+        _ => {
+            if !crate::offline_cache::is_cached(&track.id.to_string()) {
+                OfflinePlayability::Unavailable
+            } else if !crate::offline_mode::offline_playback_allowed() {
+                OfflinePlayability::GraceExpired
+            } else {
+                OfflinePlayability::Playable
+            }
+        }
+    }
+}
+
+/// Boolean form of [`offline_playability`] for the advance/prefetch walks.
+fn offline_track_playable(track: &QueueTrack) -> bool {
+    offline_playability(track) == OfflinePlayability::Playable
+}
+
+/// Move the queue cursor forward/backward to the next offline-playable
+/// track. Online this returns the immediate neighbor on the first
+/// iteration. Offline it skips unavailable tracks, bounded at
+/// [`MAX_OFFLINE_SKIPS`] consecutive (Tauri #467 parity); on exhaustion
+/// (bound hit, or queue edge after at least one skip) playback stops and
+/// ONE toast reports it.
+///
+/// The gapless-prefetched target never passes through here: a gapless
+/// hand-off happens inside the audio engine and surfaces to the poll loop
+/// as a seamless track-id change (no advance call), so the "never skip the
+/// gapless target" exemption is structural.
+async fn advance_to_playable(
+    runtime: &Runtime,
+    weak: &slint::Weak<AppWindow>,
+    forward: bool,
+) -> Option<QueueTrack> {
+    let mut skips = 0usize;
+    loop {
+        let step = if forward {
+            runtime.core().next_track().await
+        } else {
+            runtime.core().previous_track().await
+        };
+        let Some(track) = step else {
+            // Queue edge. Quiet when nothing was skipped (the normal end of
+            // queue); one toast when the walk dropped tracks on the way.
+            if skips > 0 {
+                crate::toast::show_weak(
+                    weak,
+                    "No tracks available offline",
+                    crate::ToastKind::Warning,
+                );
+            }
+            return None;
+        };
+        if offline_track_playable(&track) {
+            return Some(track);
+        }
+        skips += 1;
+        log::info!(
+            "[qbz-slint] offline: skipping unavailable track {} ({skips}/{MAX_OFFLINE_SKIPS})",
+            track.id
+        );
+        if skips >= MAX_OFFLINE_SKIPS {
+            if let Err(e) = runtime.core().stop() {
+                log::warn!("[qbz-slint] offline: stop after skip bound failed: {e}");
+            }
+            crate::toast::show_weak(
+                weak,
+                "No tracks available offline",
+                crate::ToastKind::Warning,
+            );
+            return None;
+        }
+    }
+}
+
 /// Run the audible step for `track_id`: grab the Qobuz client and call
 /// the player's self-contained `play_track`. Errors are logged, not
 /// surfaced — the poll loop keeps the UI consistent regardless.
 async fn play_audible(runtime: &Runtime, weak: &slint::Weak<AppWindow>, track_id: u64) {
+    // Offline fast-fail (slice 3d): refuse unplayable tracks BEFORE the
+    // spinner/fetch. Every explicit play path (album/track/playlist/radio)
+    // funnels through here after moving the queue cursor; the advance walks
+    // pre-filter via `advance_to_playable`, so a refusal here means the user
+    // explicitly picked an unavailable track.
+    if crate::offline_mode::engine().is_offline() {
+        if let Some(qt) = runtime.core().current_track().await {
+            if qt.id == track_id {
+                match offline_playability(&qt) {
+                    OfflinePlayability::Playable => {}
+                    OfflinePlayability::GraceExpired => {
+                        log::info!(
+                            "[qbz-slint] offline: refused track {track_id} (subscription grace expired)"
+                        );
+                        crate::toast::show_weak(
+                            weak,
+                            "Offline listening period expired — reconnect to verify your subscription",
+                            crate::ToastKind::Warning,
+                        );
+                        return;
+                    }
+                    OfflinePlayability::Unavailable => {
+                        log::info!(
+                            "[qbz-slint] offline: refused track {track_id} (not available offline)"
+                        );
+                        crate::toast::show_weak(
+                            weak,
+                            "Track not available offline",
+                            crate::ToastKind::Warning,
+                        );
+                        return;
+                    }
+                }
+            }
+        }
+    }
     // Raise the fetch spinner the instant playback is requested — BEFORE the
     // resolve/download/buffer below (the Plex resolve alone is ~10s). The bar
     // already adopted the new track meta in `refresh_now_playing_meta`; this
@@ -2449,10 +2607,11 @@ pub fn toggle_play_pause(
     });
 }
 
-/// Advance to the next queue track and play it.
+/// Advance to the next queue track and play it. Offline, unavailable
+/// tracks are skipped (bounded — see `advance_to_playable`).
 pub fn next(runtime: Runtime, weak: slint::Weak<AppWindow>, handle: tokio::runtime::Handle) {
     handle.spawn(async move {
-        let Some(track) = runtime.core().next_track().await else {
+        let Some(track) = advance_to_playable(&runtime, &weak, true).await else {
             log::info!("[qbz-slint] playback: end of queue");
             return;
         };
@@ -2462,10 +2621,11 @@ pub fn next(runtime: Runtime, weak: slint::Weak<AppWindow>, handle: tokio::runti
     });
 }
 
-/// Go to the previous queue track and play it.
+/// Go to the previous queue track and play it. Offline, unavailable
+/// tracks are skipped (bounded — see `advance_to_playable`).
 pub fn previous(runtime: Runtime, weak: slint::Weak<AppWindow>, handle: tokio::runtime::Handle) {
     handle.spawn(async move {
-        let Some(track) = runtime.core().previous_track().await else {
+        let Some(track) = advance_to_playable(&runtime, &weak, false).await else {
             log::info!("[qbz-slint] playback: start of queue");
             return;
         };
@@ -2832,8 +2992,12 @@ pub fn start_poll_loop(
             {
                 let upcoming = runtime.core().peek_upcoming(1).await;
                 if let Some(next) = upcoming.into_iter().next() {
-                    // Never queue the current track as its own next.
-                    if next.id != track_id && !next.is_local {
+                    // Never queue the current track as its own next. Offline,
+                    // an unavailable successor is not pre-queued either (the
+                    // same playable rule as the advance walk) — the track-end
+                    // auto-advance then skips it properly instead of the
+                    // engine gapless-handing into a refused fetch.
+                    if next.id != track_id && !next.is_local && offline_track_playable(&next) {
                         gapless_requested_for = track_id;
                         let runtime = runtime.clone();
                         let weak = weak.clone();
@@ -2986,13 +3150,15 @@ pub fn start_poll_loop(
             }
             was_playing = is_playing;
 
-            // Auto-advance on track end.
+            // Auto-advance on track end. Offline, unavailable tracks are
+            // skipped (bounded — see `advance_to_playable`); exhaustion
+            // lands in the queue-finished arm below.
             if track_ended {
                 last_track_id = 0;
                 was_playing = false;
                 seen_position = 0;
                 gapless_requested_for = 0;
-                if let Some(track) = runtime.core().next_track().await {
+                if let Some(track) = advance_to_playable(&runtime, &weak, true).await {
                     let next_id = track.id;
                     after_track_change(&runtime, &weak, next_id).await;
                     refresh_sidebar(true);

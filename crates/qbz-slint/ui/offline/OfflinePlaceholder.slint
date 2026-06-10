@@ -1,0 +1,66 @@
+// Offline placeholder — mounted INSTEAD of the Qobuz-only content views
+// while the app is offline (ADR-010 conditional mount at the AppShell
+// routing seam, broader than Tauri's three gated view families). The body
+// copy distinguishes real offline (no connectivity) from induced offline
+// (the Settings toggle); induced adds an "Open Settings" shortcut straight
+// to Settings > Offline so the user can flip the mode back off.
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Typography } from "../foundation/typography.slint";
+import { QbzIcon } from "../primitives/QbzIcon.slint";
+import { SecondaryButton } from "../primitives/SecondaryButton.slint";
+import { OfflineState, NavState, SettingsState } from "../state.slint";
+
+export component OfflinePlaceholder inherits Rectangle {
+    background: Theme.surface-main;
+
+    // 2 = induced offline (OfflineState.mode semantics: 0 online / 1 real / 2 induced).
+    property <bool> induced: OfflineState.mode == 2;
+
+    VerticalLayout {
+        alignment: center;
+        HorizontalLayout {
+            alignment: center;
+            QbzIcon {
+                source: @image-url("../assets/icons/cloud-off.svg");
+                width: 56px;
+                height: 56px;
+                tint: Theme.text-muted;
+            }
+        }
+        Rectangle { height: 18px; }
+        Text {
+            text: @tr("You're offline");
+            color: Theme.text-primary;
+            font-size: Typography.heading;
+            font-weight: Typography.semibold;
+            horizontal-alignment: center;
+        }
+        Rectangle { height: 8px; }
+        HorizontalLayout {
+            alignment: center;
+            Text {
+                max-width: 420px;
+                text: root.induced
+                    ? @tr("Offline mode is enabled. Disable it in Settings to use Qobuz.")
+                    : @tr("No internet connection. Your local library and downloads keep working.");
+                color: Theme.text-secondary;
+                font-size: Typography.body;
+                horizontal-alignment: center;
+                wrap: word-wrap;
+            }
+        }
+        if root.induced: Rectangle { height: 20px; }
+        if root.induced: HorizontalLayout {
+            alignment: center;
+            SecondaryButton {
+                label: @tr("Open Settings");
+                clicked => {
+                    // Settings > Offline is section index 3 (SettingsView nav).
+                    SettingsState.section = 3;
+                    NavState.request-settings();
+                }
+            }
+        }
+    }
+}

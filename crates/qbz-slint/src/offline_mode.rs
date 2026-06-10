@@ -257,9 +257,8 @@ pub fn subscription_mark_invalid() {
 
 /// D4 consumer: may the offline cache serve FULL tracks right now? Binary —
 /// within the 30-day grace window yes, past it no; there is NO 30-second
-/// preview path. Fail-open `true` when no store is bound (consumed by the
-/// playback gating slice).
-#[allow(dead_code)]
+/// preview path. Fail-open `true` when no store is bound. Consumed by the
+/// playback gating (`playback::offline_playability`).
 pub fn offline_playback_allowed() -> bool {
     let now = now_unix_secs();
     SUBSCRIPTION

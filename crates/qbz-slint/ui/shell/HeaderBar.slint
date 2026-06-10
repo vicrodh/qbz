@@ -13,7 +13,7 @@ import { Spacing } from "../foundation/spacing.slint";
 import { Typography } from "../foundation/typography.slint";
 import { Layout } from "../foundation/layout.slint";
 import { Radius } from "../foundation/radius.slint";
-import { SessionState, NavState, ContentView, ShellState, HeaderMenuState, NavMenuEntry, SearchActions, SidebarPlaylistsPopupState } from "../state.slint";
+import { SessionState, NavState, ContentView, ShellState, HeaderMenuState, NavMenuEntry, SearchActions, SidebarPlaylistsPopupState, OfflineState } from "../state.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 
 component NavTab inherits Rectangle {
@@ -21,6 +21,8 @@ component NavTab inherits Rectangle {
     in property <string> label;
     in property <bool> active: false;
     in property <bool> show-icon: true;
+    // Offline gating: dimmed + pointer-inert (no click, no hover-to-open).
+    in property <bool> disabled: false;
     callback clicked();
     // Fires when the pointer first enters the tab — drives hover-to-open.
     callback hovered();
@@ -31,6 +33,7 @@ component NavTab inherits Rectangle {
     height: 30px;
     width: tab-row.preferred-width;
     border-radius: Radius.sm;
+    opacity: root.disabled ? 0.5 : 1.0;
     background: root.active ? Theme.surface-elevated
         : ta.has-hover ? Theme.surface-hover : transparent;
 
@@ -60,6 +63,7 @@ component NavTab inherits Rectangle {
     }
 
     ta := TouchArea {
+        enabled: !root.disabled;
         mouse-cursor: pointer;
         clicked => {
             root.clicked();
@@ -129,6 +133,8 @@ component NavTabWithMenu inherits Rectangle {
     in property <string> label;
     in property <bool> active: false;
     in property <bool> show-icon: true;
+    // Offline gating — forwarded to the inner NavTab.
+    in property <bool> disabled: false;
     in property <[NavMenuEntry]> items;
     // This tab's index (0..3) — written into HeaderMenuState.open-index.
     in property <int> tab-index;
@@ -161,6 +167,7 @@ component NavTabWithMenu inherits Rectangle {
         label: root.label;
         active: root.active;
         show-icon: root.show-icon;
+        disabled: root.disabled;
         clicked => {
             root.open-menu();
         }
@@ -190,10 +197,13 @@ component CompactNavBtn inherits Rectangle {
     in property <[NavMenuEntry]> items;
     in property <int> tab-index;
     in property <int> home-item: -1;
+    // Offline gating: dimmed + pointer-inert.
+    in property <bool> disabled: false;
 
     width: 30px;
     height: 30px;
     border-radius: Radius.sm;
+    opacity: root.disabled ? 0.5 : 1.0;
     property <bool> active: HeaderMenuState.open-index == root.tab-index;
     background: root.active ? Theme.surface-elevated
         : cn-ta.has-hover ? Theme.surface-hover : transparent;
@@ -216,6 +226,7 @@ component CompactNavBtn inherits Rectangle {
         tint: root.active ? Theme.text-primary : Theme.text-secondary;
     }
     cn-ta := TouchArea {
+        enabled: !root.disabled;
         mouse-cursor: pointer;
         clicked => { root.open-menu(); }
         changed has-hover => {
@@ -445,6 +456,8 @@ export component HeaderBar inherits Rectangle {
                     label: @tr("Discover");
                     active: true;
                     show-icon: root.show-tab-icons;
+                    // Qobuz-only — inert while offline.
+                    disabled: OfflineState.offline;
                     home-item: 0;
                     items: [
                         { label: @tr("Home"), has-glyph: false, route: "discover-home" },
@@ -460,6 +473,8 @@ export component HeaderBar inherits Rectangle {
                     icon: @image-url("../assets/icons/music-library-2.svg");
                     label: @tr("Library");
                     show-icon: root.show-tab-icons;
+                    // Qobuz favorites — inert while offline.
+                    disabled: OfflineState.offline;
                     items: [
                         { label: @tr("Tracks"), icon: @image-url("../assets/icons/music.svg"), has-glyph: true, route: "favorites-tracks" },
                         { label: @tr("Albums"), icon: @image-url("../assets/icons/disc.svg"), has-glyph: true, route: "favorites-albums" },
@@ -511,6 +526,8 @@ export component HeaderBar inherits Rectangle {
                     tab-index: 0;
                     title: @tr("Discover");
                     icon: @image-url("../assets/icons/compass.svg");
+                    // Qobuz-only — inert while offline.
+                    disabled: OfflineState.offline;
                     home-item: 0;
                     items: [
                         { label: @tr("Home"), has-glyph: false, route: "discover-home" },
@@ -525,6 +542,8 @@ export component HeaderBar inherits Rectangle {
                     tab-index: 1;
                     title: @tr("Library");
                     icon: @image-url("../assets/icons/music-library-2.svg");
+                    // Qobuz favorites — inert while offline.
+                    disabled: OfflineState.offline;
                     items: [
                         { label: @tr("Tracks"), icon: @image-url("../assets/icons/music.svg"), has-glyph: true, route: "favorites-tracks" },
                         { label: @tr("Albums"), icon: @image-url("../assets/icons/disc.svg"), has-glyph: true, route: "favorites-albums" },

@@ -54,6 +54,7 @@ import { CollectionsView } from "../myqbz/CollectionsView.slint";
 import { MixtapeDetailView } from "../myqbz/MixtapeDetailView.slint";
 import { DiscographyBuilderView } from "../myqbz/DiscographyBuilderView.slint";
 import { OfflineManagerView } from "../offline/OfflineManagerView.slint";
+import { OfflinePlaceholder } from "../offline/OfflinePlaceholder.slint";
 import { LocalLibraryView } from "../locallibrary/LocalLibraryView.slint";
 import { SettingsView } from "../settings/SettingsView.slint";
 import { SearchResultsView } from "../search/SearchResultsView.slint";
@@ -76,6 +77,24 @@ export component AppShell inherits Rectangle {
 
     // The recovery banner participates in the content-height arithmetic below.
     property <length> recovery-banner-height: OfflineState.show-recovery-banner ? 40px : 0px;
+
+    // Offline gating (slice 3d): the Qobuz-only content views are replaced by
+    // the OfflinePlaceholder while ANY offline flavor is active. Views that
+    // work without Qobuz (LocalLibrary, local album, offline cache manager,
+    // My QBZ lists/detail — local-DB resolve, Settings) keep mounting.
+    property <bool> qobuz-view-blocked: OfflineState.offline && (
+        NavState.view == ContentView.home
+        || NavState.view == ContentView.discover-browse
+        || NavState.view == ContentView.search
+        || NavState.view == ContentView.favorites
+        || NavState.view == ContentView.album
+        || NavState.view == ContentView.artist
+        || NavState.view == ContentView.musician
+        || NavState.view == ContentView.label
+        || NavState.view == ContentView.label-releases
+        || NavState.view == ContentView.location
+        || NavState.view == ContentView.mix
+        || NavState.view == ContentView.playlist);
 
     background: Theme.surface-main;
 
@@ -185,7 +204,12 @@ export component AppShell inherits Rectangle {
                             border-radius: Radius.md;
                             clip: true;
 
-                if NavState.view == ContentView.home: HomeView {
+                // Offline: every Qobuz-only view below mounts only while
+                // online; the shared placeholder takes the pane otherwise
+                // (ADR-010 — the `if` lives here at the mount site).
+                if root.qobuz-view-blocked: OfflinePlaceholder { }
+
+                if NavState.view == ContentView.home && !OfflineState.offline: HomeView {
                     album-clicked(id) => {
                         root.open-album(id);
                     }
@@ -199,7 +223,7 @@ export component AppShell inherits Rectangle {
                         root.discover-view-all(e, t);
                     }
                 }
-                if NavState.view == ContentView.discover-browse: DiscoverBrowseView {
+                if NavState.view == ContentView.discover-browse && !OfflineState.offline: DiscoverBrowseView {
                     open-album(id) => {
                         root.open-album(id);
                     }
@@ -210,7 +234,7 @@ export component AppShell inherits Rectangle {
                         root.media-action(kind, id, action);
                     }
                 }
-                if NavState.view == ContentView.album: AlbumPageView {
+                if NavState.view == ContentView.album && !OfflineState.offline: AlbumPageView {
                     open-artist(id) => {
                         root.open-artist(id);
                     }
@@ -224,7 +248,7 @@ export component AppShell inherits Rectangle {
                         root.open-artist(name);
                     }
                 }
-                if NavState.view == ContentView.artist: ArtistPageView {
+                if NavState.view == ContentView.artist && !OfflineState.offline: ArtistPageView {
                     open-album(id) => {
                         root.open-album(id);
                     }
@@ -232,12 +256,12 @@ export component AppShell inherits Rectangle {
                         root.media-action(kind, id, action);
                     }
                 }
-                if NavState.view == ContentView.musician: MusicianPageView {
+                if NavState.view == ContentView.musician && !OfflineState.offline: MusicianPageView {
                     open-album(id) => {
                         root.open-album(id);
                     }
                 }
-                if NavState.view == ContentView.label: LabelPageView {
+                if NavState.view == ContentView.label && !OfflineState.offline: LabelPageView {
                     open-album(id) => {
                         root.open-album(id);
                     }
@@ -248,7 +272,7 @@ export component AppShell inherits Rectangle {
                         root.media-action(kind, id, action);
                     }
                 }
-                if NavState.view == ContentView.label-releases: LabelReleasesView {
+                if NavState.view == ContentView.label-releases && !OfflineState.offline: LabelReleasesView {
                     open-album(id) => {
                         root.open-album(id);
                     }
@@ -259,12 +283,12 @@ export component AppShell inherits Rectangle {
                         root.media-action(kind, id, action);
                     }
                 }
-                if NavState.view == ContentView.location: ArtistsByLocationView {
+                if NavState.view == ContentView.location && !OfflineState.offline: ArtistsByLocationView {
                     open-artist(id) => {
                         root.open-artist(id);
                     }
                 }
-                if NavState.view == ContentView.favorites: FavoritesView {
+                if NavState.view == ContentView.favorites && !OfflineState.offline: FavoritesView {
                     open-album(id) => {
                         root.open-album(id);
                     }
@@ -279,7 +303,7 @@ export component AppShell inherits Rectangle {
                 if NavState.view == ContentView.discography-builder: DiscographyBuilderView { }
                 if NavState.view == ContentView.offline-manager: OfflineManagerView { }
                 if NavState.view == ContentView.local-library: LocalLibraryView { }
-                if NavState.view == ContentView.mix: MixView {
+                if NavState.view == ContentView.mix && !OfflineState.offline: MixView {
                     play-track(id) => {
                         root.media-action("track", id, "play");
                     }
@@ -296,7 +320,7 @@ export component AppShell inherits Rectangle {
                         root.media-action(kind, id, action);
                     }
                 }
-                if NavState.view == ContentView.playlist: PlaylistView {
+                if NavState.view == ContentView.playlist && !OfflineState.offline: PlaylistView {
                     play-track(id) => {
                         root.media-action("track", id, "play");
                     }
@@ -333,7 +357,7 @@ export component AppShell inherits Rectangle {
                         root.settings-release-device();
                     }
                 }
-                if NavState.view == ContentView.search: SearchResultsView {
+                if NavState.view == ContentView.search && !OfflineState.offline: SearchResultsView {
                     open-album(id) => {
                         root.open-album(id);
                     }
