@@ -482,6 +482,9 @@ export component LocalAlbumView inherits Rectangle {
                     show-download: false;
                     // Show the per-row source glyph (local / qobuz-offline / Plex).
                     show-source: true;
+                    // Library surface: local menu even for qobuz_download
+                    // rows (spec §3.4).
+                    force-local-menu: true;
                     media-action(kind, id, action) => {
                         // Local-only: ignore album/artist link clicks. "play"
                         // (row body / play cell) plays; the context-menu

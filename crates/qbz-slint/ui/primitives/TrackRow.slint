@@ -44,6 +44,13 @@ export component TrackRow inherits Rectangle {
     // Trailing "..." context-menu column. Off for rows that have no menu
     // actions (e.g. ephemeral-folder rows — play-only, no persistence).
     in property <bool> show-menu: true;
+    // Library surfaces (LocalLibrary Tracks tab / local album detail /
+    // folder detail) force the LOCAL menu even for rows whose source
+    // renders as "qobuz" (qobuz_download offline copies): Tauri shows the
+    // same minimal local menu there, and the Qobuz block's arms are dead
+    // on library row ids (spec §3.4). The SourceGlyph keeps reading the
+    // unchanged source field.
+    in property <bool> force-local-menu: false;
     // Custom-order reorder controls (up/down chevrons) at the leading
     // edge — used by the playlist custom sort.
     in property <bool> show-reorder: false;
@@ -57,6 +64,12 @@ export component TrackRow inherits Rectangle {
     // Set from the (conditional) context-menu button so the row highlight
     // still reacts to hovering it without referencing a possibly-absent id.
     property <bool> menu-hovered: false;
+    // Right-click context mode (spec §3.5): the popup opens at the pointer
+    // instead of the "..." anchor. ta fills the row, so ta.mouse-x/y are
+    // already the popup's parent-relative coordinates.
+    property <bool> menu-at-pointer: false;
+    property <length> menu-click-x;
+    property <length> menu-click-y;
     property <bool> row-hovered:
         ta.has-hover || play-cell.hovered || root.menu-hovered;
 
@@ -96,6 +109,19 @@ export component TrackRow inherits Rectangle {
             }
             if (e.kind == PointerEventKind.down && e.button == PointerEventButton.forward) {
                 NavState.request-forward();
+            }
+            // Right-click opens the same context menu at the pointer (Tauri's
+            // contextmenu mode, spec §3.5). Suppressed in multi-select mode
+            // (Tauri parity: row right-click toggles nothing there) and on
+            // menu-less rows (ephemeral). x clamps to the row so the menu
+            // never overflows past the "..." gutter; vertical overflow at the
+            // window bottom matches the existing "..." anchor behavior.
+            if (e.kind == PointerEventKind.down && e.button == PointerEventButton.right
+                && root.show-menu && !root.multi-select-mode) {
+                root.menu-at-pointer = true;
+                root.menu-click-x = ta.mouse-x;
+                root.menu-click-y = ta.mouse-y;
+                track-menu.show();
             }
             if (e.kind == PointerEventKind.down) {
                 // absolute-position double-counts this row's own layout offset
@@ -534,6 +560,7 @@ export component TrackRow inherits Rectangle {
                 more-ta := TouchArea {
                     mouse-cursor: pointer;
                     clicked => {
+                        root.menu-at-pointer = false;
                         track-menu.show();
                     }
                     changed has-hover => {
@@ -544,18 +571,46 @@ export component TrackRow inherits Rectangle {
         }
     }
 
+    // True for rows whose source is Qobuz-backed (Qobuz surfaces + offline
+    // copies); the menu gates below split on it.
+    property <bool> qobuz-row: root.track.source != "local"
+        && root.track.source != "plex"
+        && root.track.source != "ephemeral";
+
     track-menu := TrackContextMenu {
-        x: parent.width - self.width - 12px;
-        y: 48px;
+        // Anchored at the "..." gutter, or at the right-click pointer in
+        // context mode (spec §3.5).
+        x: root.menu-at-pointer
+            ? Math.max(0px, Math.min(root.menu-click-x, root.width - self.width - 12px))
+            : parent.width - self.width - 12px;
+        y: root.menu-at-pointer ? root.menu-click-y : 48px;
         track-id: root.track.id;
-        // Per-source menu logic: Qobuz-backed actions (favorite, radio, share,
-        // mixtape, offline, go-to, track-info) only for Qobuz/offline rows;
-        // Add-to-playlist for Qobuz/offline/local/Plex (local playlists store
-        // each source's own ref), not ephemeral (no persistent row to
-        // reference); transient play/queue always.
-        qobuz-actions: root.track.source != "local"
-            && root.track.source != "plex"
-            && root.track.source != "ephemeral";
+        // Per-source menu logic: the Qobuz block (radio, share, offline,
+        // go-to, track-info) only for Qobuz/offline rows, and never on
+        // library surfaces (force-local-menu — its arms are dead on library
+        // row ids, spec §3.4); transient play/queue always.
+        qobuz-actions: !root.force-local-menu && root.qobuz-row;
+        // Favorite: on library surfaces only qobuz_download rows (source
+        // renders "qobuz") get the entry, wired to the REAL Qobuz id in
+        // Rust. Plain local/Plex rows get NO favorite entry — deliberate
+        // deviation from Tauri, whose "Add to Library" there sends the
+        // LOCAL row id to the Qobuz favorites API (spec §1.4/§3.2 latent
+        // bug): we port the intent, not the bug.
+        favorite-action: root.force-local-menu
+            ? root.track.source == "qobuz"
+            : root.qobuz-row;
+        // Add to Mixtape/Collection on library surfaces for every
+        // persistent row (local + Plex + qobuz_download; spec §3.1 —
+        // Tauri's Tracks-tab-only asymmetry is an artifact, not a design).
+        mixtape-action: root.force-local-menu
+            ? root.track.source != "ephemeral"
+            : root.qobuz-row;
+        // Add-to-playlist for Qobuz/offline/local/Plex (local playlists
+        // store each source's own ref), not ephemeral (no persistent row
+        // to reference). Deliberately NOT hidden offline (deviation from
+        // Tauri's shouldHidePlaylistFeatures, spec §3.3): our local
+        // playlists accept tracks offline (D7/D8) and the picker already
+        // hides the Qobuz set offline.
         playlist-action: root.track.source != "ephemeral";
         media-action(k, i, a) => {
             root.media-action(k, i, a);

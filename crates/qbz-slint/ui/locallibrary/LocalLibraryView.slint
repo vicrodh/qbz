@@ -1405,6 +1405,9 @@ export component LocalLibraryView inherits Rectangle {
                                     show-favorite: false;
                                     show-download: false;
                                     show-source: true;
+                                    // Library surface: local menu even for
+                                    // qobuz_download rows (spec §3.4).
+                                    force-local-menu: true;
                                     multi-select-mode: LocalLibraryState.tracks-multi-select;
                                     media-action(kind, id, action) => {
                                         if (kind == "album" && action == "open") {
@@ -2066,6 +2069,9 @@ export component LocalLibraryView inherits Rectangle {
                                             show-favorite: false;
                                             show-download: false;
                                             show-source: true;
+                                            // Library surface: local menu even
+                                            // for qobuz_download rows (§3.4).
+                                            force-local-menu: true;
                                             media-action(kind, id, action) => {
                                                 if (kind == "album" && action == "open") {
                                                     LocalLibraryActions.open-album(id);

@@ -9,19 +9,29 @@ import { ContextMenuItem } from "ContextMenuItem.slint";
 export component TrackContextMenu inherits PopupWindow {
     in property <string> track-id;
     // Per-source applicability (the surrounding row sets these from the track's
-    // source). `qobuz-actions` = the Qobuz-backed block (favorite, radio,
-    // mixtape, share, make-offline, go-to album/artist, track info) — on for
-    // Qobuz + offline, off for local / Plex / ephemeral. `playlist-action` =
-    // Add to playlist — on for Qobuz + offline + local + Plex (local playlists
-    // store each source's own ref), off for ephemeral. The transient actions
-    // (play / next / queue) always show.
+    // source). `qobuz-actions` = the Qobuz-backed block (radio, share,
+    // make-offline, go-to album/artist, track info) — on for Qobuz + offline,
+    // off for local / Plex / ephemeral. `favorite-action` / `mixtape-action`
+    // gate the favorite and Add-to-Mixtape entries independently of the block
+    // (library surfaces show them on rows the Qobuz block is dead for — spec
+    // §3.1/§3.2); they default to the block so Qobuz surfaces are unchanged.
+    // `playlist-action` = Add to playlist — on for Qobuz + offline + local +
+    // Plex (local playlists store each source's own ref), off for ephemeral.
+    // The transient actions (play / next / queue) always show.
     in property <bool> qobuz-actions: true;
+    in property <bool> favorite-action: root.qobuz-actions;
+    in property <bool> mixtape-action: root.qobuz-actions;
     in property <bool> playlist-action: true;
     callback media-action(string, string, string);
 
     width: 224px;
-    // 3 transient + optional add-to-playlist + the 9-item Qobuz block.
-    height: (3 + (root.playlist-action ? 1 : 0) + (root.qobuz-actions ? 9 : 0)) * 30px;
+    // 3 transient + optional favorite/mixtape/add-to-playlist + the
+    // 7-item Qobuz block.
+    height: (3
+        + (root.favorite-action ? 1 : 0)
+        + (root.mixtape-action ? 1 : 0)
+        + (root.playlist-action ? 1 : 0)
+        + (root.qobuz-actions ? 7 : 0)) * 30px;
 
     ContextMenu {
         ContextMenuItem {
@@ -52,14 +62,14 @@ export component TrackContextMenu inherits PopupWindow {
                 root.media-action("track", root.track-id, "create-radio");
             }
         }
-        if root.qobuz-actions: ContextMenuItem {
+        if root.favorite-action: ContextMenuItem {
             icon: @image-url("../assets/icons/heart.svg");
             label: @tr("Add to library");
             clicked => {
                 root.media-action("track", root.track-id, "favorite");
             }
         }
-        if root.qobuz-actions: ContextMenuItem {
+        if root.mixtape-action: ContextMenuItem {
             icon: @image-url("../assets/icons/cassette-tape.svg");
             label: @tr("Add to mixtape");
             clicked => {
