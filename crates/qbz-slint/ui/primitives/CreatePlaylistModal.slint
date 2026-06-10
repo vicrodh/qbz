@@ -207,10 +207,15 @@ export component CreatePlaylistModal inherits Rectangle {
                             horizontal-stretch: 1;
                         }
                     }
-                    if CreatePlaylistState.offline-locked: Text {
-                        text: @tr("Created locally — you're offline");
-                        color: Theme.text-muted;
-                        font-size: Typography.legal;
+                    // Hint indented to the label's left edge (20px checkbox
+                    // + 10px spacing), so it reads as the row's description.
+                    if CreatePlaylistState.offline-locked: HorizontalLayout {
+                        padding-left: 30px;
+                        Text {
+                            text: @tr("Created locally — you're offline");
+                            color: Theme.text-muted;
+                            font-size: Typography.legal;
+                        }
                     }
                 }
 

@@ -21,34 +21,32 @@ component GroupHeader inherits Text {
     font-weight: Typography.semibold;
 }
 
-// Matches OfflineSettings/LocalLibrarySettings SecondaryButton.
+// Matches AppearanceSettings/OfflineSettings' SecondaryButton — the 160px
+// settings-row standard: fixed width, 34px, body/medium label, right edge
+// of every row lands on the same vertical line.
 component SecondaryButton inherits Rectangle {
     in property <string> label;
     in property <bool> danger: false;
     in property <bool> enabled: true;
     callback clicked();
 
-    height: 32px;
-    width: row.preferred-width + 24px;
+    width: 160px;
+    height: 34px;
     border-radius: Radius.sm;
     border-width: 1px;
     border-color: root.danger ? #e0564f : Theme.border-subtle;
-    background: !root.enabled
-        ? transparent
-        : (ta.has-hover
-            ? (root.danger ? #e0564f22 : Theme.surface-hover)
-            : Theme.surface-elevated);
-    opacity: root.enabled ? 1.0 : 0.45;
+    background: ta.has-hover && root.enabled ? Theme.surface-hover : Theme.surface-elevated;
+    opacity: root.enabled ? 1.0 : 0.4;
 
-    row := HorizontalLayout {
-        x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
-        Text {
-            text: root.label;
-            color: root.danger ? #e0564f : Theme.text-primary;
-            font-size: Typography.legal;
-            font-weight: Typography.semibold;
-            vertical-alignment: center;
-        }
+    Text {
+        width: 100%;
+        height: 100%;
+        text: root.label;
+        color: root.danger ? #e0564f : Theme.text-secondary;
+        font-size: Typography.body;
+        font-weight: Typography.medium;
+        horizontal-alignment: center;
+        vertical-alignment: center;
     }
 
     ta := TouchArea {

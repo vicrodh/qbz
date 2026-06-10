@@ -39,13 +39,15 @@ component Divider inherits Rectangle {
 component SecondaryButton inherits Rectangle {
     in property <string> label;
     in property <bool> danger: false;
+    in property <bool> enabled: true;
     callback clicked();
     width: 160px;
     height: 34px;
     border-radius: Radius.sm;
     border-width: 1px;
     border-color: root.danger ? #e0564f : Theme.border-subtle;
-    background: ta.has-hover ? Theme.surface-hover : Theme.surface-elevated;
+    background: ta.has-hover && root.enabled ? Theme.surface-hover : Theme.surface-elevated;
+    opacity: root.enabled ? 1.0 : 0.4;
     Text {
         width: 100%;
         height: 100%;
@@ -57,9 +59,11 @@ component SecondaryButton inherits Rectangle {
         vertical-alignment: center;
     }
     ta := TouchArea {
-        mouse-cursor: pointer;
+        mouse-cursor: root.enabled ? pointer : default;
         clicked => {
-            root.clicked();
+            if (root.enabled) {
+                root.clicked();
+            }
         }
     }
 }
@@ -93,13 +97,14 @@ export component OfflineSettings inherits VerticalLayout {
                         : @tr("Online");
                     color: OfflineState.mode == 2 ? Theme.accent
                         : OfflineState.mode == 1 ? Palette.warning
-                        : #22c55e;
+                        : #3fae6a;
                     font-size: Typography.body;
                     font-weight: Typography.medium;
                 }
             }
             SecondaryButton {
                 label: SettingsState.offline-checking ? @tr("Checking...") : @tr("Check now");
+                enabled: !SettingsState.offline-checking;
                 clicked => {
                     if (!SettingsState.offline-checking) {
                         OfflineModeActions.check-now();

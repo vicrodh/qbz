@@ -26,11 +26,13 @@ export component FavoritesOfflineRail inherits VerticalLayout {
     if root.count > 0: HorizontalLayout {
         alignment: center;
         VerticalLayout {
-            spacing: 8px;
+            spacing: 12px;
+            // Canonical section heading (Typography.section, semibold) flush
+            // with the cards' outer edge — same idiom as GridSection.
             Text {
                 text: @tr("Available offline") + " (\{root.count})";
                 color: Theme.text-primary;
-                font-size: Typography.body;
+                font-size: Typography.section;
                 font-weight: Typography.semibold;
             }
             ListView {
