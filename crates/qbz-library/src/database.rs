@@ -48,6 +48,10 @@ impl LibraryDatabase {
         let db = Self { conn };
         db.init_schema()?;
         db.run_migrations()?;
+        // First-class LOCAL playlists (offline-mode D7) — separate module,
+        // same database file. Idempotent CREATE IF NOT EXISTS.
+        crate::local_playlists::init_schema(&db.conn)
+            .map_err(|e| LibraryError::Database(format!("local_playlists schema: {}", e)))?;
         Ok(db)
     }
 

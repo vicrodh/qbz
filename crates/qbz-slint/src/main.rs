@@ -60,6 +60,7 @@ mod ephemeral;
 mod folders;
 mod library_db;
 mod local_library;
+mod local_playlist;
 mod local_library_settings;
 mod media_controls;
 mod locallibrary_prefs;
@@ -1450,9 +1451,18 @@ fn navigate_playlist(
     image_cache: artwork::ImageCache,
     playlist_id: String,
 ) {
-    let Ok(id) = playlist_id.parse::<u64>() else {
-        log::warn!("[qbz-slint] navigate_playlist: bad id {playlist_id}");
-        return;
+    // Route by id namespace (D7 type guard): `local:<uuid>` ids open the
+    // LOCAL detail path and can never reach the Qobuz fetch below.
+    let id = match local_playlist::PlaylistRef::parse(&playlist_id) {
+        Some(local_playlist::PlaylistRef::Local(id)) => {
+            local_playlist::navigate(runtime, weak, handle, image_cache, id);
+            return;
+        }
+        Some(local_playlist::PlaylistRef::Qobuz(id)) => id,
+        None => {
+            log::warn!("[qbz-slint] navigate_playlist: bad id {playlist_id}");
+            return;
+        }
     };
     handle.spawn(async move {
         let active = playlist_id.clone();
@@ -4757,6 +4767,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
                 ("playlist", "play-all") => {
+                    // LOCAL playlist detail — its own queue snapshot +
+                    // offline-only stamp (D8); Qobuz path unchanged below.
+                    if let Some(w) = weak.upgrade() {
+                        if w.global::<PlaylistState>().get_is_local() {
+                            local_playlist::play_all(
+                                &w,
+                                runtime.clone(),
+                                weak.clone(),
+                                handle.clone(),
+                                false,
+                            );
+                            return;
+                        }
+                    }
                     let runtime = runtime.clone();
                     let weak = weak.clone();
                     let handle = handle.clone();
@@ -4766,6 +4790,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     });
                 }
                 ("playlist", "shuffle") => {
+                    if let Some(w) = weak.upgrade() {
+                        if w.global::<PlaylistState>().get_is_local() {
+                            local_playlist::play_all(
+                                &w,
+                                runtime.clone(),
+                                weak.clone(),
+                                handle.clone(),
+                                true,
+                            );
+                            return;
+                        }
+                    }
                     let runtime = runtime.clone();
                     let weak = weak.clone();
                     let handle = handle.clone();
@@ -4774,24 +4810,69 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         playback::play_tracks(runtime, weak, handle, tracks, 0);
                     });
                 }
-                ("playlist", "queue") => playback::enqueue_playlist(
-                    runtime.clone(),
-                    weak.clone(),
-                    handle.clone(),
-                    id,
-                    false,
-                ),
-                ("playlist", "play-next") => playback::enqueue_playlist(
-                    runtime.clone(),
-                    weak.clone(),
-                    handle.clone(),
-                    id,
-                    true,
-                ),
+                ("playlist", "queue") => {
+                    if local_playlist::is_local_id(&id) {
+                        local_playlist::enqueue_by_id(
+                            runtime.clone(),
+                            weak.clone(),
+                            handle.clone(),
+                            id,
+                            false,
+                        );
+                        return;
+                    }
+                    playback::enqueue_playlist(
+                        runtime.clone(),
+                        weak.clone(),
+                        handle.clone(),
+                        id,
+                        false,
+                    )
+                }
+                ("playlist", "play-next") => {
+                    if local_playlist::is_local_id(&id) {
+                        local_playlist::enqueue_by_id(
+                            runtime.clone(),
+                            weak.clone(),
+                            handle.clone(),
+                            id,
+                            true,
+                        );
+                        return;
+                    }
+                    playback::enqueue_playlist(
+                        runtime.clone(),
+                        weak.clone(),
+                        handle.clone(),
+                        id,
+                        true,
+                    )
+                }
+                ("playlist", "upload-to-qobuz") => {
+                    // D8: convert a non-offline-only LOCAL playlist into a
+                    // real Qobuz playlist (explicit user action, confirmed
+                    // in the detail view — nothing ever auto-syncs).
+                    if local_playlist::is_local_id(&id) {
+                        local_playlist::upload_to_qobuz(
+                            runtime.clone(),
+                            weak.clone(),
+                            handle.clone(),
+                            image_cache.clone(),
+                            id,
+                        );
+                    }
+                }
                 ("playlist", "favorite") => {
                     // Favorite/unfavorite the open playlist.
                     if let Some(w) = weak.upgrade() {
                         let pid = w.global::<PlaylistState>().get_id().to_string();
+                        // LOCAL playlists have no Qobuz favorite — the UI
+                        // hides the button; guard the call path too (the
+                        // favorite endpoint takes the id as a string, so a
+                        // "local:" id COULD otherwise leak through).
+                        if local_playlist::is_local_id(&pid) {
+                            return;
+                        }
                         let was_fav = w.global::<PlaylistState>().get_is_favorite();
                         w.global::<PlaylistState>().set_is_favorite(!was_fav);
                         let runtime = runtime.clone();
@@ -4820,6 +4901,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 ("playlist", "remove-selected") => {
                     if let Some(w) = weak.upgrade() {
+                        // LOCAL playlist — remove the selected rows from the
+                        // library.db repo by stored position.
+                        if w.global::<PlaylistState>().get_is_local() {
+                            local_playlist::remove_selected(
+                                &w,
+                                runtime.clone(),
+                                weak.clone(),
+                                handle.clone(),
+                                image_cache.clone(),
+                            );
+                            return;
+                        }
                         let pid = w.global::<PlaylistState>().get_id().to_string();
                         let ids = playlist::selected_ids(&w);
                         if let (Ok(pid), false) = (pid.parse::<u64>(), ids.is_empty()) {
@@ -4859,6 +4952,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // it as the playlist's custom cover, then reload.
                     if let Some(w) = weak.upgrade() {
                         let pid = w.global::<PlaylistState>().get_id().to_string();
+                        // LOCAL playlist — same flow, repo-backed.
+                        if local_playlist::is_local_id(&pid) {
+                            let runtime = runtime.clone();
+                            let weak = weak.clone();
+                            let handle = handle.clone();
+                            let image_cache = image_cache.clone();
+                            handle.clone().spawn(async move {
+                                let Some(file) = rfd::AsyncFileDialog::new()
+                                    .add_filter("Images", &["png", "jpg", "jpeg", "webp"])
+                                    .pick_file()
+                                    .await
+                                else {
+                                    return;
+                                };
+                                let src = file.path().to_string_lossy().into_owned();
+                                let lid = pid.clone();
+                                let ok = tokio::task::spawn_blocking(move || {
+                                    local_playlist::set_custom_artwork_blocking(&lid, &src)
+                                        .is_some()
+                                })
+                                .await
+                                .unwrap_or(false);
+                                if ok {
+                                    local_playlist::navigate(
+                                        runtime, weak, &handle, image_cache, pid,
+                                    );
+                                }
+                            });
+                            return;
+                        }
                         if let Ok(pid) = pid.parse::<u64>() {
                             let runtime = runtime.clone();
                             let weak = weak.clone();
@@ -4890,6 +5013,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ("playlist", "clear-artwork") => {
                     if let Some(w) = weak.upgrade() {
                         let pid = w.global::<PlaylistState>().get_id().to_string();
+                        // LOCAL playlist — clear the repo column + reload.
+                        if local_playlist::is_local_id(&pid) {
+                            let runtime = runtime.clone();
+                            let weak = weak.clone();
+                            let handle = handle.clone();
+                            let image_cache = image_cache.clone();
+                            handle.clone().spawn(async move {
+                                let lid = pid.clone();
+                                tokio::task::spawn_blocking(move || {
+                                    local_playlist::clear_custom_artwork_blocking(&lid);
+                                })
+                                .await
+                                .ok();
+                                local_playlist::navigate(
+                                    runtime, weak, &handle, image_cache, pid,
+                                );
+                            });
+                            return;
+                        }
                         if let Ok(pid) = pid.parse::<u64>() {
                             let runtime = runtime.clone();
                             let weak = weak.clone();
@@ -4915,10 +5057,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let pid = ps.get_id();
                         let name = ps.get_name();
                         let desc = ps.get_description();
+                        let is_local = ps.get_is_local();
+                        let offline_only = ps.get_offline_only();
                         let es = w.global::<EditPlaylistState>();
                         es.set_id(pid);
                         es.set_name(name);
                         es.set_description(desc);
+                        es.set_is_local(is_local);
+                        es.set_offline_only(offline_only);
                         es.set_open(true);
                     }
                 }
@@ -7563,6 +7709,50 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let ids_model = picker.get_track_ids();
                 let track_id_single = picker.get_track_id().to_string();
                 picker.set_open(false);
+
+                // LOCAL playlist target (id "local:<uuid>") — writes go to
+                // the library.db repo (works offline; D7 routing).
+                if local_playlist::is_local_id(playlist_id.as_str()) {
+                    let target = playlist_id.to_string();
+                    if is_local {
+                        // LocalLibrary row ids (i64) — source-aware mapping
+                        // (local path / offline-copy Qobuz id / Plex key).
+                        let ids_i64: Vec<i64> = (0..ids_model.row_count())
+                            .filter_map(|i| ids_model.row_data(i))
+                            .filter_map(|s| s.parse::<i64>().ok())
+                            .collect();
+                        if ids_i64.is_empty() {
+                            return;
+                        }
+                        handle.spawn(async move {
+                            let _ = tokio::task::spawn_blocking(move || {
+                                local_playlist::add_local_rows_blocking(&target, &ids_i64)
+                            })
+                            .await;
+                        });
+                        return;
+                    }
+                    let mut ids: Vec<u64> = (0..ids_model.row_count())
+                        .filter_map(|i| ids_model.row_data(i))
+                        .filter_map(|s| s.parse::<u64>().ok())
+                        .collect();
+                    if ids.is_empty() {
+                        if let Ok(tid) = track_id_single.parse::<u64>() {
+                            ids.push(tid);
+                        }
+                    }
+                    if ids.is_empty() {
+                        return;
+                    }
+                    handle.spawn(async move {
+                        let _ = tokio::task::spawn_blocking(move || {
+                            local_playlist::add_qobuz_tracks_blocking(&target, &ids)
+                        })
+                        .await;
+                    });
+                    return;
+                }
+
                 let Ok(pid) = playlist_id.parse::<u64>() else {
                     return;
                 };
@@ -7664,7 +7854,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             ds.set_over_playlist_id("".into());
             let ids = drag::dragged();
             drag::clear();
-            if let (Ok(pid), false) = (pid.parse::<u64>(), ids.is_empty()) {
+            if ids.is_empty() {
+                return;
+            }
+            // Drop onto a LOCAL playlist row — write the repo (D7 routing;
+            // dragged ids are Qobuz track ids).
+            if local_playlist::is_local_id(&pid) {
+                handle.spawn(async move {
+                    let n = tokio::task::spawn_blocking(move || {
+                        local_playlist::add_qobuz_tracks_blocking(&pid, &ids)
+                    })
+                    .await
+                    .unwrap_or(0);
+                    log::info!("[qbz-slint] dropped {n} track(s) onto local playlist");
+                });
+                return;
+            }
+            if let Ok(pid) = pid.parse::<u64>() {
                 let runtime = runtime.clone();
                 handle.spawn(async move {
                     match runtime.core().add_tracks_to_playlist(pid, &ids).await {
@@ -7747,6 +7953,46 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if name.trim().is_empty() || es.get_busy() {
                     return;
                 }
+                // LOCAL playlist (id "local:<uuid>") — rename/description/
+                // offline-only write the library.db repo; no Qobuz call.
+                if local_playlist::is_local_id(&id) {
+                    let offline_only = es.get_offline_only();
+                    let runtime = runtime.clone();
+                    let weak = weak.clone();
+                    let handle = handle.clone();
+                    handle.clone().spawn(async move {
+                        let nm = name.trim().to_string();
+                        let ds = description.trim().to_string();
+                        let lid = id.clone();
+                        let (nm2, ds2) = (nm.clone(), ds.clone());
+                        let ok = tokio::task::spawn_blocking(move || {
+                            let desc = if ds2.is_empty() { None } else { Some(ds2.as_str()) };
+                            local_playlist::update_blocking(&lid, &nm2, desc, offline_only)
+                        })
+                        .await
+                        .unwrap_or(false);
+                        if !ok {
+                            log::error!("[qbz-slint] update local playlist failed");
+                            return;
+                        }
+                        let r2 = runtime.clone();
+                        let w2 = weak.clone();
+                        let h2 = handle.clone();
+                        let _ = weak.upgrade_in_event_loop(move |w| {
+                            let ps = w.global::<PlaylistState>();
+                            // Only refresh the open detail header if this IS
+                            // the open playlist.
+                            if ps.get_id().as_str() == id {
+                                ps.set_name(nm.into());
+                                ps.set_description(ds.into());
+                                ps.set_offline_only(offline_only);
+                            }
+                            w.global::<EditPlaylistState>().set_open(false);
+                            load_sidebar_playlists(r2, w2, &h2);
+                        });
+                    });
+                    return;
+                }
                 let (Ok(pid),) = (id.parse::<u64>(),) else { return; };
                 let runtime = runtime.clone();
                 let weak = weak.clone();
@@ -7786,6 +8032,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .on_delete(move || {
                 let Some(w) = weak.upgrade() else { return; };
                 let id = w.global::<EditPlaylistState>().get_id().to_string();
+                // LOCAL playlist — delete the library.db entity (cascades
+                // its membership rows), then back + sidebar reload.
+                if local_playlist::is_local_id(&id) {
+                    w.global::<EditPlaylistState>().set_busy(true);
+                    let runtime = runtime.clone();
+                    let weak = weak.clone();
+                    let handle = handle.clone();
+                    handle.clone().spawn(async move {
+                        let lid = id.clone();
+                        let ok = tokio::task::spawn_blocking(move || {
+                            local_playlist::delete_blocking(&lid)
+                        })
+                        .await
+                        .unwrap_or(false);
+                        let r2 = runtime.clone();
+                        let w2 = weak.clone();
+                        let h2 = handle.clone();
+                        let _ = weak.upgrade_in_event_loop(move |w| {
+                            w.global::<EditPlaylistState>().set_busy(false);
+                            if ok {
+                                w.global::<EditPlaylistState>().set_open(false);
+                                load_sidebar_playlists(r2, w2, &h2);
+                                w.global::<NavState>().invoke_request_back();
+                            }
+                        });
+                    });
+                    return;
+                }
                 let Ok(pid) = id.parse::<u64>() else { return; };
                 w.global::<EditPlaylistState>().set_busy(true);
                 let runtime = runtime.clone();
@@ -7861,6 +8135,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     cps.set_is_public(false);
                     cps.set_creating(false);
                     cps.set_folder_index(0);
+                    // D8: while offline, creation always produces a LOCAL
+                    // playlist — the toggle shows ON and locked with a hint.
+                    let offline = offline_mode::engine().is_offline();
+                    cps.set_offline_only(offline);
+                    cps.set_offline_locked(offline);
                     // Build the folder dropdown from the sidebar's folder
                     // list: index 0 = "No folder" (id ""), then each folder.
                     let folders = w.global::<SidebarState>().get_folders();
@@ -8057,15 +8336,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .global::<SidebarActions>()
             .on_edit_playlist(move |id| {
                 let Some(w) = weak.upgrade() else { return };
+                let es = w.global::<EditPlaylistState>();
+                // LOCAL playlist row — prefill from the sidebar's local
+                // cache (name/description/offline-only).
+                if local_playlist::is_local_id(id.as_str()) {
+                    let (name, description, offline_only) =
+                        sidebar::local_playlist_meta(id.as_str())
+                            .unwrap_or_else(|| (id.to_string(), String::new(), false));
+                    es.set_id(id);
+                    es.set_name(name.into());
+                    es.set_description(description.into());
+                    es.set_is_local(true);
+                    es.set_offline_only(offline_only);
+                    es.set_busy(false);
+                    es.set_open(true);
+                    return;
+                }
                 let (name, description) = id
                     .parse::<u64>()
                     .ok()
                     .and_then(sidebar::playlist_name_desc)
                     .unwrap_or_else(|| (id.to_string(), String::new()));
-                let es = w.global::<EditPlaylistState>();
                 es.set_id(id);
                 es.set_name(name.into());
                 es.set_description(description.into());
+                es.set_is_local(false);
+                es.set_offline_only(false);
                 es.set_busy(false);
                 es.set_open(true);
             });
@@ -8213,6 +8509,50 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .map(|s| s.to_string())
                     .unwrap_or_default();
                 if name.trim().is_empty() || state.get_creating() {
+                    return;
+                }
+                // D8: offline-only toggle ON — or the app is offline (always
+                // local then) — creates a LOCAL playlist in library.db. The
+                // online + toggle OFF path below stays byte-unchanged.
+                let offline_now = offline_mode::engine().is_offline();
+                if state.get_offline_only() || offline_now {
+                    // Offline-only when the user opted in; a playlist forced
+                    // local by being offline keeps the flag too (it can be
+                    // unmarked later in Edit to enable "Upload to Qobuz").
+                    state.set_creating(true);
+                    let runtime = runtime.clone();
+                    let weak = weak.clone();
+                    let handle = handle.clone();
+                    let image_cache = image_cache.clone();
+                    handle.clone().spawn(async move {
+                        let nm = name.trim().to_string();
+                        let ds = description.trim().to_string();
+                        let created = tokio::task::spawn_blocking(move || {
+                            let desc = if ds.is_empty() { None } else { Some(ds.as_str()) };
+                            local_playlist::create_blocking(&nm, desc, true)
+                        })
+                        .await
+                        .ok()
+                        .flatten();
+                        let weak2 = weak.clone();
+                        let r2 = runtime.clone();
+                        let h2 = handle.clone();
+                        let _ = weak.upgrade_in_event_loop(move |w| {
+                            w.global::<CreatePlaylistState>().set_creating(false);
+                            match created {
+                                Some(new_id) => {
+                                    w.global::<CreatePlaylistState>().set_open(false);
+                                    load_sidebar_playlists(r2.clone(), weak2.clone(), &h2);
+                                    nav::record(nav::NavEntry::Playlist(new_id.clone()));
+                                    navigate_playlist(r2, weak2.clone(), &h2, image_cache, new_id);
+                                    update_nav_flags(&w);
+                                }
+                                None => {
+                                    log::error!("[qbz-slint] create local playlist failed");
+                                }
+                            }
+                        });
+                    });
                     return;
                 }
                 state.set_creating(true);

@@ -9,7 +9,7 @@ import { Theme } from "../foundation/semantic-colors.slint";
 import { Layout } from "../foundation/layout.slint";
 import { Radius } from "../foundation/radius.slint";
 import { Typography } from "../foundation/typography.slint";
-import { NavState, ContentView, ShellState, OfflineState } from "../state.slint";
+import { NavState, ContentView, ShellState, OfflineState, PlaylistState } from "../state.slint";
 import { SecondaryButton } from "../primitives/SecondaryButton.slint";
 import { Sidebar } from "Sidebar.slint";
 import { HeaderBar } from "HeaderBar.slint";
@@ -320,7 +320,10 @@ export component AppShell inherits Rectangle {
                         root.media-action(kind, id, action);
                     }
                 }
-                if NavState.view == ContentView.playlist && !OfflineState.offline: PlaylistView {
+                // LOCAL playlists (PlaylistState.is-local) render OFFLINE
+                // too — they live in library.db, not on Qobuz (D7/D11).
+                if NavState.view == ContentView.playlist
+                    && (!OfflineState.offline || PlaylistState.is-local): PlaylistView {
                     play-track(id) => {
                         root.media-action("track", id, "play");
                     }

@@ -6,7 +6,7 @@
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
 import { Radius } from "../foundation/radius.slint";
-import { PlaylistState, PlaylistActions, DragState, NavState } from "../state.slint";
+import { PlaylistState, PlaylistActions, DragState, NavState, OfflineState } from "../state.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { TrackRow } from "../primitives/TrackRow.slint";
 import { ExpandableSearch } from "../primitives/ExpandableSearch.slint";
@@ -112,6 +112,8 @@ export component PlaylistView inherits Rectangle {
 
     // Read-more description modal.
     property <bool> show-description: false;
+    // "Upload to Qobuz" confirm modal (local playlists, D8).
+    property <bool> show-upload-confirm: false;
 
     // Label for the active sort field.
     property <string> sort-label:
@@ -364,7 +366,9 @@ export component PlaylistView inherits Rectangle {
                                 }
                             }
                         }
-                        VerticalLayout {
+                        // Favorite — a Qobuz concept; hidden for LOCAL
+                        // playlists (no server entity to favorite).
+                        if !PlaylistState.is-local: VerticalLayout {
                             horizontal-stretch: 0;
                             alignment: center;
                             CircleAction {
@@ -375,8 +379,9 @@ export component PlaylistView inherits Rectangle {
                                 }
                             }
                         }
-                        // Make the whole playlist available offline.
-                        VerticalLayout {
+                        // Make the whole playlist available offline —
+                        // resolves Qobuz membership, hidden for LOCAL ones.
+                        if !PlaylistState.is-local: VerticalLayout {
                             horizontal-stretch: 0;
                             alignment: center;
                             CircleAction {
@@ -384,6 +389,21 @@ export component PlaylistView inherits Rectangle {
                                 enabled: PlaylistState.tracks.length > 0;
                                 clicked => {
                                     root.media-action("playlist", PlaylistState.id, "cache");
+                                }
+                            }
+                        }
+                        // Upload to Qobuz (D8) — LOCAL playlists that are
+                        // NOT offline-only, while online. Asks first; the
+                        // local entity is deleted after a full upload.
+                        if PlaylistState.is-local && !PlaylistState.offline-only
+                            && !OfflineState.offline: VerticalLayout {
+                            horizontal-stretch: 0;
+                            alignment: center;
+                            CircleAction {
+                                icon: @image-url("../assets/icons/cloud-upload.svg");
+                                enabled: PlaylistState.tracks.length > 0;
+                                clicked => {
+                                    root.show-upload-confirm = true;
                                 }
                             }
                         }
@@ -694,6 +714,91 @@ export component PlaylistView inherits Rectangle {
             mouse-cursor: pointer;
             clicked => {
                 track-list.viewport-y = 0;
+            }
+        }
+    }
+
+    // "Upload to Qobuz" confirm (D8) — destructive-ish conversion: the
+    // local entity is deleted once the upload completes.
+    if root.show-upload-confirm: Rectangle {
+        background: #000000bf;
+        TouchArea {
+            mouse-cursor: default;
+            clicked => {
+                root.show-upload-confirm = false;
+            }
+        }
+        Rectangle {
+            width: Math.min(root.width - 80px, 440px);
+            height: confirm-panel.preferred-height;
+            x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+            y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+            border-radius: Radius.md;
+            background: Theme.surface-card;
+            border-width: 1px;
+            border-color: Theme.border-subtle;
+            drop-shadow-blur: 32px;
+            drop-shadow-color: #00000080;
+            TouchArea { }
+            confirm-panel := VerticalLayout {
+                padding: 20px;
+                spacing: 14px;
+                Text {
+                    text: @tr("Upload to Qobuz?");
+                    color: Theme.text-primary;
+                    font-size: Typography.heading;
+                    font-weight: Typography.semibold;
+                }
+                Text {
+                    text: @tr("This creates the playlist on Qobuz with its Qobuz tracks, keeps local files attached, and removes the local-only copy.");
+                    color: Theme.text-secondary;
+                    font-size: Typography.body;
+                    wrap: word-wrap;
+                }
+                HorizontalLayout {
+                    alignment: end;
+                    spacing: 10px;
+                    Rectangle {
+                        width: upload-cancel-label.preferred-width + 28px;
+                        height: 36px;
+                        border-radius: Radius.sm;
+                        background: upload-cancel-ta.has-hover ? Theme.surface-hover : Theme.surface-elevated;
+                        upload-cancel-label := Text {
+                            text: @tr("Cancel");
+                            color: Theme.text-primary;
+                            font-size: Typography.body;
+                            x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                            y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                        }
+                        upload-cancel-ta := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                root.show-upload-confirm = false;
+                            }
+                        }
+                    }
+                    Rectangle {
+                        width: upload-go-label.preferred-width + 36px;
+                        height: 36px;
+                        border-radius: Radius.sm;
+                        background: upload-go-ta.has-hover ? #ffffffd6 : Theme.accent;
+                        upload-go-label := Text {
+                            text: @tr("Upload");
+                            color: #ffffff;
+                            font-size: Typography.body;
+                            font-weight: Typography.semibold;
+                            x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                            y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                        }
+                        upload-go-ta := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                root.show-upload-confirm = false;
+                                root.media-action("playlist", PlaylistState.id, "upload-to-qobuz");
+                            }
+                        }
+                    }
+                }
             }
         }
     }

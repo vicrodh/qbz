@@ -964,6 +964,9 @@ export struct SidebarEntry {
     count: int,         // folder playlist count
     indent: bool,       // playlist nested in a folder
     folder-id: string,  // playlist's current folder id ("" = root; folders "")
+    // "" (Qobuz) | "local" | "offline" — local playlists (library.db,
+    // ids "local:<uuid>") show a hard-drive glyph instead of list-music.
+    local-kind: string,
     cover-count: int,   // number of cover images, 0-4 (playlists)
     url1: string,
     url2: string,
@@ -1094,6 +1097,12 @@ export global CreatePlaylistState {
     in property <[string]> folder-ids: [""];
     // Selected index into `folder-options` (0 = No folder).
     in-out property <int> folder-index: 0;
+    // D8 "Offline-only playlist" opt-in: ON -> created as a LOCAL entity
+    // (library.db, id "local:<uuid>") that never reaches Qobuz.
+    in-out property <bool> offline-only: false;
+    // True while the app is offline: creation always produces a local
+    // playlist, so the toggle shows ON and locked with a hint.
+    in property <bool> offline-locked: false;
 }
 
 export global CreatePlaylistActions {
@@ -1240,6 +1249,12 @@ export global PlaylistState {
     in property <bool> is-favorite: false;
     // True when the playlist is one of the user's own (editable).
     in property <bool> is-owner: false;
+    // LOCAL playlist (id "local:<uuid>", library.db entity — never on
+    // Qobuz). Qobuz-bound header actions (favorite / cache) hide; the
+    // "Upload to Qobuz" action appears when not offline-only.
+    in property <bool> is-local: false;
+    // D8: never offered for upload, never reaches Qobuz/QConnect.
+    in property <bool> offline-only: false;
     // Track edit mode — rows show a selection checkbox and a bulk bar
     // appears (remove selected). Only available to the owner.
     in-out property <bool> multi-select-mode: false;
@@ -1266,6 +1281,12 @@ export global EditPlaylistState {
     in-out property <string> name;
     in-out property <string> description;
     in property <bool> busy: false;
+    // LOCAL playlist (id "local:<uuid>") — edits route to library.db and
+    // the offline-only toggle below shows.
+    in property <bool> is-local: false;
+    // D8 flag, editable so an offline-created playlist can be unmarked
+    // later and gain the "Upload to Qobuz" action.
+    in-out property <bool> offline-only: false;
 }
 
 export global EditPlaylistActions {
@@ -1321,6 +1342,10 @@ export struct PmPlaylistItem {
     local-status: string,
     is-favorite: bool,
     is-hidden: bool,
+    // LOCAL playlist entity (id "local:<uuid>", library.db) — the card /
+    // list-row shows a hard-drive marker; offline-only flavors label it.
+    is-local-playlist: bool,
+    offline-only: bool,
     folder-id: string,     // "" = root
     // Micro-collage covers (same 0-4 scheme as the sidebar).
     cover-count: int,
@@ -2895,6 +2920,9 @@ export struct PlaylistPickItem {
     id: string,
     name: string,
     tracks-line: string,   // "N tracks"
+    // LOCAL playlist (library.db entity, id "local:<uuid>") — the row
+    // shows a hard-drive glyph; adds write the local repo (works offline).
+    is-local: bool,
 }
 
 // "Add to playlist" picker — a global overlay opened from the track

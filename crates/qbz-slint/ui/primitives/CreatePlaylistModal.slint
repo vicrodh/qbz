@@ -123,13 +123,16 @@ export component CreatePlaylistModal inherits Rectangle {
                     }
                 }
 
-                // Public checkbox row.
+                // Public checkbox row — meaningless for a local playlist,
+                // so it dims + locks while offline-only is ON.
                 HorizontalLayout {
                     spacing: 10px;
+                    opacity: CreatePlaylistState.offline-only ? 0.4 : 1.0;
                     toggle := TouchArea {
                         width: 20px;
                         height: 20px;
-                        mouse-cursor: pointer;
+                        mouse-cursor: CreatePlaylistState.offline-only ? default : pointer;
+                        enabled: !CreatePlaylistState.offline-only;
                         clicked => {
                             CreatePlaylistState.is-public = !CreatePlaylistState.is-public;
                         }
@@ -158,6 +161,56 @@ export component CreatePlaylistModal inherits Rectangle {
                         font-size: Typography.body;
                         vertical-alignment: center;
                         horizontal-stretch: 1;
+                    }
+                }
+
+                // Offline-only checkbox row (D8) — creates a LOCAL playlist
+                // (library.db) that never reaches Qobuz. While the app is
+                // offline the toggle is forced ON and locked, with a hint.
+                VerticalLayout {
+                    spacing: 6px;
+                    HorizontalLayout {
+                        spacing: 10px;
+                        opacity: CreatePlaylistState.offline-locked ? 0.7 : 1.0;
+                        offline-toggle := TouchArea {
+                            width: 20px;
+                            height: 20px;
+                            mouse-cursor: CreatePlaylistState.offline-locked ? default : pointer;
+                            enabled: !CreatePlaylistState.offline-locked;
+                            clicked => {
+                                CreatePlaylistState.offline-only = !CreatePlaylistState.offline-only;
+                            }
+                            Rectangle {
+                                width: 18px;
+                                height: 18px;
+                                y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                                border-radius: 4px;
+                                background: CreatePlaylistState.offline-only ? Theme.accent : transparent;
+                                border-width: CreatePlaylistState.offline-only ? 0px : 1.5px;
+                                border-color: Theme.text-muted;
+                                QbzIcon {
+                                    source: @image-url("../assets/icons/check.svg");
+                                    width: 12px;
+                                    height: 12px;
+                                    x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                                    y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                                    tint: #ffffff;
+                                    visible: CreatePlaylistState.offline-only;
+                                }
+                            }
+                        }
+                        Text {
+                            text: @tr("Offline-only playlist");
+                            color: Theme.text-secondary;
+                            font-size: Typography.body;
+                            vertical-alignment: center;
+                            horizontal-stretch: 1;
+                        }
+                    }
+                    if CreatePlaylistState.offline-locked: Text {
+                        text: @tr("Created locally — you're offline");
+                        color: Theme.text-muted;
+                        font-size: Typography.legal;
                     }
                 }
 

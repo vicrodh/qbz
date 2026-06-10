@@ -329,7 +329,7 @@ fn total_duration(tracks: &[Track]) -> String {
     }
 }
 
-fn to_item(track: &Track) -> TrackItem {
+pub(crate) fn to_item(track: &Track) -> TrackItem {
     let mut title = track.title.clone();
     if let Some(v) = track.version.as_ref().filter(|v| !v.is_empty()) {
         title = format!("{title} ({v})");
@@ -406,6 +406,10 @@ pub fn reset(window: &AppWindow) {
     state.set_cover(slint::Image::default());
     state.set_sort_field("default".into());
     state.set_sort_asc(true);
+    // Local-playlist flags reset on every navigation; the local detail
+    // path re-sets them after this shared reset.
+    state.set_is_local(false);
+    state.set_offline_only(false);
     state.set_loading(true);
 }
 
@@ -441,6 +445,23 @@ pub fn apply(window: &AppWindow, data: PlaylistData) {
     state.set_tracks(ModelRc::new(VecModel::from(items)));
     state.set_track_count(count);
     state.set_total_duration(duration.into());
+    state.set_loading(false);
+}
+
+/// Apply a prebuilt row list (the LOCAL-playlist detail path, which
+/// resolves its rows from the local repo instead of a Qobuz fetch) into the
+/// SAME per-view statics this module owns, so in-page search / sort /
+/// multi-select / the artwork pipeline all work unchanged. Clears the Qobuz
+/// `CURRENT` track cache — local playlists drive playback from
+/// `crate::local_playlist`'s own queue snapshot. UI thread.
+pub fn apply_local_items(window: &AppWindow, items: Vec<TrackItem>) {
+    FULL_ITEMS.with(|cell| *cell.borrow_mut() = items.clone());
+    if let Ok(mut cur) = CURRENT.lock() {
+        cur.clear();
+    }
+    let state = window.global::<PlaylistState>();
+    state.set_track_count(items.len() as i32);
+    state.set_tracks(ModelRc::new(VecModel::from(items)));
     state.set_loading(false);
 }
 

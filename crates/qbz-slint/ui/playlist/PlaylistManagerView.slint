@@ -252,20 +252,29 @@ component PmActionButton inherits Rectangle {
 // Local-availability badge (all-local green Wifi / partial amber Cloud).
 component PmLocalBadge inherits Rectangle {
     in property <string> status;
-    visible: root.status == "all_local" || root.status == "some_local";
+    // First-class LOCAL playlist (library.db entity, D7) — hard-drive
+    // marker; offline-only flavors tint accent (same badge, distinct shade).
+    in property <bool> is-local-pl: false;
+    in property <bool> offline-only: false;
+    visible: root.is-local-pl
+        || root.status == "all_local" || root.status == "some_local";
     width: 22px;
     height: 22px;
     border-radius: 11px;
     background: #00000099;
     QbzIcon {
-        source: root.status == "all_local"
-            ? @image-url("../assets/icons/wifi.svg")
-            : @image-url("../assets/icons/cloud-download.svg");
+        source: root.is-local-pl
+            ? @image-url("../assets/icons/hard-drive.svg")
+            : (root.status == "all_local"
+                ? @image-url("../assets/icons/wifi.svg")
+                : @image-url("../assets/icons/cloud-download.svg"));
         width: 13px;
         height: 13px;
         x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
         y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
-        tint: root.status == "all_local" ? #22c55e : #f59e0b;
+        tint: root.is-local-pl
+            ? (root.offline-only ? Theme.accent : Theme.text-secondary)
+            : (root.status == "all_local" ? #22c55e : #f59e0b);
     }
 }
 
@@ -520,6 +529,8 @@ component PmGridCard inherits Rectangle {
                 x: parent.width - self.width - 6px;
                 y: 6px;
                 status: root.item.local-status;
+                is-local-pl: root.item.is-local-playlist;
+                offline-only: root.item.offline-only;
             }
         }
 
@@ -659,13 +670,27 @@ component PmListRow inherits Rectangle {
             alignment: center;
             horizontal-stretch: 1;
             spacing: 2px;
-            // Name — single-line 14px elided (matches `.list-item .name`).
-            Text {
-                text: root.item.name;
-                color: Theme.text-primary;
-                font-size: 14px;
-                font-weight: Typography.medium;
-                overflow: elide;
+            // Name — single-line 14px elided (matches `.list-item .name`),
+            // with the LOCAL-playlist marker leading when applicable.
+            HorizontalLayout {
+                spacing: 6px;
+                alignment: start;
+                if root.item.is-local-playlist: VerticalLayout {
+                    alignment: center;
+                    QbzIcon {
+                        source: @image-url("../assets/icons/hard-drive.svg");
+                        width: 13px;
+                        height: 13px;
+                        tint: root.item.offline-only ? Theme.accent : Theme.text-muted;
+                    }
+                }
+                Text {
+                    text: root.item.name;
+                    color: Theme.text-primary;
+                    font-size: 14px;
+                    font-weight: Typography.medium;
+                    overflow: elide;
+                }
             }
             // Meta line — 12px muted (matches `.list-item .meta`):
             // "N tracks · 1h 43m  (3 local)".

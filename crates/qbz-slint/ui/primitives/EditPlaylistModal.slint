@@ -82,6 +82,45 @@ export component EditPlaylistModal inherits Rectangle {
                     text <=> EditPlaylistState.description;
                 }
 
+                // Offline-only toggle (D8) — LOCAL playlists only. Unmark it
+                // to make the "Upload to Qobuz" action available.
+                if EditPlaylistState.is-local: HorizontalLayout {
+                    spacing: 10px;
+                    offline-toggle := TouchArea {
+                        width: 20px;
+                        height: 20px;
+                        mouse-cursor: pointer;
+                        clicked => {
+                            EditPlaylistState.offline-only = !EditPlaylistState.offline-only;
+                        }
+                        Rectangle {
+                            width: 18px;
+                            height: 18px;
+                            y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                            border-radius: 4px;
+                            background: EditPlaylistState.offline-only ? Theme.accent : transparent;
+                            border-width: EditPlaylistState.offline-only ? 0px : 1.5px;
+                            border-color: Theme.text-muted;
+                            QbzIcon {
+                                source: @image-url("../assets/icons/check.svg");
+                                width: 12px;
+                                height: 12px;
+                                x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                                y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                                tint: #ffffff;
+                                visible: EditPlaylistState.offline-only;
+                            }
+                        }
+                    }
+                    Text {
+                        text: @tr("Offline-only playlist");
+                        color: Theme.text-secondary;
+                        font-size: Typography.body;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                    }
+                }
+
                 HorizontalLayout {
                     spacing: 10px;
                     // Delete (destructive, left).

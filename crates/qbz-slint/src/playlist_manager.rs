@@ -55,10 +55,22 @@ impl PmPlaylist {
     }
 }
 
+/// Send view of one LOCAL playlist (library.db entity, id `local:<uuid>`).
+/// Listed alongside the Qobuz set with a hard-drive marker; folder
+/// membership / favorite / hidden are Qobuz-side concepts and don't apply.
+#[derive(Clone)]
+struct PmLocalPlaylist {
+    id: String,
+    name: String,
+    offline_only: bool,
+    track_count: u32,
+}
+
 #[derive(Clone, Default)]
 pub struct PmData {
     playlists: Vec<PmPlaylist>,
     folders: Vec<FolderFull>,
+    locals: Vec<PmLocalPlaylist>,
 }
 
 /// Last-loaded data (so toolbar changes rebuild from cache, no refetch).
@@ -101,16 +113,29 @@ where
         Vec::new()
     });
 
-    let (folders, settings, play_counts, local_counts) = tokio::task::spawn_blocking(|| {
-        (
-            crate::folders::load_folders_full(),
-            crate::folders::playlist_settings_map(),
-            crate::folders::playlist_play_counts(),
-            crate::folders::playlist_local_counts(),
-        )
-    })
-    .await
-    .unwrap_or_else(|_| (Vec::new(), HashMap::new(), HashMap::new(), HashMap::new()));
+    let (folders, settings, play_counts, local_counts, locals) =
+        tokio::task::spawn_blocking(|| {
+            let locals: Vec<PmLocalPlaylist> = crate::local_playlist::list_blocking()
+                .into_iter()
+                .map(|p| PmLocalPlaylist {
+                    id: p.id,
+                    name: p.name,
+                    offline_only: p.offline_only,
+                    track_count: p.track_count,
+                })
+                .collect();
+            (
+                crate::folders::load_folders_full(),
+                crate::folders::playlist_settings_map(),
+                crate::folders::playlist_play_counts(),
+                crate::folders::playlist_local_counts(),
+                locals,
+            )
+        })
+        .await
+        .unwrap_or_else(|_| {
+            (Vec::new(), HashMap::new(), HashMap::new(), HashMap::new(), Vec::new())
+        });
 
     let folder_ids: std::collections::HashSet<&String> = folders.iter().map(|f| &f.id).collect();
 
@@ -139,7 +164,11 @@ where
         })
         .collect();
 
-    PmData { playlists, folders }
+    PmData {
+        playlists,
+        folders,
+        locals,
+    }
 }
 
 pub fn set_loading(window: &AppWindow, loading: bool) {
@@ -282,12 +311,42 @@ fn playlist_item(p: &PmPlaylist) -> PmPlaylistItem {
         local_status: local_status.into(),
         is_favorite: p.is_favorite,
         is_hidden: p.is_hidden,
+        is_local_playlist: false,
+        offline_only: false,
         folder_id: p.folder_id.clone().unwrap_or_default().into(),
         cover_count: p.cover_urls.len().min(4) as i32,
         url1: url(0),
         url2: url(1),
         url3: url(2),
         url4: url(3),
+        cover1: slint::Image::default(),
+        cover2: slint::Image::default(),
+        cover3: slint::Image::default(),
+        cover4: slint::Image::default(),
+    }
+}
+
+fn local_playlist_item(p: &PmLocalPlaylist) -> PmPlaylistItem {
+    PmPlaylistItem {
+        id: p.id.clone().into(),
+        name: p.name.clone().into(),
+        tracks_line: format!("{} tracks", p.track_count).into(),
+        duration_line: "".into(),
+        local_line: "".into(),
+        local_count: 0,
+        total_count: p.track_count as i32,
+        play_count: 0,
+        local_status: "".into(),
+        is_favorite: false,
+        is_hidden: false,
+        is_local_playlist: true,
+        offline_only: p.offline_only,
+        folder_id: "".into(),
+        cover_count: 0,
+        url1: Default::default(),
+        url2: Default::default(),
+        url3: Default::default(),
+        url4: Default::default(),
         cover1: slint::Image::default(),
         cover2: slint::Image::default(),
         cover3: slint::Image::default(),
@@ -328,7 +387,19 @@ pub fn rebuild(window: &AppWindow) {
         .cloned()
         .collect();
     sort_playlists(&mut filtered, &sort);
-    let playlist_items: Vec<PmPlaylistItem> = filtered.iter().map(playlist_item).collect();
+    let mut playlist_items: Vec<PmPlaylistItem> = filtered.iter().map(playlist_item).collect();
+    // LOCAL playlists (library.db, D7) — appended after the Qobuz set,
+    // name-sorted, honoring the search query. They have no hidden flag, so
+    // the "hidden" filter excludes them; folder filtering N/A (root-only).
+    if filter != "hidden" {
+        let mut locals: Vec<&PmLocalPlaylist> = data
+            .locals
+            .iter()
+            .filter(|p| query.is_empty() || p.name.to_lowercase().contains(&query))
+            .collect();
+        locals.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+        playlist_items.extend(locals.iter().map(|p| local_playlist_item(p)));
+    }
     let visible_count = playlist_items.len();
 
     // Tree rows (folder headers + nested + root playlists). Built only
@@ -463,6 +534,26 @@ fn build_tree(data: &PmData, query: &str, filter: &str, sort: &str) -> Vec<PmTre
             playlist: playlist_item(p),
             indent: false,
         });
+    }
+    // LOCAL playlists as root tree rows (never in folders), name-sorted,
+    // honoring the search query (no hidden flag — the hidden filter hides
+    // them like the grid does).
+    if filter != "hidden" {
+        let mut locals: Vec<&PmLocalPlaylist> = data
+            .locals
+            .iter()
+            .filter(|p| !searching || p.name.to_lowercase().contains(query))
+            .collect();
+        locals.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+        for p in locals {
+            rows.push(PmTreeRow {
+                kind: "playlist".into(),
+                expanded: false,
+                folder: PmFolderItem::default(),
+                playlist: local_playlist_item(p),
+                indent: false,
+            });
+        }
     }
     rows
 }

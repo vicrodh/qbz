@@ -54,6 +54,16 @@ fn playlist_cover_urls(p: &qbz_models::Playlist) -> Vec<String> {
     out
 }
 
+/// One LOCAL playlist (library.db entity, id `local:<uuid>`) listed
+/// alongside the Qobuz playlists. Always available — including offline.
+#[derive(Clone)]
+pub struct LocalSidebarPlaylist {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub offline_only: bool,
+}
+
 #[derive(Clone, Default)]
 pub struct SidebarData {
     pub playlists: Vec<SidebarPlaylist>,
@@ -61,6 +71,8 @@ pub struct SidebarData {
     pub folder_map: HashMap<u64, String>,
     /// Playlist ids the user has hidden from the sidebar (local settings).
     pub hidden_playlists: HashSet<u64>,
+    /// First-class local playlists (offline-mode D7), appended as root rows.
+    pub local_playlists: Vec<LocalSidebarPlaylist>,
 }
 
 /// Session-only folder expand state (matches Tauri — not persisted).
@@ -148,9 +160,9 @@ where
         }
     };
     // Folders (hidden folders excluded) + folder membership +
-    // per-playlist custom-sort positions + hidden-playlist set (all
-    // local, library.db).
-    let (folders, folder_map, positions, hidden_playlists) =
+    // per-playlist custom-sort positions + hidden-playlist set + the
+    // first-class LOCAL playlists (all local, library.db).
+    let (folders, folder_map, positions, hidden_playlists, local_playlists) =
         tokio::task::spawn_blocking(|| {
             let folders: Vec<FolderInfo> = crate::folders::load_folders_full()
                 .into_iter()
@@ -165,11 +177,22 @@ where
                 .filter(|(_, s)| s.hidden)
                 .map(|(id, _)| id)
                 .collect();
+            let local_playlists: Vec<LocalSidebarPlaylist> =
+                crate::local_playlist::list_blocking()
+                    .into_iter()
+                    .map(|p| LocalSidebarPlaylist {
+                        id: p.id,
+                        name: p.name,
+                        description: p.description.unwrap_or_default(),
+                        offline_only: p.offline_only,
+                    })
+                    .collect();
             (
                 folders,
                 crate::folders::playlist_folder_map(),
                 crate::folders::playlist_positions(),
                 hidden_playlists,
+                local_playlists,
             )
         })
         .await
@@ -193,7 +216,19 @@ where
         folders,
         folder_map,
         hidden_playlists,
+        local_playlists,
     }
+}
+
+/// Name + description + offline_only for a LOCAL playlist id, from the
+/// last loaded sidebar cache (the local twin of `playlist_name_desc`).
+pub fn local_playlist_meta(id: &str) -> Option<(String, String, bool)> {
+    CACHE.lock().ok().and_then(|c| {
+        c.local_playlists
+            .iter()
+            .find(|p| p.id == id)
+            .map(|p| (p.name.clone(), p.description.clone(), p.offline_only))
+    })
 }
 
 /// Name + description for `id`, from the last loaded playlist payload.
@@ -237,11 +272,35 @@ fn playlist_entry(p: &SidebarPlaylist, indent: bool, folder_id: &str) -> Sidebar
         count: 0,
         indent,
         folder_id: folder_id.into(),
+        local_kind: "".into(),
         cover_count: p.cover_urls.len().min(4) as i32,
         url1: url(0),
         url2: url(1),
         url3: url(2),
         url4: url(3),
+        cover1: slint::Image::default(),
+        cover2: slint::Image::default(),
+        cover3: slint::Image::default(),
+        cover4: slint::Image::default(),
+    }
+}
+
+/// Build a LOCAL playlist root row (hard-drive glyph; no cover collage).
+fn local_playlist_entry(p: &LocalSidebarPlaylist) -> SidebarEntry {
+    SidebarEntry {
+        kind: "playlist".into(),
+        id: p.id.clone().into(),
+        name: p.name.clone().into(),
+        expanded: false,
+        count: 0,
+        indent: false,
+        folder_id: "".into(),
+        local_kind: if p.offline_only { "offline" } else { "local" }.into(),
+        cover_count: 0,
+        url1: Default::default(),
+        url2: Default::default(),
+        url3: Default::default(),
+        url4: Default::default(),
         cover1: slint::Image::default(),
         cover2: slint::Image::default(),
         cover3: slint::Image::default(),
@@ -309,6 +368,7 @@ pub fn rebuild(window: &AppWindow) {
             count: members.len() as i32,
             indent: false,
             folder_id: "".into(),
+            local_kind: "".into(),
             cover_count: 0,
             url1: Default::default(),
             url2: Default::default(),
@@ -334,6 +394,20 @@ pub fn rebuild(window: &AppWindow) {
             .unwrap_or(false);
         if !in_folder && matches(p) && !data.hidden_playlists.contains(&p.id) {
             entries.push(playlist_entry(p, false, ""));
+        }
+    }
+    // LOCAL playlists (library.db, D7) — root rows after the Qobuz set,
+    // name-sorted, honoring the same search filter. Always present, online
+    // or offline (they never depend on a Qobuz fetch).
+    {
+        let mut locals: Vec<&LocalSidebarPlaylist> = data
+            .local_playlists
+            .iter()
+            .filter(|p| !searching || p.name.to_lowercase().contains(&query))
+            .collect();
+        locals.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+        for p in locals {
+            entries.push(local_playlist_entry(p));
         }
     }
 

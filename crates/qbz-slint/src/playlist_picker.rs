@@ -12,6 +12,9 @@ pub struct PickPlaylist {
     pub id: String,
     pub name: String,
     pub tracks: u32,
+    /// LOCAL playlist (library.db, id `local:<uuid>`) — adds write the
+    /// local repo (works offline) instead of the Qobuz endpoint.
+    pub is_local: bool,
 }
 
 /// Open the picker for `track_id` and mark it loading. UI thread.
@@ -39,25 +42,45 @@ pub fn open_multi(window: &AppWindow, ids: &[String], local: bool) {
     state.set_open(true);
 }
 
-/// Fetch the user's playlists (worker thread).
+/// Fetch the user's playlists (worker thread): the LOCAL playlists
+/// (library.db — always available) followed by the Qobuz set. While
+/// OFFLINE the Qobuz fetch is skipped entirely (D3/D11: Qobuz playlists
+/// can't be written to offline, so they are hidden from the picker).
 pub async fn load<A>(runtime: &AppRuntime<A>) -> Vec<PickPlaylist>
 where
     A: FrontendAdapter + Send + Sync + 'static,
 {
-    match runtime.core().get_user_playlists().await {
-        Ok(playlists) => playlists
+    let mut out: Vec<PickPlaylist> = tokio::task::spawn_blocking(|| {
+        crate::local_playlist::list_blocking()
             .into_iter()
             .map(|p| PickPlaylist {
+                id: p.id,
+                name: p.name,
+                tracks: p.track_count,
+                is_local: true,
+            })
+            .collect::<Vec<_>>()
+    })
+    .await
+    .unwrap_or_default();
+
+    if crate::offline_mode::engine().is_offline() {
+        return out;
+    }
+    match runtime.core().get_user_playlists().await {
+        Ok(playlists) => {
+            out.extend(playlists.into_iter().map(|p| PickPlaylist {
                 id: p.id.to_string(),
                 name: p.name,
                 tracks: p.tracks_count,
-            })
-            .collect(),
+                is_local: false,
+            }));
+        }
         Err(e) => {
             log::warn!("[qbz-slint] playlist picker load failed: {e}");
-            Vec::new()
         }
     }
+    out
 }
 
 pub fn apply(window: &AppWindow, playlists: Vec<PickPlaylist>) {
@@ -71,6 +94,7 @@ pub fn apply(window: &AppWindow, playlists: Vec<PickPlaylist>) {
             } else {
                 "".into()
             },
+            is_local: p.is_local,
         })
         .collect();
     let state = window.global::<PlaylistPickerState>();

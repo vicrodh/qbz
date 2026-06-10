@@ -30,7 +30,11 @@ component PickRow inherits Rectangle {
                 border-radius: 6px;
                 background: Theme.surface-elevated;
                 QbzIcon {
-                    source: @image-url("../assets/icons/list-music.svg");
+                    // LOCAL playlists (library.db) get the hard-drive glyph
+                    // — adds write the local repo and work offline.
+                    source: root.item.is-local
+                        ? @image-url("../assets/icons/hard-drive.svg")
+                        : @image-url("../assets/icons/list-music.svg");
                     width: 18px;
                     height: 18px;
                     x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;

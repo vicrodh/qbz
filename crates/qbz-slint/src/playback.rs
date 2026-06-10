@@ -956,7 +956,7 @@ pub fn play_local_tracks_from(
 /// source. Offline copies carry the Qobuz id (so the shared resolver finds
 /// them) + `source = "qobuz_download"`; user files carry the library row id +
 /// `source = "local"`.
-fn local_queue_track(track: &qbz_library::LocalTrack) -> QueueTrack {
+pub(crate) fn local_queue_track(track: &qbz_library::LocalTrack) -> QueueTrack {
     // Source-aware: offline copies read as Qobuz downloads (carry the Qobuz id
     // so the shared resolver finds them); ephemeral tracks keep their synthetic
     // high id + an "ephemeral" tag so playback routes to the in-memory store;
@@ -1283,7 +1283,7 @@ pub fn set_now_playing_context(weak: &slint::Weak<AppWindow>, kind: &str, id: &s
 /// Build a `QueueTrack` for the queue from the catalog `Track`, filling
 /// the album metadata from `album_meta` (the track's own album summary is
 /// often partial in album responses).
-fn make_queue_track(
+pub(crate) fn make_queue_track(
     track: &qbz_models::Track,
     album_id: &str,
     album_title: &str,
@@ -1890,7 +1890,19 @@ pub fn play_track_in_context(
         // Views with an authoritative Vec<Track> cache: order it by the
         // visible model so sort/filter are respected.
         ContentView::Playlist => {
-            if let Some((tracks, idx)) = order_by_visible(
+            // LOCAL playlist detail (id "local:<uuid>") — queue from its
+            // own resolved snapshot + the D8 offline-only stamp.
+            if window.global::<PlaylistState>().get_is_local() {
+                if crate::local_playlist::play_from_visible(
+                    window,
+                    runtime.clone(),
+                    weak.clone(),
+                    handle.clone(),
+                    clicked_id,
+                ) {
+                    return;
+                }
+            } else if let Some((tracks, idx)) = order_by_visible(
                 &window.global::<PlaylistState>().get_tracks(),
                 crate::playlist::current_tracks(),
                 clicked_id,

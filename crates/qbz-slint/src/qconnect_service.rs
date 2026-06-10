@@ -696,6 +696,14 @@ impl SlintQconnectService {
             }
         }
 
+        // D8 guard: a queue built from an OFFLINE-ONLY local playlist never
+        // reaches the Connect cloud. Debug level — this runs on every track
+        // tick and must not spam the log (and never toasts).
+        if self.runtime.core().queue_is_offline_only() {
+            log::debug!("[QConnect] queue is from an offline-only playlist; skipping cloud push");
+            return;
+        }
+
         let (tracks, current_index) = self.runtime.core().get_all_queue_tracks().await;
         if tracks.is_empty() {
             return;
@@ -799,6 +807,17 @@ impl SlintQconnectService {
             (Arc::clone(&runtime.app), peer_active)
         };
         if !peer_active {
+            return false;
+        }
+
+        // D8 guard: an offline-only-playlist queue is never pushed to the
+        // cloud. Returning false lets the play proceed LOCALLY (unlike the
+        // mixed-queue refusal below, local playback of these tracks is fine —
+        // the prohibition is only on the cloud push).
+        if self.runtime.core().queue_is_offline_only() {
+            log::info!(
+                "[QConnect] queue is from an offline-only playlist; not routing to peer renderer"
+            );
             return false;
         }
 

@@ -125,6 +125,9 @@ component SidebarRow inherits Rectangle {
     callback hover-changed(bool);
 
     property <bool> is-folder: root.entry.kind == "folder";
+    // LOCAL playlist row (library.db entity) — the Qobuz-bound context
+    // actions (hide / mixtape / folders) don't apply and are hidden.
+    property <bool> is-local-pl: root.entry.local-kind != "";
     // Live filter for the move-to-folder list (per-row search input).
     property <string> folder-query;
 
@@ -238,13 +241,25 @@ component SidebarRow inherits Rectangle {
                 x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
                 y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
             }
-            if !root.is-folder && !root.use-collage: QbzIcon {
+            if !root.is-folder && !root.use-collage && root.entry.local-kind == "": QbzIcon {
                 source: @image-url("../assets/icons/list-music.svg");
                 width: 15px;
                 height: 15px;
                 x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
                 y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
                 tint: root.active ? Theme.text-primary : Theme.text-muted;
+            }
+            // LOCAL playlist marker (library.db entity) — hard-drive glyph;
+            // offline-only flavors tint accent (same badge, distinct shade).
+            if !root.is-folder && !root.use-collage && root.entry.local-kind != "": QbzIcon {
+                source: @image-url("../assets/icons/hard-drive.svg");
+                width: 15px;
+                height: 15px;
+                x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                tint: root.entry.local-kind == "offline"
+                    ? Theme.accent
+                    : (root.active ? Theme.text-primary : Theme.text-muted);
             }
         }
         if !ShellState.sidebar-mini: Text {
@@ -397,7 +412,7 @@ component SidebarRow inherits Rectangle {
                     menu.close();
                 }
             }
-            if !root.is-folder: ContextMenuItem {
+            if !root.is-folder && !root.is-local-pl: ContextMenuItem {
                 icon: @image-url("../assets/icons/eye-off.svg");
                 label: @tr("Hide from sidebar");
                 clicked => {
@@ -405,7 +420,7 @@ component SidebarRow inherits Rectangle {
                     menu.close();
                 }
             }
-            if !root.is-folder: ContextMenuItem {
+            if !root.is-folder && !root.is-local-pl: ContextMenuItem {
                 icon: @image-url("../assets/icons/cassette-tape.svg");
                 label: @tr("Add to Mixtape/Collection");
                 clicked => {
@@ -414,7 +429,7 @@ component SidebarRow inherits Rectangle {
                 }
             }
             // Divider before the move-to-folder section.
-            if !root.is-folder: Rectangle {
+            if !root.is-folder && !root.is-local-pl: Rectangle {
                 height: 7px;
                 Rectangle {
                     height: 1px;
@@ -424,7 +439,7 @@ component SidebarRow inherits Rectangle {
             }
             // MOVE TO FOLDER section (wrapped so the `for` is not a direct
             // child of an `if`, which Slint disallows).
-            if !root.is-folder: VerticalLayout {
+            if !root.is-folder && !root.is-local-pl: VerticalLayout {
                 padding-left: 11px;
                 padding-right: 16px;
                 padding-bottom: 3px;
@@ -442,7 +457,7 @@ component SidebarRow inherits Rectangle {
             // with "Recursion detected"). The substring filter runs in
             // Rust (Slint strings have no `contains`); it fills
             // `menu-folders`, which the list below iterates.
-            if !root.is-folder && SidebarState.folders.length >= 8: HorizontalLayout {
+            if !root.is-folder && !root.is-local-pl && SidebarState.folders.length >= 8: HorizontalLayout {
                 padding-left: 11px;
                 padding-right: 16px;
                 padding-bottom: 4px;
@@ -458,7 +473,7 @@ component SidebarRow inherits Rectangle {
             // The folder list — each folder except the playlist's current
             // one. The query filter is already applied to `menu-folders`
             // by Rust; the current-folder exclusion stays in markup.
-            if !root.is-folder: ScrollView {
+            if !root.is-folder && !root.is-local-pl: ScrollView {
                 // Cap the list at ~5 rows (33px each); the rest scroll.
                 height: min(SidebarState.menu-folders.length * 33px, 165px);
                 vertical-scrollbar-policy: ScrollBarPolicy.as-needed;
@@ -476,7 +491,7 @@ component SidebarRow inherits Rectangle {
                 }
             }
             // Move to root — only when the playlist is currently in a folder.
-            if !root.is-folder && root.entry.folder-id != "": ContextMenuItem {
+            if !root.is-folder && !root.is-local-pl && root.entry.folder-id != "": ContextMenuItem {
                 icon: @image-url("../assets/icons/chevron-left.svg");
                 label: @tr("Move to root");
                 clicked => {
@@ -485,7 +500,7 @@ component SidebarRow inherits Rectangle {
                 }
             }
             // No folders at all.
-            if !root.is-folder && SidebarState.folders.length == 0: HorizontalLayout {
+            if !root.is-folder && !root.is-local-pl && SidebarState.folders.length == 0: HorizontalLayout {
                 padding-left: 11px;
                 padding-right: 16px;
                 padding-bottom: 4px;
