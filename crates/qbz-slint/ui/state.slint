@@ -854,6 +854,52 @@ export global PlexAuthActions {
     callback load();                                 // panel init: seed from store + warm cache
 }
 
+// ============================ Scrobblers ==================================
+// Settings > Integrations — source-agnostic Last.fm + ListenBrainz scrobbling.
+// State mirrors `scrobbler_settings.db`; actions delegate to the Rust
+// `scrobble` controller (auth flows + the now-playing/scrobble fire live
+// there). ADR-008: no pills.
+
+export global ScrobbleState {
+    // --- Master section toggles -------------------------------------------
+    in-out property <bool> enabled: false;            // master toggle (default OFF)
+    in-out property <bool> ui-collapsed: false;       // collapse chevron
+
+    // --- Last.fm ----------------------------------------------------------
+    in-out property <bool> lastfm-enabled: false;     // per-service scrobble flag
+    in property <bool> lastfm-authed: false;          // session key present
+    in property <string> lastfm-username: "";         // "Signed in as ..."
+    in property <string> lastfm-auth-url: "";         // non-empty after connect
+    in property <bool> lastfm-busy: false;            // get_token / get_session in flight
+
+    // --- ListenBrainz -----------------------------------------------------
+    in-out property <bool> listenbrainz-enabled: false;
+    in property <bool> listenbrainz-authed: false;
+    in property <string> listenbrainz-username: "";
+    in-out property <string> listenbrainz-token-input: ""; // token field buffer
+    in property <bool> listenbrainz-busy: false;      // set_token in flight
+
+    // --- Shared status line (0 none, 1 info, 2 ok, 3 error) ---------------
+    in property <string> status-text: "";
+    in property <int> status-kind: 0;
+}
+
+export global ScrobbleActions {
+    callback load();                                  // panel init: seed from store
+    callback enable-toggle(bool);
+    callback collapse-toggle(bool);
+    // Last.fm.
+    callback lastfm-enable-toggle(bool);
+    callback lastfm-connect();                        // get_token + open browser
+    callback lastfm-open-auth-url();                  // re-open authorize URL
+    callback lastfm-confirm();                        // get_session after approve
+    callback lastfm-disconnect();
+    // ListenBrainz.
+    callback listenbrainz-enable-toggle(bool);
+    callback listenbrainz-set-token(string);
+    callback listenbrainz-disconnect();
+}
+
 // ============================ Tag editor ==================================
 // Local-album metadata editor (Settings-independent modal launched from the
 // local album detail). Sidecar (default) + opt-in direct file-write. Remote

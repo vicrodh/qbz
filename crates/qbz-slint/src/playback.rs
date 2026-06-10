@@ -1415,12 +1415,25 @@ pub(crate) async fn refresh_now_playing_meta(runtime: &Runtime, weak: &slint::We
             sample_rate: track.sample_rate,
             art_url: notify_art,
         };
+        // Source-agnostic scrobbling (Last.fm + ListenBrainz). Fires on the
+        // SAME de-duped track-change edge as the notification, so resume/seek
+        // (which also re-run this fn) do NOT re-fire. Feeds the normalized
+        // QueueTrack text (Qobuz, local, AND Plex) with the version-enriched
+        // title (#360 parity). Skipped when a remote QConnect renderer drives
+        // playback — never scrobble a peer's audio.
+        let scrobble_meta = crate::scrobble::ScrobbleMeta {
+            artist: artist.clone(),
+            track: title.clone(),
+            album: (!album.is_empty()).then(|| album.clone()),
+            duration_secs: duration,
+        };
         tokio::spawn(async move {
             if let Some(svc) = crate::qconnect_service::service() {
                 if svc.is_peer_active().await {
                     return;
                 }
             }
+            crate::scrobble::on_track_changed(scrobble_meta);
             qbz_media_controls::show_track_notification(notify_meta, offline).await;
         });
     }

@@ -16,6 +16,7 @@ import { PlaybackSettings } from "PlaybackSettings.slint";
 import { AppearanceSettings } from "AppearanceSettings.slint";
 import { OfflineSettings } from "OfflineSettings.slint";
 import { LocalLibrarySettings } from "LocalLibrarySettings.slint";
+import { IntegrationsSettings } from "IntegrationsSettings.slint";
 import { DeveloperSettings } from "DeveloperSettings.slint";
 import { ScrollView } from "std-widgets.slint";
 
@@ -151,6 +152,14 @@ export component SettingsView inherits Rectangle {
                         }
                     }
                     SubNavItem {
+                        icon: @image-url("../assets/icons/refresh-cw.svg");
+                        label: @tr("Integrations");
+                        active: SettingsState.section == 6;
+                        clicked => {
+                            SettingsState.section = 6;
+                        }
+                    }
+                    SubNavItem {
                         icon: @image-url("../assets/icons/bug.svg");
                         label: @tr("Developer");
                         active: SettingsState.section == 5;
@@ -225,6 +234,7 @@ export component SettingsView inherits Rectangle {
                         }
                     }
                     if !SettingsState.loading && SettingsState.section == 4: LocalLibrarySettings { }
+                    if !SettingsState.loading && SettingsState.section == 6: IntegrationsSettings { }
                     if !SettingsState.loading && SettingsState.section == 5: DeveloperSettings { }
                 }
             }

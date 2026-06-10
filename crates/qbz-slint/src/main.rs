@@ -78,6 +78,8 @@ mod plex_settings;
 mod playlist_picker;
 mod quality;
 mod recently;
+mod scrobble;
+mod scrobbler_settings;
 mod search;
 mod settings;
 mod share;
@@ -135,6 +137,14 @@ fn init_shell_for_user(
     // Bind Plex connection settings to this user (per-user plex_settings.db,
     // Slint-only). Seeded into PlexSettingsState lazily on panel open.
     plex_settings::init_for_user(user_id);
+
+    // Bind scrobbler (Last.fm + ListenBrainz) settings to this user (per-user
+    // scrobbler_settings.db), then start the scrobble runtime: tokio handle
+    // for the source-agnostic now-playing/scrobble fire, LB credential seed
+    // from the shared cache, and the offline-queue flush watcher (drains the
+    // shared scrobble_queue + listen_queue on every offline -> online edge).
+    scrobbler_settings::init_for_user(user_id);
+    scrobble::start(tokio::runtime::Handle::current());
 
     // Bind "My QBZ" nav branding (custom label + icon) to this user
     // (per-user myqbz_branding.json). Seeded into MyQbzBrandingState by the
@@ -7086,6 +7096,82 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         window
             .global::<PlexAuthActions>()
             .on_clear_cache(move || plex_auth::clear_cache(weak.clone(), handle.clone()));
+    }
+
+    // Settings > Integrations — scrobblers (Last.fm + ListenBrainz). The auth
+    // flows + the now-playing/scrobble fire live in `scrobble`; the persisted
+    // store is the per-user `scrobbler_settings.db`.
+    {
+        let weak = window.as_weak();
+        window
+            .global::<ScrobbleActions>()
+            .on_load(move || scrobble::load(weak.clone()));
+    }
+    {
+        let weak = window.as_weak();
+        window
+            .global::<ScrobbleActions>()
+            .on_enable_toggle(move |b| scrobble::enable_toggle(weak.clone(), b));
+    }
+    {
+        window
+            .global::<ScrobbleActions>()
+            .on_collapse_toggle(move |b| scrobble::collapse_toggle(b));
+    }
+    {
+        let weak = window.as_weak();
+        window
+            .global::<ScrobbleActions>()
+            .on_lastfm_enable_toggle(move |b| scrobble::lastfm_enable_toggle(weak.clone(), b));
+    }
+    {
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window
+            .global::<ScrobbleActions>()
+            .on_lastfm_connect(move || scrobble::lastfm_connect(weak.clone(), handle.clone()));
+    }
+    {
+        let weak = window.as_weak();
+        window
+            .global::<ScrobbleActions>()
+            .on_lastfm_open_auth_url(move || scrobble::lastfm_open_auth_url(weak.clone()));
+    }
+    {
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window
+            .global::<ScrobbleActions>()
+            .on_lastfm_confirm(move || scrobble::lastfm_confirm(weak.clone(), handle.clone()));
+    }
+    {
+        let weak = window.as_weak();
+        window
+            .global::<ScrobbleActions>()
+            .on_lastfm_disconnect(move || scrobble::lastfm_disconnect(weak.clone()));
+    }
+    {
+        let weak = window.as_weak();
+        window
+            .global::<ScrobbleActions>()
+            .on_listenbrainz_enable_toggle(move |b| {
+                scrobble::listenbrainz_enable_toggle(weak.clone(), b)
+            });
+    }
+    {
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window
+            .global::<ScrobbleActions>()
+            .on_listenbrainz_set_token(move |tok| {
+                scrobble::listenbrainz_set_token(weak.clone(), handle.clone(), tok.to_string())
+            });
+    }
+    {
+        let weak = window.as_weak();
+        window
+            .global::<ScrobbleActions>()
+            .on_listenbrainz_disconnect(move || scrobble::listenbrainz_disconnect(weak.clone()));
     }
 
     // Tag editor (local album metadata) — open via on_media_action("album",

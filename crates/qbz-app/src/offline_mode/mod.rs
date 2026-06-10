@@ -23,7 +23,7 @@ pub mod connectivity;
 pub mod store;
 
 pub use connectivity::{Connectivity, ConnectivityActor, ConnectivitySnapshot};
-pub use store::{OfflineModeSettings, OfflineModeStore};
+pub use store::{OfflineModeSettings, OfflineModeStore, QueuedScrobble};
 
 use serde::{Deserialize, Serialize};
 use std::path::Path;

@@ -1,0 +1,269 @@
+// Settings > Integrations — source-agnostic scrobblers (Last.fm + ListenBrainz).
+// Mirrors the Plex section structure in LocalLibrarySettings.slint: a master
+// enable + collapse header, then per-service connect/disconnect rows that bind
+// the `ScrobbleState` global for state and `ScrobbleActions` for actions. The
+// fire path is source-agnostic (Qobuz, local, AND Plex) and lives in Rust.
+// ADR-008: no pills — plain bordered buttons.
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Typography } from "../foundation/typography.slint";
+import { Radius } from "../foundation/radius.slint";
+import { ScrobbleState, ScrobbleActions } from "../state.slint";
+import { SettingRow } from "SettingRow.slint";
+import { QbzIcon } from "../primitives/QbzIcon.slint";
+import { QbzToggle } from "../primitives/QbzToggle.slint";
+import { LineEdit } from "std-widgets.slint";
+
+component GroupHeader inherits Text {
+    color: Theme.text-muted;
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    font-weight: Typography.semibold;
+}
+
+// Matches OfflineSettings/LocalLibrarySettings SecondaryButton.
+component SecondaryButton inherits Rectangle {
+    in property <string> label;
+    in property <bool> danger: false;
+    in property <bool> enabled: true;
+    callback clicked();
+
+    height: 32px;
+    width: row.preferred-width + 24px;
+    border-radius: Radius.sm;
+    border-width: 1px;
+    border-color: root.danger ? #e0564f : Theme.border-subtle;
+    background: !root.enabled
+        ? transparent
+        : (ta.has-hover
+            ? (root.danger ? #e0564f22 : Theme.surface-hover)
+            : Theme.surface-elevated);
+    opacity: root.enabled ? 1.0 : 0.45;
+
+    row := HorizontalLayout {
+        x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+        Text {
+            text: root.label;
+            color: root.danger ? #e0564f : Theme.text-primary;
+            font-size: Typography.legal;
+            font-weight: Typography.semibold;
+            vertical-alignment: center;
+        }
+    }
+
+    ta := TouchArea {
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => {
+            if (root.enabled) {
+                root.clicked();
+            }
+        }
+    }
+}
+
+export component IntegrationsSettings inherits VerticalLayout {
+    spacing: 4px;
+
+    init => {
+        ScrobbleActions.load();
+    }
+
+    // ===================================================================
+    // SCROBBLERS — master header: title + master toggle + collapse chevron.
+    // Body renders only when `enabled && !ui-collapsed`.
+    // ===================================================================
+    HorizontalLayout {
+        spacing: 10px;
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            spacing: 2px;
+            HorizontalLayout {
+                spacing: 8px;
+                GroupHeader { text: @tr("SCROBBLERS"); vertical-alignment: center; }
+                if ScrobbleState.enabled: VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: 20px;
+                        height: 20px;
+                        border-radius: Radius.sm;
+                        background: chev-ta.has-hover ? Theme.surface-hover : transparent;
+                        QbzIcon {
+                            source: ScrobbleState.ui-collapsed
+                                ? @image-url("../assets/icons/chevron-right.svg")
+                                : @image-url("../assets/icons/chevron-down.svg");
+                            width: 14px;
+                            height: 14px;
+                            x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                            y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                            tint: Theme.text-secondary;
+                        }
+                        chev-ta := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                ScrobbleState.ui-collapsed = !ScrobbleState.ui-collapsed;
+                                ScrobbleActions.collapse-toggle(ScrobbleState.ui-collapsed);
+                            }
+                        }
+                    }
+                }
+            }
+            Text {
+                text: @tr("Send your plays to Last.fm and ListenBrainz. Works for Qobuz, local, and Plex tracks.");
+                color: Theme.text-muted;
+                font-size: 12px;
+                wrap: word-wrap;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            QbzToggle {
+                checked: ScrobbleState.enabled;
+                toggled(v) => {
+                    ScrobbleState.enabled = v;
+                    ScrobbleActions.enable-toggle(v);
+                }
+            }
+        }
+    }
+
+    // Body — only when enabled and not collapsed.
+    if ScrobbleState.enabled && !ScrobbleState.ui-collapsed: VerticalLayout {
+        spacing: 4px;
+
+        Rectangle { height: 12px; }
+
+        // ----------------------------------------------------------------
+        // LAST.FM
+        // ----------------------------------------------------------------
+        GroupHeader { text: @tr("LAST.FM"); }
+        Rectangle { height: 4px; }
+
+        SettingRow {
+            label: @tr("Scrobble to Last.fm");
+            description: ScrobbleState.lastfm-authed
+                ? @tr("Signed in as {}.", ScrobbleState.lastfm-username)
+                : @tr("Connect your Last.fm account to enable scrobbling.");
+            QbzToggle {
+                checked: ScrobbleState.lastfm-enabled;
+                toggled(v) => {
+                    ScrobbleState.lastfm-enabled = v;
+                    ScrobbleActions.lastfm-enable-toggle(v);
+                }
+            }
+        }
+
+        // Connect (when not authed) — two-step browser flow.
+        if !ScrobbleState.lastfm-authed: SettingRow {
+            label: @tr("Connect");
+            description: @tr("Authorize QBZ in your browser, then click Finish.");
+            HorizontalLayout {
+                spacing: 8px;
+                SecondaryButton {
+                    label: ScrobbleState.lastfm-busy ? @tr("Working...") : @tr("Connect Last.fm");
+                    enabled: !ScrobbleState.lastfm-busy;
+                    clicked => { ScrobbleActions.lastfm-connect(); }
+                }
+                if ScrobbleState.lastfm-auth-url != "": SecondaryButton {
+                    label: @tr("Open authorize page");
+                    clicked => { ScrobbleActions.lastfm-open-auth-url(); }
+                }
+                if ScrobbleState.lastfm-auth-url != "": SecondaryButton {
+                    label: ScrobbleState.lastfm-busy ? @tr("Working...") : @tr("Finish");
+                    enabled: !ScrobbleState.lastfm-busy;
+                    clicked => { ScrobbleActions.lastfm-confirm(); }
+                }
+            }
+        }
+
+        // Disconnect (when authed).
+        if ScrobbleState.lastfm-authed: SettingRow {
+            label: @tr("Disconnect Last.fm");
+            description: @tr("Sign out of Last.fm.");
+            SecondaryButton {
+                label: @tr("Disconnect");
+                danger: true;
+                clicked => { ScrobbleActions.lastfm-disconnect(); }
+            }
+        }
+
+        Rectangle { height: 18px; }
+
+        // ----------------------------------------------------------------
+        // LISTENBRAINZ
+        // ----------------------------------------------------------------
+        GroupHeader { text: @tr("LISTENBRAINZ"); }
+        Rectangle { height: 4px; }
+
+        SettingRow {
+            label: @tr("Scrobble to ListenBrainz");
+            description: ScrobbleState.listenbrainz-authed
+                ? @tr("Signed in as {}.", ScrobbleState.listenbrainz-username)
+                : @tr("Paste your ListenBrainz user token to enable scrobbling.");
+            QbzToggle {
+                checked: ScrobbleState.listenbrainz-enabled;
+                toggled(v) => {
+                    ScrobbleState.listenbrainz-enabled = v;
+                    ScrobbleActions.listenbrainz-enable-toggle(v);
+                }
+            }
+        }
+
+        // Token field (when not authed).
+        if !ScrobbleState.listenbrainz-authed: SettingRow {
+            label: @tr("User token");
+            description: @tr("From listenbrainz.org/settings.");
+            HorizontalLayout {
+                width: 240px;
+                VerticalLayout {
+                    alignment: center;
+                    horizontal-stretch: 1;
+                    LineEdit {
+                        text: ScrobbleState.listenbrainz-token-input;
+                        placeholder-text: @tr("ListenBrainz token");
+                        input-type: password;
+                        enabled: !ScrobbleState.listenbrainz-busy;
+                        edited(s) => {
+                            ScrobbleState.listenbrainz-token-input = s;
+                        }
+                        accepted(s) => {
+                            ScrobbleActions.listenbrainz-set-token(s);
+                        }
+                    }
+                }
+            }
+        }
+        if !ScrobbleState.listenbrainz-authed: SettingRow {
+            label: @tr("Save token");
+            description: @tr("Validates the token against ListenBrainz.");
+            SecondaryButton {
+                label: ScrobbleState.listenbrainz-busy ? @tr("Validating...") : @tr("Connect ListenBrainz");
+                enabled: !ScrobbleState.listenbrainz-busy;
+                clicked => {
+                    ScrobbleActions.listenbrainz-set-token(ScrobbleState.listenbrainz-token-input);
+                }
+            }
+        }
+
+        // Disconnect (when authed).
+        if ScrobbleState.listenbrainz-authed: SettingRow {
+            label: @tr("Disconnect ListenBrainz");
+            description: @tr("Sign out of ListenBrainz.");
+            SecondaryButton {
+                label: @tr("Disconnect");
+                danger: true;
+                clicked => { ScrobbleActions.listenbrainz-disconnect(); }
+            }
+        }
+
+        // Shared status line.
+        if ScrobbleState.status-text != "": Text {
+            text: ScrobbleState.status-text;
+            color: ScrobbleState.status-kind == 3
+                ? #e0564f
+                : (ScrobbleState.status-kind == 2 ? #3fae6a : Theme.text-muted);
+            font-size: Typography.legal;
+            wrap: word-wrap;
+        }
+    }
+}

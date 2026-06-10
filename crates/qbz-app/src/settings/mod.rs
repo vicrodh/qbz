@@ -9,5 +9,6 @@ pub mod library;
 pub mod playback;
 pub mod plex;
 pub mod remote_control;
+pub mod scrobblers;
 pub mod subscription;
 pub mod tray;
