@@ -77,19 +77,14 @@ fn album_size(group: &[CachedTrackInfo]) -> u64 {
     group.iter().map(|t| t.file_size_bytes).sum()
 }
 
-/// Path of an album's on-disk `cover.jpg` (next to one track's CMAF bundle),
-/// or "" when it doesn't exist. Computed on the worker (a `String` is `Send`);
-/// the image itself is loaded on the UI thread (`slint::Image` is NOT `Send`).
-fn cover_path(cache_path: &str, track_id: u64) -> String {
-    let p = std::path::Path::new(cache_path)
-        .join("tracks-cmaf")
-        .join(track_id.to_string())
-        .join("cover.jpg");
-    if p.exists() {
-        p.to_string_lossy().to_string()
-    } else {
-        String::new()
-    }
+/// Path of an album's on-disk cover thumbnail, or "" when none exists.
+/// Resolution order (B5): the index's `artwork_path` when set, the CMAF
+/// bundle's `tracks-cmaf/<id>/cover.jpg`, then the `cover.jpg` sibling of
+/// the audio file (v1-format rows). Computed on the worker (a `String` is
+/// `Send`); the image itself is loaded on the UI thread (`slint::Image` is
+/// NOT `Send`).
+fn cover_path(cache_path: &str, track: &CachedTrackInfo) -> String {
+    track.resolve_cover_path(cache_path).unwrap_or_default()
 }
 
 /// Load a cover image from a path on the UI thread (empty path / missing -> default).
@@ -214,9 +209,12 @@ pub async fn rebuild(weak: slint::Weak<AppWindow>) {
         } else {
             0
         };
+        // First track whose cover resolves — within an album only some
+        // tracks may carry one (per-track CMAF folders, mixed v1/v2 rows).
         let cover_path = group
-            .first()
-            .map(|t| cover_path(&cache_path, t.track_id))
+            .iter()
+            .map(|t| cover_path(&cache_path, t))
+            .find(|p| !p.is_empty())
             .unwrap_or_default();
         rows.push(RowData {
             kind: "album",

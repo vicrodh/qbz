@@ -210,6 +210,9 @@ pub enum RowItem {
         duration_secs: u64,
         bit_depth: Option<u32>,
         sample_rate: Option<f64>,
+        /// On-disk cover thumb (B5: index `artwork_path` / CMAF `cover.jpg`),
+        /// loaded through the local-file artwork path like Local rows.
+        artwork_path: Option<String>,
     },
     /// Local file resolved from library.db by path.
     Local(Box<qbz_library::LocalTrack>),
@@ -294,11 +297,13 @@ pub async fn load(runtime: &Runtime, playlist_id: &str) -> Option<LocalPlaylistD
     let mut cached: HashMap<u64, RowItem> = HashMap::new();
     if !missing.is_empty() {
         if let Some(off) = crate::offline::get().await {
+            let cache_path = off.get_cache_path();
             let guard = off.db.lock().await;
             if let Some(db) = guard.as_ref() {
                 for tid in &missing {
                     if let Ok(Some(info)) = db.get_track(*tid) {
                         if matches!(info.status, qbz_offline_cache::OfflineCacheStatus::Ready) {
+                            let artwork_path = info.resolve_cover_path(&cache_path);
                             cached.insert(
                                 *tid,
                                 RowItem::Cached {
@@ -309,6 +314,7 @@ pub async fn load(runtime: &Runtime, playlist_id: &str) -> Option<LocalPlaylistD
                                     duration_secs: info.duration_secs,
                                     bit_depth: info.bit_depth,
                                     sample_rate: info.sample_rate,
+                                    artwork_path,
                                 },
                             );
                         }
@@ -424,6 +430,7 @@ fn row_queue_track(item: &RowItem) -> Option<QueueTrack> {
             duration_secs,
             bit_depth,
             sample_rate,
+            ..
         } => Some(QueueTrack {
             id: *track_id,
             title: title.clone(),
@@ -462,6 +469,7 @@ fn row_item(item: &RowItem, queue: Option<&QueueTrack>) -> TrackItem {
             duration_secs,
             bit_depth,
             sample_rate,
+            artwork_path,
         } => TrackItem {
             id: track_id.to_string().into(),
             number: "".into(),
@@ -478,7 +486,7 @@ fn row_item(item: &RowItem, queue: Option<&QueueTrack>) -> TrackItem {
             quality_detail: crate::quality::detail(*bit_depth, *sample_rate).into(),
             explicit: false,
             selected: false,
-            artwork_url: "".into(),
+            artwork_url: artwork_path.clone().unwrap_or_default().into(),
             artwork: slint::Image::default(),
             is_favorite: crate::fav_cache::is_favorite(&track_id.to_string()),
             artist_id: "".into(),
@@ -641,6 +649,16 @@ pub fn artwork_jobs(rows: &[LoadedRow]) -> (Vec<ArtworkJob>, Vec<ArtworkJob>) {
             }
             RowItem::Local(track) => {
                 if let Some(path) = track.artwork_path.clone().filter(|p| !p.is_empty()) {
+                    local.push(ArtworkJob {
+                        url: path,
+                        target: ArtworkTarget::PlaylistTrack { index },
+                    });
+                }
+            }
+            // Offline-resolved Qobuz rows: the cached cover.jpg loads through
+            // the same local-file path as Local rows (B5).
+            RowItem::Cached { artwork_path, .. } => {
+                if let Some(path) = artwork_path.clone().filter(|p| !p.is_empty()) {
                     local.push(ArtworkJob {
                         url: path,
                         target: ArtworkTarget::PlaylistTrack { index },
@@ -1022,11 +1040,13 @@ pub fn remove_selected(
 // ──────────────────────── Upload to Qobuz (D8) ────────────────────────
 
 /// Convert a non-offline-only local playlist into a real Qobuz playlist:
-/// create it, add the Qobuz-source rows, attach local rows as the existing
-/// mixed-playlist sidecar (`playlist_local_tracks`), then delete the local
-/// entity. Plex rows have no sidecar write path here yet — they are dropped
-/// with a log (deferred). Never reached for offline-only playlists (the UI
-/// hides the action and this guards again).
+/// create it, add the Qobuz-source rows, attach local rows via the existing
+/// mixed-playlist sidecar (`playlist_local_tracks`) and Plex rows via the
+/// plex sidecar (`playlist_plex_tracks`, the same table Tauri's
+/// `v2_playlist_add_plex_track` writes), then delete the local entity. On
+/// any attach failure the local entity is KEPT so the user can retry.
+/// Never reached for offline-only playlists (the UI hides the action and
+/// this guards again).
 pub fn upload_to_qobuz(
     runtime: Runtime,
     weak: slint::Weak<AppWindow>,
@@ -1082,19 +1102,16 @@ pub fn upload_to_qobuz(
         }
 
         // Local rows -> the existing mixed-playlist sidecar, positioned
-        // after the Qobuz block (Tauri's append convention). Plex rows are
-        // deferred (no Slint sidecar write path yet) — logged + dropped.
+        // after the Qobuz block (Tauri's append convention). Plex rows ->
+        // the plex sidecar, after the local block, relative order preserved
+        // (B1). The local entity is deleted ONLY when the sidecar attach
+        // succeeds — on a DB failure it stays so the user can retry.
         let local_paths: Vec<String> = rows.iter().filter_map(|r| r.local_path.clone()).collect();
-        let plex_count = rows.iter().filter(|r| r.plex_key.is_some()).count();
-        if plex_count > 0 {
-            log::warn!(
-                "[qbz-slint] upload to Qobuz: {plex_count} Plex row(s) dropped (sidecar attach deferred)"
-            );
-        }
+        let plex_keys: Vec<String> = rows.iter().filter_map(|r| r.plex_key.clone()).collect();
         let qobuz_count = qobuz_ids.len();
         let id_for_delete = id.clone();
-        tokio::task::spawn_blocking(move || {
-            crate::library_db::with_db(|db| {
+        let attached = tokio::task::spawn_blocking(move || {
+            let ok = crate::library_db::with_db(|db| {
                 for (i, path) in local_paths.iter().enumerate() {
                     match db.get_track_by_path(path)? {
                         Some(track) => {
@@ -1111,12 +1128,36 @@ pub fn upload_to_qobuz(
                         }
                     }
                 }
+                for (i, key) in plex_keys.iter().enumerate() {
+                    db.add_plex_track_to_playlist(
+                        new_id,
+                        key,
+                        (qobuz_count + local_paths.len() + i) as i32,
+                    )?;
+                }
                 Ok(())
-            });
-            delete_blocking(&id_for_delete);
+            })
+            .is_some();
+            if ok {
+                delete_blocking(&id_for_delete);
+            }
+            ok
         })
         .await
-        .ok();
+        .unwrap_or(false);
+        if !attached {
+            // The Qobuz playlist exists with its Qobuz tracks, but the
+            // local/Plex sidecar rows didn't attach — keep the local entity.
+            log::error!("[qbz-slint] upload to Qobuz: sidecar attach failed — local playlist kept");
+            crate::toast::error_weak(&weak, "Upload incomplete — local playlist kept");
+            let weak2 = weak.clone();
+            let r2 = runtime.clone();
+            let h2 = handle.clone();
+            let _ = weak.upgrade_in_event_loop(move |_w| {
+                crate::load_sidebar_playlists(r2, weak2, &h2);
+            });
+            return;
+        }
 
         crate::toast::success_weak(&weak, "Playlist uploaded to Qobuz");
         let weak2 = weak.clone();

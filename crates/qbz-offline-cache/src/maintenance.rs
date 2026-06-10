@@ -112,6 +112,8 @@ mod tests {
             error_message: None,
             created_at: "".into(),
             last_accessed_at: "".into(),
+            artwork_path: None,
+            file_path: "".into(),
         }
     }
 

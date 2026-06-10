@@ -7,13 +7,13 @@ use crate::types::{
     CachedTrackInfo, OfflineCacheStats, OfflineCacheStatus, ReadyTrackForSync, TrackCacheInfo,
 };
 
-/// Maps a `cached_tracks` row (with the canonical 15-column SELECT used by
+/// Maps a `cached_tracks` row (with the canonical 17-column SELECT used by
 /// `get_track`, `get_all_tracks`, and `get_album_tracks`) into a `CachedTrackInfo`.
 ///
 /// SELECT must be:
 /// `track_id, title, artist, album, album_id, duration_secs, file_size_bytes,
 ///  quality, bit_depth, sample_rate, status, progress_percent, error_message,
-///  created_at, last_accessed_at`
+///  created_at, last_accessed_at, artwork_path, file_path`
 fn row_to_cached_track_info(row: &rusqlite::Row) -> rusqlite::Result<CachedTrackInfo> {
     Ok(CachedTrackInfo {
         track_id: row.get::<_, i64>(0)? as u64,
@@ -31,6 +31,8 @@ fn row_to_cached_track_info(row: &rusqlite::Row) -> rusqlite::Result<CachedTrack
         error_message: row.get(12)?,
         created_at: row.get(13)?,
         last_accessed_at: row.get(14)?,
+        artwork_path: row.get::<_, Option<String>>(15)?,
+        file_path: row.get(16)?,
     })
 }
 
@@ -325,7 +327,7 @@ impl OfflineCacheDb {
     /// Get track info
     pub fn get_track(&self, track_id: u64) -> Result<Option<CachedTrackInfo>, String> {
         let result = self.conn.query_row(
-            "SELECT track_id, title, artist, album, album_id, duration_secs, file_size_bytes, quality, bit_depth, sample_rate, status, progress_percent, error_message, created_at, last_accessed_at
+            "SELECT track_id, title, artist, album, album_id, duration_secs, file_size_bytes, quality, bit_depth, sample_rate, status, progress_percent, error_message, created_at, last_accessed_at, artwork_path, file_path
              FROM cached_tracks WHERE track_id = ?1",
             params![track_id as i64],
             row_to_cached_track_info,
@@ -341,7 +343,7 @@ impl OfflineCacheDb {
     /// Get all cached tracks
     pub fn get_all_tracks(&self) -> Result<Vec<CachedTrackInfo>, String> {
         let mut stmt = self.conn.prepare(
-            "SELECT track_id, title, artist, album, album_id, duration_secs, file_size_bytes, quality, bit_depth, sample_rate, status, progress_percent, error_message, created_at, last_accessed_at
+            "SELECT track_id, title, artist, album, album_id, duration_secs, file_size_bytes, quality, bit_depth, sample_rate, status, progress_percent, error_message, created_at, last_accessed_at, artwork_path, file_path
              FROM cached_tracks ORDER BY last_accessed_at DESC"
         ).map_err(|e| format!("Failed to prepare query: {}", e))?;
 
@@ -364,7 +366,8 @@ impl OfflineCacheDb {
             .prepare(
                 "SELECT track_id, title, artist, album, album_id, duration_secs,
                         file_size_bytes, quality, bit_depth, sample_rate, status,
-                        progress_percent, error_message, created_at, last_accessed_at
+                        progress_percent, error_message, created_at, last_accessed_at,
+                        artwork_path, file_path
                  FROM cached_tracks WHERE album_id = ?1",
             )
             .map_err(|e| format!("Prepare failed: {}", e))?;

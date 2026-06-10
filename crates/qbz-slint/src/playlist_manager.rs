@@ -239,6 +239,92 @@ fn sort_playlists(list: &mut Vec<PmPlaylist>, sort: &str) {
     }
 }
 
+/// Display-stage union of a Qobuz playlist and a LOCAL (library.db)
+/// playlist, so locals INTERLEAVE into the active sort instead of being
+/// appended after the Qobuz set (B4). Display-only by design: PmPlaylist's
+/// u64-keyed mutators (reorder/settings) are untouched — they parse the
+/// model ids and skip `local:` ones.
+///
+/// Sort keys locals don't have:
+/// - playcount: no local play stat — locals sort as ZERO, which under the
+///   descending playcount sort puts them last (after any played Qobuz set);
+/// - custom: positions are a Qobuz-side concept — locals sort as MAX, i.e.
+///   after the positioned Qobuz set;
+/// - recent: no recency signal — kept after the API-ordered Qobuz set.
+/// Ties keep the pre-sort order (stable sort): API order for Qobuz rows,
+/// name order among the locals.
+enum PmEntry<'a> {
+    Qobuz(&'a PmPlaylist),
+    Local(&'a PmLocalPlaylist),
+}
+
+impl PmEntry<'_> {
+    fn name_lower(&self) -> String {
+        match self {
+            Self::Qobuz(p) => p.name.to_lowercase(),
+            Self::Local(p) => p.name.to_lowercase(),
+        }
+    }
+
+    fn total_count(&self) -> u32 {
+        match self {
+            Self::Qobuz(p) => p.total_count(),
+            Self::Local(p) => p.track_count,
+        }
+    }
+
+    fn play_count(&self) -> u32 {
+        match self {
+            Self::Qobuz(p) => p.play_count,
+            Self::Local(_) => 0,
+        }
+    }
+
+    fn position(&self) -> i64 {
+        match self {
+            Self::Qobuz(p) => p.position as i64,
+            Self::Local(_) => i64::MAX,
+        }
+    }
+
+    fn item(&self) -> PmPlaylistItem {
+        match self {
+            Self::Qobuz(p) => playlist_item(p),
+            Self::Local(p) => local_playlist_item(p),
+        }
+    }
+}
+
+/// `sort_playlists`, over the merged Qobuz + local display set (same
+/// comparators; see `PmEntry` for the missing-stat rules).
+fn sort_entries(list: &mut [PmEntry], sort: &str) {
+    match sort {
+        "name" => list.sort_by_key(|e| e.name_lower()),
+        "playcount" => list.sort_by(|a, b| b.play_count().cmp(&a.play_count())),
+        "tracks" => list.sort_by(|a, b| b.total_count().cmp(&a.total_count())),
+        "custom" => list.sort_by_key(|e| e.position()),
+        // "recent" — Qobuz keeps API order, locals stay after it.
+        _ => {}
+    }
+}
+
+/// The LOCAL playlists that pass the toolbar filters, name-sorted (their
+/// tie/no-stat order inside `sort_entries`). They have no hidden flag, so
+/// the "hidden" filter excludes them; folder filtering N/A (root-only).
+/// `query` must already be lowercased.
+fn local_entries<'a>(data: &'a PmData, query: &str, filter: &str) -> Vec<&'a PmLocalPlaylist> {
+    if filter == "hidden" {
+        return Vec::new();
+    }
+    let mut locals: Vec<&PmLocalPlaylist> = data
+        .locals
+        .iter()
+        .filter(|p| query.is_empty() || p.name.to_lowercase().contains(query))
+        .collect();
+    locals.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    locals
+}
+
 /// Whether a playlist passes the search + visibility + folder filters.
 /// `current_folder` is None for the flat / root view (we never enter a
 /// folder in the Slint port — folder navigation is via the tree).
@@ -414,27 +500,19 @@ pub fn rebuild(window: &AppWindow) {
     // Filtered + sorted playlists for the grid / list. While OFFLINE only
     // the MIXED playlists (>= 1 local sidecar track) stay (D11.b).
     let offline = crate::offline_mode::engine().is_offline();
-    let mut filtered: Vec<PmPlaylist> = data
+    let filtered: Vec<PmPlaylist> = data
         .playlists
         .iter()
         .filter(|p| !offline || p.local_count > 0)
         .filter(|p| passes(p, &query, &filter, folder_mode, &view_mode))
         .cloned()
         .collect();
-    sort_playlists(&mut filtered, &sort);
-    let mut playlist_items: Vec<PmPlaylistItem> = filtered.iter().map(playlist_item).collect();
-    // LOCAL playlists (library.db, D7) — appended after the Qobuz set,
-    // name-sorted, honoring the search query. They have no hidden flag, so
-    // the "hidden" filter excludes them; folder filtering N/A (root-only).
-    if filter != "hidden" {
-        let mut locals: Vec<&PmLocalPlaylist> = data
-            .locals
-            .iter()
-            .filter(|p| query.is_empty() || p.name.to_lowercase().contains(&query))
-            .collect();
-        locals.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
-        playlist_items.extend(locals.iter().map(|p| local_playlist_item(p)));
-    }
+    // LOCAL playlists (library.db, D7) interleave into the SAME sort as the
+    // Qobuz set (B4) — see `PmEntry` for the missing-stat sort rules.
+    let mut entries: Vec<PmEntry> = filtered.iter().map(PmEntry::Qobuz).collect();
+    entries.extend(local_entries(&data, &query, &filter).into_iter().map(PmEntry::Local));
+    sort_entries(&mut entries, &sort);
+    let playlist_items: Vec<PmPlaylistItem> = entries.iter().map(|e| e.item()).collect();
     let visible_count = playlist_items.len();
 
     // Tree rows (folder headers + nested + root playlists). Built only
@@ -559,43 +637,27 @@ fn build_tree(data: &PmData, query: &str, filter: &str, sort: &str) -> Vec<PmTre
             }
         }
     }
-    // Root playlists (no folder).
-    let mut root: Vec<PmPlaylist> = data
+    // Root playlists (no folder), with the LOCAL playlists (never in
+    // folders) interleaved into the SAME sort (B4) — see `PmEntry` for the
+    // missing-stat sort rules.
+    let root: Vec<PmPlaylist> = data
         .playlists
         .iter()
         .filter(|p| p.folder_id.is_none())
         .filter(|p| matches(p))
         .cloned()
         .collect();
-    sort_playlists(&mut root, sort);
-    for p in &root {
+    let mut entries: Vec<PmEntry> = root.iter().map(PmEntry::Qobuz).collect();
+    entries.extend(local_entries(data, query, filter).into_iter().map(PmEntry::Local));
+    sort_entries(&mut entries, sort);
+    for e in &entries {
         rows.push(PmTreeRow {
             kind: "playlist".into(),
             expanded: false,
             folder: PmFolderItem::default(),
-            playlist: playlist_item(p),
+            playlist: e.item(),
             indent: false,
         });
-    }
-    // LOCAL playlists as root tree rows (never in folders), name-sorted,
-    // honoring the search query (no hidden flag — the hidden filter hides
-    // them like the grid does).
-    if filter != "hidden" {
-        let mut locals: Vec<&PmLocalPlaylist> = data
-            .locals
-            .iter()
-            .filter(|p| !searching || p.name.to_lowercase().contains(query))
-            .collect();
-        locals.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
-        for p in locals {
-            rows.push(PmTreeRow {
-                kind: "playlist".into(),
-                expanded: false,
-                folder: PmFolderItem::default(),
-                playlist: local_playlist_item(p),
-                indent: false,
-            });
-        }
     }
     rows
 }
