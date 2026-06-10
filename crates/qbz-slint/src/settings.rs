@@ -754,19 +754,12 @@ pub async fn handle_bool(
     value: bool,
 ) {
     let key = key.as_str();
-    // Offline-MODE toggles persist through the shared engine's per-user
+    // The offline-MODE toggle persists through the shared engine's per-user
     // store, not the audio/playback stores — routed apart from the Apply
     // machinery below.
-    match key {
-        "offline-mode-enabled" => {
-            set_offline_mode(ctx, runtime, weak, value).await;
-            return;
-        }
-        "offline-show-network-folders" => {
-            set_offline_network_folders(weak, value);
-            return;
-        }
-        _ => {}
+    if key == "offline-mode-enabled" {
+        set_offline_mode(ctx, runtime, weak, value).await;
+        return;
     }
     // Cross-setting cascades — force dependent settings off and persist
     // those forced changes. `cascaded` flags whether a full snapshot
@@ -941,25 +934,6 @@ async fn set_offline_mode(
                 w.global::<SettingsState>().set_offline_mode_enabled(actual);
             });
         }
-    }
-}
-
-/// Settings > Offline — the Show Network Folder Content policy toggle
-/// (visible only while induced offline is on). Pure persistence; the
-/// gating slice consumes the flag.
-fn set_offline_network_folders(weak: slint::Weak<AppWindow>, value: bool) {
-    let engine = crate::offline_mode::engine();
-    if let Err(e) = engine.set_show_network_folders(value) {
-        log::error!("[qbz-slint] show-network-folders toggle failed: {e}");
-        // Revert the optimistic toggle to the persisted state.
-        let actual = engine
-            .settings()
-            .map(|s| s.show_network_folders_in_manual_offline)
-            .unwrap_or(!value);
-        let _ = weak.upgrade_in_event_loop(move |w| {
-            w.global::<SettingsState>()
-                .set_offline_show_network_folders(actual);
-        });
     }
 }
 

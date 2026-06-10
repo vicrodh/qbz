@@ -459,6 +459,42 @@ fn plex_cache_db_path() -> Option<std::path::PathBuf> {
     dirs::data_dir().map(|d| d.join("qbz").join("plex_cache.db"))
 }
 
+// NETWORK-FOLDER VISIBILITY (owner verdict 2026-06-10, refined same day):
+// hiding network-folder content is keyed on RAW CONNECTIVITY, never on the
+// offline MODE. A logged-out session or induced offline with the link up
+// says nothing about LAN mounts — content stays visible there (offline mode
+// exists precisely to use the local library). Only a CONFIRMED-down link
+// (hard offline: no default route / probes dead) hides network folders, the
+// one state where LAN mounts are gone too. An unmounted-while-online path is
+// handled at PLAYBACK time instead (existence guard + friendly toast in
+// playback.rs), not by hiding library content.
+//
+// Known approximation, accepted with the model: an ISP outage with a live
+// LAN reads as hard offline and hides NAS content; per-mount accessibility
+// checks in every browse query would be the exact-but-costly alternative.
+
+/// True only under HARD offline (connectivity confirmed down). See the
+/// NETWORK-FOLDER VISIBILITY note above.
+pub(crate) fn exclude_network_folders_now() -> bool {
+    crate::offline_mode::engine().status().connectivity
+        == qbz_app::offline_mode::Connectivity::Down
+}
+
+/// Reset the four browse-tab models so each tab re-fetches on its next visit
+/// (the `ensure_*_loaded` guards key on an empty model). Used after a scan,
+/// after the danger-zone clear, and on offline-mode flips (where the
+/// connectivity-keyed network-folder gate may change the browse SET — see
+/// the NETWORK-FOLDER VISIBILITY note above).
+pub fn reset_browse_models(window: &AppWindow) {
+    let s = window.global::<LocalLibraryState>();
+    let empty_albums = ModelRc::new(VecModel::from(Vec::<AlbumCardItem>::new()));
+    let empty_tracks = ModelRc::new(VecModel::from(Vec::<TrackItem>::new()));
+    s.set_albums(empty_albums.clone());
+    s.set_folders(empty_albums);
+    s.set_tracks(empty_tracks);
+    s.set_artists(ModelRc::new(VecModel::from(Vec::<LocalArtistItem>::new())));
+}
+
 /// Upper bound for the full-load page. The Albums tab loads the entire set in
 /// one shot (search/sort/filter/group are all derived client-side over the
 /// cached set in `derive_albums`), so we request a single large page rather
@@ -485,6 +521,11 @@ fn spawn_albums_load(
     handle.spawn(async move {
         let loaded: Option<(Vec<qbz_library::LocalAlbum>, Vec<crate::album_map::AlbumCard>)> =
             tokio::task::spawn_blocking(move || {
+                // include_qobuz_downloads: true (offline copies belong in the
+                // grid — the toolbar's "Offline" source filter selects them).
+                // exclude_network_folders: connectivity-keyed — see the
+                // NETWORK-FOLDER VISIBILITY note.
+                let exclude_network = exclude_network_folders_now();
                 crate::library_db::with_db(|db| {
                     let page = db.get_albums_metadata_page(
                         0,
@@ -492,8 +533,8 @@ fn spawn_albums_load(
                         None,
                         "artist",
                         "asc",
-                        false,
                         true,
+                        exclude_network,
                         plex_path.as_deref(),
                     )?;
                     let albums = page.albums;
@@ -581,6 +622,10 @@ pub fn seed_counts(weak: slint::Weak<AppWindow>, handle: tokio::runtime::Handle)
     let plex_enabled = crate::plex_settings::get().enabled;
     handle.spawn(async move {
         let counts: Option<(usize, usize, usize, usize)> = tokio::task::spawn_blocking(move || {
+            // Same include-qobuz / network flags as the Albums tab loader, so
+            // the badge always matches the grid (network content always in —
+            // see the NETWORK-FOLDER VISIBILITY note).
+            let exclude_network = exclude_network_folders_now();
             crate::library_db::with_db(|db| {
                 // Total under the same filter the Albums tab uses, incl. the
                 // Plex union when enabled, so the badge matches the grid.
@@ -591,8 +636,8 @@ pub fn seed_counts(weak: slint::Weak<AppWindow>, handle: tokio::runtime::Handle)
                         None,
                         "artist",
                         "asc",
-                        false,
                         true,
+                        exclude_network,
                         plex_path.as_deref(),
                     )
                     .map(|p| p.total as usize)
@@ -759,8 +804,11 @@ fn fetch_tracks_page(
     offset: u64,
     plex: bool,
 ) -> Option<(Vec<qbz_library::LocalTrack>, bool)> {
+    // exclude_network_folders: connectivity-keyed — see the NETWORK-FOLDER
+    // VISIBILITY note.
+    let exclude_network = exclude_network_folders_now();
     let mut rows = crate::library_db::with_db(|db| {
-        db.search_with_filter_page(query.trim(), offset, TRACKS_PAGE, true, false)
+        db.search_with_filter_page(query.trim(), offset, TRACKS_PAGE, true, exclude_network)
     })?;
     let has_more = rows.len() as u64 == TRACKS_PAGE;
     if plex && offset == 0 {
@@ -1401,6 +1449,10 @@ fn spawn_plex_quality_hydration(
             // The album aggregate (MAX over tracks) is a pure runtime query; the
             // refreshed Plex track quality flows into it automatically.
             let album = plex_path.as_deref().and_then(|p| {
+                // Same flags as the Albums tab loader so the looked-up
+                // aggregate comes from the identical set (network content
+                // always in — see the NETWORK-FOLDER VISIBILITY note).
+                let exclude_network = exclude_network_folders_now();
                 crate::library_db::with_db(|db| {
                     let page = db.get_albums_metadata_page(
                         0,
@@ -1408,8 +1460,8 @@ fn spawn_plex_quality_hydration(
                         None,
                         "artist",
                         "asc",
-                        false,
                         true,
+                        exclude_network,
                         Some(p),
                     )?;
                     Ok(page.albums.into_iter().find(|a| a.id == gk))
@@ -1631,11 +1683,15 @@ pub fn current_album_version_tracks(window: &AppWindow) -> Vec<qbz_library::Loca
 // the Tracks table). Reuses AlbumCollectionView; covers load per card.
 
 fn fetch_folder_albums() -> Vec<crate::album_map::AlbumCard> {
-    crate::library_db::with_db(|db| {
+    // exclude_network_folders: connectivity-keyed — an unmounted-but-online
+    // folder stays visible (the index is the source); only hard offline
+    // hides it (see the NETWORK-FOLDER VISIBILITY note).
+    let exclude_network = exclude_network_folders_now();
+    crate::library_db::with_db(move |db| {
         db.get_albums_with_full_filter(
             /* include_hidden */ false,
             /* include_qobuz_downloads */ true,
-            /* exclude_network_folders */ false,
+            exclude_network,
         )
     })
     .unwrap_or_default()
@@ -2792,8 +2848,13 @@ pub fn ensure_artists_loaded(
         let plex_path = plex_cache_db_path();
         handle.spawn(async move {
             let items = tokio::task::spawn_blocking(move || {
-                let artists = crate::library_db::with_db(|db| db.get_artists_with_filter(true, false))
-                    .unwrap_or_default();
+                // Same network flag as every browse tab: connectivity-keyed
+                // — see the NETWORK-FOLDER VISIBILITY note.
+                let exclude_network = exclude_network_folders_now();
+                let artists = crate::library_db::with_db(|db| {
+                    db.get_artists_with_filter(true, exclude_network)
+                })
+                .unwrap_or_default();
                 // Album cache for the right pane + album_count. With Plex ON,
                 // use the Plex-aware ATTACH/union query so the artist-detail grid
                 // and counts include Plex albums (1:1 with the Albums tab set);
@@ -2806,8 +2867,8 @@ pub fn ensure_artists_loaded(
                             None,
                             "artist",
                             "asc",
-                            false,
                             true,
+                            exclude_network,
                             plex_path.as_deref(),
                         )
                         .map(|p| p.albums)
@@ -2815,7 +2876,7 @@ pub fn ensure_artists_loaded(
                     .unwrap_or_default()
                 } else {
                     crate::library_db::with_db(|db| {
-                        db.get_albums_with_full_filter(false, true, false)
+                        db.get_albums_with_full_filter(false, true, exclude_network)
                     })
                     .unwrap_or_default()
                 };

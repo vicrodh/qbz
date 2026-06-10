@@ -221,18 +221,60 @@ enum OfflinePlayability {
     /// The track IS offline-cached but the D4 subscription grace window has
     /// elapsed — gets its own honest message.
     GraceExpired,
+    /// A LOCAL user file whose indexed path is not on disk right now —
+    /// typically an unmounted network drive. Checked online AND offline
+    /// (library content is never hidden, so playback is where this must
+    /// surface) — gets the "is the drive mounted?" message.
+    FileMissing,
+}
+
+/// Cheap existence guard for a LOCAL queue track's underlying file: resolve
+/// the indexed path (ephemeral store, or one indexed library-DB read) and
+/// stat it with `Path::exists()`. Unresolvable id/path → `true` (don't
+/// invent a skip; the play path has its own not-found handling).
+///
+/// D-STATE CAVEAT: `exists()` on an UNMOUNTED path returns false instantly
+/// (the path simply isn't there) — that is the case this guards. But a stat
+/// on a DEAD-yet-still-MOUNTED NFS/CIFS share can block in uninterruptible
+/// sleep (D state). This is therefore only ever called from the async layer
+/// (the advance walk and the play fast-fail run on the tokio runtime;
+/// `play_local_file_audible` checks inside `spawn_blocking`) and NEVER from
+/// the audio callback thread — a worst-case hang stalls an advance, not the
+/// audio pipeline. Do NOT add mount probing here; the hot path stays one
+/// stat per advance.
+fn local_track_file_exists(track: &QueueTrack) -> bool {
+    let path = if crate::ephemeral::is_ephemeral_id(track.id as i64) {
+        crate::ephemeral::get_track(track.id as i64).map(|row| row.file_path)
+    } else {
+        crate::library_db::with_db(|db| db.get_track(track.id as i64))
+            .flatten()
+            .map(|row| row.file_path)
+    };
+    match path {
+        Some(p) => std::path::Path::new(&p).exists(),
+        None => true,
+    }
 }
 
 /// Decide whether `track` can play under the CURRENT offline status.
-/// Online → always playable (the normal path pays one status read).
+/// Local / ephemeral user files → existence-checked regardless of
+/// online/offline (the library never hides network-folder content — see
+/// local_library.rs's NETWORK-FOLDER VISIBILITY note — so an unmounted
+/// drive is caught here, at playback time).
+/// Online → otherwise always playable (the normal path pays one status read).
 /// Offline:
-/// - local / ephemeral → playable (file presence is the player's own
-///   failure path)
 /// - plex → induced offline only (a LAN Plex server may be reachable;
 ///   under real offline it is not — Tauri parity)
 /// - qobuz (incl. "qobuz_download" copies, which keep the real Qobuz id)
 ///   → offline-cached AND within the D4 subscription grace window
 fn offline_playability(track: &QueueTrack) -> OfflinePlayability {
+    if matches!(track.source.as_deref(), Some("local") | Some("ephemeral")) {
+        return if local_track_file_exists(track) {
+            OfflinePlayability::Playable
+        } else {
+            OfflinePlayability::FileMissing
+        };
+    }
     let status = crate::offline_mode::engine().status();
     if !status.is_offline() {
         return OfflinePlayability::Playable;
@@ -241,7 +283,7 @@ fn offline_playability(track: &QueueTrack) -> OfflinePlayability {
         return OfflinePlayability::Playable;
     }
     match track.source.as_deref() {
-        Some("local") | Some("ephemeral") => OfflinePlayability::Playable,
+        // ("local" / "ephemeral" never reach here — handled above.)
         Some("plex") => {
             if status.mode == qbz_app::offline_mode::OfflineMode::InducedOffline {
                 OfflinePlayability::Playable
@@ -266,12 +308,14 @@ fn offline_track_playable(track: &QueueTrack) -> bool {
     offline_playability(track) == OfflinePlayability::Playable
 }
 
-/// Move the queue cursor forward/backward to the next offline-playable
-/// track. Online this returns the immediate neighbor on the first
-/// iteration. Offline it skips unavailable tracks, bounded at
-/// [`MAX_OFFLINE_SKIPS`] consecutive (Tauri #467 parity); on exhaustion
-/// (bound hit, or queue edge after at least one skip) playback stops and
-/// ONE toast reports it.
+/// Move the queue cursor forward/backward to the next playable track.
+/// Online this returns the immediate neighbor on the first iteration unless
+/// that neighbor is a LOCAL file whose path is gone (unmounted drive) — the
+/// only possible online skip. Offline it also skips unavailable tracks.
+/// Bounded at [`MAX_OFFLINE_SKIPS`] consecutive (Tauri #467 parity); on
+/// exhaustion (bound hit, or queue edge after at least one skip) playback
+/// stops and ONE toast reports it — worded for the drive when every skip was
+/// a missing local file, for offline otherwise.
 ///
 /// The gapless-prefetched target never passes through here: a gapless
 /// hand-off happens inside the audio engine and surfaces to the poll loop
@@ -283,6 +327,17 @@ async fn advance_to_playable(
     forward: bool,
 ) -> Option<QueueTrack> {
     let mut skips = 0usize;
+    let mut missing_files = 0usize;
+    // One message for the whole walk: when every skipped track was a local
+    // file that isn't on disk, point at the drive; any other mix keeps the
+    // offline wording (online, FileMissing is the only possible skip).
+    let walk_toast = |skips: usize, missing_files: usize| {
+        if missing_files == skips {
+            "Files not available — is the drive mounted?"
+        } else {
+            "No tracks available offline"
+        }
+    };
     loop {
         let step = if forward {
             runtime.core().next_track().await
@@ -295,27 +350,29 @@ async fn advance_to_playable(
             if skips > 0 {
                 crate::toast::show_weak(
                     weak,
-                    "No tracks available offline",
+                    walk_toast(skips, missing_files),
                     crate::ToastKind::Warning,
                 );
             }
             return None;
         };
-        if offline_track_playable(&track) {
-            return Some(track);
+        match offline_playability(&track) {
+            OfflinePlayability::Playable => return Some(track),
+            OfflinePlayability::FileMissing => missing_files += 1,
+            _ => {}
         }
         skips += 1;
         log::info!(
-            "[qbz-slint] offline: skipping unavailable track {} ({skips}/{MAX_OFFLINE_SKIPS})",
+            "[qbz-slint] advance: skipping unavailable track {} ({skips}/{MAX_OFFLINE_SKIPS})",
             track.id
         );
         if skips >= MAX_OFFLINE_SKIPS {
             if let Err(e) = runtime.core().stop() {
-                log::warn!("[qbz-slint] offline: stop after skip bound failed: {e}");
+                log::warn!("[qbz-slint] advance: stop after skip bound failed: {e}");
             }
             crate::toast::show_weak(
                 weak,
-                "No tracks available offline",
+                walk_toast(skips, missing_files),
                 crate::ToastKind::Warning,
             );
             return None;
@@ -355,6 +412,17 @@ async fn play_audible(runtime: &Runtime, weak: &slint::Weak<AppWindow>, track_id
                         crate::toast::show_weak(
                             weak,
                             "Track not available offline",
+                            crate::ToastKind::Warning,
+                        );
+                        return;
+                    }
+                    OfflinePlayability::FileMissing => {
+                        log::info!(
+                            "[qbz-slint] local play: refused track {track_id} (file missing — unmounted drive?)"
+                        );
+                        crate::toast::show_weak(
+                            weak,
+                            "File not available — is the drive mounted?",
                             crate::ToastKind::Warning,
                         );
                         return;
@@ -482,13 +550,30 @@ async fn play_local_file_audible(
         clear_loading(weak, row_id);
         return;
     };
+    // PLAYBACK LOCK (owner verdict 2026-06-10): the library never hides
+    // network-folder content, so an unmounted drive surfaces HERE — one cheap
+    // `Path::exists()` stat before the read, with friendly feedback instead
+    // of a silent log-only failure. Runs inside spawn_blocking, never on the
+    // audio callback thread: an unmounted path returns false instantly; only
+    // a dead-but-still-mounted NFS/CIFS share could block, and then it blocks
+    // a pool thread, not audio (see `local_track_file_exists`).
     let read_path = path.clone();
-    let bytes = tokio::task::spawn_blocking(move || std::fs::read(&read_path))
-        .await
-        .ok()
-        .and_then(Result::ok);
+    let bytes = tokio::task::spawn_blocking(move || {
+        if !std::path::Path::new(&read_path).exists() {
+            return None;
+        }
+        std::fs::read(&read_path).ok()
+    })
+    .await
+    .ok()
+    .flatten();
     let Some(bytes) = bytes else {
-        log::error!("[qbz-slint] local play: failed to read {path}");
+        log::error!("[qbz-slint] local play: file not available at {path}");
+        crate::toast::show_weak(
+            weak,
+            "File not available — is the drive mounted?",
+            crate::ToastKind::Warning,
+        );
         clear_loading(weak, row_id);
         return;
     };

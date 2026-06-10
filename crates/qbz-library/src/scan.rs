@@ -316,30 +316,49 @@ pub fn scan_with_progress(
 
     // Cleanup: remove tracks whose files no longer exist. Full scan checks the
     // whole DB; single-folder scan only the scanned folders' subtrees.
+    //
+    // GUARD: a network folder whose mount is currently DOWN must not have its
+    // subtree treated as missing — while unmounted every stat fails, and
+    // deleting the rows would wipe a whole folder's index over a transient
+    // condition (e.g. a reboot where the share didn't auto-mount). Those
+    // subtrees are skipped; they rehabilitate on the next scan after remount.
     on_event(ScanEvent::Cleanup);
+    let folder_prefix = |path: &str| {
+        if path.ends_with('/') {
+            path.to_string()
+        } else {
+            format!("{}/", path)
+        }
+    };
+    let unavailable_prefixes: Vec<String> = db
+        .get_folders_with_metadata()
+        .map(|folders| {
+            folders
+                .iter()
+                .filter(|f| f.is_network && std::fs::read_dir(&f.path).is_err())
+                .map(|f| folder_prefix(&f.path))
+                .collect()
+        })
+        .unwrap_or_default();
+    let under_unavailable =
+        |p: &str| unavailable_prefixes.iter().any(|pre| p.starts_with(pre.as_str()));
     if let Ok(tracks) = db.get_all_track_paths() {
         let missing: Vec<i64> = if single {
-            let prefixes: Vec<String> = targets
-                .iter()
-                .map(|f| {
-                    if f.path.ends_with('/') {
-                        f.path.clone()
-                    } else {
-                        format!("{}/", f.path)
-                    }
-                })
-                .collect();
+            let prefixes: Vec<String> =
+                targets.iter().map(|f| folder_prefix(&f.path)).collect();
             tracks
                 .iter()
                 .filter(|(_, p)| {
-                    prefixes.iter().any(|pre| p.starts_with(pre)) && !Path::new(p).exists()
+                    prefixes.iter().any(|pre| p.starts_with(pre))
+                        && !under_unavailable(p)
+                        && !Path::new(p).exists()
                 })
                 .map(|(id, _)| *id)
                 .collect()
         } else {
             tracks
                 .iter()
-                .filter(|(_, p)| !Path::new(p).exists())
+                .filter(|(_, p)| !under_unavailable(p) && !Path::new(p).exists())
                 .map(|(id, _)| *id)
                 .collect()
         };

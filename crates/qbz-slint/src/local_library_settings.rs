@@ -515,10 +515,31 @@ pub fn cleanup_missing(weak: Weak<AppWindow>, handle: tokio::runtime::Handle) {
     handle.spawn(async move {
         let result = tokio::task::spawn_blocking(|| {
             let paths = crate::library_db::with_db(|db| db.get_all_track_paths())?;
+            // Same guard as the scan's cleanup phase: a network folder whose
+            // mount is DOWN right now stats as missing for every file — that
+            // is "unreachable", not "deleted". Skip those subtrees so a
+            // maintenance click while a share is unmounted can't wipe its
+            // index.
+            let skip: Vec<String> =
+                crate::library_db::with_db(|db| db.get_folders_with_metadata())
+                    .unwrap_or_default()
+                    .into_iter()
+                    .filter(|f| f.is_network && std::fs::read_dir(&f.path).is_err())
+                    .map(|f| {
+                        if f.path.ends_with('/') {
+                            f.path
+                        } else {
+                            format!("{}/", f.path)
+                        }
+                    })
+                    .collect();
             let checked = paths.len();
             let missing: Vec<i64> = paths
                 .into_iter()
-                .filter(|(_, p)| !std::path::Path::new(p).exists())
+                .filter(|(_, p)| {
+                    !skip.iter().any(|pre| p.starts_with(pre.as_str()))
+                        && !std::path::Path::new(p).exists()
+                })
                 .map(|(id, _)| id)
                 .collect();
             let mut removed = 0usize;
@@ -602,13 +623,7 @@ pub fn clear_library(weak: Weak<AppWindow>, handle: tokio::runtime::Handle) {
         let _ = weak.upgrade_in_event_loop(|w| {
             w.global::<LibraryFoldersState>().set_clearing_library(false);
             // Reset the browse models so the tabs re-fetch on next visit.
-            let s = w.global::<crate::LocalLibraryState>();
-            let empty_albums = ModelRc::new(VecModel::from(Vec::<crate::AlbumCardItem>::new()));
-            let empty_tracks = ModelRc::new(VecModel::from(Vec::<crate::TrackItem>::new()));
-            s.set_albums(empty_albums.clone());
-            s.set_folders(empty_albums);
-            s.set_tracks(empty_tracks);
-            s.set_artists(ModelRc::new(VecModel::from(Vec::<crate::LocalArtistItem>::new())));
+            crate::local_library::reset_browse_models(&w);
         });
         if ok {
             crate::toast::success_weak(&weak, "Library database cleared");
@@ -752,13 +767,7 @@ fn run_scan(weak: Weak<AppWindow>, handle: tokio::runtime::Handle, ids: Option<V
         // Post-scan: refresh the folder list (last_scan labels) + reset the
         // browse models so the tabs re-fetch the new index on next visit.
         let _ = weak.upgrade_in_event_loop(|w| {
-            let s = w.global::<crate::LocalLibraryState>();
-            let empty_albums = ModelRc::new(VecModel::from(Vec::<crate::AlbumCardItem>::new()));
-            let empty_tracks = ModelRc::new(VecModel::from(Vec::<crate::TrackItem>::new()));
-            s.set_albums(empty_albums.clone());
-            s.set_folders(empty_albums);
-            s.set_tracks(empty_tracks);
-            s.set_artists(ModelRc::new(VecModel::from(Vec::<crate::LocalArtistItem>::new())));
+            crate::local_library::reset_browse_models(&w);
         });
         load_folders(weak, h);
     });

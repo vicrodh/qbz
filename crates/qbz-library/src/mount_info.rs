@@ -56,22 +56,9 @@ pub fn is_network_path(path: &Path) -> bool {
     let target = path
         .canonicalize()
         .unwrap_or_else(|_| path.to_path_buf());
-    let target_str = target.to_string_lossy();
 
-    // Longest-prefix match wins — `/` is always present but any
-    // deeper mount shadows it.
-    let mut best: Option<(&str, usize)> = None;
-    for (mount_point, fs_type) in &mounts {
-        if target_str.starts_with(mount_point) {
-            let len = mount_point.len();
-            if best.map(|(_, l)| l < len).unwrap_or(true) {
-                best = Some((fs_type.as_str(), len));
-            }
-        }
-    }
-
-    match best {
-        Some((fs_type, _)) => is_network_fs(fs_type),
+    match best_fs_type(&mounts, &target.to_string_lossy()) {
+        Some(fs_type) => is_network_fs(fs_type),
         None => false,
     }
 }
@@ -96,22 +83,46 @@ pub fn network_fs_label(path: &Path) -> Option<String> {
     let target = path
         .canonicalize()
         .unwrap_or_else(|_| path.to_path_buf());
-    let target_str = target.to_string_lossy();
 
-    let mut best: Option<(&str, usize)> = None;
-    for (mount_point, fs_type) in &mounts {
-        if target_str.starts_with(mount_point) {
-            let len = mount_point.len();
-            if best.map(|(_, l)| l < len).unwrap_or(true) {
-                best = Some((fs_type.as_str(), len));
-            }
-        }
-    }
-    let fs_type = best.map(|(t, _)| t)?;
+    let fs_type = best_fs_type(&mounts, &target.to_string_lossy())?;
     if !is_network_fs(fs_type) {
         return None;
     }
     Some(normalize_network_label(fs_type))
+}
+
+/// Longest-mount-point match of `target` against the mount table, honoring
+/// path-component boundaries: `/mnt/music` matches `/mnt/music` and
+/// `/mnt/music/Albums/x.flac` but NOT `/mnt/music2` (the previous raw
+/// `starts_with` matched the sibling too, inheriting the wrong fs type).
+/// `/` is always present and any deeper mount shadows it.
+#[cfg(target_os = "linux")]
+fn best_fs_type<'a>(mounts: &'a [(String, String)], target: &str) -> Option<&'a str> {
+    let mut best: Option<(&'a str, usize)> = None;
+    for (mount_point, fs_type) in mounts {
+        if !path_within_mount(target, mount_point) {
+            continue;
+        }
+        let len = mount_point.len();
+        if best.map(|(_, l)| l < len).unwrap_or(true) {
+            best = Some((fs_type.as_str(), len));
+        }
+    }
+    best.map(|(t, _)| t)
+}
+
+/// True when `target` IS `mount_point` or lives underneath it, on a path
+/// component boundary.
+#[cfg(target_os = "linux")]
+fn path_within_mount(target: &str, mount_point: &str) -> bool {
+    if mount_point == "/" {
+        return target.starts_with('/');
+    }
+    match target.strip_prefix(mount_point.trim_end_matches('/')) {
+        Some("") => true,
+        Some(rest) => rest.starts_with('/'),
+        None => false,
+    }
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -180,9 +191,20 @@ fn parse_mounts(contents: &str) -> Vec<(String, String)> {
 
 #[cfg(target_os = "linux")]
 fn is_network_fs(fs_type: &str) -> bool {
+    // A prefix hits on: the exact type ("nfs", "cifs"), a dotted scheme
+    // ("fuse.sshfs.x"), or a version suffix ("nfs4", "nfs3", "smb3" — pure
+    // digits after the prefix). The previous `== || starts_with("{prefix}.")`
+    // missed the version-suffixed forms, so `nfs4` — the fs type every
+    // modern NFS mount reports in /proc/mounts — classified as LOCAL.
     NETWORK_FS_PREFIXES
         .iter()
-        .any(|prefix| fs_type == *prefix || fs_type.starts_with(&format!("{}.", prefix)))
+        .any(|prefix| match fs_type.strip_prefix(prefix) {
+            Some("") => true,
+            Some(rest) => {
+                rest.starts_with('.') || rest.chars().all(|c| c.is_ascii_digit())
+            }
+            None => false,
+        })
 }
 
 #[cfg(all(test, target_os = "linux"))]
@@ -205,6 +227,31 @@ mod tests {
         assert!(!is_network_fs("btrfs"));
         assert!(!is_network_fs("tmpfs"));
         assert!(!is_network_fs("fuse.gocryptfs"));
+    }
+
+    #[test]
+    fn best_fs_type_respects_path_boundaries() {
+        let mounts = vec![
+            ("/".to_string(), "ext4".to_string()),
+            ("/mnt/music".to_string(), "nfs4".to_string()),
+        ];
+        assert_eq!(best_fs_type(&mounts, "/mnt/music"), Some("nfs4"));
+        assert_eq!(best_fs_type(&mounts, "/mnt/music/Albums/x.flac"), Some("nfs4"));
+        // A sibling dir sharing the string prefix must NOT inherit the
+        // mount's fs type — it falls through to `/`.
+        assert_eq!(best_fs_type(&mounts, "/mnt/music2/x.flac"), Some("ext4"));
+    }
+
+    #[test]
+    fn best_fs_type_longest_mount_wins() {
+        let mounts = vec![
+            ("/".to_string(), "ext4".to_string()),
+            ("/mnt".to_string(), "xfs".to_string()),
+            ("/mnt/nas".to_string(), "cifs".to_string()),
+        ];
+        assert_eq!(best_fs_type(&mounts, "/mnt/nas/music"), Some("cifs"));
+        assert_eq!(best_fs_type(&mounts, "/mnt/local"), Some("xfs"));
+        assert_eq!(best_fs_type(&mounts, "/home/user"), Some("ext4"));
     }
 
     #[test]

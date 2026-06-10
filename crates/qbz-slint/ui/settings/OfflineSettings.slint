@@ -119,19 +119,6 @@ export component OfflineSettings inherits VerticalLayout {
             }
         }
     }
-    // The network-folders policy only applies while induced offline is on,
-    // so the row only mounts then (Tauri parity; ADR-010 conditional mount).
-    if SettingsState.offline-mode-enabled: SettingRow {
-        label: @tr("Show Network Folder Content");
-        description: @tr("Display content from network-mounted folders (NAS, Samba, etc.) while in offline mode.");
-        QbzToggle {
-            checked: SettingsState.offline-show-network-folders;
-            toggled(v) => {
-                SettingsState.offline-show-network-folders = v;
-                root.settings-bool("offline-show-network-folders", v);
-            }
-        }
-    }
 
     Rectangle { height: 12px; }
     Divider { }

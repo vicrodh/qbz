@@ -415,15 +415,20 @@ pub fn fetch_local_and_plex(artist_name: &str) -> Vec<Candidate> {
     // local rows carry `a.artwork_path`, with the same cover.jpg/folder.jpg
     // on-disk fallback the grid uses so a DB row missing artwork_path still
     // resolves a cover.
-    crate::library_db::with_db(|db| {
+    // Same flags as the LocalLibrary Albums tab (include offline copies;
+    // network content connectivity-keyed — see local_library.rs's
+    // NETWORK-FOLDER VISIBILITY note) so the builder sees the identical
+    // candidate set.
+    let exclude_network = crate::local_library::exclude_network_folders_now();
+    crate::library_db::with_db(move |db| {
         let page = db.get_albums_metadata_page(
             0,
             1_000_000,
             None,
             "artist",
             "asc",
-            false,
             true,
+            exclude_network,
             plex_path.as_deref(),
         )?;
         let out: Vec<Candidate> = page
