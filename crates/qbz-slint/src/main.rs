@@ -240,12 +240,22 @@ async fn enter_shell(
 
     // Warm the shared favorite-track cache so track rows can show the
     // correct heart state from their first paint (album / artist / search
-    // / playlist / mix / favorites all read it). Background-fetched once.
+    // / playlist / mix / favorites / queue all read it). The disk seed
+    // already ran at session activation (fav_cache::init_for_user); this
+    // refreshes from the network and writes the fresh set back — skipped
+    // while offline, where the disk seed is the truth.
     {
         let runtime = runtime.clone();
         tokio::spawn(async move {
+            if crate::offline_mode::engine().is_offline() {
+                return;
+            }
             match runtime.core().favorite_track_ids().await {
-                Ok(ids) => fav_cache::set_all(ids),
+                Ok(ids) => {
+                    // set_all mirrors to disk (blocking rusqlite) — keep it
+                    // off the async worker.
+                    let _ = tokio::task::spawn_blocking(move || fav_cache::set_all(ids)).await;
+                }
                 Err(e) => log::warn!("[qbz-slint] favorite cache load failed: {e}"),
             }
         });
@@ -307,9 +317,11 @@ async fn enter_shell_offline(
 
     // Offline-MODE engine: bind the per-user stores and flag the
     // unauthenticated offline session (D1 — session-scoped, never persisted;
-    // a later successful login clears it).
+    // a later successful login clears it). The favorites-cache bind seeds
+    // hearts from disk — the start-offline gap Tauri never closed.
     if let Some(dir) = crate::offline_mode::user_data_dir(user_id) {
         crate::offline_mode::init_for_user(&dir);
+        crate::fav_cache::init_for_user(&dir);
     }
     crate::offline_mode::engine().set_offline_session(true);
 
@@ -4299,6 +4311,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
                 ("track", "favorite") => {
+                    // Offline = read-only hearts (spec 4.3): refuse the
+                    // toggle with a toast instead of letting the API fail.
+                    if offline_mode::engine().is_offline() {
+                        if let Some(w) = weak.upgrade() {
+                            toast::info(&w, "Not available offline");
+                        }
+                        return;
+                    }
                     // Toggle (not just add): read the cached state, flip it
                     // optimistically across every visible track model + the
                     // shared cache, then add/remove on the network.
@@ -4932,7 +4952,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // shared qconnect-app hardening (watchdog/takeover/resync). Transport
     // `*_if_remote` routing + device picker land in the QConnect UI-polish step.
     {
-        let _ = qconnect_service::init_service(app_runtime.clone(), window.as_weak());
+        let svc = qconnect_service::init_service(app_runtime.clone(), window.as_weak());
+        // D5 (offline-MODE): force-disconnect any live session on every
+        // transition into offline (induced or real).
+        svc.spawn_offline_force_disconnect(tokio_rt.handle());
         let handle = tokio_rt.handle().clone();
         let weak = window.as_weak();
         window
@@ -8684,6 +8707,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let Some(w) = weak.upgrade() else {
                     return;
                 };
+                // Offline = read-only hearts (spec 4.3).
+                if offline_mode::engine().is_offline() {
+                    toast::info(&w, "Not available offline");
+                    return;
+                }
                 favorites::mark_track_removing(&w, &id);
                 if let Ok(tid) = id.parse::<u64>() {
                     crate::fav_cache::set(tid, false);
@@ -8888,6 +8916,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                     "remove-selected" => {
+                        // Offline = read-only hearts (spec 4.3).
+                        if offline_mode::engine().is_offline() {
+                            toast::info(&w, "Not available offline");
+                            return;
+                        }
                         let ids = favorites::selected_ids(&w);
                         if ids.is_empty() {
                             return;
@@ -8959,6 +8992,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     else {
                         return;
                     };
+                    // Offline: serve the shared disk-cache copy; never attempt
+                    // the download.
+                    if offline_mode::engine().is_offline() {
+                        match artwork::cached_path_for(&url) {
+                            Some(path) => {
+                                if let Err(e) = tokio::fs::copy(&path, dest.path()).await {
+                                    log::error!(
+                                        "[qbz-slint] artwork save-as offline copy: {e}"
+                                    );
+                                }
+                            }
+                            None => log::warn!(
+                                "[qbz-slint] artwork save-as skipped offline: not in disk cache"
+                            ),
+                        }
+                        return;
+                    }
                     let bytes = match reqwest::get(&url).await {
                         Ok(resp) => match resp.bytes().await {
                             Ok(b) => b,

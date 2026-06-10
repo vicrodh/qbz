@@ -344,6 +344,50 @@ impl SlintQconnectService {
         self.inner.lock().await.runtime.is_some()
     }
 
+    /// D5 (offline-MODE): force-disconnect on every transition INTO offline
+    /// (induced or real), so an established session never outlives the offline
+    /// gate. Spawned once at service init (main.rs, next to `init_service`).
+    /// Idempotent: skips when no runtime is alive. Uses the SAME `disconnect()`
+    /// path as the UI toggle (force-Offs lifecycle, shuts the transport down —
+    /// which also kills its 60s idle-retry rearm — disarms the watchdog and
+    /// clears the renderer/cast UI), then clears the bar's connected flag
+    /// exactly like the manual toggle does. Deliberately NO auto-reconnect on
+    /// the online edge: QConnect only reconnects through its existing
+    /// user-facing flows (D5).
+    pub fn spawn_offline_force_disconnect(self: &Arc<Self>, handle: &tokio::runtime::Handle) {
+        let service = Arc::clone(self);
+        handle.spawn(async move {
+            let mut rx = crate::offline_mode::engine().subscribe();
+            let mut was_offline = rx.borrow_and_update().is_offline();
+            loop {
+                if rx.changed().await.is_err() {
+                    break;
+                }
+                let is_offline = rx.borrow_and_update().is_offline();
+                let entered_offline = is_offline && !was_offline;
+                was_offline = is_offline;
+                if !entered_offline {
+                    continue;
+                }
+                if !service.is_running().await {
+                    continue;
+                }
+                log::info!(
+                    "[QConnect] Offline mode entered; force-disconnecting Qobuz Connect (D5)"
+                );
+                dev_push_event(&service.window, "-> force-disconnect (offline mode)".to_string());
+                if let Err(err) = service.disconnect().await {
+                    log::warn!("[QConnect] offline force-disconnect failed: {err}");
+                }
+                // Mirror the manual toggle's tail: the bar's connect toggle off.
+                let _ = service.window.upgrade_in_event_loop(|w| {
+                    use slint::ComponentHandle;
+                    w.global::<crate::NowPlayingState>().set_qconnect_connected(false);
+                });
+            }
+        });
+    }
+
     /// Report this device's playback state to the cloud while QBZ is the ACTIVE
     /// LOCAL renderer (driven by the playback poll loop). Mirrors the Tauri
     /// `v2_qconnect_report_playback_state` essentials: self-gates on
@@ -442,6 +486,15 @@ impl SlintQconnectService {
     pub async fn connect(&self) -> Result<(), String> {
         if !self.runtime.core().is_api_initialized().await {
             return Err("Qobuz API is not initialized; cannot start Qobuz Connect".to_string());
+        }
+        // D5 (offline-MODE): QConnect is not available in ANY offline mode,
+        // induced or real — refuse before touching the transport. Sessions that
+        // were already up when offline was entered are torn down by the
+        // force-disconnect watcher (`spawn_offline_force_disconnect`).
+        if crate::offline_mode::engine().is_offline() {
+            log::info!("[QConnect] connect() refused: offline mode active (D5)");
+            crate::toast::error_weak(&self.window, "Qobuz Connect is unavailable while offline");
+            return Err("Qobuz Connect is unavailable while offline".to_string());
         }
 
         // Claim the connect slot ATOMICALLY before the transport-config await, so
@@ -542,6 +595,15 @@ impl SlintQconnectService {
             let mut guard = self.inner.lock().await;
             guard.last_error = Some(format!("qconnect bootstrap failed: {err}"));
             return Err(format!("qconnect bootstrap failed: {err}"));
+        }
+
+        // D5 race close: offline may have been entered while this connect was
+        // in flight (the watcher skips while no runtime is alive). Re-check now
+        // that the runtime is set; any later flip is the watcher's job.
+        if crate::offline_mode::engine().is_offline() {
+            log::info!("[QConnect] offline mode entered during connect(); tearing down (D5)");
+            let _ = self.disconnect().await;
+            return Err("Qobuz Connect is unavailable while offline".to_string());
         }
 
         Ok(())
@@ -2097,6 +2159,14 @@ impl SessionLoopHost for SlintSessionLoopHost {
     }
 
     async fn bootstrap_after_reconnect(&self) {
+        // D5 (offline-MODE): never re-bootstrap presence while offline. The
+        // force-disconnect watcher is tearing the session down on the offline
+        // edge; a transport reconnect that sneaks in before that lands (induced
+        // offline keeps the network up) must stay dormant, not re-join.
+        if crate::offline_mode::engine().is_offline() {
+            log::info!("[QConnect] Reconnect bootstrap suppressed: offline mode active (D5)");
+            return;
+        }
         if let Err(err) = bootstrap_remote_presence(&self.app, None).await {
             log::error!("[QConnect] Re-bootstrap after reconnect failed: {err}");
         }
