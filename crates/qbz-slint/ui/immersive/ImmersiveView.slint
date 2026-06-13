@@ -417,36 +417,52 @@ component ImmersivePlayerBar inherits Rectangle {
     }
 }
 
-// PROVISIONAL mode selector (top-center). A deliberately plain segmented bar to
-// be replaced by the polished header in a later session (S6). Four tabs map tab
-// position -> ImmersiveState.mode (0 Album Reactive, 1 Static, 2 Coverflow,
-// 3 Spectrum). Each tab has its own TouchArea (pointer cursor); no `changed
-// x/y/width/height` watchers (Recursion-detected risk). Fixed container height,
-// tabs sized to content via HorizontalLayout. Clicking sets the mode and wakes
-// the chrome so the bar resets its hide timer with the player.
+// Polished segmented mode selector (top-center). Rebuilt in the compact
+// player's visual language (ImmersivePlayerBar:238-243): flat dark pill
+// (#00000080), 1px white-on-glass border (#ffffff2e), drop-shadow. Four
+// icon+label tabs map tab position -> ImmersiveState.mode (0 Album Reactive,
+// 1 Static, 2 Coverflow, 3 Spectrum), with an inert leading panel-icon + a
+// vertical divider as a section marker (mirrors Tauri's .mode-toggle +
+// .tab-divider). Each tab has its own TouchArea (pointer cursor); no `changed
+// x/y/width/height` watchers (Recursion-detected risk). Container height fixed;
+// width sized to content. Clicking sets the mode and wakes the chrome so the
+// bar resets its hide timer with the player.
 component ModeTab inherits Rectangle {
+    in property <image> icon;
     in property <string> label;
     in property <int> idx;
     callback clicked();
 
     property <bool> active: ImmersiveState.mode == root.idx;
+    property <color> fg: root.active ? #ffffff : (ta.has-hover ? #fffffff2 : #ffffffb3);
 
     height: 28px;
     border-radius: 8px;
     background: root.active ? #ffffff33 : (ta.has-hover ? #ffffff1f : transparent);
+    animate background { duration: 150ms; }
 
     HorizontalLayout {
-        padding-left: 14px;
-        padding-right: 14px;
+        padding-left: 16px;
+        padding-right: 16px;
+        spacing: 8px;
+        alignment: center;
+
         VerticalLayout {
             alignment: center;
-            Text {
-                text: root.label;
-                color: root.active ? #ffffff : #ffffffb3;
-                font-size: 13px;
-                font-weight: root.active ? 600 : 400;
-                vertical-alignment: center;
+            QbzIcon {
+                source: root.icon;
+                width: 16px;
+                height: 16px;
+                tint: root.fg;
             }
+        }
+        Text {
+            text: root.label;
+            color: root.fg;
+            font-size: 13px;
+            font-weight: root.active ? 600 : 500;
+            vertical-alignment: center;
+            animate color { duration: 150ms; }
         }
     }
 
@@ -465,28 +481,63 @@ component ModeBar inherits Rectangle {
     background: #00000080;
     border-width: 1px;
     border-color: #ffffff2e;
+    drop-shadow-blur: 32px;
+    drop-shadow-color: #00000066;
+    drop-shadow-offset-y: 8px;
 
     bar := HorizontalLayout {
         x: 4px;
         y: 4px;
         height: 28px;
         spacing: 4px;
+        alignment: center;
+
+        // Inert leading panel-icon (section marker, no callback).
+        Rectangle {
+            width: 28px;
+            height: 28px;
+            QbzIcon {
+                source: @image-url("../assets/icons/panel-left.svg");
+                width: 16px;
+                height: 16px;
+                x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                tint: #ffffffd9;
+            }
+        }
+        // Vertical divider between the marker and the first tab.
+        Rectangle {
+            width: 9px;
+            height: 28px;
+            Rectangle {
+                width: 1px;
+                height: 20px;
+                x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                background: #ffffff33;
+            }
+        }
+
         ModeTab {
+            icon: @image-url("../assets/icons/audio-lines.svg");
             label: @tr("Album Reactive");
             idx: 0;
             clicked => { root.select(0); }
         }
         ModeTab {
+            icon: @image-url("../assets/icons/image.svg");
             label: @tr("Static");
             idx: 1;
             clicked => { root.select(1); }
         }
         ModeTab {
+            icon: @image-url("../assets/icons/disc-3.svg");
             label: @tr("Coverflow");
             idx: 2;
             clicked => { root.select(2); }
         }
         ModeTab {
+            icon: @image-url("../assets/icons/chart-no-axes-column.svg");
             label: @tr("Spectrum");
             idx: 3;
             clicked => { root.select(3); }
