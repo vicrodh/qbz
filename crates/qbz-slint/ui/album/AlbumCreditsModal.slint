@@ -1,0 +1,472 @@
+// Album Info (Credits / Review) modal — 1:1 port of Tauri's
+// AlbumCreditsModal.svelte. Opened from the AlbumPageView header (i) button via
+// media-action("album", id, "info"). The Rust controller (crate::info_modals)
+// fetches the album, parses per-track performers, and populates AlbumInfoState.
+// Rectangle-scrim + centered fixed-height card, mounted in AppShell after the
+// other modals (ADR-009/010). Left column = album info (fixed). Right column =
+// Credits (expandable track list) / Review (editorial text), independent scroll.
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Typography } from "../foundation/typography.slint";
+import { Radius } from "../foundation/radius.slint";
+import { AlbumInfoState, AlbumInfoActions, AlbumCreditTrack } from "../state.slint";
+import { QbzIcon } from "../primitives/QbzIcon.slint";
+import { ListScrollbar } from "../primitives/ListScrollbar.slint";
+
+// One track row in the Credits tab: number / play-on-hover, title + artist,
+// expand chevron; an expanded panel with per-performer credit lines + the
+// copyright. Local `expanded` persists while the modal stays open.
+component AlbumTrackRow inherits VerticalLayout {
+    in property <AlbumCreditTrack> track;
+    in property <bool> is-last;
+    callback play(string /* track-id */);
+    callback musician(string /* name */, string /* primary-role */);
+    property <bool> expanded: false;
+
+    // ---- Header row -------------------------------------------------------
+    Rectangle {
+        height: 46px;
+        // Declared FIRST so the per-cell play TouchArea sits on top (footgun:
+        // a later full-row TouchArea would eat the cell clicks).
+        rowha := TouchArea {
+            mouse-cursor: root.track.has-credits ? pointer : default;
+            clicked => {
+                if (root.track.has-credits) {
+                    root.expanded = !root.expanded;
+                }
+            }
+        }
+        HorizontalLayout {
+            spacing: 12px;
+            // Whole-row hover dim, 1:1 with Tauri .track-header:hover.
+            opacity: (rowha.has-hover && root.track.has-credits) ? 0.8 : 1.0;
+            // Number / play-on-hover cell.
+            Rectangle {
+                width: 28px;
+                if !(rowha.has-hover || pcell.has-hover): Text {
+                    text: root.track.number;
+                    color: Theme.text-muted;
+                    font-size: 14px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+                pcell := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        root.play(root.track.id);
+                    }
+                    if rowha.has-hover || pcell.has-hover: Rectangle {
+                        width: 28px;
+                        height: 28px;
+                        border-radius: 14px;
+                        background: Theme.accent;
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        QbzIcon {
+                            source: @image-url("../assets/icons/play-fill.svg");
+                            width: 14px;
+                            height: 14px;
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
+                            tint: Theme.accent-text;
+                        }
+                    }
+                }
+            }
+            // Title + artist.
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: center;
+                spacing: 2px;
+                Text {
+                    text: root.track.title;
+                    color: Theme.text-primary;
+                    font-size: 14px;
+                    font-weight: Typography.medium;
+                    overflow: elide;
+                }
+                Text {
+                    text: root.track.artist;
+                    color: Theme.text-muted;
+                    font-size: 12px;
+                    overflow: elide;
+                }
+            }
+            // Expand chevron (only when there are credits).
+            if root.track.has-credits: VerticalLayout {
+                alignment: center;
+                QbzIcon {
+                    source: root.expanded
+                        ? @image-url("../assets/icons/chevron-up.svg")
+                        : @image-url("../assets/icons/chevron-down.svg");
+                    width: 18px;
+                    height: 18px;
+                    tint: root.expanded ? Theme.text-primary : Theme.text-muted;
+                }
+            }
+        }
+    }
+
+    // ---- Expanded credits -------------------------------------------------
+    if root.expanded && root.track.has-credits: VerticalLayout {
+        padding-left: 40px;
+        padding-bottom: 12px;
+        spacing: 0px;
+        for perf in root.track.performers: HorizontalLayout {
+            padding-top: 4px;
+            padding-bottom: 4px;
+            alignment: start;
+            pta := TouchArea {
+                width: pname.preferred-width;
+                height: pname.preferred-height;
+                mouse-cursor: pointer;
+                clicked => {
+                    root.musician(perf.name, perf.primary-role);
+                }
+                pname := Text {
+                    text: perf.name;
+                    color: pta.has-hover ? Theme.accent : Theme.text-primary;
+                    font-size: 13px;
+                    font-weight: Typography.medium;
+                }
+            }
+            Text {
+                text: perf.roles;
+                color: Theme.text-muted;
+                font-size: 13px;
+            }
+        }
+        if root.track.copyright != "": Rectangle { height: 8px; }
+        if root.track.copyright != "": Rectangle {
+            height: 1px;
+            background: Theme.border-subtle;
+        }
+        if root.track.copyright != "": Rectangle { height: 8px; }
+        if root.track.copyright != "": Text {
+            text: root.track.copyright;
+            color: Theme.text-muted;
+            font-size: 12px;
+            wrap: word-wrap;
+        }
+    }
+
+    // ---- Divider ----------------------------------------------------------
+    if !root.is-last: Rectangle {
+        height: 1px;
+        background: Theme.border-subtle;
+    }
+}
+
+export component AlbumCreditsModal inherits Rectangle {
+    visible: AlbumInfoState.open;
+
+    if AlbumInfoState.open: Rectangle {
+        background: #000000bf;
+
+        TouchArea {
+            mouse-cursor: default;
+            clicked => {
+                AlbumInfoActions.close();
+            }
+        }
+
+        Rectangle {
+            width: Math.min(root.width - 40px, 850px);
+            // Content-sized with a decent cap: as tall as the header + the
+            // taller of the two columns (left meta vs tabs + the full credit
+            // list), but never beyond the content area (40px margin each side).
+            // When the list exceeds the cap, the right column's Flickable
+            // scrolls. All inputs are width-driven (card width is fixed by
+            // root.width) so the height binding is acyclic. The +42px is the
+            // tab strip when a review exists.
+            height: Math.min(
+                root.height - 80px,
+                hdr.preferred-height
+                    + Math.max(
+                        leftcol.preferred-height,
+                        (AlbumInfoState.has-review ? 42px : 0px) + content.preferred-height)
+                    + 24px);
+            x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+            y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+            border-radius: Radius.md;
+            background: Theme.surface-card;
+            border-width: 1px;
+            border-color: Theme.border-subtle;
+            drop-shadow-blur: 32px;
+            drop-shadow-color: Theme.card-shadow;
+
+            TouchArea { }
+
+            fs := FocusScope {
+                Timer {
+                    interval: 30ms;
+                    running: true;
+                    triggered => {
+                        self.running = false;
+                        fs.focus();
+                    }
+                }
+                key-pressed(event) => {
+                    if (event.text == Key.Escape) {
+                        AlbumInfoActions.close();
+                        return accept;
+                    }
+                    return reject;
+                }
+
+                VerticalLayout {
+                    // ---- Header -------------------------------------------
+                    hdr := HorizontalLayout {
+                        padding-left: 24px;
+                        padding-right: 24px;
+                        padding-top: 16px;
+                        padding-bottom: 16px;
+                        spacing: 16px;
+                        VerticalLayout {
+                            horizontal-stretch: 1;
+                            spacing: 4px;
+                            Text {
+                                text: AlbumInfoState.title;
+                                color: Theme.text-primary;
+                                font-size: 16px;
+                                font-weight: Typography.semibold;
+                                overflow: elide;
+                            }
+                            Text {
+                                text: AlbumInfoState.artist;
+                                color: Theme.text-muted;
+                                font-size: Typography.legal;
+                                overflow: elide;
+                            }
+                        }
+                        close-x := TouchArea {
+                            width: 32px;
+                            height: 32px;
+                            mouse-cursor: pointer;
+                            clicked => {
+                                AlbumInfoActions.close();
+                            }
+                            QbzIcon {
+                                source: @image-url("../assets/icons/x.svg");
+                                width: 18px;
+                                height: 18px;
+                                x: (parent.width - self.width) / 2;
+                                y: (parent.height - self.height) / 2;
+                                tint: close-x.has-hover ? Theme.text-primary : Theme.text-muted;
+                            }
+                        }
+                    }
+
+                    // ---- Body (two columns) — always rendered so the card
+                    // height can read the real content height (loading/error
+                    // are overlays below, since Slint can't reference elements
+                    // nested in an `if` from the height binding).
+                    HorizontalLayout {
+                        vertical-stretch: 1;
+                        padding-left: 24px;
+                        padding-right: 24px;
+                        padding-bottom: 24px;
+                        spacing: 24px;
+
+                        // LEFT — album info (fixed width). alignment:start so
+                        // the meta stacks tightly under the cover instead of
+                        // the layout distributing the tall body's slack between
+                        // the rows.
+                        leftcol := VerticalLayout {
+                            width: 260px;
+                            spacing: 0px;
+                            alignment: start;
+                            Rectangle {
+                                width: 200px;
+                                height: 200px;
+                                border-radius: 8px;
+                                clip: true;
+                                Image {
+                                    width: 200px;
+                                    height: 200px;
+                                    source: AlbumInfoState.artwork;
+                                    image-fit: cover;
+                                }
+                            }
+                            Rectangle { height: 16px; }
+                            // Released by <label> on <date>.
+                            if AlbumInfoState.label != "": VerticalLayout {
+                                spacing: 0px;
+                                Text {
+                                    text: @tr("Released by");
+                                    color: Theme.text-muted;
+                                    font-size: 13px;
+                                }
+                                lbl := TouchArea {
+                                    width: lbltext.preferred-width;
+                                    height: lbltext.preferred-height;
+                                    mouse-cursor: AlbumInfoState.label-id != "" ? pointer : default;
+                                    clicked => {
+                                        if (AlbumInfoState.label-id != "") {
+                                            AlbumInfoActions.open-label(AlbumInfoState.label-id);
+                                        }
+                                    }
+                                    lbltext := Text {
+                                        text: AlbumInfoState.label;
+                                        color: (lbl.has-hover && AlbumInfoState.label-id != "")
+                                            ? Theme.accent : Theme.text-primary;
+                                        font-size: 13px;
+                                        font-weight: Typography.semibold;
+                                    }
+                                }
+                                if AlbumInfoState.release-date != "": Text {
+                                    text: @tr("on") + " " + AlbumInfoState.release-date;
+                                    color: Theme.text-muted;
+                                    font-size: 13px;
+                                }
+                            }
+                            if AlbumInfoState.label != "": Rectangle { height: 8px; }
+                            if AlbumInfoState.meta-line != "": Text {
+                                text: AlbumInfoState.meta-line;
+                                color: Theme.text-muted;
+                                font-size: 13px;
+                                wrap: word-wrap;
+                            }
+                            if AlbumInfoState.quality != "": Rectangle { height: 12px; }
+                            if AlbumInfoState.quality != "": Text {
+                                text: AlbumInfoState.quality;
+                                color: Theme.text-secondary;
+                                font-size: 13px;
+                            }
+                        }
+
+                        // RIGHT — tabs + scrollable content.
+                        VerticalLayout {
+                            horizontal-stretch: 1;
+                            spacing: 0px;
+
+                            // Tab switcher (only when a review exists).
+                            if AlbumInfoState.has-review: VerticalLayout {
+                                spacing: 0px;
+                                HorizontalLayout {
+                                    spacing: 16px;
+                                    alignment: start;
+                                    credits-tab := TouchArea {
+                                        width: ct.preferred-width;
+                                        height: ct.preferred-height;
+                                        mouse-cursor: pointer;
+                                        clicked => {
+                                            AlbumInfoActions.set-tab("credits");
+                                        }
+                                        ct := Text {
+                                            text: @tr("Credits");
+                                            color: AlbumInfoState.active-tab == "credits"
+                                                ? Theme.accent : Theme.text-muted;
+                                            font-size: 13px;
+                                            font-weight: Typography.medium;
+                                        }
+                                    }
+                                    review-tab := TouchArea {
+                                        width: rt.preferred-width;
+                                        height: rt.preferred-height;
+                                        mouse-cursor: pointer;
+                                        clicked => {
+                                            AlbumInfoActions.set-tab("review");
+                                        }
+                                        rt := Text {
+                                            text: @tr("Review");
+                                            color: AlbumInfoState.active-tab == "review"
+                                                ? Theme.accent : Theme.text-muted;
+                                            font-size: 13px;
+                                            font-weight: Typography.medium;
+                                        }
+                                    }
+                                }
+                                Rectangle { height: 12px; }
+                                Rectangle {
+                                    height: 1px;
+                                    background: Theme.border-subtle;
+                                }
+                                Rectangle { height: 12px; }
+                            }
+
+                            // Content (scrollable) + overlaid scrollbar.
+                            Rectangle {
+                                vertical-stretch: 1;
+                                rflick := Flickable {
+                                    viewport-width: self.width;
+                                    viewport-height: content.preferred-height;
+
+                                    content := VerticalLayout {
+                                        width: parent.width;
+                                        spacing: 0px;
+                                        // Reserve the scrollbar gutter so rows
+                                        // (and the expand chevron at the row's
+                                        // right edge) never sit under the 14px
+                                        // ListScrollbar.
+                                        padding-right: 18px;
+
+                                        // Credits tab.
+                                        if AlbumInfoState.active-tab == "credits": VerticalLayout {
+                                            spacing: 0px;
+                                            for t[i] in AlbumInfoState.tracks: AlbumTrackRow {
+                                                track: t;
+                                                is-last: i == AlbumInfoState.tracks.length - 1;
+                                                play(id) => {
+                                                    AlbumInfoActions.play-track(id);
+                                                }
+                                                musician(n, r) => {
+                                                    AlbumInfoActions.open-musician(n, r);
+                                                }
+                                            }
+                                        }
+
+                                        // Review tab.
+                                        if AlbumInfoState.active-tab == "review": Text {
+                                            text: AlbumInfoState.review;
+                                            color: Theme.text-secondary;
+                                            font-size: 14px;
+                                            wrap: word-wrap;
+                                        }
+                                    }
+                                }
+
+                                ListScrollbar {
+                                    x: parent.width - self.width;
+                                    width: 14px;
+                                    height: 100%;
+                                    viewport-height: rflick.viewport-height;
+                                    visible-height: rflick.height;
+                                    viewport-y <=> rflick.viewport-y;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ---- Loading / error overlay -------------------------------
+                // Covers the (empty) skeleton while fetching or on error.
+                if AlbumInfoState.loading || AlbumInfoState.error != "": Rectangle {
+                    background: Theme.surface-card;
+                    border-radius: Radius.md;
+                    // Swallow clicks so the skeleton behind isn't reachable.
+                    TouchArea { }
+                    VerticalLayout {
+                        alignment: center;
+                        spacing: 8px;
+                        Text {
+                            text: AlbumInfoState.error != ""
+                                ? @tr("Failed to load album credits")
+                                : @tr("Loading credits...");
+                            color: Theme.text-muted;
+                            font-size: Typography.body;
+                            horizontal-alignment: center;
+                        }
+                        if AlbumInfoState.error != "": Text {
+                            text: AlbumInfoState.error;
+                            color: Theme.text-muted;
+                            font-size: Typography.legal;
+                            horizontal-alignment: center;
+                            wrap: word-wrap;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

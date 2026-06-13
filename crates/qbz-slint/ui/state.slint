@@ -341,6 +341,115 @@ export global AlbumState {
     in property <string> source;
 }
 
+// ---------------------------------------------------------------------------
+// Track Info + Album Info (Credits/Review) modals — 1:1 port of Tauri's
+// TrackInfoModal.svelte + AlbumCreditsModal.svelte. Data is fetched fresh by
+// the Rust controller (crate::info_modals) via core.get_track/get_album and
+// mapped to these plain structs. Roles are parsed + grouped + localized in
+// qbz_qobuz::performers (frontend-agnostic).
+// ---------------------------------------------------------------------------
+
+// One grouped-by-role credit cell in the Track Info grid. `role` is the
+// already-localized, UPPER-CASED label; each name is clickable -> musician.
+export struct InfoCreditRow {
+    role: string,
+    // Original (non-localized) role string, passed to the musician-nav hint.
+    role-raw: string,
+    names: [string],
+}
+
+// A row in the Track Info 2-column credits grid. The Rust side pairs the
+// ordered cells (left + optional right) so the modal needs no dynamic grid
+// placement. `has-right` is false on a trailing odd cell.
+export struct InfoCreditPair {
+    left: InfoCreditRow,
+    right: InfoCreditRow,
+    has-right: bool,
+}
+
+// One performer line inside an expanded Album-Credits track. `roles` is the
+// raw ", Role1, Role2" suffix (empty when the performer has no roles).
+export struct AlbumCreditPerformer {
+    name: string,
+    roles: string,
+    // First role (clean) — the musician-nav role hint (Tauri roles[0]).
+    primary-role: string,
+}
+
+// One track row in the Album-Credits "Credits" tab.
+export struct AlbumCreditTrack {
+    id: string,
+    number: string,
+    title: string,
+    artist: string,
+    // True when the row has performers or a copyright line (expandable).
+    has-credits: bool,
+    performers: [AlbumCreditPerformer],
+    copyright: string,
+}
+
+// Track Info modal — opened from the NPB (i) button / song-card title /
+// TrackRow context menu via media-action("track", id, "track-info").
+export global TrackInfoState {
+    in-out property <bool> open: false;
+    in property <bool> loading: false;
+    in property <string> error: "";
+    in property <string> title;
+    in property <string> album;
+    in property <string> artist;
+    // "" -> artist rendered as plain text (not a link).
+    in property <string> artist-id;
+    in property <string> duration;
+    in property <string> quality;
+    // "" -> the row is hidden.
+    in property <string> isrc;
+    in property <string> label;
+    in property <string> label-id;
+    // Paired (2-column) ordered credit cells.
+    in property <[InfoCreditPair]> credits: [];
+    in property <string> copyright;
+}
+
+export global TrackInfoActions {
+    callback close();
+    callback open-artist(string /* artist-id */);
+    callback open-label(string /* label-id */);
+    callback open-musician(string /* name */, string /* role */);
+}
+
+// Album Info modal — opened from the AlbumPageView header (i) button via
+// media-action("album", id, "info").
+export global AlbumInfoState {
+    in-out property <bool> open: false;
+    in property <bool> loading: false;
+    in property <string> error: "";
+    // "credits" | "review". The Review tab only exists when has-review.
+    in-out property <string> active-tab: "credits";
+    in property <bool> has-review: false;
+    in property <image> artwork;
+    in property <string> title;
+    in property <string> artist;
+    in property <string> label;
+    in property <string> label-id;
+    // Localized "September 2, 2021" ("" hides the date span).
+    in property <string> release-date;
+    // "Hard Rock · 10 tracks · 1h 21m".
+    in property <string> meta-line;
+    // "24-Bit / 96 kHz" ("" hides).
+    in property <string> quality;
+    in property <[AlbumCreditTrack]> tracks: [];
+    // HTML-stripped editorial review ("" -> no Review tab).
+    in property <string> review;
+}
+
+export global AlbumInfoActions {
+    callback close();
+    callback set-tab(string /* "credits" | "review" */);
+    callback play-track(string /* track-id */);
+    callback open-label(string /* label-id */);
+    callback open-musician(string /* name */, string /* role */);
+}
+
 // Album-view actions wired to Rust callbacks.
 export global AlbumActions {
     // Filter the visible track list by a query (client-side).

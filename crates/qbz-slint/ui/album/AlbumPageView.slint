@@ -445,11 +445,17 @@ export component AlbumPageView inherits Rectangle {
                                 }
                             }
                         }
-                        // Album info (i) — icon only for now; the detail panel
-                        // logic lands later.
-                        VerticalLayout {
+                        // Album info (i) — opens the Album Info (Credits/Review)
+                        // modal. Qobuz albums only (local albums have no Qobuz
+                        // credits/review), 1:1 with Tauri's album-credits button.
+                        if !AlbumState.is-local: VerticalLayout {
                             alignment: center;
-                            CircleAction { icon: @image-url("../assets/icons/info.svg"); }
+                            CircleAction {
+                                icon: @image-url("../assets/icons/info.svg");
+                                clicked => {
+                                    root.media-action("album", AlbumState.id, "info");
+                                }
+                            }
                         }
                         VerticalLayout {
                             alignment: center;

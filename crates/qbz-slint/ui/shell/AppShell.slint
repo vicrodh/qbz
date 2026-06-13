@@ -31,6 +31,8 @@ import { FolderEditModal } from "../primitives/FolderEditModal.slint";
 import { LibFolderEditModal } from "../settings/LibFolderEditModal.slint";
 import { TagEditorModal } from "../primitives/TagEditorModal.slint";
 import { PlaylistImportModal } from "../primitives/PlaylistImportModal.slint";
+import { TrackInfoModal } from "../album/TrackInfoModal.slint";
+import { AlbumCreditsModal } from "../album/AlbumCreditsModal.slint";
 import { QconnectDevModal } from "QconnectDevModal.slint";
 import { DragGhost } from "../primitives/DragGhost.slint";
 import { Toast } from "../primitives/Toast.slint";
@@ -485,6 +487,18 @@ export component AppShell inherits Rectangle {
     // declaration-order z; ADR-010 conditional mount via the global's
     // `open`), keeping QconnectDevModal topmost.
     PlaylistImportModal { }
+
+    // Track Info + Album Info (Credits/Review) modals — fed by crate::info_modals
+    // through TrackInfoState / AlbumInfoState. Conditional-mount on their own
+    // `open`; stacked above the feature modals (ADR-009/010).
+    TrackInfoModal {
+        width: 100%;
+        height: 100%;
+    }
+    AlbumCreditsModal {
+        width: 100%;
+        height: 100%;
+    }
 
     // Qobuz Connect DEV diagnostics modal (opened from the connect flyout).
     QconnectDevModal {
