@@ -1,0 +1,218 @@
+// Static foreground (Immersive mode 1) — a faithful port of the Tauri
+// `src/lib/components/immersive/panels/StaticPanel.svelte` (232 lines).
+//
+// A calm, centered now-playing card drawn over the moving ImmersiveAtmosphere
+// background. NON-reactive: it does NOT read VisualizerState.energy at all (no
+// art-scale, no glow halo, no bass/global energy). The ONLY motion is the 4-bar
+// equalizer inside the "Now Playing" indicator — a fixed-period CSS loop in the
+// source (NOT energy-driven), so it is allowed in the static panel and is kept
+// for a faithful port.
+//
+// `parent` is NEVER read in the root binding (Slint gotcha); viewport dims are
+// passed in as properties. `opacity:` is NEVER set on the root (it corrupts
+// absolute positioning); the fade lives on the player/ModeBar chrome instead.
+//
+// DIFF vs AlbumReactivePanel (dropped): global-energy / bass-energy / art-scale
+// / glow-spread / glow-opacity props, the glow Rectangle, the reactive grow
+// `animate`, and the *1.25 breathing footprint. KEPT: EqualizerBars, the
+// now-playing indicator (if playing), title/artist/album/quality, the centered
+// VerticalLayout (pad-top 52 / pad-bottom 132), the artwork image-fit cover +
+// fallback, and the static art drop shadow.
+
+import { QualityBadgeFull } from "../primitives/QualityBadgeFull.slint";
+import { NowPlayingState } from "../state.slint";
+
+// Four-bar "now playing" equalizer. A continuous loop driven by the global
+// animation-tick() (pull-based) — NOT a Timer. Verbatim copy of the
+// AlbumReactivePanel.slint EqualizerBars (lines 36-85); duplicated here on
+// purpose so this session does not touch AlbumReactivePanel. (Follow-up: lift
+// into a shared immersive/EqualizerBars.slint imported by both panels.)
+component EqualizerBars inherits Rectangle {
+    in property <color> tint: #7c3aed;
+    width: 18px;
+    height: 14px;
+
+    // 0.8s loop (Svelte `equalize 0.8s`): tick ms -> phase 0..1.
+    property <float> t: Math.mod(animation-tick() / 1ms, 800.0) / 800.0;
+    // scaleY 0.3..1.0 sweep (Svelte keyframes 0/100% -> 0.3, 50% -> 1.0).
+    function wave(phase: float) -> float {
+        return 0.3 + 0.7 * (0.5 - 0.5 * Math.cos((Math.mod(self.t + phase, 1.0)) * 6.283185 * 1rad));
+    }
+
+    HorizontalLayout {
+        alignment: start;
+        spacing: 2px;
+        // bar 1: delay 0.0, base 60%
+        Rectangle {
+            width: 3px;
+            y: parent.height - self.height;
+            height: parent.height * 0.6 * root.wave(0.0);
+            border-radius: 1px;
+            background: root.tint;
+        }
+        // bar 2: delay 0.2, base 100%
+        Rectangle {
+            width: 3px;
+            y: parent.height - self.height;
+            height: parent.height * 1.0 * root.wave(0.25);
+            border-radius: 1px;
+            background: root.tint;
+        }
+        // bar 3: delay 0.1, base 40%
+        Rectangle {
+            width: 3px;
+            y: parent.height - self.height;
+            height: parent.height * 0.4 * root.wave(0.125);
+            border-radius: 1px;
+            background: root.tint;
+        }
+        // bar 4: delay 0.3, base 80%
+        Rectangle {
+            width: 3px;
+            y: parent.height - self.height;
+            height: parent.height * 0.8 * root.wave(0.375);
+            border-radius: 1px;
+            background: root.tint;
+        }
+    }
+}
+
+export component StaticPanel inherits Rectangle {
+    in property <length> viewport-width: 1280px;
+    in property <length> viewport-height: 720px;
+
+    // Base art box. Tauri uses `min(52vh, 460px)`, but the Slint group must also
+    // leave room for the metadata block + the floating player, or the quality
+    // badge gets clipped under the bar. Static has NO breathing growth, so the
+    // height budget divides by 1.0 (no /1.25) and the panel gap is 20px (not 40).
+    // Reserve = pad-top(52) + spacing(20) + info(160) + player-clearance(132) =
+    // 364px. Player clearance 132 is KEPT identical to AlbumReactivePanel (same
+    // floating ImmersivePlayerBar); if it changes, BOTH the 132 padding-bottom
+    // below and this 364 reserve must move together. Clamped to 180..460px;
+    // width cap 0.55 captures the Svelte narrow-window 55vw intent.
+    property <length> base-art: Math.max(180px,
+        Math.min(Math.min(root.viewport-height - 364px, root.viewport-width * 0.55), 460px));
+    // Fixed size — no art-scale.
+    property <length> art-size: root.base-art;
+
+    width: root.viewport-width;
+    height: root.viewport-height;
+    background: transparent;
+
+    // Vertical stack: artwork block, then the track-info block. Matches the
+    // Svelte column (.static-panel: flex column, centered, gap 20px). Centered
+    // as a group in the viewport.
+    VerticalLayout {
+        x: 0px;
+        y: 0px;
+        width: root.viewport-width;
+        height: root.viewport-height;
+        // pad-top 52 = header+controls offset for true visual center (Svelte).
+        // pad-bottom 132 = floating-player clearance (owner-mandated, matches
+        // AlbumReactivePanel; the Svelte 88 assumes a different player).
+        padding-top: 52px;
+        padding-bottom: 132px;
+        alignment: center;
+        spacing: 20px;
+
+        // --- Artwork (static, no glow, no grow) ----------------------------
+        artwork-block := Rectangle {
+            // Fixed footprint — no *1.25 (no breathing).
+            height: root.base-art;
+            horizontal-stretch: 1;
+
+            // Static drop shadow mirrors the Svelte .artwork-container
+            // box-shadow (the two-layer CSS shadow collapses to one blur in
+            // Slint — same accepted gap as AlbumReactivePanel).
+            art := Rectangle {
+                width: root.art-size;
+                height: root.art-size;
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                border-radius: 8px;
+                clip: true;
+                drop-shadow-blur: 32px;
+                drop-shadow-color: #00000080;
+                drop-shadow-offset-y: 8px;
+
+                Image {
+                    source: NowPlayingState.artwork-large.width > 0
+                        ? NowPlayingState.artwork-large
+                        : NowPlayingState.artwork;
+                    image-fit: cover;
+                    width: parent.width;
+                    height: parent.height;
+                }
+            }
+        }
+
+        // --- Track info ----------------------------------------------------
+        info-block := VerticalLayout {
+            alignment: center;
+            spacing: 6px;
+
+            // "Now Playing" indicator: equalizer bars + label. Shown only while
+            // playing (Svelte {#if isPlaying}).
+            if NowPlayingState.playing: HorizontalLayout {
+                alignment: center;
+                spacing: 8px;
+                padding-bottom: 8px;
+                VerticalLayout {
+                    alignment: center;
+                    EqualizerBars {
+                        tint: #7c3aed;
+                    }
+                }
+                Text {
+                    text: @tr("Now Playing");
+                    color: #7c3aed;
+                    font-size: 12px;
+                    font-weight: 600;
+                    letter-spacing: 0.5px;
+                    vertical-alignment: center;
+                }
+            }
+
+            // Track title. (Explicit badge OMITTED: NowPlayingState has no
+            // `explicit` field and the sibling AlbumReactivePanel omits it too.)
+            Text {
+                text: NowPlayingState.title;
+                color: #ffffff;
+                font-size: 28px;
+                font-weight: 700;
+                horizontal-alignment: center;
+                overflow: elide;
+            }
+
+            // Artist.
+            Text {
+                text: NowPlayingState.artist;
+                color: #ffffffb3;
+                font-size: 18px;
+                horizontal-alignment: center;
+                overflow: elide;
+            }
+
+            // Album (italic, dimmer). Shown only when present (Svelte {#if album}).
+            if NowPlayingState.album != "": Text {
+                text: NowPlayingState.album;
+                color: #ffffff80;
+                font-size: 14px;
+                font-italic: true;
+                horizontal-alignment: center;
+                overflow: elide;
+            }
+
+            // Quality badge (Svelte QualityBadgeStatic full mode). Self-hides
+            // when tier == "". Centered under the text.
+            HorizontalLayout {
+                alignment: center;
+                padding-top: 12px;
+                QualityBadgeFull {
+                    tier: NowPlayingState.quality-tier;
+                    detail: NowPlayingState.quality-detail;
+                }
+            }
+        }
+    }
+}

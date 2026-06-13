@@ -7,6 +7,7 @@ import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { NowPlayingState, VisualizerState, ImmersiveState, SettingsState } from "../state.slint";
 import { ImmersiveAtmosphere } from "ImmersiveAtmosphere.slint";
 import { AlbumReactivePanel } from "AlbumReactivePanel.slint";
+import { StaticPanel } from "StaticPanel.slint";
 
 component GhostButton inherits Rectangle {
     in property <image> icon;
@@ -558,7 +559,14 @@ export component ImmersiveView inherits Rectangle {
         viewport-width: root.width;
         viewport-height: root.height;
     }
-    // TODO(S3): Static mode foreground   (mode == 1) — atmosphere-only for now.
+    // (2b) Static mode foreground (mode == 1) — calm centered now-playing
+    // card over the atmosphere. Same conditional-mount pattern (ADR-010).
+    if ImmersiveState.mode == 1: StaticPanel {
+        x: 0px;
+        y: 0px;
+        viewport-width: root.width;
+        viewport-height: root.height;
+    }
     // TODO(S4): Coverflow mode foreground (mode == 2) — atmosphere-only for now.
     // TODO(S5): Spectrum mode foreground  (mode == 3) — atmosphere-only for now.
 
