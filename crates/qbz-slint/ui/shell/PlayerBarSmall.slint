@@ -542,7 +542,6 @@ export component PlayerBarSmall inherits Rectangle {
                                     ContextMenuItem {
                                         icon: @image-url("../assets/icons/maximize-2.svg");
                                         label: @tr("Immersive");
-                                        enabled: false;
                                         clicked => {
                                             root.media-action("npb-view", "", "immersive");
                                         }

@@ -31,6 +31,7 @@ mod favorites_prefs;
 mod foryou;
 mod genre_filter;
 mod home;
+mod immersive;
 mod info_modals;
 mod label;
 mod location_view;
@@ -72,6 +73,7 @@ mod tag_editor;
 mod offline;
 mod offline_cache;
 mod offline_favorites;
+mod visualizer;
 mod offline_manager;
 mod offline_mode;
 mod playlist;
@@ -3966,7 +3968,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .global::<AppearanceState>()
         .set_is_macos(cfg!(target_os = "macos"));
 
-    let app_runtime = Arc::new(AppRuntime::new(SlintAdapter::new(window.as_weak())));
+    let app_runtime = Arc::new(AppRuntime::with_visualizer(SlintAdapter::new(window.as_weak())));
+
+    // ImmersiveView audio visualizers: spawn the frontend-agnostic FFT producer
+    // against the runtime's tap and start the 30fps drain into VisualizerState.
+    // Inert (tap disabled, no capture / no FFT cost) until the immersive view
+    // opens. Must run on the UI thread before window.run().
+    visualizer::install(&window, &app_runtime);
 
     // MusicBrainz cache — opens a SQLite store at
     // <data-dir>/qbz/cache/musicbrainz_cache.db so artist metadata
@@ -4921,6 +4929,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // Persisted to ui_prefs so the choice survives restarts.
                 // Large/window modes are disabled in the menu until those
                 // layouts land.
+                ("npb-view", "immersive") => {
+                    if let Some(w) = weak.upgrade() {
+                        w.global::<ImmersiveState>().set_open(true);
+                        w.global::<VisualizerState>().invoke_set_enabled(true);
+                    }
+                }
                 ("npb-view", mode @ ("new" | "classic" | "small")) => {
                     if let Some(w) = weak.upgrade() {
                         w.global::<ShellState>()

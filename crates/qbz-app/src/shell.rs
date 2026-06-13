@@ -50,6 +50,10 @@ pub struct AppRuntime<A: FrontendAdapter + Send + Sync + 'static> {
     runtime: Arc<RuntimeManager>,
     user_paths: UserDataPaths,
     session: Mutex<Option<ActiveSession>>,
+    /// The visualizer tap handed to the player, retained so the shell can start
+    /// the FFT producer and toggle capture. `None` for shells that do not drive
+    /// audio visualization (the default `new`/`with_audio_settings` path).
+    visualizer_tap: Option<VisualizerTap>,
 }
 
 impl<A: FrontendAdapter + Send + Sync + 'static> AppRuntime<A> {
@@ -71,6 +75,7 @@ impl<A: FrontendAdapter + Send + Sync + 'static> AppRuntime<A> {
             runtime: Arc::new(RuntimeManager::new()),
             user_paths: UserDataPaths::new(),
             session: Mutex::new(None),
+            visualizer_tap: None,
         }
     }
 
@@ -93,6 +98,37 @@ impl<A: FrontendAdapter + Send + Sync + 'static> AppRuntime<A> {
                 (None, AudioSettings::default())
             });
         Self::with_audio_settings(adapter, device_name, audio_settings, None)
+    }
+
+    /// Build like [`AppRuntime::new`], but also wire a [`VisualizerTap`] into the
+    /// player and retain it so the shell can start the frontend-agnostic FFT
+    /// producer ([`qbz_audio::visualizer::spawn_visualizer_thread`]) and toggle
+    /// capture via the tap's `set_enabled`. Used by the Slint shell for the
+    /// ImmersiveView audio visualizers. The tap starts disabled, so it adds no
+    /// runtime cost until the immersive view enables it.
+    pub fn with_visualizer(adapter: A) -> Self {
+        let (device_name, audio_settings) = AudioSettingsStore::new()
+            .ok()
+            .and_then(|store| {
+                store
+                    .get_settings()
+                    .ok()
+                    .map(|settings| (settings.output_device.clone(), settings))
+            })
+            .unwrap_or_else(|| {
+                log::info!("[AppRuntime] No saved audio settings, using defaults");
+                (None, AudioSettings::default())
+            });
+        let tap = VisualizerTap::new();
+        let mut rt =
+            Self::with_audio_settings(adapter, device_name, audio_settings, Some(tap.clone()));
+        rt.visualizer_tap = Some(tap);
+        rt
+    }
+
+    /// The visualizer tap, if this runtime was built with [`AppRuntime::with_visualizer`].
+    pub fn visualizer_tap(&self) -> Option<&VisualizerTap> {
+        self.visualizer_tap.as_ref()
     }
 
     /// Initialize the core (extracts Qobuz bundle tokens).

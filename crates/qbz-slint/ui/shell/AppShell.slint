@@ -8,7 +8,7 @@
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Layout } from "../foundation/layout.slint";
 import { Radius } from "../foundation/radius.slint";
-import { NavState, ContentView, ShellState, OfflineState, PlaylistState } from "../state.slint";
+import { NavState, ContentView, ShellState, OfflineState, PlaylistState, ImmersiveState } from "../state.slint";
 import { Sidebar } from "Sidebar.slint";
 import { HeaderBar } from "HeaderBar.slint";
 import { HeaderMenuOverlay } from "HeaderMenuOverlay.slint";
@@ -33,6 +33,7 @@ import { TagEditorModal } from "../primitives/TagEditorModal.slint";
 import { PlaylistImportModal } from "../primitives/PlaylistImportModal.slint";
 import { TrackInfoModal } from "../album/TrackInfoModal.slint";
 import { AlbumCreditsModal } from "../album/AlbumCreditsModal.slint";
+import { ImmersiveView } from "../immersive/ImmersiveView.slint";
 import { QconnectDevModal } from "QconnectDevModal.slint";
 import { DragGhost } from "../primitives/DragGhost.slint";
 import { Toast } from "../primitives/Toast.slint";
@@ -508,6 +509,14 @@ export component AppShell inherits Rectangle {
 
     // Floating track-drag ghost (follows the cursor, on top of all).
     DragGhost { }
+
+    if ImmersiveState.open: ImmersiveView {
+        width: 100%;
+        height: 100%;
+        media-action(kind, id, action) => {
+            root.media-action(kind, id, action);
+        }
+    }
 
     // In-app toast notifications — bottom-center, above everything.
     Toast { }

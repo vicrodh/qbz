@@ -29,6 +29,9 @@ rodio = { version = "0.22", features = ["symphonia-all"] }
 symphonia = { workspace = true }
 ebur128 = "0.1"
 rustfft = "6.4"
+# FFT spectrum helpers for the frontend-agnostic visualizer producer
+# (Hann window, log-bar mapping). Kept in lockstep with the src-tauri dep.
+spectrum-analyzer = "1.5"
 
 # Database for loudness cache
 rusqlite = { version = "0.31", features = ["bundled"] }

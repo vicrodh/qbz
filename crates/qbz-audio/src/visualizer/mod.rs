@@ -10,9 +10,11 @@
 //!
 //! The Tauri-specific FFT thread and event emission remain in qbz-nix.
 
+mod processor;
 mod ring_buffer;
 mod tapped_source;
 
+pub use processor::{spawn_visualizer_thread, VizFrame, VizSink};
 pub use ring_buffer::RingBuffer;
 pub use tapped_source::TappedSource;
 

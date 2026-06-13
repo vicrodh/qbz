@@ -804,14 +804,13 @@ export component PlayerBar inherits Rectangle {
                                         root.media-action("npb-view", "", "miniplayer");
                                     }
                                 }
-                                ContextMenuItem {
-                                    icon: @image-url("../assets/icons/maximize-2.svg");
-                                    label: @tr("Immersive");
-                                    enabled: false;
-                                    clicked => {
-                                        root.media-action("npb-view", "", "immersive");
+                                    ContextMenuItem {
+                                        icon: @image-url("../assets/icons/maximize-2.svg");
+                                        label: @tr("Immersive");
+                                        clicked => {
+                                            root.media-action("npb-view", "", "immersive");
+                                        }
                                     }
-                                }
                             }
                         }
                     }

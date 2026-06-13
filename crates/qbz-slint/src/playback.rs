@@ -21,8 +21,8 @@ use slint::{ComponentHandle, Model, ModelRc};
 use crate::adapter::SlintAdapter;
 use crate::queue::QueueController;
 use crate::{
-    AlbumState, AppWindow, ArtistState, ContentView, FavoritesState, LabelState, NavState,
-    NowPlayingState, PlaylistState, SearchState, TrackItem,
+    AlbumState, AppWindow, ArtistState, ContentView, FavoritesState, ImmersiveState, LabelState,
+    NavState, NowPlayingState, PlaylistState, SearchState, TrackItem,
 };
 
 /// The Queue sidebar controller, published once the shell is up so the
@@ -1192,6 +1192,13 @@ fn load_now_playing_artwork_large(weak: slint::Weak<AppWindow>, art: qbz_models:
         };
         let _ = weak.upgrade_in_event_loop(move |win| {
             let img = crate::artwork::pixels_to_image(&pixels, w, h);
+            if let Some((bg_pixels, bg_w, bg_h)) = crate::immersive::generate_atmosphere(&pixels, w, h)
+            {
+                let bg = crate::artwork::pixels_to_image(&bg_pixels, bg_w, bg_h);
+                win.global::<ImmersiveState>().set_bg_image(bg);
+            }
+            win.global::<ImmersiveState>()
+                .set_glow_color(crate::immersive::glow_color(&pixels, w, h));
             win.global::<NowPlayingState>().set_artwork_large(img);
         });
     });
@@ -1464,6 +1471,8 @@ pub(crate) async fn refresh_now_playing_meta(runtime: &Runtime, weak: &slint::We
         // floating preview never shows the previous track while the new high-res
         // cover resolves.
         np.set_artwork_large(slint::Image::default());
+        w.global::<ImmersiveState>()
+            .set_bg_image(slint::Image::default());
     });
 
     load_now_playing_artwork(weak.clone(), bar_artwork);

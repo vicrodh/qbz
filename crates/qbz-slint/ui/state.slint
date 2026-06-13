@@ -2944,6 +2944,28 @@ export struct QueueItem {
     is-ephemeral: bool,
 }
 
+// ImmersiveView audio visualizers. Driven at ~30fps by the Rust drain
+// (crate::visualizer) from the frontend-agnostic FFT producer in qbz-audio.
+// Magnitudes are normalized 0..1. The tap stays disabled (no capture / no FFT
+// cost) until the immersive view calls set-enabled(true) on open.
+export global VisualizerState {
+    in property <bool> enabled: false;
+    in property <[float]> bars;        // 16 log-spaced FFT bars (viz:data)
+    in property <[float]> spectral;    // 512 spectral-ribbon bands (viz:spectral)
+    in property <[float]> energy;      // 5 energy bands: sub-bass..air (viz:energy)
+    in property <[float]> waveform;    // 256 L then 256 R samples (viz:waveform)
+    in property <float> transient: 0;  // last transient intensity; UI decays it
+    callback set-enabled(bool);
+}
+
+// Full-window immersive now-playing overlay. The first Slint slice ships the
+// Album Reactive focus view only; broader panels can hang off this same state.
+export global ImmersiveState {
+    in-out property <bool> open: false;
+    in property <image> bg-image;
+    in property <color> glow-color: #6464ff59;
+}
+
 // Now-playing / transport state. The Rust playback poll loop pushes the
 // live values here; the PlayerBar and SeekBar bind to it directly.
 export global NowPlayingState {

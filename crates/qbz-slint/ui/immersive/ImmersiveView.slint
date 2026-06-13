@@ -1,0 +1,376 @@
+// ImmersiveView base: reusable Kawarp-like atmosphere background +
+// Tauri-shaped compact player with auto-hide. Foreground panels will be
+// rebuilt on top of this base after the background/player are approved.
+
+import { Radius } from "../foundation/radius.slint";
+import { QbzIcon } from "../primitives/QbzIcon.slint";
+import { NowPlayingState, VisualizerState, ImmersiveState } from "../state.slint";
+import { ImmersiveAtmosphere } from "ImmersiveAtmosphere.slint";
+
+component GhostButton inherits Rectangle {
+    in property <image> icon;
+    in property <bool> active: false;
+    in property <bool> enabled: true;
+    in property <length> icon-size: 12px;
+    callback clicked();
+
+    width: 28px;
+    height: 28px;
+    border-radius: 14px;
+    opacity: root.enabled ? 1.0 : 0.4;
+    background: root.active ? #ffffff40 : transparent;
+
+    QbzIcon {
+        source: root.icon;
+        width: root.icon-size;
+        height: root.icon-size;
+        x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+        y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+        tint: root.active || ta.has-hover ? #ffffff : #ffffffa6;
+    }
+
+    ta := TouchArea {
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => {
+            if (root.enabled) {
+                root.clicked();
+            }
+        }
+    }
+}
+
+component NavButton inherits Rectangle {
+    in property <image> icon;
+    callback clicked();
+
+    width: 28px;
+    height: 28px;
+    border-radius: 14px;
+    background: ta.has-hover ? #ffffff40 : #ffffff26;
+
+    QbzIcon {
+        source: root.icon;
+        width: 14px;
+        height: 14px;
+        x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+        y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+        tint: #ffffff;
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+component PlayDisc inherits Rectangle {
+    callback clicked();
+
+    width: 48px;
+    height: 48px;
+    border-radius: 24px;
+    background: ta.has-hover ? #ffffffe6 : #ffffff;
+    drop-shadow-blur: 12px;
+    drop-shadow-color: #0000004d;
+    drop-shadow-offset-y: 4px;
+
+    QbzIcon {
+        source: NowPlayingState.playing
+            ? @image-url("../assets/icons/pause.svg")
+            : @image-url("../assets/icons/play-fill.svg");
+        width: 20px;
+        height: 20px;
+        x: Math.round((parent.width - self.width) / 2 / 1px) * 1px
+            + (NowPlayingState.playing ? 0px : 1px);
+        y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+        tint: #000000;
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+component TinyBar inherits Rectangle {
+    in property <float> value: 0.0;
+    in property <color> fill: #ffffff;
+    callback changed(float);
+
+    height: 10px;
+    background: transparent;
+
+    Rectangle {
+        x: 0px;
+        width: root.width;
+        y: 4px;
+        height: 2px;
+        border-radius: 1px;
+        background: #ffffff2e;
+    }
+    Rectangle {
+        x: 0px;
+        y: 4px;
+        height: 2px;
+        width: parent.width * Math.max(0.0, Math.min(1.0, root.value));
+        border-radius: 1px;
+        background: root.fill;
+    }
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.changed(Math.max(0.0, Math.min(1.0, self.mouse-x / self.width)));
+        }
+        moved => {
+            if (self.pressed) {
+                root.changed(Math.max(0.0, Math.min(1.0, self.mouse-x / self.width)));
+            }
+        }
+    }
+}
+
+component ImmersivePlayerBar inherits Rectangle {
+    in property <length> viewport-width: 720px;
+    callback media-action(string, string, string);
+    callback wake();
+
+    width: Math.min(root.viewport-width - 32px, 720px);
+    height: 90px;
+    border-radius: 16px;
+    background: #00000080;
+    border-width: 1px;
+    border-color: #ffffff2e;
+    drop-shadow-blur: 32px;
+    drop-shadow-color: #00000066;
+    drop-shadow-offset-y: 8px;
+
+    // Left utility group.
+    GhostButton {
+        x: 24px;
+        y: 22px;
+        icon: @image-url("../assets/icons/heart.svg");
+        active: false;
+        enabled: NowPlayingState.has-track && !NowPlayingState.is-ephemeral;
+        clicked => { root.media-action("track", NowPlayingState.track-id, "favorite"); }
+    }
+    GhostButton {
+        x: 56px;
+        y: 22px;
+        icon: @image-url("../assets/icons/shuffle.svg");
+        active: NowPlayingState.shuffle;
+        clicked => { NowPlayingState.toggle-shuffle(); }
+    }
+    GhostButton {
+        x: 88px;
+        y: 22px;
+        icon: @image-url("../assets/icons/repeat.svg");
+        active: NowPlayingState.repeat-mode != 0;
+        clicked => { NowPlayingState.cycle-repeat(); }
+    }
+    GhostButton {
+        x: 120px;
+        y: 22px;
+        icon: @image-url("../assets/icons/infinity.svg");
+        active: false;
+        enabled: false;
+    }
+
+    // Playback group: positioned from the play disc so play is exactly centered.
+    Text {
+        x: root.width / 2 - 108px;
+        y: 31px;
+        width: 42px;
+        text: NowPlayingState.elapsed;
+        color: #ffffffbf;
+        font-size: 11px;
+        horizontal-alignment: right;
+    }
+    NavButton {
+        x: root.width / 2 - 64px;
+        y: 22px;
+        icon: @image-url("../assets/icons/skip-back.svg");
+        clicked => { NowPlayingState.previous(); }
+    }
+    PlayDisc {
+        x: root.width / 2 - 24px;
+        y: 12px;
+        clicked => { NowPlayingState.toggle-play(); }
+    }
+    NavButton {
+        x: root.width / 2 + 36px;
+        y: 22px;
+        icon: @image-url("../assets/icons/skip-forward.svg");
+        clicked => { NowPlayingState.next(); }
+    }
+    Text {
+        x: root.width / 2 + 76px;
+        y: 31px;
+        width: 46px;
+        text: NowPlayingState.remaining;
+        color: #ffffffbf;
+        font-size: 11px;
+    }
+
+    // Right volume/menu group.
+    GhostButton {
+        x: root.width - 156px;
+        y: 22px;
+        icon: NowPlayingState.muted || NowPlayingState.volume == 0
+            ? @image-url("../assets/icons/volume-x.svg")
+            : @image-url("../assets/icons/volume-2.svg");
+        enabled: !NowPlayingState.volume-locked;
+        clicked => { NowPlayingState.toggle-mute(); }
+    }
+    TinyBar {
+        x: root.width - 112px;
+        y: 31px;
+        width: 64px;
+        value: NowPlayingState.volume;
+        changed(v) => { NowPlayingState.set-volume(v); }
+    }
+    Rectangle {
+        x: root.width - 42px;
+        y: 22px;
+        width: 28px;
+        height: 28px;
+        border-radius: 14px;
+        background: menu-ta.has-hover ? #ffffff26 : transparent;
+        QbzIcon {
+            source: @image-url("../assets/icons/ellipsis.svg");
+            width: 12px;
+            height: 12px;
+            x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+            y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+            tint: #ffffffa6;
+        }
+        menu-ta := TouchArea {
+            mouse-cursor: pointer;
+            clicked => {
+                root.wake();
+                player-menu.show();
+            }
+        }
+        player-menu := PopupWindow {
+            x: -172px;
+            y: -58px;
+            width: 200px;
+            height: 46px;
+            close-policy: close-on-click;
+            Rectangle {
+                background: #000000cc;
+                border-radius: 12px;
+                border-width: 1px;
+                border-color: #ffffff2e;
+                Rectangle {
+                    x: 6px;
+                    y: 6px;
+                    width: parent.width - 12px;
+                    height: 34px;
+                    border-radius: Radius.sm;
+                    background: exit-ta.has-hover ? #ffffff1f : transparent;
+                    exit-ta := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            ImmersiveState.open = false;
+                            VisualizerState.set-enabled(false);
+                        }
+                    }
+                    QbzIcon {
+                        source: @image-url("../assets/icons/x.svg");
+                        width: 14px;
+                        height: 14px;
+                        x: 10px;
+                        y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                        tint: #ffffffcc;
+                    }
+                    Text {
+                        x: 34px;
+                        y: 0px;
+                        height: parent.height;
+                        width: parent.width - 44px;
+                        text: @tr("Exit Immersive");
+                        color: #ffffffcc;
+                        font-size: 13px;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+    }
+
+    TinyBar {
+        x: 16px;
+        y: 71px;
+        height: 10px;
+        width: root.width - 32px;
+        value: NowPlayingState.progress;
+        changed(v) => { NowPlayingState.seek(Math.min(v, NowPlayingState.seekable-max)); }
+    }
+}
+
+export component ImmersiveView inherits Rectangle {
+    callback media-action(string, string, string);
+
+    property <bool> chrome-visible: true;
+
+    background: #0a0a0b;
+    clip: true;
+
+    function wake() {
+        root.chrome-visible = true;
+        hide-timer.running = false;
+        hide-timer.running = true;
+    }
+
+    keys := FocusScope {
+        key-pressed(event) => {
+            if (event.text == Key.Escape) {
+                ImmersiveState.open = false;
+                VisualizerState.set-enabled(false);
+                return accept;
+            }
+            return reject;
+        }
+        focus-timer := Timer {
+            interval: 30ms;
+            running: true;
+            triggered => {
+                self.running = false;
+                keys.focus();
+                root.wake();
+            }
+        }
+    }
+
+    hide-timer := Timer {
+        interval: 4000ms;
+        triggered => {
+            root.chrome-visible = false;
+        }
+    }
+
+    // Pointer movement wakes the chrome. `TouchArea.moved` only fires while
+    // pressed in Slint, so watch mouse-x/mouse-y changes instead.
+    hover := TouchArea {
+        changed mouse-x => { root.wake(); }
+        changed mouse-y => { root.wake(); }
+    }
+
+    ImmersiveAtmosphere {
+        source-image: ImmersiveState.bg-image;
+        fallback-image: NowPlayingState.artwork-large.width > 0
+            ? NowPlayingState.artwork-large
+            : NowPlayingState.artwork;
+        dim: 0.15;
+    }
+
+    ImmersivePlayerBar {
+        viewport-width: root.width;
+        x: Math.round((root.width - self.width) / 2 / 1px) * 1px;
+        y: root.height - self.height - 24px;
+        opacity: root.chrome-visible ? 1.0 : 0.0;
+        animate opacity { duration: 300ms; }
+        wake => { root.wake(); }
+        media-action(kind, id, action) => { root.media-action(kind, id, action); }
+    }
+}

@@ -1,0 +1,83 @@
+// Reusable Kawarp-like atmosphere background.
+//
+// Source image is expected to be the host-generated 128x128 atmosphere bitmap
+// (tiny artwork sample -> blur -> color adjust -> vignette). This component
+// only animates/composites it, so it can be reused outside ImmersiveView later.
+// Immersive must keep `animated:true`; static album/artist headers can opt out.
+
+export component ImmersiveAtmosphere inherits Rectangle {
+    in property <image> source-image;
+    in property <image> fallback-image;
+    in property <float> dim: 0.15;
+    in property <float> base-opacity: 0.95;
+    in property <float> warp-opacity: 0.48;
+    in property <bool> animated: true;
+
+    property <float> tick: root.animated ? animation-tick() / 1ms : 0.0;
+
+    background: #0a0a0b;
+    clip: true;
+
+    if root.source-image.width > 0: Image {
+        property <float> sx: Math.sin((root.tick / 7600.0) * 6.283185 * 1rad)
+            + 0.35 * Math.sin((root.tick / 3300.0 + 1.9) * 6.283185 * 1rad);
+        property <float> sy: Math.sin((root.tick / 11200.0 + 1.1) * 6.283185 * 1rad);
+        source: root.source-image;
+        image-fit: cover;
+        width: root.width + 520px;
+        height: root.height + 420px;
+        x: -260px + self.sx * 132px;
+        y: -210px + self.sy * 58px;
+        opacity: root.base-opacity;
+    }
+    if root.source-image.width > 0: Image {
+        property <float> sx: Math.sin((root.tick / 9200.0 + 0.4) * 6.283185 * 1rad)
+            + 0.42 * Math.sin((root.tick / 4100.0 + 2.6) * 6.283185 * 1rad);
+        property <float> sy: Math.sin((root.tick / 14800.0 + 1.7) * 6.283185 * 1rad);
+        source: root.source-image;
+        image-fit: cover;
+        width: root.width + 620px;
+        height: root.height + 500px;
+        x: -310px - self.sx * 156px;
+        y: -250px - self.sy * 74px;
+        opacity: root.warp-opacity;
+    }
+    if root.source-image.width > 0: Image {
+        property <float> sx: Math.sin((root.tick / 5700.0 + 1.6) * 6.283185 * 1rad);
+        property <float> sy: Math.sin((root.tick / 12300.0 + 0.2) * 6.283185 * 1rad)
+            + 0.28 * Math.sin((root.tick / 3600.0 + 2.8) * 6.283185 * 1rad);
+        source: root.source-image;
+        image-fit: cover;
+        width: root.width + 700px;
+        height: root.height + 540px;
+        x: -350px + self.sx * 118px;
+        y: -270px + self.sy * 92px;
+        opacity: 0.24;
+    }
+    if root.source-image.width > 0: Image {
+        property <float> sx: Math.sin((root.tick / 15100.0 + 2.4) * 6.283185 * 1rad);
+        property <float> sy: Math.sin((root.tick / 6900.0 + 1.4) * 6.283185 * 1rad);
+        source: root.source-image;
+        image-fit: cover;
+        width: root.width + 560px;
+        height: root.height + 620px;
+        x: -280px - self.sx * 102px;
+        y: -310px + self.sy * 128px;
+        opacity: 0.18;
+    }
+    if root.source-image.width <= 0: Image {
+        source: root.fallback-image;
+        image-fit: cover;
+        width: root.width + 220px;
+        height: root.height + 220px;
+        x: -110px;
+        y: -110px;
+        opacity: 0.35;
+    }
+    Rectangle {
+        background: #000000.with-alpha(root.dim);
+    }
+    Rectangle {
+        background: @linear-gradient(180deg, #00000066 0%, transparent 35%, #00000080 100%);
+    }
+}

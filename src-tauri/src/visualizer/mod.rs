@@ -5,7 +5,7 @@
 //! on a dedicated thread.
 
 mod fft_processor;
-pub use fft_processor::{start_visualizer_thread, VisualizerState};
+use fft_processor::TauriVizSink;
 pub use qbz_audio::{RingBuffer, TappedSource, VisualizerTap};
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -49,12 +49,9 @@ impl Visualizer {
             log::debug!("Visualizer FFT thread already started, skipping");
             return;
         }
-        let state = VisualizerState {
-            ring_buffer: self.tap.ring_buffer.clone(),
-            enabled: self.tap.enabled.clone(),
-            sample_rate: self.tap.sample_rate.clone(),
-        };
-        start_visualizer_thread(state, app_handle);
+        let sink = std::sync::Arc::new(TauriVizSink::new(app_handle));
+        qbz_audio::visualizer::spawn_visualizer_thread(self.tap.clone(), sink);
+        log::info!("Visualizer FFT thread started");
     }
 
     /// Enable or disable visualization
