@@ -1484,8 +1484,12 @@ pub(crate) async fn refresh_now_playing_meta(runtime: &Runtime, weak: &slint::We
         // floating preview never shows the previous track while the new high-res
         // cover resolves.
         np.set_artwork_large(slint::Image::default());
-        w.global::<ImmersiveState>()
-            .set_bg_image(slint::Image::default());
+        // Do NOT clear the immersive atmosphere bg here. Blanking it caused a
+        // visible BACKGROUND FLICKER on a click-driven track change (the async
+        // 300px decode + blur takes a beat, so the bg went blank then back).
+        // Let the previous blurred ambient bg persist until
+        // load_now_playing_artwork_large swaps in the new one — a brief stale
+        // blur is imperceptible; a blank/raw-cover fallback is not.
     });
 
     load_now_playing_artwork(weak.clone(), bar_artwork);
