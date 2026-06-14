@@ -37,63 +37,8 @@
 // passed in as properties. `opacity:` is NEVER set on the root (it corrupts
 // absolute positioning); the fade lives on the player/ModeBar chrome instead.
 
-import { QualityBadgeFull } from "../primitives/QualityBadgeFull.slint";
 import { NowPlayingState, VisualizerState, ImmersiveState } from "../state.slint";
-
-// Four-bar "now playing" equalizer. A continuous loop driven by the global
-// animation-tick() (pull-based) — NOT a Timer (a Timer does not reliably drive
-// continuous animation). Each bar phase-offset mirrors the Svelte
-// animation-delay / per-bar base height (lines 311-314).
-component EqualizerBars inherits Rectangle {
-    in property <color> tint: #7c3aed;
-    width: 18px;
-    height: 14px;
-
-    // 0.8s loop (Svelte `equalize 0.8s`): tick ms -> phase 0..1.
-    property <float> t: Math.mod(animation-tick() / 1ms, 800.0) / 800.0;
-    // scaleY 0.3..1.0 sweep (Svelte keyframes 0/100% -> 0.3, 50% -> 1.0).
-    function wave(phase: float) -> float {
-        // triangle-ish sweep peaking at the half-phase, like ease-in-out.
-        return 0.3 + 0.7 * (0.5 - 0.5 * Math.cos((Math.mod(self.t + phase, 1.0)) * 6.283185 * 1rad));
-    }
-
-    HorizontalLayout {
-        alignment: start;
-        spacing: 2px;
-        // bar 1: delay 0.0, base 60%
-        Rectangle {
-            width: 3px;
-            y: parent.height - self.height;
-            height: parent.height * 0.6 * root.wave(0.0);
-            border-radius: 1px;
-            background: root.tint;
-        }
-        // bar 2: delay 0.2, base 100%
-        Rectangle {
-            width: 3px;
-            y: parent.height - self.height;
-            height: parent.height * 1.0 * root.wave(0.25);
-            border-radius: 1px;
-            background: root.tint;
-        }
-        // bar 3: delay 0.1, base 40%
-        Rectangle {
-            width: 3px;
-            y: parent.height - self.height;
-            height: parent.height * 0.4 * root.wave(0.125);
-            border-radius: 1px;
-            background: root.tint;
-        }
-        // bar 4: delay 0.3, base 80%
-        Rectangle {
-            width: 3px;
-            y: parent.height - self.height;
-            height: parent.height * 0.8 * root.wave(0.375);
-            border-radius: 1px;
-            background: root.tint;
-        }
-    }
-}
+import { ImmersiveTrackInfo } from "ImmersiveTrackInfo.slint";
 
 export component AlbumReactivePanel inherits Rectangle {
     in property <length> viewport-width: 1280px;
@@ -120,14 +65,20 @@ export component AlbumReactivePanel inherits Rectangle {
     // glowOpacity = min(0.1 + globalEnergy * 1.5, 1)  (Svelte line 167)
     property <float> glow-opacity: Math.min(0.1 + root.global-energy * 1.5, 1.0);
 
-    // Base art box. Tauri uses `min(52vh, 460px)`, but the Slint group must also
-    // leave room for the metadata block + the floating player, or the quality
-    // badge gets clipped under the bar. So size the art so the WHOLE group
-    // (art*1.25 growth + spacing + info) fits the viewport height, with a width
-    // cap for narrow windows. Reserve = pad-top(52) + spacing(40) + info(~160) +
-    // player clearance(132) = 384px. Clamped to a sane 180..460px range.
+    // Base art box. The group must leave room for the metadata block + the
+    // floating player, or the quality badge gets clipped under the bar. So size
+    // the art so the WHOLE group (art*1.25 growth + spacing + info) fits the
+    // viewport height, with a width cap. Reserve = pad-top(52) + spacing(40) +
+    // info(~160) + player clearance(132) = 384px.
+    //
+    // RESPONSIVE: on large/tall windows the art should GROW to fill the space
+    // (people love big covers; the bg particles were removed, so a small art
+    // reads empty). The height budget `(vh-384)/1.25` already scales with the
+    // window; we raise the hard cap from 460 -> 660px and the width fraction
+    // 0.55 -> 0.62 so the art keeps growing on a big screen instead of stalling.
+    // The 180px floor keeps small windows safe (small was confirmed good).
     property <length> base-art: Math.max(180px,
-        Math.min(Math.min((root.viewport-height - 384px) / 1.25, root.viewport-width * 0.55), 460px));
+        Math.min(Math.min((root.viewport-height - 384px) / 1.25, root.viewport-width * 0.62), 660px));
     // Reactive size = base * artScale. The glow layer and the art share this
     // exact size/position so the halo stays glued to the art edge (per risk).
     property <length> art-size: root.base-art * root.art-scale;
@@ -211,71 +162,9 @@ export component AlbumReactivePanel inherits Rectangle {
             }
         }
 
-        // --- Track info ----------------------------------------------------
-        info-block := VerticalLayout {
-            alignment: center;
-            spacing: 6px;
-
-            // "Now Playing" indicator: equalizer bars + label. Shown only while
-            // playing (Svelte {#if isPlaying}).
-            if NowPlayingState.playing: HorizontalLayout {
-                alignment: center;
-                spacing: 8px;
-                padding-bottom: 8px;
-                VerticalLayout {
-                    alignment: center;
-                    EqualizerBars {
-                        tint: #7c3aed;
-                    }
-                }
-                Text {
-                    text: @tr("Now Playing");
-                    color: #7c3aed;
-                    font-size: 12px;
-                    font-weight: 600;
-                    letter-spacing: 0.5px;
-                    vertical-alignment: center;
-                }
-            }
-
-            // Track title.
-            Text {
-                text: NowPlayingState.title;
-                color: #ffffff;
-                font-size: 28px;
-                font-weight: 700;
-                horizontal-alignment: center;
-                overflow: elide;
-            }
-
-            // Artist.
-            Text {
-                text: NowPlayingState.artist;
-                color: #ffffffb3;
-                font-size: 18px;
-                horizontal-alignment: center;
-                overflow: elide;
-            }
-
-            // Album (italic, dimmer). Shown only when present (Svelte {#if album}).
-            if NowPlayingState.album != "": Text {
-                text: NowPlayingState.album;
-                color: #ffffff80;
-                font-size: 14px;
-                font-italic: true;
-                horizontal-alignment: center;
-                overflow: elide;
-            }
-
-            // Quality badge (Svelte QualityBadgeStatic). Centered under the text.
-            HorizontalLayout {
-                alignment: center;
-                padding-top: 12px;
-                QualityBadgeFull {
-                    tier: NowPlayingState.quality-tier;
-                    detail: NowPlayingState.quality-detail;
-                }
-            }
+        // --- Track info (shared, homologated across all 3 panels) ----------
+        ImmersiveTrackInfo {
+            equalizer-tint: #7c3aed;
         }
     }
 }

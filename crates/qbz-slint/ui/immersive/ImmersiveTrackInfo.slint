@@ -1,0 +1,139 @@
+// Shared immersive track-info block (Now Playing indicator + title / artist /
+// album / quality badge) + the 4-bar equalizer. HOMOLOGATED look/spacing/
+// position across ALL THREE foreground panels (AlbumReactive, Static, Coverflow)
+// so the metadata reads identically in every mode — standardized on Static's
+// version (the one the owner liked): spacing 6px, equalizer label padding-bottom
+// 8px, quality badge padding-top 12px, fonts 28/18/14.
+//
+// Previously each panel duplicated this block (and the EqualizerBars) verbatim;
+// they are lifted here so the three modes can never drift apart again.
+//
+// SLINT GOTCHAS honored: `parent` is NEVER read in a root binding; no `opacity:`
+// on a component root; no `changed x/y/width/height` watchers; the continuous
+// equalizer loop is driven by the global animation-tick() (pull-based), NOT a
+// Timer.
+
+import { QualityBadgeFull } from "../primitives/QualityBadgeFull.slint";
+import { NowPlayingState } from "../state.slint";
+
+// Four-bar "now playing" equalizer. A continuous loop driven by the global
+// animation-tick() (pull-based) — NOT a Timer. Each bar phase-offset mirrors the
+// Svelte animation-delay / per-bar base height.
+export component EqualizerBars inherits Rectangle {
+    in property <color> tint: #7c3aed;
+    width: 18px;
+    height: 14px;
+
+    // 0.8s loop (Svelte `equalize 0.8s`): tick ms -> phase 0..1.
+    property <float> t: Math.mod(animation-tick() / 1ms, 800.0) / 800.0;
+    // scaleY 0.3..1.0 sweep (Svelte keyframes 0/100% -> 0.3, 50% -> 1.0).
+    function wave(phase: float) -> float {
+        return 0.3 + 0.7 * (0.5 - 0.5 * Math.cos((Math.mod(self.t + phase, 1.0)) * 6.283185 * 1rad));
+    }
+
+    HorizontalLayout {
+        alignment: start;
+        spacing: 2px;
+        // bar 1: delay 0.0, base 60%
+        Rectangle {
+            width: 3px;
+            y: parent.height - self.height;
+            height: parent.height * 0.6 * root.wave(0.0);
+            border-radius: 1px;
+            background: root.tint;
+        }
+        // bar 2: delay 0.2, base 100%
+        Rectangle {
+            width: 3px;
+            y: parent.height - self.height;
+            height: parent.height * 1.0 * root.wave(0.25);
+            border-radius: 1px;
+            background: root.tint;
+        }
+        // bar 3: delay 0.1, base 40%
+        Rectangle {
+            width: 3px;
+            y: parent.height - self.height;
+            height: parent.height * 0.4 * root.wave(0.125);
+            border-radius: 1px;
+            background: root.tint;
+        }
+        // bar 4: delay 0.3, base 80%
+        Rectangle {
+            width: 3px;
+            y: parent.height - self.height;
+            height: parent.height * 0.8 * root.wave(0.375);
+            border-radius: 1px;
+            background: root.tint;
+        }
+    }
+}
+
+// The standardized metadata block. Drop this below the artwork/fan in every
+// panel; it self-centers and self-hides parts that are empty.
+export component ImmersiveTrackInfo inherits VerticalLayout {
+    in property <color> equalizer-tint: #7c3aed;
+
+    alignment: center;
+    spacing: 6px;
+
+    // "Now Playing" indicator: equalizer bars + label. Shown only while playing.
+    if NowPlayingState.playing: HorizontalLayout {
+        alignment: center;
+        spacing: 8px;
+        padding-bottom: 8px;
+        VerticalLayout {
+            alignment: center;
+            EqualizerBars {
+                tint: root.equalizer-tint;
+            }
+        }
+        Text {
+            text: @tr("Now Playing");
+            color: root.equalizer-tint;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            vertical-alignment: center;
+        }
+    }
+
+    // Track title.
+    Text {
+        text: NowPlayingState.title;
+        color: #ffffff;
+        font-size: 28px;
+        font-weight: 700;
+        horizontal-alignment: center;
+        overflow: elide;
+    }
+
+    // Artist.
+    Text {
+        text: NowPlayingState.artist;
+        color: #ffffffb3;
+        font-size: 18px;
+        horizontal-alignment: center;
+        overflow: elide;
+    }
+
+    // Album (italic, dimmer). Shown only when present.
+    if NowPlayingState.album != "": Text {
+        text: NowPlayingState.album;
+        color: #ffffff80;
+        font-size: 14px;
+        font-italic: true;
+        horizontal-alignment: center;
+        overflow: elide;
+    }
+
+    // Quality badge. Self-hides when tier == "". Centered under the text.
+    HorizontalLayout {
+        alignment: center;
+        padding-top: 12px;
+        QualityBadgeFull {
+            tier: NowPlayingState.quality-tier;
+            detail: NowPlayingState.quality-detail;
+        }
+    }
+}
