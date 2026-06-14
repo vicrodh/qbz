@@ -1177,33 +1177,6 @@ fn load_now_playing_artwork(weak: slint::Weak<AppWindow>, art: qbz_models::Artwo
 /// the 160px bar art. Mirrors [`load_now_playing_artwork`] but decodes larger
 /// and writes the separate `artwork-large` slot. Source-aware via the SAME
 /// `ArtworkRef` funnel (the caller passes a `Some(300)` ref).
-/// Last resolved art URL the atmosphere (bg blur / glow / spectrum) was
-/// generated for. The 300px decode + `generate_atmosphere` blur is the CPU cost
-/// on every track change; this dedupe skips the regen when the SAME cover is
-/// re-centered (e.g. a re-play of the current track, a QConnect echo). `None` =
-/// nothing generated yet. Reset on track-clear (see `refresh_now_playing_meta`).
-static ATMOSPHERE_LAST_URL: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
-
-/// Compare-and-record the atmosphere art-URL dedupe key. Returns `true` when it
-/// differs from the last generated value (caller regenerates), recording it. A
-/// `None`/empty url, or a poisoned lock, always regenerates (conservative).
-fn atmosphere_url_changed(url: Option<&str>) -> bool {
-    let Some(u) = url.filter(|s| !s.is_empty()) else {
-        return true;
-    };
-    match ATMOSPHERE_LAST_URL.lock() {
-        Ok(mut last) => {
-            if last.as_deref() == Some(u) {
-                false
-            } else {
-                *last = Some(u.to_string());
-                true
-            }
-        }
-        Err(_) => true,
-    }
-}
-
 fn load_now_playing_artwork_large(weak: slint::Weak<AppWindow>, art: qbz_models::ArtworkRef) {
     if art.is_empty() {
         return;
@@ -1211,8 +1184,6 @@ fn load_now_playing_artwork_large(weak: slint::Weak<AppWindow>, art: qbz_models:
     let Some(cache) = crate::artwork::shared_cache() else {
         return;
     };
-    // Art-URL dedupe key for the atmosphere regen (bg/glow/spectrum).
-    let art_url = art.to_mpris_url();
     tokio::spawn(async move {
         let Some((pixels, w, h)) =
             crate::artwork::fetch_and_decode_ref(&art, &cache, 300).await
@@ -1225,20 +1196,13 @@ fn load_now_playing_artwork_large(weak: slint::Weak<AppWindow>, art: qbz_models:
             // immersive overlay), so set it unconditionally first.
             win.global::<NowPlayingState>().set_artwork_large(img);
 
-            // The atmosphere (bg blur / glow / spectrum colors) regen is the CPU
-            // cost on every track change. Skip the expensive generate_atmosphere
-            // blur when the SAME cover is already centered (art-URL dedupe) — the
-            // bg/glow/spectrum already reflect it. This is the compounding
-            // per-click cost the rebuild flagged (a re-play / QConnect echo of the
-            // current track no longer re-blurs). We deliberately do NOT gate on
-            // `ImmersiveState.open`: opening the overlay does not re-fire this
-            // path, so a closed-overlay skip would leave a stale bg on open; the
-            // overlay is conditionally mounted, so generating while closed is
-            // cheap insurance and the dedupe still prevents repeats.
+            // ALWAYS (re)generate the immersive ambient atmosphere (Codex's
+            // blurred moving background) + glow + spectrum colors from this cover.
+            // The overlay is conditionally mounted so generating while closed is
+            // cheap; the track-change reset clears bg-image, so this MUST run
+            // unconditionally — a URL dedupe here left bg-image empty after the
+            // reset and the atmosphere fell back to the raw (sharp) cover.
             let imm = win.global::<ImmersiveState>();
-            if !atmosphere_url_changed(art_url.as_deref()) {
-                return;
-            }
             if let Some((bg_pixels, bg_w, bg_h)) = crate::immersive::generate_atmosphere(&pixels, w, h)
             {
                 let bg = crate::artwork::pixels_to_image(&bg_pixels, bg_w, bg_h);
@@ -1318,11 +1282,6 @@ pub(crate) async fn refresh_now_playing_meta(runtime: &Runtime, weak: &slint::We
         // Reset the metadata dedupe too, so replaying the same track after a
         // stop re-pushes MPRIS metadata.
         if let Ok(mut last) = MPRIS_LAST_META.lock() {
-            *last = None;
-        }
-        // Reset the atmosphere art-URL dedupe so replaying the same track after a
-        // stop regenerates the immersive bg/glow/spectrum.
-        if let Ok(mut last) = ATMOSPHERE_LAST_URL.lock() {
             *last = None;
         }
         if let Some(t) = crate::tray::handle() {
