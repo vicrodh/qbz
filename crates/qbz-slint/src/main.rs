@@ -88,6 +88,8 @@ mod recently;
 mod scrobble;
 mod scrobbler_settings;
 mod search;
+// WGPU UNDERLAY SPIKE: GPU fragment-shader background for ImmersiveView.
+mod shader_underlay;
 mod settings;
 mod share;
 mod sidebar;
@@ -3941,6 +3943,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let tokio_rt = tokio::runtime::Runtime::new()?;
     let _enter = tokio_rt.enter();
 
+    // WGPU UNDERLAY SPIKE: select a wgpu-capable backend BEFORE the first window
+    // is created. require_wgpu_28 forces the winit backend (the only one that
+    // honours a graphics-API request) — which the app already uses, so the tray's
+    // WinitWindowAccessor stays valid. The renderer is femtovg-wgpu (Cargo.toml),
+    // so the femtovg text pipeline is preserved. Automatic config lets Slint init
+    // wgpu (downlevel-webgl2 limits — fine for fragment-only shaders). If this
+    // ever fails on the owner's GPU/driver, that failure IS the spike result.
+    slint::BackendSelector::new()
+        .require_wgpu_28(slint::wgpu_28::WGPUConfiguration::default())
+        .select()?;
+
     let window = AppWindow::new()?;
     // FONT TEST (slint-mvp): render with bundled Inter 18pt. Inter is a
     // clean, screen-tuned UI face; combined with the femtovg #5177/#11335
@@ -3975,6 +3988,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Inert (tap disabled, no capture / no FFT cost) until the immersive view
     // opens. Must run on the UI thread before window.run().
     visualizer::install(&window, &app_runtime);
+
+    // WGPU UNDERLAY SPIKE: capture Slint's own wgpu Device/Queue at RenderingSetup
+    // so shader_underlay allocates its texture + submits on the SAME device Slint
+    // renders with (mandatory for Image::try_from). The render itself happens in
+    // the 30fps drain (visualizer.rs). Only one rendering notifier is allowed per
+    // window; the shader underlay owns it. Errors here are non-fatal — the shader
+    // just stays dark and the rest of the UI is unaffected.
+    if let Err(e) = window
+        .window()
+        .set_rendering_notifier(move |state, graphics_api| {
+            match state {
+                slint::RenderingState::RenderingSetup => {
+                    if let slint::GraphicsAPI::WGPU28 { device, queue, .. } = graphics_api {
+                        crate::shader_underlay::setup(device.clone(), queue.clone());
+                    }
+                }
+                slint::RenderingState::RenderingTeardown => {
+                    crate::shader_underlay::teardown();
+                }
+                _ => {}
+            }
+        })
+    {
+        log::warn!("[shader] set_rendering_notifier failed: {e:?} — underlay disabled");
+    }
 
     // MusicBrainz cache — opens a SQLite store at
     // <data-dir>/qbz/cache/musicbrainz_cache.db so artist metadata

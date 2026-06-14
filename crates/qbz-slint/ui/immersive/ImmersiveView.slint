@@ -566,6 +566,15 @@ export component ImmersiveView inherits Rectangle {
                 VisualizerState.set-enabled(false);
                 return accept;
             }
+            // WGPU UNDERLAY SPIKE: 'g' (GPU) toggles the shader scene on/off in
+            // place so the owner can A/B the shader vs the existing atmosphere /
+            // panels in a single run. Remove (or repurpose to a real picker)
+            // once the spike is validated.
+            if (event.text == "g" || event.text == "G") {
+                ImmersiveState.shader-mode = ImmersiveState.shader-mode > 0 ? 0 : 1;
+                root.wake();
+                return accept;
+            }
             return reject;
         }
         focus-timer := Timer {
@@ -593,8 +602,23 @@ export component ImmersiveView inherits Rectangle {
         changed mouse-y => { root.wake(); }
     }
 
-    // (1) Bottom: moving blurred-art atmosphere.
-    ImmersiveAtmosphere {
+    // (0) WGPU UNDERLAY SPIKE: the GPU fragment-shader texture, the bottom-most
+    // layer when a shader scene is active. ADR-010 conditional mount. When
+    // shader-mode > 0 it REPLACES the atmosphere (layer 1) and the mode panels
+    // (layer 2) so the shader is the visible background; the chrome below stays
+    // on top. Driven at ~30 fps from src/visualizer.rs -> shader_underlay.
+    if ImmersiveState.shader-mode > 0: Image {
+        x: 0px;
+        y: 0px;
+        width: 100%;
+        height: 100%;
+        image-fit: fill;
+        source: ImmersiveState.shader-texture;
+    }
+
+    // (1) Bottom: moving blurred-art atmosphere. Hidden while a shader scene is
+    // active (the shader owns the background layer instead).
+    if ImmersiveState.shader-mode == 0: ImmersiveAtmosphere {
         source-image: ImmersiveState.bg-image;
         fallback-image: NowPlayingState.artwork-large.width > 0
             ? NowPlayingState.artwork-large
@@ -606,7 +630,7 @@ export component ImmersiveView inherits Rectangle {
     // (ADR-010). Mode 0 = Album Reactive (the only real foreground this
     // session). Modes 1/2/3 mount NO foreground — the atmosphere is the
     // explicit placeholder until those sessions land.
-    if ImmersiveState.mode == 0: AlbumReactivePanel {
+    if ImmersiveState.shader-mode == 0 && ImmersiveState.mode == 0: AlbumReactivePanel {
         x: 0px;
         y: 0px;
         viewport-width: root.width;
@@ -614,7 +638,7 @@ export component ImmersiveView inherits Rectangle {
     }
     // (2b) Static mode foreground (mode == 1) — calm centered now-playing
     // card over the atmosphere. Same conditional-mount pattern (ADR-010).
-    if ImmersiveState.mode == 1: StaticPanel {
+    if ImmersiveState.shader-mode == 0 && ImmersiveState.mode == 1: StaticPanel {
         x: 0px;
         y: 0px;
         viewport-width: root.width;
@@ -626,7 +650,7 @@ export component ImmersiveView inherits Rectangle {
     // click, no 3D / reflection / gradient / 500ms reflow). True-3D rotateY/
     // perspective remains deferred to a wgpu/Skia session. Same conditional-mount
     // + viewport-prop contract as the siblings (ADR-010).
-    if ImmersiveState.mode == 2: CoverflowPanel {
+    if ImmersiveState.shader-mode == 0 && ImmersiveState.mode == 2: CoverflowPanel {
         x: 0px;
         y: 0px;
         viewport-width: root.width;
@@ -639,7 +663,7 @@ export component ImmersiveView inherits Rectangle {
     // ALREADY driven on open (the mode-0 AlbumReactivePanel reads
     // VisualizerState.energy from the same enabled tap). Same conditional-mount +
     // viewport-prop contract as the siblings (ADR-010).
-    if ImmersiveState.mode == 3: SpectrumPanel {
+    if ImmersiveState.shader-mode == 0 && ImmersiveState.mode == 3: SpectrumPanel {
         x: 0px;
         y: 0px;
         viewport-width: root.width;

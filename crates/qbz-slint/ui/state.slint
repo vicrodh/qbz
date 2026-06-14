@@ -2977,6 +2977,16 @@ export global ImmersiveState {
     // Defaults = the Svelte cyan -> purple until the art resolves.
     in property <color> spectrum-primary: #00dcc8;
     in property <color> spectrum-secondary: #9632ff;
+
+    // WGPU UNDERLAY SPIKE: a GPU fragment shader rendered into a wgpu texture by
+    // src/shader_underlay.rs and handed back here each drain tick. `shader-mode`
+    // selects the scene: 0 = OFF (use the existing atmosphere + panels), >0 = a
+    // shader scene (1 = plasma spike). When >0 the atmosphere + the mode panels
+    // are hidden so the shader is the visible background; the auto-hide chrome
+    // (mode picker + compact player) stays on top. Toggle in-view with the 'g'
+    // key during the spike.
+    in property <image> shader-texture;
+    in-out property <int> shader-mode: 0;
 }
 
 // Now-playing / transport state. The Rust playback poll loop pushes the

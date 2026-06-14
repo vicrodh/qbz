@@ -11,16 +11,26 @@ name = "qbz-slint"
 path = "src/main.rs"
 
 [dependencies]
-# femtovg renderer, pinned >=1.16 for the femtovg text-rendering fixes
+# femtovg renderer, pinned =1.16.1 for the femtovg text-rendering fixes
 # (slint-ui/slint #5177 pixel-grid alignment + #11335 0.5px tearing /
 # inconsistent glyph spacing). Skia never received that treatment.
-slint = { version = "1.16", default-features = false, features = [
+#
+# WGPU UNDERLAY SPIKE (feature/wgpu-underlay-spike branch only): the renderer is
+# swapped femtovg(GL) -> femtovg-wgpu so we can render WGSL fragment shaders into
+# a wgpu texture composited under the ImmersiveView. femtovg-wgpu is the SAME
+# femtovg rasterizer on a wgpu backend, so the text fixes above are KEPT. This is
+# the one consequential, app-wide change being validated by the spike. The exact
+# version is pinned to =1.16.1 because the wgpu_28 module / GraphicsAPI::WGPU28 /
+# require_wgpu_28 are behind an `unstable-*` flag that may change on a minor bump.
+# To A/B against the GL build: `git checkout slint-mvp`.
+slint = { version = "=1.16.1", default-features = false, features = [
     "std",
     "backend-winit",
-    "renderer-femtovg",
+    "renderer-femtovg-wgpu",
     "renderer-software",
     "accessibility",
     "compat-1-2",
+    "unstable-wgpu-28",
 ] }
 # Direct access to the winit backend for the system tray: WinitWindowAccessor
 # (hide/show the OS window without quitting the event loop) and, later, the
