@@ -46,6 +46,14 @@ pub struct QueueController {
     handle: tokio::runtime::Handle,
     playback: qbz_app::settings::playback::PlaybackPreferencesState,
     view: Arc<Mutex<ViewState>>,
+    /// Last coverflow flat id-sequence fingerprint pushed to `QueueState`.
+    /// `refresh_async` compares the freshly-computed hash to this: equal means a
+    /// PURE ADVANCE/JUMP (same id-sequence, only the current pointer moved) — the
+    /// flat model setter is SKIPPED and only `coverflow-index` is updated, so the
+    /// Repeater never rebuilds and visible covers never re-decode. A different
+    /// hash (new queue / shuffle / add / remove) triggers the one-time rebuild.
+    /// `None` = nothing pushed yet (first refresh always rebuilds).
+    last_coverflow_seq: Arc<Mutex<Option<u64>>>,
 }
 
 // `PlaybackPreferencesState` is not `Clone`, but its sole field is an
@@ -61,6 +69,7 @@ impl Clone for QueueController {
                 store: Arc::clone(&self.playback.store),
             },
             view: Arc::clone(&self.view),
+            last_coverflow_seq: Arc::clone(&self.last_coverflow_seq),
         }
     }
 }
@@ -148,6 +157,7 @@ impl QueueController {
             handle,
             playback,
             view: Arc::new(Mutex::new(ViewState::default())),
+            last_coverflow_seq: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -200,6 +210,7 @@ impl QueueController {
     }
 
     async fn refresh_async(&self) {
+        let perf_start = std::time::Instant::now();
         let state = self.runtime.core().get_queue_state_full().await;
 
         // --- NOW PLAYING --------------------------------------------------
@@ -261,21 +272,60 @@ impl QueueController {
         let history_rows: Vec<RowData> =
             state.history.iter().map(|t| row_from(t, false)).collect();
 
-        // --- COVERFLOW (unfiltered next-3 / prev-3) -----------------------
-        // Built from the UNFILTERED queue so the immersive pyramid is correct
-        // regardless of sidebar page/search. Index 0 = next / most-recent.
-        let coverflow_up_rows: Vec<RowData> = state
-            .upcoming
-            .iter()
-            .take(3)
-            .map(|t| row_from(t, false))
-            .collect();
-        let coverflow_hist_rows: Vec<RowData> = state
-            .history
-            .iter()
-            .take(3)
-            .map(|t| row_from(t, false))
-            .collect();
+        // --- COVERFLOW (ONE stable flat model) ----------------------------
+        // Built from the UNFILTERED queue, oldest-first:
+        //   [history.reversed (oldest..newest), NOW-PLAYING, upcoming...]
+        // `QueueStateFull.history` is most-recent-first, so reverse it for the
+        // oldest-first flat order. The flat index of NOW = number of history
+        // entries (it sits right after the reversed history). On a PURE ADVANCE
+        // the id-sequence is unchanged and only `coverflow_index` moves -> the
+        // .slint `scroll` float animates, no model rebuild, no re-decode.
+        let mut coverflow_rows: Vec<RowData> = Vec::with_capacity(
+            state.history.len() + 1 + state.upcoming.len(),
+        );
+        for t in state.history.iter().rev() {
+            coverflow_rows.push(row_from(t, false));
+        }
+        let coverflow_index: usize = if let Some(t) = state.current_track.as_ref() {
+            let idx = coverflow_rows.len();
+            coverflow_rows.push(row_from(t, true));
+            idx
+        } else {
+            // No current track: index points at the first upcoming (or 0 when
+            // the whole queue is empty). The flat list is history ++ upcoming.
+            coverflow_rows.len()
+        };
+        for t in state.upcoming.iter() {
+            coverflow_rows.push(row_from(t, false));
+        }
+
+        // Order-sensitive rolling fingerprint over the flat id-sequence. Used to
+        // gate the model rebuild: equal hash => same membership+order => pure
+        // advance/jump => skip set_coverflow_tracks. Hashing the ordered ids
+        // (not a set) catches shuffle/reorder; folding the index-free id list
+        // keeps a same-sequence-different-pointer advance hashing identical.
+        let coverflow_seq_hash: u64 = {
+            use std::hash::{Hash, Hasher};
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            coverflow_rows.len().hash(&mut h);
+            for r in &coverflow_rows {
+                r.id.hash(&mut h);
+            }
+            h.finish()
+        };
+        // Decide rebuild-vs-index-only BEFORE the event loop so the art-job set
+        // can be narrowed to the ±4 window. `seq_changed` true => rebuild path.
+        let seq_changed = {
+            let mut last = self.last_coverflow_seq.lock().ok();
+            let changed = match last.as_deref() {
+                Some(Some(prev)) => *prev != coverflow_seq_hash,
+                _ => true, // None lock or first push -> rebuild
+            };
+            if let Some(slot) = last.as_deref_mut() {
+                *slot = Some(coverflow_seq_hash);
+            }
+            changed
+        };
 
         // --- Infinite-play flag ------------------------------------------
         let infinite = self
@@ -302,14 +352,22 @@ impl QueueController {
                 art_jobs.push((ArtTarget::History(idx), row.artwork_url.clone()));
             }
         }
-        for (idx, row) in coverflow_up_rows.iter().enumerate() {
-            if !row.artwork_url.is_empty() {
-                art_jobs.push((ArtTarget::CoverflowUpcoming(idx), row.artwork_url.clone()));
-            }
-        }
-        for (idx, row) in coverflow_hist_rows.iter().enumerate() {
-            if !row.artwork_url.is_empty() {
-                art_jobs.push((ArtTarget::CoverflowHistory(idx), row.artwork_url.clone()));
+        // Coverflow art jobs are WINDOWED to ±4 around the current flat index
+        // (only ~9 rows can be near the visible ±3 fan), not the whole queue.
+        // The set is narrowed further on the event loop (skip rows that already
+        // carry a decoded handle) so a pure advance decodes AT MOST the one
+        // cover that just entered the window — see the closure below.
+        const CF_WINDOW: usize = 4;
+        let cf_lo = coverflow_index.saturating_sub(CF_WINDOW);
+        let cf_hi = (coverflow_index + CF_WINDOW).min(coverflow_rows.len().saturating_sub(1));
+        let mut coverflow_art_jobs: Vec<(ArtTarget, String)> = Vec::new();
+        if !coverflow_rows.is_empty() {
+            for flat_idx in cf_lo..=cf_hi {
+                let row = &coverflow_rows[flat_idx];
+                if !row.artwork_url.is_empty() {
+                    coverflow_art_jobs
+                        .push((ArtTarget::CoverflowFlat(flat_idx), row.artwork_url.clone()));
+                }
             }
         }
 
@@ -317,34 +375,47 @@ impl QueueController {
         let _ = weak.upgrade_in_event_loop(move |w| {
             let qs = w.global::<QueueState>();
 
-            // Snapshot prior decoded handles per list BEFORE replacing the
-            // models, so unchanged tracks keep their decoded artwork instead of
-            // blanking to the default (which forced a full re-decode + blink on
-            // every click). Diffed per-list so a track present in both history
-            // and upcoming can't cross-map.
-            let prior_page = prior_art_map(&qs.get_upcoming_page());
-            let prior_history = prior_art_map(&qs.get_history());
-            let prior_cf_up = prior_art_map(&qs.get_coverflow_upcoming());
-            let prior_cf_hist = prior_art_map(&qs.get_coverflow_history());
+            // Snapshot prior decoded handles into ONE GLOBAL id -> artwork map
+            // covering EVERY prior list (now-playing + upcoming + history +
+            // both coverflow lists) BEFORE replacing the models. Coverflow
+            // navigation shifts a cover ACROSS lists every click (now-playing ->
+            // history, upcoming -> now-playing, ...), so a per-list diff misses
+            // the moved covers -> they blank to default -> full re-decode ->
+            // flicker + CPU spike. A global map reuses a cover's decoded handle
+            // no matter which list it sat in before; net per click only the one
+            // genuinely new track decodes.
+            let mut prior_all: std::collections::HashMap<slint::SharedString, slint::Image> =
+                std::collections::HashMap::new();
+            {
+                let np = qs.get_now_playing();
+                if np.artwork.size().width > 0 {
+                    prior_all.insert(np.id.clone(), np.artwork.clone());
+                }
+                for m in [
+                    qs.get_upcoming_page(),
+                    qs.get_history(),
+                    qs.get_coverflow_tracks(),
+                ] {
+                    for i in 0..m.row_count() {
+                        if let Some(it) = m.row_data(i) {
+                            if it.artwork.size().width > 0 {
+                                prior_all.entry(it.id.clone()).or_insert(it.artwork.clone());
+                            }
+                        }
+                    }
+                }
+            }
 
             let np_item = now_playing
                 .as_ref()
-                .map(|r| {
-                    // Reuse the prior now-playing cover only if the same track.
-                    let prior = qs.get_now_playing();
-                    let mut map = std::collections::HashMap::new();
-                    if prior.artwork.size().width > 0 {
-                        map.insert(prior.id.clone(), prior.artwork.clone());
-                    }
-                    to_item_reuse(r, &map)
-                })
+                .map(|r| to_item_reuse(r, &prior_all))
                 .unwrap_or_default();
             qs.set_has_current(now_playing.is_some());
             qs.set_now_playing(np_item);
             qs.set_now_playing_favorite(now_playing_favorite);
 
             let page_items: Vec<QueueItem> =
-                page_rows.iter().map(|r| to_item_reuse(r, &prior_page)).collect();
+                page_rows.iter().map(|r| to_item_reuse(r, &prior_all)).collect();
             qs.set_upcoming_page(slint::ModelRc::new(slint::VecModel::from(page_items)));
             qs.set_upcoming_total(upcoming_total as i32);
             qs.set_upcoming_remaining(remaining as i32);
@@ -354,25 +425,68 @@ impl QueueController {
             qs.set_page_end(page_end as i32);
 
             let history_items: Vec<QueueItem> =
-                history_rows.iter().map(|r| to_item_reuse(r, &prior_history)).collect();
+                history_rows.iter().map(|r| to_item_reuse(r, &prior_all)).collect();
             qs.set_history(slint::ModelRc::new(slint::VecModel::from(history_items)));
 
-            // Coverflow lists (unfiltered next-3 / prev-3), reusing handles.
-            let cf_up_items: Vec<QueueItem> = coverflow_up_rows
-                .iter()
-                .map(|r| to_item_reuse(r, &prior_cf_up))
-                .collect();
-            qs.set_coverflow_upcoming(slint::ModelRc::new(slint::VecModel::from(cf_up_items)));
-            let cf_hist_items: Vec<QueueItem> = coverflow_hist_rows
-                .iter()
-                .map(|r| to_item_reuse(r, &prior_cf_hist))
-                .collect();
-            qs.set_coverflow_history(slint::ModelRc::new(slint::VecModel::from(cf_hist_items)));
+            // --- COVERFLOW: gated flat-model update -----------------------
+            // KEY INVARIANT. On a PURE ADVANCE/JUMP the id-sequence is unchanged
+            // (`!seq_changed`) so we DO NOT call set_coverflow_tracks: the
+            // Repeater model is untouched, every visible cover keeps its decoded
+            // `slint::Image` handle (no source reassignment, no re-decode), and
+            // only the int `coverflow-index` moves -> the .slint `scroll` float
+            // animates the fan to the new position. The model is rebuilt ONLY
+            // when the contents actually change (new queue / shuffle / add /
+            // remove), reusing the global id->handle map so even then only the
+            // genuinely-new covers decode.
+            if seq_changed {
+                let cf_items: Vec<QueueItem> = coverflow_rows
+                    .iter()
+                    .map(|r| to_item_reuse(r, &prior_all))
+                    .collect();
+                qs.set_coverflow_tracks(slint::ModelRc::new(slint::VecModel::from(cf_items)));
+                qs.set_coverflow_seq_hash(coverflow_seq_hash as i32);
+                log::debug!(
+                    "[coverflow-perf] rebuild seq={coverflow_seq_hash} len={} idx={coverflow_index}",
+                    coverflow_rows.len()
+                );
+            } else {
+                log::debug!(
+                    "[coverflow-perf] index-only idx={coverflow_index} (seq unchanged)"
+                );
+            }
+            qs.set_coverflow_index(coverflow_index as i32);
 
             qs.set_infinite_play(infinite);
             // Keep the Slint tab property in sync with the view state so the
             // Queue/History body always matches the selected tab.
             qs.set_tab(tab);
+
+            // --- COVERFLOW windowed lazy decode (inside the event loop so it
+            // can read the live model and SKIP rows that already carry a decoded
+            // handle). After a rebuild the to_item_reuse map already filled most
+            // window covers; after an index-only update the model is the prior
+            // one with handles intact. Either way we emit a decode job ONLY for a
+            // window row whose model cell is still a default (0-width) image ->
+            // at most ONE decode per advance (the cover that just entered ±4),
+            // often zero. Visible covers are NEVER re-decoded (the invariant).
+            let cf_model = qs.get_coverflow_tracks();
+            let mut windowed_jobs: Vec<(ArtTarget, String)> = Vec::new();
+            for (target, url) in coverflow_art_jobs.into_iter() {
+                let ArtTarget::CoverflowFlat(flat_idx) = target else {
+                    continue;
+                };
+                let needs = cf_model
+                    .row_data(flat_idx)
+                    .map(|it| it.artwork.size().width == 0)
+                    .unwrap_or(false);
+                if needs {
+                    windowed_jobs.push((target, url));
+                }
+            }
+            if !windowed_jobs.is_empty() {
+                let plex = crate::plex_settings::get();
+                load_artwork(w.as_weak(), windowed_jobs, plex.base_url, plex.token);
+            }
         });
 
         // Plex creds for source-aware art: a Plex queue row carries a raw
@@ -380,6 +494,11 @@ impl QueueController {
         // not a local-file read miss. Non-Plex paths ignore these.
         let plex = crate::plex_settings::get();
         load_artwork(self.weak.clone(), art_jobs, plex.base_url, plex.token);
+
+        log::debug!(
+            "[coverflow-perf] refresh_async total={}ms",
+            perf_start.elapsed().as_millis()
+        );
     }
 
     // --- Callbacks --------------------------------------------------------
@@ -710,8 +829,8 @@ enum ArtTarget {
     NowPlaying,
     Upcoming(usize),
     History(usize),
-    CoverflowUpcoming(usize),
-    CoverflowHistory(usize),
+    /// A row in the single stable flat coverflow model, by flat index.
+    CoverflowFlat(usize),
 }
 
 /// Build a `QueueItem` from plain row data, REUSING a prior decoded artwork
@@ -739,23 +858,6 @@ fn to_item_reuse(
         explicit: row.explicit,
         is_ephemeral: row.is_ephemeral,
     }
-}
-
-/// Snapshot the current id -> decoded-artwork map for a Slint model, so the
-/// rebuilt rows can reuse handles for tracks that did not change. Only rows
-/// whose artwork is actually resolved (`width > 0`) are recorded.
-fn prior_art_map(
-    model: &slint::ModelRc<QueueItem>,
-) -> std::collections::HashMap<slint::SharedString, slint::Image> {
-    let mut map = std::collections::HashMap::new();
-    for i in 0..model.row_count() {
-        if let Some(item) = model.row_data(i) {
-            if item.artwork.size().width > 0 {
-                map.insert(item.id.clone(), item.artwork.clone());
-            }
-        }
-    }
-    map
 }
 
 #[cfg(test)]
@@ -914,6 +1016,9 @@ fn load_artwork(
         };
         if let Some(key) = cache_key.as_deref() {
             if let Some((pixels, w, h)) = crate::artwork::decoded_pixels(key, QUEUE_DECODE) {
+                if let ArtTarget::CoverflowFlat(i) = target {
+                    log::debug!("[coverflow-perf] cache-hit flat_idx={i}");
+                }
                 let weak = weak.clone();
                 let _ = weak.upgrade_in_event_loop(move |win| {
                     let img = crate::artwork::pixels_to_image(&pixels, w, h);
@@ -923,7 +1028,14 @@ fn load_artwork(
             }
         }
 
+        let perf_url = match target {
+            ArtTarget::CoverflowFlat(i) => Some((i, cache_key.clone().unwrap_or_default())),
+            _ => None,
+        };
         tokio::spawn(async move {
+            if let Some((i, u)) = perf_url.as_ref() {
+                log::debug!("[coverflow-perf] decode flat_idx={i} url={u}");
+            }
             let Some((pixels, w, h)) =
                 crate::artwork::fetch_and_decode_ref(&art, &cache, QUEUE_DECODE).await
             else {
@@ -960,17 +1072,13 @@ fn apply_queue_art(win: &AppWindow, target: ArtTarget, img: slint::Image) {
                 items.set_row_data(idx, item);
             }
         }
-        ArtTarget::CoverflowUpcoming(idx) => {
-            let items = qs.get_coverflow_upcoming();
+        ArtTarget::CoverflowFlat(idx) => {
+            let items = qs.get_coverflow_tracks();
             if let Some(mut item) = items.row_data(idx) {
                 item.artwork = img;
-                items.set_row_data(idx, item);
-            }
-        }
-        ArtTarget::CoverflowHistory(idx) => {
-            let items = qs.get_coverflow_history();
-            if let Some(mut item) = items.row_data(idx) {
-                item.artwork = img;
+                // set_row_data on a SINGLE flat row — does NOT replace the
+                // VecModel, so the Repeater is not rebuilt and the other covers'
+                // sources are untouched. Only this one cell's image changes.
                 items.set_row_data(idx, item);
             }
         }

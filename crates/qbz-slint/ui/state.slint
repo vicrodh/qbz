@@ -3248,13 +3248,25 @@ export global QueueState {
     in property <[QueueItem]> history: [];
 
     // --- Immersive coverflow (mode 2) ------------------------------------
-    // The next 3 / previous 3 tracks, taken from the UNFILTERED queue so the
-    // coverflow pyramid is correct regardless of the sidebar's page or search
-    // filter. Index 0 = next / most-recent. Decoded artwork handles are reused
-    // across refreshes (id-diff) so a one-position shift never re-decodes the
-    // covers still on screen.
-    in property <[QueueItem]> coverflow-upcoming: [];
-    in property <[QueueItem]> coverflow-history: [];
+    // ONE STABLE flat ordered model of the whole queue, oldest-first:
+    //   [history.reversed (oldest..newest), NOW-PLAYING, upcoming...]
+    // This list and its decoded cover handles do NOT change on a pure track
+    // advance/jump — only `coverflow-index` (the flat position of NOW) moves,
+    // and the .slint `scroll` float animates to it. The model is rebuilt by the
+    // Rust controller ONLY when the queue CONTENTS change (different id-sequence:
+    // new queue / shuffle / add / remove), gated by `coverflow-seq-hash`. On a
+    // pure advance the model setter is SKIPPED entirely (no Repeater rebuild, no
+    // Image churn), so visible covers never re-decode. Windowed (±4) lazy decode
+    // keeps at most one new cover decoding per advance.
+    in property <[QueueItem]> coverflow-tracks: [];
+    // Flat index of the NOW-PLAYING cover within `coverflow-tracks`
+    // (= history.len() when a current track exists, else 0). The .slint panel
+    // binds an animated `scroll` float to this int so a change eases the fan.
+    in property <int> coverflow-index: 0;
+    // Order-sensitive rolling fingerprint of the flat id-sequence. The Rust
+    // controller compares this to the value it last pushed; equal => pure
+    // advance => skip the model rebuild and only update `coverflow-index`.
+    in property <int> coverflow-seq-hash: 0;
 
     // --- Shared ----------------------------------------------------------
     // Active tab: 0 = Queue, 1 = History.
@@ -3266,8 +3278,9 @@ export global QueueState {
     // Play the upcoming entry at `index` within the current page slice.
     callback play-upcoming(int);
     // Play an upcoming entry by its QUEUE-WIDE (unfiltered) index. Used by the
-    // immersive coverflow, whose cards index `coverflow-upcoming` (= the real
-    // next-3, page/search-independent) — NOT the paged play-upcoming.
+    // immersive coverflow: a side card at flat index `i > coverflow-index` maps
+    // to up_index = i - coverflow-index - 1 and dispatches here (page/search-
+    // independent) — NOT the paged play-upcoming.
     callback play-coverflow-upcoming(int);
     // Play a history entry by its `index` in the `history` list.
     callback play-history(int);
