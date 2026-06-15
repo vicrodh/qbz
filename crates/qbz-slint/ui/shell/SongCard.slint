@@ -168,6 +168,21 @@ export component SongCard inherits Rectangle {
         : (root.compact-stamp ? (root.narrow ? 94px : 104px) : 140px);
     property <bool> has-stamp: root.show-badges && NowPlayingState.has-track;
 
+    // Exact horizontal space available to the title / meta text. Computed from
+    // the card width minus the cover (art-size + art→text gap) and — when the
+    // audio stamp is rendered INSIDE the card (New/Classic) — its reserved width
+    // + the 4px gap, mirroring the inner row's width formula. Used as the title
+    // Text's explicit width so it elides at PRECISELY the available space in
+    // every layout (New/Classic/Small) and window size. Relying on layout
+    // auto-fill failed both ways: a bare Rectangle content-sized too narrow
+    // (truncated early), and width:100% became unbounded (overflowed the stamp).
+    // Small has no in-card stamp and its time column lives OUTSIDE the SongCard,
+    // so root.width already excludes it — the same formula covers it.
+    property <length> title-avail: Math.max(0px,
+        root.width - 2 * root.pad
+        - (root.has-stamp ? root.stamp-w + 4px : 0px)
+        - (root.show-art ? root.art-size + root.art-text-gap : 0px));
+
     background: root.glass ? Theme.surface-elevated : transparent;
     border-radius: root.glass ? 8px : 0px;
     // No border — keeps the album art flush with the card (Tauri parity).
@@ -288,6 +303,10 @@ export component SongCard inherits Rectangle {
             spacing: 1px;
             alignment: center;
             Rectangle {
+                // Explicit available width (see `title-avail`): the title elides
+                // at exactly the free space — never content-sized too narrow, and
+                // never overflowing into the audio stamp.
+                width: root.title-avail;
                 tc-title := Text {
                     width: 100%;
                     text: NowPlayingState.has-track
@@ -396,6 +415,10 @@ export component SongCard inherits Rectangle {
         // this path unchanged. The text-center path above (Small bar) is the
         // tight inner-block alternative.
         if !root.text-center: Rectangle {
+            // Explicit available width (see `title-avail`) so the title elides at
+            // exactly the free space in New/Classic — never content-sized narrow,
+            // never overflowing into the in-card audio stamp.
+            width: root.title-avail;
             title-txt := Text {
                 width: 100%;
                 text: NowPlayingState.has-track
