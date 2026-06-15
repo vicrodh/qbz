@@ -207,34 +207,19 @@ export component SongCard inherits Rectangle {
                 image-fit: cover;
             }
 
-            // Idle: a sleeping cat with drifting "z"s (RunCat at rest).
+            // Idle (no track): a STATIC album glyph placeholder. Do NOT animate
+            // anything here — SongCard lives in the always-mounted now-playing
+            // bar, so any animation-tick()/continuous animation forces the whole
+            // window to redraw at the display rate forever while idle. The old
+            // sleeping-cat "zzz" animation did exactly that and pinned the CPU at
+            // ~4% on Linux / ~55% on macOS-Metal on a static Discover screen.
             if !NowPlayingState.has-track: QbzIcon {
-                source: @image-url("../assets/icons/cat.svg");
+                source: @image-url("../assets/icons/music.svg");
                 width: root.art-size * 0.5;
                 height: root.art-size * 0.5;
                 x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
-                y: Math.round((parent.height - self.height) / 2 / 1px) * 1px + root.art-size * 0.06;
+                y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
                 tint: Theme.text-muted;
-            }
-            if !NowPlayingState.has-track: Text {
-                property <float> ph: Math.mod(animation-tick() / 1ms, 2200) / 2200;
-                text: "z";
-                x: root.art-size * 0.60 + self.ph * 5px;
-                y: root.art-size * 0.34 - self.ph * 18px;
-                color: Theme.text-muted;
-                opacity: 1.0 - self.ph;
-                font-size: 8px + self.ph * 4px;
-                font-italic: true;
-            }
-            if !NowPlayingState.has-track: Text {
-                property <float> ph: Math.mod(animation-tick() / 1ms + 1100, 2200) / 2200;
-                text: "z";
-                x: root.art-size * 0.66 + self.ph * 5px;
-                y: root.art-size * 0.30 - self.ph * 18px;
-                color: Theme.text-muted;
-                opacity: 1.0 - self.ph;
-                font-size: 8px + self.ph * 4px;
-                font-italic: true;
             }
 
             // Fetch overlay: while the requested track is resolving/downloading
