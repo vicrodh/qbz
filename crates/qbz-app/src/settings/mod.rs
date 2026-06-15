@@ -9,6 +9,7 @@ pub mod legal;
 pub mod library;
 pub mod playback;
 pub mod plex;
+pub mod reco_store;
 pub mod remote_control;
 pub mod scrobblers;
 pub mod subscription;
