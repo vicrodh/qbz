@@ -108,6 +108,67 @@ export global HomeActions {
     callback select-tab(string);
 }
 
+// ---------------------------------------------------------------------------
+// Discover section configurator (Slice 5) — prefs-driven render loop + modal.
+// ---------------------------------------------------------------------------
+
+// One Discover section as a render-loop descriptor. Rust emits the ordered
+// ENABLED list per tab (DiscoverState.home-sections / editor-sections /
+// foryou-sections); each surface iterates and dispatches on `id`
+// (DiscoverySectionId::as_str). `kind` is a coarse render family used by the
+// one tab-dependent arm (mostStreamed renders as a slim grid on Home, an album
+// carousel on Editor's Picks). `section` carries the album-carousel payload for
+// Home arms that share the Carousel component but have no dedicated HomeState
+// field (newReleases / pressAwards / idealDiscography / editorPicks /
+// qobuzissimes / mostStreamed-album / recentlyPlayedAlbums); For You arms read
+// the typed ForYouState fields by id and ignore `section`.
+export struct SectionDescriptor {
+    id: string,        // "newReleases" | "qobuzPlaylists" | "qobuzMixes" | ...
+    kind: string,      // "albumCarousel" | "slimGrid" | "playlistCarousel" | ...
+    section: DiscoverSection,
+}
+
+// One row in the configurator modal: a section in the active tab's FULL ordered
+// list (enabled AND disabled — reorder applies to disabled rows too). `label`
+// is resolved in Rust from the id->key map (Slint @tr cannot take a runtime
+// key), returning the English string until the Slint gettext pipeline lands.
+export struct ConfigRow {
+    id: string,
+    label: string,
+    enabled: bool,
+}
+
+// Single owner of the configurator render-driver lists AND the modal payload.
+// `active-tab` lives here once (render loop + modal target read it); the Slice-3
+// tab pill keeps writing HomeState.active-tab and crate::home::select_tab mirrors
+// it into here (one extra set, no second tab-switch path).
+export global DiscoverState {
+    // "home" | "editorPicks" | "forYou". home::select_tab writes this.
+    in-out property <string> active-tab: "home";
+
+    // Ordered ENABLED descriptors per tab (Rust recomputes on every mutation +
+    // on tab switch). Per-tab so a tab flip is a pure binding read. When
+    // active-tab is "forYou" the home/editor lists are pushed empty so the Home
+    // repeater renders nothing for that tab (unconditional-repeater form).
+    in property <[SectionDescriptor]> home-sections: [];
+    in property <[SectionDescriptor]> editor-sections: [];
+    in property <[SectionDescriptor]> foryou-sections: [];
+
+    // Configurator modal payload (for the modal's current target = active-tab).
+    in-out property <bool> configurator-open: false;
+    in property <[ConfigRow]> config-rows: [];   // FULL list (enabled+disabled).
+    in property <int> enabled-count: 0;
+    in property <int> total-count: 0;
+}
+
+export global DiscoverActions {
+    callback open-configurator();                       // gear -> opens for active-tab
+    callback close-configurator();
+    callback toggle-section(/* tab */ string, /* id */ string);
+    callback move-section(/* tab */ string, /* id */ string, /* dir -1|+1 */ int);
+    callback reset-tab(/* tab */ string);
+}
+
 // Discover "View all" full-list page — one album module (new releases,
 // qobuzissimes, ...) opened from a Carousel's See-All link. Paginated.
 export global DiscoverBrowseState {

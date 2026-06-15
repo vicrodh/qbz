@@ -8,15 +8,19 @@
 use std::cell::RefCell;
 use std::sync::Arc;
 
+use qbz_app::settings::discover_prefs::{DiscoverPrefs, DiscoverySectionId, DiscoveryTab};
 use qbz_app::shell::AppRuntime;
 use qbz_core::FrontendAdapter;
 use qbz_models::{
     AlbumAward, DiscoverAlbum, DiscoverAudioInfo, DiscoverContainer, DiscoverPlaylist,
 };
-use slint::{ComponentHandle, ModelRc, VecModel};
+use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use crate::artwork::{ArtworkJob, ArtworkTarget};
-use crate::{AlbumCardItem, AppWindow, DiscoverSection, HomeState, SearchPlaylistItem, SlimItem};
+use crate::{
+    AlbumCardItem, AppWindow, DiscoverSection, DiscoverState, HomeState, SearchPlaylistItem,
+    SectionDescriptor, SlimItem,
+};
 
 /// Plain, `Send` home data produced on the worker thread.
 pub struct HomeData {
@@ -49,6 +53,10 @@ struct TabSections {
 
 #[derive(Clone)]
 pub struct SectionData {
+    /// The configurator section id this album carousel maps to. Lets the
+    /// prefs-driven render loop key a pref id to its cached section data
+    /// (Slice 5). Album-carousel sections only.
+    pub id: DiscoverySectionId,
     pub title: String,
     /// Discover endpoint path for the "View all" page ("" = no full-list page).
     pub endpoint: String,
@@ -125,34 +133,38 @@ where
     // Home set and the most-streamed slim grid below. Order mirrors
     // Tauri's DEFAULT_PREFS.editorPicks.
     let mut editor_sections = Vec::new();
-    push_section_ref(&mut editor_sections, "New Releases", "/discover/newReleases", &containers.new_releases);
-    push_section_ref(&mut editor_sections, "Qobuzissimes", "/discover/qobuzissims", &containers.qobuzissims);
-    push_section_ref(&mut editor_sections, "Press Accolades", "/discover/pressAward", &containers.press_awards);
-    push_section_ref(&mut editor_sections, "Most Streamed", "/discover/mostStreamed", &containers.most_streamed);
+    push_section_ref(&mut editor_sections, DiscoverySectionId::NewReleases, "New Releases", "/discover/newReleases", &containers.new_releases);
+    push_section_ref(&mut editor_sections, DiscoverySectionId::Qobuzissimes, "Qobuzissimes", "/discover/qobuzissims", &containers.qobuzissims);
+    push_section_ref(&mut editor_sections, DiscoverySectionId::PressAwards, "Press Accolades", "/discover/pressAward", &containers.press_awards);
+    push_section_ref(&mut editor_sections, DiscoverySectionId::MostStreamed, "Most Streamed", "/discover/mostStreamed", &containers.most_streamed);
     push_section_ref(
         &mut editor_sections,
+        DiscoverySectionId::IdealDiscography,
         "Ideal Discography",
         "/discover/idealDiscography",
         &containers.ideal_discography,
     );
     push_section_ref(
         &mut editor_sections,
+        DiscoverySectionId::EditorPicks,
         "Albums of the Week",
         "/discover/albumOfTheWeek",
         &containers.album_of_the_week,
     );
 
     let mut sections = Vec::new();
-    push_section(&mut sections, "New Releases", "/discover/newReleases", containers.new_releases);
-    push_section(&mut sections, "Press Accolades", "/discover/pressAward", containers.press_awards);
+    push_section(&mut sections, DiscoverySectionId::NewReleases, "New Releases", "/discover/newReleases", containers.new_releases);
+    push_section(&mut sections, DiscoverySectionId::PressAwards, "Press Accolades", "/discover/pressAward", containers.press_awards);
     push_section(
         &mut sections,
+        DiscoverySectionId::IdealDiscography,
         "Ideal Discography",
         "/discover/idealDiscography",
         containers.ideal_discography,
     );
     push_section(
         &mut sections,
+        DiscoverySectionId::EditorPicks,
         "Albums of the Week",
         "/discover/albumOfTheWeek",
         containers.album_of_the_week,
@@ -241,6 +253,7 @@ where
 
 fn push_section(
     out: &mut Vec<SectionData>,
+    id: DiscoverySectionId,
     title: &str,
     endpoint: &str,
     container: Option<DiscoverContainer<DiscoverAlbum>>,
@@ -252,6 +265,7 @@ fn push_section(
         return;
     }
     out.push(SectionData {
+        id,
         title: title.to_string(),
         endpoint: endpoint.to_string(),
         albums: container.data.items.into_iter().map(map_album).collect(),
@@ -262,6 +276,7 @@ fn push_section(
 /// so the same data can feed more than one tab's section set.
 fn push_section_ref(
     out: &mut Vec<SectionData>,
+    id: DiscoverySectionId,
     title: &str,
     endpoint: &str,
     container: &Option<DiscoverContainer<DiscoverAlbum>>,
@@ -273,6 +288,7 @@ fn push_section_ref(
         return;
     }
     out.push(SectionData {
+        id,
         title: title.to_string(),
         endpoint: endpoint.to_string(),
         albums: container.data.items.iter().cloned().map(map_album).collect(),
@@ -562,6 +578,154 @@ pub fn playlist_artwork_jobs(playlists: &[PlaylistCardData]) -> Vec<ArtworkJob> 
             })
         })
         .collect()
+}
+
+// ---------------------------------------------------------------------------
+// Slice 5 — prefs-driven descriptor lists for Home / Editor's Picks.
+// ---------------------------------------------------------------------------
+
+/// Build one Slint `DiscoverSection` from cached album data (mirrors
+/// `build_sections` for a single entry).
+fn descriptor_section(data: &SectionData) -> DiscoverSection {
+    DiscoverSection {
+        title: data.title.clone().into(),
+        endpoint: data.endpoint.clone().into(),
+        albums: ModelRc::new(VecModel::from(
+            data.albums.iter().cloned().map(card_to_item).collect::<Vec<_>>(),
+        )),
+    }
+}
+
+/// Build one tab's ordered ENABLED descriptor list from `prefs` + the cached
+/// section data. Album-carousel ids embed their `DiscoverSection` (Home/Editor
+/// share the Carousel component but have no per-id HomeState field). The
+/// fixed-data ids (qobuzPlaylists / continueListening / mostStreamed-slim) and
+/// the always-present-with-placeholder ids (recentlyPlayedAlbums on Home) bind
+/// HomeState fields in the view; they carry an empty `section`.
+///
+/// **Empty-section policy (b):** an album-carousel id with no cached data is
+/// DROPPED (no backing `SectionData` → nothing to render, and these have no
+/// placeholder). recentlyPlayedAlbums / continueListening / qobuzPlaylists /
+/// mostStreamed are KEPT (the view arm self-hides or shows a placeholder on
+/// empty data), preserving the 1:1 Home placeholders. This keeps every mounted
+/// album-carousel delegate non-empty (the documented anti-spacing-doubling form).
+fn descriptors_for(prefs: &DiscoverPrefs, tab: DiscoveryTab, cached: &[SectionData]) -> Vec<SectionDescriptor> {
+    use DiscoverySectionId::*;
+    let editor = tab == DiscoveryTab::EditorPicks;
+    let mut out = Vec::new();
+    for id in prefs.enabled_ordered(tab) {
+        // mostStreamed renders as an album carousel on Editor's Picks, a slim
+        // grid on Home — encode that in `kind` so the delegate dispatches it
+        // without reading active-tab.
+        let kind = if id == MostStreamed {
+            if editor { "albumCarousel" } else { "slimGrid" }
+        } else {
+            crate::discover_prefs::render_kind(id)
+        };
+        // Album-carousel ids that pull from the cached SectionData.
+        let is_album_cache = matches!(
+            id,
+            NewReleases | PressAwards | IdealDiscography | EditorPicks | Qobuzissimes
+        ) || (id == MostStreamed && editor);
+        let section = if is_album_cache {
+            match cached.iter().find(|s| s.id == id) {
+                Some(data) => descriptor_section(data),
+                // Empty-section policy (b): no data for this album id → drop it.
+                None => continue,
+            }
+        } else {
+            DiscoverSection::default()
+        };
+        out.push(SectionDescriptor {
+            id: SharedString::from(id.as_str()),
+            kind: SharedString::from(kind),
+            section,
+        });
+    }
+    out
+}
+
+/// Build the Home + Editor's Picks descriptor lists from the cached section
+/// data (called by the configurator controller after a mutation and at seed).
+pub fn tab_descriptors(prefs: &DiscoverPrefs) -> (Vec<SectionDescriptor>, Vec<SectionDescriptor>) {
+    TAB_SECTIONS.with(|cell| {
+        let cache = cell.borrow();
+        let home = descriptors_for(prefs, DiscoveryTab::Home, &cache.home);
+        let editor = descriptors_for(prefs, DiscoveryTab::EditorPicks, &cache.editor);
+        (home, editor)
+    })
+}
+
+/// Artwork jobs for a tab's descriptor list — they target the embedded album
+/// sections in `DiscoverState.home-sections` / `editor-sections` (NOT
+/// HomeState.sections), so covers paint on the prefs-driven Home/Editor loop.
+/// Built from the cached `SectionData` (CardData urls) keyed by the descriptor
+/// id, so `section_idx` aligns with the descriptor's position in the pushed
+/// list — no need to read back the Slint model.
+fn discover_section_artwork_jobs(
+    descriptors: &[SectionDescriptor],
+    cached: &[SectionData],
+    editor: bool,
+) -> Vec<ArtworkJob> {
+    let mut jobs = Vec::new();
+    for (section_idx, desc) in descriptors.iter().enumerate() {
+        // Only album-carousel descriptors map to a cached SectionData; the
+        // fixed-data ids have no entry and contribute no jobs here.
+        let Some(data) = cached.iter().find(|s| s.id.as_str() == desc.id.as_str()) else {
+            continue;
+        };
+        for (album_idx, card) in data.albums.iter().enumerate() {
+            if card.artwork_url.is_empty() {
+                continue;
+            }
+            jobs.push(ArtworkJob {
+                target: ArtworkTarget::DiscoverSectionAlbum {
+                    editor,
+                    section_idx,
+                    album_idx,
+                },
+                url: card.artwork_url.clone(),
+            });
+        }
+    }
+    jobs
+}
+
+/// Re-render the active Home / Editor's Picks tab from the cached section data
+/// (no network) after a configurator mutation: push the recomputed descriptor
+/// lists + the active tab's Qobuz Playlists row, and return the descriptor
+/// artwork jobs to re-fire for the active tab. For You is not handled here (its
+/// data lives in ForYouState; the descriptor list alone drives it).
+pub fn rerender_active_tab(window: &AppWindow, prefs: &DiscoverPrefs) -> Vec<ArtworkJob> {
+    let active = window.global::<DiscoverState>().get_active_tab().to_string();
+    if active == "forYou" {
+        return Vec::new();
+    }
+    let editor = active == "editorPicks";
+    let (home, editor_list) = tab_descriptors(prefs);
+    let active_list = if editor { editor_list.clone() } else { home.clone() };
+
+    let dstate = window.global::<DiscoverState>();
+    dstate.set_home_sections(ModelRc::new(VecModel::from(home)));
+    dstate.set_editor_sections(ModelRc::new(VecModel::from(editor_list)));
+
+    // Re-push the active tab's Qobuz Playlists row + build the album-section
+    // artwork jobs from the same cached data (one borrow of the cache).
+    let hstate = window.global::<HomeState>();
+    let (pls, jobs) = TAB_SECTIONS.with(|cell| {
+        let cache = cell.borrow();
+        let (album_cache, pls) = if editor {
+            (&cache.editor, &cache.editor_playlists)
+        } else {
+            (&cache.home, &cache.home_playlists)
+        };
+        let mut jobs = discover_section_artwork_jobs(&active_list, album_cache, editor);
+        jobs.extend(playlist_artwork_jobs(pls));
+        (pls.iter().map(playlist_to_item).collect::<Vec<_>>(), jobs)
+    });
+    hstate.set_playlists(ModelRc::new(VecModel::from(pls)));
+
+    jobs
 }
 
 /// Switch the visible Discover tab. Reads the cached section set for

@@ -24,6 +24,7 @@ mod commands;
 mod custom_artwork;
 mod dates;
 mod discover_browse;
+mod discover_prefs;
 mod discovery_dismiss;
 mod fav_cache;
 mod favorites;
@@ -260,6 +261,9 @@ async fn enter_shell(
         // Seed the My QBZ branding (label + icon) from the per-user store so
         // the sidebar row + Settings row paint the custom values immediately.
         myqbz_prefs::seed(&w);
+        // Seed the Discover configurator descriptor lists so the prefs-driven
+        // render loop has order/visibility data before the first apply_home.
+        discover_prefs::seed(&w);
         w.global::<HomeState>().set_loading(true);
         w.set_screen(AppScreen::Shell);
     });
@@ -370,6 +374,7 @@ async fn enter_shell_offline(
     if let Some(dir) = crate::offline_mode::user_data_dir(user_id) {
         crate::offline_mode::init_for_user(&dir);
         crate::fav_cache::init_for_user(&dir);
+        crate::discover_prefs::init_for_user(&dir);
     }
     // Lyrics cache (per-user, shared file with Tauri) — offline sessions
     // serve cached lyrics (deviation D3, cache-first offline contract).
@@ -381,6 +386,9 @@ async fn enter_shell_offline(
         let _ = weak.clone().upgrade_in_event_loop(move |w| {
             seed_tray_appearance(&w, &tray);
             myqbz_prefs::seed(&w);
+            // Seed the Discover configurator descriptor lists (works offline —
+            // the prefs store is per-user and bound at session activation).
+            discover_prefs::seed(&w);
             // No HomeState loading spinner: the discover load is skipped offline
             // (the gating slice adds the placeholder views).
             w.set_screen(AppScreen::Shell);
@@ -7842,6 +7850,64 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if tab.as_str() == "forYou" {
                         ensure_for_you_loaded(&runtime, &weak, &handle, &image_cache);
                     }
+                }
+            });
+    }
+
+    // Discover section configurator (Slice 5) — gear opens the modal; toggle /
+    // move / reset mutate the per-user prefs, persist, and re-render the active
+    // tab from the cache (no refetch). The mutation handlers re-fire artwork for
+    // newly-shown Home/Editor album sections, mirroring on_select_tab.
+    {
+        let weak = window.as_weak();
+        window
+            .global::<DiscoverActions>()
+            .on_open_configurator(move || {
+                if let Some(w) = weak.upgrade() {
+                    discover_prefs::on_open_configurator(&w);
+                }
+            });
+    }
+    {
+        let weak = window.as_weak();
+        window
+            .global::<DiscoverActions>()
+            .on_close_configurator(move || {
+                if let Some(w) = weak.upgrade() {
+                    discover_prefs::on_close_configurator(&w);
+                }
+            });
+    }
+    {
+        let weak = window.as_weak();
+        let image_cache = image_cache.clone();
+        window
+            .global::<DiscoverActions>()
+            .on_toggle_section(move |tab, id| {
+                if let Some(w) = weak.upgrade() {
+                    discover_prefs::on_toggle(&w, tab.as_str(), id.as_str(), &image_cache);
+                }
+            });
+    }
+    {
+        let weak = window.as_weak();
+        let image_cache = image_cache.clone();
+        window
+            .global::<DiscoverActions>()
+            .on_move_section(move |tab, id, dir| {
+                if let Some(w) = weak.upgrade() {
+                    discover_prefs::on_move(&w, tab.as_str(), id.as_str(), dir, &image_cache);
+                }
+            });
+    }
+    {
+        let weak = window.as_weak();
+        let image_cache = image_cache.clone();
+        window
+            .global::<DiscoverActions>()
+            .on_reset_tab(move |tab| {
+                if let Some(w) = weak.upgrade() {
+                    discover_prefs::on_reset(&w, tab.as_str(), &image_cache);
                 }
             });
     }

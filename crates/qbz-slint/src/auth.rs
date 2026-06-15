@@ -110,6 +110,7 @@ where
     if let Some(dir) = crate::offline_mode::user_data_dir(user_id) {
         crate::offline_mode::init_for_user(&dir);
         crate::fav_cache::init_for_user(&dir);
+        crate::discover_prefs::init_for_user(&dir);
     }
     // Lyrics cache (per-user, shared lyrics.db with Tauri).
     crate::lyrics::init_for_user(core.client(), user_id);
@@ -219,6 +220,7 @@ where
             if let Some(dir) = crate::offline_mode::user_data_dir(user_id) {
                 crate::offline_mode::init_for_user(&dir);
                 crate::fav_cache::init_for_user(&dir);
+                crate::discover_prefs::init_for_user(&dir);
             }
             // Lyrics cache (per-user, shared lyrics.db with Tauri).
             crate::lyrics::init_for_user(core.client(), user_id);
@@ -265,6 +267,7 @@ where
     crate::offline::deactivate().await;
     crate::offline_mode::teardown();
     crate::fav_cache::teardown();
+    crate::discover_prefs::teardown();
     crate::lyrics::teardown();
     runtime.deactivate().await?;
     log::info!("[qbz-slint] logged out");
