@@ -129,6 +129,8 @@ pub enum ArtworkTarget {
     ForYouMoreFromLibrary { index: usize },
     /// A card in ForYouState.rediscover.albums[index].
     ForYouRediscover { index: usize },
+    /// A card in ForYouState.favorite-albums.albums[index].
+    ForYouFavoriteAlbum { index: usize },
     /// The Spotlight artist portrait.
     ForYouSpotlightArtist,
     /// A card in ForYouState.spotlight-albums[index].
@@ -1017,6 +1019,13 @@ fn apply_artwork(
         }
         ArtworkTarget::ForYouRediscover { index } => {
             let model = window.global::<crate::ForYouState>().get_rediscover().albums;
+            if let Some(mut item) = model.row_data(index) {
+                item.artwork = image;
+                model.set_row_data(index, item);
+            }
+        }
+        ArtworkTarget::ForYouFavoriteAlbum { index } => {
+            let model = window.global::<crate::ForYouState>().get_favorite_albums().albums;
             if let Some(mut item) = model.row_data(index) {
                 item.artwork = image;
                 model.set_row_data(index, item);

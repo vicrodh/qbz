@@ -395,6 +395,13 @@ fn build_rediscover(fav_albums: &[Album], recent_ids: &HashSet<String>) -> Vec<A
         .collect()
 }
 
+/// Favorite Albums — the user's favorited albums, capped at 18, in favorite
+/// order (matches Tauri's home-resolved favoriteAlbums sliced 18; unfiltered,
+/// unlike Rediscover).
+fn build_favorite_albums(fav_albums: &[Album]) -> Vec<AlbumCard> {
+    fav_albums.iter().take(18).cloned().map(map_album).collect()
+}
+
 /// Radio Stations — album-seeded tiles from recent + favorite albums,
 /// deduped, capped at 12.
 fn build_radio(
@@ -628,6 +635,16 @@ fn apply_rediscover(weak: &slint::Weak<AppWindow>, cache: &ImageCache, cards: Ve
     crate::artwork::spawn_loads(jobs, weak.clone(), cache.clone());
 }
 
+fn apply_favorite_albums(weak: &slint::Weak<AppWindow>, cache: &ImageCache, cards: Vec<AlbumCard>) {
+    let jobs = album_jobs(&cards, |i| ArtworkTarget::ForYouFavoriteAlbum { index: i });
+    let w = weak.clone();
+    let _ = w.upgrade_in_event_loop(move |w| {
+        w.global::<ForYouState>()
+            .set_favorite_albums(section("Favorite Albums", &cards));
+    });
+    crate::artwork::spawn_loads(jobs, weak.clone(), cache.clone());
+}
+
 fn apply_more_from_library(
     weak: &slint::Weak<AppWindow>,
     cache: &ImageCache,
@@ -787,6 +804,7 @@ pub fn spawn_for_you<A>(
             let recent_ids = recent_ids.clone();
             Box::pin(async move {
                 let fav_albums = fetch_fav_albums(&runtime).await;
+                apply_favorite_albums(&weak, &cache, build_favorite_albums(&fav_albums));
                 apply_rediscover(&weak, &cache, build_rediscover(&fav_albums, &recent_ids));
                 apply_radio(&weak, &cache, build_radio(&recent_album_list, &fav_albums));
 

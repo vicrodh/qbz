@@ -134,6 +134,17 @@ export component ForYouView inherits VerticalLayout {
         }
     }
 
+    // 6. Favorite Albums.
+    if ForYouState.favorite-albums.albums.length > 0: Carousel {
+        section: ForYouState.favorite-albums;
+        album-clicked(id) => {
+            root.open-album(id);
+        }
+        media-action(kind, id, action) => {
+            root.media-action(kind, id, action);
+        }
+    }
+
     // 5. More From Your Library.
     if ForYouState.more-from-library.albums.length > 0: Carousel {
         section: ForYouState.more-from-library;
