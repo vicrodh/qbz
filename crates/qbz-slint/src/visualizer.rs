@@ -25,7 +25,7 @@ use qbz_audio::visualizer::{spawn_visualizer_thread, VizFrame, VizSink};
 use slint::{ComponentHandle, Model, ModelRc, VecModel};
 
 use crate::adapter::SlintAdapter;
-use crate::{AppWindow, VisualizerState};
+use crate::{AppWindow, ImmersiveState, VisualizerState};
 
 /// Single-slot, latest-wins frame store shared with the FFT producer thread.
 /// Each cell holds at most the most recent frame for that stream; the UI drain
@@ -102,6 +102,12 @@ pub fn install(window: &AppWindow, runtime: &Arc<AppRuntime<SlintAdapter>>) {
     // ~30 fps drain on the UI thread: copy the latest frames into the models.
     let weak = window.as_weak();
     let timer = slint::Timer::default();
+    // WGPU UNDERLAY SPIKE: latest sub-bass + transient kept across ticks so the
+    // shader animates smoothly (its own time accumulator) and only *reacts* at
+    // 30 fps. `last_tr` decays each tick so a one-frame transient produces a
+    // visible multi-frame flash (matching how SpectrumPanel decays it).
+    let mut last_e0 = 0.0f32;
+    let mut last_tr = 0.0f32;
     timer.start(
         slint::TimerMode::Repeated,
         std::time::Duration::from_millis(33),
@@ -115,6 +121,7 @@ pub fn install(window: &AppWindow, runtime: &Arc<AppRuntime<SlintAdapter>>) {
                 for (i, v) in b.iter().enumerate() {
                     energy.set_row_data(i, *v);
                 }
+                last_e0 = b[0];
             }
             if let Some(b) = cells.spectral.lock().unwrap().take() {
                 for (i, v) in b.iter().enumerate() {
@@ -129,6 +136,22 @@ pub fn install(window: &AppWindow, runtime: &Arc<AppRuntime<SlintAdapter>>) {
             if let Some(x) = cells.transient.lock().unwrap().take() {
                 if let Some(w) = weak.upgrade() {
                     w.global::<VisualizerState>().set_transient(x);
+                }
+                last_tr = x.max(last_tr);
+            }
+
+            // WGPU UNDERLAY SPIKE: render one GPU shader frame into the wgpu
+            // texture and hand it to ImmersiveState. Only runs while a shader
+            // scene is active (shader-mode > 0); otherwise zero GPU cost. The
+            // device/queue were captured by the rendering notifier (main.rs);
+            // render_frame is a no-op until that fires.
+            last_tr *= 0.85;
+            if let Some(w) = weak.upgrade() {
+                let imm = w.global::<ImmersiveState>();
+                if imm.get_shader_mode() > 0 {
+                    if let Some(img) = crate::shader_underlay::render_frame(last_e0, last_tr) {
+                        imm.set_shader_texture(img);
+                    }
                 }
             }
         },
