@@ -479,9 +479,6 @@ pub const TEST_SEEDS: [TestSeed; 4] = [
     TestSeed { depth: 24, rate: 192000.0, id_hint: 52265, artist: "Toto", title: "Africa" },
 ];
 
-/// The DAC node.name the test is currently watching (N6 probe target).
-static TEST_NODE: Mutex<Option<String>> = Mutex::new(None);
-
 /// True if a resolved track matches this seed's family (rate + bit depth — the
 /// two 44.1 seeds only differ by depth).
 pub fn track_matches_seed(track: &qbz_models::Track, seed: &TestSeed) -> bool {
@@ -493,29 +490,21 @@ pub fn track_matches_seed(track: &qbz_models::Track, seed: &TestSeed) -> bool {
     rate_ok && depth_ok
 }
 
-/// The node.name of the first checked candidate (the DAC being configured), or
-/// the manual node.name from the escape hatch.
-pub fn first_selected_node(window: &AppWindow) -> Option<String> {
-    let st = window.global::<DacWizardState>();
-    let model = st.get_candidates();
-    for i in 0..model.row_count() {
-        if let Some(r) = model.row_data(i) {
-            if r.checked {
-                return Some(r.id.to_string());
-            }
-        }
-    }
-    let manual = st.get_manual_node_name().to_string();
-    if !manual.trim().is_empty() && st.get_manual_valid() {
-        Some(manual)
-    } else {
-        None
-    }
+/// Resolved test tracks, kept so the user can jump straight to any of them
+/// (re-set the queue at the chosen index via the working play path).
+static TEST_TRACKS: Mutex<Vec<qbz_models::Track>> = Mutex::new(Vec::new());
+
+pub fn stash_test_tracks(tracks: Vec<qbz_models::Track>) {
+    *TEST_TRACKS.lock().unwrap() = tracks;
 }
 
-/// Start the test: stash the watched node + show the "playing" state.
-pub fn begin_test(window: &AppWindow, node: Option<String>) {
-    *TEST_NODE.lock().unwrap() = node;
+pub fn test_tracks() -> Vec<qbz_models::Track> {
+    TEST_TRACKS.lock().unwrap().clone()
+}
+
+/// Start the test: show the "playing" state. The read-back probes whichever
+/// DAC is actively playing (scan), so no node needs to be stashed.
+pub fn begin_test(window: &AppWindow) {
     let st = window.global::<DacWizardState>();
     st.set_test_playing(true);
     st.set_test_rate_matched(false);
@@ -525,11 +514,6 @@ pub fn begin_test(window: &AppWindow, node: Option<String>) {
 
 pub fn end_test(window: &AppWindow) {
     window.global::<DacWizardState>().set_test_playing(false);
-}
-
-/// The node the poll loop should probe (read on a worker thread).
-pub fn test_node() -> Option<String> {
-    TEST_NODE.lock().unwrap().clone()
 }
 
 /// Apply one poll: the rate QBZ requested vs the DAC's real negotiated rate (N6).
@@ -552,12 +536,17 @@ pub fn apply_poll(
     });
     match negotiated {
         Some(n) => {
-            st.set_test_negotiated_label(format!("DAC running at {}", khz(n.sample_rate)).into());
-            // Truth signal (N6): the DAC's real clock matches what QBZ asked for.
+            // The DAC's REAL hardware params (N6): rate + ALSA container format
+            // (e.g. S32_LE = 24-bit in a 32-bit frame) + channels. This is the
+            // bit-perfect proof — exactly what the hardware is clocked at.
+            st.set_test_negotiated_label(
+                format!("DAC: {} · {} · {} ch", khz(n.sample_rate), n.format, n.channels).into(),
+            );
+            // Truth signal: the DAC's real clock matches what QBZ asked for.
             st.set_test_rate_matched(requested_rate > 0 && n.sample_rate == requested_rate);
         }
         None => {
-            st.set_test_negotiated_label("DAC idle — set QBZ output to this DAC".into());
+            st.set_test_negotiated_label("Waiting for the DAC to start playing…".into());
             st.set_test_rate_matched(false);
         }
     }

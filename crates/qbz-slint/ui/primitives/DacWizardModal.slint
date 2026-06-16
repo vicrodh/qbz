@@ -478,28 +478,55 @@ export component DacWizardModal inherits Rectangle {
                                 font-size: Typography.body;
                                 wrap: word-wrap;
                             }
-                            // The four tracks that will play.
+                            // The four tracks — click one to jump straight to it
+                            // while testing (no need to wait for each to finish).
                             VerticalLayout {
-                                spacing: 6px;
-                                for line in root.test-tracks: HorizontalLayout {
-                                    spacing: 8px;
-                                    alignment: start;
-                                    Text {
-                                        text: "♪";
-                                        color: Theme.text-muted;
-                                        font-size: Typography.legal;
+                                spacing: 4px;
+                                for line[idx] in root.test-tracks: Rectangle {
+                                    height: 26px;
+                                    border-radius: Radius.sm;
+                                    background: (trow.has-hover && DacWizardState.test-playing)
+                                        ? Theme.surface-hover : transparent;
+                                    HorizontalLayout {
+                                        padding-left: 6px;
+                                        padding-right: 6px;
+                                        spacing: 8px;
+                                        alignment: start;
+                                        // Fixed glyph slot (width + height) so the
+                                        // ♪→▶ hover swap can never reflow the row.
+                                        Text {
+                                            width: 14px;
+                                            height: 26px;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                            text: (trow.has-hover && DacWizardState.test-playing) ? "▶" : "♪";
+                                            color: (trow.has-hover && DacWizardState.test-playing)
+                                                ? Theme.accent : Theme.text-muted;
+                                            font-size: Typography.legal;
+                                        }
+                                        Text {
+                                            text: line;
+                                            color: Theme.text-secondary;
+                                            font-size: Typography.legal;
+                                            vertical-alignment: center;
+                                            overflow: elide;
+                                            horizontal-stretch: 1;
+                                        }
                                     }
-                                    Text {
-                                        text: line;
-                                        color: Theme.text-secondary;
-                                        font-size: Typography.legal;
-                                        overflow: elide;
+                                    trow := TouchArea {
+                                        mouse-cursor: DacWizardState.test-playing ? pointer : default;
+                                        clicked => {
+                                            if (DacWizardState.test-playing) {
+                                                DacWizardActions.test-play-index(idx);
+                                            }
+                                        }
                                     }
                                 }
                             }
-                            // Play / Stop.
+                            // Play / Stop + the "use my own music" escape.
                             HorizontalLayout {
                                 alignment: start;
+                                spacing: 10px;
                                 QbzPrimaryButton {
                                     height: 34px;
                                     label: DacWizardState.test-playing ? @tr("Stop") : @tr("Play test");
@@ -509,6 +536,14 @@ export component DacWizardModal inherits Rectangle {
                                         } else {
                                             DacWizardActions.start-test();
                                         }
+                                    }
+                                }
+                                // For users who'd rather verify with their own
+                                // queue than the curated tracks.
+                                if !DacWizardState.test-playing: SecondaryButton {
+                                    label: @tr("Use my own music");
+                                    clicked => {
+                                        DacWizardActions.verify-own();
                                     }
                                 }
                             }

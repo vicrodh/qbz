@@ -73,7 +73,7 @@ pub use backend::{
 };
 pub use coreaudio_direct::CoreAudioExclusiveGuard;
 pub use dac_capabilities::{query_dac_capabilities, DacCapabilities};
-pub use dac_probe::{negotiated_stream_rate, NegotiatedRate};
+pub use dac_probe::{negotiated_active_rate, negotiated_stream_rate, NegotiatedRate};
 pub use health::{
     audio_stack_health, detect_distro, detect_init, detect_sandbox, AudioStackHealth, Distro,
     InitSystem, Sandbox,

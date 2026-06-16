@@ -11393,8 +11393,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let Some(w) = weak.upgrade() else {
                 return;
             };
-            let node = dac_wizard::first_selected_node(&w);
-            dac_wizard::begin_test(&w, node.clone());
+            dac_wizard::begin_test(&w);
             let runtime = runtime.clone();
             let weak2 = w.as_weak();
             let play_handle = handle.clone();
@@ -11418,9 +11417,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         tracks.push(t);
                     }
                 }
-                if let Some(n) = node.clone() {
-                    let _ = runtime.core().player().reinit_device(Some(n));
-                }
+                // Keep the resolved tracks so the user can jump between them.
+                dac_wizard::stash_test_tracks(tracks.clone());
                 let runtime2 = runtime.clone();
                 let _ = weak2.upgrade_in_event_loop(move |w| {
                     if tracks.is_empty() {
@@ -11448,8 +11446,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let player = runtime.core().player();
                 let req_rate = player.state.get_sample_rate();
                 let req_bits = player.state.get_bit_depth();
-                let negotiated = dac_wizard::test_node()
-                    .and_then(|n| qbz_audio::negotiated_stream_rate(&n));
+                let negotiated = qbz_audio::negotiated_active_rate();
                 let _ = weak2.upgrade_in_event_loop(move |w| {
                     dac_wizard::apply_poll(&w, req_rate, req_bits, negotiated);
                 });
@@ -11464,6 +11461,41 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             if let Some(w) = weak.upgrade() {
                 dac_wizard::end_test(&w);
             }
+        });
+    }
+    {
+        // Jump straight to one of the test tracks (skip the long waits) by
+        // re-setting the queue at that index via the working play path.
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window
+            .global::<DacWizardActions>()
+            .on_test_play_index(move |i| {
+                let tracks = dac_wizard::test_tracks();
+                if tracks.is_empty() {
+                    return;
+                }
+                let start = (i.max(0) as usize).min(tracks.len().saturating_sub(1));
+                crate::playback::play_tracks(
+                    runtime.clone(),
+                    weak.clone(),
+                    handle.clone(),
+                    tracks,
+                    start,
+                );
+            });
+    }
+    {
+        // "Use my own music": start the read-back without queuing the test
+        // tracks — the user plays whatever they want; the poll reads the rate.
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        window.global::<DacWizardActions>().on_verify_own(move || {
+            if let Some(w) = weak.upgrade() {
+                dac_wizard::begin_test(&w);
+            }
+            let _ = runtime.core().resume();
         });
     }
     {

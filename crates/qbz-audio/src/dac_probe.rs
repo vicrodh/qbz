@@ -125,6 +125,22 @@ pub fn negotiated_stream_rate(node_name: &str) -> Option<NegotiatedRate> {
     read_hw_params_for_card(card)
 }
 
+/// The negotiated rate of whichever ALSA card is ACTIVELY playing right now.
+///
+/// Scans every card's playback substream and returns the first one that is
+/// open (not `closed`). This is DAC-agnostic — it reports the rate of whatever
+/// QBZ is currently outputting to, so it works no matter which (or how many)
+/// DACs the user selected; you can only play through one output at a time.
+/// `None` = nothing is playing. Read-only; safe to poll.
+pub fn negotiated_active_rate() -> Option<NegotiatedRate> {
+    for card in 0..16 {
+        if let Some(nr) = read_hw_params_for_card(card) {
+            return Some(nr);
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
