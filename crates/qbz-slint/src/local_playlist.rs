@@ -885,6 +885,8 @@ fn row_item(item: &RowItem, queue: Option<&QueueTrack>) -> TrackItem {
             cache_progress: 0.0,
             source: "qobuz".into(),
             unlocking: false,
+            // Disc grouping is album-detail only; playlist rows carry none.
+            disc_header_number: 0,
         },
         RowItem::Local(track) | RowItem::Plex(track) => {
             let (tier, quality_detail, _) = crate::quality::badge(
@@ -924,6 +926,8 @@ fn row_item(item: &RowItem, queue: Option<&QueueTrack>) -> TrackItem {
                 }
                 .into(),
                 unlocking: false,
+                // Disc grouping is album-detail only; playlist rows carry none.
+                disc_header_number: 0,
             }
         }
         RowItem::LocalFile { path } => {
@@ -952,6 +956,8 @@ fn row_item(item: &RowItem, queue: Option<&QueueTrack>) -> TrackItem {
                 cache_progress: 0.0,
                 source: "local".into(),
                 unlocking: false,
+                // Disc grouping is album-detail only; playlist rows carry none.
+                disc_header_number: 0,
             }
         }
         // Honest unavailable row: distinct title + the raw stored ref in
@@ -991,6 +997,8 @@ fn row_item(item: &RowItem, queue: Option<&QueueTrack>) -> TrackItem {
             cache_progress: 0.0,
             source: if *kind == "plex" { "plex" } else { "" }.into(),
             unlocking: false,
+            // Disc grouping is album-detail only; playlist rows carry none.
+            disc_header_number: 0,
         },
     }
 }

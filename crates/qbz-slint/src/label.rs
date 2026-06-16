@@ -776,6 +776,8 @@ fn top_track_to_item(t: &TopTrack) -> TrackItem {
         cache_progress: 0.0,
         source: "qobuz".into(),
         unlocking: false,
+        // Disc grouping is album-detail only; flat lists carry none.
+        disc_header_number: 0,
     }
 }
 
@@ -793,6 +795,12 @@ fn playlist_to_item(p: &PlaylistSlim) -> SearchPlaylistItem {
         cover2: slint::Image::default(),
         cover3: slint::Image::default(),
         cover4: slint::Image::default(),
+        // Label-landing playlist cards carry no category subtag, and a
+        // transparent dominant-colour is the sentinel for "no letterbox":
+        // the collage keeps the legacy cover-fit (the contain + dominant-
+        // colour treatment is Discover-only).
+        category: "".into(),
+        dominant_color: slint::Color::from_argb_u8(0, 0, 0, 0),
     }
 }
 

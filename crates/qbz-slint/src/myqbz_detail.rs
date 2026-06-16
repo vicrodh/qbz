@@ -706,6 +706,8 @@ fn track_to_item(track: &qbz_models::QueueTrack, resolver_index: usize) -> Track
         cache_status: 0,
         cache_progress: 0.0,
         unlocking: false,
+        // Disc grouping is album-detail only; flat lists carry no header.
+        disc_header_number: 0,
     }
 }
 

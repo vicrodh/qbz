@@ -385,6 +385,8 @@ fn track_item(row: TrackRowData) -> TrackItem {
         cache_progress: 0.0,
         source: "qobuz".into(),
         unlocking: false,
+        // Disc grouping is album-detail only; flat lists carry none.
+        disc_header_number: 0,
     }
 }
 
@@ -417,6 +419,12 @@ pub(crate) fn playlist_item(row: PlaylistRow) -> SearchPlaylistItem {
         cover2: slint::Image::default(),
         cover3: slint::Image::default(),
         cover4: slint::Image::default(),
+        // Search playlist results carry no category subtag, and a transparent
+        // dominant-colour is the sentinel for "no letterbox" — the collage
+        // keeps the legacy cover-fit (contain + dominant colour is Discover-
+        // only).
+        category: "".into(),
+        dominant_color: slint::Color::from_argb_u8(0, 0, 0, 0),
     }
 }
 

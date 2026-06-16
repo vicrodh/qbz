@@ -295,6 +295,8 @@ fn to_item(track: &Track) -> TrackItem {
         cache_progress: 0.0,
         source: "qobuz".into(),
         unlocking: false,
+        // Disc grouping is album-detail only; flat lists carry none.
+        disc_header_number: 0,
     }
 }
 

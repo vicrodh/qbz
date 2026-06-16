@@ -376,6 +376,9 @@ fn map_track(index: usize, track: PageArtistTrack) -> TrackData {
         quality_tier: tier(bit_depth).to_string(),
         quality_detail: crate::quality::detail(bit_depth, sample_rate),
         explicit: track.parental_warning.unwrap_or(false),
+        // Artist top-tracks are a flat cross-album list and never render
+        // "Disc N" headers, so the disc value is unused here — default to 1.
+        disc: 1,
     }
 }
 
@@ -511,6 +514,8 @@ pub fn apply_artist(window: &AppWindow, data: ArtistData) {
             cache_progress: 0.0,
             source: "qobuz".into(),
             unlocking: false,
+            // Disc grouping is album-detail only; flat lists carry none.
+            disc_header_number: 0,
         })
         .collect();
     let release_sections: Vec<DiscoverSection> = data

@@ -1,0 +1,59 @@
+// Per-disc "more" (⋯) context menu — opened from a "Disc N" separator in the
+// album track list (Qobuz AlbumPageView + LocalAlbumView). NEW feature: Tauri
+// has no per-disc menu. Each action is scoped to that disc's tracks only; the
+// whole-album header buttons keep their own behavior.
+//
+// Mirrors AlbumContextMenu's structure (a PopupWindow hosting a ContextMenu +
+// ContextMenuItem rows) so it reads like every other ⋯ menu. The `disc`
+// property identifies which disc the four actions operate on.
+//
+//   Play all     -> disc-action(disc, "play")
+//   Shuffle      -> disc-action(disc, "shuffle")
+//   --
+//   Add to queue -> disc-action(disc, "queue")
+//   Play next    -> disc-action(disc, "play-next")
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { ContextMenu } from "ContextMenu.slint";
+import { ContextMenuItem } from "ContextMenuItem.slint";
+
+export component DiscContextMenu inherits PopupWindow {
+    in property <int> disc;
+    callback disc-action(int, string);
+
+    width: 200px;
+    // 4 rows x 33px + 1 separator x 1px + ContextMenu's 5/5 padding.
+    height: 4 * 33px + 1 * 1px + 10px;
+
+    ContextMenu {
+        ContextMenuItem {
+            icon: @image-url("../assets/icons/play-fill.svg");
+            label: @tr("Play all");
+            clicked => {
+                root.disc-action(root.disc, "play");
+            }
+        }
+        ContextMenuItem {
+            icon: @image-url("../assets/icons/shuffle.svg");
+            label: @tr("Shuffle");
+            clicked => {
+                root.disc-action(root.disc, "shuffle");
+            }
+        }
+        Rectangle { height: 1px; background: Theme.border-subtle; }
+        ContextMenuItem {
+            icon: @image-url("../assets/icons/list-end.svg");
+            label: @tr("Add to queue");
+            clicked => {
+                root.disc-action(root.disc, "queue");
+            }
+        }
+        ContextMenuItem {
+            icon: @image-url("../assets/icons/list-plus.svg");
+            label: @tr("Play next");
+            clicked => {
+                root.disc-action(root.disc, "play-next");
+            }
+        }
+    }
+}

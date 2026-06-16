@@ -486,6 +486,8 @@ pub fn apply_favorites(window: &AppWindow, data: FavData) {
                     cache_progress: 0.0,
                     source: "qobuz".into(),
                     unlocking: false,
+                    // Disc grouping is album-detail only; flat lists carry none.
+                    disc_header_number: 0,
                 })
                 .collect();
             // `tracks` is the full set the artwork pipeline targets;

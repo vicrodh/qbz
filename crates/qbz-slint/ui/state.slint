@@ -368,6 +368,14 @@ export struct TrackItem {
     // True while this track's offline CMAF bundle is being decrypted for
     // playback — drives the padlock glyph (swaps the play/equalizer icon).
     unlocking: bool,
+    // Multi-disc grouping: the disc number whose "Disc N" header should be
+    // rendered ABOVE this row. Set (> 0) only on the first track of each
+    // disc, and only when the album spans more than one disc; 0 otherwise
+    // (single-disc albums and every non-leading track render flat, with no
+    // header). The "Disc" word is translated in the delegate via @tr so it
+    // flows through the gettext pipeline, matching the Tauri markup
+    // `{$t('album.disc')} {discNum}` (groupByDisc + isMultiDisc).
+    disc-header-number: int,
 }
 
 // Album detail screen state.
@@ -552,6 +560,10 @@ export global AlbumActions {
     // | "queue" | "add-to-playlist" | "add-to-favorites" | "make-offline" |
     // "clear").
     callback bulk-action(string);
+    // Per-disc context-menu action on a multi-disc album's "Disc N" header —
+    // scoped to that disc's tracks only (action = "play" | "shuffle" | "queue"
+    // | "play-next"). The whole-album header buttons are unaffected.
+    callback disc-action(int /* disc number */, string /* action */);
 }
 
 // Track drag-and-drop onto sidebar playlists (a star QBZ feature).
@@ -942,6 +954,10 @@ export global LocalAlbumActions {
     // Client-side track filter (mirrors AlbumActions.search), applied over the
     // current version's tracks.
     callback search(string /* query */);
+    // Per-disc context-menu action on a multi-disc local album's "Disc N"
+    // header — scoped to that disc's tracks only (action = "play" | "shuffle" |
+    // "queue" | "play-next"). The whole-album header buttons are unaffected.
+    callback disc-action(int /* disc number */, string /* action */);
 }
 
 // ============================ Local Library management ====================

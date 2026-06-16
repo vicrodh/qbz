@@ -1,0 +1,46 @@
+// Per-disc ⋯ trigger + context menu for the album track-list disc headers.
+//
+// WHY a component: Slint rejects a `PopupWindow` placed DIRECTLY under a
+// `for`/`if` ("PopupWindow cannot be directly repeated or conditional" —
+// the popup becomes the conditional/repeated root). Wrapping the trigger +
+// `DiscContextMenu` here makes the PopupWindow a NON-root child of this
+// component's Rectangle root, so mounting `DiscHeaderMenu` inside the disc
+// header's `if` is fine (same shape as TrackRow embedding TrackContextMenu).
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { QbzIcon } from "QbzIcon.slint";
+import { DiscContextMenu } from "DiscContextMenu.slint";
+
+export component DiscHeaderMenu inherits Rectangle {
+    in property <int> disc;
+    // (disc, action) — action: "play" | "shuffle" | "queue" | "play-next".
+    callback disc-action(int, string);
+
+    width: 32px;
+    height: 32px;
+
+    more-ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            menu.show();
+        }
+        QbzIcon {
+            source: @image-url("../assets/icons/ellipsis.svg");
+            width: 16px;
+            height: 16px;
+            x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+            y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+            tint: more-ta.has-hover ? Theme.text-primary : Theme.text-muted;
+        }
+    }
+
+    // Opens just below the ⋯, right edges aligned (opens leftward).
+    menu := DiscContextMenu {
+        x: 32px - self.width;
+        y: 36px;
+        disc: root.disc;
+        disc-action(d, a) => {
+            root.disc-action(d, a);
+        }
+    }
+}

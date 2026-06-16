@@ -18,6 +18,7 @@ import { QualityBadgeFull } from "../primitives/QualityBadgeFull.slint";
 import { TrackPlayCell } from "../primitives/TrackPlayCell.slint";
 import { TrackContextMenu } from "../primitives/TrackContextMenu.slint";
 import { AlbumContextMenu } from "../primitives/AlbumContextMenu.slint";
+import { DiscHeaderMenu } from "../primitives/DiscHeaderMenu.slint";
 import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
 import { ListScrollbar } from "../primitives/ListScrollbar.slint";
 import { CircleAction } from "../primitives/CircleAction.slint";
@@ -721,20 +722,61 @@ export component AlbumPageView inherits Rectangle {
                         Rectangle { width: 32px; }
                     }
 
-                    for track[index] in AlbumState.tracks: TrackRow {
-                        track: track;
-                        index: index;
-                        // Number cell (no cover). Qobuz albums carry the
-                        // favorite heart (matching the column header) + the
-                        // offline-cache button; local albums show the source
-                        // indicator instead.
-                        show-artwork: false;
-                        show-favorite: !AlbumState.is-local;
-                        show-download: !AlbumState.is-local;
-                        show-source: AlbumState.is-local;
-                        multi-select-mode: AlbumState.multi-select;
-                        media-action(kind, id, action) => {
-                            root.media-action(kind, id, action);
+                    // Each iteration is a thin column wrapper so a "Disc N"
+                    // divider can precede the row when the model marks it as
+                    // the first track of a disc (multi-disc albums only; on a
+                    // single-disc album disc-header-number is always 0, so the
+                    // header `if` never renders and the list stays flat —
+                    // unchanged from before). Mirrors the Tauri
+                    // PurchaseAlbumDetailView groupByDisc + isMultiDisc markup.
+                    for track[index] in AlbumState.tracks: VerticalLayout {
+                        spacing: 0px;
+                        if track.disc-header-number > 0: Rectangle {
+                            height: 40px;
+                            HorizontalLayout {
+                                padding-left: 12px;
+                                padding-right: 12px;
+                                spacing: 16px;
+                                Text {
+                                    text: @tr("Disc") + " \{track.disc-header-number}";
+                                    color: Theme.text-muted;
+                                    font-size: Typography.legal;
+                                    font-weight: 600;
+                                    letter-spacing: 0.5px;
+                                    vertical-alignment: center;
+                                    horizontal-alignment: left;
+                                    horizontal-stretch: 1;
+                                }
+                                // Per-disc ⋯ menu — actions scoped to this
+                                // disc's tracks only (the column header reserves
+                                // a 32px more-button slot on the right; this
+                                // aligns with it).
+                                VerticalLayout {
+                                    alignment: center;
+                                    DiscHeaderMenu {
+                                        disc: track.disc-header-number;
+                                        disc-action(d, a) => {
+                                            AlbumActions.disc-action(d, a);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        TrackRow {
+                            track: track;
+                            index: index;
+                            // Number cell (no cover). Qobuz albums carry the
+                            // favorite heart (matching the column header) + the
+                            // offline-cache button; local albums show the source
+                            // indicator instead.
+                            show-artwork: false;
+                            show-favorite: !AlbumState.is-local;
+                            show-download: !AlbumState.is-local;
+                            show-source: AlbumState.is-local;
+                            multi-select-mode: AlbumState.multi-select;
+                            media-action(kind, id, action) => {
+                                root.media-action(kind, id, action);
+                            }
                         }
                     }
                 }

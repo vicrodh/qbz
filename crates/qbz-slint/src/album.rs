@@ -80,6 +80,10 @@ pub struct TrackData {
     pub quality_tier: String,
     pub quality_detail: String,
     pub explicit: bool,
+    /// Disc/media number (Qobuz `media_number`, defaulting to 1 when absent).
+    /// Used after mapping to decide where the "Disc N" headers fall when the
+    /// album spans more than one disc.
+    pub disc: u32,
 }
 
 /// Fetch and map a full album by id.
@@ -260,6 +264,8 @@ fn map_track(track: Track) -> TrackData {
             track.maximum_sampling_rate,
         ),
         explicit: track.parental_warning,
+        // Tauri: `disc = track.media_number ?? 1`.
+        disc: track.media_number.unwrap_or(1),
     }
 }
 
@@ -294,10 +300,41 @@ pub fn apply_album(window: &AppWindow, data: AlbumData) {
     // album link target is this album's own id (the album column is not
     // shown here, but album-id keeps the row model complete).
     let album_id: slint::SharedString = data.id.clone().into();
+    // Multi-disc grouping (Tauri PurchaseAlbumDetailView: groupByDisc +
+    // isMultiDisc). The album is "multi-disc" when its tracks span more than
+    // one distinct disc number; only then do we emit "Disc N" headers. The
+    // header is stamped on the first track of each disc run, and tracks stay
+    // in their delivered order (Qobuz returns them disc-then-track ordered).
+    let is_multi_disc = {
+        let mut seen: Option<u32> = None;
+        let mut multi = false;
+        for track in &data.tracks {
+            match seen {
+                Some(d) if d != track.disc => {
+                    multi = true;
+                    break;
+                }
+                _ => seen = Some(track.disc),
+            }
+        }
+        multi
+    };
+    let mut prev_disc: Option<u32> = None;
     let tracks: Vec<TrackItem> = data
         .tracks
         .into_iter()
-        .map(|track| TrackItem {
+        .map(|track| {
+            // Stamp the disc number on the first row of each disc run, but
+            // only for multi-disc albums (single-disc renders flat → 0). The
+            // delegate renders `@tr("Disc") <n>` above the row when this is
+            // > 0, matching the Tauri `{$t('album.disc')} {discNum}` markup.
+            let disc_header_number = if is_multi_disc && prev_disc != Some(track.disc) {
+                track.disc as i32
+            } else {
+                0
+            };
+            prev_disc = Some(track.disc);
+            TrackItem {
             id: track.id.clone().into(),
             number: track.number.into(),
             title: track.title.into(),
@@ -319,6 +356,8 @@ pub fn apply_album(window: &AppWindow, data: AlbumData) {
             // Qobuz album-detail rows; local albums override via map_local_track.
             source: "qobuz".into(),
             unlocking: false,
+            disc_header_number,
+            }
         })
         .collect();
 
@@ -484,6 +523,21 @@ pub fn selected_play_tracks(window: &AppWindow) -> Vec<Track> {
         cell.borrow()
             .iter()
             .filter(|t| ids.contains(&t.id.to_string()))
+            .cloned()
+            .collect()
+    })
+}
+
+/// The full catalog Track objects for one disc of the open album (for the
+/// per-disc "Disc N" header menu), resolved from the stashed raw album tracks.
+/// `disc` matches `media_number` (defaulting to 1, exactly as `map_track`
+/// stamps `TrackData.disc`), so it lines up with the rendered "Disc N" header.
+/// Preserves the delivered (disc-then-track) order.
+pub fn disc_play_tracks(disc: i32) -> Vec<Track> {
+    PLAY_TRACKS.with(|cell| {
+        cell.borrow()
+            .iter()
+            .filter(|t| t.media_number.unwrap_or(1) as i32 == disc)
             .cloned()
             .collect()
     })

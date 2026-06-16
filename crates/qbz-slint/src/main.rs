@@ -6916,6 +6916,79 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             });
     }
 
+    // Per-disc "Disc N" header ⋯ menu (Qobuz album) — each action is scoped to
+    // that disc's tracks only, resolved from the album's stashed raw catalog
+    // tracks. Reuses the SAME queue ops as the album-header buttons (play_tracks
+    // / play_album_shuffled's xorshift / enqueue_tracks), just over the disc
+    // subset rather than the whole album.
+    {
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window
+            .global::<AlbumActions>()
+            .on_disc_action(move |disc, action| {
+                let mut tracks = album::disc_play_tracks(disc);
+                if tracks.is_empty() {
+                    return;
+                }
+                match action.as_str() {
+                    "play" => {
+                        playback::play_tracks(
+                            runtime.clone(),
+                            weak.clone(),
+                            handle.clone(),
+                            tracks,
+                            0,
+                        );
+                    }
+                    "shuffle" => {
+                        // Same SystemTime-seeded xorshift Fisher-Yates as the
+                        // album-header Shuffle (playback::play_album_shuffled),
+                        // applied to the disc subset before play_tracks.
+                        let mut seed = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map(|d| d.as_nanos() as u64)
+                            .unwrap_or(1)
+                            | 1;
+                        for i in (1..tracks.len()).rev() {
+                            seed ^= seed << 13;
+                            seed ^= seed >> 7;
+                            seed ^= seed << 17;
+                            let j = (seed % (i as u64 + 1)) as usize;
+                            tracks.swap(i, j);
+                        }
+                        playback::play_tracks(
+                            runtime.clone(),
+                            weak.clone(),
+                            handle.clone(),
+                            tracks,
+                            0,
+                        );
+                    }
+                    "queue" => {
+                        playback::enqueue_tracks(
+                            runtime.clone(),
+                            handle.clone(),
+                            tracks,
+                            false,
+                        );
+                    }
+                    "play-next" => {
+                        playback::enqueue_tracks(
+                            runtime.clone(),
+                            handle.clone(),
+                            tracks,
+                            true,
+                        );
+                    }
+                    other => {
+                        log::warn!("[qbz-slint] album disc-action: unknown action {other}");
+                    }
+                }
+            });
+    }
+
     // Artist in-page search — client-side filter over Popular Tracks
     // and every release-section album.
     {
@@ -8884,6 +8957,58 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         window.global::<LocalAlbumActions>().on_search(move |q| {
             local_library::search_album(weak.clone(), q.to_string());
         });
+    }
+    {
+        // Per-disc "Disc N" header ⋯ menu (local album) — scoped to that disc's
+        // tracks only, resolved from the open version's track cache. Reuses the
+        // SAME local queue ops as the header play-all / shuffle buttons
+        // (play_local_tracks, shuffle flag) and the per-row menu's
+        // enqueue_local_tracks, just over the disc subset.
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window
+            .global::<LocalAlbumActions>()
+            .on_disc_action(move |disc, action| {
+                let Some(w) = weak.upgrade() else { return };
+                let tracks = local_library::current_album_disc_tracks(&w, disc);
+                if tracks.is_empty() {
+                    return;
+                }
+                match action.as_str() {
+                    "play" => playback::play_local_tracks(
+                        runtime.clone(),
+                        weak.clone(),
+                        handle.clone(),
+                        tracks,
+                        0,
+                        false,
+                    ),
+                    "shuffle" => playback::play_local_tracks(
+                        runtime.clone(),
+                        weak.clone(),
+                        handle.clone(),
+                        tracks,
+                        0,
+                        true,
+                    ),
+                    "queue" => playback::enqueue_local_tracks(
+                        runtime.clone(),
+                        handle.clone(),
+                        tracks,
+                        false,
+                    ),
+                    "play-next" => playback::enqueue_local_tracks(
+                        runtime.clone(),
+                        handle.clone(),
+                        tracks,
+                        true,
+                    ),
+                    other => {
+                        log::warn!("[qbz-slint] local disc-action: unknown action {other}");
+                    }
+                }
+            });
     }
 
     // Local Library — Albums tab controls (search / sort re-query page 1;

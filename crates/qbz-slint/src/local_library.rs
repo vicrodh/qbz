@@ -783,6 +783,10 @@ fn map_local_track(t: qbz_library::LocalTrack) -> TrackItem {
         }
         .into(),
         unlocking: false,
+        // Default: no disc header. The flat Library Tracks tab never groups by
+        // disc; the local-album DETAIL view stamps this afterwards (see
+        // apply_album_version) for multi-disc local albums.
+        disc_header_number: 0,
     }
 }
 
@@ -1336,17 +1340,48 @@ pub fn apply_album_version(window: &AppWindow, index: i32) {
     // Client-side filter (Qobuz album view parity): match title/artist; the
     // header badge/info stay album-level (computed from the full version above).
     let q = album_query().to_lowercase();
-    let items: Vec<TrackItem> = tracks
+    let shown: Vec<&qbz_library::LocalTrack> = tracks
         .iter()
         .filter(|t| {
             q.is_empty()
                 || t.title.to_lowercase().contains(&q)
                 || t.artist.to_lowercase().contains(&q)
         })
-        .cloned()
+        .collect();
+    // Multi-disc grouping (mirrors the Qobuz album view): the album is
+    // multi-disc when its shown tracks span more than one distinct disc
+    // number, and only then do we stamp "Disc N" headers on the first row of
+    // each disc run. Local tracks are already disc-then-track sorted upstream
+    // (album_versions sorts by (disc_number, track_number)).
+    let is_multi_disc = {
+        let mut seen: Option<u32> = None;
+        let mut multi = false;
+        for t in &shown {
+            let disc = t.disc_number.unwrap_or(1);
+            match seen {
+                Some(d) if d != disc => {
+                    multi = true;
+                    break;
+                }
+                _ => seen = Some(disc),
+            }
+        }
+        multi
+    };
+    let mut prev_disc: Option<u32> = None;
+    let items: Vec<TrackItem> = shown
+        .into_iter()
         .map(|t| {
-            let mut it = map_local_track(t);
+            let disc = t.disc_number.unwrap_or(1);
+            let disc_header_number = if is_multi_disc && prev_disc != Some(disc) {
+                disc as i32
+            } else {
+                0
+            };
+            prev_disc = Some(disc);
+            let mut it = map_local_track(t.clone());
             it.album_id = group_key.clone().into();
+            it.disc_header_number = disc_header_number;
             it
         })
         .collect();
@@ -1674,6 +1709,20 @@ pub fn current_album_version_tracks(window: &AppWindow) -> Vec<qbz_library::Loca
         .get(idx as usize)
         .map(|(_, v)| v.clone())
         .unwrap_or_default()
+}
+
+/// The current version's tracks for one disc (for the per-disc "Disc N" header
+/// menu), filtered by `disc_number` (defaulting to 1 — exactly as
+/// `apply_album_version` stamps the "Disc N" header). Preserves the upstream
+/// (disc, track) order.
+pub fn current_album_disc_tracks(
+    window: &AppWindow,
+    disc: i32,
+) -> Vec<qbz_library::LocalTrack> {
+    current_album_version_tracks(window)
+        .into_iter()
+        .filter(|t| t.disc_number.unwrap_or(1) as i32 == disc)
+        .collect()
 }
 
 // ============================ Folders (flat) ==============================
