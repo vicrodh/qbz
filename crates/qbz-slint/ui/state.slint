@@ -3925,5 +3925,6 @@ export global DacWizardActions {
     callback toggle-dac(int);        // flip one candidate's checked state
     callback validate-manual(string);// validate a pasted node.name (escape hatch)
     callback start-test();           // queue + play the 4 test tracks (Slice 9)
+    callback poll-test();            // refresh the requested-vs-negotiated read-back
     callback stop-test();
 }

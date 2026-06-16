@@ -11383,6 +11383,90 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             });
     }
     {
+        // Self-service playback test (Slice 9): resolve the 4 curated tracks
+        // (id-hint then "artist title" search), route output to the DAC under
+        // test, and play them. The N6 read-back is driven by on_poll_test.
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window.global::<DacWizardActions>().on_start_test(move || {
+            let Some(w) = weak.upgrade() else {
+                return;
+            };
+            let node = dac_wizard::first_selected_node(&w);
+            dac_wizard::begin_test(&w, node.clone());
+            let runtime = runtime.clone();
+            let weak2 = w.as_weak();
+            let play_handle = handle.clone();
+            handle.spawn(async move {
+                let mut tracks: Vec<qbz_models::Track> = Vec::new();
+                for seed in dac_wizard::TEST_SEEDS.iter() {
+                    let mut chosen = match runtime.core().get_track(seed.id_hint).await {
+                        Ok(t) if dac_wizard::track_matches_seed(&t, seed) => Some(t),
+                        _ => None,
+                    };
+                    if chosen.is_none() {
+                        let q = format!("{} {}", seed.artist, seed.title);
+                        if let Ok(page) = runtime.core().search_tracks(&q, 10, 0, None).await {
+                            chosen = page
+                                .items
+                                .into_iter()
+                                .find(|t| dac_wizard::track_matches_seed(t, seed));
+                        }
+                    }
+                    if let Some(t) = chosen {
+                        tracks.push(t);
+                    }
+                }
+                if let Some(n) = node.clone() {
+                    let _ = runtime.core().player().reinit_device(Some(n));
+                }
+                let runtime2 = runtime.clone();
+                let _ = weak2.upgrade_in_event_loop(move |w| {
+                    if tracks.is_empty() {
+                        w.global::<DacWizardState>()
+                            .set_test_requested_label("Couldn't load the test tracks (offline?)".into());
+                        return;
+                    }
+                    crate::playback::play_tracks(runtime2, w.as_weak(), play_handle, tracks, 0);
+                });
+            });
+        });
+    }
+    {
+        // Poll the requested vs negotiated rate while the test plays.
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window.global::<DacWizardActions>().on_poll_test(move || {
+            if weak.upgrade().is_none() {
+                return;
+            }
+            let runtime = runtime.clone();
+            let weak2 = weak.clone();
+            handle.spawn_blocking(move || {
+                let player = runtime.core().player();
+                let req_rate = player.get_sample_rate();
+                let req_bits = player.get_bit_depth();
+                let negotiated = dac_wizard::test_node()
+                    .and_then(|n| qbz_audio::negotiated_stream_rate(&n));
+                let _ = weak2.upgrade_in_event_loop(move |w| {
+                    dac_wizard::apply_poll(&w, req_rate, req_bits, negotiated);
+                });
+            });
+        });
+    }
+    {
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        window.global::<DacWizardActions>().on_stop_test(move || {
+            let _ = runtime.core().pause();
+            if let Some(w) = weak.upgrade() {
+                dac_wizard::end_test(&w);
+            }
+        });
+    }
+    {
         window
             .global::<DacWizardActions>()
             .on_copy_command(move |cmd| {

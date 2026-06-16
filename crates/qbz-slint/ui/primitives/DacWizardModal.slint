@@ -49,6 +49,14 @@ export component DacWizardModal inherits Rectangle {
     // enumeration found devices; forced open when it found none.
     property <bool> show-manual: false;
 
+    // The four owner-curated test tracks (display only; resolution is Rust-side).
+    property <[string]> test-tracks: [
+        @tr("16-bit / 44.1 kHz — George Harrison · My Sweet Lord"),
+        @tr("24-bit / 44.1 kHz — Billie Eilish · LUNCH"),
+        @tr("24-bit / 96 kHz — Iron Maiden · Stratego"),
+        @tr("24-bit / 192 kHz — Toto · Africa"),
+    ];
+
     // Step labels for the header rail (index = DacWizardState.step).
     property <[string]> steps: [
         @tr("Welcome"),
@@ -455,9 +463,97 @@ export component DacWizardModal inherits Rectangle {
                             title: @tr("Review & Apply");
                             note: @tr("Backup, per-DAC sample rates, and the copy-paste config files (Slice 10).");
                         }
-                        if DacWizardState.step == 4: StepPlaceholder {
-                            title: @tr("Test Playback");
-                            note: @tr("Plays tracks at 16/44.1, 24/44.1, 24/96 and 24/192 and reads the DAC's real negotiated rate (Slice 9).");
+                        // ── Step 4: self-service playback test ───────────
+                        if DacWizardState.step == 4: VerticalLayout {
+                            spacing: 14px;
+                            Text {
+                                text: @tr("Test Playback");
+                                color: Theme.text-primary;
+                                font-size: Typography.heading;
+                                font-weight: Typography.semibold;
+                            }
+                            Text {
+                                text: @tr("Plays four tracks at different bit-depths and sample rates through the selected DAC. Watch your DAC's display switch rates — and confirm it below.");
+                                color: Theme.text-secondary;
+                                font-size: Typography.body;
+                                wrap: word-wrap;
+                            }
+                            // The four tracks that will play.
+                            VerticalLayout {
+                                spacing: 6px;
+                                for line in root.test-tracks: HorizontalLayout {
+                                    spacing: 8px;
+                                    alignment: start;
+                                    Text {
+                                        text: "♪";
+                                        color: Theme.text-muted;
+                                        font-size: Typography.legal;
+                                    }
+                                    Text {
+                                        text: line;
+                                        color: Theme.text-secondary;
+                                        font-size: Typography.legal;
+                                        overflow: elide;
+                                    }
+                                }
+                            }
+                            // Play / Stop.
+                            HorizontalLayout {
+                                alignment: start;
+                                QbzPrimaryButton {
+                                    height: 34px;
+                                    label: DacWizardState.test-playing ? @tr("Stop") : @tr("Play test");
+                                    clicked => {
+                                        if (DacWizardState.test-playing) {
+                                            DacWizardActions.stop-test();
+                                        } else {
+                                            DacWizardActions.start-test();
+                                        }
+                                    }
+                                }
+                            }
+                            // Live read-back: requested (honest) + DAC negotiated (N6).
+                            if DacWizardState.test-playing || DacWizardState.test-requested-label != "": Rectangle {
+                                border-radius: Radius.sm;
+                                background: Theme.surface-elevated;
+                                border-width: 1px;
+                                border-color: Theme.border-subtle;
+                                height: readout.preferred-height;
+                                readout := VerticalLayout {
+                                    padding: 12px;
+                                    spacing: 6px;
+                                    Text {
+                                        text: DacWizardState.test-requested-label;
+                                        color: Theme.text-primary;
+                                        font-size: Typography.body;
+                                        font-weight: Typography.medium;
+                                    }
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        alignment: start;
+                                        if DacWizardState.test-rate-matched: Text {
+                                            text: "✓";
+                                            color: #3fae6a;
+                                            font-size: Typography.body;
+                                            font-weight: Typography.bold;
+                                        }
+                                        Text {
+                                            text: DacWizardState.test-negotiated-label;
+                                            color: DacWizardState.test-rate-matched ? #3fae6a : Theme.text-secondary;
+                                            font-size: Typography.body;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                }
+                            }
+                            // Drives the read-back while the test plays.
+                            Timer {
+                                interval: 1.5s;
+                                running: DacWizardState.test-playing;
+                                triggered => {
+                                    DacWizardActions.poll-test();
+                                }
+                            }
                         }
                         if DacWizardState.step == 5: StepPlaceholder {
                             title: @tr("All set");
