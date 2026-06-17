@@ -18,6 +18,7 @@ mod adapter;
 mod album;
 mod album_map;
 mod artist;
+mod artist_blacklist;
 mod artwork;
 mod auth;
 mod commands;
@@ -376,6 +377,9 @@ async fn enter_shell_offline(
         crate::offline_mode::init_for_user(&dir);
         crate::fav_cache::init_for_user(&dir);
         crate::discover_prefs::init_for_user(&dir);
+        // D-FIX-a: bind the blacklist offline too — Tauri never initialized it
+        // in offline mode, so blacklisted artists leaked into offline surfaces.
+        crate::artist_blacklist::init_for_user(&dir);
     }
     // Lyrics cache (per-user, shared file with Tauri) — offline sessions
     // serve cached lyrics (deviation D3, cache-first offline contract).
