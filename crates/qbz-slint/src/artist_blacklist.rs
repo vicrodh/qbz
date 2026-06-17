@@ -91,6 +91,40 @@ pub fn is_blacklisted_id_str(artist_id: &str) -> bool {
     is_blacklisted(id)
 }
 
+/// Stamp value for a `TrackItem.is-blacklisted` cell (Task 6). The single
+/// rule every in-scope track controller (album / playlist / favorites / the
+/// four Q-mixes) reuses so render and the Task 7 queue filters agree on what
+/// "blacklisted" means per row:
+///
+/// - **HARD local/Plex guard** — a non-Qobuz `source` is NEVER blacklisted
+///   (Codex guardrail; local copies with a numeric Qobuz id must still stay
+///   playable). `qobuz_download` rows render `source == "qobuz"`, so they are
+///   treated as Qobuz here — that matches Tauri (VTL keys on `!isLocal`).
+/// - Resolve the artist from the candidate string ids in order; the first
+///   non-empty, numeric, blacklisted id wins (D-FEAT: performer OR composer;
+///   album rows that lack a performer fall back to the album's primary artist).
+/// - Missing / zero / non-numeric ids => fail-open (`false`).
+///
+/// The enabled-flag gate and the no-session fail-open live in
+/// [`is_blacklisted`], so this never blocks when the feature is off or no
+/// session is bound.
+///
+/// Live re-stamp contract (Step B): there is no change-notify here (the
+/// fav_cache pattern). Every in-scope controller already calls this at LOAD
+/// time, so navigating to a view always shows correct state. To refresh the
+/// CURRENTLY-loaded lists after a blacklist mutation (Task 9 artist toggle /
+/// Task 11 manager), the mutation site re-runs that controller's existing
+/// reload / re-push path (which re-invokes `stamp_row` per row) — same as how
+/// favorites re-push after a `fav_cache` change. There is intentionally no
+/// global listener/observer.
+pub fn stamp_row(source: &str, artist_ids: &[&str]) -> bool {
+    // Local / Plex / ephemeral rows are protected — never blacklisted.
+    if source != "qobuz" {
+        return false;
+    }
+    artist_ids.iter().any(|id| is_blacklisted_id_str(id))
+}
+
 /// True when the blacklist feature is enabled. Default-enabled (`true`) when no
 /// session is bound.
 pub fn is_enabled() -> bool {

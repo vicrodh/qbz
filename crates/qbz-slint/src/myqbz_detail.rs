@@ -686,6 +686,9 @@ fn track_to_item(track: &qbz_models::QueueTrack, resolver_index: usize) -> Track
         .unwrap_or_else(|| if track.is_local { "local".into() } else { "qobuz".into() });
 
     TrackItem {
+        // MyQBZ detail is out of Task 6 row-stamping scope (mixed local/Qobuz
+        // entity; handled by its own epic). Never stamped here.
+        is_blacklisted: false,
         id: track.id.to_string().into(),
         number: (resolver_index + 1).to_string().into(),
         title: inline_track_title(track).into(),

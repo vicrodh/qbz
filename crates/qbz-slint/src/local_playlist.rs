@@ -860,6 +860,9 @@ fn row_item(item: &RowItem, queue: Option<&QueueTrack>) -> TrackItem {
             sample_rate,
             artwork_path,
         } => TrackItem {
+            // Offline cached copy — a local asset, never blacklisted (no
+            // artist id carried; protected by the local guard either way).
+            is_blacklisted: false,
             id: track_id.to_string().into(),
             number: "".into(),
             title: title.clone().into(),
@@ -895,6 +898,8 @@ fn row_item(item: &RowItem, queue: Option<&QueueTrack>) -> TrackItem {
                 Some(track.sample_rate),
             );
             TrackItem {
+                // Local / Plex / offline rows are protected — never blacklisted.
+                is_blacklisted: false,
                 // The queue id (library row id; the Qobuz id for offline
                 // copies; the synthetic 2^40-namespaced id for Plex rows)
                 // so visible-order playback resolves this row.
@@ -936,6 +941,8 @@ fn row_item(item: &RowItem, queue: Option<&QueueTrack>) -> TrackItem {
                 .and_then(|s| s.to_str())
                 .unwrap_or(path.as_str());
             TrackItem {
+                // Bare local file — never blacklisted.
+                is_blacklisted: false,
                 id: format!("file:{path}").into(),
                 number: "".into(),
                 title: name.into(),
@@ -967,6 +974,8 @@ fn row_item(item: &RowItem, queue: Option<&QueueTrack>) -> TrackItem {
         // qobuz refs get an unparseable id so no drag/pick path can ever
         // re-type them as a catalog id.
         RowItem::Unresolved { kind, reference } => TrackItem {
+            // Unresolved/unavailable row — never blacklisted.
+            is_blacklisted: false,
             id: if *kind == "plex" {
                 format!("plex:{reference}")
             } else {

@@ -368,6 +368,9 @@ fn track_item(row: TrackRowData) -> TrackItem {
     let is_favorite = crate::fav_cache::is_favorite(&row.id);
     let is_cached = crate::offline_cache::is_cached(&row.id);
     TrackItem {
+        // Combined search DROPS blacklisted rows at build time (T4 snapshot
+        // filter), so a row reaching here is never blacklisted (no greyout).
+        is_blacklisted: false,
         id: row.id.into(),
         number: "".into(),
         title: row.title.into(),

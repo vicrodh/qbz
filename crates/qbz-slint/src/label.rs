@@ -756,6 +756,8 @@ fn truncate_words(text: &str, max: usize) -> String {
 
 fn top_track_to_item(t: &TopTrack) -> TrackItem {
     TrackItem {
+        // Label landing top-tracks are out of Task 6 row-stamping scope.
+        is_blacklisted: false,
         id: t.id.clone().into(),
         number: "".into(),
         title: t.title.clone().into(),

@@ -300,6 +300,9 @@ pub fn apply_album(window: &AppWindow, data: AlbumData) {
     // album link target is this album's own id (the album column is not
     // shown here, but album-id keeps the row model complete).
     let album_id: slint::SharedString = data.id.clone().into();
+    // Album's primary artist id — the fallback blacklist key for rows whose
+    // own performer id is missing (Task 6: `track.artist_id ?? album.artist_id`).
+    let album_artist_id = data.artist_id.clone();
     // Multi-disc grouping (Tauri PurchaseAlbumDetailView: groupByDisc +
     // isMultiDisc). The album is "multi-disc" when its tracks span more than
     // one distinct disc number; only then do we emit "Disc N" headers. The
@@ -334,6 +337,15 @@ pub fn apply_album(window: &AppWindow, data: AlbumData) {
                 0
             };
             prev_disc = Some(track.disc);
+            // Blacklist key: the row's own performer id, falling back to the
+            // album's primary artist when the track carries none (Task 6).
+            let row_artist_id = if track.artist_id.is_empty() {
+                album_artist_id.as_str()
+            } else {
+                track.artist_id.as_str()
+            };
+            let is_blacklisted =
+                crate::artist_blacklist::stamp_row("qobuz", &[row_artist_id]);
             TrackItem {
             id: track.id.clone().into(),
             number: track.number.into(),
@@ -350,6 +362,7 @@ pub fn apply_album(window: &AppWindow, data: AlbumData) {
             is_favorite: crate::fav_cache::is_favorite(&track.id),
             artist_id: track.artist_id.into(),
             album_id: album_id.clone(),
+            is_blacklisted,
             removing: false,
             cache_status: if crate::offline_cache::is_cached(&track.id) { 3 } else { 0 },
             cache_progress: 0.0,

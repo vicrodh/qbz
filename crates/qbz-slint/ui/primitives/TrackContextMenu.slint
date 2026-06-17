@@ -38,6 +38,20 @@ export component TrackContextMenu inherits PopupWindow {
     in property <bool> track-info-action: true;
     in property <bool> go-album-action: root.qobuz-actions;
     in property <bool> go-artist-action: root.qobuz-actions;
+    // Nav-only reduction (blacklisted/inert rows, Task 6 step C): hides every
+    // transient / mutating / destructive entry (play, play-next, queue, radio,
+    // favorite, mixtape, add/remove-playlist, share, offline) and keeps only
+    // navigation + info (Go to album / Go to artist / Track info). Mirrors
+    // Tauri keeping a reduced nav-only menu on a blacklisted row so the user
+    // can still reach the album/artist/track-info from the "..." menu — only
+    // playback/queue is denied. Default off, so every other surface is
+    // unchanged.
+    in property <bool> nav-only: false;
+    // Track Info shows on a nav-only row even when it's not a Qobuz-block row,
+    // so a blacklisted row keeps the info entry; otherwise it rides the Qobuz
+    // block as before.
+    property <bool> show-track-info:
+        root.track-info-action && (root.nav-only || root.qobuz-actions);
     // The row's offline-cache status (TrackItem.cache-status): when cached
     // (3) the single "Make available offline" entry swaps for the
     // Refresh / Remove pair — Tauri's ready-state submenu, rendered flat
@@ -46,64 +60,69 @@ export component TrackContextMenu inherits PopupWindow {
     callback media-action(string, string, string);
 
     width: 224px;
-    // 3 transient + optional favorite/mixtape/add-to-playlist/remove +
-    // optional go-to pair + the Qobuz block (3 fixed + 1-or-2 offline
+    // Nav-only (blacklisted): only Go to album / Go to artist / Track info.
+    // Otherwise: 3 transient + optional favorite/mixtape/add-to-playlist/remove
+    // + optional go-to pair + the Qobuz block (3 fixed + 1-or-2 offline
     // entries + optional track info).
-    height: (3
-        + (root.favorite-action ? 1 : 0)
-        + (root.mixtape-action ? 1 : 0)
-        + (root.playlist-action ? 1 : 0)
-        + (root.remove-from-playlist-action ? 1 : 0)
-        + (root.go-album-action ? 1 : 0)
-        + (root.go-artist-action ? 1 : 0)
-        + (root.qobuz-actions
-            ? 3 + (root.cache-status == 3 ? 2 : 1) + (root.track-info-action ? 1 : 0)
-            : 0)) * 30px;
+    height: (root.nav-only
+        ? ((root.go-album-action ? 1 : 0)
+            + (root.go-artist-action ? 1 : 0)
+            + (root.show-track-info ? 1 : 0))
+        : (3
+            + (root.favorite-action ? 1 : 0)
+            + (root.mixtape-action ? 1 : 0)
+            + (root.playlist-action ? 1 : 0)
+            + (root.remove-from-playlist-action ? 1 : 0)
+            + (root.go-album-action ? 1 : 0)
+            + (root.go-artist-action ? 1 : 0)
+            + (root.qobuz-actions
+                ? 3 + (root.cache-status == 3 ? 2 : 1) + (root.track-info-action ? 1 : 0)
+                : 0))) * 30px;
 
     ContextMenu {
-        ContextMenuItem {
+        if !root.nav-only: ContextMenuItem {
             icon: @image-url("../assets/icons/play.svg");
             label: @tr("Play now");
             clicked => {
                 root.media-action("track", root.track-id, "play");
             }
         }
-        ContextMenuItem {
+        if !root.nav-only: ContextMenuItem {
             icon: @image-url("../assets/icons/list-plus.svg");
             label: @tr("Play next");
             clicked => {
                 root.media-action("track", root.track-id, "play-next");
             }
         }
-        ContextMenuItem {
+        if !root.nav-only: ContextMenuItem {
             icon: @image-url("../assets/icons/list-end.svg");
             label: @tr("Add to queue");
             clicked => {
                 root.media-action("track", root.track-id, "queue");
             }
         }
-        if root.qobuz-actions: ContextMenuItem {
+        if root.qobuz-actions && !root.nav-only: ContextMenuItem {
             icon: @image-url("../assets/icons/radio.svg");
             label: @tr("Create radio");
             clicked => {
                 root.media-action("track", root.track-id, "create-radio");
             }
         }
-        if root.favorite-action: ContextMenuItem {
+        if root.favorite-action && !root.nav-only: ContextMenuItem {
             icon: @image-url("../assets/icons/heart.svg");
             label: @tr("Add to library");
             clicked => {
                 root.media-action("track", root.track-id, "favorite");
             }
         }
-        if root.mixtape-action: ContextMenuItem {
+        if root.mixtape-action && !root.nav-only: ContextMenuItem {
             icon: @image-url("../assets/icons/cassette-tape.svg");
             label: @tr("Add to mixtape");
             clicked => {
                 root.media-action("track", root.track-id, "add-to-mixtape");
             }
         }
-        if root.playlist-action: ContextMenuItem {
+        if root.playlist-action && !root.nav-only: ContextMenuItem {
             icon: @image-url("../assets/icons/list-music.svg");
             label: @tr("Add to playlist");
             clicked => {
@@ -112,7 +131,7 @@ export component TrackContextMenu inherits PopupWindow {
         }
         // Remove from playlist (danger) — playlist detail only, after Add
         // to playlist (Tauri group order, spec §1.3 #8).
-        if root.remove-from-playlist-action: ContextMenuItem {
+        if root.remove-from-playlist-action && !root.nav-only: ContextMenuItem {
             icon: @image-url("../assets/icons/trash-2.svg");
             label: @tr("Remove from playlist");
             danger: true;
@@ -120,14 +139,14 @@ export component TrackContextMenu inherits PopupWindow {
                 root.media-action("track", root.track-id, "remove-from-playlist");
             }
         }
-        if root.qobuz-actions: ContextMenuItem {
+        if root.qobuz-actions && !root.nav-only: ContextMenuItem {
             icon: @image-url("../assets/icons/link.svg");
             label: @tr("Share Qobuz link");
             clicked => {
                 root.media-action("track", root.track-id, "share-qobuz");
             }
         }
-        if root.qobuz-actions: ContextMenuItem {
+        if root.qobuz-actions && !root.nav-only: ContextMenuItem {
             icon: @image-url("../assets/icons/link.svg");
             label: @tr("Share Song.link");
             clicked => {
@@ -138,21 +157,21 @@ export component TrackContextMenu inherits PopupWindow {
         // submenu, flat per spec §3.5): not cached -> Make available
         // offline; cached -> Refresh + Remove (icons 1:1 with Tauri's
         // RefreshCw / Trash2).
-        if root.qobuz-actions && root.cache-status != 3: ContextMenuItem {
+        if root.qobuz-actions && !root.nav-only && root.cache-status != 3: ContextMenuItem {
             icon: @image-url("../assets/icons/cloud-download.svg");
             label: @tr("Make available offline");
             clicked => {
                 root.media-action("track", root.track-id, "download");
             }
         }
-        if root.qobuz-actions && root.cache-status == 3: ContextMenuItem {
+        if root.qobuz-actions && !root.nav-only && root.cache-status == 3: ContextMenuItem {
             icon: @image-url("../assets/icons/refresh-cw.svg");
             label: @tr("Refresh offline copy");
             clicked => {
                 root.media-action("track", root.track-id, "recache");
             }
         }
-        if root.qobuz-actions && root.cache-status == 3: ContextMenuItem {
+        if root.qobuz-actions && !root.nav-only && root.cache-status == 3: ContextMenuItem {
             icon: @image-url("../assets/icons/trash-2.svg");
             label: @tr("Remove offline copy");
             danger: true;
@@ -174,7 +193,7 @@ export component TrackContextMenu inherits PopupWindow {
                 root.media-action("track", root.track-id, "go-to-artist");
             }
         }
-        if root.qobuz-actions && root.track-info-action: ContextMenuItem {
+        if root.show-track-info: ContextMenuItem {
             icon: @image-url("../assets/icons/info.svg");
             label: @tr("Track info");
             clicked => {

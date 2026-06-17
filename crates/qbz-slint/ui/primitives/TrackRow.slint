@@ -147,11 +147,14 @@ export component TrackRow inherits Rectangle {
             // Right-click opens the same context menu at the pointer (Tauri's
             // contextmenu mode, spec §3.5). Suppressed in multi-select mode
             // (Tauri parity: row right-click toggles nothing there) and on
-            // menu-less rows (ephemeral). x clamps to the row so the menu
-            // never overflows past the "..." gutter; vertical overflow at the
-            // window bottom matches the existing "..." anchor behavior.
+            // menu-less rows (ephemeral). A blacklisted (inert) row STILL
+            // opens it — reduced to nav-only (Go to album/artist, Track info)
+            // via track-menu.nav-only below, so the user keeps navigation.
+            // x clamps to the row so the menu never overflows past the "..."
+            // gutter; vertical overflow at the window bottom matches the
+            // existing "..." anchor behavior.
             if (e.kind == PointerEventKind.down && e.button == PointerEventButton.right
-                && root.show-menu && !root.multi-select-mode && !root.row-inert) {
+                && root.show-menu && !root.multi-select-mode) {
                 root.menu-at-pointer = true;
                 root.menu-click-x = ta.mouse-x;
                 root.menu-click-y = ta.mouse-y;
@@ -661,11 +664,13 @@ export component TrackRow inherits Rectangle {
             }
         }
 
-        // Context menu. Suppressed on a blacklisted (inert) row — Tauri's
-        // shared TrackRow short-circuits contextmenu and renders no block
-        // menu item; the per-list wrappers (VTL / Album / Playlist) do the
-        // nav-only reduction, not this shared primitive.
-        if root.show-menu && !root.row-inert: VerticalLayout {
+        // Context menu trigger. KEPT on a blacklisted (inert) row — the menu
+        // it opens is reduced to nav-only (Go to album/artist, Track info) via
+        // track-menu.nav-only, so the row still offers navigation while every
+        // play/queue/mutating entry is gone. Mirrors Tauri keeping a reduced
+        // nav-only menu on a blacklisted row (the T5 deviation that hid the
+        // whole menu is reverted here).
+        if root.show-menu: VerticalLayout {
             alignment: center;
             Rectangle {
                 width: 32px;
@@ -692,12 +697,6 @@ export component TrackRow inherits Rectangle {
                 }
             }
         }
-        // Menu-slot placeholder on a blacklisted row whose surface has the
-        // "..." menu — keeps the dimmed row's trailing edge aligned with
-        // its interactive siblings.
-        if root.show-menu && root.row-inert: Rectangle {
-            width: 32px;
-        }
     }
 
     // True for rows whose source is Qobuz-backed (Qobuz surfaces + offline
@@ -714,6 +713,9 @@ export component TrackRow inherits Rectangle {
             : parent.width - self.width - 12px;
         y: root.menu-at-pointer ? root.menu-click-y : 48px;
         track-id: root.track.id;
+        // Blacklisted (inert) rows get the nav-only reduction: only Go to
+        // album / Go to artist / Track info, no play/queue/mutating entries.
+        nav-only: root.row-inert;
         // Per-source menu logic: the Qobuz block (radio, share, offline,
         // go-to, track-info) only for Qobuz/offline rows, and never on
         // library surfaces (force-local-menu — its arms are dead on library

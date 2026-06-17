@@ -464,6 +464,10 @@ pub fn apply_favorites(window: &AppWindow, data: FavData) {
             let rows: Vec<TrackItem> = items
                 .into_iter()
                 .map(|t| TrackItem {
+                    is_blacklisted: crate::artist_blacklist::stamp_row(
+                        "qobuz",
+                        &[t.artist_id.as_str()],
+                    ),
                     id: t.id.clone().into(),
                     number: "".into(),
                     title: t.title.into(),

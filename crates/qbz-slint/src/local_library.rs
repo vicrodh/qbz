@@ -755,6 +755,8 @@ fn map_local_track(t: qbz_library::LocalTrack) -> TrackItem {
     let (tier, quality_detail, _) =
         crate::quality::badge(&t.format.to_string(), t.bit_depth, Some(t.sample_rate));
     TrackItem {
+        // Local Library rows are local assets — never blacklisted (protected).
+        is_blacklisted: false,
         id: t.id.to_string().into(),
         number: t.track_number.map(|n| n.to_string()).unwrap_or_default().into(),
         title: t.title.into(),

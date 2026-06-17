@@ -494,6 +494,9 @@ pub fn apply_artist(window: &AppWindow, data: ArtistData) {
         .top_tracks
         .into_iter()
         .map(|track| TrackItem {
+            // Out of Task 6 row-stamping scope: ArtistView gets the T9
+            // hidden-artist banner, not per-row greyout. Never stamped here.
+            is_blacklisted: false,
             id: track.id.clone().into(),
             number: track.number.into(),
             title: track.title.into(),
