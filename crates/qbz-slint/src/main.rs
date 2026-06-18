@@ -57,6 +57,7 @@ mod play_history;
 mod strip_html;
 mod playback;
 mod qconnect_engine;
+mod cast_service;
 mod qconnect_event_sink;
 mod qconnect_service;
 mod qconnect_transport;
@@ -6583,6 +6584,77 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 });
             });
     }
+    // Cast (Chromecast / DLNA) — picker discovery + connect/disconnect. Distinct
+    // from QConnect above; routes by source, never QConnect admission.
+    {
+        let _cast = cast_service::init_service(app_runtime.clone(), window.as_weak());
+        let handle = tokio_rt.handle().clone();
+        window.global::<CastActions>().on_open(move || {
+            let Some(svc) = cast_service::service() else {
+                return;
+            };
+            handle.spawn(async move {
+                svc.start_discovery().await;
+            });
+        });
+    }
+    {
+        let handle = tokio_rt.handle().clone();
+        window.global::<CastActions>().on_close(move || {
+            let Some(svc) = cast_service::service() else {
+                return;
+            };
+            handle.spawn(async move {
+                svc.stop_discovery().await;
+            });
+        });
+    }
+    {
+        let handle = tokio_rt.handle().clone();
+        window.global::<CastActions>().on_refresh(move || {
+            let Some(svc) = cast_service::service() else {
+                return;
+            };
+            // start_discovery re-arms the scan window + refresh loop.
+            handle.spawn(async move {
+                svc.start_discovery().await;
+            });
+        });
+    }
+    {
+        let handle = tokio_rt.handle().clone();
+        let weak = window.as_weak();
+        window
+            .global::<CastActions>()
+            .on_connect(move |device_id, protocol| {
+                let Some(svc) = cast_service::service() else {
+                    return;
+                };
+                let weak = weak.clone();
+                let id = device_id.to_string();
+                let proto = protocol.to_string();
+                handle.spawn(async move {
+                    if let Err(e) = svc.connect(id, proto).await {
+                        log::warn!("[Cast] connect failed: {e}");
+                        let _ = weak.upgrade_in_event_loop(move |w| {
+                            use slint::ComponentHandle;
+                            w.global::<CastState>().set_error(e.into());
+                        });
+                    }
+                });
+            });
+    }
+    {
+        let handle = tokio_rt.handle().clone();
+        window.global::<CastActions>().on_disconnect(move || {
+            let Some(svc) = cast_service::service() else {
+                return;
+            };
+            handle.spawn(async move {
+                svc.disconnect().await;
+            });
+        });
+    }
     {
         let weak = window.as_weak();
         window
@@ -6633,6 +6705,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let weak = weak.clone();
                 let handle = handle.clone();
                 handle.clone().spawn(async move {
+                    // Cast takes priority over QConnect over local.
+                    if let Some(cast) = cast_service::service() {
+                        match cast.toggle_play_if_cast().await {
+                            Ok(true) => return,
+                            Ok(false) => {}
+                            Err(e) => {
+                                log::warn!("[Cast] toggle_play: {e}");
+                                return;
+                            }
+                        }
+                    }
                     if let Some(svc) = qconnect_service::service() {
                         match svc.toggle_remote_renderer_playback_if_active().await {
                             Ok(true) => return,
@@ -6656,6 +6739,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let weak = weak.clone();
             let handle = handle.clone();
             handle.clone().spawn(async move {
+                if let Some(cast) = cast_service::service() {
+                    match cast.next_if_cast().await {
+                        Ok(true) => return,
+                        Ok(false) => {}
+                        Err(e) => {
+                            log::warn!("[Cast] next: {e}");
+                            return;
+                        }
+                    }
+                }
                 if let Some(svc) = qconnect_service::service() {
                     match svc.skip_next_if_remote().await {
                         Ok(true) => return,
@@ -6679,6 +6772,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let weak = weak.clone();
             let handle = handle.clone();
             handle.clone().spawn(async move {
+                if let Some(cast) = cast_service::service() {
+                    match cast.previous_if_cast().await {
+                        Ok(true) => return,
+                        Ok(false) => {}
+                        Err(e) => {
+                            log::warn!("[Cast] previous: {e}");
+                            return;
+                        }
+                    }
+                }
                 if let Some(svc) = qconnect_service::service() {
                     match svc.skip_previous_if_remote().await {
                         Ok(true) => return,
@@ -6702,6 +6805,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let runtime = runtime.clone();
                 let handle = handle.clone();
                 handle.clone().spawn(async move {
+                    if let Some(cast) = cast_service::service() {
+                        let frac = fraction.clamp(0.0, 1.0) as f64;
+                        let dur = runtime.core().get_playback_state().duration as f64;
+                        match cast.seek_if_cast(frac * dur).await {
+                            Ok(true) => return,
+                            Ok(false) => {}
+                            Err(e) => {
+                                log::warn!("[Cast] seek: {e}");
+                                return;
+                            }
+                        }
+                    }
                     if let Some(svc) = qconnect_service::service() {
                         // Remote API wants absolute position in ms; the bar gives
                         // a 0..1 fraction. Derive ms from the locally-known
@@ -6736,6 +6851,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let weak = weak.clone();
                 let handle = handle.clone();
                 handle.clone().spawn(async move {
+                    if let Some(cast) = cast_service::service() {
+                        match cast.set_volume_if_cast(fraction.clamp(0.0, 1.0)).await {
+                            Ok(true) => return,
+                            Ok(false) => {}
+                            Err(e) => {
+                                log::warn!("[Cast] set_volume: {e}");
+                                return;
+                            }
+                        }
+                    }
                     if let Some(svc) = qconnect_service::service() {
                         // Remote API wants 0..100; the bar gives a 0..1 fraction.
                         let volume = (fraction.clamp(0.0, 1.0) * 100.0).round() as i32;

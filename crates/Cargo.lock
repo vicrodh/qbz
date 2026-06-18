@@ -5751,6 +5751,7 @@ dependencies = [
  "qbz-app",
  "qbz-audio",
  "qbz-cache",
+ "qbz-cast",
  "qbz-core",
  "qbz-credentials",
  "qbz-integrations",

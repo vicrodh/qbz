@@ -63,6 +63,7 @@ qbz-media-controls = { path = "../qbz-media-controls" }
 qbz-audio = { path = "../qbz-audio" }
 qbz-core = { path = "../qbz-core" }
 qbz-player = { path = "../qbz-player" }
+qbz-cast = { path = "../qbz-cast" }
 qconnect-app = { path = "../qconnect-app" }
 qconnect-transport-ws = { path = "../qconnect-transport-ws" }
 futures-util = { workspace = true }

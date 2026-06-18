@@ -3416,6 +3416,52 @@ export global QconnectDevState {
     callback set-active(int);   // renderer-id; the local id = "Play here"
 }
 
+// Cast (Chromecast / DLNA) — distinct from Qobuz Connect above. A discovered
+// renderer for the cast picker. Modeled as a tagged record (the `protocol`
+// field) so Chromecast and DLNA share one list; DLNA carries capability flags.
+export struct CastDevice {
+    id: string,
+    name: string,
+    ip: string,
+    protocol: string,          // "chromecast" | "dlna"
+    model: string,
+    can-play: bool,            // DLNA has-av-transport (Chromecast: true)
+    can-set-volume: bool,      // DLNA has-rendering-control (Chromecast: true)
+}
+
+// Cast picker + connection + transport-mirror state. Populated by
+// `cast_service.rs`; read by CastPicker and AudioOutputBadges. There is NO
+// error/connecting sub-state in the Tauri original beyond a raw error string.
+export global CastState {
+    in-out property <bool> picker-open: false;
+    in-out property <string> selected-tab: "chromecast"; // "chromecast" | "dlna"
+    in property <bool> scanning: false;                  // 15s scan-spinner window
+    in property <[CastDevice]> devices: [];
+    in property <int> chromecast-count: 0;
+    in property <int> dlna-count: 0;
+    // Connection.
+    in property <bool> connected: false;
+    in property <string> protocol;     // "chromecast" | "dlna" | ""
+    in property <string> device-name;  // connected device label
+    // Transport mirror (cast owns transport while connected).
+    in property <bool> is-playing: false;
+    in property <float> position-secs: 0;
+    in property <float> duration-secs: 0;
+    // Delivered quality (D3) — surfaced in the badge tooltip / picker banner.
+    in property <string> quality-label;   // coarse, e.g. "FLAC 24-bit/>96kHz"
+    in property <string> quality-detail;  // precise, e.g. "192 kHz / 24-bit"
+    // Raw last-error for the picker error state (empty = none).
+    in property <string> error;
+}
+
+export global CastActions {
+    callback open();                  // open picker + start discovery
+    callback close();                 // close picker + stop discovery
+    callback refresh();               // re-arm discovery scan
+    callback connect(string, string); // device-id, protocol
+    callback disconnect();
+}
+
 // Single global hover-tooltip channel. Each hoverable control writes its text
 // + absolute anchor (window coords: centre-x and top-y of the control) here on
 // hover; one TooltipOverlay (mounted last, on top of everything) renders the
