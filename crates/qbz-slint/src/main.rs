@@ -38,6 +38,7 @@ mod home;
 mod immersive;
 mod info_modals;
 mod label;
+mod miniplayer;
 mod location_view;
 mod mix;
 mod musician;
@@ -290,6 +291,9 @@ async fn enter_shell(
     // ticking position/progress onto NowPlayingState and auto-advancing
     // the queue on track end. Safe to start once per shell entry.
     playback::start_poll_loop(runtime.clone(), weak.clone(), tokio::runtime::Handle::current());
+    // Store the miniplayer context (idempotent). The mini window itself is
+    // created lazily on first enter.
+    miniplayer::init(runtime.clone(), weak.clone(), tokio::runtime::Handle::current());
 
     // Load the sidebar playlists list.
     load_sidebar_playlists(runtime.clone(), weak.clone(), &tokio::runtime::Handle::current());
@@ -438,6 +442,9 @@ async fn enter_shell_offline(
     // Playback poll loop — local/cached playback and queue advance work
     // offline. Same lifetime semantics as the online entry.
     playback::start_poll_loop(runtime.clone(), weak.clone(), tokio::runtime::Handle::current());
+    // Store the miniplayer context (idempotent). The mini window itself is
+    // created lazily on first enter.
+    miniplayer::init(runtime.clone(), weak.clone(), tokio::runtime::Handle::current());
 
     // Load Audio + Playback settings into the Settings page in the
     // background — fully local, same path as the online entry.
@@ -4052,6 +4059,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ever fails on the owner's GPU/driver, that failure IS the spike result.
     slint::BackendSelector::new()
         .require_wgpu_28(slint::wgpu_28::WGPUConfiguration::default())
+        // Make ONLY the miniplayer window borderless at CREATION (the flag is
+        // true solely while MiniPlayerWindow::new() runs). Decorations cannot be
+        // reliably removed post-creation on Wayland/KDE (server-side decorations
+        // are negotiated when the surface is created), so the AppWindow keeps its
+        // system titlebar while the mini never has one. Transparency is already
+        // default-on in this backend, so the mini's rounded card shows through.
+        .with_winit_window_attributes_hook(|attributes| {
+            let creating_mini = crate::miniplayer::is_creating_mini();
+            log::info!("[mini] window-attributes hook: creating_mini={creating_mini}");
+            if creating_mini {
+                attributes.with_decorations(false)
+            } else {
+                attributes
+            }
+        })
         .select()?;
 
     let window = AppWindow::new()?;
@@ -5089,6 +5111,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         im.set_open(true);
                         w.global::<VisualizerState>().invoke_set_enabled(true);
                     }
+                }
+                ("npb-view", "miniplayer") => {
+                    crate::miniplayer::enter();
                 }
                 ("npb-view", mode @ ("new" | "classic" | "small")) => {
                     if let Some(w) = weak.upgrade() {

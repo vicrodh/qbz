@@ -79,4 +79,17 @@ export global Theme {
 
     // Effects
     out property <color> card-shadow: Palette.shadow;
+
+    // Alpha-white overlay tiers — mirror the --alpha-* CSS vars in src/app.css.
+    // Fixed white (NOT mode-conditional) to stay 1:1 with the Tauri miniplayer,
+    // which uses fixed white alphas regardless of theme. Consumed by the mini
+    // surfaces/footer/capsule for hover fills, hairlines, and muted glyphs.
+    out property <color> alpha-08: #ffffff14;  // 8%
+    out property <color> alpha-10: #ffffff1a;  // 10%
+    out property <color> alpha-12: #ffffff1f;  // 12%
+    out property <color> alpha-18: #ffffff2e;  // 18%
+    out property <color> alpha-55: #ffffff8c;  // 55%
+    out property <color> alpha-65: #ffffffa6;  // 65%
+    out property <color> alpha-70: #ffffffb3;  // 70%
+    out property <color> alpha-75: #ffffffbf;  // 75%
 }

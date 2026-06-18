@@ -33,6 +33,10 @@ slint = { version = "=1.16.1", default-features = false, features = [
     "accessibility",
     "compat-1-2",
     "unstable-wgpu-28",
+    # Borderless-at-creation for the miniplayer window via
+    # BackendSelector::with_winit_window_attributes_hook (decorations can't be
+    # reliably dropped post-creation on Wayland/KDE).
+    "unstable-winit-030",
 ] }
 # Direct access to the winit backend for the system tray: WinitWindowAccessor
 # (hide/show the OS window without quitting the event loop) and, later, the

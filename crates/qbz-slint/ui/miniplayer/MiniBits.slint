@@ -1,0 +1,44 @@
+// Small shared bits for the miniplayer surfaces.
+
+import { Theme } from "../foundation/semantic-colors.slint";
+
+// Explicit "E" badge — used by the compact/artwork surfaces and the queue
+// rows. Tauri renders the official explicit.svg mask at 13x13 / opacity 0.45;
+// the rest of the Slint app uses a styled "E" everywhere, so we keep that for
+// consistency, sized to the mini (13px, muted).
+export component ExplicitBadge inherits Rectangle {
+    width: 13px;
+    height: 13px;
+    border-radius: 3px;
+    background: Theme.alpha-12;
+
+    Text {
+        text: "E";
+        color: Theme.alpha-55;
+        font-size: 8px;
+        font-weight: 600;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
+// Cover image with a placeholder behind it. When the bound image is empty the
+// Image renders transparent and the placeholder fill shows through, matching
+// Tauri's bordered empty-art box.
+export component CoverArt inherits Rectangle {
+    in property <image> source;
+    in property <length> radius: 7px;
+
+    border-radius: root.radius;
+    background: Theme.alpha-08;
+    border-width: 1px;
+    border-color: Theme.alpha-12;
+    clip: true;
+
+    Image {
+        source: root.source;
+        width: 100%;
+        height: 100%;
+        image-fit: cover;
+    }
+}

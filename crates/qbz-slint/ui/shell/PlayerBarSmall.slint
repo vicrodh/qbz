@@ -534,7 +534,6 @@ export component PlayerBarSmall inherits Rectangle {
                                     ContextMenuItem {
                                         icon: @image-url("../assets/icons/picture-in-picture-2.svg");
                                         label: @tr("Miniplayer");
-                                        enabled: false;
                                         clicked => {
                                             root.media-action("npb-view", "", "miniplayer");
                                         }

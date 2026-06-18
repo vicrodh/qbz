@@ -1,0 +1,394 @@
+// Miniplayer FOOTER — seek + transport + volume + the window-controls capsule
+// host. Three modes via `mode`: 0 full (artwork/queue/lyrics), 1 compact,
+// 2 micro. 1:1 with Tauri MiniPlayerFooter.svelte.
+//
+// Deferred polish (documented): the seek "pending spinner" thumb and the
+// micro/marquee hover scroll — v1 uses a clean pending-seek state (no jump-back)
+// and elided text. Volume uses a PopupWindow + QbzSlider.
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { QbzIcon } from "../primitives/QbzIcon.slint";
+import { QbzSlider } from "../primitives/QbzSlider.slint";
+import { NowPlayingState, MiniPlayerState } from "../state.slint";
+import { MiniWindowControls } from "MiniWindowControls.slint";
+
+// Round transport button.
+component TBtn inherits Rectangle {
+    in property <image> icon;
+    in property <length> icon-size: 16px;
+    in property <length> btn: 30px;
+    in property <bool> active: false;
+    in property <bool> enabled: true;
+    callback clicked();
+
+    width: root.btn;
+    height: root.btn;
+    border-radius: root.btn / 2;
+    opacity: root.enabled ? 1.0 : 0.3;
+    background: (ta.has-hover && root.enabled) ? Theme.alpha-08 : transparent;
+
+    QbzIcon {
+        source: root.icon;
+        width: root.icon-size;
+        height: root.icon-size;
+        x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+        y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+        tint: root.active
+            ? Theme.accent
+            : (ta.has-hover ? Theme.text-primary : Theme.alpha-70);
+    }
+
+    ta := TouchArea {
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => {
+            if (root.enabled) {
+                root.clicked();
+            }
+        }
+    }
+}
+
+// The 5-button transport cluster, reused by every mode.
+component MiniTransport inherits HorizontalLayout {
+    in property <length> btn: 30px;
+    in property <length> ic-shuffle: 16px;
+    in property <length> ic-skip: 18px;
+    in property <length> ic-play: 20px;
+    in property <bool> enabled: true;
+    in property <length> gap: 18px;
+
+    spacing: root.gap;
+
+    TBtn {
+        icon: @image-url("../assets/icons/shuffle.svg");
+        icon-size: root.ic-shuffle;
+        btn: root.btn;
+        active: NowPlayingState.shuffle;
+        enabled: root.enabled;
+        clicked => { NowPlayingState.toggle-shuffle(); }
+    }
+    TBtn {
+        icon: @image-url("../assets/icons/skip-back.svg");
+        icon-size: root.ic-skip;
+        btn: root.btn;
+        enabled: root.enabled;
+        clicked => { NowPlayingState.previous(); }
+    }
+    TBtn {
+        icon: NowPlayingState.playing
+            ? @image-url("../assets/icons/pause.svg")
+            : @image-url("../assets/icons/play-fill.svg");
+        icon-size: root.ic-play;
+        btn: root.btn;
+        enabled: root.enabled;
+        clicked => { NowPlayingState.toggle-play(); }
+    }
+    TBtn {
+        icon: @image-url("../assets/icons/skip-forward.svg");
+        icon-size: root.ic-skip;
+        btn: root.btn;
+        enabled: root.enabled;
+        clicked => { NowPlayingState.next(); }
+    }
+    TBtn {
+        icon: NowPlayingState.repeat-mode == 2
+            ? @image-url("../assets/icons/repeat-1.svg")
+            : @image-url("../assets/icons/repeat.svg");
+        icon-size: root.ic-shuffle;
+        btn: root.btn;
+        active: NowPlayingState.repeat-mode != 0;
+        enabled: root.enabled;
+        clicked => { NowPlayingState.cycle-repeat(); }
+    }
+}
+
+// Volume trigger + popover (mute / horizontal rail / value).
+component MiniVolume inherits Rectangle {
+    in property <length> btn: 30px;
+    in property <length> icon-size: 18px;
+
+    width: root.btn;
+    height: root.btn;
+
+    TBtn {
+        icon: NowPlayingState.muted || NowPlayingState.volume == 0
+            ? @image-url("../assets/icons/volume-x.svg")
+            : @image-url("../assets/icons/volume-2.svg");
+        icon-size: root.icon-size;
+        btn: root.btn;
+        clicked => { vol-popup.show(); }
+    }
+    vol-popup := PopupWindow {
+        x: root.btn + 8px;
+        y: (root.height - 34px) / 2;
+        width: 172px;
+        height: 34px;
+        close-policy: close-on-click-outside;
+        Rectangle {
+            background: Theme.surface-card;
+            border-width: 1px;
+            border-color: Theme.alpha-12;
+            border-radius: 17px;
+            drop-shadow-blur: 24px;
+            drop-shadow-color: #00000059;
+            HorizontalLayout {
+                padding-left: 8px;
+                padding-right: 8px;
+                spacing: 7px;
+                TBtn {
+                    icon: @image-url("../assets/icons/volume-x.svg");
+                    icon-size: 14px;
+                    btn: 20px;
+                    clicked => { NowPlayingState.toggle-mute(); }
+                }
+                QbzSlider {
+                    width: 96px;
+                    minimum: 0;
+                    maximum: 100;
+                    value: NowPlayingState.volume * 100;
+                    changed(v) => { NowPlayingState.set-volume(v / 100.0); }
+                }
+                Text {
+                    text: Math.round(NowPlayingState.volume * 100) + "";
+                    color: Theme.text-muted;
+                    font-size: 10px;
+                    vertical-alignment: center;
+                    min-width: 22px;
+                    horizontal-alignment: center;
+                }
+            }
+        }
+    }
+}
+
+// Thin interactive seek track with a tall hit area. Reports preview (during
+// drag) and commit (on release/click); the footer owns the pending state.
+component MiniSeek inherits Rectangle {
+    in property <float> progress: 0.0;       // effective 0..1
+    in property <length> track-height: 3px;
+    in property <bool> rounded: true;
+    callback preview(float);
+    callback commit(float);
+
+    Rectangle {
+        width: 100%;
+        height: root.track-height;
+        y: (parent.height - self.height) / 2;
+        border-radius: root.rounded ? self.height / 2 : 0px;
+        background: Theme.alpha-12;
+        clip: true;
+
+        Rectangle {
+            x: 0;
+            y: 0;
+            width: parent.width * Math.max(0.0, Math.min(1.0, root.progress));
+            height: 100%;
+            background: Theme.accent;
+            border-radius: parent.border-radius;
+        }
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        moved => {
+            if (self.pressed) {
+                root.preview(Math.max(0.0, Math.min(1.0, self.mouse-x / self.width)));
+            }
+        }
+        pointer-event(ev) => {
+            if (ev.kind == PointerEventKind.down) {
+                root.preview(Math.max(0.0, Math.min(1.0, self.mouse-x / self.width)));
+            }
+            if (ev.kind == PointerEventKind.up) {
+                root.commit(Math.max(0.0, Math.min(1.0, self.mouse-x / self.width)));
+            }
+        }
+    }
+}
+
+export component MiniFooter inherits Rectangle {
+    in property <int> mode: 0;   // 0 full · 1 compact · 2 micro
+
+    // ---- Pending-seek state (no jump-back). ----
+    property <float> drag-preview: -1.0;
+    property <float> pending-seek: -1.0;
+    property <bool> dragging: false;
+    property <float> eff-progress:
+        (root.dragging && root.drag-preview >= 0) ? root.drag-preview
+        : (root.pending-seek >= 0 ? root.pending-seek : NowPlayingState.progress);
+
+    property <float> watch-progress: NowPlayingState.progress;
+    changed watch-progress => {
+        if (root.pending-seek >= 0
+            && Math.abs(root.watch-progress - root.pending-seek) < 0.02) {
+            root.pending-seek = -1.0;
+        }
+    }
+    pending-timer := Timer {
+        interval: 8s;
+        running: false;
+        triggered => {
+            root.pending-seek = -1.0;
+            self.running = false;
+        }
+    }
+
+    function on-preview(f: float) {
+        root.dragging = true;
+        root.drag-preview = f;
+    }
+    function on-commit(f: float) {
+        root.dragging = false;
+        root.drag-preview = -1.0;
+        root.pending-seek = f;
+        NowPlayingState.seek(f);
+        pending-timer.running = false;
+        pending-timer.running = true;
+    }
+
+    // ---- Per-mode sizing. ----
+    property <length> tbtn: root.mode == 1 ? 26px : 30px;
+    property <length> tgap: root.mode == 1 ? 14px : 18px;
+    property <length> ic-shuffle: root.mode == 1 ? 13px : 16px;
+    property <length> ic-skip: root.mode == 1 ? 15px : 18px;
+    property <length> ic-play: root.mode == 1 ? 16px : 20px;
+    property <length> ctrl-h: root.mode == 1 ? 34px : 40px;
+    property <bool> has-track: NowPlayingState.has-track;
+
+    background: MiniPlayerState.background-blur ? #06070ad9 : Theme.surface-card;   // --bg-secondary
+
+    // ============ FULL / COMPACT ============
+    if root.mode != 2: VerticalLayout {
+        width: 100%;
+        height: 100%;
+        padding-left: root.mode == 1 ? 10px : 14px;
+        padding-right: root.mode == 1 ? 10px : 14px;
+        padding-bottom: root.mode == 1 ? 6px : 10px;
+        padding-top: 0px;
+        spacing: 0px;
+
+        MiniSeek {
+            height: root.mode == 1 ? 10px : 14px;
+            track-height: root.mode == 1 ? 2px : 3px;
+            progress: root.eff-progress;
+            preview(f) => { root.on-preview(f); }
+            commit(f) => { root.on-commit(f); }
+        }
+
+        HorizontalLayout {
+            Text {
+                text: NowPlayingState.elapsed;
+                color: Theme.text-muted;
+                font-size: root.mode == 1 ? 10px : 11px;
+            }
+            Rectangle { horizontal-stretch: 1; }
+            Text {
+                text: NowPlayingState.remaining;
+                color: Theme.text-muted;
+                font-size: root.mode == 1 ? 10px : 11px;
+            }
+        }
+
+        // Controls row: volume + transport in ONE layout so they share identical
+        // vertical centering; balanced spacers + a right placeholder the width of
+        // the volume keep the transport CENTERED on the window. Capsule overlays.
+        Rectangle {
+            height: root.ctrl-h;
+
+            HorizontalLayout {
+                width: 100%;
+                height: 100%;
+
+                MiniVolume {
+                    btn: root.tbtn;
+                    icon-size: root.mode == 1 ? 15px : 18px;
+                }
+                Rectangle { horizontal-stretch: 1; }
+                MiniTransport {
+                    btn: root.tbtn;
+                    gap: root.tgap;
+                    ic-shuffle: root.ic-shuffle;
+                    ic-skip: root.ic-skip;
+                    ic-play: root.ic-play;
+                    enabled: root.has-track;
+                }
+                Rectangle { horizontal-stretch: 1; }
+                // Mirror the volume's footprint so the transport stays window-centered.
+                Rectangle { width: root.tbtn; }
+            }
+
+            // Capsule (right edge overlay, hover-revealed).
+            if MiniPlayerState.window-hovered: MiniWindowControls {
+                x: parent.width - self.width;
+                y: (parent.height - self.height) / 2;
+                active-surface: MiniPlayerState.surface;
+            }
+        }
+    }
+
+    // ============ MICRO ============
+    if root.mode == 2: VerticalLayout {
+        width: 100%;
+        height: 100%;
+        padding-left: 8px;
+        padding-right: 8px;
+        padding-top: 1px;
+        spacing: 0px;
+
+        // Header (centered marquee text + drag region + floating capsule).
+        Rectangle {
+            height: 17px;
+            Text {
+                width: 100%;
+                text: NowPlayingState.has-track
+                    ? (NowPlayingState.artist != ""
+                        ? NowPlayingState.title + " - " + NowPlayingState.artist
+                        : NowPlayingState.title)
+                    : @tr("No track playing");
+                color: Theme.alpha-70;
+                font-size: 11px;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+            TouchArea {
+                pointer-event(ev) => {
+                    if (ev.kind == PointerEventKind.down) {
+                        MiniPlayerState.start-drag();
+                    }
+                }
+            }
+            if MiniPlayerState.window-hovered: MiniWindowControls {
+                x: parent.width - self.width - 8px;
+                y: (parent.height - self.height) / 2;
+                active-surface: MiniPlayerState.surface;
+            }
+        }
+
+        // Micro controls (transport centered).
+        Rectangle {
+            height: 16px;
+            HorizontalLayout {
+                alignment: center;
+                MiniTransport {
+                    btn: 16px;
+                    gap: 9px;
+                    ic-shuffle: 8px;
+                    ic-skip: 9px;
+                    ic-play: 9px;
+                    enabled: root.has-track;
+                }
+            }
+        }
+
+        // Micro bottom seek (1px, full-bleed).
+        MiniSeek {
+            height: 4px;
+            track-height: 1px;
+            rounded: false;
+            progress: root.eff-progress;
+            preview(f) => { root.on-preview(f); }
+            commit(f) => { root.on-commit(f); }
+        }
+    }
+}

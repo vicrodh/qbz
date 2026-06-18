@@ -1,0 +1,184 @@
+// Miniplayer controls capsule — collapsed Square trigger on the RIGHT, the
+// cluster (5 surface tabs + separator + expand/pin/move/close) unfolds LEFT on
+// hover. 1:1 with Tauri MiniPlayerWindowControls.svelte. Inline chrome, NOT a
+// PopupWindow (must not steal focus).
+//
+// Sizing: the root width is COMPUTED (a Rectangle does not size to its child
+// layout), = padding + animated cluster slot + trigger. The cluster content is
+// a real HorizontalLayout so its preferred-width is well-defined.
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { QbzIcon } from "../primitives/QbzIcon.slint";
+import { MiniPlayerState } from "../state.slint";
+
+component CapBtn inherits Rectangle {
+    in property <image> icon;
+    in property <length> icon-size: 13px;
+    in property <bool> active: false;
+    in property <bool> danger: false;
+    in property <bool> drag-cursor: false;
+    out property <bool> hovered: ta.has-hover;
+    callback clicked();
+    callback pressed();
+
+    width: 22px;
+    height: 20px;
+    border-radius: 6px;
+    background: ta.has-hover
+        ? (root.danger ? #ef4444cc : Theme.alpha-12)
+        : transparent;
+
+    QbzIcon {
+        source: root.icon;
+        width: root.icon-size;
+        height: root.icon-size;
+        x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+        y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+        tint: root.active
+            ? Theme.accent
+            : (ta.has-hover ? (root.danger ? #ffffff : Theme.text-primary) : Theme.alpha-65);
+    }
+
+    ta := TouchArea {
+        mouse-cursor: root.drag-cursor ? grab : pointer;
+        clicked => {
+            root.clicked();
+        }
+        pointer-event(ev) => {
+            if (ev.kind == PointerEventKind.down) {
+                root.pressed();
+            }
+        }
+    }
+}
+
+export component MiniWindowControls inherits Rectangle {
+    in property <int> active-surface: 2;
+
+    property <bool> any-hover:
+        trigger.hovered
+        || t0.hovered || t1.hovered || t2.hovered || t3.hovered || t4.hovered
+        || a-expand.hovered || a-bg.hovered || a-move.hovered || a-close.hovered;
+    property <bool> expanded: false;
+    changed any-hover => {
+        if (root.any-hover) {
+            collapse-timer.running = false;
+            root.expanded = true;
+        } else {
+            collapse-timer.running = true;
+        }
+    }
+    collapse-timer := Timer {
+        interval: 250ms;
+        running: false;
+        triggered => {
+            root.expanded = false;
+            self.running = false;
+        }
+    }
+
+    // Animated cluster slot width (0 -> content width).
+    property <length> slot-w: root.expanded ? cluster.preferred-width : 0px;
+    animate slot-w {
+        duration: 220ms;
+        easing: cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    height: 26px;
+    width: 2px + root.slot-w + (root.expanded ? 3px : 0px) + 22px + 2px;
+    border-radius: 13px;
+    background: #06070ae6;     // rgba(6,7,10,0.9)
+    border-width: 1px;
+    border-color: #ffffff33;   // rgba(255,255,255,0.2)
+    drop-shadow-blur: root.expanded ? 20px : 0px;
+    drop-shadow-color: root.expanded ? #00000066 : transparent;
+    drop-shadow-offset-y: root.expanded ? 8px : 0px;
+
+    // Unfolding cluster (left), clipped to the animated slot.
+    Rectangle {
+        x: 2px;
+        y: (parent.height - self.height) / 2;
+        width: root.slot-w;
+        height: 22px;
+        clip: true;
+        opacity: root.expanded ? 1.0 : 0.0;
+        animate opacity {
+            duration: 160ms;
+        }
+
+        cluster := HorizontalLayout {
+            height: 22px;
+            spacing: 3px;
+
+            HorizontalLayout {
+                spacing: 2px;
+                t0 := CapBtn {
+                    icon: @image-url("../assets/icons/minus.svg");
+                    active: root.active-surface == 0;
+                    clicked => { MiniPlayerState.surface-change(0); }
+                }
+                t1 := CapBtn {
+                    icon: @image-url("../assets/icons/disc-3.svg");
+                    active: root.active-surface == 1;
+                    clicked => { MiniPlayerState.surface-change(1); }
+                }
+                t2 := CapBtn {
+                    icon: @image-url("../assets/icons/image.svg");
+                    active: root.active-surface == 2;
+                    clicked => { MiniPlayerState.surface-change(2); }
+                }
+                t3 := CapBtn {
+                    icon: @image-url("../assets/icons/list-music.svg");
+                    active: root.active-surface == 3;
+                    clicked => { MiniPlayerState.surface-change(3); }
+                }
+                t4 := CapBtn {
+                    icon: @image-url("../assets/icons/align-start-vertical.svg");
+                    active: root.active-surface == 4;
+                    clicked => { MiniPlayerState.surface-change(4); }
+                }
+            }
+
+            Rectangle {
+                width: 1px;
+                height: 12px;
+                background: #ffffff29;   // rgba(255,255,255,0.16)
+                y: (parent.height - self.height) / 2;
+            }
+
+            HorizontalLayout {
+                spacing: 2px;
+                a-expand := CapBtn {
+                    icon: @image-url("../assets/icons/maximize-2.svg");
+                    clicked => { MiniPlayerState.expand(); }
+                }
+                a-bg := CapBtn {
+                    icon: @image-url("../assets/icons/layers.svg");
+                    active: MiniPlayerState.background-blur;
+                    clicked => { MiniPlayerState.toggle-background-blur(); }
+                }
+                a-move := CapBtn {
+                    icon: @image-url("../assets/icons/move.svg");
+                    icon-size: 12px;
+                    drag-cursor: true;
+                    pressed => { MiniPlayerState.start-drag(); }
+                }
+                a-close := CapBtn {
+                    icon: @image-url("../assets/icons/x.svg");
+                    danger: true;
+                    clicked => { MiniPlayerState.close-app(); }
+                }
+            }
+        }
+    }
+
+    // Trigger (right, always visible).
+    trigger := CapBtn {
+        x: root.width - 2px - 22px;
+        y: (parent.height - self.height) / 2;
+        width: 22px;
+        height: 22px;
+        icon: @image-url("../assets/icons/square.svg");
+        icon-size: 12px;
+    }
+}

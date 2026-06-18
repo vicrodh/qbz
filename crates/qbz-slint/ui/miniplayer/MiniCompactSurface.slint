@@ -1,0 +1,57 @@
+// Miniplayer COMPACT surface — a horizontal metadata strip (380x178 window).
+// Display only: no controls, no IPC, no marquee (long text ellipsis-truncates).
+// 1:1 with Tauri MiniPlayerCompactSurface.svelte.
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { NowPlayingState } from "../state.slint";
+import { ExplicitBadge, CoverArt } from "MiniBits.slint";
+
+export component MiniCompactSurface inherits Rectangle {
+    // Cover fills the available height (minus padding), kept square (1:1).
+    property <length> art: Math.max(40px, root.height - 24px);
+
+    HorizontalLayout {
+        width: 100%;
+        height: 100%;
+        padding: 12px;
+        spacing: 12px;
+        alignment: start;
+
+        // Square cover, fills height, vertically centered.
+        CoverArt {
+            source: NowPlayingState.artwork;
+            radius: 8px;
+            width: root.art;
+            height: root.art;
+        }
+
+        // Title + artist, vertically centered, fills remaining width.
+        VerticalLayout {
+            alignment: center;
+            spacing: 2px;
+
+            HorizontalLayout {
+                spacing: 5px;
+                Text {
+                    horizontal-stretch: 1;
+                    text: NowPlayingState.has-track ? NowPlayingState.title : @tr("No track playing");
+                    color: Theme.text-primary;
+                    font-size: 13px;
+                    font-weight: 600;
+                    overflow: elide;
+                    vertical-alignment: center;
+                }
+                if NowPlayingState.explicit: ExplicitBadge {
+                    horizontal-stretch: 0;
+                }
+            }
+
+            Text {
+                text: NowPlayingState.artist != "" ? NowPlayingState.artist : "—";
+                color: Theme.text-muted;
+                font-size: 11px;
+                overflow: elide;
+            }
+        }
+    }
+}

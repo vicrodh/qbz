@@ -1,0 +1,139 @@
+// Miniplayer QUEUE surface — a NAVIGABLE list of current + full upcoming
+// (NOT capped at 20). Per-row play routes remote-first via
+// MiniPlayerState.queue-play (REQ-2). Rows mirror the MAIN queue sidebar's
+// UP NEXT rows for coherence: a position NUMBER (no per-row album art — the
+// main only shows art on the now-playing/history rows), title/artist, explicit
+// badge, and a trailing duration. The mini must not have MORE than the main.
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { MiniPlayerState } from "../state.slint";
+import { ListScrollbar } from "../primitives/ListScrollbar.slint";
+import { ExplicitBadge } from "MiniBits.slint";
+
+export component MiniQueueSurface inherits Rectangle {
+    // Empty state.
+    if MiniPlayerState.queue-tracks.length == 0: Text {
+        width: 100%;
+        height: 100%;
+        text: @tr("Queue is empty");
+        color: Theme.text-muted;
+        font-size: 13px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    // Scrollable list.
+    if MiniPlayerState.queue-tracks.length > 0: Rectangle {
+        width: 100%;
+        height: 100%;
+
+        flick := Flickable {
+            width: 100%;
+            height: 100%;
+            viewport-width: self.width;
+            viewport-height: list.preferred-height;
+
+            list := VerticalLayout {
+                width: parent.width;
+                padding-top: 6px;
+                padding-bottom: 8px;
+
+                for item[idx] in MiniPlayerState.queue-tracks: row := Rectangle {
+                    property <bool> active: item.id != "" && item.id == MiniPlayerState.current-track-id;
+                    height: 44px;
+                    border-radius: 4px;
+                    background: rta.has-hover
+                        ? Theme.surface-hover
+                        : (row.active ? Theme.accent.with-alpha(0.10) : transparent);
+
+                    // Hover + click to play (row has no other TouchArea; declared
+                    // first so the content renders on top, matching the main row).
+                    rta := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            MiniPlayerState.queue-play(idx);
+                        }
+                    }
+
+                    if row.active: Rectangle {
+                        x: 0;
+                        y: 4px;
+                        width: 3px;
+                        height: parent.height - 8px;
+                        border-radius: 3px;
+                        background: Theme.accent;
+                    }
+
+                    HorizontalLayout {
+                        width: 100%;
+                        height: 100%;
+                        padding-left: 12px;
+                        padding-right: 12px;
+                        padding-top: 4px;
+                        padding-bottom: 4px;
+                        spacing: 9px;
+
+                        // Position number (no album art — main parity).
+                        VerticalLayout {
+                            alignment: center;
+                            width: 22px;
+                            Text {
+                                text: idx + 1;
+                                color: row.active ? Theme.accent : Theme.text-muted;
+                                font-size: 12px;
+                                horizontal-alignment: center;
+                            }
+                        }
+
+                        VerticalLayout {
+                            horizontal-stretch: 1;
+                            alignment: center;
+                            spacing: 2px;
+                            HorizontalLayout {
+                                spacing: 5px;
+                                Text {
+                                    horizontal-stretch: 1;
+                                    text: item.title;
+                                    color: row.active ? Theme.text-primary : Theme.text-secondary;
+                                    font-size: 12px;
+                                    font-weight: 600;
+                                    overflow: elide;
+                                }
+                                if item.explicit: VerticalLayout {
+                                    alignment: center;
+                                    ExplicitBadge { }
+                                }
+                            }
+                            if item.artist != "": Text {
+                                text: item.artist;
+                                color: Theme.text-muted;
+                                font-size: 10px;
+                                overflow: elide;
+                            }
+                        }
+
+                        // Duration (the main UP NEXT rows show this too).
+                        VerticalLayout {
+                            alignment: center;
+                            Text {
+                                text: item.duration;
+                                color: Theme.text-muted;
+                                font-size: 11px;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        ListScrollbar {
+            x: parent.width - self.width;
+            y: 0;
+            height: parent.height;
+            viewport-height: flick.viewport-height;
+            visible-height: flick.height;
+            viewport-y <=> flick.viewport-y;
+            auto-hide: true;
+        }
+    }
+}

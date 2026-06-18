@@ -871,6 +871,24 @@ fn to_item_reuse(
     }
 }
 
+/// Build the miniplayer's self-contained NAVIGABLE queue model: the current
+/// track first, then the FULL upcoming list (NOT capped at 20, NOT paginated —
+/// the mini is scrollable). Artwork is left empty in v1 (rows show the
+/// placeholder); id/title/artist/duration/explicit are 1:1. The miniplayer
+/// owns its own model so it never collides with the sidebar's `QueueState`.
+pub(crate) fn mini_queue_items(state: &qbz_models::QueueState) -> Vec<QueueItem> {
+    let empty: std::collections::HashMap<slint::SharedString, slint::Image> =
+        std::collections::HashMap::new();
+    let mut out: Vec<QueueItem> = Vec::with_capacity(1 + state.upcoming.len());
+    if let Some(t) = state.current_track.as_ref() {
+        out.push(to_item_reuse(&row_from(t, true), &empty));
+    }
+    for t in state.upcoming.iter() {
+        out.push(to_item_reuse(&row_from(t, false), &empty));
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

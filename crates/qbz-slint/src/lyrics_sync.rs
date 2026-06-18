@@ -217,6 +217,10 @@ fn compute_and_push(window: &AppWindow, runtime: &Runtime, require_playing: bool
         lyrics.set_line_progress(fraction);
     }
 
+    // REQ-1 fan-out: mirror the karaoke scalars to the miniplayer (30Hz; no-op
+    // when the mini is closed) so the mini lyrics highlight stays smooth.
+    crate::miniplayer::mirror_lyrics_scalars(window);
+
     playing
 }
 

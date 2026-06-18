@@ -1,0 +1,65 @@
+// Miniplayer SHELL — the rounded card: mounts exactly one surface (or none for
+// micro, where the footer is the whole content) plus the footer. 1:1 with
+// Tauri MiniPlayerShell.svelte. Whole-window hover (capsule reveal) is fed from
+// the mini window's winit pointer events into MiniPlayerState.window-hovered.
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { ImmersiveState, MiniPlayerState, NowPlayingState } from "../state.slint";
+import { ImmersiveAtmosphere } from "../immersive/ImmersiveAtmosphere.slint";
+import { MiniCompactSurface } from "MiniCompactSurface.slint";
+import { MiniArtworkSurface } from "MiniArtworkSurface.slint";
+import { MiniQueueSurface } from "MiniQueueSurface.slint";
+import { MiniLyricsSurface } from "MiniLyricsSurface.slint";
+import { MiniFooter } from "MiniFooter.slint";
+
+export component MiniShell inherits Rectangle {
+    property <int> surface: MiniPlayerState.surface;
+    // 0 micro -> footer mode 2; 1 compact -> 1; expanded (2/3/4) -> 0.
+    property <int> footer-mode: root.surface == 0 ? 2 : (root.surface == 1 ? 1 : 0);
+
+    background: MiniPlayerState.background-blur ? #050506 : Theme.surface-main;       // --bg-primary
+    border-width: 1px;
+    border-color: Theme.alpha-10;
+    border-radius: root.surface <= 1 ? 9px : 10px;   // micro/compact 9, else 10
+    clip: true;
+
+    if MiniPlayerState.background-blur && NowPlayingState.has-track: ImmersiveAtmosphere {
+        width: 100%;
+        height: 100%;
+        source-image: ImmersiveState.bg-image;
+        fallback-image: NowPlayingState.artwork-large.width > 0
+            ? NowPlayingState.artwork-large
+            : NowPlayingState.artwork;
+        animated: false;
+        dim: 0.54;
+        base-opacity: 0.72;
+        warp-opacity: 0.20;
+    }
+
+    if MiniPlayerState.background-blur: Rectangle {
+        background: #050506bf;
+    }
+
+    VerticalLayout {
+        width: 100%;
+        height: 100%;
+
+        // Surface area (everything except micro).
+        if root.surface != 0: Rectangle {
+            vertical-stretch: 1;
+            clip: true;
+            if root.surface == 1: MiniCompactSurface { width: 100%; height: 100%; }
+            if root.surface == 2: MiniArtworkSurface { width: 100%; height: 100%; }
+            if root.surface == 3: MiniQueueSurface { width: 100%; height: 100%; }
+            if root.surface == 4: MiniLyricsSurface { width: 100%; height: 100%; }
+        }
+
+        // Footer. In micro it fills the whole card (stretch); otherwise it has a
+        // fixed per-mode height (a Rectangle doesn't size to its child layout).
+        MiniFooter {
+            mode: root.footer-mode;
+            vertical-stretch: root.surface == 0 ? 1 : 0;
+            height: root.surface == 1 ? 64px : (root.surface == 0 ? 50px : 80px);
+        }
+    }
+}

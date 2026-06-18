@@ -1,0 +1,46 @@
+// Miniplayer LYRICS surface — reuses the shared LyricsLinesView (which reads
+// LyricsState internally) with mini sizing. Empty state mirrors Tauri
+// MiniPlayerLyricsSurface.svelte (MicVocal + "No lyrics").
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { LyricsState } from "../state.slint";
+import { LyricsLinesView } from "../shell/LyricsLinesView.slint";
+import { QbzIcon } from "../primitives/QbzIcon.slint";
+
+export component MiniLyricsSurface inherits Rectangle {
+    property <bool> has-lines: LyricsState.lines.length > 0;
+
+    if !root.has-lines: VerticalLayout {
+        width: 100%;
+        height: 100%;
+        alignment: center;
+        spacing: 10px;
+        padding: 24px;
+
+        HorizontalLayout {
+            alignment: center;
+            QbzIcon {
+                source: @image-url("../assets/icons/mic-vocal.svg");
+                width: 30px;
+                height: 30px;
+                tint: Theme.text-muted;
+            }
+        }
+        Text {
+            text: @tr("No lyrics");
+            color: Theme.text-muted;
+            font-size: 13px;
+            horizontal-alignment: center;
+        }
+    }
+
+    if root.has-lines: LyricsLinesView {
+        width: 100%;
+        height: 100%;
+        side-padding: 18px;
+        line-gap: 10px;
+        size-inactive: 13px;
+        size-active: 15px;
+        show-attribution: false;
+    }
+}

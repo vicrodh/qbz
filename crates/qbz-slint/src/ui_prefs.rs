@@ -54,6 +54,35 @@ pub struct UiPrefs {
     /// Whether album/artist detail headers use artwork-derived backdrops.
     #[serde(default = "default_album_header_gradient")]
     pub album_header_gradient: bool,
+
+    // ---- Miniplayer ----------------------------------------------------
+    /// Last miniplayer surface: 0 micro · 1 compact · 2 artwork · 3 queue · 4 lyrics.
+    #[serde(default = "default_mini_surface")]
+    pub mini_surface: i32,
+    /// Remembered EXPANDED window size (artwork/queue/lyrics share it).
+    #[serde(default = "default_mini_width")]
+    pub mini_width: f32,
+    #[serde(default = "default_mini_height")]
+    pub mini_height: f32,
+    /// Whether the miniplayer uses the static artwork-derived background.
+    #[serde(default)]
+    pub mini_background_blur: bool,
+    /// Default-view key: "remember" | micro | compact | artwork | queue | lyrics.
+    #[serde(default = "default_mini_default_view")]
+    pub mini_default_view: String,
+}
+
+fn default_mini_surface() -> i32 {
+    2
+}
+fn default_mini_width() -> f32 {
+    380.0
+}
+fn default_mini_height() -> f32 {
+    540.0
+}
+fn default_mini_default_view() -> String {
+    "remember".to_string()
 }
 
 fn default_streaming_quality() -> String {
@@ -74,6 +103,11 @@ impl Default for UiPrefs {
             streaming_quality: default_streaming_quality(),
             npb_mode: default_npb_mode(),
             album_header_gradient: default_album_header_gradient(),
+            mini_surface: default_mini_surface(),
+            mini_width: default_mini_width(),
+            mini_height: default_mini_height(),
+            mini_background_blur: false,
+            mini_default_view: default_mini_default_view(),
         }
     }
 }

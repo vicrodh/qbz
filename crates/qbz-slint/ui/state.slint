@@ -3186,6 +3186,9 @@ export global NowPlayingState {
     // True when the playing track is from an ephemeral folder (synthetic id):
     // it has no DB row, so favorite / add-to-playlist / track-info are gated off.
     in property <bool> is-ephemeral: false;
+    // Parental-warning / explicit flag for the playing track. Drives the
+    // explicit badge in the miniplayer compact + artwork surfaces (Tauri parity).
+    in property <bool> explicit: false;
     in property <bool> playing: false;
     // Fetch/resolve in flight for the track being started — no audio yet.
     // Set the instant a play is requested (before the Plex/Qobuz/local
@@ -3260,6 +3263,38 @@ export global NowPlayingState {
     // Qobuz Connect — toggle the session on/off from the bar's connect flyout.
     // Wired in main.rs to SlintQconnectService::connect/disconnect.
     callback qconnect-toggle();
+}
+
+// Miniplayer-specific state. The miniplayer is a SECOND Slint Window with its
+// OWN global instances (Slint globals are per-component-tree, NOT shared with
+// AppWindow), so the Rust layer mirrors NowPlayingState/LyricsState into the
+// mini window's instances and drives THIS global for mini-only concerns:
+// the active surface, always-on-top, hover (capsule reveal), the AOT warning
+// chip, and a SELF-CONTAINED navigable queue model (current + full upcoming,
+// NOT QueueState.upcoming-page which is the 40-row sidebar slice).
+export global MiniPlayerState {
+    // 0 micro · 1 compact · 2 artwork · 3 queue · 4 lyrics
+    in-out property <int> surface: 2;
+    // Static artwork-derived background for the mini surfaces.
+    in-out property <bool> background-blur: false;
+    // Whole-window hover — reveals the window-controls capsule. Fed from the
+    // mini window's winit CursorMoved/CursorLeft (or a root TouchArea).
+    in-out property <bool> window-hovered: false;
+
+    // Self-contained navigable queue: current track first, then the FULL
+    // de-duplicated upcoming list (no 20-cap). Scrollable in the surface.
+    in property <[QueueItem]> queue-tracks: [];
+    in property <string> current-track-id;
+
+    // Surface navigation + window actions (wired in main.rs to crate::miniplayer).
+    callback surface-change(int);   // 0..4 → apply geometry + persist
+    callback expand();              // exit mini, show main app
+    callback close-app();           // close the app from the mini
+    callback toggle-background-blur(); // toggle static artwork backdrop
+    callback start-drag();          // begin a borderless window drag
+    // Per-row play — index into queue-tracks. Routes remote-first (REQ-2):
+    // play_track_if_remote, bail before mutating local; current row resumes.
+    callback queue-play(int);
 }
 
 // One rendered lyrics line. `time-ms`/`end-ms` are milliseconds from track

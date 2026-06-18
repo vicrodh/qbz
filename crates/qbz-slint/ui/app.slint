@@ -16,10 +16,11 @@ import { SplashScreen } from "splash/SplashScreen.slint";
 import { LoginScreen } from "login/LoginScreen.slint";
 import { AppShell } from "shell/AppShell.slint";
 import { Toast } from "primitives/Toast.slint";
-import { ShellState } from "state.slint";
+import { ShellState, MiniPlayerState } from "state.slint";
+import { MiniShell } from "miniplayer/MiniShell.slint";
 
 // Re-export the state globals so the Rust layer can populate them.
-export { HomeState, HomeActions, DiscoverState, DiscoverActions, SectionDescriptor, ConfigRow, DiscoverBrowseState, DiscoverBrowseActions, ForYouState, MixState, GenreFilterState, GenreFilterActions, AlbumState, ArtistState, NavState, ShellState, SessionState, SettingsState, AlbumActions, ArtistActions, ArtworkActions, NowPlayingState, QueueState, LyricsState, LyricsLineItem, SearchState, SearchActions, NetworkSidebarState, NetworkSidebarActions, MusicianState, MusicianActions, LabelState, LabelActions, LocationViewState, LocationViewActions, FavoritesState, FavoritesActions, PlaylistPickerState, PlaylistPickerActions, DuplicateConfirmState, DuplicateConfirmActions, PlaylistState, PlaylistActions, SidebarState, SidebarActions, SidebarFolderPopupState, CreatePlaylistState, CreatePlaylistActions, EditPlaylistState, EditPlaylistActions, CreateFolderState, CreateFolderActions, MyQbzCreateState, MyQbzCreateActions, DragState, DragActions, PlaylistManagerState, PlaylistManagerActions, OfflineManagerState, OfflineManagerActions, BlacklistState, BlacklistActions, BlacklistedArtistItem, MyQbzState, MyQbzActions, MixtapeCardItem, MyQbzAddState, MyQbzAddActions, MyQbzAddRow, MyQbzDetailState, MyQbzDetailActions, MixtapeDetailItem, MyQbzEditState, MyQbzEditActions, MyQbzMixState, MyQbzMixActions, DiscoBuilderState, DiscoBuilderActions, DiscoGroup, DiscoCandidate, LocalLibraryState, LocalLibraryActions, LibraryFoldersState, LibFolderEditState, LibraryManageActions, LibraryScanState, LibAlbumFilterState, LocalAlbumState, LocalAlbumActions, TagEditorState, TagEditorActions, FolderEditState, FolderEditActions, ToastState, TextUtil, QconnectDevState, QconnectDevice, AppearanceState, MyQbzBrandingState, EphemeralPlayChoiceState, EphemeralPlayChoiceActions, PlexSettingsState, PlexAuthActions, PlexSectionItem, ScrobbleState, ScrobbleActions, OfflineState, OfflineModeActions, OfflineFavoritesState, OfflineFavoritesActions, ImportLogEntry, PlaylistImportState, PlaylistImportActions, DacWizardState, DacWizardActions, DacCandidateRow, RemediationRow, DacConfigRow, InfoCreditRow, InfoCreditPair, AlbumCreditPerformer, AlbumCreditTrack, TrackInfoState, TrackInfoActions, AlbumInfoState, AlbumInfoActions, VisualizerState, ImmersiveState } from "state.slint";
+export { HomeState, HomeActions, DiscoverState, DiscoverActions, SectionDescriptor, ConfigRow, DiscoverBrowseState, DiscoverBrowseActions, ForYouState, MixState, GenreFilterState, GenreFilterActions, AlbumState, ArtistState, NavState, ShellState, SessionState, SettingsState, AlbumActions, ArtistActions, ArtworkActions, NowPlayingState, QueueState, LyricsState, LyricsLineItem, SearchState, SearchActions, NetworkSidebarState, NetworkSidebarActions, MusicianState, MusicianActions, LabelState, LabelActions, LocationViewState, LocationViewActions, FavoritesState, FavoritesActions, PlaylistPickerState, PlaylistPickerActions, DuplicateConfirmState, DuplicateConfirmActions, PlaylistState, PlaylistActions, SidebarState, SidebarActions, SidebarFolderPopupState, CreatePlaylistState, CreatePlaylistActions, EditPlaylistState, EditPlaylistActions, CreateFolderState, CreateFolderActions, MyQbzCreateState, MyQbzCreateActions, DragState, DragActions, PlaylistManagerState, PlaylistManagerActions, OfflineManagerState, OfflineManagerActions, BlacklistState, BlacklistActions, BlacklistedArtistItem, MyQbzState, MyQbzActions, MixtapeCardItem, MyQbzAddState, MyQbzAddActions, MyQbzAddRow, MyQbzDetailState, MyQbzDetailActions, MixtapeDetailItem, MyQbzEditState, MyQbzEditActions, MyQbzMixState, MyQbzMixActions, DiscoBuilderState, DiscoBuilderActions, DiscoGroup, DiscoCandidate, LocalLibraryState, LocalLibraryActions, LibraryFoldersState, LibFolderEditState, LibraryManageActions, LibraryScanState, LibAlbumFilterState, LocalAlbumState, LocalAlbumActions, TagEditorState, TagEditorActions, FolderEditState, FolderEditActions, ToastState, TextUtil, QconnectDevState, QconnectDevice, AppearanceState, MyQbzBrandingState, EphemeralPlayChoiceState, EphemeralPlayChoiceActions, PlexSettingsState, PlexAuthActions, PlexSectionItem, ScrobbleState, ScrobbleActions, OfflineState, OfflineModeActions, OfflineFavoritesState, OfflineFavoritesActions, ImportLogEntry, PlaylistImportState, PlaylistImportActions, DacWizardState, DacWizardActions, DacCandidateRow, RemediationRow, DacConfigRow, InfoCreditRow, InfoCreditPair, AlbumCreditPerformer, AlbumCreditTrack, TrackInfoState, TrackInfoActions, AlbumInfoState, AlbumInfoActions, VisualizerState, ImmersiveState, MiniPlayerState } from "state.slint";
 
 // Which top-level screen is shown. The app starts on `splash` while it
 // restores a saved session, then resolves to `shell` or `login`.
@@ -142,5 +143,34 @@ export component AppWindow inherits Window {
     Toast {
         width: 100%;
         height: 100%;
+    }
+}
+
+// Second top-level window — the miniplayer. Borderless + transparent (set at
+// the winit level in crate::miniplayer); the 6px transparent gutter + the
+// rounded card recreate Tauri's floating-card look. The first QBZ surface with
+// no system titlebar.
+export component MiniPlayerWindow inherits Window {
+    title: "QBZ Mini Player";
+    min-width: 340px;
+    min-height: 57px;
+    background: transparent;
+    // BORDERLESS — the real fix. Slint's winit adapter OVERRIDES winit
+    // decorations at every window realization from this property
+    // (`set_decorations(!no_frame() || fullscreen)`, winitwindowadapter.rs:1268),
+    // so the BackendSelector attributes hook alone was being undone. `no-frame`
+    // is the native, authoritative borderless switch. First QBZ surface with no
+    // system titlebar; AppWindow keeps `no-frame: false` (default).
+    no-frame: true;
+
+    in property <string> system-font: "";
+    default-font-family: root.system-font;
+
+    // 6px transparent gutter around the rounded card.
+    MiniShell {
+        x: 6px;
+        y: 6px;
+        width: parent.width - 12px;
+        height: parent.height - 12px;
     }
 }

@@ -1,0 +1,73 @@
+// Miniplayer ARTWORK surface — large centered cover + centered metadata
+// (380x540 window). Display only. 1:1 with Tauri MiniPlayerArtworkSurface.svelte.
+//
+// NOTE (deferred polish): Tauri runs a hover-triggered marquee on each text
+// line when it overflows. v1 uses elide; the hover-marquee is a documented
+// follow-up (cosmetic hover effect, not core function).
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { NowPlayingState } from "../state.slint";
+import { ExplicitBadge, CoverArt } from "MiniBits.slint";
+
+export component MiniArtworkSurface inherits Rectangle {
+    // max-width 320, aspect 1:1, shrinks with the (resizable) window width.
+    property <length> cover-size: Math.min(root.width - 40px, 320px);
+
+    VerticalLayout {
+        width: 100%;
+        height: 100%;
+        padding-left: 20px;
+        padding-right: 20px;
+        padding-top: 16px;
+        padding-bottom: 12px;
+        spacing: 12px;
+        alignment: center;
+
+        HorizontalLayout {
+            alignment: center;
+            CoverArt {
+                source: NowPlayingState.artwork;
+                radius: 10px;
+                width: root.cover-size;
+                height: root.cover-size;
+            }
+        }
+
+        // Centered meta block.
+        VerticalLayout {
+            spacing: 2px;
+
+            HorizontalLayout {
+                spacing: 5px;
+                Text {
+                    horizontal-stretch: 1;
+                    text: NowPlayingState.has-track ? NowPlayingState.title : @tr("No track playing");
+                    color: Theme.text-primary;
+                    font-size: 13px;
+                    font-weight: 600;
+                    horizontal-alignment: center;
+                    overflow: elide;
+                }
+                if NowPlayingState.explicit: ExplicitBadge {
+                    horizontal-stretch: 0;
+                }
+            }
+
+            if NowPlayingState.artist != "": Text {
+                text: NowPlayingState.artist;
+                color: Theme.text-muted;
+                font-size: 12px;
+                horizontal-alignment: center;
+                overflow: elide;
+            }
+
+            if NowPlayingState.album != "": Text {
+                text: NowPlayingState.album;
+                color: Theme.alpha-55;
+                font-size: 12px;
+                horizontal-alignment: center;
+                overflow: elide;
+            }
+        }
+    }
+}

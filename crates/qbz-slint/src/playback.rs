@@ -3621,6 +3621,9 @@ pub fn start_poll_loop(
                 np.set_remaining(remaining.into());
                 np.set_playing(is_playing);
                 np.set_volume(volume.clamp(0.0, 1.0));
+                // REQ-1 fan-out: mirror to the miniplayer window (no-op when
+                // the mini is closed). Single tick, no second poll loop.
+                crate::miniplayer::mirror_tick(&w);
             });
 
             // Clear the fetch spinner once the audio for the in-flight play is
