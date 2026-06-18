@@ -51,6 +51,9 @@ pub struct DlnaConnection {
 impl DlnaConnection {
     /// Connect to a DLNA device and discover service URLs
     pub async fn connect(device: DiscoveredDlnaDevice) -> Result<Self, DlnaError> {
+        // Defensive: the device-description fetch may go over TLS in some
+        // setups; ensure a rustls CryptoProvider is installed (idempotent).
+        crate::ensure_crypto_provider();
         let device_url: Uri = device
             .url
             .parse()

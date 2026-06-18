@@ -37,3 +37,26 @@ pub use dlna::{
 
 /// Cast device type alias for backwards compatibility
 pub type CastDevice = CastDeviceConnection;
+
+/// Install the rustls process-level `CryptoProvider` (aws-lc-rs) exactly once.
+///
+/// `rust_cast` opens a TLS control channel to the Chromecast via rustls. In the
+/// full QBZ binary BOTH the `aws-lc-rs` and `ring` providers are enabled (reqwest
+/// pulls `ring`, rust_cast pulls `aws-lc-rs`), so rustls can't auto-select one
+/// and panics with "Could not automatically determine the process-level
+/// CryptoProvider". Installing one explicitly before any TLS use fixes it.
+///
+/// Idempotent (a second call is a no-op); harmless if some other component
+/// already installed a default (`install_default` then returns Err, ignored).
+pub fn ensure_crypto_provider() {
+    use std::sync::Once;
+    static INIT: Once = Once::new();
+    INIT.call_once(|| {
+        if rustls::crypto::aws_lc_rs::default_provider()
+            .install_default()
+            .is_err()
+        {
+            log::debug!("[cast] rustls CryptoProvider already installed");
+        }
+    });
+}

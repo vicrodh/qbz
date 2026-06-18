@@ -5451,6 +5451,7 @@ dependencies = [
  "mdns-sd",
  "rupnp",
  "rust_cast",
+ "rustls",
  "serde",
  "serde_json",
  "thiserror 2.0.18",

@@ -8,6 +8,12 @@ description = "Casting support for QBZ - Chromecast, DLNA"
 # Chromecast
 rust_cast = "0.21"
 
+# TLS provider selection. rust_cast uses rustls; in the multi-crate binary both
+# the aws-lc-rs and ring providers end up enabled (reqwest pulls ring), so
+# rustls can't auto-pick one and panics on connect. We install aws-lc-rs
+# explicitly before connecting (see `ensure_crypto_provider`).
+rustls = { version = "0.23", features = ["aws_lc_rs"] }
+
 # mDNS discovery
 mdns-sd = "0.11"
 

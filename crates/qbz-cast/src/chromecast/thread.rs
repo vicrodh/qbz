@@ -75,6 +75,9 @@ impl ChromecastHandle {
 
     /// Connect to a Chromecast device
     pub fn connect(&self, ip: String, port: u16) -> Result<(), CastError> {
+        // rust_cast opens a rustls TLS channel; make sure a CryptoProvider is
+        // installed first (the worker thread would otherwise panic).
+        crate::ensure_crypto_provider();
         let (reply_tx, reply_rx) = mpsc::channel();
         self.sender
             .send(CastCommand::Connect {
