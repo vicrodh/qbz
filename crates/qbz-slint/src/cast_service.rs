@@ -539,6 +539,14 @@ impl SlintCastService {
                 }
             }
         }
+        // Reflect the drag on the bar: the local set_volume (which normally
+        // moves the slider) is skipped while casting, and the cast poll doesn't
+        // push volume, so update NowPlayingState.volume here.
+        let weak = self.window.clone();
+        let _ = weak.upgrade_in_event_loop(move |w| {
+            use slint::ComponentHandle;
+            w.global::<NowPlayingState>().set_volume(v);
+        });
         Ok(true)
     }
 
@@ -555,27 +563,10 @@ impl SlintCastService {
         Ok(true)
     }
 
-    /// Advance the QBZ queue and cast the new current track. Ok(false) = not
-    /// casting.
-    pub async fn next_if_cast(self: &Arc<Self>) -> Result<bool, String> {
-        if !self.is_casting().await {
-            return Ok(false);
-        }
-        if let Some(track) = self.runtime.core().next_track().await {
-            self.cast_track(&track).await?;
-        }
-        Ok(true)
-    }
-
-    pub async fn previous_if_cast(self: &Arc<Self>) -> Result<bool, String> {
-        if !self.is_casting().await {
-            return Ok(false);
-        }
-        if let Some(track) = self.runtime.core().previous_track().await {
-            self.cast_track(&track).await?;
-        }
-        Ok(true)
-    }
+    // NOTE: next/previous are intentionally NOT handled here. While casting, the
+    // local playback::next/previous flow runs (it moves the core cursor +
+    // refreshes the card/queue), and play_audible casts the new current track.
+    // A cast-only advance would desync the UI cursor from the renderer.
 
     async fn seek_secs(&self, secs: f64) -> Result<(), String> {
         let proto = {
@@ -767,14 +758,22 @@ impl SlintCastService {
             np.set_progress((position / duration.max(1.0)).clamp(0.0, 1.0) as f32);
             np.set_position_secs(position as i32);
             np.set_duration_secs(duration as i32);
+            np.set_seekable_max(1.0);
             np.set_elapsed(format_mmss(position).into());
+            np.set_remaining(format_mmss((duration - position).max(0.0)).into());
+            np.set_playing(playing);
         });
 
         if ended {
             log::info!("[Cast] track ended (state={state}); auto-advancing");
-            if let Err(e) = self.next_if_cast().await {
-                log::warn!("[Cast] auto-advance failed: {e}");
-            }
+            // Run the SAME local advance the next button uses: it moves the
+            // core cursor, refreshes the card + queue, and play_audible casts
+            // the new current track. Keeps the UI and renderer in sync.
+            crate::playback::next(
+                self.runtime.clone(),
+                self.window.clone(),
+                tokio::runtime::Handle::current(),
+            );
         }
     }
 
@@ -893,6 +892,11 @@ impl SlintCastService {
             let np = w.global::<NowPlayingState>();
             np.set_cast_active(connected);
             np.set_cast_protocol(protocol.into());
+            // Keep the bar's play/pause icon in sync immediately (the local poll
+            // is skipped while casting).
+            if connected {
+                np.set_playing(playing);
+            }
         });
     }
 

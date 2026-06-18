@@ -6744,16 +6744,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let weak = weak.clone();
             let handle = handle.clone();
             handle.clone().spawn(async move {
-                if let Some(cast) = cast_service::service() {
-                    match cast.next_if_cast().await {
-                        Ok(true) => return,
-                        Ok(false) => {}
-                        Err(e) => {
-                            log::warn!("[Cast] next: {e}");
-                            return;
-                        }
-                    }
-                }
+                // NOTE: no cast-specific branch here. While casting, the local
+                // next() flow runs — it moves the core cursor, refreshes the
+                // now-playing card + queue, and calls play_audible, which casts
+                // the new current track (the play_audible cast gate). Routing
+                // next() through a cast-only path would advance the renderer but
+                // leave the UI cursor stale (and then queue-click resolves
+                // against the wrong index).
                 if let Some(svc) = qconnect_service::service() {
                     match svc.skip_next_if_remote().await {
                         Ok(true) => return,
@@ -6777,16 +6774,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let weak = weak.clone();
             let handle = handle.clone();
             handle.clone().spawn(async move {
-                if let Some(cast) = cast_service::service() {
-                    match cast.previous_if_cast().await {
-                        Ok(true) => return,
-                        Ok(false) => {}
-                        Err(e) => {
-                            log::warn!("[Cast] previous: {e}");
-                            return;
-                        }
-                    }
-                }
+                // See on_next: no cast branch — the local previous() flow keeps
+                // the cursor + UI in sync and play_audible casts the new track.
                 if let Some(svc) = qconnect_service::service() {
                     match svc.skip_previous_if_remote().await {
                         Ok(true) => return,
