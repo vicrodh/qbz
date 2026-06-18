@@ -33,8 +33,6 @@ pub type ImageCache = Arc<Mutex<Option<ImageCacheService>>>;
 /// Which card an artwork download targets.
 #[derive(Clone, Copy)]
 pub enum ArtworkTarget {
-    /// A card in `HomeState.sections[section_idx].albums[album_idx]`.
-    Section { section_idx: usize, album_idx: usize },
     /// A card in a Discover descriptor list's embedded album section
     /// (`DiscoverState.home-sections` / `editor-sections`
     /// `[section_idx].section.albums[album_idx]`) — Slice 5's prefs-driven
@@ -640,20 +638,6 @@ fn apply_artwork(
 
     let home = window.global::<HomeState>();
     match target {
-        ArtworkTarget::Section {
-            section_idx,
-            album_idx,
-        } => {
-            let sections = home.get_sections();
-            let Some(section) = sections.row_data(section_idx) else {
-                return;
-            };
-            let Some(mut item) = section.albums.row_data(album_idx) else {
-                return;
-            };
-            item.artwork = image;
-            section.albums.set_row_data(album_idx, item);
-        }
         ArtworkTarget::DiscoverSectionAlbum {
             editor,
             section_idx,

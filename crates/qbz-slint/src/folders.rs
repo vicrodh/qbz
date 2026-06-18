@@ -56,12 +56,6 @@ pub fn create_folder(name: &str) -> Option<FolderInfo> {
     })
 }
 
-pub fn rename_folder(id: &str, name: &str) {
-    library_db::with_db(|db| {
-        db.update_playlist_folder(id, Some(name), None, None, None, None, None)
-    });
-}
-
 pub fn delete_folder(id: &str) {
     library_db::with_db(|db| db.delete_playlist_folder(id));
 }

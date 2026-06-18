@@ -709,6 +709,7 @@ pub(crate) async fn load_collection(collection_id: &str) -> Option<MixtapeCollec
 /// finds the first track whose item-boundary differs from the current item via
 /// `next_item_index`, and `play_index`es it. No-op at the last item / empty
 /// queue / no current cursor.
+#[allow(dead_code)] // Reserved: ported (spec 40 §6), pending Mixtape item-skip wiring.
 pub async fn skip_to_next_item(runtime: &Runtime, weak: &slint::Weak<AppWindow>) {
     let (queue, current) = runtime.core().get_all_queue_tracks().await;
     let Some(current) = current else {
@@ -734,6 +735,7 @@ pub async fn skip_to_next_item(runtime: &Runtime, weak: &slint::Weak<AppWindow>)
 /// + cursor + elapsed position from `qbz-core`, applies the 3-second prev rule
 /// via `previous_item_index` (elapsed > 3s OR mid-item → restart current item;
 /// else jump to the previous item's start), and `play_index`es the target.
+#[allow(dead_code)] // Reserved: ported (spec 40 §6), pending Mixtape item-skip wiring.
 pub async fn skip_to_previous_item(runtime: &Runtime, weak: &slint::Weak<AppWindow>) {
     let (queue, current) = runtime.core().get_all_queue_tracks().await;
     let Some(current) = current else {

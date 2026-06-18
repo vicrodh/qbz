@@ -1999,6 +1999,9 @@ impl SlintQconnectService {
 
     /// Set autoplay mode on the active PEER renderer. Mirrors the Tauri
     /// `set_autoplay_mode_if_remote`.
+    // Reserved: ported QConnect transport API, pending wiring by the QConnect
+    // autoplay/stop UI work.
+    #[allow(dead_code)]
     pub async fn set_autoplay_mode_if_remote(&self, enabled: bool) -> Result<bool, String> {
         let remote_context = self.effective_remote_renderer_snapshot().await?;
         let Some((_renderer, _queue, session)) = remote_context else {
@@ -2024,6 +2027,7 @@ impl SlintQconnectService {
 
     /// Load autoplay tracks onto the active PEER renderer. Empty list = handled
     /// no-op. Mirrors the Tauri `autoplay_load_tracks_if_remote`.
+    #[allow(dead_code)] // Reserved: ported, pending QConnect autoplay wiring.
     pub async fn autoplay_load_tracks_if_remote(
         &self,
         track_ids: Vec<u32>,
@@ -2055,6 +2059,7 @@ impl SlintQconnectService {
     }
 
     /// Stop the active PEER renderer. Mirrors the Tauri `stop_if_remote`.
+    #[allow(dead_code)] // Reserved: ported, pending QConnect stop wiring.
     pub async fn stop_if_remote(&self) -> Result<bool, String> {
         let remote_context = self.effective_remote_renderer_snapshot().await?;
         let Some((renderer, queue, session)) = remote_context else {

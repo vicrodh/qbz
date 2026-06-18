@@ -379,60 +379,6 @@ component ModeToggle inherits Rectangle {
     }
 }
 
-// Flat/Tree toggle with TEXT labels (1:1 with Tauri's `.folders-mode-btn`):
-// ghost buttons, the active one highlighted.
-// Inherits Rectangle (content-sized) so the buttons render identically in flat
-// and tree mode regardless of the surrounding toolbar's fill; `alignment: end`
-// keeps the pair floated to the right.
-component ModeTextToggle inherits Rectangle {
-    in property <string> mode;        // "flat" | "tree"
-    callback set-mode(string);
-    HorizontalLayout {
-        alignment: end;
-        spacing: 2px;
-        Rectangle {
-            height: 30px;
-            width: flat-lbl.preferred-width + 24px;
-            border-radius: 6px;
-            background: root.mode == "flat"
-                ? Theme.surface-elevated
-                : (flat-ta.has-hover ? Theme.surface-hover : transparent);
-            flat-lbl := Text {
-                text: @tr("Flat");
-                color: root.mode == "flat" ? Theme.text-primary : Theme.text-secondary;
-                font-size: Typography.legal;
-                font-weight: Typography.medium;
-                x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
-                y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
-            }
-            flat-ta := TouchArea {
-                mouse-cursor: pointer;
-                clicked => { root.set-mode("flat"); }
-            }
-        }
-        Rectangle {
-            height: 30px;
-            width: tree-lbl.preferred-width + 24px;
-            border-radius: 6px;
-            background: root.mode == "tree"
-                ? Theme.surface-elevated
-                : (tree-ta.has-hover ? Theme.surface-hover : transparent);
-            tree-lbl := Text {
-                text: @tr("Tree");
-                color: root.mode == "tree" ? Theme.text-primary : Theme.text-secondary;
-                font-size: Typography.legal;
-                font-weight: Typography.medium;
-                x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
-                y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
-            }
-            tree-ta := TouchArea {
-                mouse-cursor: pointer;
-                clicked => { root.set-mode("tree"); }
-            }
-        }
-    }
-}
-
 // Compact icon button for the tree select bar — icon-only with a hover tooltip.
 component RailBulkBtn inherits Rectangle {
     in property <image> icon;

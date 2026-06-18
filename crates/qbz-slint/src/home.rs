@@ -647,27 +647,6 @@ fn build_sections(sections: &[SectionData]) -> Vec<DiscoverSection> {
         .collect()
 }
 
-/// Artwork jobs for a tab's section set (Section-targeted, so they
-/// land in HomeState.sections — the model the active tab renders).
-pub fn section_artwork_jobs(sections: &[SectionData]) -> Vec<ArtworkJob> {
-    let mut jobs = Vec::new();
-    for (section_idx, section) in sections.iter().enumerate() {
-        for (album_idx, card) in section.albums.iter().enumerate() {
-            if card.artwork_url.is_empty() {
-                continue;
-            }
-            jobs.push(ArtworkJob {
-                target: ArtworkTarget::Section {
-                    section_idx,
-                    album_idx,
-                },
-                url: card.artwork_url.clone(),
-            });
-        }
-    }
-    jobs
-}
-
 /// Artwork jobs for the Qobuz Playlists row (single cover per card, so they
 /// target `HomeState.playlists[idx]` directly). Skips cards with no artwork.
 pub fn playlist_artwork_jobs(playlists: &[PlaylistCardData]) -> Vec<ArtworkJob> {
