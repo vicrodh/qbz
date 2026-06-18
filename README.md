@@ -65,7 +65,14 @@ sudo snap connect qbz-player:pipewire
 
 ```bash
 curl -fsSL https://vicrodh.github.io/qbz-apt/qbz-archive-keyring.gpg | gpg --dearmor | sudo tee /usr/share/keyrings/qbz-archive-keyring.gpg > /dev/null
-echo "deb [signed-by=/usr/share/keyrings/qbz-archive-keyring.gpg arch=$(dpkg --print-architecture)] https://vicrodh.github.io/qbz-apt stable main" | sudo tee /etc/apt/sources.list.d/qbz.list
+cat <<EOF | sudo tee /etc/apt/sources.list.d/qbz.sources
+Types: deb
+URIs: https://vicrodh.github.io/qbz-apt
+Suites: stable
+Components: main
+Architectures: $(dpkg --print-architecture)
+Signed-By: /usr/share/keyrings/qbz-archive-keyring.gpg
+EOF
 sudo apt update && sudo apt install qbz
 ```
 
