@@ -7,7 +7,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use qbz_models::{
-    ExternalStreamAsset,
+    AssetOrigin, ExternalStreamAsset, StreamQualityInfo,
     Album, Artist, ArtistAlbums, CoreEvent, DiscoverAlbum, DiscoverData, DiscoverPlaylistsResponse,
     DiscoverResponse, FrontendAdapter, GenreInfo, LabelExploreResponse, LabelGetListResponse,
     LabelListPage, LabelPageData, LabelStoryResponse, PageArtistResponse,
@@ -665,16 +665,40 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
         self.player.fetch_for_gapless(client, track_id, quality).await
     }
 
-    /// Resolve a fully-materialized audio asset (bytes + MIME + delivered
-    /// quality) for an EXTERNAL renderer (Chromecast / DLNA). The Cast service
-    /// hands the bytes to the local media server and the quality to the UI.
-    /// Attempts the best tier first (pass `Quality::UltraHiRes`); the resolver
-    /// falls back down the chain and reports what was actually delivered.
+    /// Resolve a fully-materialized audio asset (bytes + MIME + quality) for an
+    /// EXTERNAL renderer (Chromecast / DLNA). Tier order mirrors
+    /// `fetch_for_gapless_resolved`: L1/L2 player cache -> OFFLINE (local CMAF
+    /// decrypt, no network) -> network. The offline tier is what makes a
+    /// downloaded track cast fast with no connection (the same "local segments,
+    /// decrypt on demand" path the offline cache uses for playback). On a cache
+    /// or offline hit the precise delivered quality isn't known here — the Cast
+    /// service derives the quality label from the track's catalog metadata.
     pub async fn fetch_for_external_stream_resolved(
         &self,
         track_id: u64,
         quality: Quality,
+        offline: Option<&qbz_offline_cache::OfflineCacheState>,
+        sink: Option<&qbz_offline_cache::CacheEventSink>,
     ) -> Option<ExternalStreamAsset> {
+        // L1/L2 player cache (decrypted FLAC) is handled inside
+        // fetch_for_external_stream; only reach for the offline tier when the
+        // track is not already cached (the CMAF decrypt is slow).
+        if !self.player.is_track_cached(track_id) {
+            if let Some(off) = offline {
+                if let Some(bytes) =
+                    crate::offline_resolve::resolve_offline_bytes(track_id, off, sink).await
+                {
+                    log::info!("[CAST-FETCH] track {track_id} served from OFFLINE cache");
+                    return Some(ExternalStreamAsset {
+                        bytes,
+                        content_type: "audio/flac".to_string(),
+                        quality: StreamQualityInfo::from_raw(0, None, None),
+                        duration_secs: None,
+                        origin: AssetOrigin::Offline,
+                    });
+                }
+            }
+        }
         let guard = self.client.read().await;
         let client = guard.as_ref()?;
         self.player

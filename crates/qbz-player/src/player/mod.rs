@@ -3765,22 +3765,54 @@ impl Player {
 
     /// Resolve a fully-materialized audio asset for an EXTERNAL renderer
     /// (Chromecast / DLNA), carrying the bytes verbatim plus the MIME and the
-    /// quality that was ACTUALLY delivered. Used by the Cast path through the
-    /// local media server.
+    /// quality. Used by the Cast path through the local media server.
     ///
-    /// Unlike `fetch_for_gapless`, this deliberately does NOT read the local
-    /// playback cache: those bytes were fetched at the user's *local* quality
-    /// setting, whereas casting attempts the best tier (UltraHiRes-first) and
-    /// must report the real delivered quality. The CMAF path is preferred (it
-    /// yields decrypted FLAC and exposes the resolved sample-rate/bit-depth);
-    /// the legacy stream-URL download is the fallback.
+    /// Cache-first (P1, matches the fast Tauri cast path + consumes the gapless
+    /// prefetch): L1 in-memory -> L2 on-disk playback cache (both decrypted
+    /// FLAC) -> network. A prefetched/replayed track is served instantly; only a
+    /// cold track pays the CMAF download. On a cache hit the delivered quality is
+    /// not known here (no metadata stored with the bytes) — the caller derives
+    /// the quality label from the track's catalog metadata; the network path
+    /// returns the precise resolved tier.
     pub async fn fetch_for_external_stream(
         &self,
         client: &QobuzClient,
         track_id: u64,
         quality: Quality,
     ) -> Option<ExternalStreamAsset> {
-        // Preferred: CMAF full download (Akamai CDN) -> decrypted FLAC.
+        // L1: in-memory cache (warmed by the gapless prefetch / a prior play).
+        if let Some(cached) = self.audio_cache.get(track_id) {
+            log::info!(
+                "[CAST-FETCH] Track {track_id} from MEMORY cache ({} bytes)",
+                cached.size_bytes
+            );
+            return Some(ExternalStreamAsset {
+                bytes: cached.data,
+                content_type: "audio/flac".to_string(),
+                quality: StreamQualityInfo::from_raw(0, None, None),
+                duration_secs: None,
+                origin: AssetOrigin::Cache,
+            });
+        }
+        // L2: on-disk plain-FLAC playback cache; warm L1 on the way out.
+        if let Some(playback_cache) = self.audio_cache.get_playback_cache() {
+            if let Some(audio_data) = playback_cache.get(track_id) {
+                log::info!(
+                    "[CAST-FETCH] Track {track_id} from DISK cache ({} bytes)",
+                    audio_data.len()
+                );
+                self.audio_cache.insert(track_id, audio_data.clone());
+                return Some(ExternalStreamAsset {
+                    bytes: audio_data,
+                    content_type: "audio/flac".to_string(),
+                    quality: StreamQualityInfo::from_raw(0, None, None),
+                    duration_secs: None,
+                    origin: AssetOrigin::Cache,
+                });
+            }
+        }
+
+        // Cold: CMAF full download (Akamai CDN) -> decrypted FLAC.
         match qbz_qobuz::cmaf::download_full_with_quality(client, track_id, quality).await {
             Ok((bytes, q)) => {
                 log::info!(

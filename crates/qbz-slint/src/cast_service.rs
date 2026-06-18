@@ -356,22 +356,19 @@ impl SlintCastService {
             track.source.as_deref().unwrap_or("qobuz")
         };
 
-        // Resolve (content_type, register-closure) per source. The network
-        // download happens OUTSIDE the inner lock.
-        let (content_type, quality_label, quality_detail) = match source {
+        // Resolve the content type + register the bytes per source. The fetch
+        // (cache / offline / network) happens OUTSIDE the inner lock.
+        let content_type = match source {
             "local" | "ephemeral" => {
                 let path = resolve_local_path(track.id)
                     .ok_or_else(|| format!("Local file not found for track {}", track.id))?;
                 self.register_local(track.id, &path).await?
             }
             "qobuz" | "qobuz_download" => {
-                // The external-stream resolver is network/CMAF only (it does not
-                // read the offline cache), so Qobuz casting needs a connection.
-                // Local casting still works offline (handled above). Tracked as a
-                // follow-up (offline-cached Qobuz cast).
-                if crate::offline_mode::engine().is_offline() {
-                    return Err("Casting Qobuz tracks requires a connection".to_string());
-                }
+                // Cache-first + offline tier (see fetch_for_external_stream_resolved):
+                // a prefetched / replayed / downloaded track resolves with no
+                // network; only a cold online track downloads. An offline track
+                // not in the cache will simply fail to resolve below.
                 self.register_qobuz(track.id).await?
             }
             "plex" => {
@@ -424,27 +421,34 @@ impl SlintCastService {
             inner.is_playing = true;
             inner.track_end_detected = false;
         }
+        // Quality label comes from the track's catalog metadata (always present,
+        // no network call) so it's the same whether bytes came from cache,
+        // offline, or the network.
+        let (quality_label, quality_detail) = quality_label_from_track(track);
         self.push_quality(quality_label, quality_detail).await;
         self.push_connection_state().await;
         Ok(())
     }
 
-    /// qobuz: resolve via the shared core API (UltraHiRes-first), register the
-    /// bytes. Returns (content_type, quality_label, quality_detail).
-    async fn register_qobuz(
-        &self,
-        track_id: u64,
-    ) -> Result<(String, String, String), String> {
+    /// qobuz: resolve via the shared core API (cache -> offline -> network),
+    /// register the bytes. Returns the content type.
+    async fn register_qobuz(&self, track_id: u64) -> Result<String, String> {
+        let offline = crate::offline::get().await;
+        let sink = crate::offline_cache::row_sink(self.window.clone());
         let asset = self
             .runtime
             .core()
-            .fetch_for_external_stream_resolved(track_id, Quality::UltraHiRes)
+            .fetch_for_external_stream_resolved(
+                track_id,
+                Quality::UltraHiRes,
+                offline.as_deref(),
+                Some(&sink),
+            )
             .await
             .ok_or_else(|| format!("Could not resolve stream for track {track_id}"))?;
 
+        log::info!("[Cast] qobuz track {track_id} resolved from {:?}", asset.origin);
         let content_type = asset.content_type.clone();
-        let quality_label = asset.quality.tier_label().to_string();
-        let quality_detail = format_quality_detail(&asset.quality);
 
         self.ensure_media_server().await?;
         {
@@ -452,16 +456,12 @@ impl SlintCastService {
             let server = inner.media_server.as_mut().ok_or("Media server gone")?;
             server.register_audio(track_id, asset.bytes, &content_type);
         }
-        Ok((content_type, quality_label, quality_detail))
+        Ok(content_type)
     }
 
     /// local: stream the file from disk via register_file (no full-RAM read);
     /// the crate's rich MIME map sets the content type.
-    async fn register_local(
-        &self,
-        track_id: u64,
-        path: &str,
-    ) -> Result<(String, String, String), String> {
+    async fn register_local(&self, track_id: u64, path: &str) -> Result<String, String> {
         self.ensure_media_server().await?;
         let content_type = {
             let mut inner = self.inner.lock().await;
@@ -469,12 +469,11 @@ impl SlintCastService {
             server
                 .register_file(track_id, path)
                 .map_err(|e| e.to_string())?;
-            // Re-read the entry's content type would need an accessor; recompute
-            // from the path for the UI label (cheap, matches the crate map).
+            // Recompute the content type from the path for the UI (cheap, matches
+            // the crate's own register_file map).
             content_type_for_local(path)
         };
-        // Local files carry no resolved Qobuz quality tier.
-        Ok((content_type, String::new(), String::new()))
+        Ok(content_type)
     }
 
     async fn ensure_media_server(&self) -> Result<(), String> {
@@ -968,14 +967,19 @@ fn dlna_metadata(track: &QueueTrack) -> DlnaMetadata {
     }
 }
 
-/// Precise quality string like "192 kHz / 24-bit" from the resolved info.
-fn format_quality_detail(q: &qbz_models::StreamQualityInfo) -> String {
-    match (q.sampling_rate_khz, q.bit_depth) {
+/// Quality label + detail from the track's CATALOG metadata (always present,
+/// no network call) — used regardless of whether the bytes came from cache,
+/// offline, or the network. Returns (label, detail) e.g. ("Hi-Res FLAC",
+/// "96 kHz / 24-bit").
+fn quality_label_from_track(track: &QueueTrack) -> (String, String) {
+    let detail = match (track.sample_rate, track.bit_depth) {
         (Some(khz), Some(bits)) => format!("{} kHz / {}-bit", trim_khz(khz), bits),
         (Some(khz), None) => format!("{} kHz", trim_khz(khz)),
         (None, Some(bits)) => format!("{}-bit", bits),
         (None, None) => String::new(),
-    }
+    };
+    let label = if track.hires { "Hi-Res FLAC" } else { "FLAC" }.to_string();
+    (label, detail)
 }
 
 /// Format seconds as "m:ss" for the now-playing bar elapsed label.
