@@ -533,6 +533,9 @@ impl SlintCastService {
         Ok(true)
     }
 
+    // No transport "stop" button in the bar today; kept for parity + a future
+    // stop control.
+    #[allow(dead_code)]
     pub async fn stop_if_cast(&self) -> Result<bool, String> {
         if !self.is_casting().await {
             return Ok(false);

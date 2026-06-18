@@ -1,0 +1,315 @@
+// Cast (Chromecast / DLNA) device picker modal. Replaces the old static
+// PlayerBar cast-menu PopupWindow. Mounted last in AppShell so it sits on top
+// (Slint mount-order z; ADR-009 intent). Driven by CastState / CastActions:
+//   - open: PlayerBar sets CastState.picker-open = true + CastActions.open()
+//   - close: scrim/X sets picker-open = false + CastActions.close()
+// No pills (ADR-008): tabs are rectangular, counts are plain trailing text.
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Typography } from "../foundation/typography.slint";
+import { Radius } from "../foundation/radius.slint";
+import { CastState, CastActions } from "../state.slint";
+import { QbzIcon } from "../primitives/QbzIcon.slint";
+
+// One discovered-device row.
+component CastDeviceRow inherits Rectangle {
+    in property <string> id;
+    in property <string> name;
+    in property <string> ip;
+    in property <string> protocol;
+    in property <bool> can-play: true;
+    height: 52px;
+    border-radius: Radius.sm;
+    background: ta.has-hover && root.can-play ? Theme.surface-hover : transparent;
+    ta := TouchArea {
+        mouse-cursor: root.can-play ? pointer : default;
+        enabled: root.can-play;
+        clicked => {
+            CastActions.connect(root.id, root.protocol);
+        }
+    }
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 10px;
+        VerticalLayout {
+            alignment: center;
+            QbzIcon {
+                source: @image-url("../assets/icons/cast.svg");
+                width: 18px;
+                height: 18px;
+                tint: Theme.text-secondary;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            spacing: 2px;
+            horizontal-stretch: 1;
+            Text {
+                text: root.name;
+                color: root.can-play ? Theme.text-primary : Theme.text-muted;
+                font-size: Typography.body;
+                overflow: elide;
+            }
+            Text {
+                text: root.can-play ? root.ip : @tr("{} (not playable)", root.ip);
+                color: Theme.text-muted;
+                font-size: Typography.legal;
+                overflow: elide;
+            }
+        }
+    }
+}
+
+// A rectangular tab button with a trailing count (no pills).
+component CastTab inherits Rectangle {
+    in property <string> label;
+    in property <int> count;
+    in property <bool> selected;
+    callback clicked();
+    height: 34px;
+    horizontal-stretch: 1;
+    border-radius: Radius.sm;
+    background: root.selected ? Theme.accent : (tta.has-hover ? Theme.surface-hover : Theme.surface-elevated);
+    tta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked();
+        }
+    }
+    HorizontalLayout {
+        alignment: center;
+        spacing: 6px;
+        Text {
+            text: root.label;
+            color: root.selected ? #ffffff : Theme.text-primary;
+            font-size: Typography.body;
+            font-weight: root.selected ? Typography.semibold : Typography.regular;
+            vertical-alignment: center;
+        }
+        if root.count > 0: Text {
+            text: "\{root.count}";
+            color: root.selected ? #ffffffcc : Theme.text-muted;
+            font-size: Typography.legal;
+            vertical-alignment: center;
+        }
+    }
+}
+
+export component CastPicker inherits Rectangle {
+    visible: CastState.picker-open;
+
+    if CastState.picker-open: Rectangle {
+        background: #000000bf;
+        // Scrim — click closes + stops discovery.
+        TouchArea {
+            mouse-cursor: default;
+            clicked => {
+                CastState.picker-open = false;
+                CastActions.close();
+            }
+        }
+
+        Rectangle {
+            width: Math.min(root.width - 80px, 400px);
+            height: 420px;
+            x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+            y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+            border-radius: Radius.md;
+            background: Theme.surface-card;
+            border-width: 1px;
+            border-color: Theme.border-subtle;
+            drop-shadow-blur: 32px;
+            drop-shadow-color: #00000080;
+            // Swallow clicks so they don't reach the scrim.
+            TouchArea { }
+
+            VerticalLayout {
+                padding: 18px;
+                spacing: 14px;
+
+                // Header.
+                HorizontalLayout {
+                    spacing: 8px;
+                    QbzIcon {
+                        source: @image-url("../assets/icons/cast.svg");
+                        width: 18px;
+                        height: 18px;
+                        tint: Theme.text-primary;
+                    }
+                    Text {
+                        text: @tr("Cast");
+                        color: Theme.text-primary;
+                        font-size: Typography.heading;
+                        font-weight: Typography.semibold;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                    }
+                    close-x := TouchArea {
+                        width: 28px;
+                        height: 28px;
+                        mouse-cursor: pointer;
+                        clicked => {
+                            CastState.picker-open = false;
+                            CastActions.close();
+                        }
+                        QbzIcon {
+                            source: @image-url("../assets/icons/x.svg");
+                            width: 17px;
+                            height: 17px;
+                            x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                            y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                            tint: close-x.has-hover ? Theme.text-primary : Theme.text-muted;
+                        }
+                    }
+                }
+
+                // ---- Connected banner (replaces tabs + list) ----
+                if CastState.connected: Rectangle {
+                    height: 64px;
+                    border-radius: Radius.sm;
+                    background: #1f3d2e;
+                    border-width: 1px;
+                    border-color: #3fae6a;
+                    HorizontalLayout {
+                        padding-left: 12px;
+                        padding-right: 12px;
+                        spacing: 10px;
+                        VerticalLayout {
+                            alignment: center;
+                            Rectangle {
+                                width: 10px;
+                                height: 10px;
+                                border-radius: 5px;
+                                background: #3fae6a;
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            spacing: 2px;
+                            horizontal-stretch: 1;
+                            Text {
+                                text: @tr("Connected to");
+                                color: Theme.text-muted;
+                                font-size: Typography.legal;
+                            }
+                            Text {
+                                text: CastState.device-name;
+                                color: Theme.text-primary;
+                                font-size: Typography.body;
+                                font-weight: Typography.semibold;
+                                overflow: elide;
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            Rectangle {
+                                width: discon-label.preferred-width + 24px;
+                                height: 32px;
+                                border-radius: Radius.sm;
+                                background: discon-ta.has-hover ? #d44a4a : #b23b3b;
+                                discon-label := Text {
+                                    text: @tr("Disconnect");
+                                    color: #ffffff;
+                                    font-size: Typography.legal;
+                                    font-weight: Typography.semibold;
+                                    x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                                    y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                                }
+                                discon-ta := TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => {
+                                        CastActions.disconnect();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Delivered quality (D3) under the banner, when known.
+                if CastState.connected && CastState.quality-detail != "": Text {
+                    text: @tr("Streaming {} · {}", CastState.protocol == "dlna" ? "DLNA" : "Chromecast", CastState.quality-detail);
+                    color: Theme.text-muted;
+                    font-size: Typography.legal;
+                }
+
+                // ---- Tabs + device list (when not connected) ----
+                if !CastState.connected: HorizontalLayout {
+                    spacing: 8px;
+                    CastTab {
+                        label: "Chromecast";
+                        count: CastState.chromecast-count;
+                        selected: CastState.selected-tab == "chromecast";
+                        clicked => {
+                            CastState.selected-tab = "chromecast";
+                        }
+                    }
+                    CastTab {
+                        label: "DLNA";
+                        count: CastState.dlna-count;
+                        selected: CastState.selected-tab == "dlna";
+                        clicked => {
+                            CastState.selected-tab = "dlna";
+                        }
+                    }
+                }
+
+                if !CastState.connected: Rectangle {
+                    vertical-stretch: 1;
+                    border-radius: Radius.sm;
+                    background: Theme.surface-elevated;
+
+                    // Device list for the selected tab.
+                    Flickable {
+                        viewport-width: self.width;
+                        VerticalLayout {
+                            padding: 6px;
+                            spacing: 2px;
+                            for d in CastState.devices: Rectangle {
+                                height: d.protocol == CastState.selected-tab ? 52px : 0px;
+                                visible: d.protocol == CastState.selected-tab;
+                                if d.protocol == CastState.selected-tab: CastDeviceRow {
+                                    id: d.id;
+                                    name: d.name;
+                                    ip: d.ip;
+                                    protocol: d.protocol;
+                                    can-play: d.can-play;
+                                }
+                            }
+                        }
+                    }
+
+                    // Empty / scanning overlay (shown when the selected tab has
+                    // no devices).
+                    if (CastState.selected-tab == "chromecast" && CastState.chromecast-count == 0)
+                        || (CastState.selected-tab == "dlna" && CastState.dlna-count == 0): VerticalLayout {
+                        alignment: center;
+                        spacing: 4px;
+                        Text {
+                            text: CastState.scanning ? @tr("Searching…") : @tr("No devices found");
+                            color: Theme.text-secondary;
+                            font-size: Typography.body;
+                            horizontal-alignment: center;
+                        }
+                        Text {
+                            text: @tr("Looking for Chromecast & DLNA on your network");
+                            color: Theme.text-muted;
+                            font-size: Typography.legal;
+                            horizontal-alignment: center;
+                            wrap: word-wrap;
+                        }
+                    }
+                }
+
+                // Error line.
+                if CastState.error != "": Text {
+                    text: CastState.error;
+                    color: #d46a6a;
+                    font-size: Typography.legal;
+                    wrap: word-wrap;
+                }
+            }
+        }
+    }
+}

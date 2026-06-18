@@ -4825,6 +4825,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let runtime = runtime.clone();
             let weak = weak.clone();
             handle.spawn(async move {
+                // Tear down any live cast session + poll (fixes the Tauri
+                // logout leak where the connection + position interval lived on).
+                if let Some(cast) = cast_service::service() {
+                    cast.shutdown().await;
+                }
                 if let Err(e) = auth::logout(&runtime).await {
                     log::error!("[qbz-slint] logout failed: {e}");
                 }
@@ -12993,6 +12998,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // on + the tray is live, otherwise quit. Required because the loop runs
     // with quit_on_last_window_closed = false (so a tray-hide keeps the app
     // alive) — without this, the native close would leave a headless process.
+    let cast_exit_handle = tokio_rt.handle().clone();
     window.window().on_close_requested(move || {
         let settings = tray_settings::get();
         if settings.close_to_tray && tray::handle().is_some() {
@@ -13007,6 +13013,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             slint::CloseRequestResponse::HideWindow
         } else {
             log::info!("[qbz-slint] WM close requested: quitting");
+            // Best-effort: stop the renderer + media server so a cast device
+            // doesn't keep playing after the app quits (Tauri parity, #32).
+            if let Some(cast) = cast_service::service() {
+                cast_exit_handle.block_on(async move {
+                    cast.shutdown().await;
+                });
+            }
             let _ = slint::quit_event_loop();
             slint::CloseRequestResponse::HideWindow
         }

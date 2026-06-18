@@ -20,7 +20,7 @@ import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
 import { SeekBar } from "SeekBar.slint";
 import { SongCard } from "SongCard.slint";
 import { TransportControls } from "TransportControls.slint";
-import { NowPlayingState, ShellState, AppearanceState, SettingsState, TooltipState, QconnectDevState, QconnectDevice } from "../state.slint";
+import { NowPlayingState, ShellState, AppearanceState, SettingsState, TooltipState, QconnectDevState, QconnectDevice, CastState, CastActions } from "../state.slint";
 
 // IconButton + PlayButton now live in primitives/BarControls.slint (shared
 // with TransportControls). ConnectButton + ToggleRow stay local (bar-only).
@@ -583,7 +583,7 @@ export component PlayerBar inherits Rectangle {
                     }
                 }
 
-                // Cast (Chromecast / DLNA) — opens the cast flyout.
+                // Cast (Chromecast / DLNA) — opens the cast picker modal.
                 VerticalLayout {
                     alignment: center;
                     Rectangle {
@@ -596,91 +596,8 @@ export component PlayerBar inherits Rectangle {
                             tooltip: @tr("Cast");
                             active: NowPlayingState.cast-active;
                             clicked => {
-                                cast-menu.show();
-                            }
-                        }
-                        cast-menu := PopupWindow {
-                            x: 32px - 280px;
-                            y: -252px;
-                            width: 280px;
-                            height: 244px;
-                            close-policy: close-on-click-outside;
-                            Rectangle {
-                                background: Theme.surface-main;
-                                border-radius: Radius.sm;
-                                border-width: 1px;
-                                border-color: Theme.border-muted;
-                                drop-shadow-blur: 22px;
-                                drop-shadow-color: Theme.card-shadow;
-                                drop-shadow-offset-y: 6px;
-                                VerticalLayout {
-                                    padding: 14px;
-                                    spacing: 12px;
-                                    HorizontalLayout {
-                                        spacing: 8px;
-                                        QbzIcon {
-                                            source: @image-url("../assets/icons/cast.svg");
-                                            width: 16px;
-                                            height: 16px;
-                                            tint: Theme.text-primary;
-                                        }
-                                        Text {
-                                            text: @tr("Cast");
-                                            color: Theme.text-primary;
-                                            font-size: 14px;
-                                            font-weight: 600;
-                                            vertical-alignment: center;
-                                            horizontal-stretch: 1;
-                                        }
-                                    }
-                                    Rectangle {
-                                        height: 1px;
-                                        background: Theme.border-subtle;
-                                    }
-                                    HorizontalLayout {
-                                        spacing: 8px;
-                                        VerticalLayout {
-                                            alignment: center;
-                                            Rectangle {
-                                                width: 8px;
-                                                height: 8px;
-                                                border-radius: 4px;
-                                                background: NowPlayingState.cast-active ? #a855f7 : Theme.text-muted;
-                                            }
-                                        }
-                                        Text {
-                                            text: NowPlayingState.cast-active
-                                                ? @tr("Casting")
-                                                : @tr("Not casting");
-                                            color: Theme.text-secondary;
-                                            font-size: 12px;
-                                            vertical-alignment: center;
-                                            horizontal-stretch: 1;
-                                        }
-                                    }
-                                    Rectangle {
-                                        vertical-stretch: 1;
-                                        background: Theme.surface-elevated;
-                                        border-radius: Radius.sm;
-                                        VerticalLayout {
-                                            alignment: center;
-                                            spacing: 4px;
-                                            Text {
-                                                text: @tr("No cast devices found");
-                                                color: Theme.text-secondary;
-                                                font-size: 12px;
-                                                horizontal-alignment: center;
-                                            }
-                                            Text {
-                                                text: @tr("Looking for Chromecast & DLNA on your network");
-                                                color: Theme.text-muted;
-                                                font-size: 10px;
-                                                horizontal-alignment: center;
-                                                wrap: word-wrap;
-                                            }
-                                        }
-                                    }
-                                }
+                                CastState.picker-open = true;
+                                CastActions.open();
                             }
                         }
                     }
