@@ -173,6 +173,13 @@ pub enum ArtworkTarget {
     /// One hero-mosaic cover slot (0-8) of the My QBZ collection-detail view
     /// (`MyQbzDetailState.cover{N}`).
     MyQbzDetailCover { slot: usize },
+    /// One collage cover slot (0-3) of an immersive Suggestions card
+    /// (`SuggestionsState.cards[card_idx].cover{slot}`). Playlist cards use
+    /// up to 3 slots (book collage), the radio card up to 4 (diamond collage).
+    SuggestionCardCover { card_idx: usize, slot: usize },
+    /// A row thumbnail in the immersive Suggestions recommended-tracks list
+    /// (`SuggestionsState.tracks[idx]`).
+    SuggestionTrackCover { idx: usize },
 }
 
 impl ArtworkTarget {
@@ -186,6 +193,7 @@ impl ArtworkTarget {
             | ArtworkTarget::FavoriteTrack { .. }
             | ArtworkTarget::MixTrack { .. }
             | ArtworkTarget::PlaylistTrack { .. }
+            | ArtworkTarget::SuggestionTrackCover { .. }
             | ArtworkTarget::LocalArtistRowImage { .. } => 96,
             // Sidebar micro-collage tiles render at ~10-20px; decode tiny.
             ArtworkTarget::SidebarPlaylistCover { .. } => 48,
@@ -1140,6 +1148,26 @@ fn apply_artwork(
         }
         ArtworkTarget::MyQbzDetailCover { slot } => {
             crate::myqbz_detail::set_hero_cover(window, slot, image);
+        }
+        ArtworkTarget::SuggestionCardCover { card_idx, slot } => {
+            let model = window.global::<crate::SuggestionsState>().get_cards();
+            if let Some(mut item) = model.row_data(card_idx) {
+                match slot {
+                    0 => item.cover0 = image,
+                    1 => item.cover1 = image,
+                    2 => item.cover2 = image,
+                    3 => item.cover3 = image,
+                    _ => return,
+                }
+                model.set_row_data(card_idx, item);
+            }
+        }
+        ArtworkTarget::SuggestionTrackCover { idx } => {
+            let model = window.global::<crate::SuggestionsState>().get_tracks();
+            if let Some(mut item) = model.row_data(idx) {
+                item.artwork = image;
+                model.set_row_data(idx, item);
+            }
         }
     }
 }

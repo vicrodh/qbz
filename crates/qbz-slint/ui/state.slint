@@ -539,6 +539,68 @@ export global TrackInfoActions {
     callback load-inline(string /* track-id */);
 }
 
+// One card in the immersive Suggestions panel (data-panels.md §6): either a
+// curated artist PLAYLIST (`kind == "playlist"`, book-collage of up to 3 album
+// covers) or the seed-track SONG RADIO (`kind == "radio"`, diamond-collage of
+// up to 4 covers). `cover-urls` is the artwork pipeline's input (slot-indexed);
+// `covers` holds the decoded images, applied per-slot by the controller. Slots
+// 0-3 are addressed via the parallel cover0..cover3 fields (Slint structs can't
+// have per-element image arrays painted in place, so flat slots are used — same
+// pattern as the search/favorites playlist collages).
+export struct SuggestionCard {
+    // "playlist" | "radio".
+    kind: string,
+    title: string,
+    subtitle: string,
+    // Remote URLs for the (up to 4) collage slots — the artwork-job input.
+    cover-urls: [string],
+    // Decoded collage covers, painted per-slot by the artwork pipeline.
+    cover0: image,
+    cover1: image,
+    cover2: image,
+    cover3: image,
+    // Playlist-card target id ("" for the radio card).
+    playlist-id: string,
+    // Radio-card seed (empty for playlist cards).
+    seed-track-id: string,
+    seed-track-name: string,
+    seed-artist-id: string,
+    // "qobuz" (playlist) | "qbz" (radio) — drives the corner badge glyph.
+    badge: string,
+    // Radio card: true while the Song Radio session is building (spinner).
+    loading: bool,
+}
+
+// Immersive Suggestions panel state (split-only, split-panel == 2). Populated
+// by crate::suggestions::apply_suggestions; the recommended-track list reuses
+// the shared TrackItem struct.
+export global SuggestionsState {
+    in property <bool> loading: false;
+    in property <string> error: "";
+    // The artist whose suggestions are loaded (dedup guard mirror).
+    in property <string> artist-id: "";
+    // The seed track these suggestions were built for.
+    in property <string> seed-track-id: "";
+    in property <[SuggestionCard]> cards: [];
+    in property <[TrackItem]> tracks: [];
+}
+
+export global SuggestionsActions {
+    // Play / queue / play-next a curated artist playlist by id.
+    callback play-playlist(string /* playlist-id */);
+    callback queue-playlist(string /* playlist-id */);
+    callback play-next-playlist(string /* playlist-id */);
+    // Start the seed-track Song Radio: (seed-track-id, seed-track-name, seed-artist-id).
+    callback start-radio(string, string, string);
+    // Play a single recommended track by id.
+    callback play-track(string /* track-id */);
+    // Load suggestions for the given track id (the Rust side reads the
+    // artist-id + name off NowPlayingState). Fired on panel entry and on
+    // now-playing track change while the panel is open. A "" id resets to the
+    // empty (no-track) state.
+    callback load(string /* track-id */);
+}
+
 // Album Info modal — opened from the AlbumPageView header (i) button via
 // media-action("album", id, "info").
 export global AlbumInfoState {

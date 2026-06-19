@@ -1496,6 +1496,83 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
         Ok(tracks)
     }
 
+    /// Smart Song Radio seeded by a single track via the local `qbz-radio`
+    /// pool builder — the immersive Suggestions panel's "Song Radio" card.
+    ///
+    /// Mirrors `create_smart_artist_radio` (same `!Send` RadioDb/RadioEngine
+    /// orchestration via `spawn_blocking` + `Handle::current().block_on`) but
+    /// seeds with `create_track_radio(track_id, artist_id)` and HOISTS the
+    /// seed track to index 0 (mirroring the Tauri `v2_create_track_radio`
+    /// hoist) so the radio always starts on the song the user was playing.
+    /// Pulls up to 60 ids, hoists the seed, takes 50, resolves to full tracks.
+    ///
+    /// Frontend-agnostic (no `tauri::State`, no blacklist filter — the
+    /// blacklist lives in the UI/integration layer; callers that need it drop
+    /// blacklisted rows after this returns). `seed_track_name` is accepted for
+    /// call-site parity with the Tauri command (the local builder seeds by id,
+    /// so the name is not needed here) and currently unused.
+    pub async fn create_smart_track_radio(
+        &self,
+        track_id: u64,
+        artist_id: u64,
+        _seed_track_name: String,
+    ) -> Result<Vec<Track>, CoreError> {
+        let client = {
+            let guard = self.client.read().await;
+            guard.as_ref().ok_or(CoreError::NotInitialized)?.clone()
+        };
+
+        let build_client = client.clone();
+        let session_id = tokio::task::spawn_blocking(move || -> Result<String, String> {
+            let db = qbz_radio::RadioDb::open_default()?;
+            let builder = qbz_radio::RadioPoolBuilder::new(
+                &db,
+                &build_client,
+                qbz_radio::BuildRadioOptions::default(),
+            );
+            let session = tokio::runtime::Handle::current()
+                .block_on(builder.create_track_radio(track_id, artist_id))?;
+            Ok(session.id)
+        })
+        .await
+        .map_err(|e| CoreError::Internal(format!("song radio build task: {e}")))?
+        .map_err(CoreError::Internal)?;
+
+        let seed_track_id = track_id;
+        let ids = tokio::task::spawn_blocking(move || -> Result<Vec<u64>, String> {
+            let db = qbz_radio::RadioDb::open_default()?;
+            let engine = qbz_radio::RadioEngine::new(db);
+            let mut pulled: Vec<(u64, String)> = Vec::new();
+            for _ in 0..60 {
+                match engine.next_track(&session_id) {
+                    Ok(track) => pulled.push((track.track_id, track.source.clone())),
+                    Err(_) => break,
+                }
+            }
+            // Hoist the seed track to the front (mirror of link_resolver.rs).
+            if let Some(seed_idx) = pulled
+                .iter()
+                .position(|(id, source)| *id == seed_track_id && source == "seed_track")
+            {
+                if seed_idx != 0 {
+                    pulled.swap(0, seed_idx);
+                }
+            }
+            Ok(pulled.into_iter().take(50).map(|(id, _)| id).collect())
+        })
+        .await
+        .map_err(|e| CoreError::Internal(format!("song radio pull task: {e}")))?
+        .map_err(CoreError::Internal)?;
+
+        let mut tracks = Vec::new();
+        for id in ids {
+            if let Ok(track) = client.get_track(id).await {
+                tracks.push(track);
+            }
+        }
+        Ok(tracks)
+    }
+
     /// Get artist with albums (for album pagination)
     pub async fn get_artist_with_albums(
         &self,

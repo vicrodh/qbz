@@ -1,0 +1,470 @@
+// Immersive split Suggestions panel — mounted in the SPLIT-right slot
+// (ImmersiveState.split-panel == 2). 1:1 with Tauri's SuggestionsPanel.svelte
+// (recon data-panels.md §6): a cards row (curated artist-playlist book-collage
+// cards + the seed Song-Radio diamond-collage card, each with play/queue/
+// play-next hover overlays + a corner badge; the radio card shows a spinner
+// while building) and below, a "Recommended tracks" list (play on click).
+// Split-only (no focus variant).
+//
+// Data is fed by crate::suggestions::apply_suggestions into SuggestionsState;
+// actions resolve through SuggestionsActions (play/queue/play-next playlist,
+// start-radio, play-track). Rendered white-on-dark over the atmosphere backdrop
+// like the other immersive split panels.
+//
+// Slint gotchas observed (reference_slint_*): viewport dims are passed as props
+// (no `parent` in the root binding); no `opacity:` on the root; no `changed`
+// watcher on layout geometry; ADR-009 declaration order; no pills (ADR-008);
+// @tr() for visible strings; Theme tokens for accent.
+
+import { SuggestionsState, SuggestionsActions, SuggestionCard } from "../state.slint";
+import { TrackItem } from "../state.slint";
+import { QbzIcon } from "../primitives/QbzIcon.slint";
+import { ListScrollbar } from "../primitives/ListScrollbar.slint";
+import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
+import { Theme } from "../foundation/semantic-colors.slint";
+
+// Circular overlay action button (no pill — a true circle; ADR-008 forbids
+// pill-shaped chips, a circle is fine). `primary` = 40px accent disc, else a
+// 32px translucent disc.
+component OverlayButton inherits Rectangle {
+    in property <image> icon;
+    in property <bool> primary: false;
+    in property <length> icon-size: 16px;
+    callback clicked();
+
+    width: root.primary ? 40px : 32px;
+    height: root.primary ? 40px : 32px;
+    border-radius: self.width / 2;
+    background: root.primary
+        ? (ta.has-hover ? Theme.accent-hover : Theme.accent)
+        : (ta.has-hover ? #ffffff80 : #ffffff4d);
+
+    QbzIcon {
+        source: root.icon;
+        width: root.icon-size;
+        height: root.icon-size;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        tint: #ffffff;
+    }
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// One collage cover tile — absolutely placed + rotated by the card layout.
+component CollageTile inherits Rectangle {
+    in property <image> img;
+    border-radius: 4px;
+    clip: true;
+    drop-shadow-blur: 8px;
+    drop-shadow-color: #00000066;
+    Image {
+        source: root.img;
+        image-fit: cover;
+        width: parent.width;
+        height: parent.height;
+    }
+}
+
+// One suggestion card (playlist book-collage OR radio diamond-collage). 168px
+// wide, fixed height; collage on top, title/subtitle below; hover overlay with
+// the play/queue/play-next (playlist) or single start (radio) actions.
+component SuggestionCardView inherits Rectangle {
+    in property <SuggestionCard> card;
+    in property <int> index;
+
+    width: 168px;
+    height: 220px;
+    border-radius: 12px;
+    background: card-ta.has-hover ? #ffffff26 : #ffffff1a;
+    border-width: 1px;
+    border-color: #ffffff1a;
+    animate background { duration: 150ms; }
+
+    property <bool> is-radio: root.card.kind == "radio";
+
+    card-ta := TouchArea { mouse-cursor: default; }
+
+    VerticalLayout {
+        padding: 12px;
+        spacing: 10px;
+
+        // ---- Collage / image well ------------------------------------
+        well := Rectangle {
+            height: 144px;
+            border-radius: 8px;
+            background: #00000040;
+            clip: true;
+
+            // Book collage (playlist): 3 covers, left/center/right.
+            if !root.is-radio: Rectangle {
+                width: 100%;
+                height: 100%;
+                CollageTile {
+                    img: root.card.cover0;
+                    width: parent.width * 0.62;
+                    height: parent.height * 0.82;
+                    x: parent.width * 0.06;
+                    y: (parent.height - self.height) / 2;
+                }
+                CollageTile {
+                    img: root.card.cover2;
+                    width: parent.width * 0.62;
+                    height: parent.height * 0.82;
+                    x: parent.width * 0.32;
+                    y: (parent.height - self.height) / 2;
+                }
+                CollageTile {
+                    img: root.card.cover1;
+                    width: parent.width * 0.66;
+                    height: parent.height * 0.88;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                }
+            }
+
+            // Diamond collage (radio): up to 4 covers.
+            if root.is-radio: Rectangle {
+                width: 100%;
+                height: 100%;
+                CollageTile {
+                    img: root.card.cover1;
+                    width: parent.width * 0.62;
+                    height: parent.height * 0.62;
+                    x: parent.width * 0.04;
+                    y: (parent.height - self.height) / 2;
+                }
+                CollageTile {
+                    img: root.card.cover2;
+                    width: parent.width * 0.62;
+                    height: parent.height * 0.62;
+                    x: parent.width * 0.34;
+                    y: (parent.height - self.height) / 2;
+                }
+                CollageTile {
+                    img: root.card.cover0;
+                    width: parent.width * 0.64;
+                    height: parent.height * 0.64;
+                    x: (parent.width - self.width) / 2;
+                    y: parent.height * 0.06;
+                }
+                CollageTile {
+                    img: root.card.cover3;
+                    width: parent.width * 0.5;
+                    height: parent.height * 0.5;
+                    x: (parent.width - self.width) / 2;
+                    y: parent.height * 0.42;
+                }
+            }
+
+            // Corner badge (above the collage): the full-colour Qobuz logo
+            // (playlist cards) or a white radio glyph (radio card).
+            if root.card.badge == "qobuz": Image {
+                x: parent.width - self.width - 8px;
+                y: 8px;
+                width: 22px;
+                height: 22px;
+                image-fit: contain;
+                source: @image-url("../assets/icons/qobuz-logo-filled.svg");
+            }
+            if root.card.badge != "qobuz": QbzIcon {
+                x: parent.width - self.width - 8px;
+                y: 8px;
+                width: 20px;
+                height: 20px;
+                source: @image-url("../assets/icons/radio.svg");
+                tint: #ffffffcc;
+            }
+
+            // Radio building spinner — dim veil + the shared LoadingSpinner
+            // (animation-tick rotation; same as every other heavy-load spinner).
+            if root.is-radio && root.card.loading: Rectangle {
+                width: 100%;
+                height: 100%;
+                background: #00000099;
+                LoadingSpinner {
+                    size: 28px;
+                    tint: #ffffffcc;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                }
+            }
+
+            // Hover overlay with actions.
+            overlay := Rectangle {
+                width: 100%;
+                height: 100%;
+                background: #00000099;
+                opacity: ov-ta.has-hover ? 1.0 : 0.0;
+                animate opacity { duration: 150ms; }
+                ov-ta := TouchArea { mouse-cursor: pointer; }
+
+                if !root.is-radio: HorizontalLayout {
+                    alignment: center;
+                    spacing: 10px;
+                    padding: 8px;
+                    VerticalLayout {
+                        alignment: center;
+                        OverlayButton {
+                            icon: @image-url("../assets/icons/list-plus.svg");
+                            clicked => { SuggestionsActions.queue-playlist(root.card.playlist-id); }
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        OverlayButton {
+                            primary: true;
+                            icon: @image-url("../assets/icons/play-fill.svg");
+                            icon-size: 18px;
+                            clicked => { SuggestionsActions.play-playlist(root.card.playlist-id); }
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        OverlayButton {
+                            icon: @image-url("../assets/icons/list-end.svg");
+                            clicked => { SuggestionsActions.play-next-playlist(root.card.playlist-id); }
+                        }
+                    }
+                }
+
+                if root.is-radio: HorizontalLayout {
+                    alignment: center;
+                    padding: 8px;
+                    VerticalLayout {
+                        alignment: center;
+                        OverlayButton {
+                            primary: true;
+                            icon: @image-url("../assets/icons/radio.svg");
+                            icon-size: 18px;
+                            clicked => {
+                                if (!root.card.loading) {
+                                    SuggestionsActions.start-radio(
+                                        root.card.seed-track-id,
+                                        root.card.seed-track-name,
+                                        root.card.seed-artist-id);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ---- Title + subtitle ----------------------------------------
+        Text {
+            text: root.card.title;
+            color: #ffffff;
+            font-size: 15px;
+            font-weight: 600;
+            overflow: elide;
+        }
+        Text {
+            text: root.card.subtitle;
+            color: #ffffff80;
+            font-size: 13px;
+            overflow: elide;
+        }
+    }
+}
+
+// One recommended-track row: 40px cover + title/artist, play on click/hover.
+component RecTrackRow inherits Rectangle {
+    in property <TrackItem> track;
+    callback clicked();
+
+    height: 56px;
+    border-radius: 8px;
+    background: row-ta.has-hover ? #ffffff1a : transparent;
+    animate background { duration: 150ms; }
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 8px;
+        spacing: 10px;
+
+        // Artwork + hover play overlay.
+        VerticalLayout {
+            alignment: center;
+            art := Rectangle {
+                width: 40px;
+                height: 40px;
+                border-radius: 4px;
+                clip: true;
+                background: #ffffff14;
+                Image {
+                    source: root.track.artwork;
+                    image-fit: cover;
+                    width: parent.width;
+                    height: parent.height;
+                }
+                Rectangle {
+                    width: 100%;
+                    height: 100%;
+                    background: #00000080;
+                    opacity: row-ta.has-hover ? 1.0 : 0.0;
+                    animate opacity { duration: 150ms; }
+                    QbzIcon {
+                        source: @image-url("../assets/icons/play-fill.svg");
+                        width: 14px;
+                        height: 14px;
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        tint: #ffffff;
+                    }
+                }
+            }
+        }
+
+        // Title + artist.
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            spacing: 2px;
+            Text {
+                text: root.track.title;
+                color: #ffffff;
+                font-size: 15px;
+                overflow: elide;
+            }
+            Text {
+                text: root.track.artist;
+                color: #ffffff99;
+                font-size: 13px;
+                overflow: elide;
+            }
+        }
+
+        // Duration.
+        VerticalLayout {
+            alignment: center;
+            Text {
+                text: root.track.duration;
+                color: #ffffff80;
+                font-size: 13px;
+            }
+        }
+    }
+
+    row-ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component ImmersiveSuggestionsPanel inherits Rectangle {
+    in property <length> viewport-width: 480px;
+    in property <length> viewport-height: 600px;
+    in property <bool> centered: true;
+
+    width: root.viewport-width;
+    height: root.viewport-height;
+    background: transparent;
+
+    VerticalLayout {
+        alignment: root.centered ? center : start;
+        Rectangle {
+            height: root.centered
+                ? Math.min(root.viewport-height,
+                    Math.clamp(340px, root.viewport-height * 0.62, 760px))
+                : root.viewport-height;
+
+            // ---- Empty (no track selected) ----------------------------
+            if SuggestionsState.artist-id == "" && !SuggestionsState.loading: VerticalLayout {
+                alignment: center;
+                spacing: 12px;
+                HorizontalLayout {
+                    alignment: center;
+                    QbzIcon {
+                        source: @image-url("../assets/icons/radio.svg");
+                        width: 32px;
+                        height: 32px;
+                        tint: #ffffff80;
+                    }
+                }
+                Text {
+                    text: @tr("No track selected");
+                    color: #ffffff80;
+                    font-size: 18px;
+                    horizontal-alignment: center;
+                }
+            }
+
+            // ---- Loading (no content yet) -----------------------------
+            if SuggestionsState.loading && SuggestionsState.cards.length == 0
+                && SuggestionsState.tracks.length == 0: Text {
+                text: @tr("Loading suggestions...");
+                color: #ffffff80;
+                font-size: 18px;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                width: 100%;
+                height: 100%;
+            }
+
+            // ---- Error ------------------------------------------------
+            if SuggestionsState.error != "": Text {
+                text: @tr("Failed to load suggestions");
+                color: #ffffff80;
+                font-size: 18px;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                width: 100%;
+                height: 100%;
+            }
+
+            // ---- Loaded -----------------------------------------------
+            if SuggestionsState.error == "" && SuggestionsState.artist-id != ""
+                && (SuggestionsState.cards.length > 0 || SuggestionsState.tracks.length > 0): Rectangle {
+                clip: true;
+
+                flick := Flickable {
+                    viewport-width: self.width;
+                    viewport-height: body.preferred-height;
+
+                    body := VerticalLayout {
+                        width: parent.width;
+                        padding-right: 12px;
+                        spacing: 24px;
+
+                        // Cards row.
+                        if SuggestionsState.cards.length > 0: HorizontalLayout {
+                            spacing: 12px;
+                            alignment: start;
+                            for card[i] in SuggestionsState.cards: SuggestionCardView {
+                                card: card;
+                                index: i;
+                            }
+                        }
+
+                        // Recommended tracks.
+                        if SuggestionsState.tracks.length > 0: Text {
+                            text: @tr("Recommended tracks");
+                            color: #ffffff80;
+                            font-size: 14px;
+                            font-weight: 600;
+                        }
+                        if SuggestionsState.tracks.length > 0: VerticalLayout {
+                            spacing: 4px;
+                            for track in SuggestionsState.tracks: RecTrackRow {
+                                track: track;
+                                clicked => { SuggestionsActions.play-track(track.id); }
+                            }
+                        }
+                    }
+                }
+
+                ListScrollbar {
+                    x: parent.width - self.width;
+                    width: 14px;
+                    height: 100%;
+                    viewport-height: flick.viewport-height;
+                    visible-height: flick.height;
+                    viewport-y <=> flick.viewport-y;
+                }
+            }
+        }
+    }
+}

@@ -101,6 +101,7 @@ mod shader_underlay;
 mod settings;
 mod share;
 mod sidebar;
+mod suggestions;
 mod toast;
 mod tray;
 mod tray_settings;
@@ -1672,6 +1673,43 @@ fn navigate_award(
                 });
             }
         }
+    });
+}
+
+/// Load the immersive Suggestions split panel for the current track. Reads the
+/// artist-id + track-id + title off NowPlayingState, resets the panel, and
+/// spawns the live artist load (mirror of navigate_award). An empty artist-id
+/// or track-id resets to the no-track empty state. Refreshed on track change
+/// while the panel is open via the mount's `changed live-track-id` -> the
+/// SuggestionsActions.load callback (which calls this).
+fn navigate_suggestions(
+    runtime: Arc<AppRuntime<SlintAdapter>>,
+    weak: slint::Weak<AppWindow>,
+    handle: &tokio::runtime::Handle,
+    image_cache: artwork::ImageCache,
+    artist_id: String,
+    track_id: String,
+    track_name: String,
+) {
+    // No track / no artist -> reset to the empty state and stop. apply with an
+    // empty payload clears cards/tracks and leaves artist-id "" (the empty
+    // branch in the panel).
+    let (Ok(aid), Ok(tid)) = (artist_id.parse::<u64>(), track_id.parse::<u64>()) else {
+        let _ = weak.upgrade_in_event_loop(|w| {
+            suggestions::apply_suggestions(&w, suggestions::empty_payload());
+        });
+        return;
+    };
+    handle.spawn(async move {
+        let _ = weak.upgrade_in_event_loop(|w| {
+            suggestions::reset_suggestions(&w);
+        });
+        let payload = suggestions::load_suggestions(&runtime, aid, tid, track_name).await;
+        let jobs = suggestions::suggestions_artwork_jobs(&payload);
+        let _ = weak.upgrade_in_event_loop(move |w| {
+            suggestions::apply_suggestions(&w, payload);
+        });
+        artwork::spawn_loads(jobs, weak.clone(), image_cache.clone());
     });
 }
 
@@ -8306,6 +8344,169 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ),
             }
         });
+    }
+
+    // Immersive Suggestions panel actions (Checkpoint D — split-panel == 2).
+    {
+        // load(track-id) — entry + now-playing-change refresh. Reads the
+        // artist-id + title off NowPlayingState (the panel only has the track
+        // id) and kicks the live artist load (mirror of navigate_award).
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        let image_cache = image_cache.clone();
+        window
+            .global::<SuggestionsActions>()
+            .on_load(move |track_id| {
+                let Some(w) = weak.upgrade() else {
+                    return;
+                };
+                let np = w.global::<NowPlayingState>();
+                let artist_id = np.get_artist_id().to_string();
+                let track_id = track_id.to_string();
+                let track_name = np.get_title().to_string();
+                // Dedup: skip a reload when the panel already shows this artist
+                // for this seed track (the changed-watcher can refire on
+                // unrelated NowPlayingState churn).
+                let ss = w.global::<SuggestionsState>();
+                if ss.get_artist_id().as_str() == artist_id
+                    && ss.get_seed_track_id().as_str() == track_id
+                    && !track_id.is_empty()
+                {
+                    return;
+                }
+                navigate_suggestions(
+                    runtime.clone(),
+                    weak.clone(),
+                    &handle,
+                    image_cache.clone(),
+                    artist_id,
+                    track_id,
+                    track_name,
+                );
+            });
+    }
+    {
+        // play / queue / play-next a curated artist playlist by id — reuse the
+        // existing playback seams (same paths the playlist cards use).
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window
+            .global::<SuggestionsActions>()
+            .on_play_playlist(move |playlist_id| {
+                let id = playlist_id.to_string();
+                if id.is_empty() {
+                    return;
+                }
+                playback::play_playlist(runtime.clone(), weak.clone(), handle.clone(), id);
+            });
+    }
+    {
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window
+            .global::<SuggestionsActions>()
+            .on_queue_playlist(move |playlist_id| {
+                let id = playlist_id.to_string();
+                if id.is_empty() {
+                    return;
+                }
+                playback::enqueue_playlist(
+                    runtime.clone(),
+                    weak.clone(),
+                    handle.clone(),
+                    id,
+                    false,
+                );
+            });
+    }
+    {
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window
+            .global::<SuggestionsActions>()
+            .on_play_next_playlist(move |playlist_id| {
+                let id = playlist_id.to_string();
+                if id.is_empty() {
+                    return;
+                }
+                playback::enqueue_playlist(
+                    runtime.clone(),
+                    weak.clone(),
+                    handle.clone(),
+                    id,
+                    true,
+                );
+            });
+    }
+    {
+        // start-radio — build the Song Radio off the seed track via core, then
+        // start it (set_queue + play) through the shared play_tracks seam. The
+        // radio card spinner is flipped on optimistically and cleared on apply.
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window
+            .global::<SuggestionsActions>()
+            .on_start_radio(move |track_id, track_name, artist_id| {
+                let (Ok(tid), Ok(aid)) =
+                    (track_id.parse::<u64>(), artist_id.parse::<u64>())
+                else {
+                    return;
+                };
+                let track_name = track_name.to_string();
+                suggestions::set_radio_loading(&weak, true);
+                let runtime = runtime.clone();
+                let weak = weak.clone();
+                let handle2 = handle.clone();
+                handle.spawn(async move {
+                    let result = runtime
+                        .core()
+                        .create_smart_track_radio(tid, aid, track_name)
+                        .await;
+                    suggestions::set_radio_loading(&weak, false);
+                    match result {
+                        Ok(tracks) if !tracks.is_empty() => {
+                            playback::play_tracks(runtime, weak, handle2, tracks, 0);
+                        }
+                        Ok(_) => {
+                            log::warn!("[qbz-slint] song radio returned no tracks");
+                        }
+                        Err(e) => {
+                            log::error!("[qbz-slint] song radio failed: {e}");
+                        }
+                    }
+                });
+            });
+    }
+    {
+        // play-track — play a single recommended track by id NOW.
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window
+            .global::<SuggestionsActions>()
+            .on_play_track(move |track_id| {
+                let Ok(tid) = track_id.parse::<u64>() else {
+                    return;
+                };
+                let runtime = runtime.clone();
+                let weak = weak.clone();
+                let handle2 = handle.clone();
+                handle.spawn(async move {
+                    match runtime.core().get_track(tid).await {
+                        Ok(track) => {
+                            playback::play_tracks(runtime, weak, handle2, vec![track], 0);
+                        }
+                        Err(e) => {
+                            log::error!("[qbz-slint] suggestions play-track {tid} failed: {e}");
+                        }
+                    }
+                });
+            });
     }
 
     // Artist Blacklist Manager actions (Task 11). Mutations are synchronous

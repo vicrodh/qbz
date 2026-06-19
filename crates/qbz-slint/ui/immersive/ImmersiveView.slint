@@ -4,7 +4,7 @@
 
 import { Radius } from "../foundation/radius.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
-import { NowPlayingState, VisualizerState, ImmersiveState, SettingsState, LyricsState, QueueState, TrackInfoActions } from "../state.slint";
+import { NowPlayingState, VisualizerState, ImmersiveState, SettingsState, LyricsState, QueueState, TrackInfoActions, SuggestionsActions } from "../state.slint";
 import { ImmersiveAtmosphere } from "ImmersiveAtmosphere.slint";
 import { AlbumReactivePanel } from "AlbumReactivePanel.slint";
 import { StaticPanel } from "StaticPanel.slint";
@@ -14,6 +14,7 @@ import { ImmersiveLyricsFocusPanel } from "ImmersiveLyricsFocusPanel.slint";
 import { ImmersiveQueuePanel } from "ImmersiveQueuePanel.slint";
 import { ImmersiveTrackInfo } from "ImmersiveTrackInfo.slint";
 import { ImmersiveTrackInfoPanel } from "ImmersiveTrackInfoPanel.slint";
+import { ImmersiveSuggestionsPanel } from "ImmersiveSuggestionsPanel.slint";
 import { LyricsLinesView } from "../shell/LyricsLinesView.slint";
 
 component GhostButton inherits Rectangle {
@@ -495,6 +496,9 @@ component ModeBar inherits Rectangle {
     // Fired when the user enters the split Track Info panel so the parent can
     // kick the inline load for the current track (TrackInfoActions.load-inline).
     callback trackinfo-entered();
+    // Fired when the user enters the split Suggestions panel so the parent can
+    // kick the live artist load for the current track.
+    callback suggestions-entered();
 
     property <bool> is-split: ImmersiveState.view-mode == 1;
 
@@ -621,6 +625,15 @@ component ModeBar inherits Rectangle {
                 clicked => {
                     root.select-split(1);
                     root.trackinfo-entered();
+                }
+            }
+            ModeTab {
+                icon: @image-url("../assets/icons/radio.svg");
+                label: @tr("Suggestions");
+                active: ImmersiveState.split-panel == 2;
+                clicked => {
+                    root.select-split(2);
+                    root.suggestions-entered();
                 }
             }
             ModeTab {
@@ -885,6 +898,23 @@ export component ImmersiveView inherits Rectangle {
                 viewport-height: parent.height;
                 centered: true;
             }
+            // Checkpoint D: the live Suggestions panel (artist playlists +
+            // Song Radio + recommended tracks), centered in the right half
+            // (split-only, data-panels §6). `init` kicks the live artist load
+            // for the current track; a `changed NowPlayingState.track-id`
+            // guard re-fires the load so the panel refreshes when the track
+            // changes while it's open (track-id is a string — safe to watch,
+            // no layout geometry involved).
+            if ImmersiveState.split-panel == 2: ImmersiveSuggestionsPanel {
+                property <string> live-track-id: NowPlayingState.track-id;
+                init => { SuggestionsActions.load(NowPlayingState.track-id); }
+                changed live-track-id => { SuggestionsActions.load(self.live-track-id); }
+                width: 100%;
+                height: 100%;
+                viewport-width: parent.width;
+                viewport-height: parent.height;
+                centered: true;
+            }
             // Checkpoint B: the Queue + History panel, centered in the right
             // half. Same component as the focus mount; `centered: true` fills
             // the slot (data-panels §4 — one QueuePanel in both placements).
@@ -938,6 +968,9 @@ export component ImmersiveView inherits Rectangle {
             if (ImmersiveState.view-mode == 1 && ImmersiveState.split-panel == 1) {
                 TrackInfoActions.load-inline(NowPlayingState.track-id);
             }
+            if (ImmersiveState.view-mode == 1 && ImmersiveState.split-panel == 2) {
+                SuggestionsActions.load(NowPlayingState.track-id);
+            }
             root.wake();
         }
         lyrics-entered => {
@@ -950,6 +983,10 @@ export component ImmersiveView inherits Rectangle {
         }
         trackinfo-entered => {
             TrackInfoActions.load-inline(NowPlayingState.track-id);
+            root.wake();
+        }
+        suggestions-entered => {
+            SuggestionsActions.load(NowPlayingState.track-id);
             root.wake();
         }
     }
