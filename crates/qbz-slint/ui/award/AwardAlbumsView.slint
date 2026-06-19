@@ -1,0 +1,350 @@
+// Award "See all" full-list page — every album carrying a given award,
+// shown as a paginated full grid with a client-side search filter.
+// Opened ONLY from AwardView's "See all" link. Mirrors Tauri's
+// AwardAlbumsView.svelte: the back/forward NavButtons + a kicker/title
+// block sit on the LEFT, the search box floats RIGHT on the same row.
+// AwardAlbums is the SIMPLE listing — NO sort dropdown, NO Hi-Res filter,
+// NO group-by-artist, NO grid/list toggle (those belong to Label).
+//
+// Structure homologated with DiscoverBrowseView: a fixed header, then an
+// infinite-scroll Flickable driving AwardActions.load-more() when the
+// viewport nears the bottom, gated on has-more + the loading flags AND an
+// empty search query (a client-side search filter must not keep paging the
+// catalog). The grid renders AwardState.visible (the search-filtered list),
+// kept live by sharing AwardState.albums when the query is empty.
+//
+// Two cheap improvements over Tauri:
+//  1. Distinct empty states — Tauri shows the same "No award-winning
+//     releases yet." for both an empty award AND no-search-results; here a
+//     non-empty query gets the reused search-empty message instead.
+//  2. open-artist IS wired on the album cards — Tauri drops the
+//     onArtistClick prop in this view (artist-nav-from-card is dead there).
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Typography } from "../foundation/typography.slint";
+import { AwardState, AwardActions, NavState, ShellState } from "../state.slint";
+import { AlbumCollectionView } from "../discover/AlbumCollectionView.slint";
+import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
+import { ListScrollbar } from "../primitives/ListScrollbar.slint";
+import { NavButtons } from "../shell/NavButtons.slint";
+import { QbzIcon } from "../primitives/QbzIcon.slint";
+
+// Search field — a leading magnifier, the input, and a trailing X that
+// clears (mirrors Tauri's .search-wrapper; same visual as BrowseSearch).
+component AwardSearch inherits Rectangle {
+    height: 34px;
+    width: 200px;
+    border-radius: 6px;
+    background: Theme.surface-elevated;
+    border-width: 1px;
+    border-color: input.has-focus ? Theme.accent : Theme.border-subtle;
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 6px;
+        spacing: 8px;
+        VerticalLayout {
+            alignment: center;
+            QbzIcon {
+                source: @image-url("../assets/icons/search.svg");
+                width: 15px;
+                height: 15px;
+                tint: Theme.text-muted;
+            }
+        }
+        Rectangle {
+            horizontal-stretch: 1;
+            clip: true;
+            input := TextInput {
+                width: 100%;
+                height: 100%;
+                color: Theme.text-primary;
+                font-size: 13px;
+                vertical-alignment: center;
+                single-line: true;
+                text <=> AwardState.search-query;
+                edited => {
+                    AwardActions.search(self.text);
+                }
+            }
+            Text {
+                visible: input.text == "";
+                width: 100%;
+                height: 100%;
+                // Reused discover placeholder (discover.searchPlaceholder).
+                text: @tr("Search albums & tracks…");
+                color: Theme.text-muted;
+                font-size: 13px;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+        }
+        // Trailing X — clears the query.
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                visible: AwardState.search-query != "";
+                width: 22px;
+                height: 22px;
+                border-radius: 4px;
+                background: clear-ta.has-hover ? Theme.surface-hover : transparent;
+                QbzIcon {
+                    source: @image-url("../assets/icons/x.svg");
+                    width: 12px;
+                    height: 12px;
+                    x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                    y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                    tint: clear-ta.has-hover ? Theme.text-primary : Theme.text-muted;
+                }
+                clear-ta := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        AwardState.search-query = "";
+                        AwardActions.search("");
+                    }
+                }
+            }
+        }
+    }
+}
+
+export component AwardAlbumsView inherits Rectangle {
+    callback open-album(string);
+    callback open-artist(string);
+    callback media-action(string, string, string);
+
+    property <length> album-w: 200px;
+    property <length> album-h: 266px;
+    property <length> gap: 24px;
+
+    background: Theme.surface-main;
+
+    VerticalLayout {
+        spacing: 0px;
+
+        // --- Fixed header (always visible) -------------------------------
+        // NavButtons + the kicker/title block on the LEFT (kicker = the
+        // award name, uppercase, server text bound directly; title =
+        // "Acclaimed Releases"); the search box floats RIGHT. Like the
+        // Discover toolbar: a fixed bar whose back/forward buttons keep the
+        // same screen position as every page (center at y=25 = 11px top +
+        // 14px half-button). Only the list below scrolls.
+        Rectangle {
+            height: 56px;
+            background: Theme.surface-main;
+
+            // Left cluster — nav buttons then the kicker/title block, inline.
+            HorizontalLayout {
+                x: 32px;
+                y: 25px - self.height / 2;
+                width: self.preferred-width;
+                height: self.preferred-height;
+                spacing: 16px;
+                VerticalLayout {
+                    alignment: center;
+                    NavButtons { }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    spacing: 2px;
+                    // Kicker — the award name, server text (NEVER @tr).
+                    Text {
+                        text: AwardState.name;
+                        color: Theme.text-muted;
+                        font-size: 11px;
+                        font-weight: Typography.semibold;
+                        letter-spacing: 0.6px;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        text: @tr("Acclaimed Releases");
+                        color: Theme.text-primary;
+                        font-size: Typography.section;
+                        font-weight: Typography.bold;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+
+            // Right cluster — the search box, anchored right.
+            HorizontalLayout {
+                x: parent.width - self.preferred-width - 32px;
+                y: 25px - self.height / 2;
+                width: self.preferred-width;
+                height: self.preferred-height;
+                VerticalLayout {
+                    alignment: center;
+                    AwardSearch { }
+                }
+            }
+        }
+
+        // --- Scrolling list (only the listing scrolls) ------------------
+        flick := Flickable {
+            vertical-stretch: 1;
+            viewport-width: self.width;
+            viewport-height: page.preferred-height;
+            // Scroll-position restore on back/forward (see nav::scope_for).
+            property <string> sr-armed: NavState.restore-scope;
+            function sr-restore() {
+                if (NavState.restore-scope == "award-albums" && self.viewport-height > self.height) {
+                    self.viewport-y = NavState.scroll-restore;
+                    NavState.restore-scope = "";
+                }
+            }
+            init => { self.sr-restore(); }
+            changed sr-armed => { self.sr-restore(); }
+            changed viewport-height => { self.sr-restore(); }
+
+            // Infinite scroll — when the viewport nears the bottom of the
+            // content (within 600px), pull the next page. Guarded by
+            // has-more + the loading flags AND an empty search query, so a
+            // client-side search filter does not keep paging the catalog.
+            changed viewport-y => {
+                NavState.report-scroll(self.viewport-y);
+                if (-self.viewport-y + self.height >= self.viewport-height - 600px
+                    && AwardState.has-more
+                    && !AwardState.load-more-loading
+                    && !AwardState.loading
+                    && AwardState.search-query == "") {
+                    AwardActions.load-more();
+                }
+            }
+
+            page := VerticalLayout {
+                width: parent.width;
+                padding-left: 32px;
+                padding-right: 32px;
+                padding-top: 8px;
+                padding-bottom: 100px;
+                spacing: 0px;
+                alignment: start;
+
+                // Initial-load spinner.
+                if AwardState.loading: HorizontalLayout {
+                    alignment: center;
+                    VerticalLayout {
+                        alignment: center;
+                        spacing: 12px;
+                        HorizontalLayout {
+                            alignment: center;
+                            LoadingSpinner { size: 36px; }
+                        }
+                        Text {
+                            text: @tr("Loading…");
+                            color: Theme.text-muted;
+                            font-size: 14px;
+                            horizontal-alignment: center;
+                        }
+                    }
+                }
+
+                // Error branch — failed load + retry (full reset, like
+                // Tauri's fetchPage(true) retry).
+                if !AwardState.loading && AwardState.load-error: HorizontalLayout {
+                    alignment: center;
+                    VerticalLayout {
+                        alignment: center;
+                        spacing: 12px;
+                        Text {
+                            text: @tr("Failed to load Library");
+                            color: Theme.text-secondary;
+                            font-size: 14px;
+                            horizontal-alignment: center;
+                        }
+                        Rectangle {
+                            width: retry-row.preferred-width;
+                            height: 34px;
+                            border-radius: 6px;
+                            background: retry-ta.has-hover ? Theme.surface-hover : Theme.surface-elevated;
+                            retry-row := HorizontalLayout {
+                                padding-left: 16px;
+                                padding-right: 16px;
+                                Text {
+                                    text: @tr("Retry");
+                                    color: Theme.text-primary;
+                                    font-size: 13px;
+                                    font-weight: Typography.medium;
+                                    vertical-alignment: center;
+                                }
+                            }
+                            retry-ta := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => {
+                                    AwardActions.retry();
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Empty states (improvement #1 — distinct branches).
+                // No-search-results: reuse DiscoverBrowse's search-empty
+                // string when a query filtered everything out.
+                if !AwardState.loading && !AwardState.load-error
+                    && AwardState.visible.length == 0
+                    && AwardState.search-query != "": HorizontalLayout {
+                    alignment: center;
+                    Text {
+                        text: @tr("No results found.");
+                        color: Theme.text-muted;
+                        font-size: 14px;
+                    }
+                }
+                // Genuinely-empty award (no query active).
+                if !AwardState.loading && !AwardState.load-error
+                    && AwardState.visible.length == 0
+                    && AwardState.search-query == "": HorizontalLayout {
+                    alignment: center;
+                    Text {
+                        text: @tr("No award-winning releases yet.");
+                        color: Theme.text-muted;
+                        font-size: 14px;
+                    }
+                }
+
+                // --- Album grid (plain grid; no toolbar) ----------------
+                if !AwardState.loading && !AwardState.load-error: AlbumCollectionView {
+                    albums: AwardState.visible;
+                    view-mode: "grid";
+                    is-grouped: false;
+                    show-source: false;
+                    card-width: root.album-w;
+                    card-height: root.album-h;
+                    card-gap: root.gap;
+                    open-album(id) => { root.open-album(id); }
+                    // Improvement #2 — wire open-artist (Tauri leaves it dead).
+                    open-artist(id) => { root.open-artist(id); }
+                    media-action(kind, id, action) => {
+                        root.media-action(kind, id, action);
+                    }
+                }
+
+                // Bottom load-more spinner while the next page is in flight.
+                if AwardState.load-more-loading: HorizontalLayout {
+                    alignment: center;
+                    Rectangle { height: 24px; }
+                    LoadingSpinner { size: 28px; }
+                }
+            }
+        }
+    }
+
+    // Shared scrollbar in the right gutter (homologated cross-view). Sits
+    // below the fixed 56px header so it tracks only the scrolling list.
+    ListScrollbar {
+        x: parent.width - self.width - 4px;
+        y: 56px;
+        width: 14px;
+        height: parent.height - 56px;
+        viewport-height: flick.viewport-height;
+        visible-height: flick.height;
+        viewport-y <=> flick.viewport-y;
+        auto-hide: true;
+        hover-active: ShellState.pointer-in-window
+            && ShellState.pointer-x >= flick.absolute-position.x
+            && ShellState.pointer-x <= flick.absolute-position.x + flick.width
+            && ShellState.pointer-y >= flick.absolute-position.y
+            && ShellState.pointer-y <= flick.absolute-position.y + flick.height;
+    }
+}

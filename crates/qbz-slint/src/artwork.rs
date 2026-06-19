@@ -82,6 +82,11 @@ pub enum ArtworkTarget {
     LabelArtist { index: usize },
     /// A card in LabelState.more-labels[index] (landing).
     LabelMoreLabel { index: usize },
+    /// A card in AwardState.albums[index] (landing preview grid AND the
+    /// full AwardAlbums listing — both source the `albums` model).
+    AwardAlbum { index: usize },
+    /// A card in AwardState.other-awards[index] (landing carousel).
+    AwardOther { index: usize },
     /// A card in LocationViewState.artists[index].
     LocationArtist { index: usize },
     /// A row in FavoritesState.tracks[index].
@@ -847,6 +852,20 @@ fn apply_artwork(
         }
         ArtworkTarget::LabelMoreLabel { index } => {
             let model = window.global::<crate::LabelState>().get_more_labels();
+            if let Some(mut item) = model.row_data(index) {
+                item.artwork = image;
+                model.set_row_data(index, item);
+            }
+        }
+        ArtworkTarget::AwardAlbum { index } => {
+            let model = window.global::<crate::AwardState>().get_albums();
+            if let Some(mut item) = model.row_data(index) {
+                item.artwork = image;
+                model.set_row_data(index, item);
+            }
+        }
+        ArtworkTarget::AwardOther { index } => {
+            let model = window.global::<crate::AwardState>().get_other_awards();
             if let Some(mut item) = model.row_data(index) {
                 item.artwork = image;
                 model.set_row_data(index, item);

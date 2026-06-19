@@ -54,8 +54,10 @@ pub struct AlbumData {
     /// Record label id, so the sidebar label card can navigate to the label
     /// page ("" when unknown).
     pub label_id: String,
-    /// Editorial award names, for the sidebar.
-    pub awards: Vec<String>,
+    /// Editorial awards for the sidebar, as `(id, name)` pairs. `id` may be
+    /// "" — some /album/get entries omit it; the award controller then
+    /// resolves it by name on click. Mirrors Tauri's `AlbumAward { id?, name }`.
+    pub awards: Vec<(String, String)>,
     /// True when the album bundles a downloadable booklet/liner-notes PDF
     /// (Qobuz goodies) — gates the header booklet button.
     pub has_booklet: bool,
@@ -183,8 +185,8 @@ fn map_album(album: Album) -> AlbumData {
         .as_deref()
         .unwrap_or_default()
         .iter()
-        .map(|a| a.name.clone())
-        .filter(|n| !n.is_empty())
+        .map(|a| (a.id.clone().unwrap_or_default(), a.name.clone()))
+        .filter(|(_, n)| !n.is_empty())
         .collect();
     // Booklet present when the album carries any goody with a usable URL.
     let has_booklet = album
@@ -380,8 +382,18 @@ pub fn apply_album(window: &AppWindow, data: AlbumData) {
         })
         .collect();
 
-    let awards: Vec<slint::SharedString> =
-        data.awards.into_iter().map(Into::into).collect();
+    // Seed the award name->id resolver from this album's awards (the same
+    // harvesting Tauri's awardCatalogStore.rememberAwardsFromAlbums does), so
+    // a sidebar laurel whose id Qobuz omitted can still resolve on click.
+    crate::award::remember_awards(&data.awards);
+    let awards: Vec<crate::AwardEntry> = data
+        .awards
+        .into_iter()
+        .map(|(id, name)| crate::AwardEntry {
+            id: id.into(),
+            name: name.into(),
+        })
+        .collect();
 
     let has_custom_cover = crate::custom_artwork::album_cover(&data.id).is_some();
     let artwork_url = data.artwork_url.clone();

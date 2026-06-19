@@ -112,6 +112,21 @@ pub enum NavEntry {
         id: u64,
         name: String,
     },
+    /// AwardView landing — the award detail page (hero + award-winning
+    /// releases preview + "Other awards" carousel + follow heart). Reached
+    /// from an album's sidebar laurel or another award's "Other awards"
+    /// card. Carries the award id (string — Qobuz types it inconsistently)
+    /// + name fallback (history restores the id only; name is best-effort).
+    Award {
+        id: String,
+        name: String,
+    },
+    /// AwardAlbumsView — the "See all" paginated listing reached from the
+    /// AwardView landing. Carries the award id + name fallback.
+    AwardAlbums {
+        id: String,
+        name: String,
+    },
     /// ArtistsByLocationView — opened by the Origin section's
     /// location link. Carries the full scene-discovery payload.
     Location {

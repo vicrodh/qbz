@@ -68,6 +68,15 @@ export struct SlimItem {
     following: bool,
 }
 
+// One editorial award on an album — the sidebar AWARDS list. Carries the
+// award id (may be "" — some /album/get entries omit it; the controller
+// then resolves it by name) so the laurel card can navigate to the award
+// page. Mirrors Tauri's `AlbumAward { id?, name }`.
+export struct AwardEntry {
+    id: string,
+    name: string,
+}
+
 // A playlist result in search (and the label landing's Playlists row).
 // Qobuz returns up to four cover URLs per playlist; the card renders them
 // as a count-based collage. Defined here (before LabelState) so the label
@@ -419,7 +428,7 @@ export global AlbumState {
     in property <string> label;
     // Label id for the sidebar label card → label page navigation ("" = none).
     in property <string> label-id;
-    in property <[string]> awards: [];
+    in property <[AwardEntry]> awards: [];
     // True when the album ships a downloadable booklet/liner-notes PDF
     // (Qobuz goodies). Gates the booklet button in the header — not every
     // album has one.
@@ -601,7 +610,7 @@ export global DragActions {
 }
 
 // Which content view the shell shows.
-export enum ContentView { home, album, artist, settings, search, musician, label, label-releases, location, favorites, mix, playlist, discover-browse, playlist-manager, offline-manager, blacklist-manager, local-library, local-album, mixtapes, collections, mixtape-detail, discography-builder }
+export enum ContentView { home, album, artist, settings, search, musician, label, label-releases, award, award-albums, location, favorites, mix, playlist, discover-browse, playlist-manager, offline-manager, blacklist-manager, local-library, local-album, mixtapes, collections, mixtape-detail, discography-builder }
 
 // In-app toast (transient notification). Mirrors Tauri's toastStore:
 // a single toast at a time (a new one replaces the current), auto-hidden
@@ -3025,6 +3034,63 @@ export global LabelActions {
     callback set-hires(bool);
     callback set-group(bool);
     callback search(string /* query */);
+}
+
+// Award pages (AwardView landing + AwardAlbumsView listing) — mirrors
+// Tauri's AwardView.svelte / AwardAlbumsView.svelte. One global serves
+// both, like LabelState: the landing renders the hero + `albums` preview
+// (first /award/getAlbums page) + `other-awards`; the listing renders the
+// full paginated `albums` with client-side search (`visible`). The grid is
+// always sourced from /award/getAlbums — never `/award/page.releases`
+// (user-scoped, hero-only).
+export global AwardState {
+    in property <string> id;
+    in property <string> name;
+    // Hero image URL (award image, falling back to magazine image) + the
+    // decoded image. Empty image-url => laurel/gold placeholder.
+    in property <string> image-url;
+    in property <image> image;
+    // Magazine name shown under the award name (may be "").
+    in property <string> magazine-name;
+    // Header follow heart — three states: not-following / following /
+    // toggling (disabled while the API call is in flight).
+    in property <bool> is-following: false;
+    in property <bool> following-toggling: false;
+    // Loaded album catalog (landing preview OR full listing) + the artwork
+    // pipeline target (stable indices). `visible` is the search-filtered
+    // subset the listing renders (shares `albums` when the query is empty,
+    // so artwork stays live — the DiscoverBrowse/Label pattern).
+    in property <[AlbumCardItem]> albums: [];
+    in property <[AlbumCardItem]> visible: [];
+    in property <int> total: 0;
+    in property <bool> has-more: false;
+    in property <bool> loading: false;
+    in property <bool> load-more-loading: false;
+    // True when the releases load failed (drives the error/retry branch).
+    in property <bool> load-error: false;
+    // "Other awards" carousel (from /award/explore, current award excluded).
+    // Reuses SlimItem: title = award name, subtitle = magazine.
+    in property <[SlimItem]> other-awards: [];
+    // True once the landing page-data load resolves (gates the spinner).
+    in property <bool> page-loaded: false;
+    // Listing in-view search query + the count actually shown after filter.
+    in-out property <string> search-query: "";
+    in property <int> shown: 0;
+}
+
+export global AwardActions {
+    // Header: toggle follow on the open award.
+    callback toggle-follow(string /* award id */);
+    // Landing "See all" -> open the full albums listing.
+    callback open-albums();
+    // "Other awards" card click -> open that award's landing.
+    callback open-award(string /* award id */, string /* award name */);
+    // Listing: fetch the next album page.
+    callback load-more();
+    // Listing: re-filter `visible` after `search-query` changed (UI thread).
+    callback search(string /* query */);
+    // Releases error branch: retry the failed load.
+    callback retry();
 }
 
 // One artist in the scene-discovery grid (artists from the same

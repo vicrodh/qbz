@@ -847,9 +847,20 @@ export component AlbumPageView inherits Rectangle {
                         }
                         for award in AlbumState.awards: SidebarCard {
                             icon: @image-url("../assets/laurels.svg");
-                            name: award;
+                            name: award.name;
                             compact: ShellState.content-constrained;
                             avatar-bg: @linear-gradient(135deg, #b45309 0%, #eab308 100%);
+                            // Navigate to the award page. With an id, open it
+                            // directly; without one (Qobuz omits it on some
+                            // /album/get entries) pass the NAME and let the
+                            // controller resolve it (or toast if unresolved).
+                            clicked => {
+                                if (award.id != "") {
+                                    root.media-action("award", award.id, "open");
+                                } else if (award.name != "") {
+                                    root.media-action("award", award.name, "resolve-open");
+                                }
+                            }
                         }
                     }
                 }
