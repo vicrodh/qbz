@@ -1,0 +1,234 @@
+// Immersive split Track Info panel — the INLINE credits panel mounted in the
+// SPLIT-right slot (ImmersiveState.split-panel == 1). 1:1 with Tauri's
+// TrackInfoPanel.svelte (recon data-panels.md §7): track title + album, the
+// Duration / Quality / ISRC / Label(link) metadata rows, the grouped CREDITS
+// section, and the copyright line. Split-only (no focus variant).
+//
+// Data is fed by crate::info_modals::load_track_info_inline via
+// TrackInfoActions.load-inline — it populates the SAME TrackInfoState the
+// floating modal reads, but never sets `open`, so the overlay modal does NOT
+// appear over the immersive view. The shared metadata/credit cells are reused
+// 1:1 from TrackInfoModal.slint (MetaCell / CreditCell).
+//
+// Rendered white-on-dark over the atmosphere backdrop (vs the modal's
+// surface-card), matching the other immersive split panels. Viewport dims are
+// passed as props (no `parent` in the root binding); no `opacity:` on the
+// root; no `changed` watcher on layout geometry (ADR-009 declaration order,
+// reference_slint_* gotchas).
+
+import { TrackInfoState, TrackInfoActions } from "../state.slint";
+import { MetaCell, CreditCell } from "../album/TrackInfoModal.slint";
+import { ListScrollbar } from "../primitives/ListScrollbar.slint";
+
+export component ImmersiveTrackInfoPanel inherits Rectangle {
+    // Slot dimensions, supplied by the mount site (the split-right Rectangle).
+    in property <length> viewport-width: 480px;
+    in property <length> viewport-height: 600px;
+    // When true (split placement) the content is height-capped + vertically
+    // centered in the slot, mirroring Tauri's `centeredLayout`.
+    in property <bool> centered: true;
+
+    width: root.viewport-width;
+    height: root.viewport-height;
+    background: transparent;
+
+    // Centered, height-capped content column (Tauri .centered-layout:
+    // height clamp(340px, 62vh, 760px); max-height 80vh).
+    VerticalLayout {
+        alignment: root.centered ? center : start;
+        Rectangle {
+            height: root.centered
+                ? Math.min(root.viewport-height,
+                    Math.clamp(340px, root.viewport-height * 0.62, 760px))
+                : root.viewport-height;
+
+            // ---- Loading -----------------------------------------------
+            if TrackInfoState.loading && TrackInfoState.error == "": Text {
+                text: @tr("Loading track info...");
+                color: #ffffff80;
+                font-size: 18px;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                width: 100%;
+                height: 100%;
+            }
+
+            // ---- Error -------------------------------------------------
+            if TrackInfoState.error != "": VerticalLayout {
+                alignment: center;
+                spacing: 8px;
+                Text {
+                    text: @tr("Failed to load track info");
+                    color: #ffffff80;
+                    font-size: 18px;
+                    horizontal-alignment: center;
+                }
+                Text {
+                    text: TrackInfoState.error;
+                    color: #ffffff66;
+                    font-size: 13px;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                }
+            }
+
+            // ---- Empty (no track / not yet loaded) ---------------------
+            if !TrackInfoState.loading && TrackInfoState.error == "" && TrackInfoState.title == "": Text {
+                text: @tr("No track selected");
+                color: #ffffff66;
+                font-size: 18px;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                width: 100%;
+                height: 100%;
+            }
+
+            // ---- Loaded ------------------------------------------------
+            if !TrackInfoState.loading && TrackInfoState.error == "" && TrackInfoState.title != "": Rectangle {
+                clip: true;
+
+                flick := Flickable {
+                    viewport-width: self.width;
+                    viewport-height: body.preferred-height;
+
+                    body := VerticalLayout {
+                        width: parent.width;
+                        padding-right: 12px;
+
+                        // Header: track title + album.
+                        VerticalLayout {
+                            spacing: 4px;
+                            padding-bottom: 24px;
+                            Text {
+                                text: TrackInfoState.title;
+                                color: #ffffff;
+                                font-size: 24px;
+                                font-weight: 700;
+                                wrap: word-wrap;
+                            }
+                            if TrackInfoState.album != "": Text {
+                                text: TrackInfoState.album;
+                                color: #ffffff99;
+                                font-size: 18px;
+                                wrap: word-wrap;
+                            }
+                        }
+
+                        // Metadata rows: Duration, Quality, ISRC, Label(link).
+                        VerticalLayout {
+                            spacing: 24px;
+                            HorizontalLayout {
+                                spacing: 24px;
+                                MetaCell {
+                                    horizontal-stretch: 1;
+                                    label: @tr("Duration");
+                                    Text {
+                                        text: TrackInfoState.duration;
+                                        color: #ffffff;
+                                        font-size: 14px;
+                                    }
+                                }
+                                MetaCell {
+                                    horizontal-stretch: 1;
+                                    label: @tr("Quality");
+                                    Text {
+                                        text: TrackInfoState.quality;
+                                        color: #ffffff;
+                                        font-size: 14px;
+                                    }
+                                }
+                                if TrackInfoState.isrc != "": MetaCell {
+                                    horizontal-stretch: 1;
+                                    label: "ISRC";
+                                    Text {
+                                        text: TrackInfoState.isrc;
+                                        color: #ffffffb3;
+                                        font-size: 13px;
+                                    }
+                                }
+                                if TrackInfoState.isrc == "": Rectangle { horizontal-stretch: 1; }
+                            }
+                            if TrackInfoState.label != "": HorizontalLayout {
+                                spacing: 24px;
+                                MetaCell {
+                                    horizontal-stretch: 1;
+                                    label: @tr("Label");
+                                    label-link := TouchArea {
+                                        width: label-text.preferred-width;
+                                        height: label-text.preferred-height;
+                                        mouse-cursor: TrackInfoState.label-id != "" ? pointer : default;
+                                        clicked => {
+                                            if (TrackInfoState.label-id != "") {
+                                                TrackInfoActions.open-label(TrackInfoState.label-id);
+                                            }
+                                        }
+                                        label-text := Text {
+                                            text: TrackInfoState.label;
+                                            color: (label-link.has-hover && TrackInfoState.label-id != "")
+                                                ? #b794f6 : #ffffff;
+                                            font-size: 14px;
+                                        }
+                                    }
+                                }
+                                Rectangle { horizontal-stretch: 1; }
+                                Rectangle { horizontal-stretch: 1; }
+                            }
+                        }
+
+                        // Grouped CREDITS (2-column), only when present.
+                        if TrackInfoState.credits.length > 0: Rectangle { height: 20px; }
+                        if TrackInfoState.credits.length > 0: Rectangle {
+                            height: 1px;
+                            background: #ffffff1a;
+                        }
+                        if TrackInfoState.credits.length > 0: Rectangle { height: 20px; }
+                        if TrackInfoState.credits.length > 0: VerticalLayout {
+                            spacing: 16px;
+                            for pair in TrackInfoState.credits: HorizontalLayout {
+                                spacing: 24px;
+                                CreditCell {
+                                    horizontal-stretch: 1;
+                                    cell: pair.left;
+                                    name-clicked(n, r) => {
+                                        TrackInfoActions.open-musician(n, r);
+                                    }
+                                }
+                                if pair.has-right: CreditCell {
+                                    horizontal-stretch: 1;
+                                    cell: pair.right;
+                                    name-clicked(n, r) => {
+                                        TrackInfoActions.open-musician(n, r);
+                                    }
+                                }
+                                if !pair.has-right: Rectangle { horizontal-stretch: 1; }
+                            }
+                        }
+
+                        // Copyright.
+                        if TrackInfoState.copyright != "": Rectangle { height: 20px; }
+                        if TrackInfoState.copyright != "": Rectangle {
+                            height: 1px;
+                            background: #ffffff1a;
+                        }
+                        if TrackInfoState.copyright != "": Rectangle { height: 20px; }
+                        if TrackInfoState.copyright != "": Text {
+                            text: TrackInfoState.copyright;
+                            color: #ffffff66;
+                            font-size: 12px;
+                            wrap: word-wrap;
+                        }
+                    }
+                }
+
+                ListScrollbar {
+                    x: parent.width - self.width;
+                    width: 14px;
+                    height: 100%;
+                    viewport-height: flick.viewport-height;
+                    visible-height: flick.height;
+                    viewport-y <=> flick.viewport-y;
+                }
+            }
+        }
+    }
+}

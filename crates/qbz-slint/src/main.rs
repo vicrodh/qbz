@@ -7862,6 +7862,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .invoke_musician_clicked(name, role);
                 }
             });
+        // Immersive split Track Info panel: populate TrackInfoState for the
+        // given track WITHOUT opening the floating modal (open stays false).
+        let weak = window.as_weak();
+        let runtime_l = runtime.clone();
+        let handle_l = tokio_rt.handle().clone();
+        window
+            .global::<TrackInfoActions>()
+            .on_load_inline(move |track_id| {
+                if let Ok(id) = track_id.parse::<u64>() {
+                    info_modals::load_track_info_inline(
+                        runtime_l.clone(),
+                        weak.clone(),
+                        handle_l.clone(),
+                        id,
+                    );
+                }
+            });
 
         // -- Album Info --
         let weak = window.as_weak();

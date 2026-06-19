@@ -434,20 +434,26 @@ fn apply_album_credits(window: &AppWindow, data: AlbumCreditsData) {
 // Public spawn entry points (called from the media-action handler).
 // ---------------------------------------------------------------------------
 
-/// Fetch a track and open the Track Info modal.
-pub fn open_track_info<A>(
+/// Shared fetch+map+apply for Track Info. `open_modal` decides whether the
+/// floating modal is shown: `true` for the explicit (i)-button flow, `false`
+/// for the immersive split panel which renders the same data inline (and so
+/// must NOT pop the overlay over the immersive view).
+fn spawn_track_info<A>(
     runtime: Arc<AppRuntime<A>>,
     weak: slint::Weak<AppWindow>,
     handle: tokio::runtime::Handle,
     track_id: u64,
+    open_modal: bool,
 ) where
     A: FrontendAdapter + Send + Sync + 'static,
 {
-    let _ = weak.upgrade_in_event_loop(|w| {
+    let _ = weak.upgrade_in_event_loop(move |w| {
         let st = w.global::<TrackInfoState>();
         st.set_error("".into());
         st.set_loading(true);
-        st.set_open(true);
+        if open_modal {
+            st.set_open(true);
+        }
     });
     handle.spawn(async move {
         match runtime.core().get_track(track_id).await {
@@ -469,6 +475,34 @@ pub fn open_track_info<A>(
             }
         }
     });
+}
+
+/// Fetch a track and open the Track Info modal.
+pub fn open_track_info<A>(
+    runtime: Arc<AppRuntime<A>>,
+    weak: slint::Weak<AppWindow>,
+    handle: tokio::runtime::Handle,
+    track_id: u64,
+) where
+    A: FrontendAdapter + Send + Sync + 'static,
+{
+    spawn_track_info(runtime, weak, handle, track_id, true);
+}
+
+/// Fetch a track and populate TrackInfoState WITHOUT opening the modal — for
+/// the immersive split Track Info panel (data-panels.md §7), which renders the
+/// metadata + grouped credits + copyright inline. Same fetch+map+apply as
+/// `open_track_info`; `open` stays false so the floating modal never appears
+/// over the immersive overlay.
+pub fn load_track_info_inline<A>(
+    runtime: Arc<AppRuntime<A>>,
+    weak: slint::Weak<AppWindow>,
+    handle: tokio::runtime::Handle,
+    track_id: u64,
+) where
+    A: FrontendAdapter + Send + Sync + 'static,
+{
+    spawn_track_info(runtime, weak, handle, track_id, false);
 }
 
 /// Fetch an album and open the Album Info (Credits/Review) modal.

@@ -532,6 +532,11 @@ export global TrackInfoActions {
     callback open-artist(string /* artist-id */);
     callback open-label(string /* label-id */);
     callback open-musician(string /* name */, string /* role */);
+    // Populate TrackInfoState for the given track WITHOUT opening the floating
+    // modal — used by the immersive split Track Info panel, which renders the
+    // same data inline. Fetch+map+apply are identical to open-track-info; the
+    // ONLY difference is `open` stays false so the overlay modal never appears.
+    callback load-inline(string /* track-id */);
 }
 
 // Album Info modal — opened from the AlbumPageView header (i) button via

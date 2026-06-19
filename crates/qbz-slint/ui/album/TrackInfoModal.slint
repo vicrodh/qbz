@@ -13,7 +13,8 @@ import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { ListScrollbar } from "../primitives/ListScrollbar.slint";
 
 // One metadata cell: uppercase label (11px) + a value supplied as a child.
-component MetaCell inherits VerticalLayout {
+// Exported so the immersive split Track Info panel can reuse it 1:1.
+export component MetaCell inherits VerticalLayout {
     in property <string> label;
     spacing: 6px;
     Text {
@@ -29,7 +30,8 @@ component MetaCell inherits VerticalLayout {
 // One credit cell: role label (11px upper) + the performer names, each
 // clickable -> musician. Clipped so a long name list can't bleed into the
 // neighbouring column (the common 1-3 name case fits one line).
-component CreditCell inherits VerticalLayout {
+// Exported so the immersive split Track Info panel can reuse it 1:1.
+export component CreditCell inherits VerticalLayout {
     in property <InfoCreditRow> cell;
     callback name-clicked(string /* name */, string /* role-raw */);
     spacing: 6px;

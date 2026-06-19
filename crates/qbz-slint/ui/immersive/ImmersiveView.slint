@@ -4,7 +4,7 @@
 
 import { Radius } from "../foundation/radius.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
-import { NowPlayingState, VisualizerState, ImmersiveState, SettingsState, LyricsState, QueueState } from "../state.slint";
+import { NowPlayingState, VisualizerState, ImmersiveState, SettingsState, LyricsState, QueueState, TrackInfoActions } from "../state.slint";
 import { ImmersiveAtmosphere } from "ImmersiveAtmosphere.slint";
 import { AlbumReactivePanel } from "AlbumReactivePanel.slint";
 import { StaticPanel } from "StaticPanel.slint";
@@ -13,6 +13,7 @@ import { SpectrumPanel } from "SpectrumPanel.slint";
 import { ImmersiveLyricsFocusPanel } from "ImmersiveLyricsFocusPanel.slint";
 import { ImmersiveQueuePanel } from "ImmersiveQueuePanel.slint";
 import { ImmersiveTrackInfo } from "ImmersiveTrackInfo.slint";
+import { ImmersiveTrackInfoPanel } from "ImmersiveTrackInfoPanel.slint";
 import { LyricsLinesView } from "../shell/LyricsLinesView.slint";
 
 component GhostButton inherits Rectangle {
@@ -491,6 +492,9 @@ component ModeBar inherits Rectangle {
     // Fired whenever the user enters a queue surface (focus Queue tab or split
     // Queue panel) so the parent can kick QueueState.panel-opened().
     callback queue-entered();
+    // Fired when the user enters the split Track Info panel so the parent can
+    // kick the inline load for the current track (TrackInfoActions.load-inline).
+    callback trackinfo-entered();
 
     property <bool> is-split: ImmersiveState.view-mode == 1;
 
@@ -597,8 +601,8 @@ component ModeBar inherits Rectangle {
             }
         }
 
-        // SPLIT rail: Lyrics (Checkpoint A) + Queue (Checkpoint B). Track Info /
-        // Suggestions tabs land in their own checkpoints.
+        // SPLIT rail: Lyrics (Checkpoint A) + Track Info (Checkpoint C) +
+        // Queue (Checkpoint B). Suggestions tab lands in its own checkpoint.
         if root.is-split: HorizontalLayout {
             spacing: 4px;
             ModeTab {
@@ -608,6 +612,15 @@ component ModeBar inherits Rectangle {
                 clicked => {
                     root.select-split(0);
                     root.lyrics-entered();
+                }
+            }
+            ModeTab {
+                icon: @image-url("../assets/icons/info.svg");
+                label: @tr("Track Info");
+                active: ImmersiveState.split-panel == 1;
+                clicked => {
+                    root.select-split(1);
+                    root.trackinfo-entered();
                 }
             }
             ModeTab {
@@ -855,6 +868,23 @@ export component ImmersiveView inherits Rectangle {
                 // Solid white active line in immersive (data-panels.md §2).
                 active-color: #ffffff;
             }
+            // Checkpoint C: the inline Track Info credits panel, centered in
+            // the right half (split-only, data-panels §7). `init` populates
+            // TrackInfoState for the current track WITHOUT opening the modal
+            // (TrackInfoActions.load-inline -> open stays false). A
+            // `changed NowPlayingState.track-id` guard re-fires the load so the
+            // panel refreshes when the track changes while it's open (track-id
+            // is a string — safe to watch, no layout geometry involved).
+            if ImmersiveState.split-panel == 1: ImmersiveTrackInfoPanel {
+                property <string> live-track-id: NowPlayingState.track-id;
+                init => { TrackInfoActions.load-inline(NowPlayingState.track-id); }
+                changed live-track-id => { TrackInfoActions.load-inline(self.live-track-id); }
+                width: 100%;
+                height: 100%;
+                viewport-width: parent.width;
+                viewport-height: parent.height;
+                centered: true;
+            }
             // Checkpoint B: the Queue + History panel, centered in the right
             // half. Same component as the focus mount; `centered: true` fills
             // the slot (data-panels §4 — one QueuePanel in both placements).
@@ -898,10 +928,15 @@ export component ImmersiveView inherits Rectangle {
         }
         toggle-view => {
             ImmersiveState.view-mode = ImmersiveState.view-mode == 1 ? 0 : 1;
-            // Entering split lands on Lyrics (the only Checkpoint A panel) —
-            // kick the fetch so the doc loads immediately.
+            // Entering split kicks the load for whichever panel is already
+            // selected so it populates immediately (the panel's own `init`
+            // covers the first mount; this handles re-entry onto an existing
+            // selection).
             if (ImmersiveState.view-mode == 1 && ImmersiveState.split-panel == 0) {
                 LyricsState.panel-opened();
+            }
+            if (ImmersiveState.view-mode == 1 && ImmersiveState.split-panel == 1) {
+                TrackInfoActions.load-inline(NowPlayingState.track-id);
             }
             root.wake();
         }
@@ -911,6 +946,10 @@ export component ImmersiveView inherits Rectangle {
         }
         queue-entered => {
             QueueState.panel-opened();
+            root.wake();
+        }
+        trackinfo-entered => {
+            TrackInfoActions.load-inline(NowPlayingState.track-id);
             root.wake();
         }
     }
