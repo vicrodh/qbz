@@ -4,7 +4,7 @@
 
 import { Radius } from "../foundation/radius.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
-import { NowPlayingState, VisualizerState, ImmersiveState, SettingsState, LyricsState, QueueState, TrackInfoActions, SuggestionsActions } from "../state.slint";
+import { NowPlayingState, VisualizerState, ImmersiveState, SettingsState, LyricsState, QueueState, TrackInfoActions, SuggestionsActions, WindowControlActions } from "../state.slint";
 import { ImmersiveAtmosphere } from "ImmersiveAtmosphere.slint";
 import { AlbumReactivePanel } from "AlbumReactivePanel.slint";
 import { StaticPanel } from "StaticPanel.slint";
@@ -423,44 +423,60 @@ component ImmersivePlayerBar inherits Rectangle {
     }
 }
 
-// Polished segmented mode selector (top-center). Rebuilt in the compact
-// player's visual language (ImmersivePlayerBar:238-243): flat dark pill
-// (#00000080), 1px white-on-glass border (#ffffff2e), drop-shadow. Four
-// icon+label tabs map tab position -> ImmersiveState.mode (0 Album Reactive,
-// 1 Static, 2 Coverflow, 3 Spectrum), with an inert leading panel-icon + a
-// vertical divider as a section marker (mirrors Tauri's .mode-toggle +
-// .tab-divider). Each tab has its own TouchArea (pointer cursor); no `changed
-// x/y/width/height` watchers (Recursion-detected risk). Container height fixed;
-// width sized to content. Clicking sets the mode and wakes the chrome so the
-// bar resets its hide timer with the player.
-component ModeTab inherits Rectangle {
+// ===========================================================================
+// HEADER (overhaul 2026-06-19): a single TWO-LEVEL dropdown (TV-glyph trigger)
+// replaces the old ModeBar (focus/split toggle + tabs) AND ShaderBar. The
+// dropdown's Level-1 = the "Focus" / "Split" group headers; Level-2 = each
+// group's child rows. A row sets the relevant ImmersiveState fields, fires the
+// same per-panel entry trigger the old tabs fired (so the fetch/load-on-entry
+// behavior is preserved), and closes the popup. No pills (ADR-008).
+// ===========================================================================
+
+// One grouped section header inside the view menu ("Focus" / "Split").
+component ImmersiveMenuGroupHeader inherits Rectangle {
+    in property <string> label;
+    height: 26px;
+    HorizontalLayout {
+        padding-left: 14px;
+        padding-right: 14px;
+        alignment: start;
+        Text {
+            text: root.label;
+            color: #ffffff80;
+            font-size: 11px;
+            font-weight: 700;
+            vertical-alignment: center;
+            // Uppercase-ish section header look without a font dependency.
+            letter-spacing: 0.6px;
+        }
+    }
+}
+
+// One selectable child row inside the view menu (Level-2). Icon + label, with a
+// flat active highlight (no pill — ADR-008) and a trailing dot when active.
+component ImmersiveMenuRow inherits Rectangle {
     in property <image> icon;
     in property <string> label;
-    // Whether this tab reads as selected. Callers compute it from the relevant
-    // state (focus: ImmersiveState.mode; split: ImmersiveState.split-panel) so
-    // one component serves both rails.
     in property <bool> active: false;
     callback clicked();
 
-    property <color> fg: root.active ? #ffffff : (ta.has-hover ? #fffffff2 : #ffffffb3);
+    property <color> fg: root.active ? #ffffff : (ta.has-hover ? #fffffff2 : #ffffffcc);
 
-    height: 28px;
+    height: 34px;
     border-radius: 8px;
-    background: root.active ? #ffffff33 : (ta.has-hover ? #ffffff1f : transparent);
-    animate background { duration: 150ms; }
+    background: root.active ? #ffffff26 : (ta.has-hover ? #ffffff14 : transparent);
+    animate background { duration: 120ms; }
 
     HorizontalLayout {
-        padding-left: 16px;
-        padding-right: 16px;
-        spacing: 8px;
-        alignment: center;
-
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 10px;
         VerticalLayout {
             alignment: center;
             QbzIcon {
                 source: root.icon;
-                width: 16px;
-                height: 16px;
+                width: 15px;
+                height: 15px;
                 tint: root.fg;
             }
         }
@@ -470,7 +486,17 @@ component ModeTab inherits Rectangle {
             font-size: 13px;
             font-weight: root.active ? 600 : 500;
             vertical-alignment: center;
-            animate color { duration: 150ms; }
+            horizontal-stretch: 1;
+        }
+        // Trailing active marker (small filled dot) — single-choice cue.
+        if root.active: VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 7px;
+                height: 7px;
+                border-radius: 4px;
+                background: #ffffff;
+            }
         }
     }
 
@@ -480,30 +506,200 @@ component ModeTab inherits Rectangle {
     }
 }
 
-component ModeBar inherits Rectangle {
-    // Focus-mode visualizer / lyrics tab picker -> ImmersiveState.mode.
-    callback select(int);
-    // Split-mode panel picker -> ImmersiveState.split-panel.
-    callback select-split(int);
-    // Flip focus<->split (ImmersiveState.view-mode 0<->1).
-    callback toggle-view();
-    // Fired whenever the user enters a lyrics surface (focus Lyrics tab or
-    // split Lyrics panel) so the parent can kick LyricsState.panel-opened().
+// The grouped two-level menu itself (Level-1 group headers + Level-2 rows).
+// Declared as a PopupWindow so it stacks above the chrome; it must be hosted as
+// a NON-root child of a wrapper (PopupWindow cannot sit directly under a for/if
+// — see DiscHeaderMenu's note), which `ImmersiveViewMenu` provides. Each row
+// re-emits the same entry trigger the old ModeBar tabs did, via the menu's own
+// callbacks (the parent wires them to the *State.panel-opened() / load calls).
+component ImmersiveViewMenuPopup inherits PopupWindow {
     callback lyrics-entered();
-    // Fired whenever the user enters a queue surface (focus Queue tab or split
-    // Queue panel) so the parent can kick QueueState.panel-opened().
     callback queue-entered();
-    // Fired when the user enters the split Track Info panel so the parent can
-    // kick the inline load for the current track (TrackInfoActions.load-inline).
     callback trackinfo-entered();
-    // Fired when the user enters the split Suggestions panel so the parent can
-    // kick the live artist load for the current track.
     callback suggestions-entered();
+    callback picked();
 
-    property <bool> is-split: ImmersiveState.view-mode == 1;
+    property <bool> is-focus: ImmersiveState.view-mode == 0;
+    property <int> sh: ImmersiveState.shader-mode;
+    property <int> md: ImmersiveState.mode;
+    property <int> sp: ImmersiveState.split-panel;
 
+    width: 244px;
+    height: menu-body.preferred-height;
+    // close-on-click dismisses the menu on ANY click, including a row tap —
+    // so a child selection both applies its state and closes the popup (the
+    // same idiom the player ⋯ menu + DiscContextMenu use).
+    close-policy: close-on-click;
+
+    Rectangle {
+        background: #0b0b0ef2;
+        border-radius: 14px;
+        border-width: 1px;
+        border-color: #ffffff2e;
+        drop-shadow-blur: 32px;
+        drop-shadow-color: #00000099;
+        drop-shadow-offset-y: 10px;
+
+        menu-body := VerticalLayout {
+            padding: 6px;
+            spacing: 1px;
+
+            // ---- FOCUS group ----
+            ImmersiveMenuGroupHeader { label: @tr("Focus"); }
+            ImmersiveMenuRow {
+                icon: @image-url("../assets/icons/audio-lines.svg");
+                label: @tr("Album Reactive");
+                active: root.is-focus && root.sh == 0 && root.md == 0;
+                clicked => {
+                    ImmersiveState.view-mode = 0; ImmersiveState.shader-mode = 0; ImmersiveState.mode = 0;
+                    root.picked();
+                }
+            }
+            ImmersiveMenuRow {
+                icon: @image-url("../assets/icons/image.svg");
+                label: @tr("Static");
+                active: root.is-focus && root.sh == 0 && root.md == 1;
+                clicked => {
+                    ImmersiveState.view-mode = 0; ImmersiveState.shader-mode = 0; ImmersiveState.mode = 1;
+                    root.picked();
+                }
+            }
+            ImmersiveMenuRow {
+                icon: @image-url("../assets/icons/disc-3.svg");
+                label: @tr("Coverflow");
+                active: root.is-focus && root.sh == 0 && root.md == 2;
+                clicked => {
+                    ImmersiveState.view-mode = 0; ImmersiveState.shader-mode = 0; ImmersiveState.mode = 2;
+                    root.picked();
+                }
+            }
+            ImmersiveMenuRow {
+                icon: @image-url("../assets/icons/chart-no-axes-column.svg");
+                label: @tr("Spectrum");
+                active: root.is-focus && root.sh == 0 && root.md == 3;
+                clicked => {
+                    ImmersiveState.view-mode = 0; ImmersiveState.shader-mode = 0; ImmersiveState.mode = 3;
+                    root.picked();
+                }
+            }
+            ImmersiveMenuRow {
+                icon: @image-url("../assets/icons/mic-vocal.svg");
+                label: @tr("Lyrics");
+                active: root.is-focus && root.sh == 0 && root.md == 4;
+                clicked => {
+                    ImmersiveState.view-mode = 0; ImmersiveState.shader-mode = 0; ImmersiveState.mode = 4;
+                    root.lyrics-entered();
+                    root.picked();
+                }
+            }
+            ImmersiveMenuRow {
+                icon: @image-url("../assets/icons/list-music.svg");
+                label: @tr("Queue");
+                active: root.is-focus && root.sh == 0 && root.md == 5;
+                clicked => {
+                    ImmersiveState.view-mode = 0; ImmersiveState.shader-mode = 0; ImmersiveState.mode = 5;
+                    root.queue-entered();
+                    root.picked();
+                }
+            }
+            ImmersiveMenuRow {
+                icon: @image-url("../assets/icons/chart-no-axes-column.svg");
+                label: @tr("Plasma");
+                active: root.is-focus && root.sh == 1;
+                clicked => {
+                    ImmersiveState.view-mode = 0; ImmersiveState.shader-mode = 1;
+                    root.picked();
+                }
+            }
+            ImmersiveMenuRow {
+                icon: @image-url("../assets/icons/disc-3.svg");
+                label: @tr("Tunnel");
+                active: root.is-focus && root.sh == 2;
+                clicked => {
+                    ImmersiveState.view-mode = 0; ImmersiveState.shader-mode = 2;
+                    root.picked();
+                }
+            }
+            ImmersiveMenuRow {
+                icon: @image-url("../assets/icons/audio-lines.svg");
+                label: @tr("Aurora");
+                active: root.is-focus && root.sh == 3;
+                clicked => {
+                    ImmersiveState.view-mode = 0; ImmersiveState.shader-mode = 3;
+                    root.picked();
+                }
+            }
+
+            // Divider between the two groups.
+            Rectangle { height: 7px;
+                Rectangle {
+                    y: 3px; height: 1px;
+                    width: parent.width - 16px;
+                    x: 8px;
+                    background: #ffffff1f;
+                }
+            }
+
+            // ---- SPLIT group ----
+            ImmersiveMenuGroupHeader { label: @tr("Split"); }
+            ImmersiveMenuRow {
+                icon: @image-url("../assets/icons/mic-vocal.svg");
+                label: @tr("Lyrics");
+                active: !root.is-focus && root.sp == 0;
+                clicked => {
+                    ImmersiveState.view-mode = 1; ImmersiveState.shader-mode = 0; ImmersiveState.split-panel = 0;
+                    root.lyrics-entered();
+                    root.picked();
+                }
+            }
+            ImmersiveMenuRow {
+                icon: @image-url("../assets/icons/info.svg");
+                label: @tr("Track Info");
+                active: !root.is-focus && root.sp == 1;
+                clicked => {
+                    ImmersiveState.view-mode = 1; ImmersiveState.shader-mode = 0; ImmersiveState.split-panel = 1;
+                    root.trackinfo-entered();
+                    root.picked();
+                }
+            }
+            ImmersiveMenuRow {
+                icon: @image-url("../assets/icons/radio.svg");
+                label: @tr("Suggestions");
+                active: !root.is-focus && root.sp == 2;
+                clicked => {
+                    ImmersiveState.view-mode = 1; ImmersiveState.shader-mode = 0; ImmersiveState.split-panel = 2;
+                    root.suggestions-entered();
+                    root.picked();
+                }
+            }
+            ImmersiveMenuRow {
+                icon: @image-url("../assets/icons/list-music.svg");
+                label: @tr("Queue");
+                active: !root.is-focus && root.sp == 3;
+                clicked => {
+                    ImmersiveState.view-mode = 1; ImmersiveState.shader-mode = 0; ImmersiveState.split-panel = 3;
+                    root.queue-entered();
+                    root.picked();
+                }
+            }
+        }
+    }
+}
+
+// TV/monitor-glyph trigger button + the two-level view menu. The wrapper makes
+// the PopupWindow a non-root child (mandatory in Slint). Forwards the per-panel
+// entry triggers up so the parent can fire the same load callbacks the old tabs
+// fired. `monitor.svg` is the closest existing display glyph (no dedicated TV
+// icon in ui/assets/icons/).
+component ImmersiveViewMenu inherits Rectangle {
+    callback lyrics-entered();
+    callback queue-entered();
+    callback trackinfo-entered();
+    callback suggestions-entered();
+    callback wake();
+
+    width: 40px;
     height: 36px;
-    width: bar.preferred-width + 8px;
     border-radius: 12px;
     background: #00000080;
     border-width: 1px;
@@ -512,172 +708,92 @@ component ModeBar inherits Rectangle {
     drop-shadow-color: #00000066;
     drop-shadow-offset-y: 8px;
 
-    bar := HorizontalLayout {
-        x: 4px;
-        y: 4px;
-        height: 28px;
-        spacing: 4px;
-        alignment: center;
+    QbzIcon {
+        source: @image-url("../assets/icons/monitor.svg");
+        width: 18px;
+        height: 18px;
+        x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+        y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+        tint: trigger-ta.has-hover ? #ffffff : #ffffffcc;
+    }
 
-        // Leading focus/split TOGGLE (was an inert panel-icon). Active = split.
-        // Reuses the ModeTab active/hover styling idiom (flat highlight, no
-        // pill — ADR-008): a 28px square that lights up when split is active.
-        toggle := Rectangle {
-            width: 28px;
-            height: 28px;
-            border-radius: 8px;
-            background: root.is-split
-                ? #ffffff33
-                : (toggle-ta.has-hover ? #ffffff1f : transparent);
-            animate background { duration: 150ms; }
-            QbzIcon {
-                source: @image-url("../assets/icons/panel-left.svg");
-                width: 16px;
-                height: 16px;
-                x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
-                y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
-                tint: root.is-split
-                    ? #ffffff
-                    : (toggle-ta.has-hover ? #fffffff2 : #ffffffd9);
-            }
-            toggle-ta := TouchArea {
-                mouse-cursor: pointer;
-                clicked => { root.toggle-view(); }
-            }
+    trigger-ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.wake();
+            view-menu.show();
         }
-        // Vertical divider between the toggle and the tabs.
-        Rectangle {
-            width: 9px;
-            height: 28px;
-            Rectangle {
-                width: 1px;
-                height: 20px;
-                x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
-                y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
-                background: #ffffff33;
-            }
-        }
+    }
 
-        // FOCUS rail: the 4 visualizer modes + Lyrics. Shown when not split.
-        if !root.is-split: HorizontalLayout {
-            spacing: 4px;
-            ModeTab {
-                icon: @image-url("../assets/icons/audio-lines.svg");
-                label: @tr("Album Reactive");
-                active: ImmersiveState.mode == 0;
-                clicked => { root.select(0); }
-            }
-            ModeTab {
-                icon: @image-url("../assets/icons/image.svg");
-                label: @tr("Static");
-                active: ImmersiveState.mode == 1;
-                clicked => { root.select(1); }
-            }
-            ModeTab {
-                icon: @image-url("../assets/icons/disc-3.svg");
-                label: @tr("Coverflow");
-                active: ImmersiveState.mode == 2;
-                clicked => { root.select(2); }
-            }
-            ModeTab {
-                icon: @image-url("../assets/icons/chart-no-axes-column.svg");
-                label: @tr("Spectrum");
-                active: ImmersiveState.mode == 3;
-                clicked => { root.select(3); }
-            }
-            ModeTab {
-                icon: @image-url("../assets/icons/mic-vocal.svg");
-                label: @tr("Lyrics");
-                active: ImmersiveState.mode == 4;
-                clicked => {
-                    root.select(4);
-                    root.lyrics-entered();
-                }
-            }
-            ModeTab {
-                icon: @image-url("../assets/icons/list-music.svg");
-                label: @tr("Queue");
-                active: ImmersiveState.mode == 5;
-                clicked => {
-                    root.select(5);
-                    root.queue-entered();
-                }
-            }
-        }
-
-        // SPLIT rail: Lyrics (Checkpoint A) + Track Info (Checkpoint C) +
-        // Queue (Checkpoint B). Suggestions tab lands in its own checkpoint.
-        if root.is-split: HorizontalLayout {
-            spacing: 4px;
-            ModeTab {
-                icon: @image-url("../assets/icons/mic-vocal.svg");
-                label: @tr("Lyrics");
-                active: ImmersiveState.split-panel == 0;
-                clicked => {
-                    root.select-split(0);
-                    root.lyrics-entered();
-                }
-            }
-            ModeTab {
-                icon: @image-url("../assets/icons/info.svg");
-                label: @tr("Track Info");
-                active: ImmersiveState.split-panel == 1;
-                clicked => {
-                    root.select-split(1);
-                    root.trackinfo-entered();
-                }
-            }
-            ModeTab {
-                icon: @image-url("../assets/icons/radio.svg");
-                label: @tr("Suggestions");
-                active: ImmersiveState.split-panel == 2;
-                clicked => {
-                    root.select-split(2);
-                    root.suggestions-entered();
-                }
-            }
-            ModeTab {
-                icon: @image-url("../assets/icons/list-music.svg");
-                label: @tr("Queue");
-                active: ImmersiveState.split-panel == 3;
-                clicked => {
-                    root.select-split(3);
-                    root.queue-entered();
-                }
-            }
-        }
+    view-menu := ImmersiveViewMenuPopup {
+        // Opens just below the trigger, left edges aligned.
+        x: 0px;
+        y: 42px;
+        lyrics-entered => { root.lyrics-entered(); }
+        queue-entered => { root.queue-entered(); }
+        trackinfo-entered => { root.trackinfo-entered(); }
+        suggestions-entered => { root.suggestions-entered(); }
+        picked => { root.wake(); }
     }
 }
 
-// Compact shader-scene picker. A small text-label segmented row (ModeTab
-// styling idiom: flat highlight, no pill — ADR-008) that sets
-// ImmersiveState.shader-mode (0 Off, 1 Plasma, 2 Tunnel, 3 Aurora). Placed in
-// the header chrome, right-aligned, so it does not collide with the centered
-// ModeBar (focus/split toggle + panel tabs).
-component ShaderTab inherits Rectangle {
-    in property <string> label;
-    in property <bool> active: false;
-    callback clicked();
-
-    property <color> fg: root.active ? #ffffff : (ta.has-hover ? #fffffff2 : #ffffffb3);
-
-    height: 28px;
+// INERT search placeholder (header center). Visual-only this session: a rounded
+// input styled like the app's search inputs (HeaderBar:534 — 6px radius, 1px
+// border, elevated surface) but rendered in the immersive dark glass palette,
+// with a leading magnifier + "Search" placeholder text. NO wiring; search logic
+// is a future session.
+component ImmersiveSearchPlaceholder inherits Rectangle {
+    height: 36px;
     border-radius: 8px;
-    background: root.active ? #ffffff33 : (ta.has-hover ? #ffffff1f : transparent);
-    animate background { duration: 150ms; }
+    background: #00000066;
+    border-width: 1px;
+    border-color: #ffffff26;
 
     HorizontalLayout {
         padding-left: 12px;
         padding-right: 12px;
-        alignment: center;
-        Text {
-            text: root.label;
-            color: root.fg;
-            font-size: 12px;
-            font-weight: root.active ? 600 : 500;
-            vertical-alignment: center;
-            animate color { duration: 150ms; }
+        spacing: 8px;
+        VerticalLayout {
+            alignment: center;
+            QbzIcon {
+                source: @image-url("../assets/icons/search.svg");
+                width: 15px;
+                height: 15px;
+                tint: #ffffff8c;
+            }
         }
+        Text {
+            text: @tr("Search");
+            color: #ffffff8c;
+            font-size: 13px;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+        }
+    }
+}
+
+// One round control button for the immersive window-controls cluster (ported
+// 1:1 from Tauri's ImmersiveHeader .window-btn). 32px circle, flat hover.
+component ImmersiveWindowBtn inherits Rectangle {
+    in property <image> icon;
+    in property <bool> danger: false;
+    callback clicked();
+
+    width: 32px;
+    height: 32px;
+    border-radius: 16px;
+    background: ta.has-hover
+        ? (root.danger ? #ef4444cc : #ffffff26)
+        : transparent;
+    animate background { duration: 120ms; }
+
+    QbzIcon {
+        source: root.icon;
+        width: 15px;
+        height: 15px;
+        x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+        y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+        tint: ta.has-hover ? #ffffff : #ffffffd9;
     }
 
     ta := TouchArea {
@@ -686,14 +802,19 @@ component ShaderTab inherits Rectangle {
     }
 }
 
-component ShaderBar inherits Rectangle {
-    // Sets ImmersiveState.shader-mode (0..3). Self-contained: no callbacks, it
-    // writes the global directly (the picker has no other side effects).
-    callback picked();
-
+// Header-right window-controls cluster, ported 1:1 from Tauri's ImmersiveHeader
+// (ImmersiveHeader.svelte:343-410 — the .window-controls capsule). Six controls:
+// Drag / Fullscreen / Maximize-Restore / Minimize / Exit-immersive (ChevronDown)
+// / Close-app (X). All native-window controls (Drag/Fullscreen/Maximize/Minimize/
+// Close) route through the WindowControlActions global, wired in
+// src/main.rs::wire_window_controls onto the MAIN AppWindow's winit handle.
+// Exit Immersive keeps its in-overlay close path (ImmersiveState.open = false +
+// VisualizerState.set-enabled(false)). Same flat-glass capsule idiom as the
+// dropdown.
+component ImmersiveWindowControls inherits Rectangle {
     height: 36px;
-    width: bar.preferred-width + 8px;
-    border-radius: 12px;
+    width: cluster.preferred-width + 8px;
+    border-radius: 18px;
     background: #00000080;
     border-width: 1px;
     border-color: #ffffff2e;
@@ -701,32 +822,58 @@ component ShaderBar inherits Rectangle {
     drop-shadow-color: #00000066;
     drop-shadow-offset-y: 8px;
 
-    bar := HorizontalLayout {
-        x: 4px;
-        y: 4px;
-        height: 28px;
-        spacing: 4px;
+    cluster := HorizontalLayout {
+        x: 2px;
+        y: 2px;
+        height: 32px;
+        spacing: 2px;
         alignment: center;
 
-        ShaderTab {
-            label: @tr("Off");
-            active: ImmersiveState.shader-mode == 0;
-            clicked => { ImmersiveState.shader-mode = 0; root.picked(); }
+        // Drag (move the native window).
+        ImmersiveWindowBtn {
+            icon: @image-url("../assets/icons/move.svg");
+            clicked => { WindowControlActions.drag-move(); }
         }
-        ShaderTab {
-            label: @tr("Plasma");
-            active: ImmersiveState.shader-mode == 1;
-            clicked => { ImmersiveState.shader-mode = 1; root.picked(); }
+
+        // Fullscreen toggle — glyph swaps on WindowControlActions.is-fullscreen
+        // (shrink/minimize-2 when fullscreen, expand/maximize-2 otherwise).
+        ImmersiveWindowBtn {
+            icon: WindowControlActions.is-fullscreen
+                ? @image-url("../assets/icons/minimize-2.svg")
+                : @image-url("../assets/icons/maximize-2.svg");
+            clicked => { WindowControlActions.toggle-fullscreen(); }
         }
-        ShaderTab {
-            label: @tr("Tunnel");
-            active: ImmersiveState.shader-mode == 2;
-            clicked => { ImmersiveState.shader-mode = 2; root.picked(); }
+
+        // Maximize / Restore — glyph swaps on WindowControlActions.is-maximized
+        // (copy = restore/overlap when maximized, square otherwise).
+        ImmersiveWindowBtn {
+            icon: WindowControlActions.is-maximized
+                ? @image-url("../assets/icons/copy.svg")
+                : @image-url("../assets/icons/square.svg");
+            clicked => { WindowControlActions.toggle-maximize(); }
         }
-        ShaderTab {
-            label: @tr("Aurora");
-            active: ImmersiveState.shader-mode == 3;
-            clicked => { ImmersiveState.shader-mode = 3; root.picked(); }
+
+        // Minimize.
+        ImmersiveWindowBtn {
+            icon: @image-url("../assets/icons/minus.svg");
+            clicked => { WindowControlActions.minimize(); }
+        }
+
+        // Exit Immersive — the in-overlay close path (ChevronDown glyph, 1:1
+        // with Tauri's exit-immersive control).
+        ImmersiveWindowBtn {
+            icon: @image-url("../assets/icons/chevron-down.svg");
+            clicked => {
+                ImmersiveState.open = false;
+                VisualizerState.set-enabled(false);
+            }
+        }
+
+        // Close App — danger-tinted X; routes to the AppWindow close-app path.
+        ImmersiveWindowBtn {
+            icon: @image-url("../assets/icons/x.svg");
+            danger: true;
+            clicked => { WindowControlActions.close-app(); }
         }
     }
 }
@@ -884,6 +1031,17 @@ export component ImmersiveView inherits Rectangle {
     // active data panel RIGHT (ADR-010 conditional mount). The atmosphere stays
     // behind it (layer 1). Checkpoint A ships only the Lyrics split panel.
     if ImmersiveState.shader-mode == 0 && ImmersiveState.view-mode == 1: HorizontalLayout {
+        // 55/45 split (art-left larger, never beyond 60/40): the two columns
+        // carry horizontal-stretch WEIGHTS (11 : 9 ≈ 55 : 45) so the layout
+        // distributes width by ratio — the RIGHT data panel always receives a
+        // real, usable ~45% width. It used to collapse to a sliver because both
+        // halves shared horizontal-stretch 1 while the LEFT's intrinsic content
+        // (the centered artwork + the ImmersiveTrackInfo block) out-measured it,
+        // so the layout handed the LEFT almost everything. `col-h` is the
+        // available column height (viewport minus the header/player clearance),
+        // used to bound the artwork square.
+        property <length> col-h: root.height - 56px - 132px;
+
         x: 0px;
         y: 0px;
         width: root.width;
@@ -896,18 +1054,23 @@ export component ImmersiveView inherits Rectangle {
         padding-right: 48px;
         spacing: 40px;
 
-        // LEFT: artwork + shared metadata block, centered in its half.
-        VerticalLayout {
-            horizontal-stretch: 1;
+        // LEFT (~55%): artwork + shared metadata block, centered in its half.
+        // horizontal-stretch 11 (vs the right's 9) yields the 55/45 ratio.
+        left-col := VerticalLayout {
+            property <length> col-h: parent.col-h;
+            horizontal-stretch: 11;
             alignment: center;
             spacing: 24px;
 
-            // Artwork. Sized to fit its half without crowding the metadata:
-            // min(half-width, height-budget), capped, floored.
+            // Artwork. Large + responsive: a square bounded by this column's
+            // resolved width and the available height (minus a budget for the
+            // metadata block below), floored so it never shrinks to a thumbnail.
+            // `self.width` is the layout-resolved column width; it only drives
+            // `height`, never the column's own width, so there's no loop.
             left-art := Rectangle {
                 property <length> art-size:
-                    Math.max(200px,
-                        Math.min(Math.min(root.width / 2 - 88px, root.height - 380px), 520px));
+                    Math.max(220px,
+                        Math.min(self.width, left-col.col-h - 200px));
                 height: self.art-size;
                 horizontal-stretch: 1;
                 art-inner := Rectangle {
@@ -936,9 +1099,10 @@ export component ImmersiveView inherits Rectangle {
             }
         }
 
-        // RIGHT: the active split panel. Checkpoint A = Lyrics only.
+        // RIGHT (~45%): the active split panel, full column width + height.
+        // horizontal-stretch 9 (vs the left's 11) yields the 45% share.
         Rectangle {
-            horizontal-stretch: 1;
+            horizontal-stretch: 9;
             clip: true;
             if ImmersiveState.split-panel == 0: LyricsLinesView {
                 init => { LyricsState.panel-opened(); }
@@ -1021,65 +1185,62 @@ export component ImmersiveView inherits Rectangle {
         media-action(kind, id, action) => { root.media-action(kind, id, action); }
     }
 
-    // (4) Top-center mode selector. Shares the same chrome-visible flag so it
-    // auto-hides/wakes with the player (no second timer). Horizontally
-    // centered, pinned near the window top so it never overlaps the player.
-    ModeBar {
-        x: Math.round((root.width - self.width) / 2 / 1px) * 1px;
+    // (4) Header (overhaul 2026-06-19): three groups, left -> right —
+    //   [ TV-glyph two-level dropdown ]  [ inert Search placeholder ]  [ controls ]
+    // Replaces the old ModeBar (focus/split toggle + tabs) AND the ShaderBar;
+    // both now live inside the single dropdown. Shares the chrome-visible flag
+    // so the whole header fades/wakes with the player (no second timer).
+    HorizontalLayout {
+        x: 24px;
         y: 16px;
+        width: root.width - 48px;
+        height: 36px;
+        spacing: 16px;
         opacity: root.chrome-visible ? 1.0 : 0.0;
         animate opacity { duration: 300ms; }
-        select(idx) => {
-            ImmersiveState.mode = idx;
-            root.wake();
-        }
-        select-split(idx) => {
-            ImmersiveState.split-panel = idx;
-            root.wake();
-        }
-        toggle-view => {
-            ImmersiveState.view-mode = ImmersiveState.view-mode == 1 ? 0 : 1;
-            // Entering split kicks the load for whichever panel is already
-            // selected so it populates immediately (the panel's own `init`
-            // covers the first mount; this handles re-entry onto an existing
-            // selection).
-            if (ImmersiveState.view-mode == 1 && ImmersiveState.split-panel == 0) {
-                LyricsState.panel-opened();
-            }
-            if (ImmersiveState.view-mode == 1 && ImmersiveState.split-panel == 1) {
-                TrackInfoActions.load-inline(NowPlayingState.track-id);
-            }
-            if (ImmersiveState.view-mode == 1 && ImmersiveState.split-panel == 2) {
-                SuggestionsActions.load(NowPlayingState.track-id);
-            }
-            root.wake();
-        }
-        lyrics-entered => {
-            LyricsState.panel-opened();
-            root.wake();
-        }
-        queue-entered => {
-            QueueState.panel-opened();
-            root.wake();
-        }
-        trackinfo-entered => {
-            TrackInfoActions.load-inline(NowPlayingState.track-id);
-            root.wake();
-        }
-        suggestions-entered => {
-            SuggestionsActions.load(NowPlayingState.track-id);
-            root.wake();
-        }
-    }
 
-    // (5) Top-right shader-scene picker. Right-aligned in the header so it never
-    // overlaps the centered ModeBar; shares the chrome-visible flag (auto-hide /
-    // wake) so it fades with the rest of the chrome.
-    ShaderBar {
-        x: root.width - self.width - 24px;
-        y: 16px;
-        opacity: root.chrome-visible ? 1.0 : 0.0;
-        animate opacity { duration: 300ms; }
-        picked => { root.wake(); }
+        // LEFT: the TV-glyph two-level view dropdown. Fires the same per-panel
+        // entry triggers the old ModeBar tabs did (load-on-entry preserved).
+        VerticalLayout {
+            horizontal-stretch: 0;
+            alignment: start;
+            ImmersiveViewMenu {
+                lyrics-entered => {
+                    LyricsState.panel-opened();
+                    root.wake();
+                }
+                queue-entered => {
+                    QueueState.panel-opened();
+                    root.wake();
+                }
+                trackinfo-entered => {
+                    TrackInfoActions.load-inline(NowPlayingState.track-id);
+                    root.wake();
+                }
+                suggestions-entered => {
+                    SuggestionsActions.load(NowPlayingState.track-id);
+                    root.wake();
+                }
+                wake => { root.wake(); }
+            }
+        }
+
+        // CENTER: inert search placeholder (future-session search lives here).
+        // Bounded so it doesn't stretch the full width; centered in the gap.
+        Rectangle {
+            horizontal-stretch: 1;
+            ImmersiveSearchPlaceholder {
+                width: Math.min(parent.width, 420px);
+                x: (parent.width - self.width) / 2;
+                y: 0px;
+            }
+        }
+
+        // RIGHT: window-controls cluster (ported from Tauri's ImmersiveHeader).
+        VerticalLayout {
+            horizontal-stretch: 0;
+            alignment: start;
+            ImmersiveWindowControls { }
+        }
     }
 }

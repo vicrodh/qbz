@@ -660,6 +660,96 @@ fn install_browser_mouse_nav(window: &AppWindow) {
     });
 }
 
+/// Wire the immersive header's native window-control cluster
+/// (WindowControlActions) to the MAIN AppWindow's winit handle. The AppWindow
+/// uses native OS decorations, so the only seam to move/min/max/fullscreen it
+/// is the winit backend — reached via `WinitWindowAccessor::with_winit_window`,
+/// exactly as miniplayer.rs does for the mini window. `with_winit_window`
+/// returns `Option<T>` (None when not on the winit backend / window gone), so
+/// every handler degrades gracefully. Read-then-set state (maximize/fullscreen)
+/// returns the new flag OUT of the closure, then pushes it onto the global
+/// AFTER the borrow ends.
+fn wire_window_controls(window: &AppWindow) {
+    let actions = window.global::<WindowControlActions>();
+
+    // Minimize.
+    {
+        let weak = window.as_weak();
+        actions.on_minimize(move || {
+            if let Some(w) = weak.upgrade() {
+                w.window().with_winit_window(|win| {
+                    win.set_minimized(true);
+                });
+            }
+        });
+    }
+
+    // Maximize / Restore toggle. Read current state inside the closure, flip it,
+    // then mirror the new value onto the global for the glyph swap.
+    {
+        let weak = window.as_weak();
+        actions.on_toggle_maximize(move || {
+            if let Some(w) = weak.upgrade() {
+                let new_max = w.window().with_winit_window(|win| {
+                    let m = win.is_maximized();
+                    win.set_maximized(!m);
+                    !m
+                });
+                if let Some(m) = new_max {
+                    w.global::<WindowControlActions>().set_is_maximized(m);
+                }
+            }
+        });
+    }
+
+    // Fullscreen toggle (true fullscreen hides the native titlebar — the
+    // genuinely useful immersive control).
+    {
+        let weak = window.as_weak();
+        actions.on_toggle_fullscreen(move || {
+            use i_slint_backend_winit::winit::window::Fullscreen;
+            if let Some(w) = weak.upgrade() {
+                let new_fs = w.window().with_winit_window(|win| {
+                    if win.fullscreen().is_some() {
+                        win.set_fullscreen(None);
+                        false
+                    } else {
+                        win.set_fullscreen(Some(Fullscreen::Borderless(None)));
+                        true
+                    }
+                });
+                if let Some(fs) = new_fs {
+                    w.global::<WindowControlActions>().set_is_fullscreen(fs);
+                }
+            }
+        });
+    }
+
+    // Close app — reuse the AppWindow's existing close-app choreography
+    // (close-to-tray vs quit lives in `window.on_close_app`, main.rs ~13558;
+    // miniplayer.rs calls the same `invoke_close_app`).
+    {
+        let weak = window.as_weak();
+        actions.on_close_app(move || {
+            if let Some(w) = weak.upgrade() {
+                w.invoke_close_app();
+            }
+        });
+    }
+
+    // Drag-move — start a window-move drag (same idiom as miniplayer start_drag).
+    {
+        let weak = window.as_weak();
+        actions.on_drag_move(move || {
+            if let Some(w) = weak.upgrade() {
+                w.window().with_winit_window(|win| {
+                    let _ = win.drag_window();
+                });
+            }
+        });
+    }
+}
+
 /// Whether the CURRENT content view is one the AppShell swaps for the
 /// OfflinePlaceholder while offline. KEEP IN SYNC with `qobuz-view-blocked`
 /// in `AppShell.slint`. The playlist view blocks only when it is neither a
@@ -4216,6 +4306,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let window = AppWindow::new()?;
     install_browser_mouse_nav(&window);
+    wire_window_controls(&window);
     // FONT TEST (slint-mvp): render with bundled Inter 18pt. Inter is a
     // clean, screen-tuned UI face; combined with the femtovg #5177/#11335
     // text fixes this is the candidate for the final look. Flip

@@ -3325,6 +3325,24 @@ export global ImmersiveState {
     in-out property <int> shader-mode: 0;
 }
 
+// Native window-control actions for the MAIN AppWindow, exposed to the
+// immersive overlay header cluster. The AppWindow uses native OS decorations,
+// so the only seam to manipulate it is the winit backend (see
+// src/main.rs wire_window_controls): every callback below reaches the MAIN
+// window's winit handle via WinitWindowAccessor::with_winit_window. The two
+// bool props drive the glyph swap on the maximize/fullscreen buttons; they are
+// only updated on OUR OWN toggles, so they can go stale if the user
+// maximizes/fullscreens via the OS chrome (acceptable for v1).
+export global WindowControlActions {
+    in property <bool> is-maximized: false;
+    in property <bool> is-fullscreen: false;
+    callback minimize();
+    callback toggle-maximize();
+    callback toggle-fullscreen();
+    callback close-app();
+    callback drag-move();
+}
+
 // Now-playing / transport state. The Rust playback poll loop pushes the
 // live values here; the PlayerBar and SeekBar bind to it directly.
 export global NowPlayingState {
