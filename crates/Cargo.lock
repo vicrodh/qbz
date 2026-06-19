@@ -5776,6 +5776,7 @@ dependencies = [
  "serde_json",
  "slint",
  "slint-build",
+ "swash",
  "tokio",
  "urlencoding",
  "uuid",

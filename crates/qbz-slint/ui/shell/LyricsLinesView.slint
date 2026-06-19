@@ -44,7 +44,7 @@
 
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
-import { LyricsState } from "../state.slint";
+import { LyricsState, LyricsSegment } from "../state.slint";
 
 // Q6 (SHIPPED): Tauri's four non-system lyric font families, embedded into
 // the binary at compile time (slint-build default EmbedAllResources for Rust
@@ -166,7 +166,9 @@ component LyricsLineRow inherits VerticalLayout {
         return 0.03;
     }
 
-    base := Text {
+    // INACTIVE / unsynced rows: a single wrapping Text, exactly as before.
+    // (Active rows render the per-visual-line karaoke split below instead.)
+    if !root.is-active: Text {
         text: root.display-text;
         wrap: word-wrap;
         opacity: root.line-opacity();
@@ -178,42 +180,71 @@ component LyricsLineRow inherits VerticalLayout {
             duration: 220ms;
             easing: ease-out;
         }
-        // Active base = the DIM (unsung) layer under the karaoke overlay
-        // (Tauri gradient parity: unsung stays dim, sung sweeps in accent).
-        color: root.is-active
-            ? Theme.text-secondary
-            : (root.is-past ? Theme.text-muted : Theme.text-secondary);
+        color: root.is-past ? Theme.text-muted : Theme.text-secondary;
         font-family: root.font-name;
-        font-size: root.is-active ? root.size-active : root.size-inactive;
-        font-weight: root.is-active ? Typography.bold : Typography.medium;
+        font-size: root.size-inactive;
+        font-weight: Typography.medium;
         // Friendly letter-spacing (Q3): slightly open, never cramped.
         letter-spacing: 0.2px;
+    }
 
-        // Karaoke fill overlay (active synced line only): bright copy of the
-        // SAME text, clipped to the sung fraction. Identical width/font so
-        // wrapping and glyph positions match the base exactly.
-        if root.is-active: Rectangle {
-            x: 0;
-            y: 0;
-            width: base.width * Math.clamp(LyricsState.line-progress, 0.0, 1.0);
-            height: base.height;
-            clip: true;
-            animate width {
-                duration: LyricsState.fill-anim-ms * 1ms;
-                easing: linear;
-            }
-            Text {
-                x: 0;
-                y: 0;
-                width: base.width;
-                height: base.height;
-                text: root.display-text;
-                wrap: word-wrap;
-                color: root.active-color;
+    // ACTIVE row: per-VISUAL-line karaoke highlight. The engine measured the
+    // active line's word-wrap (`lyrics_measure` / `lyrics_sync`) against this
+    // view's content-width + font + size and pushed one LyricsSegment per
+    // visual row, each carrying `start-weight` (cumulative width fraction
+    // before it) and `width-weight` (its share of the line). We render one
+    // dim-base + clipped-bright-overlay row PER segment with `wrap: no-wrap`
+    // (segments are already single visual lines, Tauri's `white-space:nowrap`),
+    // and re-map the single global `line-progress` to a per-segment local
+    // fraction so row 1 fills to 100% BEFORE row 2 starts — instead of the old
+    // single full-height clip rect that lit every wrapped row at once.
+    if root.is-active: VerticalLayout {
+        for seg[i] in LyricsState.active-segments: HorizontalLayout {
+            // Left-align each visual line; the segment's own width drives the
+            // clip, the HorizontalLayout just keeps it flush-left.
+            alignment: start;
+            segbase := Text {
+                text: seg.text;
+                wrap: no-wrap;
+                // Active line is fully bright (opacity 1.0, dimming ladder
+                // returns 1.0 for the active row) — keep parity with the old
+                // base which animated opacity; active stays solid.
+                color: Theme.text-secondary;
                 font-family: root.font-name;
                 font-size: root.size-active;
                 font-weight: Typography.bold;
                 letter-spacing: 0.2px;
+
+                // Bright (sung) overlay, clipped to this segment's LOCAL fill.
+                // local = clamp((line-progress - start-weight) / width-weight, 0, 1)
+                Rectangle {
+                    x: 0;
+                    y: 0;
+                    width: segbase.width * Math.clamp(
+                        seg.width-weight > 0
+                            ? (LyricsState.line-progress - seg.start-weight) / seg.width-weight
+                            : 0,
+                        0.0, 1.0);
+                    height: segbase.height;
+                    clip: true;
+                    animate width {
+                        duration: LyricsState.fill-anim-ms * 1ms;
+                        easing: linear;
+                    }
+                    Text {
+                        x: 0;
+                        y: 0;
+                        width: segbase.width;
+                        height: segbase.height;
+                        text: seg.text;
+                        wrap: no-wrap;
+                        color: root.active-color;
+                        font-family: root.font-name;
+                        font-size: root.size-active;
+                        font-weight: Typography.bold;
+                        letter-spacing: 0.2px;
+                    }
+                }
             }
         }
     }
@@ -238,6 +269,19 @@ export component LyricsLinesView inherits Rectangle {
     in property <bool> uppercase: false;
     in property <string> font-name: "";         // "" = window default font
     in property <color> active-color: Theme.accent;
+
+    // Publish the text content width (column width minus the side padding) to
+    // the engine so it can segment the active line's word-wrap at the right
+    // budget for the per-visual-line karaoke highlight. The ROOT is NOT a
+    // repeated row, so reading `self.width` here is SAFE (the header FOOTGUN
+    // forbids geometry reads only in `changed` handlers on the repeated rows).
+    // `init` seeds it (width is set once at construction; the view remounts on
+    // every doc commit), `changed width` keeps it live on resize.
+    function publish-content-width() {
+        LyricsState.content-width = Math.max(0px, self.width - 2 * root.side-padding);
+    }
+    init => { root.publish-content-width(); }
+    changed width => { root.publish-content-width(); }
 
     // ---- Auto-center scroll state ----
     // Last index the view centered on; -1 = nothing yet -> next center is

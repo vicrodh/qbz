@@ -71,6 +71,7 @@ mod local_library;
 mod local_playlist;
 mod local_library_settings;
 mod lyrics;
+mod lyrics_measure;
 mod lyrics_prefs;
 mod lyrics_sync;
 mod media_controls;

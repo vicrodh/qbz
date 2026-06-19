@@ -3309,6 +3309,22 @@ export struct LyricsLineItem {
     has-words: bool,
 }
 
+// One VISUAL line of the ACTIVE logical line, for the per-visual-line karaoke
+// highlight. The engine (`lyrics_measure` + `lyrics_sync`) measures the active
+// line's word-wrap against the current content width + font + size, and pushes
+// one segment per visual row so the highlight fills row 1 to 100% BEFORE row 2
+// starts (matching Tauri) instead of lighting every wrapped row at once.
+//
+// `start-weight` = cumulative width fraction (0..1) of all PRIOR segments;
+// `width-weight` = this segment's width / total line width. The row re-maps the
+// single global `line-progress` to a per-segment local fraction:
+//   local = clamp((line-progress - start-weight) / width-weight, 0, 1)
+export struct LyricsSegment {
+    text: string,
+    start-weight: float,
+    width-weight: float,
+}
+
 // Lyrics panel state. The Rust glue (`crate::lyrics`) pushes fetch results
 // here on the de-duped track-change edge; the sidebar binds directly. The
 // S4 sync engine drives `active-index` (placeholder -1 until then).
@@ -3340,6 +3356,15 @@ export global LyricsState {
     // backward seek) so the fill first-paints exactly at the reported
     // progress (Tauri parity, LyricsLines.svelte:114-138).
     in property <int> fill-anim-ms: 0;
+    // Per-visual-line segmentation of the ACTIVE line, for the karaoke
+    // highlight on wrapped lines. The engine recomputes it when the active
+    // index, content-width, font-index or size-index changes (low frequency)
+    // and pushes one entry per visual row. Empty until the first active line.
+    in property <[LyricsSegment]> active-segments: [];
+    // The lyrics view's current text content width (column width minus side
+    // padding). The view pushes it from its root `changed width`; the engine
+    // uses it as the wrap budget when segmenting the active line.
+    in property <length> content-width: 0px;
     // Fired by the sidebar's `init` (conditional mount, ADR-010): re-requests
     // lyrics for the current track (cache-served when already fetched).
     callback panel-opened();

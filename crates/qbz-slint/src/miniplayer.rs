@@ -464,6 +464,25 @@ pub fn mirror_lyrics_scalars(main: &AppWindow) {
     d.set_active_index(s.get_active_index());
     d.set_line_progress(s.get_line_progress());
     d.set_fill_anim_ms(s.get_fill_anim_ms());
+    refresh_mini_segments(&d);
+}
+
+/// Recompute the mini's per-visual-line karaoke segmentation against ITS OWN
+/// content-width (the mini surface has a different width + padding than the
+/// sidebar). The mini renders with FIXED render prefs — Inter / 15px / no
+/// uppercase (`MiniLyricsSurface.slint` binds none of the display prefs) — so
+/// it passes those rather than the persisted sidebar prefs. Cache-guarded.
+fn refresh_mini_segments(d: &LyricsState) {
+    crate::lyrics_sync::refresh_active_segments(
+        d,
+        d.get_active_index(),
+        crate::lyrics_sync::RenderPrefs {
+            font_index: 0, // System / Inter (mini default font-name "")
+            size_index: 1, // 15px (mini's fixed size-active)
+            uppercase: false,
+        },
+        crate::lyrics_sync::SegSurface::Mini,
+    );
 }
 
 fn force_full_mirror(main: &AppWindow, mini: &MiniPlayerWindow) {
@@ -533,6 +552,7 @@ fn mirror_lyrics_gated(main: &AppWindow, mini: &MiniPlayerWindow) {
     d.set_active_index(s.get_active_index());
     d.set_line_progress(s.get_line_progress());
     d.set_fill_anim_ms(s.get_fill_anim_ms());
+    refresh_mini_segments(&d);
 
     // Gate the lines-model copy on (status, line-count) so we don't thrash the
     // lyrics view (which would reset its scroll) every tick.

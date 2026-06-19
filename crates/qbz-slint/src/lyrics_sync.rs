@@ -47,12 +47,13 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use slint::{ComponentHandle, Timer, TimerMode};
+use slint::{ComponentHandle, Model, ModelRc, SharedString, Timer, TimerMode, VecModel};
 
 use qbz_app::shell::AppRuntime;
 
 use crate::adapter::SlintAdapter;
-use crate::{AppWindow, LyricsState, ShellState};
+use crate::lyrics_measure;
+use crate::{AppWindow, LyricsSegment, LyricsState, ShellState};
 
 type Runtime = Arc<AppRuntime<SlintAdapter>>;
 
@@ -96,6 +97,33 @@ thread_local! {
     static FAST: Cell<bool> = const { Cell::new(false) };
     static CTX: RefCell<Option<(Runtime, slint::Weak<AppWindow>)>> =
         const { RefCell::new(None) };
+    /// Last inputs the active-line segmentation was computed for, so the
+    /// (potentially font-shaping) recompute only runs on a real change —
+    /// active-line index, content-width budget, font family, size tier, or the
+    /// uppercase transform — never every 30Hz tick. `None` forces a recompute.
+    /// Separate cells per surface (the main window vs the miniplayer have
+    /// different content widths, hence different segmentations).
+    static SEG_KEY_MAIN: RefCell<Option<SegKey>> = const { RefCell::new(None) };
+    static SEG_KEY_MINI: RefCell<Option<SegKey>> = const { RefCell::new(None) };
+}
+
+/// Which surface's segmentation cache to consult.
+#[derive(Clone, Copy)]
+pub(crate) enum SegSurface {
+    Main,
+    Mini,
+}
+
+/// Cache key for the active-line segmentation (see `SEG_KEY`).
+#[derive(PartialEq, Clone)]
+struct SegKey {
+    index: i32,
+    /// Content width in px, quantized to whole px so sub-pixel jitter from the
+    /// layout doesn't thrash the recompute.
+    width_px: i32,
+    font_index: i32,
+    size_index: i32,
+    uppercase: bool,
 }
 
 /// Start the engine timer. UI-thread only (slint::Timer requirement);
@@ -178,7 +206,16 @@ fn compute_and_push(window: &AppWindow, runtime: &Runtime, require_playing: bool
     let (position_ms, playing) = resolve_position_ms(runtime);
     if require_playing && !playing {
         // Pause freezes the ladder + fill in place (Tauri parity: the rAF
-        // gate stops, getCurrentTime holds — review §8 "Pause").
+        // gate stops, getCurrentTime holds — review §8 "Pause"). Still refresh
+        // the segmentation from the last-pushed active index so a resize or a
+        // font/size pref change WHILE PAUSED re-flows the wrapped highlight
+        // (cache-guarded — a no-op when nothing relevant changed).
+        refresh_active_segments(
+            &lyrics,
+            lyrics.get_active_index(),
+            main_render_prefs(&lyrics),
+            SegSurface::Main,
+        );
         return false;
     }
 
@@ -217,6 +254,10 @@ fn compute_and_push(window: &AppWindow, runtime: &Runtime, require_playing: bool
         lyrics.set_line_progress(fraction);
     }
 
+    // Per-visual-line karaoke segmentation: recompute (cache-guarded) when the
+    // active line, content-width, font, size tier, or uppercase pref changes.
+    refresh_active_segments(&lyrics, index, main_render_prefs(&lyrics), SegSurface::Main);
+
     // REQ-1 fan-out: mirror the karaoke scalars to the miniplayer (30Hz; no-op
     // when the mini is closed) so the mini lyrics highlight stays smooth.
     crate::miniplayer::mirror_lyrics_scalars(window);
@@ -232,4 +273,127 @@ fn now_ms() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0)
+}
+
+/// Render prefs for the MAIN sidebar surface — driven by the persisted prefs
+/// on `LyricsState`, exactly as `LyricsSidebar.slint` binds them into
+/// `LyricsLinesView`.
+fn main_render_prefs(lyrics: &LyricsState) -> RenderPrefs {
+    RenderPrefs {
+        font_index: lyrics.get_font_index(),
+        size_index: lyrics.get_size_index(),
+        uppercase: lyrics.get_uppercase(),
+    }
+}
+
+/// Active-line font size in px (`size-active`), replicating the size-tier ->
+/// px mapping in `LyricsSidebar.slint` (0 S = 13 · 1 M = 15 · 2 L = 19 ·
+/// 3 XL = 24). Used as the ppem for the segmentation measure pass so segment
+/// widths match the drawn active line.
+fn size_active_px(size_index: i32) -> f32 {
+    match size_index {
+        0 => 13.0,
+        2 => 19.0,
+        3 => 24.0,
+        _ => 15.0,
+    }
+}
+
+/// The font + size tier + uppercase the active line is RENDERED with — the
+/// segmentation must measure against these so segment widths match the draw.
+/// The main sidebar drives them from the persisted prefs on `LyricsState`; the
+/// miniplayer renders with FIXED values (Inter / 15px / no uppercase — it
+/// binds none of the prefs, see `MiniLyricsSurface.slint`), so it passes those.
+#[derive(Clone, Copy)]
+pub(crate) struct RenderPrefs {
+    pub font_index: i32,
+    pub size_index: i32,
+    pub uppercase: bool,
+}
+
+/// Recompute (cache-guarded) the per-visual-line segmentation of the ACTIVE
+/// line and push it onto `lyrics.active-segments`. Cheap no-op unless the
+/// active index, content-width, or render prefs changed since the last push.
+/// When there is no active line, clears the model. `surface` selects the
+/// per-window cache cell (main window vs miniplayer).
+pub(crate) fn refresh_active_segments(
+    lyrics: &LyricsState,
+    index: i32,
+    prefs: RenderPrefs,
+    surface: SegSurface,
+) {
+    let content_width = lyrics.get_content_width();
+    let font_index = prefs.font_index;
+    let size_index = prefs.size_index;
+    let uppercase = prefs.uppercase;
+
+    let key = SegKey {
+        index,
+        // Quantize to whole px so layout sub-pixel jitter doesn't re-segment.
+        width_px: content_width.round() as i32,
+        font_index,
+        size_index,
+        uppercase,
+    };
+    let set_key = |k: Option<SegKey>| match surface {
+        SegSurface::Main => SEG_KEY_MAIN.with(|cell| *cell.borrow_mut() = k),
+        SegSurface::Mini => SEG_KEY_MINI.with(|cell| *cell.borrow_mut() = k),
+    };
+    let unchanged = match surface {
+        SegSurface::Main => SEG_KEY_MAIN.with(|cell| cell.borrow().as_ref() == Some(&key)),
+        SegSurface::Mini => SEG_KEY_MINI.with(|cell| cell.borrow().as_ref() == Some(&key)),
+    };
+    if unchanged {
+        return;
+    }
+
+    // No active line, no measurable width, or no doc -> clear the model.
+    if index < 0 || content_width <= 0.0 {
+        if lyrics.get_active_segments().row_count() > 0 {
+            lyrics.set_active_segments(ModelRc::new(VecModel::<LyricsSegment>::default()));
+        }
+        set_key(Some(key));
+        return;
+    }
+
+    // Pull the raw active-line text from the parsed doc (the UI model carries
+    // the same text, but the doc read is already the engine's source of truth).
+    let raw = crate::lyrics::with_current_doc(|doc| match doc {
+        Some(doc) if doc.synced => doc
+            .lines
+            .get(index as usize)
+            .map(|line| line.text.clone()),
+        _ => None,
+    });
+    let Some(raw) = raw else {
+        lyrics.set_active_segments(ModelRc::new(VecModel::<LyricsSegment>::default()));
+        set_key(Some(key));
+        return;
+    };
+
+    // Match the rendered transform: the active line is uppercased when the pref
+    // is on, so segment widths must be measured on the uppercased string.
+    let text = if uppercase { raw.to_uppercase() } else { raw };
+
+    let size_px = size_active_px(size_index);
+    let segments = lyrics_measure::wrap_segments(&text, font_index, size_px, content_width);
+
+    // Convert measured widths into cumulative start-weight + per-segment
+    // width-weight (Tauri's getSegmentProgress partition) so the row can
+    // re-map the single global `line-progress` to a per-segment local fill.
+    let total: f32 = segments.iter().map(|seg| seg.width_px).sum();
+    let mut cumulative = 0.0_f32;
+    let mut out: Vec<LyricsSegment> = Vec::with_capacity(segments.len());
+    for seg in &segments {
+        let width_weight = if total > 0.0 { seg.width_px / total } else { 0.0 };
+        out.push(LyricsSegment {
+            text: SharedString::from(seg.text.as_str()),
+            start_weight: cumulative,
+            width_weight,
+        });
+        cumulative += width_weight;
+    }
+
+    lyrics.set_active_segments(ModelRc::new(VecModel::from(out)));
+    set_key(Some(key));
 }

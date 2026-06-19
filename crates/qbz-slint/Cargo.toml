@@ -76,6 +76,11 @@ qbz-mixtape = { path = "../qbz-mixtape" }
 qbz-playlist-import = { path = "../qbz-playlist-import" }
 qbz-qobuz = { path = "../qbz-qobuz" }
 qbz-lyrics = { path = "../qbz-lyrics" }
+# Karaoke highlight per-visual-line measurement (lyrics_measure.rs): swash is
+# the SAME shaper femtovg uses to raster glyphs, so an advance pass at the same
+# font + ppem + wght axis + letter-spacing matches the rendered wrap. Already in
+# the workspace lock (pulled transitively via femtovg) — no new external dep.
+swash = "0.2"
 qbz-integrations = { path = "../qbz-integrations" }
 rusqlite = { version = "0.31", features = ["bundled"] }
 # DJ-mix sampler thread RNG (rand::rng()), confined to a sync scope — the
