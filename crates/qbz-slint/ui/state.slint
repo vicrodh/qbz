@@ -3208,14 +3208,28 @@ export global ImmersiveState {
     in-out property <bool> open: false;
     in property <image> bg-image;
     in property <color> glow-color: #6464ff59;
-    // Foreground mode for the conditional-mounted panel:
-    //   0 = Album Reactive, 1 = Static, 2 = Coverflow, 3 = Spectrum.
-    // SESSION default 0 (Album Reactive) so opening shows a real foreground;
-    // modes 1-3 are atmosphere-only placeholders until their own sessions.
-    // NOTE: this compact 0..3 enum is a Slint-scaffold contract; it deliberately
+    // View mode — Tauri's focus/split duality (ImmersivePlayer.svelte focus
+    // vs split layout, recon data-panels.md §"two layout contexts"):
+    //   0 = FOCUS — full-bleed single panel (the visualizer modes + Lyrics-focus).
+    //   1 = SPLIT — artwork + metadata on the LEFT, the active data panel on the
+    //       RIGHT. The leading header icon (was inert) toggles this 0<->1.
+    // Default 0 (focus) so opening lands on a real full-bleed foreground.
+    in-out property <int> view-mode: 0;
+    // FOCUS-mode foreground for the conditional-mounted panel (read only while
+    // view-mode == 0):
+    //   0 = Album Reactive, 1 = Static, 2 = Coverflow, 3 = Spectrum,
+    //   4 = Lyrics-focus (one giant centered current line).
+    // (5 = Queue-focus is reserved for a later checkpoint — NOT added yet.)
+    // SESSION default 0 (Album Reactive) so opening shows a real foreground.
+    // NOTE: this compact enum is a Slint-scaffold contract; it deliberately
     // does NOT match Tauri's focus-tab string order (coverflow first). Product
     // default + persistence ("remember last view") is a later (header) session.
     in-out property <int> mode: 0;
+    // SPLIT-mode active panel (read only while view-mode == 1):
+    //   0 = Lyrics, 1 = Track Info, 2 = Suggestions, 3 = Queue.
+    // Checkpoint A ships only Lyrics (0); the other panels land in their own
+    // checkpoints. Default 0.
+    in-out property <int> split-panel: 0;
     // Spectrum bar gradient, derived from the album art (contrast colors;
     // negative fallback for dark covers so the bars read against the black bg).
     // Defaults = the Svelte cyan -> purple until the art resolves.

@@ -1,0 +1,149 @@
+// Lyrics-focus foreground (Immersive view-mode 0, mode 4) — a faithful port of
+// the Tauri `src/lib/components/immersive/panels/LyricsFocusPanel.svelte`
+// (recon data-panels.md §3).
+//
+// One giant centered CURRENT line, cross-faded on every line change. Reads
+// LyricsState.lines[active-index].text directly; no karaoke fill here (whole-
+// line swap only, just like the Svelte source which omits activeProgress).
+//
+// Entry animation (data-panels.md §3 "Animations"): Tauri replays a
+// `fadeInUp` (translate-up + scale + opacity, with an animated blur). Per the
+// recon Slint note we SKIP the blur (no cheap animatable per-element blur) and
+// keep the translate-up + opacity "lite" variant as canonical. The replay is
+// driven WITHOUT remounting: a plain-int watch on LyricsState.active-index
+// (SAFE — never reads layout geometry, per the LyricsLinesView FOOTGUN) flips
+// an `entering` flag that a one-shot Timer clears, and `y`/`opacity` animate
+// between the two states.
+//
+// SLINT GOTCHAS honored: `parent` is NEVER read in a root binding (viewport
+// dims are passed as props, like StaticPanel); no `opacity:` on the component
+// ROOT (corrupts absolute positioning — the dim/fade lives on the inner text);
+// no `changed x/y/width/height` watchers.
+
+import { LyricsState } from "../state.slint";
+
+export component ImmersiveLyricsFocusPanel inherits Rectangle {
+    in property <length> viewport-width: 1280px;
+    in property <length> viewport-height: 720px;
+
+    width: root.viewport-width;
+    height: root.viewport-height;
+    background: transparent;
+
+    // Current line text (empty if no active line yet).
+    property <string> current-line:
+        (LyricsState.active-index >= 0 && LyricsState.active-index < LyricsState.lines.length)
+            ? LyricsState.lines[LyricsState.active-index].text
+            : "";
+    property <bool> has-current: root.current-line != "";
+    // Synced docs with no current line yet (before the first lyric) show the ♪.
+    property <bool> waiting:
+        LyricsState.synced && LyricsState.status == 2
+        && LyricsState.lines.length > 0 && !root.has-current;
+    // Truly empty: ready/no-lyrics with zero lines, or idle.
+    property <bool> no-lyrics:
+        LyricsState.status == 3
+        || (LyricsState.status == 2 && LyricsState.lines.length == 0);
+
+    // Responsive font size (data-panels.md §3: clamp(28px, 5vw, 56px)).
+    // Slint has no clamp()/vw — compute from viewport-width.
+    property <length> line-size:
+        Math.clamp(28px, root.viewport-width * 0.05, 56px);
+
+    // --- Entry-animation retrigger ------------------------------------------
+    // `entering` is briefly true right after each line change; `y`/`opacity`
+    // animate from the "entering" pose (down + transparent) to rest. A plain
+    // int watch on the global active-index drives it (no geometry watched).
+    property <int> watched-index: LyricsState.active-index;
+    property <bool> entering: false;
+    changed watched-index => {
+        // Snap to the start pose, then release on the next tick so the
+        // `animate` runs forward (toggling within one evaluation would not
+        // produce a transition).
+        root.entering = true;
+        enter-timer.running = false;
+        enter-timer.running = true;
+    }
+    enter-timer := Timer {
+        interval: 16ms;
+        running: false;
+        triggered => {
+            root.entering = false;
+            self.running = false;
+        }
+    }
+
+    // The line block. Centered as a group in the viewport; padding mirrors the
+    // Svelte 80px 60px 140px (top / sides / bottom-player-clearance).
+    VerticalLayout {
+        x: 0px;
+        y: 0px;
+        width: root.viewport-width;
+        height: root.viewport-height;
+        padding-left: 60px;
+        padding-right: 60px;
+        padding-top: 80px;
+        padding-bottom: 140px;
+
+        // The line wrapper is a plain Rectangle (NOT a layout) so the inner
+        // Text's animated `y` offset is FREE — inside a layout `y` would be
+        // layout-managed and the translate-up would not take. It
+        // `vertical-stretch`-fills the padded region (real, non-circular
+        // height), and the inner Text self-centers within it. This avoids the
+        // "Rectangle has 0 preferred height under alignment:center" collapse.
+        Rectangle {
+            horizontal-stretch: 1;
+            vertical-stretch: 1;
+
+            // Current line — fadeInUp-lite (translate-up + opacity; blur
+            // skipped per recon §3 Slint note). Centered in the wrapper.
+            if root.has-current: Text {
+                text: root.current-line;
+                color: #ffffff;
+                font-size: root.line-size;
+                font-weight: 700;
+                letter-spacing: 0.2px;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                wrap: word-wrap;
+                width: Math.min(parent.width, root.viewport-width * 0.9);
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2 + (root.entering ? 24px : 0px);
+                opacity: root.entering ? 0.0 : 1.0;
+                animate y {
+                    duration: 500ms;
+                    easing: cubic-bezier(0.22, 1, 0.36, 1);
+                }
+                animate opacity {
+                    duration: 500ms;
+                    easing: cubic-bezier(0.22, 1, 0.36, 1);
+                }
+            }
+
+            // Synced-but-before-first-line: the ♪ glyph (Svelte .waiting-text,
+            // 48px / opacity .3).
+            if !root.has-current && root.waiting: Text {
+                text: "♪";
+                color: #ffffff;
+                opacity: 0.3;
+                font-size: 48px;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                width: parent.width;
+                height: parent.height;
+            }
+
+            // No lyrics at all — localized empty state.
+            if !root.has-current && !root.waiting && root.no-lyrics: Text {
+                text: @tr("No lyrics");
+                color: #ffffff80;
+                font-size: 20px;
+                font-italic: true;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                width: parent.width;
+                height: parent.height;
+            }
+        }
+    }
+}

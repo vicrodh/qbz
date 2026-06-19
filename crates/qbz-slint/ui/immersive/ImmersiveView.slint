@@ -4,12 +4,15 @@
 
 import { Radius } from "../foundation/radius.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
-import { NowPlayingState, VisualizerState, ImmersiveState, SettingsState } from "../state.slint";
+import { NowPlayingState, VisualizerState, ImmersiveState, SettingsState, LyricsState } from "../state.slint";
 import { ImmersiveAtmosphere } from "ImmersiveAtmosphere.slint";
 import { AlbumReactivePanel } from "AlbumReactivePanel.slint";
 import { StaticPanel } from "StaticPanel.slint";
 import { CoverflowPanel } from "CoverflowPanel.slint";
 import { SpectrumPanel } from "SpectrumPanel.slint";
+import { ImmersiveLyricsFocusPanel } from "ImmersiveLyricsFocusPanel.slint";
+import { ImmersiveTrackInfo } from "ImmersiveTrackInfo.slint";
+import { LyricsLinesView } from "../shell/LyricsLinesView.slint";
 
 component GhostButton inherits Rectangle {
     in property <image> icon;
@@ -430,10 +433,12 @@ component ImmersivePlayerBar inherits Rectangle {
 component ModeTab inherits Rectangle {
     in property <image> icon;
     in property <string> label;
-    in property <int> idx;
+    // Whether this tab reads as selected. Callers compute it from the relevant
+    // state (focus: ImmersiveState.mode; split: ImmersiveState.split-panel) so
+    // one component serves both rails.
+    in property <bool> active: false;
     callback clicked();
 
-    property <bool> active: ImmersiveState.mode == root.idx;
     property <color> fg: root.active ? #ffffff : (ta.has-hover ? #fffffff2 : #ffffffb3);
 
     height: 28px;
@@ -473,7 +478,17 @@ component ModeTab inherits Rectangle {
 }
 
 component ModeBar inherits Rectangle {
+    // Focus-mode visualizer / lyrics tab picker -> ImmersiveState.mode.
     callback select(int);
+    // Split-mode panel picker -> ImmersiveState.split-panel.
+    callback select-split(int);
+    // Flip focus<->split (ImmersiveState.view-mode 0<->1).
+    callback toggle-view();
+    // Fired whenever the user enters a lyrics surface (focus Lyrics tab or
+    // split Lyrics panel) so the parent can kick LyricsState.panel-opened().
+    callback lyrics-entered();
+
+    property <bool> is-split: ImmersiveState.view-mode == 1;
 
     height: 36px;
     width: bar.preferred-width + 8px;
@@ -492,20 +507,33 @@ component ModeBar inherits Rectangle {
         spacing: 4px;
         alignment: center;
 
-        // Inert leading panel-icon (section marker, no callback).
-        Rectangle {
+        // Leading focus/split TOGGLE (was an inert panel-icon). Active = split.
+        // Reuses the ModeTab active/hover styling idiom (flat highlight, no
+        // pill — ADR-008): a 28px square that lights up when split is active.
+        toggle := Rectangle {
             width: 28px;
             height: 28px;
+            border-radius: 8px;
+            background: root.is-split
+                ? #ffffff33
+                : (toggle-ta.has-hover ? #ffffff1f : transparent);
+            animate background { duration: 150ms; }
             QbzIcon {
                 source: @image-url("../assets/icons/panel-left.svg");
                 width: 16px;
                 height: 16px;
                 x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
                 y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
-                tint: #ffffffd9;
+                tint: root.is-split
+                    ? #ffffff
+                    : (toggle-ta.has-hover ? #fffffff2 : #ffffffd9);
+            }
+            toggle-ta := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.toggle-view(); }
             }
         }
-        // Vertical divider between the marker and the first tab.
+        // Vertical divider between the toggle and the tabs.
         Rectangle {
             width: 9px;
             height: 28px;
@@ -518,29 +546,57 @@ component ModeBar inherits Rectangle {
             }
         }
 
-        ModeTab {
-            icon: @image-url("../assets/icons/audio-lines.svg");
-            label: @tr("Album Reactive");
-            idx: 0;
-            clicked => { root.select(0); }
+        // FOCUS rail: the 4 visualizer modes + Lyrics. Shown when not split.
+        if !root.is-split: HorizontalLayout {
+            spacing: 4px;
+            ModeTab {
+                icon: @image-url("../assets/icons/audio-lines.svg");
+                label: @tr("Album Reactive");
+                active: ImmersiveState.mode == 0;
+                clicked => { root.select(0); }
+            }
+            ModeTab {
+                icon: @image-url("../assets/icons/image.svg");
+                label: @tr("Static");
+                active: ImmersiveState.mode == 1;
+                clicked => { root.select(1); }
+            }
+            ModeTab {
+                icon: @image-url("../assets/icons/disc-3.svg");
+                label: @tr("Coverflow");
+                active: ImmersiveState.mode == 2;
+                clicked => { root.select(2); }
+            }
+            ModeTab {
+                icon: @image-url("../assets/icons/chart-no-axes-column.svg");
+                label: @tr("Spectrum");
+                active: ImmersiveState.mode == 3;
+                clicked => { root.select(3); }
+            }
+            ModeTab {
+                icon: @image-url("../assets/icons/mic-vocal.svg");
+                label: @tr("Lyrics");
+                active: ImmersiveState.mode == 4;
+                clicked => {
+                    root.select(4);
+                    root.lyrics-entered();
+                }
+            }
         }
-        ModeTab {
-            icon: @image-url("../assets/icons/image.svg");
-            label: @tr("Static");
-            idx: 1;
-            clicked => { root.select(1); }
-        }
-        ModeTab {
-            icon: @image-url("../assets/icons/disc-3.svg");
-            label: @tr("Coverflow");
-            idx: 2;
-            clicked => { root.select(2); }
-        }
-        ModeTab {
-            icon: @image-url("../assets/icons/chart-no-axes-column.svg");
-            label: @tr("Spectrum");
-            idx: 3;
-            clicked => { root.select(3); }
+
+        // SPLIT rail: only Lyrics for Checkpoint A (Track Info / Suggestions /
+        // Queue tabs land in their own checkpoints).
+        if root.is-split: HorizontalLayout {
+            spacing: 4px;
+            ModeTab {
+                icon: @image-url("../assets/icons/mic-vocal.svg");
+                label: @tr("Lyrics");
+                active: ImmersiveState.split-panel == 0;
+                clicked => {
+                    root.select-split(0);
+                    root.lyrics-entered();
+                }
+            }
         }
     }
 }
@@ -626,11 +682,11 @@ export component ImmersiveView inherits Rectangle {
         dim: 0.15;
     }
 
-    // (2) Foreground: switches on ImmersiveState.mode via conditional mount
-    // (ADR-010). Mode 0 = Album Reactive (the only real foreground this
-    // session). Modes 1/2/3 mount NO foreground — the atmosphere is the
-    // explicit placeholder until those sessions land.
-    if ImmersiveState.shader-mode == 0 && ImmersiveState.mode == 0: AlbumReactivePanel {
+    // (2) FOCUS foreground (view-mode == 0): switches on ImmersiveState.mode via
+    // conditional mount (ADR-010). Mode 0 = Album Reactive, 1 = Static,
+    // 2 = Coverflow, 3 = Spectrum, 4 = Lyrics-focus. Each gates additionally on
+    // `view-mode == 0` so the SPLIT branch (below) owns the screen instead.
+    if ImmersiveState.shader-mode == 0 && ImmersiveState.view-mode == 0 && ImmersiveState.mode == 0: AlbumReactivePanel {
         x: 0px;
         y: 0px;
         viewport-width: root.width;
@@ -638,7 +694,7 @@ export component ImmersiveView inherits Rectangle {
     }
     // (2b) Static mode foreground (mode == 1) — calm centered now-playing
     // card over the atmosphere. Same conditional-mount pattern (ADR-010).
-    if ImmersiveState.shader-mode == 0 && ImmersiveState.mode == 1: StaticPanel {
+    if ImmersiveState.shader-mode == 0 && ImmersiveState.view-mode == 0 && ImmersiveState.mode == 1: StaticPanel {
         x: 0px;
         y: 0px;
         viewport-width: root.width;
@@ -650,7 +706,7 @@ export component ImmersiveView inherits Rectangle {
     // click, no 3D / reflection / gradient / 500ms reflow). True-3D rotateY/
     // perspective remains deferred to a wgpu/Skia session. Same conditional-mount
     // + viewport-prop contract as the siblings (ADR-010).
-    if ImmersiveState.shader-mode == 0 && ImmersiveState.mode == 2: CoverflowPanel {
+    if ImmersiveState.shader-mode == 0 && ImmersiveState.view-mode == 0 && ImmersiveState.mode == 2: CoverflowPanel {
         x: 0px;
         y: 0px;
         viewport-width: root.width;
@@ -663,11 +719,108 @@ export component ImmersiveView inherits Rectangle {
     // ALREADY driven on open (the mode-0 AlbumReactivePanel reads
     // VisualizerState.energy from the same enabled tap). Same conditional-mount +
     // viewport-prop contract as the siblings (ADR-010).
-    if ImmersiveState.shader-mode == 0 && ImmersiveState.mode == 3: SpectrumPanel {
+    if ImmersiveState.shader-mode == 0 && ImmersiveState.view-mode == 0 && ImmersiveState.mode == 3: SpectrumPanel {
         x: 0px;
         y: 0px;
         viewport-width: root.width;
         viewport-height: root.height;
+    }
+    // (2e) Lyrics-focus foreground (mode == 4) — one giant centered current
+    // line, cross-faded on change. Same conditional-mount + viewport-prop
+    // contract as the siblings (ADR-010). `init` kicks the lyrics fetch (mirror
+    // of LyricsSidebar's init -> panel-opened()) so entering this tab loads the
+    // doc once; cache-served / no-op when already fetched.
+    if ImmersiveState.shader-mode == 0 && ImmersiveState.view-mode == 0 && ImmersiveState.mode == 4: ImmersiveLyricsFocusPanel {
+        init => { LyricsState.panel-opened(); }
+        x: 0px;
+        y: 0px;
+        viewport-width: root.width;
+        viewport-height: root.height;
+    }
+
+    // (2-split) SPLIT layout (view-mode == 1): artwork + metadata LEFT, the
+    // active data panel RIGHT (ADR-010 conditional mount). The atmosphere stays
+    // behind it (layer 1). Checkpoint A ships only the Lyrics split panel.
+    if ImmersiveState.shader-mode == 0 && ImmersiveState.view-mode == 1: HorizontalLayout {
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        height: root.height;
+        // Top offset for the header, bottom for the floating player — mirrors
+        // the focus panels' clearance so nothing tucks under the chrome.
+        padding-top: 56px;
+        padding-bottom: 132px;
+        padding-left: 48px;
+        padding-right: 48px;
+        spacing: 40px;
+
+        // LEFT: artwork + shared metadata block, centered in its half.
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            spacing: 24px;
+
+            // Artwork. Sized to fit its half without crowding the metadata:
+            // min(half-width, height-budget), capped, floored.
+            left-art := Rectangle {
+                property <length> art-size:
+                    Math.max(200px,
+                        Math.min(Math.min(root.width / 2 - 88px, root.height - 380px), 520px));
+                height: self.art-size;
+                horizontal-stretch: 1;
+                art-inner := Rectangle {
+                    width: parent.art-size;
+                    height: parent.art-size;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    border-radius: 8px;
+                    clip: true;
+                    drop-shadow-blur: 32px;
+                    drop-shadow-color: #00000080;
+                    drop-shadow-offset-y: 8px;
+                    Image {
+                        source: NowPlayingState.artwork-large.width > 0
+                            ? NowPlayingState.artwork-large
+                            : NowPlayingState.artwork;
+                        image-fit: cover;
+                        width: parent.width;
+                        height: parent.height;
+                    }
+                }
+            }
+            // Shared metadata block (reused from the focus panels).
+            ImmersiveTrackInfo {
+                equalizer-tint: #7c3aed;
+            }
+        }
+
+        // RIGHT: the active split panel. Checkpoint A = Lyrics only.
+        Rectangle {
+            horizontal-stretch: 1;
+            clip: true;
+            if ImmersiveState.split-panel == 0: LyricsLinesView {
+                init => { LyricsState.panel-opened(); }
+                width: 100%;
+                height: 100%;
+                // Immersive sizing — larger than the 280px sidebar. Computed
+                // from window width (no clamp()/vw in Slint).
+                side-padding: 8px;
+                line-gap: Math.clamp(16px, root.width * 0.014, 26px);
+                size-inactive: Math.clamp(24px, root.width * 0.018, 34px);
+                size-active: Math.clamp(28px, root.width * 0.022, 42px);
+                dimming-mode: LyricsState.dimming-mode;
+                auto-follow: true;
+                uppercase: LyricsState.uppercase;
+                show-attribution: false;
+                font-name: LyricsState.font-index == 1 ? "LINE Seed JP"
+                    : LyricsState.font-index == 2 ? "Montserrat"
+                    : LyricsState.font-index == 3 ? "Noto Sans"
+                    : LyricsState.font-index == 4 ? "Source Sans 3"
+                    : "";
+                // Solid white active line in immersive (data-panels.md §2).
+                active-color: #ffffff;
+            }
+        }
     }
 
     // (3) Auto-hide compact player.
@@ -691,6 +844,23 @@ export component ImmersiveView inherits Rectangle {
         animate opacity { duration: 300ms; }
         select(idx) => {
             ImmersiveState.mode = idx;
+            root.wake();
+        }
+        select-split(idx) => {
+            ImmersiveState.split-panel = idx;
+            root.wake();
+        }
+        toggle-view => {
+            ImmersiveState.view-mode = ImmersiveState.view-mode == 1 ? 0 : 1;
+            // Entering split lands on Lyrics (the only Checkpoint A panel) —
+            // kick the fetch so the doc loads immediately.
+            if (ImmersiveState.view-mode == 1 && ImmersiveState.split-panel == 0) {
+                LyricsState.panel-opened();
+            }
+            root.wake();
+        }
+        lyrics-entered => {
+            LyricsState.panel-opened();
             root.wake();
         }
     }
