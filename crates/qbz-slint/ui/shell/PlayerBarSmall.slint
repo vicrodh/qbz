@@ -457,99 +457,6 @@ export component PlayerBarSmall inherits Rectangle {
                         gap-left: 10px;
                     }
 
-                    // ViewMode — the layout-menu flyout (how you exit Small).
-                    VerticalLayout {
-                        alignment: center;
-                        Rectangle {
-                            width: 32px;
-                            height: 32px;
-                            IconButton {
-                                icon: @image-url("../assets/icons/layout-grid.svg");
-                                icon-size: 16px;
-                                btn-width: 32px;
-                                tooltip: @tr("Now Playing view");
-                                clicked => {
-                                    layout-menu.show();
-                                }
-                            }
-                            layout-menu := PopupWindow {
-                                // Anchored just above the button at its natural
-                                // content height. The inner ContextMenu is
-                                // CONTENT-sized (6 rows × 33px + a 7px divider +
-                                // the ContextMenu's 5px+5px vertical padding =
-                                // 215px), so the popup height MUST match that
-                                // content height — otherwise the rows top-align
-                                // and leave empty slack at the bottom, floating
-                                // the visible menu high above the bar. With
-                                // height == content, `y + height` is the true
-                                // visible bottom, homologated to the other
-                                // flyouts at -7 (bottom flush just above the 3px
-                                // seekbar; bar top edge sits at ≈ -6.5).
-                                x: 32px - 196px;
-                                y: -222px;
-                                width: 196px;
-                                height: 215px;
-                                close-policy: close-on-click;
-                                ContextMenu {
-                                    ContextMenuItem {
-                                        icon: @image-url("../assets/icons/panel-left.svg");
-                                        label: @tr("New");
-                                        selected: ShellState.npb-mode == 0;
-                                        clicked => {
-                                            root.media-action("npb-view", "", "new");
-                                        }
-                                    }
-                                    ContextMenuItem {
-                                        icon: @image-url("../assets/icons/panel-right-close.svg");
-                                        label: @tr("Classic");
-                                        selected: ShellState.npb-mode == 1;
-                                        clicked => {
-                                            root.media-action("npb-view", "", "classic");
-                                        }
-                                    }
-                                    ContextMenuItem {
-                                        icon: @image-url("../assets/icons/rows-3.svg");
-                                        label: @tr("Small");
-                                        selected: ShellState.npb-mode == 2;
-                                        clicked => {
-                                            root.media-action("npb-view", "", "small");
-                                        }
-                                    }
-                                    ContextMenuItem {
-                                        icon: @image-url("../assets/icons/layout-grid.svg");
-                                        label: @tr("Large");
-                                        enabled: false;
-                                        clicked => {
-                                            root.media-action("npb-view", "", "large");
-                                        }
-                                    }
-                                    Rectangle {
-                                        height: 7px;
-                                        Rectangle {
-                                            height: 1px;
-                                            y: 3px;
-                                            background: Theme.border-subtle;
-                                        }
-                                    }
-                                    ContextMenuItem {
-                                        icon: @image-url("../assets/icons/picture-in-picture-2.svg");
-                                        label: @tr("Miniplayer");
-                                        clicked => {
-                                            root.media-action("npb-view", "", "miniplayer");
-                                        }
-                                    }
-                                    ContextMenuItem {
-                                        icon: @image-url("../assets/icons/maximize-2.svg");
-                                        label: @tr("Immersive");
-                                        clicked => {
-                                            root.media-action("npb-view", "", "immersive");
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
                     // Connect — golden when a session is on; opens the connect
                     // flyout (self-contained upward PopupWindow, verbatim from
                     // PlayerBar so Small drives the same device picker path).
@@ -806,21 +713,6 @@ export component PlayerBarSmall inherits Rectangle {
                         }
                     }
 
-                    // Lyrics — toggles the lyrics panel (1:1 with PlayerBar:765).
-                    VerticalLayout {
-                        alignment: center;
-                        IconButton {
-                            icon: @image-url("../assets/icons/mic-vocal.svg");
-                            icon-size: 16px;
-                            btn-width: 32px;
-                            tooltip: @tr("Lyrics");
-                            active: ShellState.lyrics-open;
-                            clicked => {
-                                ShellState.lyrics-open = !ShellState.lyrics-open;
-                            }
-                        }
-                    }
-
                     // Settings — the SAME audio-menu flyout as New/Classic
                     // (Normalization + Gapless), a popup not a single toggle.
                     VerticalLayout {
@@ -930,6 +822,114 @@ export component PlayerBarSmall inherits Rectangle {
                                         }
                                     }
                                 }
+                            }
+                        }
+                    }
+
+                    // ViewMode — the layout-menu flyout (how you exit Small).
+                    VerticalLayout {
+                        alignment: center;
+                        Rectangle {
+                            width: 32px;
+                            height: 32px;
+                            IconButton {
+                                icon: @image-url("../assets/icons/layout-grid.svg");
+                                icon-size: 16px;
+                                btn-width: 32px;
+                                tooltip: @tr("Now Playing view");
+                                clicked => {
+                                    layout-menu.show();
+                                }
+                            }
+                            layout-menu := PopupWindow {
+                                // Anchored just above the button at its natural
+                                // content height. The inner ContextMenu is
+                                // CONTENT-sized (6 rows × 33px + a 7px divider +
+                                // the ContextMenu's 5px+5px vertical padding =
+                                // 215px), so the popup height MUST match that
+                                // content height — otherwise the rows top-align
+                                // and leave empty slack at the bottom, floating
+                                // the visible menu high above the bar. With
+                                // height == content, `y + height` is the true
+                                // visible bottom, homologated to the other
+                                // flyouts at -7 (bottom flush just above the 3px
+                                // seekbar; bar top edge sits at ≈ -6.5).
+                                x: 32px - 196px;
+                                y: -222px;
+                                width: 196px;
+                                height: 215px;
+                                close-policy: close-on-click;
+                                ContextMenu {
+                                    ContextMenuItem {
+                                        icon: @image-url("../assets/icons/panel-left.svg");
+                                        label: @tr("New");
+                                        selected: ShellState.npb-mode == 0;
+                                        clicked => {
+                                            root.media-action("npb-view", "", "new");
+                                        }
+                                    }
+                                    ContextMenuItem {
+                                        icon: @image-url("../assets/icons/panel-right-close.svg");
+                                        label: @tr("Classic");
+                                        selected: ShellState.npb-mode == 1;
+                                        clicked => {
+                                            root.media-action("npb-view", "", "classic");
+                                        }
+                                    }
+                                    ContextMenuItem {
+                                        icon: @image-url("../assets/icons/rows-3.svg");
+                                        label: @tr("Small");
+                                        selected: ShellState.npb-mode == 2;
+                                        clicked => {
+                                            root.media-action("npb-view", "", "small");
+                                        }
+                                    }
+                                    ContextMenuItem {
+                                        icon: @image-url("../assets/icons/layout-grid.svg");
+                                        label: @tr("Large");
+                                        enabled: false;
+                                        clicked => {
+                                            root.media-action("npb-view", "", "large");
+                                        }
+                                    }
+                                    Rectangle {
+                                        height: 7px;
+                                        Rectangle {
+                                            height: 1px;
+                                            y: 3px;
+                                            background: Theme.border-subtle;
+                                        }
+                                    }
+                                    ContextMenuItem {
+                                        icon: @image-url("../assets/icons/picture-in-picture-2.svg");
+                                        label: @tr("Miniplayer");
+                                        clicked => {
+                                            root.media-action("npb-view", "", "miniplayer");
+                                        }
+                                    }
+                                    ContextMenuItem {
+                                        icon: @image-url("../assets/icons/maximize-2.svg");
+                                        label: @tr("Immersive");
+                                        clicked => {
+                                            root.media-action("npb-view", "", "immersive");
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Lyrics — toggles the lyrics panel (1:1 with PlayerBar:765).
+                    VerticalLayout {
+                        alignment: center;
+                        IconButton {
+                            icon: @image-url("../assets/icons/mic-vocal.svg");
+                            icon-size: 16px;
+                            btn-width: 32px;
+                            tooltip: @tr("Lyrics");
+                            active: ShellState.lyrics-open;
+                            clicked => {
+                                ShellState.lyrics-open = !ShellState.lyrics-open;
                             }
                         }
                     }
