@@ -102,12 +102,12 @@ mod tests {
     }
 
     #[test]
-    fn implemented_list_is_all_standard_themes() {
-        // After P2 every non-accessibility theme is materialized; the 5 a11y
-        // themes (WcagLight/WcagDark/HighContrast/HighContrastLight/Colorblind)
-        // land in P3.
+    fn implemented_list_is_every_theme() {
+        // After P3 every theme is materialized — the standard rows AND the 5
+        // redesigned accessibility themes (WcagLight/WcagDark/HighContrast/
+        // HighContrastLight/Colorblind).
         let list = implemented_theme_list();
-        assert_eq!(list.len(), ALL.len() - 5);
+        assert_eq!(list.len(), ALL.len());
         let slugs: Vec<&str> = list.iter().map(|e| e.slug).collect();
         // P1 originals still present:
         assert!(slugs.contains(&"dark"));
@@ -122,10 +122,12 @@ mod tests {
         assert!(slugs.contains(&"langley"));
         assert!(slugs.contains(&"alucard"));
         assert!(slugs.contains(&"kurosaki"));
-        // accessibility themes NOT yet implemented:
-        assert!(!slugs.contains(&"wcag-dark"));
-        assert!(!slugs.contains(&"high-contrast"));
-        assert!(!slugs.contains(&"colorblind"));
+        // P3 accessibility themes now implemented:
+        assert!(slugs.contains(&"wcag-light"));
+        assert!(slugs.contains(&"wcag-dark"));
+        assert!(slugs.contains(&"high-contrast"));
+        assert!(slugs.contains(&"high-contrast-light"));
+        assert!(slugs.contains(&"colorblind"));
     }
 
     #[test]

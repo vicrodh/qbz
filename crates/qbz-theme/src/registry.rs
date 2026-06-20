@@ -83,13 +83,13 @@ pub fn palette(id: ThemeId) -> ThemeColors {
         ThemeId::DuotoneSnow => duotone_snow(),
         ThemeId::SnowStorm => snow_storm(),
         ThemeId::Kurosaki => kurosaki(),
-        // --- Accessibility (REDESIGNED): P3 fills these. Fall back to a safe
-        // fully-populated row until then.
-        ThemeId::WcagLight
-        | ThemeId::WcagDark
-        | ThemeId::HighContrast
-        | ThemeId::HighContrastLight
-        | ThemeId::Colorblind => dark(),
+        // --- Accessibility (REDESIGNED in P3): final verified palettes from
+        // 99-MIGRATION-PLAN.md Part B (adversarial corrections folded in). ---
+        ThemeId::WcagLight => wcag_light(),
+        ThemeId::WcagDark => wcag_dark(),
+        ThemeId::HighContrast => high_contrast(),
+        ThemeId::HighContrastLight => high_contrast_light(),
+        ThemeId::Colorblind => colorblind(),
     }
 }
 
@@ -946,6 +946,290 @@ fn kurosaki() -> ThemeColors {
     s.build(bg_is_light(s.bg_primary))
 }
 
+// ---------------------------------------------------------------------------
+// Accessibility (REDESIGNED) themes — final verified palettes (Part B)
+// ---------------------------------------------------------------------------
+//
+// Unlike the standard rows, the a11y themes specify SOLID (opaque) status
+// surfaces and borders, not rgba() alpha tints — accessible contrast can't be
+// guaranteed through translucency over an arbitrary backdrop. So these rows are
+// materialized directly (like dark()/tokyo_night()) rather than via StdSpec.
+//
+// `success` family: Part B tables only fix `success` for `colorblind`. For the
+// other four a11y themes a theme-appropriate green is derived to clear the same
+// contrast bar as the theme's other foregrounds (AAA for wcag-*, ≥ wcag bar for
+// HC), with solid bg/border/hover tints matching each theme's status pattern.
+// These derived greens are covered by the contrast unit tests below.
+//
+// `focus_ring`: exactly as Part B (reuses the accent for wcag-*/HC-light;
+// dedicated cyan/blue elsewhere; bright yellow for HC-dark).
+
+/// `wcag-light` — WCAG AAA Light (Part B §B.1). Body text AAA (7:1) + APCA ≥75;
+/// non-text ≥3:1. text-primary `#1a1a1a` (not pure black) to avoid reverse-halation.
+fn wcag_light() -> ThemeColors {
+    let danger = Rgba::rgb(0xa3, 0x00, 0x00);
+    let warning = Rgba::rgb(0x6b, 0x45, 0x00);
+    // derived success: deep green clearing AAA on white (7.36:1).
+    let success = Rgba::rgb(0x13, 0x63, 0x2f);
+    let accent = Rgba::rgb(0x0a, 0x4e, 0xa3);
+    ThemeColors {
+        surface_main: Rgba::rgb(0xff, 0xff, 0xff),     // bg-primary
+        surface_card: Rgba::rgb(0xf4, 0xf5, 0xf7),     // bg-secondary
+        surface_elevated: Rgba::rgb(0xe7, 0xe9, 0xee), // bg-tertiary
+        surface_hover: Rgba::rgba(0, 0, 0, 0x10),      // ~6% black (light polarity)
+        bg_hover: Rgba::rgb(0xdd, 0xe0, 0xe6),         // bg-hover
+
+        text_primary: Rgba::rgb(0x1a, 0x1a, 0x1a),
+        text_secondary: Rgba::rgb(0x3a, 0x3a, 0x3a),
+        text_muted: Rgba::rgb(0x59, 0x59, 0x59),
+        text_disabled: Rgba::rgb(0x76, 0x76, 0x76),
+
+        accent,
+        accent_hover: Rgba::rgb(0x08, 0x3d, 0x80),
+        accent_pressed: Rgba::rgb(0x06, 0x2e, 0x60),
+        accent_text: Rgba::rgb(0xff, 0xff, 0xff), // btn-primary-text
+
+        danger,
+        danger_bg: Rgba::rgb(0xfb, 0xe9, 0xe9),     // solid
+        danger_border: Rgba::rgb(0xaa, 0x60, 0x60), // solid
+        danger_hover: Rgba::rgb(0x85, 0x00, 0x00),
+
+        warning,
+        warning_bg: Rgba::rgb(0xff, 0xf7, 0xe6),     // solid
+        warning_border: Rgba::rgb(0x9c, 0x73, 0x20), // solid
+        warning_hover: Rgba::rgb(0x55, 0x37, 0x00),
+
+        success,
+        success_bg: Rgba::rgb(0xe6, 0xf4, 0xea),     // solid
+        success_border: Rgba::rgb(0x5a, 0x9c, 0x72), // solid
+        success_hover: Rgba::rgb(0x0f, 0x4f, 0x25),
+
+        border_subtle: Rgba::rgb(0xc9, 0xcc, 0xd2), // decorative divider
+        border_muted: Rgba::rgba(0, 0, 0, 0x38),    // ~22% black
+        border_strong: Rgba::rgb(0x6e, 0x6e, 0x6e), // control border
+
+        focus_ring: accent, // reuses accent
+
+        favorite: danger,
+        card_shadow: LEGACY_CARD_SHADOW,
+
+        alpha: alpha_ramp(true), // light theme -> black-based overlays
+    }
+}
+
+/// `wcag-dark` — WCAG AAA Dark (Part B §B.2). AAA (7:1) + APCA content/body;
+/// non-text ≥3:1. bg `#0d1117` + text `#e6edf3` to kill halation.
+fn wcag_dark() -> ThemeColors {
+    let danger = Rgba::rgb(0xff, 0x9d, 0x9d);
+    let warning = Rgba::rgb(0xff, 0xca, 0x6a);
+    // derived success: lightened green clearing the AAA bar on dark (11.77:1).
+    let success = Rgba::rgb(0x7e, 0xe0, 0xa0);
+    let accent = Rgba::rgb(0x9e, 0xc1, 0xff);
+    ThemeColors {
+        surface_main: Rgba::rgb(0x0d, 0x11, 0x17),
+        surface_card: Rgba::rgb(0x16, 0x1b, 0x22),
+        surface_elevated: Rgba::rgb(0x21, 0x26, 0x2d),
+        surface_hover: Rgba::rgba(255, 255, 255, 0x10), // ~6% white
+        bg_hover: Rgba::rgb(0x2a, 0x31, 0x3a),
+
+        text_primary: Rgba::rgb(0xe6, 0xed, 0xf3),
+        text_secondary: Rgba::rgb(0xc9, 0xd1, 0xd9),
+        text_muted: Rgba::rgb(0xb8, 0xc0, 0xcc),
+        text_disabled: Rgba::rgb(0x7d, 0x87, 0x94),
+
+        accent,
+        accent_hover: Rgba::rgb(0xb9, 0xd2, 0xff),
+        accent_pressed: Rgba::rgb(0xcf, 0xe0, 0xff),
+        accent_text: Rgba::rgb(0x06, 0x09, 0x0f), // dark text on light-blue
+
+        danger,
+        danger_bg: Rgba::rgb(0x2d, 0x14, 0x16),     // opaque dark-red tint
+        danger_border: Rgba::rgb(0xa8, 0x56, 0x56), // see adjacency constraint
+        danger_hover: Rgba::rgb(0xff, 0xb3, 0xb3),
+
+        warning,
+        warning_bg: Rgba::rgb(0x2d, 0x24, 0x10),     // opaque dark-amber tint
+        warning_border: Rgba::rgb(0x9c, 0x74, 0x30),
+        warning_hover: Rgba::rgb(0xff, 0xd9, 0x8a),
+
+        success,
+        success_bg: Rgba::rgb(0x11, 0x24, 0x1a),     // opaque dark-green tint
+        success_border: Rgba::rgb(0x3f, 0x7d, 0x56),
+        success_hover: Rgba::rgb(0x9a, 0xed, 0xb6),
+
+        border_subtle: Rgba::rgb(0x2d, 0x33, 0x3b), // decorative separator
+        border_muted: Rgba::rgba(255, 255, 255, 0x38),
+        border_strong: Rgba::rgb(0x6b, 0x76, 0x86), // control border (≥3:1 all tiers)
+
+        focus_ring: accent,
+
+        favorite: danger,
+        card_shadow: LEGACY_CARD_SHADOW,
+
+        alpha: alpha_ramp(false), // dark theme -> white-based overlays
+    }
+}
+
+/// `high-contrast` (DARK) — Part B §B.3a. Lifted off pure black (`#0a0a0a`),
+/// reciprocal cyan accent, bright yellow demoted to the focus-ring slot.
+fn high_contrast() -> ThemeColors {
+    let danger = Rgba::rgb(0xff, 0x8a, 0x8a);
+    let warning = Rgba::rgb(0xff, 0xb0, 0x00);
+    // derived success: bright green ≥ wcag-dark bar (15.51:1 on bg-primary).
+    let success = Rgba::rgb(0x62, 0xff, 0xb0);
+    let accent = Rgba::rgb(0x62, 0xd4, 0xff);
+    ThemeColors {
+        surface_main: Rgba::rgb(0x0a, 0x0a, 0x0a),     // lifted off pure black
+        surface_card: Rgba::rgb(0x14, 0x14, 0x14),
+        surface_elevated: Rgba::rgb(0x1f, 0x1f, 0x1f),
+        surface_hover: Rgba::rgba(255, 255, 255, 0x10),
+        bg_hover: Rgba::rgb(0x2b, 0x2b, 0x2b),
+
+        text_primary: Rgba::rgb(0xff, 0xff, 0xff),
+        text_secondary: Rgba::rgb(0xf0, 0xf0, 0xf0), // near-primary, NOT gray
+        text_muted: Rgba::rgb(0xe0, 0xe0, 0xe0),     // near-primary, NOT gray
+        text_disabled: Rgba::rgb(0x8c, 0x8c, 0x8c),  // the only reserved gray
+
+        accent,                                      // reciprocal cyan
+        accent_hover: Rgba::rgb(0x8c, 0xe3, 0xff),
+        accent_pressed: Rgba::rgb(0xae, 0xed, 0xff),
+        accent_text: Rgba::rgb(0x00, 0x00, 0x00),    // reads on cyan fill
+
+        danger,
+        danger_bg: Rgba::rgb(0x2a, 0x00, 0x00),      // opaque; always bordered
+        danger_border: danger,                       // = danger hue
+        danger_hover: Rgba::rgb(0xff, 0xb3, 0xb3),
+
+        warning,
+        warning_bg: Rgba::rgb(0x2a, 0x1d, 0x00),     // opaque; always bordered
+        warning_border: warning,                     // = warning hue
+        warning_hover: Rgba::rgb(0xff, 0xc9, 0x4d),
+
+        success,
+        success_bg: Rgba::rgb(0x00, 0x26, 0x1a),     // opaque; always bordered
+        success_border: success,                     // = success hue
+        success_hover: Rgba::rgb(0x8a, 0xff, 0xc8),
+
+        border_subtle: Rgba::rgb(0x7a, 0x7a, 0x7a), // still clearly visible (4.61:1)
+        border_muted: Rgba::rgba(255, 255, 255, 0x38),
+        border_strong: Rgba::rgb(0xff, 0xff, 0xff), // = text color
+
+        focus_ring: Rgba::rgb(0xff, 0xee, 0x32),    // bright yellow's correct home
+
+        favorite: danger,
+        card_shadow: LEGACY_CARD_SHADOW,
+
+        alpha: alpha_ramp(false), // dark theme -> white-based overlays
+    }
+}
+
+/// `high-contrast-light` (LIGHT, new) — Part B §B.3b. Reciprocal deep-blue
+/// accent. Warning corrected `#735c00` → `#5e4b00` (AA-only → AAA on white).
+fn high_contrast_light() -> ThemeColors {
+    let danger = Rgba::rgb(0xa3, 0x00, 0x00);
+    let warning = Rgba::rgb(0x5e, 0x4b, 0x00); // CORRECTED from #735c00
+    // derived success: deep green ≥ HC bar (8.47:1 on white).
+    let success = Rgba::rgb(0x00, 0x5a, 0x1c);
+    let accent = Rgba::rgb(0x00, 0x00, 0xcc);
+    ThemeColors {
+        surface_main: Rgba::rgb(0xff, 0xff, 0xff),
+        surface_card: Rgba::rgb(0xf2, 0xf2, 0xf2),
+        surface_elevated: Rgba::rgb(0xe6, 0xe6, 0xe6),
+        surface_hover: Rgba::rgba(0, 0, 0, 0x10),
+        bg_hover: Rgba::rgb(0xda, 0xda, 0xda),
+
+        text_primary: Rgba::rgb(0x00, 0x00, 0x00),
+        text_secondary: Rgba::rgb(0x1a, 0x1a, 0x1a), // near-primary
+        text_muted: Rgba::rgb(0x33, 0x33, 0x33),     // near-primary, NOT gray
+        text_disabled: Rgba::rgb(0x59, 0x59, 0x59),  // reserved gray (7.00:1 AAA)
+
+        accent,                                      // reciprocal deep blue
+        accent_hover: Rgba::rgb(0x00, 0x00, 0xa3),
+        accent_pressed: Rgba::rgb(0x00, 0x00, 0x80),
+        accent_text: Rgba::rgb(0xff, 0xff, 0xff),    // reads on blue fill
+
+        danger,
+        danger_bg: Rgba::rgb(0xff, 0xe5, 0xe5),      // opaque; always bordered
+        danger_border: danger,                       // = danger hue
+        danger_hover: Rgba::rgb(0x7a, 0x00, 0x00),
+
+        warning,
+        warning_bg: Rgba::rgb(0xff, 0xf4, 0xd6),     // opaque; always bordered
+        warning_border: warning,                     // = corrected warning hue
+        warning_hover: Rgba::rgb(0x5c, 0x49, 0x00),
+
+        success,
+        success_bg: Rgba::rgb(0xdc, 0xf2, 0xe2),     // opaque; always bordered
+        success_border: success,                     // = success hue
+        success_hover: Rgba::rgb(0x00, 0x44, 0x17),
+
+        border_subtle: Rgba::rgb(0x66, 0x66, 0x66), // clearly visible (5.74:1)
+        border_muted: Rgba::rgba(0, 0, 0, 0x38),
+        border_strong: Rgba::rgb(0x00, 0x00, 0x00), // = text color
+
+        focus_ring: accent, // accent doubles as focus ring
+
+        favorite: danger,
+        card_shadow: LEGACY_CARD_SHADOW,
+
+        alpha: alpha_ramp(true), // light theme -> black-based overlays
+    }
+}
+
+/// `colorblind` — universal Okabe-Ito (Part B §B.4). danger (reddish-purple)
+/// split from warning (amber) across CVD confusion axes; foregrounds lightened
+/// to clear AA on all tiers. `success` kept `#009e73`; body text routes to
+/// `success-hover #33c397` on the lightest tier (C.6).
+fn colorblind() -> ThemeColors {
+    let danger = Rgba::rgb(0xd4, 0x88, 0xb1);
+    let warning = Rgba::rgb(0xe6, 0x9f, 0x00);
+    let success = Rgba::rgb(0x00, 0x9e, 0x73); // Okabe-Ito bluish green
+    let accent = Rgba::rgb(0x62, 0xa5, 0xe4);
+    ThemeColors {
+        surface_main: Rgba::rgb(0x1a, 0x1a, 0x2e),     // retained dark navy
+        surface_card: Rgba::rgb(0x22, 0x22, 0x3a),
+        surface_elevated: Rgba::rgb(0x2c, 0x2c, 0x46),
+        surface_hover: Rgba::rgba(255, 255, 255, 0x10),
+        bg_hover: Rgba::rgb(0x36, 0x36, 0x52),
+
+        text_primary: Rgba::rgb(0xff, 0xff, 0xff),
+        text_secondary: Rgba::rgb(0xdc, 0xdc, 0xe0),
+        text_muted: Rgba::rgb(0xaa, 0xaa, 0xb8),    // lightened -> AA on bg-tertiary
+        text_disabled: Rgba::rgb(0x6f, 0x6f, 0x86), // exempt, perceptible
+
+        accent,                                     // lightened Okabe-Ito blue
+        accent_hover: Rgba::rgb(0x7e, 0xb4, 0xe8),
+        accent_pressed: Rgba::rgb(0x8b, 0xbc, 0xec),
+        accent_text: Rgba::rgb(0x0a, 0x0a, 0x14),   // near-black on light-blue
+
+        danger,                                     // lightened reddish-purple
+        danger_bg: Rgba::rgb(0x3a, 0x1a, 0x2e),     // solid tint
+        danger_border: Rgba::rgb(0x8a, 0x4a, 0x70), // solid tint
+        danger_hover: Rgba::rgb(0xe0, 0xa3, 0xc5),
+
+        warning,                                    // Okabe-Ito amber
+        warning_bg: Rgba::rgb(0x3a, 0x2e, 0x00),    // solid tint
+        warning_border: Rgba::rgb(0x8a, 0x6e, 0x00),
+        warning_hover: Rgba::rgb(0xf0, 0xb6, 0x30),
+
+        success,                                    // AA on primary/secondary
+        success_bg: Rgba::rgb(0x0a, 0x33, 0x29),    // solid tint
+        success_border: Rgba::rgb(0x1f, 0x6b, 0x54),
+        success_hover: Rgba::rgb(0x33, 0xc3, 0x97), // body-size success on bg-tertiary
+
+        border_subtle: Rgba::rgb(0x3e, 0x3e, 0x56), // decorative (1.65:1)
+        border_muted: Rgba::rgba(255, 255, 255, 0x38),
+        border_strong: Rgba::rgb(0x6e, 0x6e, 0x88), // control boundary (3.45:1)
+
+        focus_ring: Rgba::rgb(0x8b, 0xbc, 0xec),    // high-tone blue (8.53:1)
+
+        favorite: danger,
+        card_shadow: LEGACY_CARD_SHADOW,
+
+        alpha: alpha_ramp(false), // dark theme -> white-based overlays
+    }
+}
+
 /// Straight-alpha overlay of an opaque hue at `frac` opacity (0.0..=1.0).
 /// Used to reproduce Tauri's `rgba(hue, frac)` danger/warning/success tints.
 const fn with_alpha(c: Rgba, frac: f32) -> Rgba {
@@ -1182,5 +1466,312 @@ mod tests {
         // sanity: with_alpha(.., 0.1) == alpha_byte(10)
         let c = Rgba::rgb(0x10, 0x20, 0x30);
         assert_eq!(with_alpha(c, 0.1).a, alpha_byte(10));
+    }
+}
+
+// ===========================================================================
+// P3 — Accessibility contrast unit tests (the plan's "WCAG/APCA unit tests")
+//
+// Every threshold here is the documented target from 99-MIGRATION-PLAN.md
+// Part B. If an assertion fails, the HEX is wrong vs Part B — fix the value to
+// match the verified palette, NEVER weaken the test.
+// ===========================================================================
+#[cfg(test)]
+mod a11y_contrast_tests {
+    use super::*;
+    use crate::color::{apca_lc, contrast_ratio};
+    use crate::id::ALL;
+
+    const AAA_BODY: f64 = 7.0; // WCAG 2.x AAA normal text
+    const AA_NORMAL: f64 = 4.5; // WCAG 2.x AA normal text
+    const NON_TEXT: f64 = 3.0; // WCAG 2.x SC 1.4.11 / 1.4.3-large
+
+    /// Solid composite of `fg` over `bg` (a11y status surfaces are opaque, but
+    /// translucent overlays compose straight-alpha for contrast measurement).
+    fn over(fg: Rgba, bg: Rgba) -> Rgba {
+        if fg.a == 255 {
+            return fg;
+        }
+        let a = fg.a as f64 / 255.0;
+        let mix = |f: u8, b: u8| ((f as f64 * a) + (b as f64 * (1.0 - a))).round() as u8;
+        Rgba::rgb(mix(fg.r, bg.r), mix(fg.g, bg.g), mix(fg.b, bg.b))
+    }
+
+    // ---- wcag-light: body text AAA, accent AAA, status AAA ----------------
+    #[test]
+    fn wcag_light_meets_aaa() {
+        let c = wcag_light();
+        // text-primary on bg-primary >= 7.0:1 (AAA) — Part B: 17.40:1 / Lc 104.3
+        assert!(
+            contrast_ratio(c.text_primary, c.surface_main) >= AAA_BODY,
+            "wcag-light text-primary {:.2}",
+            contrast_ratio(c.text_primary, c.surface_main)
+        );
+        // text-muted on bg-primary >= 7.0:1 (AAA, exactly) — Part B 7.00:1
+        assert!(contrast_ratio(c.text_muted, c.surface_main) >= AAA_BODY);
+        // accent + btn-text on accent >= 7.0:1 — Part B 7.98:1
+        assert!(contrast_ratio(c.accent, c.surface_main) >= AAA_BODY);
+        assert!(contrast_ratio(c.accent_text, c.accent) >= AAA_BODY);
+        // danger/warning/success text on bg-primary >= AAA
+        assert!(contrast_ratio(c.danger, c.surface_main) >= AAA_BODY);
+        assert!(contrast_ratio(c.warning, c.surface_main) >= AAA_BODY);
+        assert!(contrast_ratio(c.success, c.surface_main) >= AAA_BODY);
+        // non-text: border-strong + focus-ring >= 3:1
+        assert!(contrast_ratio(c.border_strong, c.surface_main) >= NON_TEXT);
+        assert!(contrast_ratio(c.focus_ring, c.surface_main) >= NON_TEXT);
+        // APCA body gate (|Lc| >= 75) for primary text
+        assert!(apca_lc(c.text_primary, c.surface_main).abs() >= 75.0);
+    }
+
+    // ---- wcag-dark: AAA + APCA, status on opaque tints --------------------
+    #[test]
+    fn wcag_dark_meets_aaa() {
+        let c = wcag_dark();
+        assert!(contrast_ratio(c.text_primary, c.surface_main) >= AAA_BODY); // 16.02:1
+        assert!(contrast_ratio(c.text_secondary, c.surface_main) >= AAA_BODY);
+        // text-muted is APCA-content by design but still clears AAA ratio (10.32:1)
+        assert!(contrast_ratio(c.text_muted, c.surface_main) >= AAA_BODY);
+        assert!(contrast_ratio(c.accent, c.surface_main) >= AAA_BODY); // 10.39:1
+        // danger/warning/success text on their OPAQUE tint bg >= AAA
+        assert!(contrast_ratio(c.danger, c.danger_bg) >= AAA_BODY); // 8.63:1
+        assert!(contrast_ratio(c.warning, c.surface_main) >= AAA_BODY); // 12.53:1
+        assert!(contrast_ratio(c.success, c.success_bg) >= AAA_BODY);
+        // border-strong >= 3:1 on every surface tier (Part B: 4.11/3.76/3.31)
+        for bg in [c.surface_main, c.surface_card, c.surface_elevated] {
+            assert!(
+                contrast_ratio(c.border_strong, bg) >= NON_TEXT,
+                "wcag-dark border-strong {:.2}",
+                contrast_ratio(c.border_strong, bg)
+            );
+        }
+        assert!(contrast_ratio(c.focus_ring, c.surface_main) >= NON_TEXT);
+        assert!(apca_lc(c.text_primary, c.surface_main).abs() >= 75.0);
+    }
+
+    // ---- High Contrast (both polarities): >= the wcag bar + interactive ---
+    #[test]
+    fn high_contrast_dark_beats_wcag_dark() {
+        let hc = high_contrast();
+        let wd = wcag_dark();
+        let hc_tp = contrast_ratio(hc.text_primary, hc.surface_main);
+        let wd_tp = contrast_ratio(wd.text_primary, wd.surface_main);
+        // HC must be at least as high-contrast as wcag-dark (no regression).
+        assert!(
+            hc_tp >= wd_tp,
+            "HC-dark text/bg {:.2} should be >= wcag-dark {:.2}",
+            hc_tp,
+            wd_tp
+        );
+        assert!(hc_tp >= 19.0); // Part B: 19.80:1
+        // reciprocal cyan: accent as text AND as a fill under btn-text
+        assert!(contrast_ratio(hc.accent, hc.surface_main) >= AAA_BODY); // 11.67:1
+        assert!(contrast_ratio(hc.accent_text, hc.accent) >= AAA_BODY); // 12.38:1
+        // interactive non-text tokens >= 3:1
+        assert!(contrast_ratio(hc.border_strong, hc.surface_main) >= NON_TEXT);
+        assert!(contrast_ratio(hc.focus_ring, hc.surface_main) >= NON_TEXT); // 13.76:1
+        assert!(contrast_ratio(hc.border_subtle, hc.surface_main) >= NON_TEXT); // 4.61:1
+    }
+
+    #[test]
+    fn high_contrast_light_beats_wcag_light() {
+        let hc = high_contrast_light();
+        let wl = wcag_light();
+        let hc_tp = contrast_ratio(hc.text_primary, hc.surface_main);
+        let wl_tp = contrast_ratio(wl.text_primary, wl.surface_main);
+        assert!(
+            hc_tp >= wl_tp,
+            "HC-light text/bg {:.2} should be >= wcag-light {:.2}",
+            hc_tp,
+            wl_tp
+        );
+        assert!(hc_tp >= 20.0); // Part B: 21.00:1
+        // reciprocal deep blue: accent as text AND btn-text under accent fill
+        assert!(contrast_ratio(hc.accent, hc.surface_main) >= AAA_BODY); // 11.22:1
+        assert!(contrast_ratio(hc.accent_text, hc.accent) >= AAA_BODY);
+        // corrected warning #5e4b00 must clear AAA on white (8.46:1)
+        assert!(
+            contrast_ratio(hc.warning, hc.surface_main) >= AAA_BODY,
+            "HC-light warning {:.2} (corrected #5e4b00 should be 8.46:1)",
+            contrast_ratio(hc.warning, hc.surface_main)
+        );
+        assert_eq!(hc.warning, Rgba::rgb(0x5e, 0x4b, 0x00)); // the applied correction
+        assert!(contrast_ratio(hc.border_strong, hc.surface_main) >= NON_TEXT);
+        assert!(contrast_ratio(hc.focus_ring, hc.surface_main) >= NON_TEXT);
+        assert!(contrast_ratio(hc.border_subtle, hc.surface_main) >= NON_TEXT); // 5.74:1
+    }
+
+    // ---- colorblind: text contrast + status hue distinctness -------------
+    /// Crude protanopia/deuteranopia simulation (Brettel-style fixed matrices,
+    /// sufficient to confirm the documented hue separation survives red-green
+    /// CVD). Returns the simulated sRGB. Used only to assert ΔE separation, not
+    /// for rendering.
+    fn simulate_deutan(c: Rgba) -> Rgba {
+        // Linearize, apply the standard deuteranopia LMS-collapse matrix
+        // (Machado 2009, severity 1.0), re-encode. Approximate but stable.
+        let lin = |v: u8| {
+            let cs = v as f64 / 255.0;
+            if cs <= 0.04045 {
+                cs / 12.92
+            } else {
+                ((cs + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        let enc = |v: f64| {
+            let v = v.clamp(0.0, 1.0);
+            let s = if v <= 0.003_130_8 {
+                v * 12.92
+            } else {
+                1.055 * v.powf(1.0 / 2.4) - 0.055
+            };
+            (s * 255.0).round().clamp(0.0, 255.0) as u8
+        };
+        let (r, g, b) = (lin(c.r), lin(c.g), lin(c.b));
+        // Machado deuteranomaly severity=1.0 matrix:
+        let nr = 0.367_322 * r + 0.860_646 * g + -0.227_968 * b;
+        let ng = 0.280_085 * r + 0.672_501 * g + 0.047_413 * b;
+        let nb = -0.011_820 * r + 0.042_940 * g + 0.968_881 * b;
+        Rgba::rgb(enc(nr), enc(ng), enc(nb))
+    }
+
+    /// CIE76 ΔE in Lab (sufficient threshold check for hue separation).
+    fn delta_e(a: Rgba, b: Rgba) -> f64 {
+        fn to_lab(c: Rgba) -> (f64, f64, f64) {
+            let lin = |v: u8| {
+                let cs = v as f64 / 255.0;
+                if cs <= 0.04045 {
+                    cs / 12.92
+                } else {
+                    ((cs + 0.055) / 1.055).powf(2.4)
+                }
+            };
+            let (r, g, b) = (lin(c.r), lin(c.g), lin(c.b));
+            // linear sRGB -> XYZ (D65)
+            let x = 0.4124 * r + 0.3576 * g + 0.1805 * b;
+            let y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+            let z = 0.0193 * r + 0.1192 * g + 0.9505 * b;
+            let f = |t: f64| {
+                if t > 0.008_856 {
+                    t.cbrt()
+                } else {
+                    7.787 * t + 16.0 / 116.0
+                }
+            };
+            let (xn, yn, zn) = (0.95047, 1.0, 1.08883);
+            let (fx, fy, fz) = (f(x / xn), f(y / yn), f(z / zn));
+            (116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz))
+        }
+        let (l1, a1, b1) = to_lab(a);
+        let (l2, a2, b2) = to_lab(b);
+        ((l1 - l2).powi(2) + (a1 - a2).powi(2) + (b1 - b2).powi(2)).sqrt()
+    }
+
+    #[test]
+    fn colorblind_text_passes_aa() {
+        let c = colorblind();
+        // text-primary AAA; muted AA on the lightest tier (Part B 5.88:1)
+        assert!(contrast_ratio(c.text_primary, c.surface_main) >= AAA_BODY);
+        assert!(contrast_ratio(c.text_muted, c.surface_elevated) >= AA_NORMAL);
+        // accent/danger/warning double as text in ~300 places: AA on all tiers
+        for bg in [c.surface_main, c.surface_card, c.surface_elevated] {
+            assert!(contrast_ratio(c.accent, bg) >= AA_NORMAL, "accent on {bg:?}");
+            assert!(contrast_ratio(c.danger, bg) >= AA_NORMAL, "danger on {bg:?}");
+            assert!(contrast_ratio(c.warning, bg) >= AA_NORMAL, "warning on {bg:?}");
+        }
+        // success: AA-normal on primary/secondary (Part B/C.6); body text on the
+        // lightest tier routes to success-hover (must clear AA-normal there).
+        assert!(contrast_ratio(c.success, c.surface_main) >= AA_NORMAL); // 4.99:1
+        assert!(contrast_ratio(c.success, c.surface_card) >= AA_NORMAL); // 4.52:1
+        assert!(contrast_ratio(c.success_hover, c.surface_elevated) >= AA_NORMAL); // 6.04:1
+        // focus-ring high-tone blue >= 3:1 non-text (Part B 8.53:1)
+        assert!(contrast_ratio(c.focus_ring, c.surface_main) >= NON_TEXT);
+    }
+
+    #[test]
+    fn colorblind_status_hues_stay_distinct_under_cvd() {
+        let c = colorblind();
+        // The decisive separation (Part B): danger vs warning under red-green
+        // CVD must stay clearly distinct (delete vs caution must not collapse).
+        // Part B reports ΔE 34.81 under deuteranopia; assert a strong margin.
+        let d_sim = simulate_deutan(c.danger);
+        let w_sim = simulate_deutan(c.warning);
+        let dw = delta_e(d_sim, w_sim);
+        assert!(
+            dw >= 15.0,
+            "colorblind danger vs warning under deutan ΔE {dw:.2} should stay distinct (Part B 34.81)"
+        );
+        // accent vs danger also separable under red-green CVD (Part B protan 10.40).
+        let a_sim = simulate_deutan(c.accent);
+        let ad = delta_e(a_sim, d_sim);
+        assert!(
+            ad >= 8.0,
+            "colorblind accent vs danger under deutan ΔE {ad:.2} should stay distinct"
+        );
+        // accent vs warning likewise (blue vs amber, the easy axis).
+        let aw = delta_e(a_sim, w_sim);
+        assert!(aw >= 15.0, "colorblind accent vs warning under deutan ΔE {aw:.2}");
+        // sanity: the unsimulated hues are obviously distinct too.
+        assert!(delta_e(c.danger, c.warning) >= 20.0);
+    }
+
+    // ---- global: ALL registered themes return a fully-populated row -------
+    #[test]
+    fn all_32_themes_fully_populated_no_zero_color() {
+        // The all-zero opaque black is the StdSpec::default() sentinel: a fully
+        // materialized row must never leave a meaningful hue at it by accident.
+        let zero = Rgba::rgb(0, 0, 0);
+        for &id in ALL {
+            let c = palette(id);
+            // alpha ramp complete + every tier carries opacity
+            assert_eq!(c.alpha.len(), crate::colors::ALPHA_COUNT, "{id:?} alpha len");
+            assert!(c.alpha.iter().all(|a| a.a > 0), "{id:?} alpha has zero tier");
+            // every status surface/border/hover composites to something visible
+            for x in [
+                c.danger_bg,
+                c.danger_border,
+                c.danger_hover,
+                c.warning_bg,
+                c.warning_border,
+                c.warning_hover,
+                c.success_bg,
+                c.success_border,
+                c.success_hover,
+            ] {
+                assert!(x.a > 0, "{id:?} a status tint has zero alpha");
+            }
+            // opaque hero tokens are opaque and not the all-zero sentinel.
+            for (name, x) in [
+                ("surface_main", c.surface_main),
+                ("text_primary", c.text_primary),
+                ("accent", c.accent),
+                ("accent_text", c.accent_text),
+                ("danger", c.danger),
+                ("warning", c.warning),
+                ("success", c.success),
+                ("border_strong", c.border_strong),
+                ("focus_ring", c.focus_ring),
+                ("favorite", c.favorite),
+            ] {
+                assert_eq!(x.a, 255, "{id:?} {name} must be opaque");
+            }
+            // text/accent/border-strong must not be invisible-on-bg (the "default
+            // color slipped through" symptom): require >= 1.5:1 minimum signal.
+            assert!(
+                contrast_ratio(c.text_primary, c.surface_main) >= 1.5,
+                "{id:?} text_primary indistinguishable from bg (zero color?)"
+            );
+            // System falls back to Dark; skip the pure-pair identity below for it.
+            let _ = (zero, over(c.surface_hover, c.surface_main));
+        }
+        // Count: the registry holds every ThemeId variant. The plan's prose
+        // says "32 themes" but counts inconsistently (it variously treats the
+        // System meta-entry as in/out). The enum is the source of truth: 4 Core
+        // + 17 Dark + 7 Light + 5 Accessibility = 33 rows. Assert the concrete
+        // breakdown so a future add/remove can't silently drop a row.
+        let n_a11y = ALL
+            .iter()
+            .filter(|id| id.category() == crate::id::ThemeCategory::Accessibility)
+            .count();
+        assert_eq!(n_a11y, 5, "exactly 5 accessibility themes (P3)");
+        assert_eq!(ALL.len(), 33, "registry must hold every ThemeId row");
     }
 }

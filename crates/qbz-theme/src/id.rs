@@ -116,10 +116,10 @@ impl ThemeId {
 
     /// Whether this theme is fully materialized by the registry. Used by the
     /// frontend list builder to expose only ready themes during the phased
-    /// rollout. After P2 every standard (non-accessibility) theme is materialized;
-    /// the 5 accessibility themes are filled in P3.
+    /// rollout. After P3 every theme — including the 5 redesigned accessibility
+    /// themes — is materialized, so this is now unconditionally `true`.
     pub fn is_implemented(self) -> bool {
-        !matches!(self.category(), ThemeCategory::Accessibility)
+        true
     }
 
     /// Stable persisted slug. MUST NOT change once shipped.
