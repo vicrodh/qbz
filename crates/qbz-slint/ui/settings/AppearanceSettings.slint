@@ -164,9 +164,10 @@ export component AppearanceSettings inherits VerticalLayout {
                 current-index: AppearanceState.theme-index;
                 selected(i) => {
                     AppearanceState.theme-index = i;
-                    // The themes list is trimmed to the ported set, so the
-                    // dropdown index maps 1:1 to the mode (0 Dark, 1 OLED,
-                    // 2 Tokyo Night, 3 System).
+                    // The Rust handler ("theme" arm) maps this dropdown index to
+                    // a stable theme id, persists the slug, and hot-switches the
+                    // palette via Theme.set_c. ThemeState.mode is kept in sync
+                    // only as a legacy index reference (no longer drives colors).
                     ThemeState.mode = i;
                     AppearanceState.appearance-select("theme", i);
                 }

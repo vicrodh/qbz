@@ -5766,6 +5766,7 @@ dependencies = [
  "qbz-playlist-import",
  "qbz-plex",
  "qbz-qobuz",
+ "qbz-theme",
  "qconnect-app",
  "qconnect-transport-ws",
  "rand 0.10.1",

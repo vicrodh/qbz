@@ -54,6 +54,11 @@ pub struct UiPrefs {
     /// Whether album/artist detail headers use artwork-derived backdrops.
     #[serde(default = "default_album_header_gradient")]
     pub album_header_gradient: bool,
+    /// Active theme — a stable `qbz_theme::ThemeId` slug ("oled", "dark",
+    /// "tokyo-night", "system", ...). Stored as a slug (not an index) so it is
+    /// order-independent and stable across releases. Owner default: OLED Dark.
+    #[serde(default = "default_theme")]
+    pub theme: String,
 
     // ---- Miniplayer ----------------------------------------------------
     /// Last miniplayer surface: 0 micro · 1 compact · 2 artwork · 3 queue · 4 lyrics.
@@ -97,12 +102,20 @@ fn default_album_header_gradient() -> bool {
     DEFAULT_ALBUM_HEADER_GRADIENT
 }
 
+/// Default theme slug. Owner decision 2026-06-20: OLED Dark is the default for
+/// fresh installs and any profile without a persisted theme. Sourced from the
+/// `qbz-theme` registry so the default stays single-sourced.
+fn default_theme() -> String {
+    qbz_theme::default_slug().to_string()
+}
+
 impl Default for UiPrefs {
     fn default() -> Self {
         Self {
             streaming_quality: default_streaming_quality(),
             npb_mode: default_npb_mode(),
             album_header_gradient: default_album_header_gradient(),
+            theme: default_theme(),
             mini_surface: default_mini_surface(),
             mini_width: default_mini_width(),
             mini_height: default_mini_height(),
@@ -202,5 +215,13 @@ mod tests {
         let prefs: UiPrefs = serde_json::from_str("{}").expect("empty object deserializes");
         assert_eq!(prefs.streaming_quality, "hires_plus");
         assert!(prefs.album_header_gradient);
+        // A profile that predates the theme field falls back to OLED.
+        assert_eq!(prefs.theme, "oled");
+    }
+
+    #[test]
+    fn default_theme_is_oled() {
+        assert_eq!(UiPrefs::default().theme, "oled");
+        assert_eq!(default_theme(), "oled");
     }
 }

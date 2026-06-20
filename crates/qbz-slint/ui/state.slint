@@ -2537,8 +2537,10 @@ export global SettingsState {
 // so the UI renders standalone even while unwired.
 export global AppearanceState {
     // --- THEME -------------------------------------------------------------
-    // Only the themes that are actually ported/wired. Order is load-bearing:
-    // the index maps 1:1 to ThemeState.mode (0 Dark, 1 OLED, 2 Tokyo, 3 System).
+    // Seeded at startup by Rust from the qbz-theme registry
+    // (theme::dropdown_labels), in registry display order. The list below is a
+    // standalone-preview fallback only; the index is DERIVED from the persisted
+    // theme slug (theme::index_for_id), never assumed.
     in-out property <[string]> themes: [
         "Dark", "OLED Black", "Tokyo Night", "System"
     ];

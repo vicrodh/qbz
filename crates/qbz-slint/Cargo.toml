@@ -59,6 +59,7 @@ serde_json = { workspace = true }
 dirs = "5"
 chrono = { workspace = true, features = ["unstable-locales"] }
 qbz-app = { path = "../qbz-app" }
+qbz-theme = { path = "../qbz-theme" }
 qbz-media-controls = { path = "../qbz-media-controls" }
 qbz-audio = { path = "../qbz-audio" }
 qbz-core = { path = "../qbz-core" }

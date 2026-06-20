@@ -102,6 +102,7 @@ mod settings;
 mod share;
 mod sidebar;
 mod suggestions;
+mod theme;
 mod toast;
 mod tray;
 mod tray_settings;
@@ -4321,6 +4322,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .global::<AppearanceState>()
         .set_album_header_gradient(crate::ui_prefs::load().album_header_gradient);
 
+    // Theme: seed the dropdown list from the Rust registry, then restore the
+    // persisted theme (slug is the source of truth; the dropdown index is
+    // derived). Fresh profiles default to OLED Dark (owner decision). This must
+    // run before the shell renders so the first paint is the right palette.
+    {
+        let appearance = window.global::<AppearanceState>();
+        let labels: Vec<slint::SharedString> = crate::theme::dropdown_labels()
+            .into_iter()
+            .map(slint::SharedString::from)
+            .collect();
+        appearance.set_themes(slint::ModelRc::new(slint::VecModel::from(labels)));
+
+        let id = crate::theme::id_for_slug(&crate::ui_prefs::load().theme);
+        appearance.set_theme_index(crate::theme::index_for_id(id));
+        appearance.set_theme_is_system(id == qbz_theme::ThemeId::System);
+        // Keep the legacy ThemeState.mode in sync with the dropdown index for
+        // any residual reads; the palette itself is driven by apply_theme.
+        window
+            .global::<ThemeState>()
+            .set_mode(crate::theme::index_for_id(id));
+        crate::theme::apply_theme(&window, id);
+    }
+
     // Tell the tray settings UI which platform it's on so it can show the
     // macOS-only controls ("Menu Bar" header, hide-Dock toggle) and hide the
     // Linux/Windows-only minimize-to-tray row.
@@ -5237,12 +5261,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "tray-mac-hide-dock" => tray_settings::set_mac_hide_dock(value),
             other => log::debug!("[qbz-slint] unhandled appearance-bool '{other}'"),
         });
-        appearance.on_appearance_select(|key, index| match key.as_str() {
+        let theme_weak = window.as_weak();
+        appearance.on_appearance_select(move |key, index| match key.as_str() {
             "tray-icon-theme" => {
                 tray_settings::set_icon_theme_index(index);
                 // Re-theme the running tray icon live (no restart).
                 if let Some(t) = tray::handle() {
                     t.set_icon_theme(tray_settings::theme_for_index(index));
+                }
+            }
+            "theme" => {
+                // Slug is the source of truth: map the dropdown index -> stable
+                // id, persist the slug, then hot-switch the live palette.
+                let id = crate::theme::id_for_index(index);
+                let mut prefs = crate::ui_prefs::load();
+                prefs.theme = id.slug().to_string();
+                crate::ui_prefs::save(&prefs);
+                if let Some(w) = theme_weak.upgrade() {
+                    crate::theme::apply_theme(&w, id);
                 }
             }
             other => log::debug!("[qbz-slint] unhandled appearance-select '{other}'"),
