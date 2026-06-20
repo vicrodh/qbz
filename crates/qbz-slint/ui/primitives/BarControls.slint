@@ -81,6 +81,10 @@ export component PlayButton inherits Rectangle {
     background: root.circle
         ? ((ta.has-hover && root.enabled) ? #ffffffd6 : #ffffff)
         : ((ta.has-hover && root.enabled) ? Theme.surface-hover : transparent);
+    // HC-only border on the white disc so it stays delineated against a
+    // light HC background (1:1 Tauri otherwise — zero change in normal themes).
+    border-width: (root.circle && Theme.is-high-contrast) ? 1px : 0px;
+    border-color: Theme.border-strong;
 
     if !root.loading: QbzIcon {
         source: root.icon;
