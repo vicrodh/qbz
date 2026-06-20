@@ -15,8 +15,12 @@ export component QbzPrimaryButton inherits Rectangle {
     height: 48px;
     border-radius: Radius.sm;
     opacity: root.enabled ? 1.0 : 0.5;
+    // Destructive hover darkens the SOLID danger (Theme.danger-hover is a
+    // 15-25% translucent tint meant for danger-bg surfaces, not a button fill —
+    // using it here would make the button ~80% transparent / pale on hover in
+    // every theme). `.darker()` keeps an opaque, richer red across all palettes.
     background: root.destructive
-        ? (ta.has-hover && root.enabled ? Theme.danger-hover : Theme.danger)
+        ? (ta.has-hover && root.enabled ? Theme.danger.darker(0.15) : Theme.danger)
         : (ta.has-hover && root.enabled ? Theme.accent-hover : Theme.accent);
 
     animate background { duration: 150ms; }
