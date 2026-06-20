@@ -97,6 +97,7 @@ pub fn apply_theme(window: &AppWindow, id: ThemeId) {
     let theme = window.global::<SlintTheme>();
     theme.set_c(to_slint(&colors));
     theme.set_is_system(id == ThemeId::System);
+    theme.set_is_high_contrast(qbz_theme::is_high_contrast(id));
     log::info!("[qbz-slint] applied theme '{}'", id.slug());
 }
 

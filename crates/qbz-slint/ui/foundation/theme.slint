@@ -151,6 +151,26 @@ export global Theme {
     // std-Palette fallback for the System-overridden tokens below.
     in-out property <bool> is-system: false;
 
+    // True only for the two High-Contrast themes (HighContrast/HighContrastLight).
+    // Set by Rust alongside `c`. Gates HC-ONLY redundant-encoding affordances
+    // (1px control borders, slider-thumb borders) so they never leak into the
+    // polished normal themes. Components read it via the re-exported Theme global.
+    //
+    // Canonical HC border gate (copy verbatim in components):
+    //   border-width: Theme.is-high-contrast ? 1px : 0px;
+    //   border-color: Theme.border-strong;
+    //
+    // Canonical NON-LAYOUT focus ring (copy verbatim; draw as a sibling/overlay
+    // Rectangle so focus never reflows the control):
+    //   Rectangle {
+    //       x: 0; y: 0; width: parent.width; height: parent.height;
+    //       border-width: 2px;
+    //       border-color: root.has-focus ? Theme.focus-ring : transparent;
+    //       border-radius: parent.border-radius;
+    //       background: transparent;
+    //   }
+    in-out property <bool> is-high-contrast: false;
+
     // --- Surfaces: System follows the OS palette (was `mode == 3`) -----------
     out property <color> surface-main: is-system ? StdPalette.background : c.surface-main;
     out property <color> surface-card: is-system ? StdPalette.alternate-background : c.surface-card;

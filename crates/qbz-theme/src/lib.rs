@@ -54,6 +54,14 @@ pub fn is_light(id: ThemeId) -> bool {
     relative_luminance(palette(id).surface_main) >= 0.5
 }
 
+/// Whether a theme is one of the two High-Contrast accessibility themes.
+/// Drives the Slint `Theme.is-high-contrast` flag, which gates HC-only
+/// redundant-encoding affordances (1px control borders, slider-thumb borders)
+/// so they never leak into the polished normal themes (P4 a11y pass).
+pub fn is_high_contrast(id: ThemeId) -> bool {
+    matches!(id, ThemeId::HighContrast | ThemeId::HighContrastLight)
+}
+
 /// Build the full Settings theme list in display order. The frontend filters by
 /// `is_light` and may hide `!implemented` rows during P1/P2.
 pub fn theme_list() -> Vec<ThemeListEntry> {
@@ -144,5 +152,21 @@ mod tests {
     #[test]
     fn full_list_has_all_entries() {
         assert_eq!(theme_list().len(), ALL.len());
+    }
+
+    #[test]
+    fn high_contrast_flag_only_for_hc_themes() {
+        // True for exactly the two High-Contrast themes.
+        assert!(is_high_contrast(ThemeId::HighContrast));
+        assert!(is_high_contrast(ThemeId::HighContrastLight));
+        // False for everything else, including the other a11y themes.
+        assert!(!is_high_contrast(ThemeId::WcagLight));
+        assert!(!is_high_contrast(ThemeId::WcagDark));
+        assert!(!is_high_contrast(ThemeId::Colorblind));
+        assert!(!is_high_contrast(ThemeId::Dark));
+        assert!(!is_high_contrast(ThemeId::Oled));
+        assert!(!is_high_contrast(ThemeId::System));
+        // Exactly two themes in ALL are high-contrast.
+        assert_eq!(ALL.iter().filter(|&&id| is_high_contrast(id)).count(), 2);
     }
 }
