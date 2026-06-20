@@ -352,9 +352,9 @@ export component BlacklistManagerView inherits Rectangle {
             vertical-stretch: 0;
             height: warn-row.preferred-height + 24px;
             border-radius: Radius.md;
-            background: #fbbf241a;
+            background: Theme.warning-bg;
             border-width: 1px;
-            border-color: #fbbf244d;
+            border-color: Theme.warning-border;
             warn-row := HorizontalLayout {
                 padding: 12px;
                 spacing: 10px;
@@ -364,14 +364,14 @@ export component BlacklistManagerView inherits Rectangle {
                         source: @image-url("../assets/icons/circle-alert.svg");
                         width: 16px;
                         height: 16px;
-                        tint: #fbbf24;
+                        tint: Theme.warning;
                     }
                 }
                 VerticalLayout {
                     alignment: center;
                     Text {
                         text: @tr("Blacklist filtering is disabled. Blacklisted artists are shown everywhere until you re-enable it.");
-                        color: #fbbf24;
+                        color: Theme.warning;
                         font-size: Typography.legal;
                         wrap: word-wrap;
                     }
