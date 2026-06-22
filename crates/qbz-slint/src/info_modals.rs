@@ -347,14 +347,22 @@ fn apply_track_info(window: &AppWindow, data: TrackInfoData) {
         .credits
         .into_iter()
         .map(|c| {
+            let names_line = c.names.join(", ");
             let names: Vec<SharedString> = c.names.into_iter().map(SharedString::from).collect();
             InfoCreditRow {
                 role: c.role.into(),
                 role_raw: c.role_raw.into(),
                 names: ModelRc::new(VecModel::from(names)),
+                names_line: names_line.into(),
             }
         })
         .collect();
+    // Two independent columns (even -> left, odd -> right) so the modal can
+    // render natural vertical stacks instead of height-coupled paired rows.
+    let credits_left: Vec<InfoCreditRow> = cells.iter().step_by(2).cloned().collect();
+    let credits_right: Vec<InfoCreditRow> =
+        cells.iter().skip(1).step_by(2).cloned().collect();
+
     let mut pairs: Vec<InfoCreditPair> = Vec::new();
     let mut iter = cells.into_iter();
     while let Some(left) = iter.next() {
@@ -370,6 +378,7 @@ fn apply_track_info(window: &AppWindow, data: TrackInfoData) {
                     role: SharedString::new(),
                     role_raw: SharedString::new(),
                     names: ModelRc::new(VecModel::from(Vec::<SharedString>::new())),
+                    names_line: SharedString::new(),
                 },
                 has_right: false,
             }),
@@ -386,6 +395,8 @@ fn apply_track_info(window: &AppWindow, data: TrackInfoData) {
     st.set_label_id(data.label_id.into());
     st.set_copyright(data.copyright.into());
     st.set_credits(ModelRc::new(VecModel::from(pairs)));
+    st.set_credits_left(ModelRc::new(VecModel::from(credits_left)));
+    st.set_credits_right(ModelRc::new(VecModel::from(credits_right)));
 }
 
 fn apply_album_credits(window: &AppWindow, data: AlbumCreditsData) {

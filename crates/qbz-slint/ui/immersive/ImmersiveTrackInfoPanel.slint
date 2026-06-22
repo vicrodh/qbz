@@ -53,32 +53,14 @@ component CreditCellLight inherits VerticalLayout {
         font-weight: 600;
         letter-spacing: 0.6px;
     }
-    Rectangle {
-        clip: true;
-        height: names-row.preferred-height;
-        names-row := HorizontalLayout {
-            alignment: start;
-            for name[j] in root.cell.names: HorizontalLayout {
-                nta := TouchArea {
-                    width: nm.preferred-width;
-                    height: nm.preferred-height;
-                    mouse-cursor: pointer;
-                    clicked => {
-                        root.name-clicked(name, root.cell.role-raw);
-                    }
-                    nm := Text {
-                        text: name;
-                        color: nta.has-hover ? #b794f6 : #ffffff;
-                        font-size: 14px;
-                    }
-                }
-                if j < root.cell.names.length - 1: Text {
-                    text: ", ";
-                    color: #ffffffcc;
-                    font-size: 14px;
-                }
-            }
-        }
+    // Single wrapping Text (names pre-joined) so a long credit list wraps
+    // instead of clipping — mirrors the TrackInfoModal CreditCell fix. Slint
+    // has no flow layout, so per-name click is dropped in favour of wrapping.
+    Text {
+        text: root.cell.names-line;
+        color: #ffffff;
+        font-size: 14px;
+        wrap: word-wrap;
     }
 }
 

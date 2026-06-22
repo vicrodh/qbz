@@ -134,6 +134,10 @@ component AlbumTrackRow inherits VerticalLayout {
                 text: perf.roles;
                 color: Theme.text-muted;
                 font-size: 13px;
+                // Fill the row's remaining width and wrap the role list instead
+                // of letting it run off the right edge of the modal.
+                horizontal-stretch: 1;
+                wrap: word-wrap;
             }
         }
         if root.track.copyright != "": Rectangle { height: 8px; }

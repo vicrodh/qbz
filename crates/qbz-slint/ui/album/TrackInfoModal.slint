@@ -33,6 +33,9 @@ export component MetaCell inherits VerticalLayout {
 // Exported so the immersive split Track Info panel can reuse it 1:1.
 export component CreditCell inherits VerticalLayout {
     in property <InfoCreditRow> cell;
+    // Fixed cell width handed down by the modal so the two columns stay aligned
+    // and the value text wraps inside the column instead of dictating its width.
+    in property <length> col-w: 280px;
     callback name-clicked(string /* name */, string /* role-raw */);
     spacing: 6px;
     Text {
@@ -41,31 +44,27 @@ export component CreditCell inherits VerticalLayout {
         font-size: 11px;
         font-weight: Typography.semibold;
         letter-spacing: 0.5px;
+        width: root.col-w;
+        wrap: word-wrap;
     }
-    Rectangle {
-        clip: true;
-        height: names-row.preferred-height;
-        names-row := HorizontalLayout {
-            alignment: start;
-            for name[j] in root.cell.names: HorizontalLayout {
-                nta := TouchArea {
-                    width: nm.preferred-width;
-                    height: nm.preferred-height;
-                    mouse-cursor: pointer;
-                    clicked => {
-                        root.name-clicked(name, root.cell.role-raw);
-                    }
-                    nm := Text {
-                        text: name;
-                        color: nta.has-hover ? Theme.accent : Theme.text-primary;
-                        font-size: 14px;
-                    }
-                }
-                if j < root.cell.names.length - 1: Text {
-                    text: ", ";
-                    color: Theme.text-primary;
-                    font-size: 14px;
-                }
+    // One clickable name per line (Slint has no flow layout, so a wrapping row
+    // of links would clip): keeps click-to-musician AND never overflows. Each
+    // name wraps within the fixed column width if a single name is very long.
+    VerticalLayout {
+        spacing: 2px;
+        for name in root.cell.names: ta := TouchArea {
+            width: root.col-w;
+            height: nmt.preferred-height;
+            mouse-cursor: pointer;
+            clicked => {
+                root.name-clicked(name, root.cell.role-raw);
+            }
+            nmt := Text {
+                text: name;
+                color: ta.has-hover ? Theme.accent : Theme.text-primary;
+                font-size: 14px;
+                width: root.col-w;
+                wrap: word-wrap;
             }
         }
     }
@@ -85,8 +84,13 @@ export component TrackInfoModal inherits Rectangle {
             }
         }
 
-        Rectangle {
+        card := Rectangle {
             width: Math.min(root.width - 40px, 728px);
+            // Fixed credits-column width: card minus the 24px L/R content padding
+            // (48) minus the 24px inter-column gutter, halved. Pinning each credit
+            // cell to this (instead of horizontal-stretch, whose split skews with
+            // each cell's content width) keeps the right column aligned on every row.
+            property <length> credits-col-w: (self.width - 48px - 24px) / 2;
             height: Math.min(root.height * 0.8, card-body.preferred-height);
             x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
             y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
@@ -257,7 +261,7 @@ export component TrackInfoModal inherits Rectangle {
                                             Text {
                                                 text: TrackInfoState.isrc;
                                                 color: Theme.text-muted;
-                                                font-size: 13px;
+                                                font-size: 14px;
                                             }
                                         }
                                         if TrackInfoState.isrc == "": Rectangle { horizontal-stretch: 1; }
@@ -296,25 +300,35 @@ export component TrackInfoModal inherits Rectangle {
                                     background: Theme.surface-elevated;
                                 }
                                 if TrackInfoState.credits.length > 0: Rectangle { height: 20px; }
-                                if TrackInfoState.credits.length > 0: VerticalLayout {
-                                    spacing: 16px;
-                                    for pair in TrackInfoState.credits: HorizontalLayout {
-                                        spacing: 24px;
-                                        CreditCell {
-                                            horizontal-stretch: 1;
-                                            cell: pair.left;
+                                // Two INDEPENDENT columns (left/right stacks) with
+                                // natural vertical spacing — no height-coupled rows,
+                                // so a column with more names just grows on its own.
+                                if TrackInfoState.credits.length > 0: HorizontalLayout {
+                                    spacing: 24px;
+                                    alignment: start;
+                                    VerticalLayout {
+                                        width: card.credits-col-w;
+                                        spacing: 20px;
+                                        alignment: start;
+                                        for entry in TrackInfoState.credits-left: CreditCell {
+                                            col-w: card.credits-col-w;
+                                            cell: entry;
                                             name-clicked(n, r) => {
                                                 TrackInfoActions.open-musician(n, r);
                                             }
                                         }
-                                        if pair.has-right: CreditCell {
-                                            horizontal-stretch: 1;
-                                            cell: pair.right;
+                                    }
+                                    VerticalLayout {
+                                        width: card.credits-col-w;
+                                        spacing: 20px;
+                                        alignment: start;
+                                        for entry in TrackInfoState.credits-right: CreditCell {
+                                            col-w: card.credits-col-w;
+                                            cell: entry;
                                             name-clicked(n, r) => {
                                                 TrackInfoActions.open-musician(n, r);
                                             }
                                         }
-                                        if !pair.has-right: Rectangle { horizontal-stretch: 1; }
                                     }
                                 }
 

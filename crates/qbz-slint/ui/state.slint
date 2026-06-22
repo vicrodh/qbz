@@ -536,6 +536,9 @@ export struct InfoCreditRow {
     // Original (non-localized) role string, passed to the musician-nav hint.
     role-raw: string,
     names: [string],
+    // Names pre-joined with ", " — rendered as a single wrapping Text so a long
+    // credit list (e.g. 5 producers) wraps instead of clipping at the column edge.
+    names-line: string,
 }
 
 // A row in the Track Info 2-column credits grid. The Rust side pairs the
@@ -587,6 +590,11 @@ export global TrackInfoState {
     in property <string> label-id;
     // Paired (2-column) ordered credit cells.
     in property <[InfoCreditPair]> credits: [];
+    // Credits split into two independent columns (even-index -> left,
+    // odd-index -> right) so the modal renders two natural vertical stacks
+    // instead of height-coupled paired rows (which left vertical gaps).
+    in property <[InfoCreditRow]> credits-left: [];
+    in property <[InfoCreditRow]> credits-right: [];
     in property <string> copyright;
 }
 
