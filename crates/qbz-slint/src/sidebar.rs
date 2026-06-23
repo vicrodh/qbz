@@ -62,6 +62,12 @@ pub struct LocalSidebarPlaylist {
     pub name: String,
     pub description: String,
     pub offline_only: bool,
+    /// Sidebar folder membership (shared `playlist_folders.id`); None = root.
+    pub folder_id: Option<String>,
+    /// Up to four cover refs for the micro-collage, resolved from the
+    /// playlist's tracks' artwork (local file paths / Plex thumbs / cached
+    /// Qobuz covers — no network). Empty = render the hard-drive glyph.
+    pub cover_urls: Vec<String>,
 }
 
 #[derive(Clone, Default)]
@@ -223,6 +229,9 @@ where
                         name: p.name,
                         description: p.description.unwrap_or_default(),
                         offline_only: p.offline_only,
+                        folder_id: p.folder_id,
+                        // Resolved below (async, off the blocking DB closure).
+                        cover_urls: Vec::new(),
                     })
                     .collect();
             // B7/B8 (offline only): the snapshot names replace the
@@ -250,6 +259,16 @@ where
         })
         .await
         .unwrap_or_default();
+    // Resolve up to 4 cover refs per LOCAL playlist for the sidebar micro-collage
+    // (no network — local/Plex/cached-Qobuz covers from the playlist's tracks).
+    // Done here in the async load (off the blocking DB closure above) so each
+    // resolved set is cached in SidebarData; rebuild() reuses it without
+    // re-resolving. Empty result = the row keeps its hard-drive glyph.
+    let mut local_playlists = local_playlists;
+    for lp in local_playlists.iter_mut() {
+        lp.cover_urls = crate::local_playlist::resolve_cover_urls(&lp.id, 4).await;
+    }
+
     let mut playlists = playlists;
     // D11.b — OFFLINE: the Qobuz fetch above is gate-refused (empty), so the
     // reachable playlists are synthesized locally: the MIXED ones (>= 1
@@ -384,22 +403,29 @@ fn playlist_entry(p: &SidebarPlaylist, indent: bool, folder_id: &str) -> Sidebar
     }
 }
 
-/// Build a LOCAL playlist root row (hard-drive glyph; no cover collage).
-fn local_playlist_entry(p: &LocalSidebarPlaylist) -> SidebarEntry {
+/// Build a LOCAL playlist row. `indent`/`folder_id` place it under a folder
+/// (root row when `folder_id` is ""). A micro-collage is shown when the
+/// playlist resolved >= 1 track cover; otherwise the row falls back to the
+/// hard-drive glyph (`local_kind` stays set so the glyph branch still applies
+/// when there are no covers).
+fn local_playlist_entry(p: &LocalSidebarPlaylist, indent: bool, folder_id: &str) -> SidebarEntry {
+    let url = |i: usize| -> slint::SharedString {
+        p.cover_urls.get(i).cloned().unwrap_or_default().into()
+    };
     SidebarEntry {
         kind: "playlist".into(),
         id: p.id.clone().into(),
         name: p.name.clone().into(),
         expanded: false,
         count: 0,
-        indent: false,
-        folder_id: "".into(),
+        indent,
+        folder_id: folder_id.into(),
         local_kind: if p.offline_only { "offline" } else { "local" }.into(),
-        cover_count: 0,
-        url1: Default::default(),
-        url2: Default::default(),
-        url3: Default::default(),
-        url4: Default::default(),
+        cover_count: p.cover_urls.len().min(4) as i32,
+        url1: url(0),
+        url2: url(1),
+        url3: url(2),
+        url4: url(3),
         cover1: slint::Image::default(),
         cover2: slint::Image::default(),
         cover3: slint::Image::default(),
@@ -414,7 +440,7 @@ pub fn load_folder_popup(window: &AppWindow, folder_id: &str) {
     let data = CACHE.lock().map(|c| c.clone()).unwrap_or_default();
     let offline = crate::offline_mode::engine().is_offline();
     let sorted = sort_playlists(&data.playlists);
-    let entries: Vec<SidebarEntry> = sorted
+    let mut entries: Vec<SidebarEntry> = sorted
         .iter()
         .filter(|p| {
             data.folder_map
@@ -426,6 +452,16 @@ pub fn load_folder_popup(window: &AppWindow, folder_id: &str) {
         .filter(|p| offline_visible(&data, offline, p))
         .map(|p| playlist_entry(p, true, folder_id))
         .collect();
+    // Local playlists assigned to this folder, name-sorted, appended after.
+    let mut local_members: Vec<&LocalSidebarPlaylist> = data
+        .local_playlists
+        .iter()
+        .filter(|p| p.folder_id.as_deref() == Some(folder_id))
+        .collect();
+    local_members.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    for p in local_members {
+        entries.push(local_playlist_entry(p, true, folder_id));
+    }
     window
         .global::<SidebarFolderPopupState>()
         .set_playlists(ModelRc::new(VecModel::from(entries)));
@@ -456,6 +492,11 @@ pub fn rebuild(window: &AppWindow) {
     let sorted = sort_playlists(&data.playlists);
     let matches = |p: &SidebarPlaylist| !searching || p.name.to_lowercase().contains(&query);
 
+    // Local playlists matching the search, grouped by their folder membership
+    // (the local twin of `folder_map`). Locals are never offline-gated — they
+    // don't depend on a Qobuz fetch.
+    let local_matches = |p: &LocalSidebarPlaylist| !searching || p.name.to_lowercase().contains(&query);
+
     let mut entries: Vec<SidebarEntry> = Vec::new();
     for folder in &data.folders {
         let members: Vec<&SidebarPlaylist> = sorted
@@ -465,11 +506,20 @@ pub fn rebuild(window: &AppWindow) {
             .filter(|p| !data.hidden_playlists.contains(&p.id))
             .filter(|p| offline_visible(&data, offline, p))
             .collect();
+        // Local playlists assigned to THIS folder, name-sorted.
+        let mut local_members: Vec<&LocalSidebarPlaylist> = data
+            .local_playlists
+            .iter()
+            .filter(|p| p.folder_id.as_deref() == Some(folder.id.as_str()))
+            .filter(|p| local_matches(p))
+            .collect();
+        local_members.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
         // While searching, skip folders with no matching playlists
         // (mirrors Tauri's `if (isSearching && folderPlaylists.length === 0) continue`).
         // Offline the same rule hides folders whose members are all filtered
         // out (D11.b) — an empty folder header carries no information there.
-        if (searching || offline) && members.is_empty() {
+        // Locals count as members for both gates.
+        if (searching || offline) && members.is_empty() && local_members.is_empty() {
             continue;
         }
         // When searching, force-expand so matches inside are visible.
@@ -479,7 +529,7 @@ pub fn rebuild(window: &AppWindow) {
             id: folder.id.clone().into(),
             name: folder.name.clone().into(),
             expanded: is_exp,
-            count: members.len() as i32,
+            count: (members.len() + local_members.len()) as i32,
             indent: false,
             folder_id: "".into(),
             local_kind: "".into(),
@@ -496,6 +546,9 @@ pub fn rebuild(window: &AppWindow) {
         if is_exp {
             for p in members {
                 entries.push(playlist_entry(p, true, &folder.id));
+            }
+            for p in local_members {
+                entries.push(local_playlist_entry(p, true, &folder.id));
             }
         }
     }
@@ -514,18 +567,26 @@ pub fn rebuild(window: &AppWindow) {
             entries.push(playlist_entry(p, false, ""));
         }
     }
-    // LOCAL playlists (library.db, D7) — root rows after the Qobuz set,
-    // name-sorted, honoring the same search filter. Always present, online
-    // or offline (they never depend on a Qobuz fetch).
+    // LOCAL playlists (library.db, D7) NOT in a folder (or in one that no
+    // longer exists) — root rows after the Qobuz set, name-sorted, honoring
+    // the same search filter. Folder-assigned locals were already emitted
+    // under their folder header above. Always present, online or offline.
     {
         let mut locals: Vec<&LocalSidebarPlaylist> = data
             .local_playlists
             .iter()
-            .filter(|p| !searching || p.name.to_lowercase().contains(&query))
+            .filter(|p| {
+                let in_folder = p
+                    .folder_id
+                    .as_ref()
+                    .map(|f| folder_ids.contains(f))
+                    .unwrap_or(false);
+                !in_folder && local_matches(p)
+            })
             .collect();
         locals.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
         for p in locals {
-            entries.push(local_playlist_entry(p));
+            entries.push(local_playlist_entry(p, false, ""));
         }
     }
 
@@ -570,26 +631,40 @@ pub fn search_menu_folders(window: &AppWindow, query: &str) {
 /// Build artwork-download jobs for every playlist row's collage covers,
 /// targeting `SidebarState.entries` by row index. Call after `apply` /
 /// `rebuild` updates the entries.
-pub fn artwork_jobs(window: &AppWindow) -> Vec<crate::artwork::ArtworkJob> {
+/// Returns `(qobuz_jobs, local_jobs)`. Qobuz playlist covers are http(s) URLs
+/// (HTTP cache loader); LOCAL playlist covers are filesystem paths / Plex thumb
+/// paths (the local-or-Plex loader). They're split by the row's `local_kind` so
+/// each set goes to the right loader — a file path sent through the HTTP loader
+/// would silently fail to decode.
+pub fn artwork_jobs(
+    window: &AppWindow,
+) -> (Vec<crate::artwork::ArtworkJob>, Vec<crate::artwork::ArtworkJob>) {
     use slint::Model;
-    let mut jobs = Vec::new();
+    let mut qobuz_jobs = Vec::new();
+    let mut local_jobs = Vec::new();
     let entries = window.global::<SidebarState>().get_entries();
     for idx in 0..entries.row_count() {
         let Some(e) = entries.row_data(idx) else { continue };
         if e.kind != "playlist" {
             continue;
         }
+        let is_local = !e.local_kind.is_empty();
         let urls = [e.url1, e.url2, e.url3, e.url4];
         for (slot, url) in urls.iter().enumerate() {
             if !url.is_empty() {
-                jobs.push(crate::artwork::ArtworkJob {
+                let job = crate::artwork::ArtworkJob {
                     target: crate::artwork::ArtworkTarget::SidebarPlaylistCover { idx, slot },
                     url: url.to_string(),
-                });
+                };
+                if is_local {
+                    local_jobs.push(job);
+                } else {
+                    qobuz_jobs.push(job);
+                }
             }
         }
     }
-    jobs
+    (qobuz_jobs, local_jobs)
 }
 
 /// Toggle a folder's expanded state, then re-render from cache.
@@ -610,6 +685,22 @@ pub fn move_playlist_local(window: &AppWindow, playlist_id: u64, folder_id: &str
             cache.folder_map.remove(&playlist_id);
         } else {
             cache.folder_map.insert(playlist_id, folder_id.to_string());
+        }
+    }
+    rebuild(window);
+}
+
+/// Optimistically move a LOCAL playlist (`local:<uuid>` id) into a folder
+/// (`folder_id` "" = root) in the cache, then re-render. The DB write happens
+/// separately. The local twin of `move_playlist_local`.
+pub fn move_local_playlist_local(window: &AppWindow, id: &str, folder_id: &str) {
+    if let Ok(mut cache) = CACHE.lock() {
+        if let Some(p) = cache.local_playlists.iter_mut().find(|p| p.id == id) {
+            p.folder_id = if folder_id.is_empty() {
+                None
+            } else {
+                Some(folder_id.to_string())
+            };
         }
     }
     rebuild(window);

@@ -64,6 +64,8 @@ pub struct LocalPlaylist {
     /// manager's "hidden" filter.
     pub hidden: bool,
     pub custom_artwork_path: Option<String>,
+    /// Sidebar folder membership (shared `playlist_folders.id`); None = root.
+    pub folder_id: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
     pub track_count: u32,
@@ -113,6 +115,12 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
             favorite INTEGER NOT NULL DEFAULT 0,
             hidden INTEGER NOT NULL DEFAULT 0,
             custom_artwork_path TEXT,
+            -- Sidebar folder membership. Points at the SHARED playlist_folders
+            -- table (the same folders Qobuz playlists use); folder org is a
+            -- QBZ-side concept, so local playlists join the same folders. Local
+            -- ids are strings, so they could never live in playlist_settings
+            -- (u64 PK) — the membership rides here instead.
+            folder_id TEXT REFERENCES playlist_folders(id) ON DELETE SET NULL,
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL
         );
@@ -145,6 +153,23 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
         conn.execute_batch(
             "ALTER TABLE local_playlists ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0;
              ALTER TABLE local_playlists ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0;",
+        )?;
+    }
+    // Additive migration (folder membership): DBs created before the folder_id
+    // column. The REFERENCES clause is accepted by ALTER because the default is
+    // NULL and the app's connections don't enable the foreign_keys pragma.
+    let has_folder: bool = conn
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('local_playlists') WHERE name = 'folder_id'",
+            [],
+            |r| r.get::<_, i32>(0),
+        )
+        .map(|count| count > 0)
+        .unwrap_or(false);
+    if !has_folder {
+        conn.execute_batch(
+            "ALTER TABLE local_playlists ADD COLUMN folder_id TEXT \
+             REFERENCES playlist_folders(id) ON DELETE SET NULL;",
         )?;
     }
     Ok(())
@@ -213,6 +238,29 @@ pub fn set_hidden(conn: &Connection, id: &str, hidden: bool) -> Result<()> {
     Ok(())
 }
 
+/// Move a local playlist into a folder (`Some(folder_id)`) or back to the
+/// sidebar root (`None`). The folder lives in the shared `playlist_folders`
+/// table — the same folders Qobuz playlists use.
+pub fn move_to_folder(conn: &Connection, id: &str, folder_id: Option<&str>) -> Result<()> {
+    conn.execute(
+        "UPDATE local_playlists SET folder_id = ?1, updated_at = ?2 WHERE id = ?3",
+        params![folder_id, now_ms(), id],
+    )?;
+    Ok(())
+}
+
+/// Null the `folder_id` of every local playlist that pointed at `folder_id`.
+/// Called when a folder is deleted: the schema's `ON DELETE SET NULL` only
+/// fires when the `foreign_keys` pragma is on, and the app's connections keep
+/// it off, so do it explicitly (the same reason `delete` clears tracks by hand).
+pub fn clear_folder(conn: &Connection, folder_id: &str) -> Result<()> {
+    conn.execute(
+        "UPDATE local_playlists SET folder_id = NULL WHERE folder_id = ?1",
+        params![folder_id],
+    )?;
+    Ok(())
+}
+
 pub fn set_custom_artwork(conn: &Connection, id: &str, path: Option<&str>) -> Result<()> {
     conn.execute(
         "UPDATE local_playlists SET custom_artwork_path = ?1, updated_at = ?2 WHERE id = ?3",
@@ -242,6 +290,7 @@ fn row_to_playlist(r: &rusqlite::Row) -> Result<LocalPlaylist> {
         favorite: r.get::<_, i64>("favorite")? != 0,
         hidden: r.get::<_, i64>("hidden")? != 0,
         custom_artwork_path: r.get("custom_artwork_path")?,
+        folder_id: r.get("folder_id")?,
         created_at: r.get("created_at")?,
         updated_at: r.get("updated_at")?,
         track_count: 0,
@@ -276,7 +325,7 @@ fn hydrate_counts(conn: &Connection, p: &mut LocalPlaylist) -> Result<()> {
 pub fn list(conn: &Connection) -> Result<Vec<LocalPlaylist>> {
     let mut stmt = conn.prepare(
         "SELECT id, name, description, offline_only, favorite, hidden,
-                custom_artwork_path, created_at, updated_at
+                custom_artwork_path, folder_id, created_at, updated_at
            FROM local_playlists
           ORDER BY created_at DESC",
     )?;
@@ -295,7 +344,7 @@ pub fn get(conn: &Connection, id: &str) -> Result<Option<LocalPlaylist>> {
     let maybe = conn
         .query_row(
             "SELECT id, name, description, offline_only, favorite, hidden,
-                    custom_artwork_path, created_at, updated_at
+                    custom_artwork_path, folder_id, created_at, updated_at
                FROM local_playlists WHERE id = ?1",
             params![id],
             row_to_playlist,

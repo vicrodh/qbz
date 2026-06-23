@@ -2606,9 +2606,21 @@ fn load_sidebar_playlists(
 /// covers resolve from disk without a re-download.
 fn refresh_sidebar_covers(window: &AppWindow) {
     if let Some(cache) = artwork::shared_cache() {
-        let jobs = sidebar::artwork_jobs(window);
-        if !jobs.is_empty() {
-            artwork::spawn_loads(jobs, window.as_weak(), cache);
+        let (qobuz_jobs, local_jobs) = sidebar::artwork_jobs(window);
+        if !qobuz_jobs.is_empty() {
+            artwork::spawn_loads(qobuz_jobs, window.as_weak(), cache.clone());
+        }
+        // LOCAL playlist collage covers are file paths / Plex thumb paths — route
+        // them through the local-or-Plex loader (http loader would miss them).
+        if !local_jobs.is_empty() {
+            let plex = plex_settings::get();
+            artwork::spawn_local_or_plex_loads(
+                local_jobs,
+                plex.base_url,
+                plex.token,
+                window.as_weak(),
+                cache,
+            );
         }
     }
 }
@@ -13821,8 +13833,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .global::<SidebarActions>()
             .on_move_playlist(move |playlist_id, folder_id| {
                 let Some(w) = weak.upgrade() else { return; };
-                let Ok(pid) = playlist_id.parse::<u64>() else { return; };
                 let fid = folder_id.to_string();
+                // LOCAL playlists (`local:<uuid>`) persist into the
+                // local_playlists.folder_id column; Qobuz ones into
+                // playlist_settings. Both join the SAME shared folders.
+                if local_playlist::is_local_id(&playlist_id) {
+                    let id = playlist_id.to_string();
+                    sidebar::move_local_playlist_local(&w, &id, &fid);
+                    refresh_sidebar_covers(&w);
+                    handle.spawn(async move {
+                        tokio::task::spawn_blocking(move || {
+                            let opt = if fid.is_empty() { None } else { Some(fid.as_str()) };
+                            folders::move_local_playlist(&id, opt);
+                        })
+                        .await
+                        .ok();
+                    });
+                    return;
+                }
+                let Ok(pid) = playlist_id.parse::<u64>() else { return; };
                 sidebar::move_playlist_local(&w, pid, &fid);
                 refresh_sidebar_covers(&w);
                 handle.spawn(async move {

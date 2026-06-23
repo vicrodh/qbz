@@ -460,7 +460,7 @@ component SidebarRow inherits Rectangle {
             }
             // MOVE TO FOLDER section (wrapped so the `for` is not a direct
             // child of an `if`, which Slint disallows).
-            if !root.is-folder && !root.is-local-pl: VerticalLayout {
+            if !root.is-folder: VerticalLayout {
                 padding-left: 11px;
                 padding-right: 16px;
                 padding-bottom: 3px;
@@ -478,7 +478,7 @@ component SidebarRow inherits Rectangle {
             // with "Recursion detected"). The substring filter runs in
             // Rust (Slint strings have no `contains`); it fills
             // `menu-folders`, which the list below iterates.
-            if !root.is-folder && !root.is-local-pl && SidebarState.folders.length >= 8: HorizontalLayout {
+            if !root.is-folder && SidebarState.folders.length >= 8: HorizontalLayout {
                 padding-left: 11px;
                 padding-right: 16px;
                 padding-bottom: 4px;
@@ -494,7 +494,7 @@ component SidebarRow inherits Rectangle {
             // The folder list — each folder except the playlist's current
             // one. The query filter is already applied to `menu-folders`
             // by Rust; the current-folder exclusion stays in markup.
-            if !root.is-folder && !root.is-local-pl: ScrollView {
+            if !root.is-folder: ScrollView {
                 // Cap the list at ~5 rows (33px each); the rest scroll.
                 height: min(SidebarState.menu-folders.length * 33px, 165px);
                 vertical-scrollbar-policy: ScrollBarPolicy.as-needed;
@@ -512,7 +512,7 @@ component SidebarRow inherits Rectangle {
                 }
             }
             // Move to root — only when the playlist is currently in a folder.
-            if !root.is-folder && !root.is-local-pl && root.entry.folder-id != "": ContextMenuItem {
+            if !root.is-folder && root.entry.folder-id != "": ContextMenuItem {
                 icon: @image-url("../assets/icons/chevron-left.svg");
                 label: @tr("Move to root");
                 clicked => {
@@ -521,7 +521,7 @@ component SidebarRow inherits Rectangle {
                 }
             }
             // No folders at all.
-            if !root.is-folder && !root.is-local-pl && SidebarState.folders.length == 0: HorizontalLayout {
+            if !root.is-folder && SidebarState.folders.length == 0: HorizontalLayout {
                 padding-left: 11px;
                 padding-right: 16px;
                 padding-bottom: 4px;

@@ -71,6 +71,92 @@ pub fn get_tracks_blocking(id: &str) -> Vec<repo::LocalPlaylistTrack> {
         .unwrap_or_default()
 }
 
+/// Resolve up to `limit` cover refs for a local playlist's tracks, in track
+/// order, WITHOUT any network — for the sidebar micro-collage. Sources, all
+/// local: a Local track's `local_tracks.artwork_path`, a Plex track's cached
+/// thumb (`/library/...`), and a Qobuz track's offline-cache `cover.jpg` when
+/// it is downloaded. Returns file paths / Plex thumb paths (the sidebar art
+/// loader routes by shape). A purely-online (uncached) Qobuz playlist resolves
+/// nothing here (no network in the sidebar) and falls back to the glyph.
+/// The library.db/Plex lookups run on a blocking thread; the cached-Qobuz cover
+/// lives behind the offline cache's async lock.
+pub async fn resolve_cover_urls(id: &str, limit: usize) -> Vec<String> {
+    let pid = id.to_string();
+    let (mut covers, qobuz_ids): (Vec<String>, Vec<u64>) =
+        tokio::task::spawn_blocking(move || {
+            let mut covers: Vec<String> = Vec::new();
+            let mut qobuz_ids: Vec<u64> = Vec::new();
+            for t in get_tracks_blocking(&pid) {
+                if covers.len() >= limit {
+                    break;
+                }
+                match t.source {
+                    repo::LocalPlaylistTrackSource::Local => {
+                        if let Some(path) = t.local_path {
+                            if let Some(Some(track)) =
+                                crate::library_db::with_db(|db| db.get_track_by_path(&path))
+                            {
+                                if let Some(art) = track.artwork_path {
+                                    if !covers.contains(&art) {
+                                        covers.push(art);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    repo::LocalPlaylistTrackSource::Plex => {
+                        if let Some(key) = t.plex_key {
+                            if let Ok(list) = qbz_plex::plex_cache_get_cached_tracks_by_keys(&[key])
+                            {
+                                if let Some(pt) = list.into_iter().next() {
+                                    let lt = crate::local_library::map_plex_cached_to_local_track(pt);
+                                    if let Some(art) = lt.artwork_path {
+                                        if !covers.contains(&art) {
+                                            covers.push(art);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    repo::LocalPlaylistTrackSource::Qobuz => {
+                        if let Some(tid) = t.qobuz_track_id {
+                            qobuz_ids.push(tid);
+                        }
+                    }
+                }
+            }
+            covers.truncate(limit);
+            (covers, qobuz_ids)
+        })
+        .await
+        .unwrap_or_default();
+
+    // Fill any remaining slots from offline-cached Qobuz covers (async lock).
+    if covers.len() < limit && !qobuz_ids.is_empty() {
+        if let Some(off) = crate::offline::get().await {
+            let cache_path = off.get_cache_path();
+            let guard = off.db.lock().await;
+            if let Some(db) = guard.as_ref() {
+                for tid in qobuz_ids {
+                    if covers.len() >= limit {
+                        break;
+                    }
+                    if let Ok(Some(info)) = db.get_track(tid) {
+                        if let Some(art) = info.resolve_cover_path(&cache_path) {
+                            if !covers.contains(&art) {
+                                covers.push(art);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    covers.truncate(limit);
+    covers
+}
+
 pub fn create_blocking(name: &str, description: Option<&str>, offline_only: bool) -> Option<String> {
     crate::library_db::with_db(|db| {
         Ok(db.with_connection(|conn| repo::create(conn, name, description, offline_only)))
