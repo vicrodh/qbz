@@ -4540,6 +4540,18 @@ fn system_font_family() -> Option<String> {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
+    // Install the rustls process-level CryptoProvider ONCE, before ANY TLS use.
+    // The full binary compiles BOTH rustls providers (aws-lc-rs via qbz-cast's
+    // rust_cast, ring via reqwest), so rustls cannot auto-select one and panics
+    // ("Could not automatically determine the process-level CryptoProvider") the
+    // first time a TLS connection opens. Previously this was only installed lazily
+    // on the cast paths, so QConnect's tokio-tungstenite WebSocket (it opens a
+    // rustls TLS channel on its own worker thread) panicked when the user joined a
+    // session WITHOUT ever casting. Installing here at startup covers every TLS
+    // consumer — QConnect, cast, reqwest — regardless of which connects first.
+    // Idempotent (the cast paths still call it; the second call is a no-op).
+    qbz_cast::ensure_crypto_provider();
+
     let tokio_rt = tokio::runtime::Runtime::new()?;
     let _enter = tokio_rt.enter();
 
