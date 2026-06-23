@@ -245,6 +245,15 @@ export component ImmersiveQueuePanel inherits Rectangle {
 
     background: transparent;
 
+    // Opening this panel (conditional-mount: focus mode==5 / split-panel==3)
+    // re-pulls the queue so the controller decodes art for the WHOLE up-next
+    // list, not just the ±4 coverflow window — without this the rows past the
+    // 4th stay art-less until the next track change. Same hook the sidebar
+    // fires on open (QueueState.panel-opened -> refresh_with_favorites).
+    init => {
+        QueueState.panel-opened();
+    }
+
     // Content width: in focus full-screen we cap to a comfortable reading
     // column and center it; in split we already live in the right half, so we
     // fill it. (data-panels §4 `.centered-layout` width:100%.)
