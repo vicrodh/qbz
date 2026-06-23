@@ -4633,6 +4633,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &crate::ui_prefs::load().immersive_default_view,
         ),
     );
+    // System Notifications toggle: seed the UI + the poll-thread atomic gate.
+    {
+        let sys_notif = crate::ui_prefs::load().system_notifications;
+        window
+            .global::<AppearanceState>()
+            .set_system_notifications(sys_notif);
+        playback::NOTIFICATIONS_ENABLED
+            .store(sys_notif, std::sync::atomic::Ordering::Relaxed);
+    }
+    // Miniplayer default-view select index from the persisted key.
+    window.global::<AppearanceState>().set_miniplayer_view_index(
+        crate::ui_prefs::mini_default_view_index(&crate::ui_prefs::load().mini_default_view),
+    );
 
     // Theme: seed the dropdown list from the Rust registry, then restore the
     // persisted theme (slug is the source of truth; the dropdown index is
@@ -6618,6 +6631,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // the flag from the persisted pref above).
                 crate::search_service::set_enabled(value);
             }
+            "system-notifications" => {
+                let mut prefs = crate::ui_prefs::load();
+                prefs.system_notifications = value;
+                crate::ui_prefs::save(&prefs);
+                // Live gate for the poll-thread notify path (no restart).
+                playback::NOTIFICATIONS_ENABLED
+                    .store(value, std::sync::atomic::Ordering::Relaxed);
+            }
             "tray-enable" => tray_settings::set_enable_tray(value),
             "tray-minimize-to-tray" => tray_settings::set_minimize_to_tray(value),
             "tray-close-to-tray" => tray_settings::set_close_to_tray(value),
@@ -6646,6 +6667,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let mut prefs = crate::ui_prefs::load();
                 prefs.immersive_default_view =
                     crate::ui_prefs::immersive_default_view_for_index(index).to_string();
+                crate::ui_prefs::save(&prefs);
+            }
+            "miniplayer-view" => {
+                // 0 = Remember last, 1-5 = micro / compact / artwork / queue /
+                // lyrics. The miniplayer reads this key on open (miniplayer.rs).
+                let mut prefs = crate::ui_prefs::load();
+                prefs.mini_default_view =
+                    crate::ui_prefs::mini_default_view_for_index(index).to_string();
                 crate::ui_prefs::save(&prefs);
             }
             "theme" => {

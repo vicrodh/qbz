@@ -1279,6 +1279,13 @@ fn fmt_remaining(position: u64, duration: u64) -> String {
 static NOTIFY_LAST_TRACK: std::sync::atomic::AtomicU64 =
     std::sync::atomic::AtomicU64::new(u64::MAX);
 
+/// User gate for desktop "now playing" notifications (Settings › Appearance ›
+/// System Notifications). Seeded from `ui_prefs.system_notifications` at startup
+/// and flipped live by the toggle. Default ON. Read off the poll thread, so an
+/// atomic (not the UI-thread AppearanceState) is the source of truth here.
+pub static NOTIFICATIONS_ENABLED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(true);
+
 /// Last `(track id, resolved art URL)` pushed to the OS media controls'
 /// metadata. `refresh_now_playing_meta` re-runs on resume/seek/quality-patch,
 /// so metadata is only re-pushed when this key actually changes — the
@@ -1488,7 +1495,11 @@ pub(crate) async fn refresh_now_playing_meta(runtime: &Runtime, weak: &slint::We
                 }
             }
             crate::scrobble::on_track_changed(scrobble_meta);
-            qbz_media_controls::show_track_notification(notify_meta, offline).await;
+            // Scrobbling above is independent of the notification gate; only the
+            // desktop notification honors the System Notifications toggle.
+            if NOTIFICATIONS_ENABLED.load(std::sync::atomic::Ordering::Relaxed) {
+                qbz_media_controls::show_track_notification(notify_meta, offline).await;
+            }
         });
     }
 

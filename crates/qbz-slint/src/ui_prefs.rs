@@ -82,6 +82,35 @@ pub const DEFAULT_IMMERSIVE_DEFAULT_VIEW: &str = "remember";
 /// on-screen order is Remember last / Album Reactive / Static / Coverflow /
 /// Spectrum / Lyrics / Queue (0-6); any unknown index falls back to the
 /// default (`"remember"`).
+fn default_system_notifications() -> bool {
+    true
+}
+
+/// Miniplayer default-view select index -> persisted key (mirrors the
+/// miniplayer's own reader in `miniplayer.rs`). 0 = "remember".
+pub fn mini_default_view_for_index(index: i32) -> &'static str {
+    match index {
+        1 => "micro",
+        2 => "compact",
+        3 => "artwork",
+        4 => "queue",
+        5 => "lyrics",
+        _ => "remember",
+    }
+}
+
+/// Inverse of [`mini_default_view_for_index`]: select index for a persisted key.
+pub fn mini_default_view_index(key: &str) -> i32 {
+    match key {
+        "micro" => 1,
+        "compact" => 2,
+        "artwork" => 3,
+        "queue" => 4,
+        "lyrics" => 5,
+        _ => 0,
+    }
+}
+
 pub fn immersive_default_view_for_index(index: i32) -> &'static str {
     match index {
         0 => "remember",
@@ -135,6 +164,10 @@ pub struct UiPrefs {
     /// Whether intelligent search (cache, ranking, preview dropdown) is enabled.
     #[serde(default = "default_intelligent_search")]
     pub intelligent_search: bool,
+    /// Whether desktop "now playing" system notifications fire on track change.
+    /// Default ON (the notify backend ships default-on; this is the user gate).
+    #[serde(default = "default_system_notifications")]
+    pub system_notifications: bool,
     /// Immersive in-view search action: `"disabled"` | `"replace"` | `"next"` |
     /// `"queue"`. Doubles as the enable switch (`"disabled"` keeps the field
     /// inert). See [`DEFAULT_IMMERSIVE_SEARCH_ACTION`].
@@ -241,6 +274,7 @@ impl Default for UiPrefs {
             large_spectrum_mode: default_large_spectrum_mode(),
             album_header_gradient: default_album_header_gradient(),
             intelligent_search: default_intelligent_search(),
+            system_notifications: default_system_notifications(),
             immersive_search_action: default_immersive_search_action(),
             immersive_default_view: default_immersive_default_view(),
             immersive_last_view_mode: 0,

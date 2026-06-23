@@ -266,19 +266,6 @@ export component AppearanceSettings inherits VerticalLayout {
     }
     SettingRow {
         unsupported: true;
-        label: @tr("Font");
-        QbzSelect {
-            menu-width: 200px;
-            options: AppearanceState.fonts;
-            current-index: AppearanceState.font-index;
-            selected(i) => {
-                AppearanceState.font-index = i;
-                AppearanceState.appearance-select("font", i);
-            }
-        }
-    }
-    SettingRow {
-        unsupported: true;
         label: @tr("UI Scale");
         QbzSelect {
             menu-width: 140px;
@@ -442,7 +429,6 @@ export component AppearanceSettings inherits VerticalLayout {
         }
     }
     SettingRow {
-        unsupported: true;
         label: @tr("System Notifications");
         QbzToggle {
             checked: AppearanceState.system-notifications;
@@ -545,107 +531,6 @@ export component AppearanceSettings inherits VerticalLayout {
             }
         }
     }
-    SettingRow {
-        unsupported: true;
-        label: @tr("Search in title bar");
-        description: @tr("Show the search field in the title bar instead of the sidebar");
-        enabled: !root.tb-locked;
-        QbzToggle {
-            checked: AppearanceState.search-in-title-bar;
-            enabled: !root.tb-locked;
-            toggled(v) => {
-                AppearanceState.search-in-title-bar = v;
-                AppearanceState.appearance-bool("search-in-title-bar", v);
-            }
-        }
-    }
-
-    // Navigation in title bar — a label row + per-target indented toggles.
-    SettingRow {
-        unsupported: true;
-        label: @tr("Navigation in title bar");
-        description: @tr("Show Discover, Library, and Local Library buttons in the title bar");
-    }
-    SettingRow {
-        unsupported: true;
-        label: @tr("Home");
-        enabled: !root.tb-locked;
-        QbzToggle {
-            checked: AppearanceState.nav-tb-discover;
-            enabled: !root.tb-locked;
-            toggled(v) => {
-                AppearanceState.nav-tb-discover = v;
-                AppearanceState.appearance-bool("nav-tb-discover", v);
-            }
-        }
-    }
-    SettingRow {
-        unsupported: true;
-        label: @tr("Library");
-        enabled: !root.tb-locked;
-        QbzToggle {
-            checked: AppearanceState.nav-tb-favorites;
-            enabled: !root.tb-locked;
-            toggled(v) => {
-                AppearanceState.nav-tb-favorites = v;
-                AppearanceState.appearance-bool("nav-tb-favorites", v);
-            }
-        }
-    }
-    SettingRow {
-        unsupported: true;
-        label: @tr("Library");
-        enabled: !root.tb-locked;
-        QbzToggle {
-            checked: AppearanceState.nav-tb-library;
-            enabled: !root.tb-locked;
-            toggled(v) => {
-                AppearanceState.nav-tb-library = v;
-                AppearanceState.appearance-bool("nav-tb-library", v);
-            }
-        }
-    }
-    SettingRow {
-        unsupported: true;
-        label: @tr("My QBZ");
-        enabled: !root.tb-locked;
-        QbzToggle {
-            checked: AppearanceState.nav-tb-myqbz;
-            enabled: !root.tb-locked;
-            toggled(v) => {
-                AppearanceState.nav-tb-myqbz = v;
-                AppearanceState.appearance-bool("nav-tb-myqbz", v);
-            }
-        }
-    }
-    SettingRow {
-        unsupported: true;
-        label: @tr("Purchases");
-        enabled: !root.tb-locked;
-        QbzToggle {
-            checked: AppearanceState.nav-tb-purchases;
-            enabled: !root.tb-locked;
-            toggled(v) => {
-                AppearanceState.nav-tb-purchases = v;
-                AppearanceState.appearance-bool("nav-tb-purchases", v);
-            }
-        }
-    }
-    if root.nav-tb-any && !root.tb-locked: SettingRow {
-        unsupported: true;
-        label: @tr("Navigation buttons position");
-        description: @tr("Where to place the navigation buttons in the title bar");
-        QbzSelect {
-            menu-width: 260px;
-            options: AppearanceState.nav-tb-positions;
-            current-index: AppearanceState.nav-tb-position-index;
-            selected(i) => {
-                AppearanceState.nav-tb-position-index = i;
-                AppearanceState.appearance-select("nav-tb-position", i);
-            }
-        }
-    }
-
     Rectangle { height: 12px; }
     Divider { }
     Rectangle { height: 12px; }
@@ -668,54 +553,6 @@ export component AppearanceSettings inherits VerticalLayout {
             selected(i) => {
                 AppearanceState.wc-position-index = i;
                 AppearanceState.appearance-select("wc-position", i);
-            }
-        }
-    }
-    SettingRow {
-        unsupported: true;
-        label: @tr("Window controls style");
-        description: @tr("Choose the shape of the window control buttons");
-        enabled: !root.tb-locked;
-        QbzSelect {
-            menu-width: 200px;
-            options: AppearanceState.wc-styles;
-            current-index: AppearanceState.wc-style-index;
-            enabled: !root.tb-locked;
-            selected(i) => {
-                AppearanceState.wc-style-index = i;
-                AppearanceState.appearance-select("wc-style", i);
-            }
-        }
-    }
-    SettingRow {
-        unsupported: true;
-        label: @tr("Window controls size");
-        description: @tr("Adjust the size of the window control buttons");
-        enabled: !root.tb-locked;
-        QbzSelect {
-            menu-width: 160px;
-            options: AppearanceState.wc-sizes;
-            current-index: AppearanceState.wc-size-index;
-            enabled: !root.tb-locked;
-            selected(i) => {
-                AppearanceState.wc-size-index = i;
-                AppearanceState.appearance-select("wc-size", i);
-            }
-        }
-    }
-    SettingRow {
-        unsupported: true;
-        label: @tr("Window controls color preset");
-        description: @tr("Choose a color scheme for the window control buttons");
-        enabled: !root.tb-locked;
-        QbzSelect {
-            menu-width: 180px;
-            options: AppearanceState.wc-color-presets;
-            current-index: AppearanceState.wc-color-preset-index;
-            enabled: !root.tb-locked;
-            selected(i) => {
-                AppearanceState.wc-color-preset-index = i;
-                AppearanceState.appearance-select("wc-color-preset", i);
             }
         }
     }
@@ -754,7 +591,6 @@ export component AppearanceSettings inherits VerticalLayout {
         }
     }
     SettingRow {
-        unsupported: true;
         label: @tr("Mini player default view");
         QbzSelect {
             menu-width: 200px;
@@ -874,19 +710,6 @@ export component AppearanceSettings inherits VerticalLayout {
     // ===================================================================
     GroupHeader { text: @tr("IMMERSIVE"); }
 
-    SettingRow {
-        unsupported: true;
-        label: @tr("Immersive default view");
-        QbzSelect {
-            menu-width: 220px;
-            options: AppearanceState.immersive-views;
-            current-index: AppearanceState.immersive-view-index;
-            selected(i) => {
-                AppearanceState.immersive-view-index = i;
-                AppearanceState.appearance-select("immersive-view", i);
-            }
-        }
-    }
     SettingRow {
         unsupported: true;
         label: @tr("Background effect");
