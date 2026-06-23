@@ -2718,3 +2718,740 @@ msgstr "Voir tout"
 
 msgid "Other awards"
 msgstr "Autres récompenses"
+
+msgid "{} item needs attention before bit-perfect playback will work."
+msgid_plural "{} items need attention before bit-perfect playback will work."
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{} track"
+msgid_plural "{} tracks"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "Removed {} artist from blacklist"
+msgid_plural "Removed {} artists from blacklist"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "Removed {} folder"
+msgid_plural "Removed {} folders"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "Scan complete ({} file skipped)"
+msgid_plural "Scan complete ({} files skipped)"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{} album"
+msgid_plural "{} albums"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{} item"
+msgid_plural "{} items"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{} duplicate skipped"
+msgid_plural "{} duplicates skipped"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "Removed {} item"
+msgid_plural "Removed {} items"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "Caching {} track offline…"
+msgid_plural "Caching {} tracks offline…"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "(Re)start the PipeWire audio services"
+msgstr ""
+
+msgid "({} local)"
+msgstr ""
+
+msgid "A fresh mix every week."
+msgstr ""
+
+msgid "Add a folder before scanning"
+msgstr ""
+
+msgid "Added to queue"
+msgstr "Ajouté à la file d'attente"
+
+msgid "Added {} to {}"
+msgstr ""
+
+msgid "Added {} to {} ({})"
+msgstr ""
+
+msgid "Adding tracks to playlist..."
+msgstr "Ajout des titres a la playlist..."
+
+msgid "Adding tracks: {} / {}"
+msgstr ""
+
+msgid "Album folder not found on disk"
+msgstr ""
+
+msgid "Album metadata saved"
+msgstr "Métadonnées de l'album enregistrées"
+
+msgid "Album title is required"
+msgstr ""
+
+msgid "Albums of the Week"
+msgstr "Albums de la semaine"
+
+msgid "Albums on Local Library"
+msgstr ""
+
+msgid "Already in {}"
+msgstr ""
+
+msgid "Are you absolutely sure?"
+msgstr ""
+
+msgid "Artists on Local Library"
+msgstr ""
+
+msgid "Authorize QBZ in your browser, then click \"Finish\""
+msgstr ""
+
+msgid "Auto"
+msgstr "Automatique"
+
+msgid "Available tracks only — offline"
+msgstr ""
+
+msgid "Blacklist disabled"
+msgstr ""
+
+msgid "Blacklist enabled"
+msgstr ""
+
+msgid "Booklet open task failed: {}"
+msgstr ""
+
+msgid "COLLECTION"
+msgstr "COLLECTION"
+
+msgid "Cache cleared"
+msgstr ""
+
+msgid "Cached for offline"
+msgstr ""
+
+msgid "Cannot convert this kind"
+msgstr ""
+
+msgid "Checked {} tracks - all OK"
+msgstr ""
+
+msgid "Checking playlist link..."
+msgstr ""
+
+msgid "Checking your audio stack…"
+msgstr ""
+
+msgid "Choose a cover image"
+msgstr ""
+
+msgid "Choose a folder to play"
+msgstr "Sélectionne un dossier à lire"
+
+msgid "Choose a {} icon"
+msgstr ""
+
+msgid "Cleaning up missing files..."
+msgstr ""
+
+msgid "Cleanup failed"
+msgstr ""
+
+msgid "Clear Plex cache?"
+msgstr ""
+
+msgid "Clear library database?"
+msgstr ""
+
+msgid "Code copied"
+msgstr ""
+
+msgid "Compilation"
+msgstr "Compilation"
+
+msgid "Connected as {}"
+msgstr ""
+
+msgid "Connected to {} (v{})"
+msgstr ""
+
+msgid "Converted"
+msgstr ""
+
+msgid "Couldn't add folder"
+msgstr ""
+
+msgid "Couldn't change folder location (path may already exist)"
+msgstr ""
+
+msgid "Couldn't clean up missing files"
+msgstr ""
+
+msgid "Couldn't clear the Plex cache"
+msgstr ""
+
+msgid "Couldn't clear the library database"
+msgstr ""
+
+msgid "Couldn't clear the offline cache"
+msgstr ""
+
+msgid "Couldn't create the Qobuz playlist"
+msgstr ""
+
+msgid "Couldn't load library folders"
+msgstr ""
+
+msgid "Couldn't load that album"
+msgstr ""
+
+msgid "Couldn't load that playlist"
+msgstr ""
+
+msgid "Couldn't load that track"
+msgstr ""
+
+msgid "Couldn't load this album"
+msgstr ""
+
+msgid "Couldn't load this artist"
+msgstr ""
+
+msgid "Couldn't load this collection"
+msgstr ""
+
+msgid "Couldn't load this playlist"
+msgstr ""
+
+msgid "Couldn't open that folder"
+msgstr ""
+
+msgid "Couldn't save folder settings"
+msgstr ""
+
+msgid "Couldn't save metadata: {}"
+msgstr ""
+
+msgid "Cover removed"
+msgstr ""
+
+msgid "Cover updated"
+msgstr "Pochette mise à jour"
+
+msgid "Creating playlist..."
+msgstr "Creation de la playlist..."
+
+msgid "Critics' Picks"
+msgstr "Choix des critiques"
+
+msgid "DAC: {} · {} · {} ch"
+msgstr ""
+
+msgid "Disconnect from Plex?"
+msgstr ""
+
+msgid "EP"
+msgstr "EP"
+
+msgid "Enable PipeWire in your NixOS configuration"
+msgstr ""
+
+msgid "Enter a title or artist to search"
+msgstr ""
+
+msgid "Enter code {} at the Plex sign-in page"
+msgstr ""
+
+msgid "Error: {}"
+msgstr ""
+
+msgid "Error: {} (did you authorize in the browser?)"
+msgstr ""
+
+msgid "Every track needs a title"
+msgstr ""
+
+msgid "Failed to cast track"
+msgstr ""
+
+msgid "Failed to change play mode"
+msgstr ""
+
+msgid "Failed to clear blacklist"
+msgstr ""
+
+msgid "Failed to clear lyrics cache"
+msgstr ""
+
+msgid "Failed to create temp dir: {}"
+msgstr ""
+
+msgid "Failed to decode booklet page: {}"
+msgstr ""
+
+msgid "Failed to delete"
+msgstr ""
+
+msgid "Failed to fetch booklet: {}"
+msgstr ""
+
+msgid "Failed to fetch metadata"
+msgstr ""
+
+msgid "Failed to read booklet: {}"
+msgstr ""
+
+msgid "Failed to remove artist"
+msgstr ""
+
+msgid "Failed to remove cover"
+msgstr "Échec de la suppression de la pochette"
+
+msgid "Failed to remove items"
+msgstr ""
+
+msgid "Failed to rename"
+msgstr ""
+
+msgid "Failed to save description"
+msgstr ""
+
+msgid "Failed to toggle blacklist"
+msgstr ""
+
+msgid "Failed to upload cover"
+msgstr "Échec du téléversement de la pochette"
+
+msgid "Failed to write booklet: {}"
+msgstr ""
+
+msgid "Favorite Albums"
+msgstr ""
+
+msgid "File not available — is the drive mounted?"
+msgstr ""
+
+msgid "Files not available — is the drive mounted?"
+msgstr ""
+
+msgid "Folder opened"
+msgstr ""
+
+msgid "Found {} tracks from {}."
+msgstr ""
+
+msgid "From the same artist"
+msgstr ""
+
+msgid "From your most-played playlists."
+msgstr ""
+
+msgid "Ideal Discography"
+msgstr "Discographie idéale"
+
+msgid "Image"
+msgstr ""
+
+msgid "Import failed: {}"
+msgstr ""
+
+msgid "Imported {} of {} tracks into QBZ."
+msgstr ""
+
+msgid "Install the ALSA bridge so playback can reach PipeWire"
+msgstr ""
+
+msgid "Install the PipeWire audio stack"
+msgstr ""
+
+msgid "Install the PipeWire tools (pw-dump)"
+msgstr ""
+
+msgid "Install the Pulse compatibility tools (optional fallback)"
+msgstr ""
+
+msgid "Last.fm disconnected"
+msgstr ""
+
+msgid "Last.fm sign-in failed to start"
+msgstr ""
+
+msgid "Library database cleared"
+msgstr ""
+
+msgid "ListenBrainz disconnected"
+msgstr ""
+
+msgid "Listening suggestions"
+msgstr ""
+
+msgid "Live"
+msgstr "Live"
+
+msgid "Loaded {} cached tracks"
+msgstr ""
+
+msgid "Log in to cache tracks offline"
+msgstr ""
+
+msgid "Lossless: {}"
+msgstr ""
+
+msgid "Lyrics cache cleared"
+msgstr ""
+
+msgid "Lyrics copied"
+msgstr "Paroles copiées"
+
+msgid "MIXTAPE"
+msgstr "MIXTAPE"
+
+msgid "Matching tracks: {} / {} ({} found)"
+msgstr ""
+
+msgid "Middle-click to pause"
+msgstr ""
+
+msgid "Middle-click to play"
+msgstr ""
+
+msgid "Mixed queue — not cast to Qobuz Connect"
+msgstr ""
+
+msgid "More From Your Library"
+msgstr "Plus de votre bibliothèque"
+
+msgid "Most Streamed"
+msgstr ""
+
+msgid "Music Player\nNothing playing"
+msgstr ""
+
+msgid "Network folder detected"
+msgstr ""
+
+msgid "Never"
+msgstr "Jamais"
+
+msgid "New Releases"
+msgstr "Nouveautés"
+
+msgid "Next Track"
+msgstr "Titre suivant"
+
+msgid "No matching tracks found."
+msgstr ""
+
+msgid "No sinks detected — reinstall the ALSA UCM profiles, then reboot"
+msgstr ""
+
+msgid "No top tracks available for this artist"
+msgstr ""
+
+msgid "No tracks available offline"
+msgstr ""
+
+msgid "Not available offline"
+msgstr ""
+
+msgid "Nothing playable in this playlist right now"
+msgstr ""
+
+msgid "Offline cache cleared"
+msgstr ""
+
+msgid "Offline cache is full — free space or raise the limit"
+msgstr ""
+
+msgid "Offline caching failed"
+msgstr ""
+
+msgid "Offline listening period expired — reconnect to verify your subscription"
+msgstr ""
+
+msgid "On Local Library"
+msgstr ""
+
+msgid "Opened folder ({} files skipped)"
+msgstr ""
+
+msgid "PLAYLIST"
+msgstr "PLAYLIST"
+
+msgid "Paste your ListenBrainz user token first"
+msgstr ""
+
+msgid "Play/Pause"
+msgstr ""
+
+msgid "Playing next"
+msgstr ""
+
+msgid "Playing {} of {}"
+msgstr ""
+
+msgid "Playlist ({} local)"
+msgstr ""
+
+msgid "Playlist created in Qobuz™."
+msgstr ""
+
+msgid "Playlist uploaded to Qobuz"
+msgstr ""
+
+msgid "Playlist: {}"
+msgstr ""
+
+msgid "Plex link failed to start"
+msgstr ""
+
+msgid "Press Accolades"
+msgstr "Distinctions de la presse"
+
+msgid "Previous Track"
+msgstr "Titre précédent"
+
+msgid "QBZ requesting {} · {}-bit"
+msgstr ""
+
+msgid "Qobuz Connect is unavailable while offline"
+msgstr ""
+
+msgid "Qobuz Connect renderer disconnected"
+msgstr ""
+
+msgid "Qobuz Connect renderer unreachable"
+msgstr ""
+
+msgid "Qobuzissimes"
+msgstr "Qobuzissimes"
+
+msgid "Quit QBZ"
+msgstr ""
+
+msgid "Rate limited, try again shortly"
+msgstr ""
+
+msgid "Rediscover Your Library"
+msgstr ""
+
+msgid "Release Watch"
+msgstr "Radar des sorties"
+
+msgid "Removed \"{}\" ({})"
+msgstr ""
+
+msgid "Removed album from offline"
+msgstr ""
+
+msgid "Removed from offline"
+msgstr ""
+
+msgid "Removed {} of {} tracks"
+msgstr ""
+
+msgid "Scan cancelled"
+msgstr "Analyse annulée"
+
+msgid "Scan complete"
+msgstr "Analyse terminée"
+
+msgid "Scan failed"
+msgstr ""
+
+msgid "Scanning track paths..."
+msgstr ""
+
+msgid "Scroll to adjust volume"
+msgstr ""
+
+msgid "Search failed: {}"
+msgstr ""
+
+msgid "Searching Qobuz catalog..."
+msgstr "Recherche dans le catalogue Qobuz..."
+
+msgid "Select music folder"
+msgstr ""
+
+msgid "Show/Hide Window"
+msgstr ""
+
+msgid "Similar to {}"
+msgstr ""
+
+msgid "Single"
+msgstr "Single"
+
+msgid "Skipped: {}"
+msgstr ""
+
+msgid "Some tracks can't be cast to Qobuz Connect"
+msgstr ""
+
+msgid "Song Radio"
+msgstr "Radio chanson"
+
+msgid "Split into {} playlists (Qobuz 2000-track limit)"
+msgstr ""
+
+msgid "Start the sign-in first"
+msgstr ""
+
+msgid "Starting…"
+msgstr ""
+
+msgid "System default"
+msgstr ""
+
+msgid "TRACK"
+msgstr ""
+
+msgid "These items resolved to 0 playable tracks"
+msgstr ""
+
+msgid "This action cannot be undone."
+msgstr ""
+
+msgid "This album has no playable tracks"
+msgstr ""
+
+msgid "This collection resolved to 0 playable tracks"
+msgstr ""
+
+msgid "This item resolved to 0 playable tracks"
+msgstr ""
+
+msgid "This modifies your audio files on disk and cannot be undone."
+msgstr ""
+
+msgid "This playlist has no playable tracks"
+msgstr ""
+
+msgid "This removes ALL indexed tracks from the database. Your audio files are NOT deleted. You will need to re-scan your folders afterward."
+msgstr ""
+
+msgid "This removes cached Plex libraries and tracks. Your sign-in is kept."
+msgstr ""
+
+msgid "This signs out of Plex and clears the locally cached libraries and tracks."
+msgstr ""
+
+msgid "This track is no longer available"
+msgstr ""
+
+msgid "Track count differs from the result; titles applied by position"
+msgstr ""
+
+msgid "Track not available offline"
+msgstr ""
+
+msgid "Track not castable to Qobuz Connect"
+msgstr ""
+
+msgid "Track unavailable on Qobuz Connect"
+msgstr ""
+
+msgid "Tracks matched: {} / {}"
+msgstr ""
+
+msgid "Unavailable Plex track"
+msgstr ""
+
+msgid "Unavailable track"
+msgstr ""
+
+msgid "Unknown"
+msgstr "Inconnu"
+
+msgid "Unknown Artist"
+msgstr ""
+
+msgid "Unknown source"
+msgstr ""
+
+msgid "Upload incomplete — local playlist kept"
+msgstr ""
+
+msgid "Various Artists"
+msgstr ""
+
+msgid "Waiting for the DAC to start playing…"
+msgstr ""
+
+msgid "Write tags to audio files?"
+msgstr ""
+
+msgid "Writing tags to files isn't supported for CUE albums; use sidecar mode"
+msgstr ""
+
+msgid "Year must be a number"
+msgstr ""
+
+msgid "You're offline — try again when connected"
+msgstr ""
+
+msgid "Your audio stack is ready for bit-perfect playback."
+msgstr ""
+
+msgid "Your queue is empty — add some tracks first, or press Play test."
+msgstr ""
+
+msgid "by {}"
+msgstr ""
+
+msgid "{} + {} more"
+msgstr ""
+
+msgid "{} albums · {} tracks"
+msgstr ""
+
+msgid "{} h {} min"
+msgstr ""
+
+msgid "{} libraries found"
+msgstr ""
+
+msgid "{} min"
+msgstr ""
+
+msgid "{} removed from blacklist"
+msgstr ""
+
+msgid "{} tracks loaded"
+msgstr ""
+
+msgid "{} tracks · {}"
+msgstr ""
+
+msgid "{} {}"
+msgstr ""
+
+msgid "{} {}, {}"
+msgstr ""
+
+msgid "{} — Complete Discography"
+msgstr ""
+
+msgid "· Unlimited"
+msgstr ""
+
+msgid "· of {}"
+msgstr ""
