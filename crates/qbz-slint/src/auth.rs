@@ -114,6 +114,9 @@ where
         crate::artist_blacklist::init_for_user(&dir);
         // Intelligent Search (cache + ranking), seeded from the persisted pref.
         crate::search_service::init(&dir, crate::ui_prefs::load().intelligent_search);
+        // Session persistence (queue + playback): open the per-user session.db
+        // and seed the persist/resume gates from the playback prefs.
+        crate::session_persist::init_for_user(&dir);
     }
     // Lyrics cache (per-user, shared lyrics.db with Tauri).
     crate::lyrics::init_for_user(core.client(), user_id);
@@ -227,6 +230,9 @@ where
                 crate::artist_blacklist::init_for_user(&dir);
                 // Intelligent Search (cache + ranking), seeded from the pref.
                 crate::search_service::init(&dir, crate::ui_prefs::load().intelligent_search);
+                // Session persistence (queue + playback): open the per-user
+                // session.db and seed the persist/resume gates.
+                crate::session_persist::init_for_user(&dir);
             }
             // Lyrics cache (per-user, shared lyrics.db with Tauri).
             crate::lyrics::init_for_user(core.client(), user_id);

@@ -441,6 +441,9 @@ fn build_snapshot(
     prefs: qbz_app::settings::playback::PlaybackPreferences,
     streaming_quality_key: &str,
 ) -> SettingsSnapshot {
+    // Keep the session-persistence gates in step with the live playback prefs
+    // whenever a settings snapshot is built (startup load + post-reset rebuild).
+    crate::session_persist::set_gates(prefs.persist_session, prefs.resume_playback_position);
     let backend_types = BackendManager::available_backends();
     let current_backend = audio.backend_type.unwrap_or_default();
     let backend_index = backend_types
@@ -861,12 +864,21 @@ pub async fn handle_bool(
             with_playback(&ctx.playback, |s| s.set_show_context_icon(value)).map(|_| Apply::None)
         }
         "persist-session" => {
-            with_playback(&ctx.playback, |s| s.set_persist_session(value)).map(|_| Apply::None)
+            let r = with_playback(&ctx.playback, |s| s.set_persist_session(value))
+                .map(|_| Apply::None);
+            if let Ok(p) = with_playback(&ctx.playback, |s| s.get_preferences()) {
+                crate::session_persist::set_gates(p.persist_session, p.resume_playback_position);
+            }
+            r
         }
-        "resume-position" => with_playback(&ctx.playback, |s| {
-            s.set_resume_playback_position(value)
-        })
-        .map(|_| Apply::None),
+        "resume-position" => {
+            let r = with_playback(&ctx.playback, |s| s.set_resume_playback_position(value))
+                .map(|_| Apply::None);
+            if let Ok(p) = with_playback(&ctx.playback, |s| s.get_preferences()) {
+                crate::session_persist::set_gates(p.persist_session, p.resume_playback_position);
+            }
+            r
+        }
         other => {
             log::warn!("[qbz-slint] unknown settings bool key: {other}");
             return;

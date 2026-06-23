@@ -625,20 +625,29 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
         quality: Quality,
         offline: Option<&qbz_offline_cache::OfflineCacheState>,
         sink: Option<&qbz_offline_cache::CacheEventSink>,
+        start_position_secs: u64,
     ) -> Result<(), String> {
         if let Some(off) = offline {
             if let Some(bytes) =
                 crate::offline_resolve::resolve_offline_bytes(track_id, off, sink).await
             {
                 log::info!("[Core] track {} served from OFFLINE cache", track_id);
-                return self.player.play_data(bytes, track_id);
+                let r = self.player.play_data(bytes, track_id);
+                // Offline-cached bytes play from memory; honor a session-resume
+                // position with a best-effort seek (0 = from the start).
+                if r.is_ok() && start_position_secs > 0 {
+                    let _ = self.player.seek(start_position_secs);
+                }
+                return r;
             }
         }
         let guard = self.client.read().await;
         let client = guard
             .as_ref()
             .ok_or_else(|| "No Qobuz client available".to_string())?;
-        self.player.play_track(client, track_id, quality).await
+        self.player
+            .play_track(client, track_id, quality, start_position_secs)
+            .await
     }
 
     /// Resolve the bytes for a GAPLESS successor. Tier order L1/L2 → offline →

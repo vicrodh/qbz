@@ -100,6 +100,7 @@ mod recently;
 mod scrobble;
 mod scrobbler_settings;
 mod search;
+mod session_persist;
 mod search_service;
 // WGPU UNDERLAY SPIKE: GPU fragment-shader background for ImmersiveView.
 mod shader_underlay;
@@ -320,6 +321,9 @@ async fn enter_shell(
     // Store the miniplayer context (idempotent). The mini window itself is
     // created lazily on first enter.
     miniplayer::init(runtime.clone(), weak.clone(), tokio::runtime::Handle::current());
+    // Bind the exit context so the window close handlers can flush a final
+    // session snapshot before the loop quits (idempotent).
+    session_persist::bind_exit_ctx(runtime.clone(), tokio::runtime::Handle::current());
 
     // Load the sidebar playlists list.
     load_sidebar_playlists(runtime.clone(), weak.clone(), &tokio::runtime::Handle::current());
@@ -387,6 +391,75 @@ async fn enter_shell(
 
     reload_home(&runtime, &weak, &image_cache, "home".to_string()).await;
 
+    // Session persistence: restore the last queue + current track PAUSED (gated
+    // on `persist_session`). set_queue_with_order emits QueueUpdated so the queue
+    // sidebar repaints itself; the now-playing bar reads current_track, so we
+    // refresh its metadata explicitly. No audio is loaded — playback stays
+    // stopped until the user hits play (Phase B then seeks to the saved
+    // position when `resume_playback_position` is on).
+    if session_persist::restore(&runtime).await {
+        playback::refresh_now_playing_meta(&runtime, &weak).await;
+        // Repaint the queue sidebar/list — set_queue_with_order emits
+        // QueueUpdated, but the queue UI repaints from explicit refreshes.
+        playback::refresh_sidebar(true);
+        // Seed the seek bar + timers to the resume position so they show it
+        // immediately (refresh_now_playing_meta above reset them to 0; the poll
+        // loop only catches up once playback starts). Peeks — the actual resume
+        // still fires on first play.
+        //
+        // KNOWN ISSUE / NEEDS WORK: this seed does NOT visibly stick — at rest
+        // the bar + timer still read 0:00 and only jump to the resume position
+        // once the user presses play (the audio resume itself works correctly).
+        // Something repaints NowPlayingState position/progress back to 0 after
+        // this runs (a later refresh_now_playing_meta closure, the poll loop's
+        // idle tick reporting position 0 while no audio is loaded, or the bar
+        // binding not reflecting a paused non-loaded position). Left as-is on
+        // purpose — revisit the pre-play seek-bar seed for paused restore.
+        let resume_pos = session_persist::pending_resume_position();
+        if resume_pos > 0 {
+            if let Some(track) = runtime.core().current_track().await {
+                let dur = track.duration_secs;
+                let _ = weak.upgrade_in_event_loop(move |w| {
+                    playback::seed_seek_display(&w, resume_pos, dur);
+                });
+            }
+        }
+    }
+
+    // Startup page = "where you left off": restore the last SAFE top-level view
+    // (online only — the offline entry keeps its D12 LocalLibrary root). Home
+    // was loaded just above; if a different view is remembered, re-root the nav
+    // history there (on the UI thread, like the offline path) and apply_entry it
+    // — which loads the view's data, NOT a blank set_view (the Tauri precedent).
+    {
+        let prefs = crate::ui_prefs::load();
+        if prefs.startup_page == "remember" {
+            let entry = match prefs.last_view.as_str() {
+                "favorites" => Some(nav::NavEntry::Favorites { tab: "tracks".to_string() }),
+                "local-library" => Some(nav::NavEntry::LocalLibrary {
+                    tab: local_library::LibTab::Albums.tab_id().to_string(),
+                }),
+                "mixtapes" => Some(nav::NavEntry::Mixtapes),
+                "collections" => Some(nav::NavEntry::Collections),
+                // "home" / unknown → keep the Home already loaded above.
+                _ => None,
+            };
+            if let Some(entry) = entry {
+                let root_entry = entry.clone();
+                let _ = weak.upgrade_in_event_loop(move |_w| {
+                    nav::reset_root(root_entry);
+                });
+                apply_entry(
+                    entry,
+                    &runtime,
+                    &weak,
+                    &tokio::runtime::Handle::current(),
+                    &image_cache,
+                );
+            }
+        }
+    }
+
     // Seed the favorites tab counts so the badges are ready before the
     // user opens each tab (they otherwise only count on first visit).
     let counts = favorites::load_counts(&runtime).await;
@@ -442,6 +515,9 @@ async fn enter_shell_offline(
         // Intelligent Search (cache + ranking), seeded from the persisted pref.
         // Cached results stay searchable offline; live revalidation no-ops.
         crate::search_service::init(&dir, crate::ui_prefs::load().intelligent_search);
+        // Session persistence (queue + playback): open the per-user session.db
+        // and seed the persist/resume gates from the playback prefs.
+        crate::session_persist::init_for_user(&dir);
     }
     // Lyrics cache (per-user, shared file with Tauri) — offline sessions
     // serve cached lyrics (deviation D3, cache-first offline contract).
@@ -487,6 +563,9 @@ async fn enter_shell_offline(
     // Store the miniplayer context (idempotent). The mini window itself is
     // created lazily on first enter.
     miniplayer::init(runtime.clone(), weak.clone(), tokio::runtime::Handle::current());
+    // Bind the exit context so the window close handlers can flush a final
+    // session snapshot before the loop quits (idempotent).
+    session_persist::bind_exit_ctx(runtime.clone(), tokio::runtime::Handle::current());
 
     // Load Audio + Playback settings into the Settings page in the
     // background — fully local, same path as the online entry.
@@ -724,6 +803,37 @@ fn install_browser_mouse_nav(window: &AppWindow) {
                     _ => EventResult::Propagate,
                 }
             }
+            // Persist main-window geometry so the next launch restores it
+            // (mirrors miniplayer.rs). The startup restore clamps to the
+            // monitor; here we just record what the WM settled on. A change
+            // guard avoids redundant writes on the many no-op events the WM
+            // emits. The app minimum is 940x600 (app.slint) — ignore smaller
+            // frames (minimize reports 0x0, mid-transition frames undershoot).
+            WindowEvent::Resized(size) => {
+                let scale = slint_window.scale_factor().max(0.01) as f64;
+                let lw = (size.width as f64 / scale) as f32;
+                let lh = (size.height as f64 / scale) as f32;
+                if lw >= 940.0 && lh >= 600.0 {
+                    let mut prefs = crate::ui_prefs::load();
+                    if (prefs.window_width - lw).abs() > 0.5
+                        || (prefs.window_height - lh).abs() > 0.5
+                    {
+                        prefs.window_width = lw;
+                        prefs.window_height = lh;
+                        crate::ui_prefs::save(&prefs);
+                    }
+                }
+                EventResult::Propagate
+            }
+            WindowEvent::Moved(pos) => {
+                let mut prefs = crate::ui_prefs::load();
+                if prefs.window_x != pos.x || prefs.window_y != pos.y {
+                    prefs.window_x = pos.x;
+                    prefs.window_y = pos.y;
+                    crate::ui_prefs::save(&prefs);
+                }
+                EventResult::Propagate
+            }
             _ => EventResult::Propagate,
         }
     });
@@ -834,6 +944,24 @@ fn is_offline_blocked_view(window: &AppWindow) -> bool {
             !ps.get_is_local() && !ps.get_offline_subset()
         }
         _ => false,
+    }
+}
+
+/// Map a top-level view to its persisted key for "Startup page = where you left
+/// off" — ONLY safe, id-free views (the main nav destinations). Detail views
+/// (album/artist/playlist/…) need a context id that may be stale on restart, so
+/// they return None and the last safe view is kept instead.
+fn safe_view_key(view: ContentView) -> Option<&'static str> {
+    match view {
+        // Home is also the Discover landing (its tabs render in the Home view),
+        // so this covers both. Detail views (album/artist/playlist/…) + the
+        // endpoint-scoped DiscoverBrowse "View all" pages are not restorable.
+        ContentView::Home => Some("home"),
+        ContentView::Favorites => Some("favorites"),
+        ContentView::LocalLibrary => Some("local-library"),
+        ContentView::Mixtapes => Some("mixtapes"),
+        ContentView::Collections => Some("collections"),
+        _ => None,
     }
 }
 
@@ -4634,6 +4762,49 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &restored_prefs.large_spectrum_mode,
         ));
     }
+    // Main window geometry: restore the persisted LOGICAL size + (best-effort)
+    // position, each clamped to the current monitor so a smaller / disconnected
+    // display never opens an oversized or stranded window. 0 size = never saved
+    // → keep the `.slint` preferred size. The monitor query is best-effort
+    // (`with_winit_window` returns None before the surface exists → the WM's own
+    // clamping is the fallback, and the Resized handler re-saves the result).
+    if restored_prefs.window_width >= 940.0 && restored_prefs.window_height >= 600.0 {
+        let mut w = restored_prefs.window_width;
+        let mut h = restored_prefs.window_height;
+        window.window().with_winit_window(|win| {
+            if let Some(mon) = win.current_monitor() {
+                let scale = win.scale_factor().max(0.01);
+                let avail_w = (mon.size().width as f64 / scale) as f32;
+                let avail_h = (mon.size().height as f64 / scale) as f32;
+                if avail_w >= 940.0 {
+                    w = w.min(avail_w);
+                }
+                if avail_h >= 600.0 {
+                    h = h.min(avail_h);
+                }
+            }
+        });
+        window.window().set_size(slint::LogicalSize::new(w, h));
+    }
+    if restored_prefs.window_x != i32::MIN && restored_prefs.window_y != i32::MIN {
+        let mut px = restored_prefs.window_x;
+        let mut py = restored_prefs.window_y;
+        window.window().with_winit_window(|win| {
+            if let Some(mon) = win.current_monitor() {
+                let m = mon.size();
+                let mp = mon.position();
+                // Keep the top-left inside the monitor rect, leaving ~100px so a
+                // sliver stays grabbable even if the saved spot is near an edge.
+                let max_x = (mp.x + m.width as i32 - 100).max(mp.x);
+                let max_y = (mp.y + m.height as i32 - 100).max(mp.y);
+                px = px.clamp(mp.x, max_x);
+                py = py.clamp(mp.y, max_y);
+            }
+        });
+        window
+            .window()
+            .set_position(slint::PhysicalPosition::new(px, py));
+    }
     // NOTE: the FFT tap is primed AFTER visualizer::install() (further below) — not
     // here — because install() registers the `on_set_enabled` handler this call
     // depends on.
@@ -4665,6 +4836,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Miniplayer default-view select index from the persisted key.
     window.global::<AppearanceState>().set_miniplayer_view_index(
         crate::ui_prefs::mini_default_view_index(&crate::ui_prefs::load().mini_default_view),
+    );
+    window.global::<AppearanceState>().set_startup_page_index(
+        crate::ui_prefs::startup_page_index(&crate::ui_prefs::load().startup_page),
     );
 
     // Theme: seed the dropdown list from the Rust registry, then restore the
@@ -6709,6 +6883,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let mut prefs = crate::ui_prefs::load();
                 prefs.mini_default_view =
                     crate::ui_prefs::mini_default_view_for_index(index).to_string();
+                crate::ui_prefs::save(&prefs);
+            }
+            "startup-page" => {
+                // 0 = Home, 1 = Where you left off (restore last_view).
+                let mut prefs = crate::ui_prefs::load();
+                prefs.startup_page = crate::ui_prefs::startup_page_for_index(index).to_string();
                 crate::ui_prefs::save(&prefs);
             }
             "theme" => {
@@ -8777,6 +8957,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut prefs = crate::ui_prefs::load();
             prefs.volume = fraction.clamp(0.0, 1.0);
             crate::ui_prefs::save(&prefs);
+        });
+        // Remember the last SAFE top-level view for "where you left off".
+        let weak = window.as_weak();
+        shell.on_persist_view(move || {
+            let Some(w) = weak.upgrade() else { return };
+            if let Some(key) = safe_view_key(w.global::<NavState>().get_view()) {
+                let mut prefs = crate::ui_prefs::load();
+                if prefs.last_view != key {
+                    prefs.last_view = key.to_string();
+                    crate::ui_prefs::save(&prefs);
+                }
+            }
         });
     }
 
@@ -15577,9 +15769,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // enabled and the tray is live; otherwise quit.
             if tray_settings::get().close_to_tray && tray::handle().is_some() {
                 log::info!("[qbz-slint] close-to-tray (titlebar): hiding to tray");
+                // Flush the session even when only hiding — the process may be
+                // killed from the tray / shell without a real quit afterwards.
+                session_persist::save_on_exit();
                 tray::hide_window(&weak);
             } else {
                 log::info!("[qbz-slint] closing");
+                // Flush the final session snapshot before quitting.
+                session_persist::save_on_exit();
                 let _ = slint::quit_event_loop();
             }
         }
@@ -15597,6 +15794,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Slint performs the hide (destroys the surface) for HideWindow;
             // we only sync the shown flag so the next tray toggle shows it.
             log::info!("[qbz-slint] close-to-tray (WM close): hiding to tray");
+            // Flush the session even when only hiding — the process may be
+            // killed from the tray / shell without a real quit afterwards.
+            session_persist::save_on_exit();
             tray::set_window_shown(false);
             // macOS: drop the Dock icon if the user opted in (no-op elsewhere).
             if settings.mac_hide_dock {
@@ -15605,6 +15805,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             slint::CloseRequestResponse::HideWindow
         } else {
             log::info!("[qbz-slint] WM close requested: quitting");
+            // Flush the final session snapshot before quitting.
+            session_persist::save_on_exit();
             // Best-effort: stop the renderer + media server so a cast device
             // doesn't keep playing after the app quits (Tauri parity, #32).
             if let Some(cast) = cast_service::service() {

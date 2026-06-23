@@ -3406,6 +3406,9 @@ export global ShellState {
     // Persist the sidebar state / nav placement (wired to ui_prefs in Rust).
     callback persist-sidebar-state(int);
     callback persist-nav(bool);
+    // Persist the current top-level view for "Startup page = where you left off"
+    // (Rust reads NavState.view and stores only SAFE, id-free views).
+    callback persist-view();
     public function cycle-sidebar() {
         root.sidebar-state = Math.mod(root.sidebar-state + 1, 3);
         if (root.sidebar-state != 0 && root.npb-mode == 3) {

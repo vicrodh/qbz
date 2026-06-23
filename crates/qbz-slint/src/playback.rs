@@ -91,6 +91,9 @@ pub async fn after_track_change(
     // gapless (a cached track plays via `play_data`, which the audio
     // engine's gapless engine supports; a streamed track does not).
     kick_prefetch(runtime).await;
+    // Persist the session (queue + current track + position) so a restart can
+    // restore it. No-op unless `persist_session` is on.
+    crate::session_persist::capture_and_save(runtime).await;
 }
 
 /// How many upcoming queue tracks to prefetch into the player cache.
@@ -503,9 +506,18 @@ async fn play_audible(runtime: &Runtime, weak: &slint::Weak<AppWindow>, track_id
     // login. The sink drives the padlock while a CMAF bundle decrypts.
     let offline = crate::offline::get().await;
     let sink = crate::offline_cache::row_sink(weak.clone());
+    // Session resume: if this is the track restored at launch, start it at the
+    // saved position (consumed once); any other track starts from 0.
+    let start_position_secs = crate::session_persist::take_resume_for(track_id);
     if let Err(e) = runtime
         .core()
-        .play_track_resolved(track_id, PLAYBACK_QUALITY, offline.as_deref(), Some(&sink))
+        .play_track_resolved(
+            track_id,
+            PLAYBACK_QUALITY,
+            offline.as_deref(),
+            Some(&sink),
+            start_position_secs,
+        )
         .await
     {
         log::error!("[qbz-slint] playback: play_track {track_id} failed: {e}");
@@ -1268,6 +1280,24 @@ fn fmt_elapsed(secs: u64) -> String {
 fn fmt_remaining(position: u64, duration: u64) -> String {
     let left = duration.saturating_sub(position);
     format!("-{}:{:02}", left / 60, left % 60)
+}
+
+/// Seed the seek bar + timers on `NowPlayingState` to a fixed position (UI
+/// thread). Used by the session restore so the bar shows the resume point
+/// immediately — `refresh_now_playing_meta` resets these to 0, and the poll
+/// loop only catches up once playback actually starts.
+pub(crate) fn seed_seek_display(w: &AppWindow, position_secs: u64, duration_secs: u64) {
+    let np = w.global::<NowPlayingState>();
+    let progress = if duration_secs > 0 {
+        (position_secs as f32 / duration_secs as f32).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    np.set_duration_secs(duration_secs as i32);
+    np.set_position_secs(position_secs as i32);
+    np.set_progress(progress);
+    np.set_elapsed(fmt_elapsed(position_secs).into());
+    np.set_remaining(fmt_remaining(position_secs, duration_secs).into());
 }
 
 /// Push the now-playing values for the current queue track onto
@@ -3184,6 +3214,9 @@ pub fn toggle_play_pause(
             if let Err(e) = runtime.core().pause() {
                 log::error!("[qbz-slint] playback: pause failed: {e}");
             }
+            // Persist the paused position so a restart resumes near where the
+            // user stopped (no-op unless `persist_session` is on).
+            crate::session_persist::capture_and_save(&runtime).await;
             return;
         }
         // Not playing: resume an existing stream, or cold-start the current
@@ -3405,6 +3438,8 @@ pub fn start_poll_loop(
         let mut last_track_id: u64 = 0;
         let mut was_playing = false;
         let mut seen_position: u64 = 0;
+        // Throttle for the periodic session-position save (every ~11 ticks ≈ 5s).
+        let mut save_pos_tick: u64 = 0;
         // Track id we have already fired a gapless prefetch for, so the
         // 450ms ticker does not re-request it every tick.
         let mut gapless_requested_for: u64 = 0;
@@ -3561,6 +3596,13 @@ pub fn start_poll_loop(
             let duration = event.duration;
             let is_playing = event.is_playing;
             let volume = event.volume;
+            // Persist the live position periodically (~5s) while playing so a
+            // crash keeps a near-current resume point (no-op unless
+            // `persist_session` is on; `position` is in seconds).
+            save_pos_tick = save_pos_tick.wrapping_add(1);
+            if is_playing && track_id != 0 && save_pos_tick % 11 == 0 {
+                crate::session_persist::save_position(position);
+            }
             // Streaming buffer fill, for the seek-bar cache overlay.
             let cache = event.buffer_progress.unwrap_or(0.0);
             // Seek lock: while streaming (`buffer_progress` is Some), the user

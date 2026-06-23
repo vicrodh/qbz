@@ -3433,11 +3433,13 @@ impl Player {
         client: &QobuzClient,
         track_id: u64,
         quality: Quality,
+        start_position_secs: u64,
     ) -> Result<(), String> {
         log::info!(
-            "Player: Starting playback for track {} with quality {:?}",
+            "Player: Starting playback for track {} with quality {:?} (start {}s)",
             track_id,
-            quality
+            quality,
+            start_position_secs
         );
 
         // Cache hit: replay instantly from L1/L2 unless the cached copy is
@@ -3455,7 +3457,14 @@ impl Player {
                     track_id,
                     cached.size_bytes
                 );
-                return self.play_data(cached.data, track_id);
+                let r = self.play_data(cached.data, track_id);
+                // Cached tracks play from in-memory data (no streaming resume
+                // offset); honor a session-resume position with a best-effort
+                // seek once playback has been handed to the audio thread.
+                if r.is_ok() && start_position_secs > 0 {
+                    let _ = self.seek(start_position_secs);
+                }
+                return r;
             }
         }
 
@@ -3527,7 +3536,7 @@ impl Player {
                     total_flac_size,
                     speed_mbps,
                     duration_secs,
-                    0, // no resume offset
+                    start_position_secs, // session-resume offset (0 = from start)
                 )?;
 
                 // Spawn the background task that fetches + decrypts + pushes
@@ -3604,7 +3613,11 @@ impl Player {
         }
 
         // Send to audio thread
-        self.play_data(audio_data, track_id)
+        let r = self.play_data(audio_data, track_id);
+        if r.is_ok() && start_position_secs > 0 {
+            let _ = self.seek(start_position_secs);
+        }
+        r
     }
 
     /// Download a track fully into the L1/L2 cache **without** starting

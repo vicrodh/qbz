@@ -129,6 +129,9 @@ export component AppShell inherits Rectangle {
     property <ContentView> tracked-view: NavState.view;
     changed tracked-view => {
         SearchActions.cortinilla-dismiss();
+        // Remember the last top-level view for "Startup page = where you left
+        // off" (Rust filters to safe, id-free views before persisting).
+        ShellState.persist-view();
     }
 
     // FFT visualizer tap — single source of truth. The tap (frontend-agnostic

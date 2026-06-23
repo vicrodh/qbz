@@ -94,6 +94,32 @@ fn default_volume() -> f32 {
     1.0
 }
 
+fn default_startup_page() -> String {
+    "home".to_string()
+}
+
+fn default_last_view() -> String {
+    "home".to_string()
+}
+
+/// Startup-page select index (0 = Home, 1 = Where you left off) -> key.
+pub fn startup_page_for_index(index: i32) -> &'static str {
+    if index == 1 {
+        "remember"
+    } else {
+        "home"
+    }
+}
+
+/// Inverse: select index for a persisted startup-page key.
+pub fn startup_page_index(key: &str) -> i32 {
+    if key == "remember" {
+        1
+    } else {
+        0
+    }
+}
+
 /// Miniplayer default-view select index -> persisted key (mirrors the
 /// miniplayer's own reader in `miniplayer.rs`). 0 = "remember".
 pub fn mini_default_view_for_index(index: i32) -> &'static str {
@@ -190,6 +216,15 @@ pub struct UiPrefs {
     /// Player volume, 0.0..=1.0. Restored at startup. Default full.
     #[serde(default = "default_volume")]
     pub volume: f32,
+    /// Startup page: "home" (always Home) or "remember" (restore last_view).
+    /// Maps to Settings > Appearance > Startup page.
+    #[serde(default = "default_startup_page")]
+    pub startup_page: String,
+    /// Last visited SAFE top-level view (no required id), for "remember". One of
+    /// "home" | "discover" | "favorites" | "local-library" | "mixtapes" |
+    /// "collections". Detail views (album/artist/playlist/…) are never stored.
+    #[serde(default = "default_last_view")]
+    pub last_view: String,
     /// Immersive in-view search action: `"disabled"` | `"replace"` | `"next"` |
     /// `"queue"`. Doubles as the enable switch (`"disabled"` keeps the field
     /// inert). See [`DEFAULT_IMMERSIVE_SEARCH_ACTION`].
@@ -233,6 +268,26 @@ pub struct UiPrefs {
     /// Default-view key: "remember" | micro | compact | artwork | queue | lyrics.
     #[serde(default = "default_mini_default_view")]
     pub mini_default_view: String,
+
+    // ---- Main window geometry ------------------------------------------
+    /// Last main-window LOGICAL size. 0 = never saved → use the `.slint`
+    /// preferred size. Restored at startup, clamped to the monitor's size so a
+    /// smaller display never opens an oversized window.
+    #[serde(default)]
+    pub window_width: f32,
+    #[serde(default)]
+    pub window_height: f32,
+    /// Last main-window PHYSICAL outer position. `i32::MIN` = never saved → let
+    /// the window manager place it. Nice-to-have; clamped on-screen at restore.
+    #[serde(default = "default_window_pos")]
+    pub window_x: i32,
+    #[serde(default = "default_window_pos")]
+    pub window_y: i32,
+}
+
+/// Sentinel for "no saved window position" (let the WM place the window).
+fn default_window_pos() -> i32 {
+    i32::MIN
 }
 
 fn default_mini_surface() -> i32 {
@@ -301,6 +356,8 @@ impl Default for UiPrefs {
             sidebar_state: 0,
             nav_in_sidebar: default_nav_in_sidebar(),
             volume: default_volume(),
+            startup_page: default_startup_page(),
+            last_view: default_last_view(),
             immersive_search_action: default_immersive_search_action(),
             immersive_default_view: default_immersive_default_view(),
             immersive_last_view_mode: 0,
@@ -312,6 +369,10 @@ impl Default for UiPrefs {
             mini_height: default_mini_height(),
             mini_background_blur: false,
             mini_default_view: default_mini_default_view(),
+            window_width: 0.0,
+            window_height: 0.0,
+            window_x: default_window_pos(),
+            window_y: default_window_pos(),
         }
     }
 }

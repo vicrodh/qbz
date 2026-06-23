@@ -241,6 +241,8 @@ pub(crate) fn set_mac_dock_hidden(hidden: bool) {
 pub(crate) fn quit() {
     log::info!("[tray] quit requested");
     let _ = slint::invoke_from_event_loop(|| {
+        // Flush the session before the loop tears down.
+        crate::session_persist::save_on_exit();
         let _ = slint::quit_event_loop();
     });
 }
