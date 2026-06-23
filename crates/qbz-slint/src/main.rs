@@ -30,6 +30,7 @@ mod commands;
 mod custom_artwork;
 mod dates;
 mod discover_browse;
+mod discord_rpc;
 mod discover_prefs;
 mod discovery_dismiss;
 mod fav_cache;
@@ -173,6 +174,12 @@ fn init_shell_for_user(
     // shared scrobble_queue + listen_queue on every offline -> online edge).
     scrobbler_settings::init_for_user(user_id);
     scrobble::start(tokio::runtime::Handle::current());
+
+    // Discord Rich Presence: apply the persisted opt-in AFTER the session is
+    // active (PR #477 — never at early boot). Runs for both the online and
+    // offline entry paths since both call init_shell_for_user. No-op + no IPC
+    // when the user hasn't opted in.
+    discord_rpc::init(runtime, &tokio::runtime::Handle::current());
 
     // Bind "My QBZ" nav branding (custom label + icon) to this user
     // (per-user myqbz_branding.json). Seeded into MyQbzBrandingState by the
@@ -6433,6 +6440,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let weak = window.as_weak();
         let handle = tokio_rt.handle().clone();
         window.on_logout(move || {
+            // Drop any Discord "now listening" activity on logout.
+            discord_rpc::clear(&handle);
             let runtime = runtime.clone();
             let weak = weak.clone();
             handle.spawn(async move {
@@ -6450,6 +6459,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     w.set_screen(AppScreen::Login);
                 });
             });
+        });
+    }
+
+    // Discord Rich Presence (Settings > Integrations): seed the toggle from the
+    // persisted opt-in and wire the change to the controller (persist + apply).
+    {
+        let de = window.global::<DiscordState>();
+        de.set_enabled(crate::ui_prefs::load().discord_rpc_enabled);
+        let runtime = app_runtime.clone();
+        let handle = tokio_rt.handle().clone();
+        de.on_set_enabled(move |enabled| {
+            discord_rpc::set_enabled(enabled, &runtime, &handle);
         });
     }
 

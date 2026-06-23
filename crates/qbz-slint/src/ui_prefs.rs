@@ -168,6 +168,11 @@ pub struct UiPrefs {
     /// Default ON (the notify backend ships default-on; this is the user gate).
     #[serde(default = "default_system_notifications")]
     pub system_notifications: bool,
+    /// Discord Rich Presence "now listening" opt-in. Default OFF — external
+    /// integrations are opt-in. (Tauri scoped this per Qobuz user; here it is a
+    /// per-machine app preference — your Discord client is per-machine.)
+    #[serde(default)]
+    pub discord_rpc_enabled: bool,
     /// Immersive in-view search action: `"disabled"` | `"replace"` | `"next"` |
     /// `"queue"`. Doubles as the enable switch (`"disabled"` keeps the field
     /// inert). See [`DEFAULT_IMMERSIVE_SEARCH_ACTION`].
@@ -275,6 +280,7 @@ impl Default for UiPrefs {
             album_header_gradient: default_album_header_gradient(),
             intelligent_search: default_intelligent_search(),
             system_notifications: default_system_notifications(),
+            discord_rpc_enabled: false,
             immersive_search_action: default_immersive_search_action(),
             immersive_default_view: default_immersive_default_view(),
             immersive_last_view_mode: 0,

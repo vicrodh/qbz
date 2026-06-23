@@ -24,6 +24,7 @@
 //! The crate exposes async APIs that can be called from any async runtime.
 
 pub mod discogs;
+pub mod discord;
 pub mod error;
 pub mod lastfm;
 pub mod listenbrainz;
@@ -34,6 +35,7 @@ pub use error::{IntegrationError, IntegrationResult};
 
 // Re-export main types for convenience
 pub use discogs::DiscogsClient;
+pub use discord::{DiscordRpc, NowListening};
 pub use lastfm::{LastFmClient, LastFmSession};
 pub use listenbrainz::{ListenBrainzClient, ListenBrainzConfig, ListenType};
 pub use musicbrainz::{MusicBrainzClient, MusicBrainzConfig};

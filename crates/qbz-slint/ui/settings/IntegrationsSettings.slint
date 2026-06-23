@@ -8,7 +8,7 @@
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
 import { Radius } from "../foundation/radius.slint";
-import { ScrobbleState, ScrobbleActions } from "../state.slint";
+import { ScrobbleState, ScrobbleActions, DiscordState } from "../state.slint";
 import { SettingRow } from "SettingRow.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { QbzToggle } from "../primitives/QbzToggle.slint";
@@ -263,5 +263,29 @@ export component IntegrationsSettings inherits VerticalLayout {
             font-size: Typography.legal;
             wrap: word-wrap;
         }
+    }
+
+    // ===================================================================
+    // DISCORD — Rich Presence "now listening" (opt-in, independent of the
+    // scrobblers above). State + persistence live in DiscordState / ui_prefs;
+    // the fire + IPC live in the `discord_rpc` controller.
+    // ===================================================================
+    Rectangle { height: 12px; }
+    GroupHeader { text: @tr("DISCORD"); }
+    Rectangle { height: 4px; }
+    SettingRow {
+        label: @tr("Discord Rich Presence");
+        description: @tr("Show what you're listening to as your Discord status. Opt-in — Discord must be running.");
+        QbzToggle {
+            checked: DiscordState.enabled;
+            toggled(v) => {
+                DiscordState.enabled = v;
+                DiscordState.set-enabled(v);
+            }
+        }
+    }
+    SettingRow {
+        label: @tr("Flatpak socket access");
+        description: @tr("Flatpak install and the presence isn't showing? Grant access to Discord's IPC socket, then restart QBZ:\nflatpak override --user --filesystem=xdg-run/discord-ipc-0 com.blitzfc.qbz");
     }
 }

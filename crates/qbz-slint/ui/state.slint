@@ -1314,6 +1314,13 @@ export global PlexAuthActions {
 // `scrobble` controller (auth flows + the now-playing/scrobble fire live
 // there). ADR-008: no pills.
 
+// Discord Rich Presence (Settings > Integrations). Opt-in, default OFF; the
+// `enabled` flag is seeded from ui_prefs and `set-enabled` persists + applies it.
+export global DiscordState {
+    in-out property <bool> enabled: false;
+    callback set-enabled(bool);
+}
+
 export global ScrobbleState {
     // --- Master section toggles -------------------------------------------
     in-out property <bool> enabled: false;            // master toggle (default OFF)

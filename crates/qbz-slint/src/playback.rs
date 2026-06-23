@@ -1462,6 +1462,10 @@ pub(crate) async fn refresh_now_playing_meta(runtime: &Runtime, weak: &slint::We
         // peer's track (Q7). Fire-and-forget; the stale-response guard (F2)
         // lives in `lyrics::on_track_changed`.
         crate::lyrics::on_track_changed(weak.clone(), &track);
+        // Discord Rich Presence: push the new track on this de-duped
+        // track-change edge (no-op + no IPC when not opted in). Mirrors the
+        // Tauri service's track_id transition push.
+        crate::discord_rpc::push(runtime, &tokio::runtime::Handle::current());
         // Warm the NEXT queued track's lyrics in the background so the panel is
         // instant when it becomes current (cache-only; no UI). Generated here
         // because Tauri only ever fetches the CURRENT track.
@@ -3786,6 +3790,10 @@ pub fn start_poll_loop(
                     };
                     mc.set_playback(status, Some(std::time::Duration::from_secs(position as u64)));
                 }
+                // Discord Rich Presence: re-push on the play/pause edge so the
+                // "Playing" / "Paused at mm:ss" state + timestamps stay correct
+                // (no-op when not opted in). Mirrors the Tauri service.
+                crate::discord_rpc::push(&runtime, &tokio::runtime::Handle::current());
             }
             was_playing = is_playing;
 
