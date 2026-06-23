@@ -158,7 +158,7 @@ export component Spotlight inherits VerticalLayout {
                 if ForYouState.spotlight-has-top-tracks: RadioCard {
                     seed-title: @tr("Top tracks");
                     seed-subtitle: @tr("By {}", ForYouState.spotlight-name);
-                    label: "TOP TRACKS";
+                    label: @tr("TOP TRACKS");
                     artwork: ForYouState.spotlight-image;
                     clicked => {
                         root.play-top-tracks(ForYouState.spotlight-artist-id);
@@ -170,7 +170,7 @@ export component Spotlight inherits VerticalLayout {
                 RadioCard {
                     seed-title: ForYouState.spotlight-name;
                     seed-subtitle: @tr("Qobuz Radio Station");
-                    label: "RADIO";
+                    label: @tr("RADIO");
                     artwork: ForYouState.spotlight-image;
                     clicked => {
                         root.start-radio(ForYouState.spotlight-artist-id);

@@ -11,7 +11,7 @@ import { Typography } from "../foundation/typography.slint";
 import { QbzIcon } from "QbzIcon.slint";
 
 export component ExpandableSearch inherits Rectangle {
-    in property <string> placeholder: "Search…";
+    in property <string> placeholder: @tr("Search…");
     // Trimmed 20px so the open field doesn't ride over the controls to its
     // left on small screens.
     in property <length> max-open-width: 196px;

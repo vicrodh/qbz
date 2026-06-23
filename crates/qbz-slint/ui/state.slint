@@ -2676,14 +2676,14 @@ export global AppearanceState {
     // Auto-Theme (shown when the "System" theme is selected). Source:
     // 0 = System Colors, 1 = Wallpaper Sync, 2 = Custom Image.
     in-out property <bool> theme-is-system: false;
-    in-out property <[string]> auto-theme-sources: ["System Colors", "Wallpaper Sync", "Custom Image"];
+    in-out property <[string]> auto-theme-sources: [@tr("System Colors"), @tr("Wallpaper Sync"), @tr("Custom Image")];
     in-out property <int> auto-theme-source-index: 0;
     in-out property <string> auto-theme-custom-path: "";
     in-out property <bool> auto-theme-generating: false;
     in-out property <string> auto-theme-detected-de: "";
 
     // --- TYPOGRAPHY / SCALE / LANGUAGE -------------------------------------
-    in-out property <[string]> languages: ["Auto", "English", "Español", "Français", "Deutsch", "Português"];
+    in-out property <[string]> languages: [@tr("Auto"), "English", "Español", "Français", "Deutsch", "Português"];
     in-out property <int> language-index: 0;
     in-out property <[string]> fonts: ["LINE Seed JP", "Montserrat", "Noto Sans", "Source Sans 3", "System"];
     in-out property <int> font-index: 0;
@@ -2693,7 +2693,7 @@ export global AppearanceState {
     // Immersive search action — what selecting a result in the Immersive search
     // cortinilla does (index: 0=Disabled, 1=Replace queue, 2=Play next,
     // 3=Add to queue). Persisted via appearance-select("immersive-search-action").
-    in-out property <[string]> immersive-search-actions: ["Disabled", "Replace current queue", "Play next", "Add to queue"];
+    in-out property <[string]> immersive-search-actions: [@tr("Disabled"), @tr("Replace current queue"), @tr("Play next"), @tr("Add to queue")];
     in-out property <int> immersive-search-action-index: 1;
 
     // Immersive default view — which immersive view opens by default.
@@ -2701,7 +2701,7 @@ export global AppearanceState {
     //   1 = Album Reactive, 2 = Static, 3 = Coverflow, 4 = Spectrum,
     //   5 = Lyrics, 6 = Queue (all 1-6 pin a FOCUS view-mode foreground).
     // Persisted via appearance-select("immersive-default-view").
-    in-out property <[string]> immersive-default-views: ["Remember last", "Album Reactive", "Static", "Coverflow", "Spectrum", "Lyrics", "Queue"];
+    in-out property <[string]> immersive-default-views: [@tr("Remember last"), @tr("Album Reactive"), @tr("Static"), @tr("Coverflow"), @tr("Spectrum"), @tr("Lyrics"), @tr("Queue")];
     in-out property <int> immersive-default-view-index: 0;
 
     // --- VISUAL EXTRAS -----------------------------------------------------
@@ -2739,26 +2739,26 @@ export global AppearanceState {
     in-out property <bool> nav-tb-myqbz: false;
     in-out property <bool> nav-tb-purchases: false;
     // Nav buttons position: 0 = Auto, 1 = Left, 2 = Right.
-    in-out property <[string]> nav-tb-positions: ["Auto (opposite to window controls)", "Left", "Right"];
+    in-out property <[string]> nav-tb-positions: [@tr("Auto (opposite to window controls)"), @tr("Left"), @tr("Right")];
     in-out property <int> nav-tb-position-index: 0;
 
     // Window controls group.
-    in-out property <[string]> wc-positions: ["Left", "Right"];
+    in-out property <[string]> wc-positions: [@tr("Left"), @tr("Right")];
     in-out property <int> wc-position-index: 1;
-    in-out property <[string]> wc-styles: ["Rectangular", "Full-height rounded", "Circular", "Square"];
+    in-out property <[string]> wc-styles: [@tr("Rectangular"), @tr("Full-height rounded"), @tr("Circular"), @tr("Square")];
     in-out property <int> wc-style-index: 0;
-    in-out property <[string]> wc-sizes: ["Small", "Normal", "Large"];
+    in-out property <[string]> wc-sizes: [@tr("Small"), @tr("Normal"), @tr("Large")];
     in-out property <int> wc-size-index: 1;
-    in-out property <[string]> wc-color-presets: ["Default", "macOS", "Adwaita", "Monochrome", "Custom"];
+    in-out property <[string]> wc-color-presets: [@tr("Default"), "macOS", "Adwaita", @tr("Monochrome"), @tr("Custom")];
     in-out property <int> wc-color-preset-index: 0;
     in-out property <bool> show-window-controls: true;
 
     // --- MINIPLAYER --------------------------------------------------------
-    in-out property <[string]> miniplayer-views: ["Remember last used", "Micro", "Compact", "Artwork", "Queue", "Lyrics"];
+    in-out property <[string]> miniplayer-views: [@tr("Remember last used"), @tr("Micro"), @tr("Compact"), @tr("Artwork"), @tr("Queue"), @tr("Lyrics")];
     in-out property <int> miniplayer-view-index: 0;
 
     // --- STARTUP -----------------------------------------------------------
-    in-out property <[string]> startup-pages: ["Home", "Where you left off"];
+    in-out property <[string]> startup-pages: [@tr("Home"), @tr("Where you left off")];
     in-out property <int> startup-page-index: 0;
 
     in-out property <bool> show-purchases: false;
@@ -2773,17 +2773,17 @@ export global AppearanceState {
     // macOS-only: hide the Dock icon when closed to the menu bar (.accessory
     // activation policy). Off = Spotify-style (keep the Dock icon).
     in-out property <bool> tray-mac-hide-dock: false;
-    in-out property <[string]> tray-icon-themes: ["Auto", "Mono light", "Mono dark", "Color"];
+    in-out property <[string]> tray-icon-themes: [@tr("Auto"), @tr("Mono light"), @tr("Mono dark"), @tr("Color")];
     in-out property <int> tray-icon-theme-index: 0;
 
     // --- IMMERSIVE ---------------------------------------------------------
     in-out property <[string]> immersive-views: [
-        "Remember last used", "Coverflow", "Static", "Vinyl", "Visualizer",
-        "Neon Flow", "Tunnel", "Comet", "Lyrics", "Queue",
-        "Split: Lyrics", "Split: Track Info", "Split: Suggestions", "Split: Queue"
+        @tr("Remember last used"), @tr("Coverflow"), @tr("Static"), @tr("Vinyl"), @tr("Visualizer"),
+        @tr("Neon Flow"), @tr("Tunnel"), @tr("Comet"), @tr("Lyrics"), @tr("Queue"),
+        @tr("Split: Lyrics"), @tr("Split: Track Info"), @tr("Split: Suggestions"), @tr("Split: Queue")
     ];
     in-out property <int> immersive-view-index: 0;
-    in-out property <[string]> immersive-background-modes: ["Full", "Lite", "Off"];
+    in-out property <[string]> immersive-background-modes: [@tr("Full"), @tr("Lite"), @tr("Off")];
     in-out property <int> immersive-background-mode-index: 0;
     // Collapsible sub-panels (collapsed by default, matching Tauri).
     in-out property <bool> immersive-panels-collapsed: true;

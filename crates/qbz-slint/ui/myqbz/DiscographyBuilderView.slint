@@ -140,11 +140,11 @@ component TypeOverride inherits Rectangle {
                 padding: 4px;
                 // Album, EP, Single, Live, Compilation (spec order).
                 for choice in [
-                    { id: "album", lbl: "Album" },
-                    { id: "ep", lbl: "EP" },
-                    { id: "single", lbl: "Single" },
-                    { id: "live", lbl: "Live" },
-                    { id: "compilation", lbl: "Compilation" },
+                    { id: "album", lbl: @tr("Album") },
+                    { id: "ep", lbl: @tr("EP") },
+                    { id: "single", lbl: @tr("Single") },
+                    { id: "live", lbl: @tr("Live") },
+                    { id: "compilation", lbl: @tr("Compilation") },
                 ]: Rectangle {
                     height: 28px;
                     border-radius: 4px;
@@ -549,9 +549,9 @@ export component DiscographyBuilderView inherits Rectangle {
                         seg := HorizontalLayout {
                             spacing: 0px;
                             for s[i] in [
-                                { id: "release_date", lbl: "Release date" },
-                                { id: "title", lbl: "Title" },
-                                { id: "manual", lbl: "Manual" },
+                                { id: "release_date", lbl: @tr("Release date") },
+                                { id: "title", lbl: @tr("Title") },
+                                { id: "manual", lbl: @tr("Manual") },
                             ]: seg-rect := Rectangle {
                                 property <bool> active: DiscoBuilderState.order-by == s.id;
                                 // Non-accent active (the app's ToggleButton idiom): a surface
@@ -744,8 +744,7 @@ export component DiscographyBuilderView inherits Rectangle {
                     alignment: center;
                     horizontal-stretch: 1;
                     Text {
-                        text: DiscoBuilderState.selected-count + " of "
-                            + DiscoBuilderState.group-count + " albums selected";
+                        text: @tr("{} of {} album selected" | "{} of {} albums selected" % DiscoBuilderState.group-count, DiscoBuilderState.selected-count, DiscoBuilderState.group-count);
                         color: Theme.text-secondary;
                         font-size: 13px;
                     }

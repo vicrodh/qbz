@@ -100,7 +100,7 @@ export component ForYouView inherits VerticalLayout {
                         for st in ForYouState.radio-stations: RadioCard {
                             seed-title: st.title;
                             seed-subtitle: st.artist;
-                            label: "RADIO";
+                            label: @tr("RADIO");
                             artwork: st.artwork;
                             clicked => {
                                 root.start-radio-album(st.album-id);

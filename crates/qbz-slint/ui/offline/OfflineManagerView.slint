@@ -170,7 +170,7 @@ export component OfflineManagerView inherits Rectangle {
             VerticalLayout {
                 alignment: center;
                 Text {
-                    text: "Offline Cache";
+                    text: @tr("Offline Cache");
                     color: Theme.text-primary;
                     // Hero homologated to the canonical 18px (section).
                     font-size: Typography.section;
@@ -191,7 +191,7 @@ export component OfflineManagerView inherits Rectangle {
                 VerticalLayout {
                     alignment: center;
                     Text {
-                        text: OfflineManagerState.tracks-count + " tracks";
+                        text: @tr("{} track" | "{} tracks" % OfflineManagerState.tracks-count, OfflineManagerState.tracks-count);
                         color: Theme.text-primary;
                         font-size: Typography.body;
                         font-weight: Typography.semibold;
@@ -381,7 +381,7 @@ export component OfflineManagerView inherits Rectangle {
                         spacing: 2px;
                         ArtistRailRow {
                             name: @tr("All artists");
-                            meta: OfflineManagerState.tracks-count + " tracks";
+                            meta: @tr("{} track" | "{} tracks" % OfflineManagerState.tracks-count, OfflineManagerState.tracks-count);
                             active: OfflineManagerState.selected-artist == "";
                             clicked => {
                                 OfflineManagerActions.select-artist("");
