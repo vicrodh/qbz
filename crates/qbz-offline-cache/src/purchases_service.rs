@@ -357,11 +357,21 @@ pub fn target_path(
 ///
 /// No collision preflight (Addendum B.3): `.part`→`fs::rename` overwrites any
 /// pre-existing final file or stale `.part` silently.
+/// Filesystem-only tail: derive the extension from the RESPONSE format, build
+/// the target path, `create_dir_all`, write the `.part`, `fs::rename` to final,
+/// and return the final on-disk path string. Does **NOT** touch the registry.
+///
+/// This is the shared write core. The album loop uses it directly (so a registry
+/// failure does NOT mark the track `Failed`; the album loop instead does a
+/// SEPARATE best-effort registry write that swallows the error — Svelte
+/// `markTrackDownloaded(...).catch(()=>{})`, §B.1 album-path semantics). The
+/// single-track bundled path (`write_and_register_track`) wraps this and then
+/// propagates a registry error so the track shows `Failed` (§B.1 single-track
+/// semantics).
+///
+/// Addendum B.2: extension/MIME from the RESPONSE; Addendum B.3: silent overwrite.
 #[allow(clippy::too_many_arguments)]
-fn write_and_register_track(
-    db: &LibraryDatabase,
-    track_id: u64,
-    requested_format_id: u32,
+fn write_track_file(
     data: &[u8],
     artist_name: &str,
     album_title: &str,
@@ -394,7 +404,35 @@ fn write_and_register_track(
     std::fs::write(&temp_path, data).map_err(|e| format!("Failed to write temporary file: {}", e))?;
     std::fs::rename(&temp_path, &target).map_err(|e| format!("Failed to finalize file: {}", e))?;
 
-    let file_path = target.to_string_lossy().to_string();
+    Ok(target.to_string_lossy().to_string())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn write_and_register_track(
+    db: &LibraryDatabase,
+    track_id: u64,
+    requested_format_id: u32,
+    data: &[u8],
+    artist_name: &str,
+    album_title: &str,
+    quality_dir: &str,
+    track_number: u32,
+    track_title: &str,
+    response_format_id: u32,
+    response_mime_type: &str,
+    destination: &str,
+) -> Result<String, String> {
+    let file_path = write_track_file(
+        data,
+        artist_name,
+        album_title,
+        quality_dir,
+        track_number,
+        track_title,
+        response_format_id,
+        response_mime_type,
+        destination,
+    )?;
 
     // Addendum B.1/B.2: registry write AFTER the file is on disk, with the
     // REQUESTED format_id (album_id None for single-track downloads). A registry
@@ -472,6 +510,66 @@ pub async fn download_purchase_track(
         db,
         track_id,
         format_id,
+        &data,
+        &artist_name,
+        &album_title,
+        quality_dir,
+        track.track_number,
+        &track.title,
+        stream.format_id,
+        &stream.mime_type,
+        destination,
+    )
+}
+
+/// Download-ONLY variant of the single-track primitive: identical CDN fetch +
+/// `.part`→rename pipeline as `download_purchase_track`, but it does **NOT**
+/// write the `downloaded_purchases` registry. Returns the final on-disk path.
+///
+/// This exists for the ALBUM loop (`qbz-slint::execute_album_download`), which
+/// matches Svelte `executeAlbumDownload` (`purchaseDownloadStore.ts:130-147`):
+/// the album loop marks the track `'complete'` on download success FIRST, then
+/// performs the registry write as a SEPARATE best-effort step that SWALLOWS
+/// failure (`await markTrackDownloaded(...).catch(() => {})`). So a registry-write
+/// failure during an album download leaves the track `'complete'` (file on disk,
+/// just unregistered) — UNLIKE the single-track path, where a registry error
+/// propagates and the track shows `'failed'` (§B.1).
+///
+/// The caller is responsible for the best-effort registry write afterwards
+/// (`db.mark_purchase_downloaded(track_id, Some(album_id), &file_path,
+/// format_id)`), ignoring its error. Addendum B.2 (extension from RESPONSE,
+/// registry/qualityDir from REQUESTED), B.3 (silent overwrite), and B.5
+/// (restrictions ignored) all hold identically to `download_purchase_track`.
+pub async fn download_purchase_track_file_only(
+    client: &QobuzClient,
+    track_id: u64,
+    format_id: u32,
+    destination: &str,
+    quality_dir: &str,
+) -> Result<String, String> {
+    let track = client
+        .get_track(track_id)
+        .await
+        .map_err(|e| format!("Failed to fetch track {}: {}", track_id, e))?;
+    let stream = client
+        .get_track_file_url_by_format(track_id, format_id)
+        .await
+        .map_err(|e| format!("Failed to get download URL for track {}: {}", track_id, e))?;
+
+    let data = QobuzClient::download_audio(&stream.url).await?;
+
+    let artist_name = track
+        .performer
+        .as_ref()
+        .map(|artist| artist.name.clone())
+        .unwrap_or_else(|| "Unknown Artist".to_string());
+    let album_title = track
+        .album
+        .as_ref()
+        .map(|album| album.title.clone())
+        .unwrap_or_else(|| "Singles".to_string());
+
+    write_track_file(
         &data,
         &artist_name,
         &album_title,
