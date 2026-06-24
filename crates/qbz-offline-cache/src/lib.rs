@@ -23,6 +23,7 @@ pub mod metadata;
 pub mod migration;
 pub mod path_validator;
 pub mod playback;
+pub mod purchases_service;
 pub mod purge;
 pub mod secret_vault;
 pub mod state;

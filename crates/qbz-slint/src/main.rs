@@ -92,6 +92,7 @@ mod playlist;
 mod playlist_import;
 mod playlist_manager;
 mod playlist_snapshot;
+mod purchases;
 mod plex_auth;
 mod plex_settings;
 mod playlist_picker;
