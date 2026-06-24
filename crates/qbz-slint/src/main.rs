@@ -2769,6 +2769,117 @@ fn refresh_sidebar_covers(window: &AppWindow) {
     }
 }
 
+/// Reseed the AppearanceState dropdown OPTION arrays from the Rust-side i18n
+/// catalog (`qbz_i18n::t`). These arrays are declared in `ui/state.slint` as
+/// `@tr(...)` PROPERTY DEFAULTS, which are evaluated once and do NOT react to a
+/// runtime `select_bundled_translation()` switch — so without this reseed the
+/// option contents stay in the language that was active at first paint.
+/// `QbzSelect` binds `options` live, so writing the arrays here updates the
+/// rendered dropdowns immediately.
+///
+/// Call this (a) at startup right after `select_bundled_translation` (post
+/// `AppWindow::new()`) and (b) in the "language" appearance-select arm after the
+/// translation switch. Only the string arrays are reseeded; the `*_index`
+/// selection properties are intentionally left untouched. Brand names and
+/// language endonyms (macOS, Adwaita, English, Español, …) stay as literals.
+fn reseed_i18n_labels(window: &AppWindow) {
+    use slint::{ModelRc, SharedString, VecModel};
+    let t = |s: &str| SharedString::from(qbz_i18n::t(s));
+    let state = window.global::<AppearanceState>();
+
+    state.set_auto_theme_sources(ModelRc::new(VecModel::from(vec![
+        t("System Colors"),
+        t("Wallpaper Sync"),
+        t("Custom Image"),
+    ])));
+    state.set_languages(ModelRc::new(VecModel::from(vec![
+        t("Auto"),
+        "English".into(),
+        "Español".into(),
+        "Français".into(),
+        "Deutsch".into(),
+        "Português".into(),
+    ])));
+    state.set_immersive_search_actions(ModelRc::new(VecModel::from(vec![
+        t("Disabled"),
+        t("Replace current queue"),
+        t("Play next"),
+        t("Add to queue"),
+    ])));
+    state.set_immersive_default_views(ModelRc::new(VecModel::from(vec![
+        t("Remember last"),
+        t("Album Reactive"),
+        t("Static"),
+        t("Coverflow"),
+        t("Spectrum"),
+        t("Lyrics"),
+        t("Queue"),
+    ])));
+    state.set_nav_tb_positions(ModelRc::new(VecModel::from(vec![
+        t("Auto (opposite to window controls)"),
+        t("Left"),
+        t("Right"),
+    ])));
+    state.set_wc_positions(ModelRc::new(VecModel::from(vec![t("Left"), t("Right")])));
+    state.set_wc_styles(ModelRc::new(VecModel::from(vec![
+        t("Rectangular"),
+        t("Full-height rounded"),
+        t("Circular"),
+        t("Square"),
+    ])));
+    state.set_wc_sizes(ModelRc::new(VecModel::from(vec![
+        t("Small"),
+        t("Normal"),
+        t("Large"),
+    ])));
+    state.set_wc_color_presets(ModelRc::new(VecModel::from(vec![
+        t("Default"),
+        "macOS".into(),
+        "Adwaita".into(),
+        t("Monochrome"),
+        t("Custom"),
+    ])));
+    state.set_miniplayer_views(ModelRc::new(VecModel::from(vec![
+        t("Remember last used"),
+        t("Micro"),
+        t("Compact"),
+        t("Artwork"),
+        t("Queue"),
+        t("Lyrics"),
+    ])));
+    state.set_startup_pages(ModelRc::new(VecModel::from(vec![
+        t("Home"),
+        t("Where you left off"),
+    ])));
+    state.set_tray_icon_themes(ModelRc::new(VecModel::from(vec![
+        t("Auto"),
+        t("Mono light"),
+        t("Mono dark"),
+        t("Color"),
+    ])));
+    state.set_immersive_views(ModelRc::new(VecModel::from(vec![
+        t("Remember last used"),
+        t("Coverflow"),
+        t("Static"),
+        t("Vinyl"),
+        t("Visualizer"),
+        t("Neon Flow"),
+        t("Tunnel"),
+        t("Comet"),
+        t("Lyrics"),
+        t("Queue"),
+        t("Split: Lyrics"),
+        t("Split: Track Info"),
+        t("Split: Suggestions"),
+        t("Split: Queue"),
+    ])));
+    state.set_immersive_background_modes(ModelRc::new(VecModel::from(vec![
+        t("Full"),
+        t("Lite"),
+        t("Off"),
+    ])));
+}
+
 /// Open the folder editor modal for an existing folder, populating
 /// `FolderEditState` from the stored record. Shared by the Playlist
 /// Manager edit-folder action and the sidebar context menu so both open
@@ -4725,12 +4836,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
         .select()?;
 
-    // UI language: resolve and apply the persisted language BEFORE the first
-    // window is created, so the first paint uses the right translations. The
-    // persisted key may be "auto" (follow the OS locale) — resolve that to a
-    // concrete language. set_language() drives our Rust-side `t`/dates helpers;
-    // select_bundled_translation() switches the Slint `@tr` bindings.
-    {
+    // UI language: resolve the persisted language BEFORE the first window is
+    // created, and set the Rust-side language now so `t()`/date helpers are
+    // correct from the first call. The persisted key may be "auto" (follow the
+    // OS locale) — resolve that to a concrete language. set_language() drives
+    // our Rust-side `t`/dates helpers.
+    //
+    // NOTE: select_bundled_translation() operates on the component's GLOBAL
+    // translation context, which only exists AFTER AppWindow::new() — calling
+    // it before that is a no-op (returns NoTranslationsBundled) and leaves the
+    // first paint in English. So we compute `lang` here, set the Rust language,
+    // and defer the Slint translation switch + label reseed to just after
+    // AppWindow::new() below.
+    let lang = {
         let persisted = crate::ui_prefs::load().language;
         let lang = if persisted == "auto" {
             qbz_i18n::resolve_auto()
@@ -4739,12 +4857,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             qbz_i18n::current_language()
         };
         qbz_i18n::set_language(lang);
-        if let Err(e) = slint::select_bundled_translation(lang) {
-            log::warn!("[qbz-slint] select_bundled_translation('{lang}') failed: {e:?}");
-        }
-    }
+        lang
+    };
 
     let window = AppWindow::new()?;
+    // Now that the AppWindow (and its translation global context) exists, switch
+    // the Slint bundled translations to `lang` and reseed the non-reactive
+    // option arrays so the first paint is fully in the persisted language.
+    if let Err(e) = slint::select_bundled_translation(lang) {
+        log::warn!("[qbz-slint] select_bundled_translation('{lang}') failed: {e:?}");
+    }
+    reseed_i18n_labels(&window);
     install_browser_mouse_nav(&window);
     wire_window_controls(&window);
     // FONT TEST (slint-mvp): render with bundled Inter 18pt. Inter is a
@@ -6935,6 +7058,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     log::warn!(
                         "[qbz-slint] select_bundled_translation('{lang}') failed: {e:?}"
                     );
+                }
+                // Reseed the non-reactive option arrays (they live as @tr
+                // property DEFAULTS, which do NOT react to a translation
+                // switch) so the dropdown contents update live.
+                if let Some(w) = theme_weak.upgrade() {
+                    reseed_i18n_labels(&w);
                 }
             }
             "theme" => {
