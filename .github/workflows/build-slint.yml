@@ -28,18 +28,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Disk + swap (16 GB runner can't hold the rustc peak)
+      - name: Free disk + swap
         run: |
           echo "::group::before"; df -h /; free -h; echo "::endgroup::"
-          # 12 GB swap on the large ephemeral disk (/mnt has ~70 GB).
-          sudo fallocate -l 12G /mnt/swapfile
-          sudo chmod 600 /mnt/swapfile
-          sudo mkswap /mnt/swapfile
-          sudo swapon /mnt/swapfile
-          # Build target on /mnt too (root is only ~20 GB free).
-          sudo mkdir -p /mnt/cargo-target
-          sudo chown "$(id -u):$(id -g)" /mnt/cargo-target
-          echo "::group::after"; df -h /mnt; free -h; echo "::endgroup::"
+          # On ubuntu-24.04 there is no separate large /mnt disk — everything is
+          # on the 72 GB root (~16 GB free after the image). Reclaim the big
+          # preinstalled toolchains we don't need (~25-30 GB) so the cargo target
+          # fits, then add a modest swap cushion for the qbz-slint rustc peak.
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android \
+            /opt/hostedtoolcache /usr/local/share/boost /usr/share/swift \
+            /usr/local/lib/node_modules || true
+          sudo docker image prune --all --force || true
+          sudo fallocate -l 8G /swapfile
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          echo "::group::after"; df -h /; free -h; echo "::endgroup::"
 
       - name: System dependencies
         run: |
@@ -57,7 +61,6 @@ jobs:
 
       - name: Build qbz-slint (memory-tuned, MIN tier)
         env:
-          CARGO_TARGET_DIR: /mnt/cargo-target
           CARGO_INCREMENTAL: '0'
           CARGO_BUILD_JOBS: '1'
           CARGO_PROFILE_RELEASE_CODEGEN_UNITS: '256'
@@ -65,11 +68,11 @@ jobs:
           RUSTFLAGS: '-C target-feature=+aes,+ssse3 -C link-arg=-fuse-ld=mold -Z threads=1'
         run: |
           cargo +nightly build --release --manifest-path crates/Cargo.toml -p qbz-slint
-          echo "::group::result"; ls -lh /mnt/cargo-target/release/qbz-slint; free -h; echo "::endgroup::"
+          echo "::group::result"; ls -lh crates/target/release/qbz-slint; df -h /; free -h; echo "::endgroup::"
 
       - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
           name: qbz-slint-linux-x86_64
-          path: /mnt/cargo-target/release/qbz-slint
+          path: crates/target/release/qbz-slint
           if-no-files-found: error
