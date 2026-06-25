@@ -1,0 +1,75 @@
+name: Build Slint (linux)
+
+# Builds the Slint app (`qbz-slint`) on a stock GitHub-hosted runner. This is
+# the first step toward releasing the Slint app (Tauri is being retired). The
+# qbz-slint rustc peaks at ~18-24 GB locally with the fast settings; a stock
+# `ubuntu-24.04` runner has only ~16 GB, so this job:
+#   - adds a 12 GB swapfile (cushion so a memory spike pages out instead of
+#     getting OOM-killed), and
+#   - builds with the lowest-memory rustc settings (serial frontend, many
+#     codegen units, opt-level 2, one rustc at a time) — the same knobs as the
+#     local `slint-run.sh` MIN tier.
+# It is intentionally build-only (no signing/bundling yet) — the goal is to find
+# out whether a stock runner can compile qbz-slint at all, and to verify the
+# branch compiles in CI.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [slint-mvp]
+    paths:
+      - 'crates/**'
+      - '.github/workflows/build-slint.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Disk + swap (16 GB runner can't hold the rustc peak)
+        run: |
+          echo "::group::before"; df -h /; free -h; echo "::endgroup::"
+          # 12 GB swap on the large ephemeral disk (/mnt has ~70 GB).
+          sudo fallocate -l 12G /mnt/swapfile
+          sudo chmod 600 /mnt/swapfile
+          sudo mkswap /mnt/swapfile
+          sudo swapon /mnt/swapfile
+          # Build target on /mnt too (root is only ~20 GB free).
+          sudo mkdir -p /mnt/cargo-target
+          sudo chown "$(id -u):$(id -g)" /mnt/cargo-target
+          echo "::group::after"; df -h /mnt; free -h; echo "::endgroup::"
+
+      - name: System dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config cmake clang libclang-dev mold nasm \
+            libasound2-dev libjack-jackd2-dev \
+            libfontconfig1-dev libfreetype-dev \
+            libxkbcommon-dev libwayland-dev libxcb1-dev \
+            libgl1-mesa-dev libegl1-mesa-dev \
+            libdbus-1-dev libssl-dev
+
+      - name: Rust toolchain (nightly — build uses -Z threads)
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Build qbz-slint (memory-tuned, MIN tier)
+        env:
+          CARGO_TARGET_DIR: /mnt/cargo-target
+          CARGO_INCREMENTAL: '0'
+          CARGO_BUILD_JOBS: '1'
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: '256'
+          CARGO_PROFILE_RELEASE_OPT_LEVEL: '2'
+          RUSTFLAGS: '-C target-feature=+aes,+ssse3 -C link-arg=-fuse-ld=mold -Z threads=1'
+        run: |
+          cargo +nightly build --release --manifest-path crates/Cargo.toml -p qbz-slint
+          echo "::group::result"; ls -lh /mnt/cargo-target/release/qbz-slint; free -h; echo "::endgroup::"
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: qbz-slint-linux-x86_64
+          path: /mnt/cargo-target/release/qbz-slint
+          if-no-files-found: error
