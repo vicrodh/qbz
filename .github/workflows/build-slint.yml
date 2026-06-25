@@ -57,7 +57,9 @@ jobs:
             libfontconfig1-dev libfreetype-dev \
             libxkbcommon-dev libwayland-dev libxcb1-dev \
             libgl1-mesa-dev libegl1-mesa-dev \
-            libdbus-1-dev libssl-dev
+            libdbus-1-dev libssl-dev \
+            libharfbuzz-dev libjbig2dec0-dev libopenjp2-7-dev \
+            libjpeg-dev zlib1g-dev libgumbo-dev
 
       - name: Rust toolchain (nightly — build uses -Z threads)
         uses: dtolnay/rust-toolchain@nightly
