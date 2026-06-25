@@ -682,11 +682,6 @@ pub fn album_download_state(album_id: &str) -> Option<AlbumDownloadState> {
     with_store(|s| s.album(album_id))
 }
 
-/// `getAlbumDownloadFormatId(albumId)` reader.
-pub fn get_album_download_format_id(album_id: &str) -> Option<u32> {
-    with_store(|s| s.album_format_id(album_id))
-}
-
 /// Cache the resolved format options for an OPEN per-track picker (keyed by
 /// `trackId`). `pick-format` reads these back so the chosen option's label is
 /// resolved without re-fetching the album (the Svelte original keeps the
