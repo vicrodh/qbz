@@ -7735,12 +7735,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         );
                     }
                 }
-                // Album booklet (digital liner-notes PDF) — opened from the
-                // album header booklet button. Downloads + rasterizes the goody
-                // PDF stashed by album::apply_album; the BookletState gate keeps
-                // it a no-op when the album bundles no booklet.
+                // Album booklet (digital liner-notes PDF) — the album-header
+                // booklet button DOWNLOADS the goody PDF (stashed by
+                // album::apply_album) to a user-chosen location. No-op when the
+                // album bundles no booklet (empty stashed URL).
                 ("album", "booklet") => {
-                    crate::booklet::open(weak.clone(), handle.clone());
+                    crate::booklet::download_booklet(weak.clone(), handle.clone());
                 }
                 // "From the same artist" carousel "View all" — open the artist's
                 // full Albums discography page. `id` is the artist id; reuse the
@@ -10036,67 +10036,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         });
 
-    // Booklet reader controls (BookletActions) — paging / zoom / rotate
-    // re-rasterize the current page off-thread; close removes the temp PDF.
-    {
-        let weak = window.as_weak();
-        window
-            .global::<BookletActions>()
-            .on_close(move || {
-                if let Some(w) = weak.upgrade() {
-                    crate::booklet::close(&w);
-                }
-            });
-    }
-    {
-        let weak = window.as_weak();
-        let handle = tokio_rt.handle().clone();
-        window
-            .global::<BookletActions>()
-            .on_next_page(move || crate::booklet::next_page(weak.clone(), handle.clone()));
-    }
-    {
-        let weak = window.as_weak();
-        let handle = tokio_rt.handle().clone();
-        window
-            .global::<BookletActions>()
-            .on_prev_page(move || crate::booklet::prev_page(weak.clone(), handle.clone()));
-    }
-    {
-        let weak = window.as_weak();
-        let handle = tokio_rt.handle().clone();
-        window
-            .global::<BookletActions>()
-            .on_zoom_in(move || crate::booklet::zoom_in(weak.clone(), handle.clone()));
-    }
-    {
-        let weak = window.as_weak();
-        let handle = tokio_rt.handle().clone();
-        window
-            .global::<BookletActions>()
-            .on_zoom_out(move || crate::booklet::zoom_out(weak.clone(), handle.clone()));
-    }
-    {
-        let weak = window.as_weak();
-        let handle = tokio_rt.handle().clone();
-        window
-            .global::<BookletActions>()
-            .on_fit_width(move || crate::booklet::fit_width(weak.clone(), handle.clone()));
-    }
-    {
-        let weak = window.as_weak();
-        let handle = tokio_rt.handle().clone();
-        window
-            .global::<BookletActions>()
-            .on_rotate(move || crate::booklet::rotate(weak.clone(), handle.clone()));
-    }
-    {
-        let weak = window.as_weak();
-        let handle = tokio_rt.handle().clone();
-        window
-            .global::<BookletActions>()
-            .on_download(move || crate::booklet::download(weak.clone(), handle.clone()));
-    }
+    // Booklet reader removed — the album booklet button now downloads the PDF
+    // (booklet::download_booklet via the ("album","booklet") media action). The
+    // BookletActions/BookletState globals + AlbumBookletModal.slint are unused
+    // now (left in place; remove in a UI cleanup pass that recompiles qbz-ui).
 
     // Artist in-page search — client-side filter over Popular Tracks
     // and every release-section album.

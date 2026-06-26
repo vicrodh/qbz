@@ -32,7 +32,6 @@ members = [
     "qbz-mixtape",
     "qbz-playlist-import",
     "qbz-lyrics",
-    "qbz-booklet",
     "qbz-i18n",
     "qbz-music-link",
 ]

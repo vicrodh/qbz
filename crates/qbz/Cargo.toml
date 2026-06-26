@@ -83,7 +83,6 @@ qbz-mixtape = { path = "../qbz-mixtape" }
 qbz-playlist-import = { path = "../qbz-playlist-import" }
 qbz-qobuz = { path = "../qbz-qobuz" }
 qbz-lyrics = { path = "../qbz-lyrics" }
-qbz-booklet = { path = "../qbz-booklet" }
 # Karaoke highlight per-visual-line measurement (lyrics_measure.rs): swash is
 # the SAME shaper femtovg uses to raster glyphs, so an advance pass at the same
 # font + ppem + wght axis + letter-spacing matches the rendered wrap. Already in
