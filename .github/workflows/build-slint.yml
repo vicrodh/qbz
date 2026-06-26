@@ -1,17 +1,18 @@
 name: Build Slint (linux)
 
-# Builds the Slint app (`qbz-slint`) on a stock GitHub-hosted runner. This is
-# the first step toward releasing the Slint app (Tauri is being retired). The
-# qbz-slint rustc peaks at ~18-24 GB locally with the fast settings; a stock
-# `ubuntu-24.04` runner has only ~16 GB, so this job:
-#   - adds a 12 GB swapfile (cushion so a memory spike pages out instead of
-#     getting OOM-killed), and
-#   - builds with the lowest-memory rustc settings (serial frontend, many
-#     codegen units, opt-level 2, one rustc at a time) — the same knobs as the
-#     local `slint-run.sh` MIN tier.
-# It is intentionally build-only (no signing/bundling yet) — the goal is to find
-# out whether a stock runner can compile qbz-slint at all, and to verify the
-# branch compiles in CI.
+# Builds the Slint app on a stock GitHub-hosted runner. The wall is the qbz_ui
+# rustc (the generated Slint UI = ONE ~1.6M-line module): its peak memory DEMAND
+# is ~30 GB (measured RSS+Swap, 2026-06) and it is FRONTEND-bound — codegen knobs
+# (codegen-units, opt-level, CARGO_BUILD_JOBS, -Z threads) barely move it (jobs=1
+# only shaved ~3 GB vs cargo defaults). So the build is NOT made to fit by tuning;
+# it is made to fit by giving it enough RAM+SWAP to hold ~30 GB. A stock
+# `ubuntu-24.04` runner has ~16 GB RAM, so this job adds a large swapfile so
+# RAM(16) + swap(~4 base + 18) ≈ 38 GB comfortably exceeds the ~30 GB demand: the
+# resident working set stays near RAM size while cold pages page out (slow but it
+# completes). The MIN-tier rustc env below keeps the resident set as low as
+# possible. rust-cache (added below) makes this heavy compile happen ONCE per
+# qbz_ui change, not on every push — that, not the peak, is the minute saver.
+# Build-only for now (no signing/bundling).
 
 on:
   workflow_dispatch:
@@ -20,6 +21,12 @@ on:
     paths:
       - 'crates/**'
       - '.github/workflows/build-slint.yml'
+
+# A new push to slint-mvp cancels the older in-flight build — only the latest
+# commit matters, and stacked ~20-min builds are the main minute-burn.
+concurrency:
+  group: build-slint-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -39,10 +46,12 @@ jobs:
             /opt/hostedtoolcache /usr/local/share/boost /usr/share/swift \
             /usr/local/lib/node_modules || true
           sudo docker image prune --all --force || true
-          # The runner already ships an active /swapfile; add MORE swap on a
-          # fresh path as a cushion for the qbz-slint rustc peak. Guarded so a
-          # swap hiccup never fails the job (memory wasn't the blocker).
-          ( sudo fallocate -l 8G /swap_extra \
+          # The runner ships an active /swapfile (~4 GB); add a LARGE extra swap
+          # so RAM(16) + swap(~4 + 18) ≈ 38 GB holds the measured ~30 GB qbz_ui
+          # demand (frontend-bound; not tunable away). 8 GB was NOT enough
+          # (16+4+8 ≈ 28 GB < 30 GB → OOM risk). Guarded so a swap hiccup never
+          # fails the job.
+          ( sudo fallocate -l 18G /swap_extra \
             && sudo chmod 600 /swap_extra \
             && sudo mkswap /swap_extra \
             && sudo swapon /swap_extra ) || echo "extra swap skipped (non-fatal)"
@@ -61,8 +70,30 @@ jobs:
             libharfbuzz-dev libjbig2dec0-dev libopenjp2-7-dev \
             libjpeg-dev zlib1g-dev libgumbo-dev
 
-      - name: Rust toolchain (nightly — build uses -Z threads)
-        uses: dtolnay/rust-toolchain@nightly
+      - name: Rust toolchain (pinned dated nightly — build uses -Z threads)
+        # Pinned (not floating @nightly) so rustc -V is byte-stable across runs:
+        # rust-cache embeds the rustc version in its key, and a floating nightly
+        # re-keys the cache + invalidates every Cargo fingerprint daily (the
+        # from-scratch-every-run waste). Bump this date deliberately when a newer
+        # nightly feature is actually needed.
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-06-23
+
+      - name: Cargo cache (Swatinem/rust-cache)
+        # THE biggest minute-saver: caches ~/.cargo + crates/target so a push
+        # that only touches controllers restores the prebuilt qbz-ui rlib (the
+        # ~20 GB / ~20-min compilation unit) instead of recompiling it; only the
+        # cheap qbz bin then rebuilds + links. `workspaces` MUST point at crates/
+        # (manifest is crates/Cargo.toml, artifacts land in crates/target — not
+        # the default `. -> target`). save-if gates cache WRITES to slint-mvp so
+        # dispatch/PR runs read but don't churn the 10 GB Actions cache budget.
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates -> target
+          shared-key: slint-linux
+          cache-on-failure: true
+          save-if: ${{ github.ref == 'refs/heads/slint-mvp' }}
 
       - name: Build qbz-slint (memory-tuned, MIN tier)
         env:
@@ -72,7 +103,7 @@ jobs:
           CARGO_PROFILE_RELEASE_OPT_LEVEL: '2'
           RUSTFLAGS: '-C target-feature=+aes,+ssse3 -C link-arg=-fuse-ld=mold -Z threads=1'
         run: |
-          cargo +nightly build --release --manifest-path crates/Cargo.toml -p qbz
+          cargo build --release --manifest-path crates/Cargo.toml -p qbz
           echo "::group::result"; ls -lh crates/target/release/qbz; df -h /; free -h; echo "::endgroup::"
 
       - name: Upload binary
