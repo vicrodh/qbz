@@ -2,6 +2,8 @@
 //! into PlaylistPickerState for the global picker modal; the pick
 //! handler in main.rs adds the pending track to the chosen playlist.
 
+use std::sync::Arc;
+
 use qbz_app::shell::AppRuntime;
 use qbz_core::FrontendAdapter;
 use slint::{ComponentHandle, ModelRc, VecModel};
@@ -112,4 +114,28 @@ pub fn apply(window: &AppWindow, playlists: Vec<PickPlaylist>) {
     // Reset the filter affordance whenever the list is repopulated.
     state.set_filter("".into());
     state.set_loading(false);
+}
+
+/// Open the Add-to-Playlist picker seeded with `ids` and asynchronously
+/// populate the user's playlists. Picking an existing playlist appends the
+/// ids to it; the inline "Create new playlist" row create-and-adds them — so
+/// this is the single entry point for "create/add a playlist from an arbitrary
+/// track-id list" (the queue save-as-playlist + the reco rows). MUST be called
+/// on the UI/event-loop thread (it sets Slint globals). `local=false` -> Qobuz
+/// u64 ids as strings; `local=true` -> LocalLibrary/Plex refs.
+pub fn open_for_ids<A>(
+    window: &AppWindow,
+    runtime: Arc<AppRuntime<A>>,
+    handle: &tokio::runtime::Handle,
+    ids: Vec<String>,
+    local: bool,
+) where
+    A: FrontendAdapter + Send + Sync + 'static,
+{
+    open_multi(window, &ids, local);
+    let weak = window.as_weak();
+    handle.spawn(async move {
+        let playlists = load(&runtime).await;
+        let _ = weak.upgrade_in_event_loop(move |w| apply(&w, playlists));
+    });
 }

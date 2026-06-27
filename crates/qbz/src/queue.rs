@@ -789,8 +789,11 @@ impl QueueController {
         });
     }
 
-    /// The current queue track IDs (current + upcoming), in play order —
-    /// the set the "save as playlist" action would persist.
+    /// Open the Add-to-Playlist picker seeded with the queue's tracks
+    /// (current + upcoming, de-duplicated, in play order). The picker's inline
+    /// "Create new playlist" row turns the queue into a named playlist; picking
+    /// an existing one appends the queue to it. Mirrors Tauri's
+    /// handleSaveQueueAsPlaylist (which reuses the add-to-playlist modal).
     pub fn save_as_playlist(&self) {
         let this = self.clone();
         self.handle.spawn(async move {
@@ -799,15 +802,20 @@ impl QueueController {
             if let Some(curr) = state.current_track.as_ref() {
                 ids.push(curr.id);
             }
-            ids.extend(state.upcoming.iter().map(|t| t.id));
-            // The Slint MVP has no playlist-name input modal yet, so the
-            // queue cannot be persisted into a named playlist here. Log the
-            // resolved track set so the wiring is verifiable; the modal is
-            // tracked as follow-up work.
-            log::info!(
-                "[qbz-slint] queue: save-as-playlist requested for {} tracks (modal pending)",
-                ids.len()
-            );
+            for t in state.upcoming.iter() {
+                if !ids.contains(&t.id) {
+                    ids.push(t.id);
+                }
+            }
+            if ids.is_empty() {
+                return;
+            }
+            let ids_str: Vec<String> = ids.iter().map(|id| id.to_string()).collect();
+            let runtime = this.runtime.clone();
+            let handle = this.handle.clone();
+            let _ = this.weak.upgrade_in_event_loop(move |w| {
+                crate::playlist_picker::open_for_ids(&w, runtime, &handle, ids_str, false);
+            });
         });
     }
 
