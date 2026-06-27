@@ -582,6 +582,9 @@ pub fn reset(window: &AppWindow) {
     // Drop the previous detail's queue snapshot — the local/offline/mixed
     // applies repopulate it after this shared reset.
     crate::local_playlist::clear_open_snapshot();
+    // Reset the "Suggested Songs" section so a new playlist shows its own
+    // "Suggest songs" CTA instead of the previous playlist's rows (T8).
+    crate::playlist_suggestions::reset(window);
     let state = window.global::<PlaylistState>();
     state.set_tracks(ModelRc::new(VecModel::from(Vec::<TrackItem>::new())));
     state.set_track_count(0);

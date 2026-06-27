@@ -95,6 +95,8 @@ mod playlist;
 mod playlist_import;
 mod playlist_manager;
 mod playlist_snapshot;
+mod playlist_suggestions;
+mod playlist_suggestions_dismiss;
 mod purchases;
 mod plex_auth;
 mod plex_settings;
@@ -11922,6 +11924,123 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 });
+            });
+    }
+
+    // --- Playlist "Suggested Songs" section (T8) ----------------------------
+    // 1:1 port of the Svelte PlaylistSuggestions component. The pool +
+    // pagination + dedupe live in crate::playlist_suggestions; the nav actions
+    // route through the shared media-action arms the playlist track rows use.
+    {
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window
+            .global::<PlaylistSuggestionsActions>()
+            .on_activate(move || {
+                if let Some(w) = weak.upgrade() {
+                    playlist_suggestions::activate(&w, runtime.clone(), handle.clone());
+                }
+            });
+    }
+    {
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window
+            .global::<PlaylistSuggestionsActions>()
+            .on_refresh(move || {
+                if let Some(w) = weak.upgrade() {
+                    playlist_suggestions::refresh(&w, runtime.clone(), handle.clone());
+                }
+            });
+    }
+    {
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window
+            .global::<PlaylistSuggestionsActions>()
+            .on_add_track(move |track_id| {
+                if let Some(w) = weak.upgrade() {
+                    playlist_suggestions::add_track(
+                        &w,
+                        runtime.clone(),
+                        handle.clone(),
+                        track_id.to_string(),
+                    );
+                }
+            });
+    }
+    {
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window
+            .global::<PlaylistSuggestionsActions>()
+            .on_play_track(move |track_id| {
+                playlist_suggestions::play_track(
+                    runtime.clone(),
+                    weak.clone(),
+                    handle.clone(),
+                    track_id.to_string(),
+                );
+            });
+    }
+    {
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window
+            .global::<PlaylistSuggestionsActions>()
+            .on_dismiss_track(move |track_id| {
+                if let Some(w) = weak.upgrade() {
+                    playlist_suggestions::dismiss_track(
+                        &w,
+                        runtime.clone(),
+                        handle.clone(),
+                        track_id.to_string(),
+                    );
+                }
+            });
+    }
+    {
+        // show-info / go-album / go-artist reuse the shared media-action arms:
+        // ("track","track-info") opens the Track Info modal; ("album"/"artist",
+        // "open") navigate — the same routing the playlist track rows use.
+        let weak = window.as_weak();
+        window
+            .global::<PlaylistSuggestionsActions>()
+            .on_show_info(move |track_id| {
+                if let Some(w) = weak.upgrade() {
+                    if !track_id.is_empty() {
+                        w.invoke_media_action("track".into(), track_id, "track-info".into());
+                    }
+                }
+            });
+    }
+    {
+        let weak = window.as_weak();
+        window
+            .global::<PlaylistSuggestionsActions>()
+            .on_go_album(move |album_id| {
+                if let Some(w) = weak.upgrade() {
+                    if !album_id.is_empty() {
+                        w.invoke_media_action("album".into(), album_id, "open".into());
+                    }
+                }
+            });
+    }
+    {
+        let weak = window.as_weak();
+        window
+            .global::<PlaylistSuggestionsActions>()
+            .on_go_artist(move |artist_id| {
+                if let Some(w) = weak.upgrade() {
+                    if !artist_id.is_empty() {
+                        w.invoke_media_action("artist".into(), artist_id, "open".into());
+                    }
+                }
             });
     }
 

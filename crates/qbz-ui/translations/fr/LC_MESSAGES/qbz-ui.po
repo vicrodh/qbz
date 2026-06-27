@@ -4060,3 +4060,19 @@ msgstr "Échec du démarrage du téléchargement. Veuillez réessayer."
 
 msgid "No downloadable formats available"
 msgstr "Aucun format téléchargeable disponible"
+
+# Playlist "Suggested Songs" section (T8)
+msgid "Suggested songs"
+msgstr "Titres suggérés"
+
+msgid "Suggest songs for this playlist"
+msgstr "Suggérer des titres pour cette playlist"
+
+msgid "Finding similar artists..."
+msgstr "Recherche d'artistes similaires..."
+
+msgid "Refresh suggestions"
+msgstr "Actualiser les suggestions"
+
+msgid "Not interested"
+msgstr "Pas intéressé"

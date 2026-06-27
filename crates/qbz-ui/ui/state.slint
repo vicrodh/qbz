@@ -678,6 +678,72 @@ export global SuggestionsActions {
     callback load(string /* track-id */);
 }
 
+// Playlist "Suggested Songs" section (T8). 1:1 port of the Svelte
+// `PlaylistSuggestions` component: a fixed page of suggested tracks (6
+// visible) with per-row add / play / info / dismiss + play-on-hover,
+// driven by a Rust-held pool + pagination (crate::playlist_suggestions).
+// DISTINCT from the immersive SuggestionsState/Actions above (different
+// surface, different controller) — the name split is deliberate.
+export struct PlaylistSuggestionRow {
+    // Qobuz ids carried as STRINGS (parsed to u64 in Rust) — matches the
+    // shared TrackItem id convention; Qobuz catalog ids can exceed Slint's
+    // 32-bit `int`, and album ids are alphanumeric.
+    track-id: string,
+    title: string,
+    artist-name: string,
+    artist-id: string,
+    album-title: string,
+    album-id: string,
+    // Remote cover URL (artwork-job input) + the decoded thumbnail.
+    artwork-url: string,
+    artwork: image,
+    duration-label: string,
+    // Dev-mode "why suggested" string (empty in production — include_reasons=false).
+    reason: string,
+    // True while this row's add call is in flight; flips to `added` (a brief
+    // check state) on success, just before the row leaves the pool.
+    adding: bool,
+    added: bool,
+}
+
+// Playlist suggestions section state. Populated by
+// crate::playlist_suggestions::*; the row list reuses PlaylistSuggestionRow.
+export global PlaylistSuggestionsState {
+    // The user has launched suggestions for the open playlist (manual
+    // activation gate — mirrors the Svelte `suggestionsActivated`). Until
+    // then the section shows only the "Suggest Songs" CTA.
+    in-out property <bool> activated: false;
+    in property <bool> loading: false;
+    // A background pool expansion (load-more / auto-variety) is in flight.
+    in property <bool> loading-more: false;
+    // More pages are available beyond the visible 6 (drives the refresh hint).
+    in property <bool> has-more: false;
+    // The filtered pool is exhausted (nothing left to suggest) — the loaded
+    // section hides itself, matching the Svelte `isEmpty` branch.
+    in property <bool> is-empty: false;
+    in property <string> error: "";
+    in property <[PlaylistSuggestionRow]> rows: [];
+}
+
+export global PlaylistSuggestionsActions {
+    // Launch suggestions for the open playlist: gather seed artists +
+    // exclude ids off the loaded Qobuz tracks, then fetch the first pool page.
+    callback activate();
+    // Advance the visible page (wraps + expands the pool on cycle — Svelte parity).
+    callback refresh();
+    // Add a suggested track to the open playlist, then drop it from the pool.
+    callback add-track(string /* track-id */);
+    // Preview / play a single suggested track now.
+    callback play-track(string /* track-id */);
+    // Dismiss a suggestion (sticky per-playlist) + drop it from the pool.
+    callback dismiss-track(string /* track-id */);
+    // Open the Track Info modal for a suggestion.
+    callback show-info(string /* track-id */);
+    // Navigate to a suggestion's album / artist.
+    callback go-album(string /* album-id */);
+    callback go-artist(string /* artist-id */);
+}
+
 // Album Info modal — opened from the AlbumPageView header (i) button via
 // media-action("album", id, "info").
 export global AlbumInfoState {

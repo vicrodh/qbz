@@ -7,6 +7,7 @@ import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
 import { Radius } from "../foundation/radius.slint";
 import { PlaylistState, PlaylistActions, DragState, NavState, OfflineState, BulkAction } from "../state.slint";
+import { PlaylistSuggestionsState, PlaylistSuggestionsActions, PlaylistSuggestionRow, TooltipState } from "../state.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { CircleAction } from "../primitives/CircleAction.slint";
 import { TrackRow } from "../primitives/TrackRow.slint";
@@ -55,6 +56,242 @@ component SortOption inherits Rectangle {
         mouse-cursor: pointer;
         clicked => {
             root.chosen();
+        }
+    }
+}
+
+// Small ghost icon button for the "Suggested Songs" rows (info / add /
+// dismiss) and the section refresh. Surface-hover fill on hover (NOT a pill —
+// a 4px-rounded square; ADR-008). Mirrors the Svelte `.action-btn`.
+component SuggestionActionButton inherits Rectangle {
+    in property <image> icon;
+    in property <color> icon-tint: Theme.text-muted;
+    in property <color> hover-bg: Theme.surface-hover;
+    in property <color> hover-tint: Theme.text-primary;
+    in property <bool> enabled: true;
+    in property <length> diameter: 28px;
+    in property <length> glyph: 15px;
+    in property <string> tooltip;
+    // Exposed so the row can OR it into its `row-hovered` (a child TouchArea
+    // otherwise steals the row's hover, making the reveal flicker off).
+    out property <bool> hovered: sab-ta.has-hover;
+    callback clicked();
+
+    width: root.diameter;
+    height: root.diameter;
+    border-radius: 4px;
+    opacity: root.enabled ? 1.0 : 0.45;
+    background: (sab-ta.has-hover && root.enabled) ? root.hover-bg : transparent;
+    animate background { duration: 150ms; }
+
+    QbzIcon {
+        source: root.icon;
+        width: root.glyph;
+        height: root.glyph;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        tint: (sab-ta.has-hover && root.enabled) ? root.hover-tint : root.icon-tint;
+    }
+    sab-ta := TouchArea {
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => {
+            if (root.enabled) {
+                root.clicked();
+            }
+        }
+        changed has-hover => {
+            if (self.has-hover && root.tooltip != "") {
+                TooltipState.text = root.tooltip;
+                TooltipState.anchor-x = root.absolute-position.x + root.width / 2;
+                TooltipState.anchor-y = root.absolute-position.y;
+                TooltipState.show = true;
+            } else if (!self.has-hover) {
+                TooltipState.show = false;
+            }
+        }
+    }
+}
+
+// One "Suggested Songs" row — 40px cover (play on hover), title + clickable
+// artist · album meta, duration, and the info / add / dismiss actions (shown
+// on row hover). 1:1 with the Svelte `.suggestion-row`.
+component PlaylistSuggestionRowView inherits Rectangle {
+    in property <PlaylistSuggestionRow> entry;
+
+    // OR the background detector with every interactive child's hover so the
+    // cover-play overlay + the trailing actions stay revealed (and clickable)
+    // when the pointer moves onto them (mirrors TrackRow.row-hovered).
+    property <bool> row-hovered:
+        psr-ta.has-hover || play-ta.has-hover
+        || info-btn.hovered || add-btn.hovered || dismiss-btn.hovered;
+
+    height: 56px;
+    border-radius: 8px;
+    background: root.row-hovered ? Theme.surface-hover : transparent;
+    animate background { duration: 150ms; }
+
+    // Background hover detector (below the interactive children).
+    psr-ta := TouchArea {
+        mouse-cursor: default;
+    }
+
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 12px;
+
+        // Artwork + hover play overlay.
+        VerticalLayout {
+            horizontal-stretch: 0;
+            alignment: center;
+            Rectangle {
+                width: 40px;
+                height: 40px;
+                border-radius: 4px;
+                clip: true;
+                background: Theme.surface-elevated;
+                Image {
+                    source: root.entry.artwork;
+                    image-fit: cover;
+                    width: parent.width;
+                    height: parent.height;
+                }
+                play-ov := Rectangle {
+                    width: 100%;
+                    height: 100%;
+                    background: #00000080;
+                    opacity: root.row-hovered ? 1.0 : 0.0;
+                    animate opacity { duration: 150ms; }
+                    QbzIcon {
+                        source: @image-url("../assets/icons/play-fill.svg");
+                        width: 14px;
+                        height: 14px;
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        tint: #ffffff;
+                    }
+                    play-ta := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            PlaylistSuggestionsActions.play-track(root.entry.track-id);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Title + meta (artist · album, clickable links).
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            spacing: 2px;
+            Text {
+                text: root.entry.title;
+                color: Theme.text-primary;
+                font-size: Typography.body;
+                font-weight: Typography.medium;
+                overflow: elide;
+            }
+            HorizontalLayout {
+                spacing: 4px;
+                alignment: start;
+                // Artist link (content width; clickable when artist-id set).
+                VerticalLayout {
+                    horizontal-stretch: 0;
+                    alignment: center;
+                    artist-ta := TouchArea {
+                        width: artist-txt.preferred-width;
+                        height: artist-txt.preferred-height;
+                        mouse-cursor: root.entry.artist-id != "" ? pointer : default;
+                        enabled: root.entry.artist-id != "";
+                        clicked => {
+                            PlaylistSuggestionsActions.go-artist(root.entry.artist-id);
+                        }
+                        artist-txt := Text {
+                            text: root.entry.artist-name;
+                            color: (artist-ta.has-hover && root.entry.artist-id != "")
+                                ? Theme.accent : Theme.text-muted;
+                            font-size: Typography.legal;
+                        }
+                    }
+                }
+                if root.entry.album-title != "": Text {
+                    text: "·";
+                    color: Theme.text-muted;
+                    font-size: Typography.legal;
+                    vertical-alignment: center;
+                }
+                // Album link (stretches + elides in the remaining space).
+                if root.entry.album-title != "": album-ta := TouchArea {
+                    horizontal-stretch: 1;
+                    mouse-cursor: root.entry.album-id != "" ? pointer : default;
+                    enabled: root.entry.album-id != "";
+                    clicked => {
+                        PlaylistSuggestionsActions.go-album(root.entry.album-id);
+                    }
+                    album-txt := Text {
+                        width: parent.width;
+                        text: root.entry.album-title;
+                        color: (album-ta.has-hover && root.entry.album-id != "")
+                            ? Theme.accent : Theme.text-muted;
+                        font-size: Typography.legal;
+                        overflow: elide;
+                    }
+                }
+            }
+        }
+
+        // Duration.
+        VerticalLayout {
+            horizontal-stretch: 0;
+            alignment: center;
+            Text {
+                text: root.entry.duration-label;
+                color: Theme.text-muted;
+                font-size: Typography.legal;
+                horizontal-alignment: right;
+                width: 44px;
+            }
+        }
+
+        // Actions (info / add / dismiss) — fade in on row hover. The buttons'
+        // own hover feeds root.row-hovered so the cluster stays up while used.
+        VerticalLayout {
+            horizontal-stretch: 0;
+            alignment: center;
+            HorizontalLayout {
+                spacing: 4px;
+                opacity: root.row-hovered ? 1.0 : 0.0;
+                animate opacity { duration: 150ms; }
+                info-btn := SuggestionActionButton {
+                    icon: @image-url("../assets/icons/info.svg");
+                    tooltip: @tr("Track info");
+                    clicked => {
+                        PlaylistSuggestionsActions.show-info(root.entry.track-id);
+                    }
+                }
+                add-btn := SuggestionActionButton {
+                    icon: root.entry.added
+                        ? @image-url("../assets/icons/check.svg")
+                        : @image-url("../assets/icons/plus.svg");
+                    icon-tint: Theme.accent;
+                    hover-bg: Theme.accent;
+                    hover-tint: #ffffff;
+                    enabled: !root.entry.adding && !root.entry.added;
+                    tooltip: @tr("Add to playlist");
+                    clicked => {
+                        PlaylistSuggestionsActions.add-track(root.entry.track-id);
+                    }
+                }
+                dismiss-btn := SuggestionActionButton {
+                    icon: @image-url("../assets/icons/x.svg");
+                    enabled: !root.entry.adding && !root.entry.added;
+                    tooltip: @tr("Not interested");
+                    clicked => {
+                        PlaylistSuggestionsActions.dismiss-track(root.entry.track-id);
+                    }
+                }
+            }
         }
     }
 }
@@ -408,6 +645,26 @@ export component PlaylistView inherits Rectangle {
                             }
                         }
 
+                        // "Suggest songs" — generates the Suggested Songs
+                        // section below the track list. Owner-only and hidden at
+                        // >= 2000 tracks (the Qobuz playlist cap, can't add
+                        // more). Manual activation mirrors the Svelte (it never
+                        // auto-computes — large playlists shouldn't pay for it).
+                        if PlaylistState.is-owner && !PlaylistState.is-local
+                            && PlaylistState.track-count > 0
+                            && PlaylistState.track-count < 2000: VerticalLayout {
+                            horizontal-stretch: 0;
+                            alignment: center;
+                            CircleAction {
+                                icon: @image-url("../assets/icons/wand-sparkles.svg");
+                                active: PlaylistSuggestionsState.activated;
+                                tooltip: @tr("Suggest songs for this playlist");
+                                clicked => {
+                                    PlaylistSuggestionsActions.activate();
+                                }
+                            }
+                        }
+
                         // Spacer floats the search + sort to the right.
                         Rectangle { horizontal-stretch: 1; }
 
@@ -706,6 +963,156 @@ export component PlaylistView inherits Rectangle {
                     visible-height: track-list.visible-height;
                     viewport-y <=> track-list.viewport-y;
                 }
+            }
+
+            // --- Suggested Songs (T8) ----------------------------------
+            // 1:1 port of the Svelte PlaylistSuggestions component. Docked
+            // below the (virtualized) track list: PlaylistView's track list is
+            // a ListView that owns its own scroll, so — unlike the Svelte page
+            // flow — this section can't scroll INTO view; it docks at the
+            // bottom (vertical-stretch: 0) and the list takes the rest. Shown
+            // only after manual activation, and self-hides once the filtered
+            // pool is exhausted (is-empty) — matching the Svelte guard.
+            if PlaylistSuggestionsState.activated && !PlaylistSuggestionsState.is-empty
+                && PlaylistState.is-owner && PlaylistState.track-count < 2000: VerticalLayout {
+                vertical-stretch: 0;
+                padding-top: 16px;
+                padding-right: 14px;
+                spacing: 0px;
+
+                Rectangle {
+                    height: 1px;
+                    background: Theme.border-subtle;
+                }
+                Rectangle { height: 14px; }
+
+                // Header: star + "Suggested songs" + refresh (trailing edge).
+                HorizontalLayout {
+                    padding-left: 12px;
+                    spacing: 8px;
+                    VerticalLayout {
+                        horizontal-stretch: 0;
+                        alignment: center;
+                        QbzIcon {
+                            source: @image-url("../assets/icons/wand-sparkles.svg");
+                            width: 17px;
+                            height: 17px;
+                            tint: Theme.accent;
+                        }
+                    }
+                    Text {
+                        text: @tr("Suggested songs");
+                        color: Theme.text-primary;
+                        font-size: Typography.section;
+                        font-weight: Typography.semibold;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                    }
+                    VerticalLayout {
+                        horizontal-stretch: 0;
+                        alignment: center;
+                        SuggestionActionButton {
+                            icon: @image-url("../assets/icons/refresh-cw.svg");
+                            diameter: 32px;
+                            glyph: 16px;
+                            icon-tint: Theme.text-secondary;
+                            enabled: !PlaylistSuggestionsState.loading
+                                && !PlaylistSuggestionsState.loading-more;
+                            tooltip: @tr("Refresh suggestions");
+                            clicked => {
+                                PlaylistSuggestionsActions.refresh();
+                            }
+                        }
+                    }
+                    // Close (×) — hide the panel (re-open via the header wand).
+                    VerticalLayout {
+                        horizontal-stretch: 0;
+                        alignment: center;
+                        SuggestionActionButton {
+                            icon: @image-url("../assets/icons/x.svg");
+                            diameter: 32px;
+                            glyph: 16px;
+                            icon-tint: Theme.text-secondary;
+                            tooltip: @tr("Close");
+                            clicked => {
+                                PlaylistSuggestionsState.activated = false;
+                            }
+                        }
+                    }
+                }
+                Rectangle { height: 12px; }
+
+                // Loading (first fetch, no rows yet).
+                if PlaylistSuggestionsState.loading
+                    && PlaylistSuggestionsState.rows.length == 0: VerticalLayout {
+                    alignment: center;
+                    spacing: 12px;
+                    padding: 24px;
+                    HorizontalLayout {
+                        alignment: center;
+                        LoadingSpinner { size: 26px; }
+                    }
+                    Text {
+                        text: @tr("Finding similar artists...");
+                        color: Theme.text-muted;
+                        font-size: Typography.body;
+                        horizontal-alignment: center;
+                    }
+                }
+
+                // Error state with a Retry (re-activates).
+                if PlaylistSuggestionsState.error != "": VerticalLayout {
+                    alignment: center;
+                    spacing: 12px;
+                    padding: 24px;
+                    Text {
+                        text: PlaylistSuggestionsState.error;
+                        color: Theme.text-muted;
+                        font-size: Typography.body;
+                        horizontal-alignment: center;
+                        wrap: word-wrap;
+                    }
+                    HorizontalLayout {
+                        alignment: center;
+                        retry-btn := Rectangle {
+                            width: retry-label.preferred-width + 32px;
+                            height: 34px;
+                            border-radius: Radius.sm;
+                            background: retry-ta.has-hover ? Theme.accent-hover : Theme.accent;
+                            retry-label := Text {
+                                text: @tr("Retry");
+                                color: #ffffff;
+                                font-size: Typography.body;
+                                font-weight: Typography.semibold;
+                                x: (parent.width - self.width) / 2;
+                                y: (parent.height - self.height) / 2;
+                            }
+                            retry-ta := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => {
+                                    PlaylistSuggestionsActions.activate();
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // The visible page of suggestion rows.
+                if PlaylistSuggestionsState.error == ""
+                    && !(PlaylistSuggestionsState.loading
+                         && PlaylistSuggestionsState.rows.length == 0): VerticalLayout {
+                    spacing: 2px;
+                    for srow in PlaylistSuggestionsState.rows: PlaylistSuggestionRowView {
+                        entry: srow;
+                    }
+                    if PlaylistSuggestionsState.loading-more: HorizontalLayout {
+                        alignment: center;
+                        padding: 12px;
+                        LoadingSpinner { size: 16px; }
+                    }
+                }
+
+                Rectangle { height: 12px; }
             }
     }
 

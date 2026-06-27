@@ -4033,3 +4033,19 @@ msgstr "Falha ao iniciar o download. Tente novamente."
 
 msgid "No downloadable formats available"
 msgstr "Nenhum formato disponível para download"
+
+# Playlist "Suggested Songs" section (T8)
+msgid "Suggested songs"
+msgstr "Músicas sugeridas"
+
+msgid "Suggest songs for this playlist"
+msgstr "Sugerir músicas para esta playlist"
+
+msgid "Finding similar artists..."
+msgstr "Procurando artistas semelhantes..."
+
+msgid "Refresh suggestions"
+msgstr "Atualizar sugestões"
+
+msgid "Not interested"
+msgstr "Sem interesse"

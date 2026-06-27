@@ -202,6 +202,9 @@ pub enum ArtworkTarget {
     /// A row thumbnail in the immersive Suggestions recommended-tracks list
     /// (`SuggestionsState.tracks[idx]`).
     SuggestionTrackCover { idx: usize },
+    /// A row thumbnail in the playlist "Suggested Songs" section
+    /// (`PlaylistSuggestionsState.rows[idx]`). 40px row art — decode small.
+    PlaylistSuggestionCover { idx: usize },
     /// A cover of `PurchasesState.albums-full[index]` (the stable artwork-target
     /// full set). The apply arm writes here, then dual-sets by id into the
     /// rendered flat + grouped models (which a filter/sort/group re-derives).
@@ -226,6 +229,7 @@ impl ArtworkTarget {
             | ArtworkTarget::MixTrack { .. }
             | ArtworkTarget::PlaylistTrack { .. }
             | ArtworkTarget::SuggestionTrackCover { .. }
+            | ArtworkTarget::PlaylistSuggestionCover { .. }
             | ArtworkTarget::LocalArtistRowImage { .. } => 96,
             // Sidebar micro-collage tiles render at ~10-20px; decode tiny.
             ArtworkTarget::SidebarPlaylistCover { .. } => 48,
@@ -1375,6 +1379,15 @@ fn apply_artwork(
         }
         ArtworkTarget::SuggestionTrackCover { idx } => {
             let model = window.global::<crate::SuggestionsState>().get_tracks();
+            if let Some(mut item) = model.row_data(idx) {
+                item.artwork = image;
+                model.set_row_data(idx, item);
+            }
+        }
+        ArtworkTarget::PlaylistSuggestionCover { idx } => {
+            let model = window
+                .global::<crate::PlaylistSuggestionsState>()
+                .get_rows();
             if let Some(mut item) = model.row_data(idx) {
                 item.artwork = image;
                 model.set_row_data(idx, item);
