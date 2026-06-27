@@ -750,6 +750,13 @@ impl QueueController {
                     // Keep the shared cache (memory + disk) in sync so every
                     // other heart surface reflects the change immediately.
                     crate::fav_cache::set(track.id, make_favorite);
+                    // reco: log a favorite ADD (skip un-favorite) for scoring.
+                    if make_favorite {
+                        let tid = track.id;
+                        tokio::task::spawn_blocking(move || {
+                            crate::reco::log_favorite_track(tid, None, None)
+                        });
+                    }
                 }
                 Err(e) => {
                     log::error!("[qbz-slint] queue: toggle favorite failed: {e}");

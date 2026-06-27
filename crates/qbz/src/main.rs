@@ -1177,6 +1177,15 @@ fn toggle_track_favorite(
         } else {
             runtime.core().remove_favorite("track", &id).await
         };
+        // reco: log a favorite ADD on success (skip removes/failures) for taste
+        // scoring; blocking SQLite off the async path.
+        if make_fav && res.is_ok() {
+            if let Ok(tid) = id.parse::<u64>() {
+                tokio::task::spawn_blocking(move || {
+                    crate::reco::log_favorite_track(tid, None, None)
+                });
+            }
+        }
         if let Err(e) = res {
             log::error!("[qbz-slint] toggle track favorite failed: {e}");
             // Roll the optimistic change back on failure.
@@ -7961,6 +7970,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 // album-header heart reflects a grid favorite.
                                 crate::fav_cache::set_album(&album_id, true);
                                 crate::toast::success_weak(&weak, "Added to favorites");
+                                // reco: log the album favorite (add-only arm).
+                                let aid = album_id.clone();
+                                tokio::task::spawn_blocking(move || {
+                                    crate::reco::log_favorite_album(aid, None)
+                                });
                             }
                             Err(e) => {
                                 log::error!("[qbz-slint] favorite album failed: {e}");
@@ -7999,6 +8013,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             log::error!(
                                 "[qbz-slint] toggle favorite album {album_id} failed: {e}"
                             );
+                        }
+                        // reco: log the album favorite ADD on success (skip the
+                        // un-favorite). Blocking SQLite off the async path.
+                        if ok && new_state {
+                            let aid = album_id.clone();
+                            tokio::task::spawn_blocking(move || {
+                                crate::reco::log_favorite_album(aid, None)
+                            });
                         }
                         let _ = weak.upgrade_in_event_loop(move |w| {
                             let st = w.global::<AlbumState>();
@@ -8566,6 +8588,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     handle.spawn(async move {
                         match runtime.core().add_favorite("artist", &artist_id).await {
                             Ok(()) => {
+                                // reco: log the artist favorite (add-only follow
+                                // arm). Qobuz artist id -> u64.
+                                if let Ok(aid) = artist_id.parse::<u64>() {
+                                    tokio::task::spawn_blocking(move || {
+                                        crate::reco::log_favorite_artist(aid)
+                                    });
+                                }
                                 let _ = weak.upgrade_in_event_loop(move |w| {
                                     search::mark_artist_followed(&w, &artist_id, true);
                                 });
