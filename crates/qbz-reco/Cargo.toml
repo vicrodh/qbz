@@ -1,0 +1,9 @@
+[package]
+name = "qbz-reco"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Frontend-agnostic artist-vector recommendation engine for QBZ (ported from the Tauri artist_vectors)"
+
+[dependencies]
+serde = { workspace = true }

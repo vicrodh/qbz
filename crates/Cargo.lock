@@ -5818,6 +5818,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "qbz-reco"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "qbz-secrets"
 version = "0.1.0"
 dependencies = [
