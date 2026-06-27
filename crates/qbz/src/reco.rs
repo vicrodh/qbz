@@ -241,6 +241,15 @@ pub fn known_artist_ids(play_threshold: u32) -> Option<HashSet<u64>> {
     store.get_known_artist_ids(play_threshold).ok()
 }
 
+/// Most-recently-played distinct Qobuz track ids (the local "already heard
+/// in-app" set, e.g. for the external-reco "not scrobbled" deep-cut filter).
+/// `None` when reco is cold/disabled.
+pub fn recent_track_ids(limit: u32) -> Option<Vec<u64>> {
+    let guard = RECO.lock().ok()?;
+    let store = guard.as_ref()?;
+    store.get_recent_track_ids(limit).ok()
+}
+
 // ---------------------------------------------------------------------------
 // Training (W5)
 // ---------------------------------------------------------------------------

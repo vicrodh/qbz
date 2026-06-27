@@ -15,6 +15,7 @@ import { PlaylistCarousel } from "PlaylistCarousel.slint";
 import { PlaylistTagFilter } from "PlaylistTagFilter.slint";
 import { HomeSkeleton } from "HomeSkeleton.slint";
 import { ForYouView } from "ForYouView.slint";
+import { ExternalRecoView } from "ExternalRecoView.slint";
 import { GenreFilterPopup } from "GenreFilterPopup.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { ListScrollbar } from "../primitives/ListScrollbar.slint";
@@ -210,6 +211,11 @@ export component HomeView inherits Rectangle {
                             active: HomeState.active-tab == "forYou";
                             clicked => { HomeActions.select-tab("forYou"); }
                         }
+                        Tab {
+                            label: @tr("Recommendations");
+                            active: HomeState.active-tab == "recommendations";
+                            clicked => { HomeActions.select-tab("recommendations"); }
+                        }
                     }
                 }
             }
@@ -287,7 +293,7 @@ export component HomeView inherits Rectangle {
                 // would suppress it — gate on `loading` alone. The empty-data
                 // placeholders below are gated off while loading, so ONLY the
                 // skeleton shows during the fetch (1:1 Tauri).
-                if DiscoverState.active-tab != "forYou" && HomeState.loading: HomeSkeleton { }
+                if DiscoverState.active-tab != "forYou" && DiscoverState.active-tab != "recommendations" && HomeState.loading: HomeSkeleton { }
 
                 // Prefs-driven render loop (Slice 5). Rust pushes the ordered
                 // ENABLED descriptor list for the active tab (home-sections /
@@ -443,6 +449,23 @@ export component HomeView inherits Rectangle {
                     }
                     open-mix(which) => {
                         root.media-action("mix", which, "open");
+                    }
+                }
+
+                // Recommendations (4th tab) — external-reco carousels from
+                // ExternalRecoState (lazy-loaded on first open).
+                if DiscoverState.active-tab == "recommendations": ExternalRecoView {
+                    open-album(id) => {
+                        root.album-clicked(id);
+                    }
+                    open-artist(id) => {
+                        root.open-artist(id);
+                    }
+                    media-action(kind, id, action) => {
+                        root.media-action(kind, id, action);
+                    }
+                    play-track(id) => {
+                        root.media-action("track", id, "play");
                     }
                 }
             }

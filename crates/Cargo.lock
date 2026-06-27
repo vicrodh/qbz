@@ -5420,6 +5420,7 @@ dependencies = [
  "qbz-core",
  "qbz-credentials",
  "qbz-dac-wizard",
+ "qbz-external-reco",
  "qbz-i18n",
  "qbz-integrations",
  "qbz-library",

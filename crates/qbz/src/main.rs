@@ -38,6 +38,7 @@ mod discovery_dismiss;
 mod fav_cache;
 mod favorites;
 mod favorites_prefs;
+mod external_reco;
 mod foryou;
 mod genre_filter;
 use qbz_dac_wizard as dac_wizard;
@@ -521,6 +522,8 @@ async fn enter_shell_offline(
         crate::fav_cache::init_for_user(&dir);
         // Recommendation event store (shared events.db with Tauri).
         crate::reco::init_for_user(&dir);
+        // External-recommendations resolution cache (4th Discover tab).
+        crate::external_reco::init_for_user(&dir);
         // Playlist Suggested Songs: open the per-user artist-vector store.
         if let Ok(store) = qbz_reco::ArtistVectorStore::open_at(&dir) {
             runtime.core().set_artist_vectors(store).await;
@@ -1894,6 +1897,7 @@ fn apply_entry(
         }
         nav::NavEntry::Discover { tab } => {
             let for_you = tab == "forYou";
+            let recommendations = tab == "recommendations";
             {
                 let weak = weak.clone();
                 let image_cache = image_cache.clone();
@@ -1905,6 +1909,9 @@ fn apply_entry(
             }
             if for_you {
                 ensure_for_you_loaded(runtime, weak, handle, image_cache);
+            }
+            if recommendations {
+                external_reco::ensure_loaded(runtime, weak, handle, image_cache);
             }
         }
         nav::NavEntry::Favorites { tab } => {
@@ -12460,6 +12467,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if tab.as_str() == "forYou" {
                         ensure_for_you_loaded(&runtime, &weak, &handle, &image_cache);
                     }
+                    if tab.as_str() == "recommendations" {
+                        external_reco::ensure_loaded(&runtime, &weak, &handle, &image_cache);
+                    }
                 }
             });
     }
@@ -12854,6 +12864,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     update_nav_flags(&w);
                     if tab == "forYou" {
                         ensure_for_you_loaded(&runtime, &weak, &handle, &image_cache);
+                    }
+                    if tab == "recommendations" {
+                        external_reco::ensure_loaded(&runtime, &weak, &handle, &image_cache);
                     }
                 }
                 return;

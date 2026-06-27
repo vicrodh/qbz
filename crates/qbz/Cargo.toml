@@ -70,6 +70,7 @@ qbz-media-controls = { path = "../qbz-media-controls" }
 qbz-audio = { path = "../qbz-audio" }
 qbz-core = { path = "../qbz-core" }
 qbz-reco = { path = "../qbz-reco" }
+qbz-external-reco = { path = "../qbz-external-reco" }
 qbz-player = { path = "../qbz-player" }
 qbz-cast = { path = "../qbz-cast" }
 qconnect-app = { path = "../qconnect-app" }

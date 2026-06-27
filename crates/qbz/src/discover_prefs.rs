@@ -183,8 +183,9 @@ pub fn push_descriptors(window: &AppWindow, prefs: &DiscoverPrefs) {
     // For You list (always pushed; the For You view is mounted only when active).
     state.set_foryou_sections(ModelRc::new(VecModel::from(foryou_descriptors(prefs))));
 
-    if active == "forYou" {
-        // Drive the Home repeater empty for the For You tab.
+    if active == "forYou" || active == "recommendations" {
+        // Drive the Home repeater empty for the For You + Recommendations tabs
+        // (both render from their own dedicated views).
         state.set_home_sections(ModelRc::new(VecModel::from(Vec::<SectionDescriptor>::new())));
         state.set_editor_sections(ModelRc::new(VecModel::from(Vec::<SectionDescriptor>::new())));
     } else {

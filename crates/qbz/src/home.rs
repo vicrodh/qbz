@@ -909,9 +909,10 @@ pub fn select_tab(window: &AppWindow, tab: &str) -> Vec<ArtworkJob> {
     window.global::<HomeState>().set_active_tab(tab.into());
     window.global::<DiscoverState>().set_active_tab(tab.into());
 
-    if tab == "forYou" {
-        // Push the For You descriptor list + drive Home/Editor empty, and clear
-        // the legacy HomeState models so nothing lingers under the For You view.
+    if tab == "forYou" || tab == "recommendations" {
+        // For You + Recommendations both render from their own dedicated state /
+        // view; push the For You descriptor list + drive Home/Editor empty, and
+        // clear the legacy HomeState models so nothing lingers underneath.
         let prefs = crate::discover_prefs::prefs_snapshot();
         crate::discover_prefs::push_descriptors(window, &prefs);
         let hstate = window.global::<HomeState>();

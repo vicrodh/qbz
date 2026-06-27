@@ -163,6 +163,18 @@ pub enum ArtworkTarget {
     ForYouMoreFromLibrary { index: usize },
     /// A card in ForYouState.rediscover.albums[index].
     ForYouRediscover { index: usize },
+    /// A tile in ExternalRecoState.similar-artists[index] (4th tab).
+    ExtRecoSimilarArtist { index: usize },
+    /// A row in ExternalRecoState.similar-tracks[index].
+    ExtRecoSimilarTrack { index: usize },
+    /// A row in ExternalRecoState.rediscover-tracks[index].
+    ExtRecoRediscoverTrack { index: usize },
+    /// A row in ExternalRecoState.deep-cut-tracks[index].
+    ExtRecoDeepCutTrack { index: usize },
+    /// A card in ExternalRecoState.top-albums.albums[index] (cold-start).
+    ExtRecoTopAlbum { index: usize },
+    /// A tile in ExternalRecoState.top-artists[index] (cold-start).
+    ExtRecoTopArtist { index: usize },
     /// A card in ForYouState.favorite-albums.albums[index].
     ForYouFavoriteAlbum { index: usize },
     /// The Spotlight artist portrait.
@@ -1279,6 +1291,48 @@ fn apply_artwork(
         }
         ArtworkTarget::ForYouRediscover { index } => {
             let model = window.global::<crate::ForYouState>().get_rediscover().albums;
+            if let Some(mut item) = model.row_data(index) {
+                item.artwork = image;
+                model.set_row_data(index, item);
+            }
+        }
+        ArtworkTarget::ExtRecoSimilarArtist { index } => {
+            let model = window.global::<crate::ExternalRecoState>().get_similar_artists();
+            if let Some(mut item) = model.row_data(index) {
+                item.artwork = image;
+                model.set_row_data(index, item);
+            }
+        }
+        ArtworkTarget::ExtRecoSimilarTrack { index } => {
+            let model = window.global::<crate::ExternalRecoState>().get_similar_tracks();
+            if let Some(mut item) = model.row_data(index) {
+                item.artwork = image;
+                model.set_row_data(index, item);
+            }
+        }
+        ArtworkTarget::ExtRecoRediscoverTrack { index } => {
+            let model = window.global::<crate::ExternalRecoState>().get_rediscover_tracks();
+            if let Some(mut item) = model.row_data(index) {
+                item.artwork = image;
+                model.set_row_data(index, item);
+            }
+        }
+        ArtworkTarget::ExtRecoDeepCutTrack { index } => {
+            let model = window.global::<crate::ExternalRecoState>().get_deep_cut_tracks();
+            if let Some(mut item) = model.row_data(index) {
+                item.artwork = image;
+                model.set_row_data(index, item);
+            }
+        }
+        ArtworkTarget::ExtRecoTopAlbum { index } => {
+            let model = window.global::<crate::ExternalRecoState>().get_top_albums().albums;
+            if let Some(mut item) = model.row_data(index) {
+                item.artwork = image;
+                model.set_row_data(index, item);
+            }
+        }
+        ArtworkTarget::ExtRecoTopArtist { index } => {
+            let model = window.global::<crate::ExternalRecoState>().get_top_artists();
             if let Some(mut item) = model.row_data(index) {
                 item.artwork = image;
                 model.set_row_data(index, item);

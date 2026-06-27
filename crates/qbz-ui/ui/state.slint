@@ -328,6 +328,30 @@ export global ForYouState {
     in-out property <bool> loaded: false;
 }
 
+// Discover > Recommendations (the 4th tab). External-recommendations engine
+// (Last.fm + ListenBrainz -> Qobuz) carousels, plus the Qobuz-editorial
+// cold-start fallback. Mirrors ForYouState's lazy-load latch + self-hiding
+// rows (each row's `length > 0` gate). Populated by crate::external_reco.
+export global ExternalRecoState {
+    in property <bool> loading: false;
+    in-out property <bool> loaded: false;
+    // True when no external integration is connected: the editorial fallback
+    // (top-albums + top-artists) is shown instead of the personalized rows.
+    in property <bool> editorial-fallback: false;
+    // C1 — similar artists you haven't heard.
+    in property <[SlimItem]> similar-artists: [];
+    // C2 — similar tracks you haven't heard.
+    in property <[SlimItem]> similar-tracks: [];
+    // C3 — listened but not recently.
+    in property <[SlimItem]> rediscover-tracks: [];
+    // C4 — from artists you know but not scrobbled (deep cuts).
+    in property <[SlimItem]> deep-cut-tracks: [];
+    // Cold-start fallback: Qobuz editorial top albums.
+    in property <DiscoverSection> top-albums;
+    // Cold-start fallback: Qobuz editorial top artists.
+    in property <[SlimItem]> top-artists: [];
+}
+
 // One genre in the Filter-by-genre popup's simple grid.
 export struct GenreChip {
     id: string,

@@ -1,0 +1,115 @@
+// Discover > Recommendations — the 4th tab.
+//
+// External-recommendations engine (Last.fm + ListenBrainz -> Qobuz) carousels,
+// plus the Qobuz-editorial cold-start fallback. Mirrors ForYouView: hardcoded
+// arms, each with its own `length > 0` self-hide gate, reusing the shared
+// Carousel / SlimCarousel / ArtistCarousel components. Data lives in
+// ExternalRecoState (populated by crate::external_reco). At runtime exactly one
+// regime is non-empty: personalized (C1-C4) OR editorial fallback.
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Typography } from "../foundation/typography.slint";
+import { ExternalRecoState } from "../state.slint";
+import { Carousel } from "Carousel.slint";
+import { SlimCarousel } from "SlimCarousel.slint";
+import { ArtistCarousel } from "ArtistCarousel.slint";
+import { HomeSkeleton } from "HomeSkeleton.slint";
+
+export component ExternalRecoView inherits VerticalLayout {
+    callback open-album(string);
+    callback open-artist(string);
+    callback media-action(string, string, string);
+    callback play-track(string);
+
+    property <bool> any-content:
+        ExternalRecoState.similar-artists.length > 0
+        || ExternalRecoState.similar-tracks.length > 0
+        || ExternalRecoState.rediscover-tracks.length > 0
+        || ExternalRecoState.deep-cut-tracks.length > 0
+        || ExternalRecoState.top-albums.albums.length > 0
+        || ExternalRecoState.top-artists.length > 0;
+
+    spacing: 40px;
+    alignment: start;
+
+    // Skeleton while the first load is in flight and nothing has painted yet.
+    if ExternalRecoState.loading && !root.any-content: HomeSkeleton { }
+
+    // C1 — Similar artists you haven't heard (artist carousel).
+    if ExternalRecoState.similar-artists.length > 0: ArtistCarousel {
+        title: @tr("Similar artists you haven't heard");
+        artists: ExternalRecoState.similar-artists;
+        artist-clicked(id) => {
+            root.open-artist(id);
+        }
+        media-action(kind, id, action) => {
+            root.media-action(kind, id, action);
+        }
+    }
+
+    // C2 — Similar tracks you haven't heard (track slim carousel).
+    if ExternalRecoState.similar-tracks.length > 0: SlimCarousel {
+        title: @tr("Similar tracks you haven't heard");
+        items: ExternalRecoState.similar-tracks;
+        item-clicked(id) => {
+            root.play-track(id);
+        }
+    }
+
+    // C3 — Listened but not recently (re-discovery track carousel).
+    if ExternalRecoState.rediscover-tracks.length > 0: SlimCarousel {
+        title: @tr("Listened, but not lately");
+        items: ExternalRecoState.rediscover-tracks;
+        item-clicked(id) => {
+            root.play-track(id);
+        }
+    }
+
+    // C4 — From artists you know but not scrobbled (deep cuts).
+    if ExternalRecoState.deep-cut-tracks.length > 0: SlimCarousel {
+        title: @tr("Deep cuts from artists you know");
+        items: ExternalRecoState.deep-cut-tracks;
+        item-clicked(id) => {
+            root.play-track(id);
+        }
+    }
+
+    // Cold-start fallback — Qobuz editorial top albums (album carousel).
+    if ExternalRecoState.top-albums.albums.length > 0: Carousel {
+        section: ExternalRecoState.top-albums;
+        album-clicked(id) => {
+            root.open-album(id);
+        }
+        media-action(kind, id, action) => {
+            root.media-action(kind, id, action);
+        }
+    }
+
+    // Cold-start fallback — Qobuz editorial top artists (artist carousel).
+    if ExternalRecoState.top-artists.length > 0: ArtistCarousel {
+        title: @tr("Popular artists on Qobuz");
+        artists: ExternalRecoState.top-artists;
+        artist-clicked(id) => {
+            root.open-artist(id);
+        }
+        media-action(kind, id, action) => {
+            root.media-action(kind, id, action);
+        }
+    }
+
+    // Empty state: nothing loaded and not loading (no source, no editorial).
+    if !root.any-content && !ExternalRecoState.loading: VerticalLayout {
+        spacing: 8px;
+        Text {
+            text: @tr("No recommendations yet");
+            color: Theme.text-primary;
+            font-size: 18px;
+            font-weight: Typography.semibold;
+        }
+        Text {
+            text: @tr("Connect Last.fm or ListenBrainz in Settings, or play more music, to get personalized recommendations.");
+            color: Theme.text-muted;
+            font-size: 13px;
+        }
+    }
+}
