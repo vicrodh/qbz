@@ -83,6 +83,12 @@
     awardedAt?: string;
   }
 
+  interface TrackSection {
+    work: string | null;
+    composer: string | null;
+    tracks: Track[];
+  }
+
   interface Props {
     album: {
       id: string;
@@ -231,6 +237,37 @@
       (track.artist?.toLowerCase().includes(q))
     );
   });
+
+  const trackSections = $derived.by(() => {
+    const sections: TrackSection[] = [];
+    let currentTracks: Track[] = [];
+    let currentWork: string = null;
+    let currentComposer: string = null;
+
+    for (const track of filteredTracks) {
+      const work = track.work;
+
+      if (work === currentWork) {
+        currentTracks.push(track);
+      } else {
+        if (currentTracks.length !== 0) {
+          sections.push({ work: currentWork, composer: currentComposer, tracks: currentTracks });
+        }
+
+        currentWork = work;
+        currentComposer = track.composer;
+        currentTracks = [track];
+      }
+    }
+
+    if (currentTracks.length !== 0) {
+      sections.push({ work: currentWork, composer: currentComposer, tracks: currentTracks });
+    }
+
+    return sections;
+  });
+
+  console.log(trackSections);
 
   // Booklet: find first PDF goody
   const bookletGoody = $derived(
@@ -849,25 +886,27 @@
       </div>
     </div>
 
-    <div class="table-header">
-      <div class="col-select-all" class:active={multiSelectMode}>
-        <input
-          type="checkbox"
-          checked={selectAllState === 'all'}
-          indeterminate={selectAllState === 'partial'}
-          onchange={toggleSelectAll}
-          title={$t('actions.selectAll')}
-          tabindex={multiSelectMode ? 0 : -1}
-        />
+    {#snippet tableHeader()}
+      <div class="table-header">
+        <div class="col-select-all" class:active={multiSelectMode}>
+          <input
+            type="checkbox"
+            checked={selectAllState === 'all'}
+            indeterminate={selectAllState === 'partial'}
+            onchange={toggleSelectAll}
+            title={$t('actions.selectAll')}
+            tabindex={multiSelectMode ? 0 : -1}
+          />
+        </div>
+        <div class="col-number">#</div>
+        <div class="col-title">{$t('tracklist.title')}</div>
+        <div class="col-duration">{$t('tracklist.duration')}</div>
+        <div class="col-quality">{$t('tracklist.quality')}</div>
+        <div class="col-icon"><Heart size={14} /></div>
+        <div class="col-icon"><CloudDownload size={14} /></div>
+        <div class="col-spacer"></div>
       </div>
-      <div class="col-number">#</div>
-      <div class="col-title">{$t('tracklist.title')}</div>
-      <div class="col-duration">{$t('tracklist.duration')}</div>
-      <div class="col-quality">{$t('tracklist.quality')}</div>
-      <div class="col-icon"><Heart size={14} /></div>
-      <div class="col-icon"><CloudDownload size={14} /></div>
-      <div class="col-spacer"></div>
-    </div>
+    {/snippet}
 
     <!-- Track Rows -->
     <div class="tracks">
@@ -881,68 +920,72 @@
           <p>{$t('tracklist.noMatches')}</p>
         </div>
       {:else}
-      {#each filteredTracks as track, trackIndex (track.id)}
-        {@const downloadInfo = getTrackOfflineCacheStatus?.(track.id) ?? { status: 'none' as const, progress: 0 }}
-        {@const isTrackDownloaded = downloadInfo.status === 'ready'}
-        {@const trackArtistId = track.artistId ?? album.artistId}
-        {@const trackBlacklisted = trackArtistId ? isArtistBlacklisted(trackArtistId) : false}
-        {@const trackUnavailable = checkTrackUnavailable(track)}
-
-        {@const previousTrack = filteredTracks[trackIndex - 1]}
-        {@const showWorkHeader = track.work && track.work !== previousTrack?.work}
-
-        {#if showWorkHeader}
+      {#each trackSections as section, sectionIndex}
+        {#if section.work || sectionIndex > 0}
           <div class="work-header">
-            {track.work} {track.composer ? `(${track.composer})` : ""}
+            {#if section.work}
+              {section.work} {section.composer ? `(${section.composer})` : ""}
+            {/if}
           </div>
         {/if}
-        <TrackRow
-          trackId={track.id}
-          number={track.number}
-          title={formatTrackTitle(track)}
-          artist={track.artist}
-          duration={track.duration}
-          quality={track.quality}
-          explicit={track.parental_warning === true}
-          isPlaying={isPlaybackActive && activeTrackId === track.id}
-          isActiveTrack={activeTrackId === track.id}
-          isBlacklisted={trackBlacklisted}
-          isUnavailable={trackUnavailable}
-          unavailableTooltip={trackUnavailable ? $t('player.trackUnavailable') : undefined}
-          selectable={multiSelectMode}
-          selected={multiSelectedIds.has(track.id)}
-          dragTrackIds={multiSelectMode && multiSelectedIds.has(track.id) ? [...multiSelectedIds] : undefined}
-          onToggleSelect={(e) => toggleMultiSelect(track.id, trackIndex, e)}
-          downloadStatus={downloadInfo.status}
-          downloadProgress={downloadInfo.progress}
-          hideFavorite={trackBlacklisted}
-          hideDownload={trackBlacklisted}
-          onPlay={trackBlacklisted ? undefined : () => {
-            onTrackPlay?.(track);
-          }}
-          onDownload={!trackBlacklisted && onTrackDownload ? () => onTrackDownload(track) : undefined}
-          onRemoveDownload={!trackBlacklisted && onTrackRemoveDownload ? () => onTrackRemoveDownload(track.id) : undefined}
-          menuActions={trackBlacklisted ? {
-            // Blacklisted: only navigation and info
-            onGoToArtist: album.artistId && onTrackGoToArtist ? () => onTrackGoToArtist(album.artistId!) : undefined,
-            onShowInfo: onTrackShowInfo ? () => onTrackShowInfo(track.id) : undefined
-          } : {
-            onPlayNow: () => {
+
+        {@render tableHeader()}
+
+        {#each section.tracks as track, trackIndex (track.id)}
+          {@const downloadInfo = getTrackOfflineCacheStatus?.(track.id) ?? { status: 'none' as const, progress: 0 }}
+          {@const isTrackDownloaded = downloadInfo.status === 'ready'}
+          {@const trackArtistId = track.artistId ?? album.artistId}
+          {@const trackBlacklisted = trackArtistId ? isArtistBlacklisted(trackArtistId) : false}
+          {@const trackUnavailable = checkTrackUnavailable(track)}
+
+          <TrackRow
+            trackId={track.id}
+            number={track.number}
+            title={formatTrackTitle(track)}
+            artist={track.artist}
+            duration={track.duration}
+            quality={track.quality}
+            explicit={track.parental_warning === true}
+            isPlaying={isPlaybackActive && activeTrackId === track.id}
+            isActiveTrack={activeTrackId === track.id}
+            isBlacklisted={trackBlacklisted}
+            isUnavailable={trackUnavailable}
+            unavailableTooltip={trackUnavailable ? $t('player.trackUnavailable') : undefined}
+            selectable={multiSelectMode}
+            selected={multiSelectedIds.has(track.id)}
+            dragTrackIds={multiSelectMode && multiSelectedIds.has(track.id) ? [...multiSelectedIds] : undefined}
+            onToggleSelect={(e) => toggleMultiSelect(track.id, trackIndex, e)}
+            downloadStatus={downloadInfo.status}
+            downloadProgress={downloadInfo.progress}
+            hideFavorite={trackBlacklisted}
+            hideDownload={trackBlacklisted}
+            onPlay={trackBlacklisted ? undefined : () => {
               onTrackPlay?.(track);
-            },
-            onPlayNext: onTrackPlayNext ? () => onTrackPlayNext(track) : undefined,
-            onPlayLater: onTrackPlayLater ? () => onTrackPlayLater(track) : undefined,
-            onAddToPlaylist: onAddTrackToPlaylist ? () => onAddTrackToPlaylist(track.id) : undefined,
-            onShareQobuz: onTrackShareQobuz ? () => onTrackShareQobuz(track.id) : undefined,
-            onShareSonglink: onTrackShareSonglink ? () => onTrackShareSonglink(track) : undefined,
-            onGoToArtist: album.artistId && onTrackGoToArtist ? () => onTrackGoToArtist(album.artistId!) : undefined,
-            onShowInfo: onTrackShowInfo ? () => onTrackShowInfo(track.id) : undefined,
-            onDownload: onTrackDownload ? () => onTrackDownload(track) : undefined,
-            isTrackDownloaded,
-            onReDownload: isTrackDownloaded && onTrackReDownload ? () => onTrackReDownload(track) : undefined,
-            onRemoveDownload: isTrackDownloaded && onTrackRemoveDownload ? () => onTrackRemoveDownload(track.id) : undefined
-          }}
-        />
+            }}
+            onDownload={!trackBlacklisted && onTrackDownload ? () => onTrackDownload(track) : undefined}
+            onRemoveDownload={!trackBlacklisted && onTrackRemoveDownload ? () => onTrackRemoveDownload(track.id) : undefined}
+            menuActions={trackBlacklisted ? {
+              // Blacklisted: only navigation and info
+              onGoToArtist: album.artistId && onTrackGoToArtist ? () => onTrackGoToArtist(album.artistId!) : undefined,
+              onShowInfo: onTrackShowInfo ? () => onTrackShowInfo(track.id) : undefined
+            } : {
+              onPlayNow: () => {
+                onTrackPlay?.(track);
+              },
+              onPlayNext: onTrackPlayNext ? () => onTrackPlayNext(track) : undefined,
+              onPlayLater: onTrackPlayLater ? () => onTrackPlayLater(track) : undefined,
+              onAddToPlaylist: onAddTrackToPlaylist ? () => onAddTrackToPlaylist(track.id) : undefined,
+              onShareQobuz: onTrackShareQobuz ? () => onTrackShareQobuz(track.id) : undefined,
+              onShareSonglink: onTrackShareSonglink ? () => onTrackShareSonglink(track) : undefined,
+              onGoToArtist: album.artistId && onTrackGoToArtist ? () => onTrackGoToArtist(album.artistId!) : undefined,
+              onShowInfo: onTrackShowInfo ? () => onTrackShowInfo(track.id) : undefined,
+              onDownload: onTrackDownload ? () => onTrackDownload(track) : undefined,
+              isTrackDownloaded,
+              onReDownload: isTrackDownloaded && onTrackReDownload ? () => onTrackReDownload(track) : undefined,
+              onRemoveDownload: isTrackDownloaded && onTrackRemoveDownload ? () => onTrackRemoveDownload(track.id) : undefined
+            }}
+          />
+        {/each}
       {/each}
       {/if}
     </div>
@@ -1643,6 +1686,8 @@
   }
 
   .work-header {
+    margin-top: 24px;
+    margin-bottom: 8px;
     color: var(--text-muted);
   }
 
