@@ -887,6 +887,15 @@
         {@const trackArtistId = track.artistId ?? album.artistId}
         {@const trackBlacklisted = trackArtistId ? isArtistBlacklisted(trackArtistId) : false}
         {@const trackUnavailable = checkTrackUnavailable(track)}
+
+        {@const previousTrack = filteredTracks[trackIndex - 1]}
+        {@const showWorkHeader = track.work && track.work !== previousTrack?.work}
+
+        {#if showWorkHeader}
+          <div class="work-header">
+            {track.work} {track.composer ? `(${track.composer})` : ""}
+          </div>
+        {/if}
         <TrackRow
           trackId={track.id}
           number={track.number}
@@ -1631,6 +1640,10 @@
     display: flex;
     flex-direction: column;
     width: 100%;
+  }
+
+  .work-header {
+    color: var(--text-muted);
   }
 
   /* By the same artist section */

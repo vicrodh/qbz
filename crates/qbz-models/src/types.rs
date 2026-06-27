@@ -198,6 +198,7 @@ pub struct Track {
     /// it parenthesized after the title so remix and reissue albums are
     /// distinguishable from originals (issue #360).
     pub version: Option<String>,
+    pub work: Option<String>,
     pub isrc: Option<String>,
     #[serde(default)]
     pub duration: u32,

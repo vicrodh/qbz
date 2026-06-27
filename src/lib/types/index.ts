@@ -19,6 +19,7 @@ export interface QobuzTrack {
   /** Subtitle/edition info from Qobuz (e.g. "Player's Ball Mix"). Render
    *  via formatTrackTitle() to disambiguate remixes/reissues (#360). */
   version?: string | null;
+  work?: string | null;
   duration: number;
   track_number?: number;
   album?: {
@@ -173,7 +174,9 @@ export interface Track {
   /** Qobuz subtitle/edition (e.g. "Player's Ball Mix"). Render with
    *  formatTrackTitle() (#360). */
   version?: string | null;
+  work?: string | null;
   artist?: string;
+  composer?: string;
   duration: string;
   durationSeconds: number;
   quality?: string;
