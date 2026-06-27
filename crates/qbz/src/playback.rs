@@ -1760,6 +1760,19 @@ async fn record_recent(runtime: &Runtime) {
     if let Some(artist_id) = track.artist_id {
         crate::play_history::record_play(artist_id, &track.artist);
     }
+    // reco: log this play for taste scoring. The helper gates to Qobuz-catalog
+    // sources only (local/plex/ephemeral ids don't resolve against the Qobuz
+    // catalog and would poison the home seeds). SQLite is blocking, so it runs
+    // on the blocking pool, off the async record_recent path.
+    let (rid, ralb, rart, rsrc) = (
+        track.id,
+        track.album_id.clone(),
+        track.artist_id,
+        track.source.clone(),
+    );
+    tokio::task::spawn_blocking(move || {
+        crate::reco::log_play_gated(rid, ralb, rart, rsrc.as_deref());
+    });
 }
 
 /// THE single queue-drop predicate for an already-built `QueueTrack` (Task 7).

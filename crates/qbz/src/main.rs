@@ -100,6 +100,7 @@ mod plex_auth;
 mod plex_settings;
 mod playlist_picker;
 mod quality;
+mod reco;
 mod recently;
 mod scrobble;
 mod scrobbler_settings;
@@ -516,6 +517,8 @@ async fn enter_shell_offline(
     if let Some(dir) = crate::offline_mode::user_data_dir(user_id) {
         crate::offline_mode::init_for_user(&dir);
         crate::fav_cache::init_for_user(&dir);
+        // Recommendation event store (shared events.db with Tauri).
+        crate::reco::init_for_user(&dir);
         crate::discover_prefs::init_for_user(&dir);
         // D-FIX-a: bind the blacklist offline too — Tauri never initialized it
         // in offline mode, so blacklisted artists leaked into offline surfaces.

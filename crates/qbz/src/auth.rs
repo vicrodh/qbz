@@ -110,6 +110,8 @@ where
     if let Some(dir) = crate::offline_mode::user_data_dir(user_id) {
         crate::offline_mode::init_for_user(&dir);
         crate::fav_cache::init_for_user(&dir);
+        // Recommendation event store (shared events.db with Tauri).
+        crate::reco::init_for_user(&dir);
         crate::discover_prefs::init_for_user(&dir);
         crate::artist_blacklist::init_for_user(&dir);
         // Intelligent Search (cache + ranking), seeded from the persisted pref.
@@ -226,6 +228,8 @@ where
             if let Some(dir) = crate::offline_mode::user_data_dir(user_id) {
                 crate::offline_mode::init_for_user(&dir);
                 crate::fav_cache::init_for_user(&dir);
+                // Recommendation event store (shared events.db with Tauri).
+                crate::reco::init_for_user(&dir);
                 crate::discover_prefs::init_for_user(&dir);
                 crate::artist_blacklist::init_for_user(&dir);
                 // Intelligent Search (cache + ranking), seeded from the pref.
@@ -279,6 +283,7 @@ where
     crate::offline::deactivate().await;
     crate::offline_mode::teardown();
     crate::fav_cache::teardown();
+    crate::reco::teardown();
     crate::discover_prefs::teardown();
     crate::artist_blacklist::teardown();
     crate::search_service::teardown();
