@@ -214,6 +214,10 @@ pub struct QbzCore<A: FrontendAdapter> {
     /// data-dir path) via `set_musicbrainz_cache`. Methods read the
     /// cache before hitting the network and persist on miss.
     musicbrainz_cache: Arc<std::sync::Mutex<Option<MusicBrainzCache>>>,
+    /// Per-user artist-vector store for the playlist "Suggested Songs" engine.
+    /// Opened by the frontend (owns the data dir) via `set_artist_vectors`.
+    /// tokio Mutex because the suggestions engine holds it across `.await`s.
+    artist_vectors: Arc<tokio::sync::Mutex<Option<qbz_reco::ArtistVectorStore>>>,
     /// Whether the core is initialized
     initialized: Arc<RwLock<bool>>,
     /// D8 guard: true when the current queue was built from an OFFLINE-ONLY
@@ -238,6 +242,7 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
             player: Arc::new(player),
             musicbrainz: Arc::new(MusicBrainzClient::new()),
             musicbrainz_cache: Arc::new(std::sync::Mutex::new(None)),
+            artist_vectors: Arc::new(tokio::sync::Mutex::new(None)),
             initialized: Arc::new(RwLock::new(false)),
             queue_offline_only: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
@@ -265,6 +270,18 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
         if let Ok(mut guard) = self.musicbrainz_cache.lock() {
             *guard = Some(cache);
         }
+    }
+
+    /// Install the per-user artist-vector store (playlist Suggested Songs). The
+    /// frontend owns the data path and opens it via
+    /// `qbz_reco::ArtistVectorStore::open_at`.
+    pub async fn set_artist_vectors(&self, store: qbz_reco::ArtistVectorStore) {
+        *self.artist_vectors.lock().await = Some(store);
+    }
+
+    /// Drop the per-user artist-vector store on logout.
+    pub async fn clear_artist_vectors(&self) {
+        *self.artist_vectors.lock().await = None;
     }
 
     /// Initialize the core
@@ -1935,6 +1952,72 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
             .resolve_artist(name)
             .await
             .map_err(|e| CoreError::Internal(e.to_string()))
+    }
+
+    /// Generate playlist "Suggested Songs" via the artist_vectors engine.
+    /// Resolves each playlist artist NAME to a confident MusicBrainz id, then
+    /// runs the SuggestionsEngine over the core-owned clients + the per-user
+    /// vector store. The names come from the playlist's own Qobuz tracks (so
+    /// they are already canonical — the Tauri command's extra Qobuz-name
+    /// re-fetch is unnecessary; `qobuz_id` is accepted for forward use).
+    pub async fn generate_playlist_suggestions(
+        &self,
+        artists: Vec<(Option<u64>, String)>,
+        exclude_track_ids: Vec<u64>,
+        include_reasons: bool,
+        config: Option<qbz_reco::SuggestionConfig>,
+    ) -> Result<qbz_reco::SuggestionResult, String> {
+        use std::collections::HashSet;
+
+        if artists.is_empty() {
+            return Ok(qbz_reco::SuggestionResult {
+                tracks: Vec::new(),
+                source_artists: Vec::new(),
+                playlist_artists_count: 0,
+                similar_artists_count: 0,
+            });
+        }
+
+        // Resolve each artist name to a confident MusicBrainz id, deduped.
+        let mut resolved: Vec<(String, String)> = Vec::new();
+        let mut seen: HashSet<String> = HashSet::new();
+        for (_qobuz_id, name) in &artists {
+            if let Ok(Some(r)) = self.musicbrainz_resolve_artist(name).await {
+                if seen.insert(r.mbid.clone()) {
+                    resolved.push((r.mbid, name.clone()));
+                }
+            }
+        }
+
+        if resolved.is_empty() {
+            log::warn!("[suggestions] no playlist artists resolved to MusicBrainz ids");
+            return Ok(qbz_reco::SuggestionResult {
+                tracks: Vec::new(),
+                source_artists: Vec::new(),
+                playlist_artists_count: artists.len(),
+                similar_artists_count: 0,
+            });
+        }
+
+        let config = config.unwrap_or_default();
+        let builder = Arc::new(qbz_reco::ArtistVectorBuilder::new(
+            self.artist_vectors.clone(),
+            self.musicbrainz.clone(),
+            self.musicbrainz_cache.clone(),
+            self.client.clone(),
+            qbz_reco::RelationshipWeights::default(),
+        ));
+        let engine = qbz_reco::SuggestionsEngine::new(
+            self.artist_vectors.clone(),
+            builder,
+            self.client.clone(),
+            config,
+        );
+
+        let exclude: HashSet<u64> = exclude_track_ids.into_iter().collect();
+        engine
+            .generate_suggestions(&resolved, &exclude, include_reasons)
+            .await
     }
 
     /// Fetch the artist metadata (location, life_span, genre seeds) for

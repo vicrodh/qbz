@@ -27,12 +27,14 @@ use crate::weights::RelationshipWeights;
 pub struct ArtistVectorBuilder {
     /// Vector store for persistence
     store: Arc<Mutex<Option<ArtistVectorStore>>>,
-    /// MusicBrainz client for relationship data (behind Mutex for shared ownership)
-    mb_client: Arc<Mutex<MusicBrainzClient>>,
-    /// MusicBrainz cache
-    mb_cache: Arc<Mutex<Option<MusicBrainzCache>>>,
-    /// Qobuz client for similar artists
-    qobuz_client: Arc<RwLock<QobuzClient>>,
+    /// MusicBrainz client (Send+Sync, no outer lock — matches qbz-core's
+    /// `Arc<MusicBrainzClient>`).
+    mb_client: Arc<MusicBrainzClient>,
+    /// MusicBrainz cache (std::sync::Mutex — matches qbz-core; locked only for
+    /// short, await-free windows so no guard crosses an `.await`).
+    mb_cache: Arc<std::sync::Mutex<Option<MusicBrainzCache>>>,
+    /// Qobuz client for similar artists (`Option` = no active session).
+    qobuz_client: Arc<RwLock<Option<QobuzClient>>>,
     /// Configurable weights
     weights: RelationshipWeights,
 }
@@ -54,9 +56,9 @@ impl ArtistVectorBuilder {
     /// Create a new builder with the given dependencies
     pub fn new(
         store: Arc<Mutex<Option<ArtistVectorStore>>>,
-        mb_client: Arc<Mutex<MusicBrainzClient>>,
-        mb_cache: Arc<Mutex<Option<MusicBrainzCache>>>,
-        qobuz_client: Arc<RwLock<QobuzClient>>,
+        mb_client: Arc<MusicBrainzClient>,
+        mb_cache: Arc<std::sync::Mutex<Option<MusicBrainzCache>>>,
+        qobuz_client: Arc<RwLock<Option<QobuzClient>>>,
         weights: RelationshipWeights,
     ) -> Self {
         Self {
@@ -167,7 +169,10 @@ impl ArtistVectorBuilder {
     ) -> Result<(SparseVector, usize), String> {
         // Try cache first
         let cached = {
-            let guard__ = self.mb_cache.lock().await;
+            let guard__ = self
+                .mb_cache
+                .lock()
+                .map_err(|_| "MusicBrainz cache lock poisoned")?;
             let cache = guard__
                 .as_ref()
                 .ok_or("No active session - please log in")?;
@@ -177,20 +182,22 @@ impl ArtistVectorBuilder {
         let relations = if let Some(rel) = cached {
             rel
         } else {
-            // Fetch from API
-            let mb_client = self.mb_client.lock().await;
-            let response = mb_client
+            // Fetch from API (mb_client is Send+Sync; no lock needed)
+            let response = self
+                .mb_client
                 .get_artist_with_relations(artist_mbid)
                 .await
                 .map_err(|e| e.to_string())?;
-            drop(mb_client);
 
             // Extract relationships from raw response
             let extracted = extract_relationships(&response);
 
             // Cache it
             {
-                let guard__ = self.mb_cache.lock().await;
+                let guard__ = self
+                    .mb_cache
+                    .lock()
+                    .map_err(|_| "MusicBrainz cache lock poisoned")?;
                 let cache = guard__
                     .as_ref()
                     .ok_or("No active session - please log in")?;
@@ -250,7 +257,10 @@ impl ArtistVectorBuilder {
         qobuz_artist_id: u64,
     ) -> Result<(SparseVector, usize), String> {
         let similar = {
-            let client = self.qobuz_client.read().await;
+            let guard__ = self.qobuz_client.read().await;
+            let client = guard__
+                .as_ref()
+                .ok_or("No active session - please log in")?;
             client
                 .get_similar_artists(qobuz_artist_id, 20, 0)
                 .await

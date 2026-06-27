@@ -109,7 +109,7 @@ pub struct SuggestionsEngine {
     /// Vector builder for lazy construction
     builder: Arc<ArtistVectorBuilder>,
     /// Qobuz client for track search
-    qobuz_client: Arc<RwLock<QobuzClient>>,
+    qobuz_client: Arc<RwLock<Option<QobuzClient>>>,
     /// Configuration
     config: SuggestionConfig,
 }
@@ -119,7 +119,7 @@ impl SuggestionsEngine {
     pub fn new(
         store: Arc<Mutex<Option<ArtistVectorStore>>>,
         builder: Arc<ArtistVectorBuilder>,
-        qobuz_client: Arc<RwLock<QobuzClient>>,
+        qobuz_client: Arc<RwLock<Option<QobuzClient>>>,
         config: SuggestionConfig,
     ) -> Self {
         Self {
@@ -357,7 +357,10 @@ impl SuggestionsEngine {
             let step4c_start = Instant::now();
 
             // Get client for Qobuz API calls
-            let client = self.qobuz_client.read().await;
+            let guard__ = self.qobuz_client.read().await;
+            let client = guard__
+                .as_ref()
+                .ok_or_else(|| "No active session - please log in".to_string())?;
 
             // For each playlist artist, get their Qobuz similar artists
             let mut qobuz_similar_ids: HashSet<u64> = HashSet::new();
@@ -627,7 +630,11 @@ impl SuggestionsEngine {
             }
         };
 
-        let client = self.qobuz_client.read().await;
+        let guard__ = self.qobuz_client.read().await;
+        let Some(client) = guard__.as_ref() else {
+            log::warn!("[SuggestionsEngine] No active Qobuz session; skipping");
+            return Vec::new();
+        };
 
         // Step 1: Validate artist exists in Qobuz with their own catalog
         // This prevents searching for session musicians who don't have artist pages
