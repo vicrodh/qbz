@@ -583,6 +583,48 @@ impl RecoStore {
         Ok(genres)
     }
 
+    /// Favorite album ids NOT played within `recency_days` ("forgotten
+    /// favorites"). Ported from Tauri `reco_store/db.rs:391-426`, adapted to
+    /// the integer `created_at` (unix seconds) schema: Tauri's
+    /// `datetime('now', …)` string comparison never matched an integer column,
+    /// so the recency filter is a numeric cutoff here.
+    pub fn get_forgotten_favorite_album_ids(
+        &self,
+        limit: u32,
+        recency_days: u32,
+    ) -> Result<Vec<String>, String> {
+        let cutoff = now_ts().saturating_sub((recency_days as i64) * 86_400);
+        let mut stmt = self
+            .conn
+            .prepare(
+                r#"
+                SELECT f.album_id
+                FROM reco_events f
+                WHERE f.event_type = 'favorite' AND f.album_id IS NOT NULL
+                  AND f.album_id NOT IN (
+                    SELECT DISTINCT p.album_id
+                    FROM reco_events p
+                    WHERE p.event_type = 'play'
+                      AND p.album_id IS NOT NULL
+                      AND p.created_at > ?
+                  )
+                GROUP BY f.album_id
+                ORDER BY RANDOM()
+                LIMIT ?
+                "#,
+            )
+            .map_err(|e| format!("Failed to prepare forgotten favorites query: {}", e))?;
+        let rows = stmt
+            .query_map(params![cutoff, limit], |row| row.get::<_, String>(0))
+            .map_err(|e| format!("Failed to query forgotten favorites: {}", e))?;
+        let mut albums = Vec::new();
+        for row in rows {
+            albums
+                .push(row.map_err(|e| format!("Failed to read forgotten favorite row: {}", e))?);
+        }
+        Ok(albums)
+    }
+
     // ---- Scores (companion table, written by train()) ----
 
     fn has_scores(&self, score_type: &str) -> Result<bool, String> {
@@ -988,6 +1030,21 @@ impl RecoStore {
             .map_err(|e| format!("Failed to upsert album genre meta: {}", e))?;
         Ok(())
     }
+
+    /// Backfill `genre_id` onto every still-NULL event of an album once its
+    /// genre is known (ported from Tauri `db.rs:321-331`). Plays log
+    /// `genre_id = None`, so the frontend calls this when it resolves an
+    /// album's genre — this is what makes `get_top_genres` non-empty.
+    pub fn update_genre_for_album(&self, album_id: &str, genre_id: u64) -> Result<u64, String> {
+        let affected = self
+            .conn
+            .execute(
+                "UPDATE reco_events SET genre_id = ? WHERE album_id = ? AND genre_id IS NULL",
+                params![genre_id, album_id],
+            )
+            .map_err(|e| format!("Failed to update genre for album: {}", e))?;
+        Ok(affected as u64)
+    }
 }
 
 /// Merge two lists preserving order: fresh items first, then scored items
@@ -1182,6 +1239,42 @@ mod tests {
         // The "favorite" bucket only contains the favorited track.
         let fav_scored = store.get_scored_track_ids("favorite", 10).unwrap();
         assert_eq!(fav_scored, vec![2]);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn forgotten_favorites_excludes_recently_played() {
+        let dir = unique_test_dir("reco-forgotten");
+        let store = RecoStore::new_at(&dir).unwrap();
+        // Favorite albums A and B; only A was played (now).
+        store.log_favorite_event(1, Some("A".into()), Some(10), None).unwrap();
+        store.log_favorite_event(2, Some("B".into()), Some(11), None).unwrap();
+        store.log_play_event(1, Some("A".into()), Some(10), None).unwrap();
+        let forgotten = store.get_forgotten_favorite_album_ids(10, 30).unwrap();
+        assert!(forgotten.contains(&"B".to_string())); // never played -> forgotten
+        assert!(!forgotten.contains(&"A".to_string())); // played now -> not forgotten
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn genre_backfill_makes_top_genres_non_empty() {
+        let dir = unique_test_dir("reco-genre-backfill");
+        let store = RecoStore::new_at(&dir).unwrap();
+        // Plays log no genre_id, so top genres is empty until backfill.
+        store.log_play_event(1, Some("jz".into()), Some(10), None).unwrap();
+        store.log_play_event(2, Some("jz".into()), Some(10), None).unwrap();
+        store.log_play_event(3, Some("rk".into()), Some(11), None).unwrap();
+        assert!(store.get_top_genres(10).unwrap().is_empty());
+        // The frontend backfills genre on album resolution (id + name).
+        store.update_genre_for_album("jz", 5).unwrap();
+        store.set_album_genre_name("jz", "Jazz").unwrap();
+        store.update_genre_for_album("rk", 6).unwrap();
+        store.set_album_genre_name("rk", "Rock").unwrap();
+        let genres = store.get_top_genres(10).unwrap();
+        assert_eq!(genres.len(), 2);
+        assert_eq!(genres[0].0, 5); // jazz played 2x -> ranked first
+        assert_eq!(genres[0].1, "Jazz"); // name resolved from album-meta
+        assert_eq!(genres[1].0, 6);
         let _ = std::fs::remove_dir_all(dir);
     }
 }
