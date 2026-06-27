@@ -3046,6 +3046,9 @@ export struct StoryItem {
 export global ArtistState {
     in property <string> id;
     in property <string> name;
+    // Whether the user follows (Qobuz-favorites) this artist — drives the
+    // header heart fill; seeded on artist open, toggled by the follow action.
+    in property <bool> is-following: false;
     // Network URL of the portrait — used by the artwork right-click
     // menu for Open-in-browser and Save-as actions.
     in property <string> artwork-url;
