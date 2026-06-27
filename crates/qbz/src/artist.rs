@@ -1540,7 +1540,17 @@ where
             seed_name,
             &similar_names,
             &|tag| crate::discovery_dismiss::dismissed_for_tag(tag),
-            &|| crate::play_history::known_artists(known_threshold),
+            &|| {
+                // play_history supplies the (id, name) known set; reco augments
+                // the id set with its richer signal (artists played >threshold
+                // OR favorited). Names stay from play_history -- reco_events has
+                // no artist names (schema frozen to match Tauri).
+                let (mut ids, names) = crate::play_history::known_artists(known_threshold);
+                if let Some(reco_ids) = crate::reco::known_artist_ids(known_threshold) {
+                    ids.extend(reco_ids);
+                }
+                (ids, names)
+            },
         )
         .await
         .map_err(|e| e.to_string())?;

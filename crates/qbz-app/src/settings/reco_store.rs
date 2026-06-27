@@ -554,6 +554,37 @@ impl RecoStore {
         Ok(artists)
     }
 
+    /// Distinct artist ids the user "knows": played strictly more than
+    /// `play_threshold` times OR favorited at least once. Backs the discovery
+    /// "skip artists I already know" filter with a richer signal (plays +
+    /// favorites) than the play-only `play_history` store.
+    pub fn get_known_artist_ids(
+        &self,
+        play_threshold: u32,
+    ) -> Result<std::collections::HashSet<u64>, String> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                r#"
+                SELECT artist_id
+                FROM reco_events
+                WHERE artist_id IS NOT NULL
+                GROUP BY artist_id
+                HAVING SUM(CASE WHEN event_type = 'play' THEN 1 ELSE 0 END) > ?
+                    OR SUM(CASE WHEN event_type = 'favorite' THEN 1 ELSE 0 END) > 0
+                "#,
+            )
+            .map_err(|e| format!("Failed to prepare known artists query: {}", e))?;
+        let rows = stmt
+            .query_map(params![play_threshold], |row| row.get::<_, u64>(0))
+            .map_err(|e| format!("Failed to query known artists: {}", e))?;
+        let mut ids = std::collections::HashSet::new();
+        for row in rows {
+            ids.insert(row.map_err(|e| format!("Failed to read known artist row: {}", e))?);
+        }
+        Ok(ids)
+    }
+
     /// The user's most-played genres by event count (mirrors `get_top_genre_ids`).
     /// Returns `(genre_id, genre_name)` — name from `reco_album_meta` (empty if unknown).
     pub fn get_top_genres(&self, limit: u32) -> Result<Vec<(u64, String)>, String> {
@@ -1275,6 +1306,34 @@ mod tests {
         assert_eq!(genres[0].0, 5); // jazz played 2x -> ranked first
         assert_eq!(genres[0].1, "Jazz"); // name resolved from album-meta
         assert_eq!(genres[1].0, 6);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn known_artists_includes_played_and_favorited() {
+        let dir = unique_test_dir("reco-known-artists");
+        let store = RecoStore::new_at(&dir).unwrap();
+        // artist 10: 3 plays (> threshold 2). artist 20: a single favorite, no
+        // plays. artist 30: 1 play, not favorited -> excluded.
+        store.log_play_event(1, Some("a".into()), Some(10), None).unwrap();
+        store.log_play_event(2, Some("a".into()), Some(10), None).unwrap();
+        store.log_play_event(3, Some("a".into()), Some(10), None).unwrap();
+        store
+            .insert_event(&RecoEventInput {
+                event_type: RecoEventType::Favorite,
+                item_type: RecoItemType::Artist,
+                track_id: None,
+                album_id: None,
+                artist_id: Some(20),
+                playlist_id: None,
+                genre_id: None,
+            })
+            .unwrap();
+        store.log_play_event(4, Some("c".into()), Some(30), None).unwrap();
+        let known = store.get_known_artist_ids(2).unwrap();
+        assert!(known.contains(&10)); // 3 plays > 2
+        assert!(known.contains(&20)); // favorited
+        assert!(!known.contains(&30)); // 1 play, not favorited
         let _ = std::fs::remove_dir_all(dir);
     }
 }

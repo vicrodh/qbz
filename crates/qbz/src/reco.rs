@@ -12,6 +12,7 @@
 //! file is shared with Tauri (`<base_dir>/reco/events.db`), so a user's
 //! existing recommendation history carries across frontends.
 
+use std::collections::HashSet;
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -228,6 +229,16 @@ pub fn backfill_album_genres(entries: Vec<(String, u64, String)>) {
             }
         }
     }
+}
+
+/// Artist ids the user "knows" — played more than `play_threshold` times OR
+/// favorited — to augment the discovery "skip artists I already know" filter
+/// with the reco signal (plays + favorites, not plays alone). `None` when reco
+/// is cold/disabled, so discovery falls back to the play_history set only.
+pub fn known_artist_ids(play_threshold: u32) -> Option<HashSet<u64>> {
+    let guard = RECO.lock().ok()?;
+    let store = guard.as_ref()?;
+    store.get_known_artist_ids(play_threshold).ok()
 }
 
 // ---------------------------------------------------------------------------
