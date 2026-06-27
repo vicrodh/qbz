@@ -519,6 +519,10 @@ async fn enter_shell_offline(
         crate::fav_cache::init_for_user(&dir);
         // Recommendation event store (shared events.db with Tauri).
         crate::reco::init_for_user(&dir);
+        // Playlist Suggested Songs: open the per-user artist-vector store.
+        if let Ok(store) = qbz_reco::ArtistVectorStore::open_at(&dir) {
+            runtime.core().set_artist_vectors(store).await;
+        }
         crate::discover_prefs::init_for_user(&dir);
         // D-FIX-a: bind the blacklist offline too — Tauri never initialized it
         // in offline mode, so blacklisted artists leaked into offline surfaces.

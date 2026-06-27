@@ -114,6 +114,11 @@ where
         // after init (off-thread) so the seeds reflect this session's events.
         crate::reco::init_for_user(&dir);
         crate::reco::train_async();
+        // Playlist Suggested Songs: open the per-user artist-vector store on
+        // the core (the suggestions engine reads/writes it).
+        if let Ok(store) = qbz_reco::ArtistVectorStore::open_at(&dir) {
+            runtime.core().set_artist_vectors(store).await;
+        }
         crate::discover_prefs::init_for_user(&dir);
         crate::artist_blacklist::init_for_user(&dir);
         // Intelligent Search (cache + ranking), seeded from the persisted pref.
@@ -235,6 +240,11 @@ where
                 // session's events.
                 crate::reco::init_for_user(&dir);
                 crate::reco::train_async();
+                // Playlist Suggested Songs: open the per-user artist-vector
+                // store on the core (the suggestions engine reads/writes it).
+                if let Ok(store) = qbz_reco::ArtistVectorStore::open_at(&dir) {
+                    runtime.core().set_artist_vectors(store).await;
+                }
                 crate::discover_prefs::init_for_user(&dir);
                 crate::artist_blacklist::init_for_user(&dir);
                 // Intelligent Search (cache + ranking), seeded from the pref.
@@ -289,6 +299,7 @@ where
     crate::offline_mode::teardown();
     crate::fav_cache::teardown();
     crate::reco::teardown();
+    runtime.core().clear_artist_vectors().await;
     crate::discover_prefs::teardown();
     crate::artist_blacklist::teardown();
     crate::search_service::teardown();
