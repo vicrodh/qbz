@@ -590,6 +590,34 @@ export component PlaylistView inherits Rectangle {
                                 }
                             }
                         }
+                        // Follow on Qobuz (subscribe) — only a non-owned Qobuz
+                        // playlist; syncs to the user's Qobuz account.
+                        if !PlaylistState.is-local && !PlaylistState.is-owner: VerticalLayout {
+                            horizontal-stretch: 0;
+                            alignment: center;
+                            CircleAction {
+                                icon: @image-url("../assets/icons/user-plus.svg");
+                                active: PlaylistState.is-following;
+                                tooltip: PlaylistState.is-following ? @tr("Following on Qobuz") : @tr("Follow on Qobuz");
+                                clicked => {
+                                    root.media-action("playlist", PlaylistState.id, "follow");
+                                }
+                            }
+                        }
+                        // Copy to your library — clone a non-owned Qobuz playlist
+                        // into your own playlists (hidden once copied).
+                        if !PlaylistState.is-local && !PlaylistState.is-owner
+                            && !PlaylistState.is-copied: VerticalLayout {
+                            horizontal-stretch: 0;
+                            alignment: center;
+                            CircleAction {
+                                icon: @image-url("../assets/icons/copy.svg");
+                                tooltip: @tr("Copy to your library");
+                                clicked => {
+                                    root.media-action("playlist", PlaylistState.id, "copy");
+                                }
+                            }
+                        }
                         // Make the whole playlist available offline —
                         // resolves Qobuz membership, hidden for LOCAL ones.
                         if !PlaylistState.is-local: VerticalLayout {

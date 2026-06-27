@@ -1860,6 +1860,12 @@ export global PlaylistState {
     in property <bool> is-favorite: false;
     // True when the playlist is one of the user's own (editable).
     in property <bool> is-owner: false;
+    // Followed (subscribed) on Qobuz — an account-level follow that syncs
+    // across Qobuz clients, distinct from the internal favorite heart.
+    in property <bool> is-following: false;
+    // Already copied into the user's own playlists this session (hides the
+    // Copy action so it isn't duplicated).
+    in property <bool> is-copied: false;
     // LOCAL playlist (id "local:<uuid>", library.db entity — never on
     // Qobuz). Qobuz-bound header actions (favorite / cache) hide; the
     // "Upload to Qobuz" action appears when not offline-only.

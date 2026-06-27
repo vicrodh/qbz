@@ -209,6 +209,38 @@ where
         })
         .collect();
 
+    // Surface INTERNAL favorites (hearted playlists) that are neither owned nor
+    // subscribed — they don't come back from get_user_playlists, so without this
+    // a favorited-but-not-followed Qobuz playlist would be invisible here.
+    // Online only (offline can't fetch them); mirrors Favorites>Playlists.
+    if !crate::offline_mode::engine().is_offline() {
+        let fav_ids =
+            crate::library_db::with_db(|db| db.get_favorite_playlist_ids()).unwrap_or_default();
+        let known: std::collections::HashSet<u64> = playlists.iter().map(|p| p.id).collect();
+        for fid in fav_ids {
+            if known.contains(&fid) {
+                continue;
+            }
+            if let Ok(p) = runtime.core().get_playlist(fid).await {
+                let s = settings.get(&fid).cloned().unwrap_or_default();
+                playlists.push(PmPlaylist {
+                    id: fid,
+                    name: p.name.clone(),
+                    tracks_count: p.tracks_count,
+                    duration: p.duration,
+                    local_count: local_counts.get(&fid).copied().unwrap_or(0),
+                    play_count: play_counts.get(&fid).copied().unwrap_or(0),
+                    is_favorite: true,
+                    is_hidden: s.hidden,
+                    folder_id: s.folder_id.filter(|f| folder_ids.contains(f)),
+                    position: s.position,
+                    cover_urls: cover_urls(&p),
+                    offline_available: snapshot_available.contains(&fid),
+                });
+            }
+        }
+    }
+
     // D11.b — OFFLINE: the Qobuz fetch is gate-refused (empty), so the
     // reachable playlists are synthesized locally: the MIXED ones (>= 1
     // local sidecar row) plus — B8 — the snapshot-available ones (>= 1
