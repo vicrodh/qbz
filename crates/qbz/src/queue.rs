@@ -22,13 +22,11 @@ use slint::{ComponentHandle, Model};
 use crate::adapter::SlintAdapter;
 use crate::{AppWindow, ImmersiveState, QueueItem, QueueState};
 
-/// Up-next "page" size. Set effectively unbounded so the queue renders the
-/// WHOLE up-next as ONE scrollable list (a growing list, like the immersive +
-/// miniplayer queues) instead of 40-row pages — this dissolves the cross-page
-/// drag limitation: a dragged row can now reach any slot in one list. Kept as a
-/// single large "page" so the pagination + reorder index math stays uniform;
-/// the paginator UI auto-hides at `page_count == 1` (QueueSidebar.slint:624).
-pub const PAGE_SIZE: usize = 100_000;
+/// Upcoming tracks shown per paginator page. PAGINATED (not a growing list) to
+/// keep CPU/rendering bounded on huge queues (1000+ tracks) — owner preference.
+/// The cross-page drag (moving a dragged row to another page) is a SEPARATE
+/// pending rework (paginator drop-zones + drag auto-scroll), tracked on its own.
+pub const PAGE_SIZE: usize = 40;
 
 type Runtime = Arc<qbz_app::shell::AppRuntime<SlintAdapter>>;
 
