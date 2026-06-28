@@ -1,0 +1,117 @@
+// Radio Stations carousel for Discover > For You — album-seeded radio tiles in a
+// paged horizontal Flickable with prev/next nav buttons (drag still works). The
+// nav buttons mirror SlimCarousel; the body uses RadioCard (the bespoke radio
+// tile) instead of slim/album cards. Replaces the previous bespoke Flickable
+// block in ForYouView, which had no navigation buttons.
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Typography } from "../foundation/typography.slint";
+import { RadioStationItem } from "../state.slint";
+import { RadioCard } from "RadioCard.slint";
+import { QbzIcon } from "../primitives/QbzIcon.slint";
+
+component NavButton inherits Rectangle {
+    in property <image> icon;
+    in property <bool> enabled: true;
+    callback clicked();
+
+    width: 28px;
+    height: 28px;
+    border-radius: 14px;
+    opacity: root.enabled ? 1.0 : 0.4;
+    background: ta.has-hover && root.enabled
+        ? Theme.surface-hover
+        : Theme.surface-elevated;
+
+    QbzIcon {
+        source: root.icon;
+        width: 15px;
+        height: 15px;
+        x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+        y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+        tint: root.enabled ? Theme.text-primary : Theme.text-muted;
+    }
+
+    ta := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+export component RadioCarousel inherits VerticalLayout {
+    in property <string> title;
+    in property <[RadioStationItem]> stations;
+    callback start-radio-album(string);
+
+    // 200px card + 32px inter-card spacing (matches the HorizontalLayout below).
+    property <length> card-pitch: 232px;
+    property <length> total-width: root.stations.length * root.card-pitch;
+    property <length> max-scroll: Math.max(0px, root.total-width - flick.width);
+
+    spacing: 12px;
+
+    // Header: title + (conditional) page controls — only when the row overflows.
+    HorizontalLayout {
+        Text {
+            text: root.title;
+            color: Theme.text-primary;
+            font-size: 18px;
+            font-weight: Typography.semibold;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+        }
+        if root.max-scroll > 0px: HorizontalLayout {
+            spacing: 4px;
+            VerticalLayout {
+                alignment: center;
+                NavButton {
+                    icon: @image-url("../assets/icons/chevron-left.svg");
+                    enabled: flick.viewport-x < -1px;
+                    clicked => {
+                        flick.viewport-x = Math.min(0px, flick.viewport-x + flick.width);
+                    }
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                NavButton {
+                    icon: @image-url("../assets/icons/chevron-right.svg");
+                    enabled: flick.viewport-x > -root.max-scroll + 1px;
+                    clicked => {
+                        flick.viewport-x = Math.max(-root.max-scroll, flick.viewport-x - flick.width);
+                    }
+                }
+            }
+        }
+    }
+
+    Rectangle {
+        height: 234px;
+        clip: true;
+        flick := Flickable {
+            width: 100%;
+            height: parent.height;
+            viewport-width: root.total-width;
+            viewport-height: self.height;
+            HorizontalLayout {
+                spacing: 32px;
+                alignment: start;
+                for st in root.stations: RadioCard {
+                    seed-title: st.title;
+                    seed-subtitle: st.artist;
+                    label: @tr("RADIO");
+                    artwork: st.artwork;
+                    clicked => {
+                        root.start-radio-album(st.album-id);
+                    }
+                    play => {
+                        root.start-radio-album(st.album-id);
+                    }
+                }
+            }
+        }
+    }
+}

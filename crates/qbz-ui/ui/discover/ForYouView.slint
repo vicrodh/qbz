@@ -23,7 +23,7 @@ import { SlimCarousel } from "SlimCarousel.slint";
 import { ArtistCarousel } from "ArtistCarousel.slint";
 import { Spotlight } from "Spotlight.slint";
 import { QobuzMixesRow } from "QobuzMixesRow.slint";
-import { RadioCard } from "RadioCard.slint";
+import { RadioCarousel } from "RadioCarousel.slint";
 import { HomeSkeleton } from "HomeSkeleton.slint";
 
 export component ForYouView inherits VerticalLayout {
@@ -77,40 +77,12 @@ export component ForYouView inherits VerticalLayout {
             }
         }
 
-        // radioStations — album-seeded radio tiles (bespoke Flickable body).
-        if desc.id == "radioStations" && ForYouState.radio-stations.length > 0: VerticalLayout {
-            spacing: 12px;
-            Text {
-                text: @tr("Radio Stations");
-                color: Theme.text-primary;
-                font-size: 18px;
-                font-weight: Typography.semibold;
-            }
-            Rectangle {
-                height: 234px;
-                clip: true;
-                radio-flick := Flickable {
-                    width: 100%;
-                    height: parent.height;
-                    viewport-width: ForYouState.radio-stations.length * (200px + 32px);
-                    viewport-height: self.height;
-                    HorizontalLayout {
-                        spacing: 32px;
-                        alignment: start;
-                        for st in ForYouState.radio-stations: RadioCard {
-                            seed-title: st.title;
-                            seed-subtitle: st.artist;
-                            label: @tr("RADIO");
-                            artwork: st.artwork;
-                            clicked => {
-                                root.start-radio-album(st.album-id);
-                            }
-                            play => {
-                                root.start-radio-album(st.album-id);
-                            }
-                        }
-                    }
-                }
+        // radioStations — album-seeded radio tiles (paged carousel w/ nav buttons).
+        if desc.id == "radioStations" && ForYouState.radio-stations.length > 0: RadioCarousel {
+            title: @tr("Radio Stations");
+            stations: ForYouState.radio-stations;
+            start-radio-album(id) => {
+                root.start-radio-album(id);
             }
         }
 

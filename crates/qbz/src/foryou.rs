@@ -470,6 +470,14 @@ fn build_radio(
     let mut radio_seen: HashSet<String> = HashSet::new();
     let mut radio_stations: Vec<RadioSeed> = Vec::new();
     for a in recent_album_list {
+        // Radio Stations seed a Qobuz album radio (/radio/album), so only
+        // Qobuz-sourced albums are eligible. Locally-played / Plex albums carry
+        // ids the Qobuz radio endpoint can't resolve, so they must NOT appear
+        // here (they still show in "Recently Played Albums"). Empty source =
+        // legacy pre-source entry, treated as Qobuz.
+        if !(a.source.is_empty() || a.source.eq_ignore_ascii_case("qobuz")) {
+            continue;
+        }
         if radio_seen.insert(a.id.clone()) {
             radio_stations.push(RadioSeed {
                 album_id: a.id.clone(),
@@ -651,7 +659,12 @@ fn apply_recent(
             .collect();
         state.set_recent_tracks(ModelRc::new(VecModel::from(slim)));
     });
-    crate::artwork::spawn_loads(jobs, weak.clone(), cache.clone());
+    // Recently-played albums/tracks mix sources (Qobuz / Plex / local), so the
+    // artwork must be routed by scheme: http -> Qobuz CDN, /library/ or /photo/
+    // -> Plex thumb (tokenized LAN fetch), else a local file read. The plain
+    // HTTP loader (spawn_loads) left Plex and local covers blank.
+    let plex = crate::plex_settings::get();
+    crate::artwork::spawn_search_loads(jobs, plex.base_url, plex.token, weak.clone(), cache.clone());
 }
 
 fn apply_release_watch(weak: &slint::Weak<AppWindow>, cache: &ImageCache, cards: Vec<AlbumCard>) {
