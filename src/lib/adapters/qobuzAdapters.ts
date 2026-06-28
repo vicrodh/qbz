@@ -403,6 +403,7 @@ export function convertQobuzAlbum(album: QobuzAlbum): AlbumDetail {
       samplingRate: track.maximum_sampling_rate,
       albumId: album.id,
       artistId: track.performer?.id ?? album.artist?.id,
+      composerId: track.composer?.id,
       isrc: track.isrc,
       streamable: track.streamable ?? true,
       parental_warning: track.parental_warning ?? false

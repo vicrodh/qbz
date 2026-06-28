@@ -185,6 +185,7 @@ export interface Track {
   samplingRate?: number;
   albumId?: string;
   artistId?: number;
+  composerId?: number;
   isrc?: string;
   /** Whether the track is streamable (false = unavailable on Qobuz) */
   streamable?: boolean;

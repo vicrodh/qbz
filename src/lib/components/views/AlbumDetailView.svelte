@@ -53,8 +53,11 @@
     title: string;
     /** Qobuz subtitle/edition (e.g. "Player's Ball Mix") (#360). */
     version?: string | null;
+    work?: string | null;
     artist?: string;
     artistId?: number;
+    composer?: string;
+    composerId?: number;
     duration: string;
     durationSeconds: number;
     quality?: string;
@@ -238,14 +241,18 @@
     );
   });
 
+  const filteredTrackIndexById = $derived.by(() =>
+    new Map(filteredTracks.map((track, index) => [track.id, index]))
+  );
+
   const trackSections = $derived.by(() => {
     const sections: TrackSection[] = [];
     let currentTracks: Track[] = [];
-    let currentWork: string = null;
-    let currentComposer: string = null;
+    let currentWork = null;
+    let currentComposer = null;
 
     for (const track of filteredTracks) {
-      const work = track.work;
+      const work = track.work || null;
 
       if (work === currentWork) {
         currentTracks.push(track);
@@ -255,7 +262,7 @@
         }
 
         currentWork = work;
-        currentComposer = track.composer;
+        currentComposer = track.composer || null;
         currentTracks = [track];
       }
     }
@@ -266,8 +273,6 @@
 
     return sections;
   });
-
-  console.log(trackSections);
 
   // Booklet: find first PDF goody
   const bookletGoody = $derived(
@@ -322,8 +327,8 @@
   }
 
   function toggleMultiSelect(id: number, index: number, event?: MouseEvent | KeyboardEvent) {
-    if (event?.shiftKey && lastSelectedIndex !== null && album?.tracks) {
-      const ids = album.tracks.map(track => track.id);
+    if (event?.shiftKey && lastSelectedIndex !== null) {
+      const ids = filteredTracks.map(track => track.id);
       multiSelectedIds = applyShiftRange({
         current: multiSelectedIds,
         ids,
@@ -339,14 +344,28 @@
     lastSelectedIndex = index;
   }
 
-  function toggleSelectAll() {
-    if (!album?.tracks) return;
-    const allIds = album.tracks.map(track => track.id);
-    if (multiSelectedIds.size === allIds.length) {
-      multiSelectedIds = new Set();
-    } else {
-      multiSelectedIds = new Set(allIds);
+  function getSelectStateForTracks(tracks: Track[]) {
+    if (tracks.length === 0) return 'none' as const;
+
+    const selectedCount = tracks.filter((track) => multiSelectedIds.has(track.id)).length;
+    if (selectedCount === 0) return 'none' as const;
+    if (selectedCount === tracks.length) return 'all' as const;
+    return 'partial' as const;
+  }
+
+  function toggleSelectTracks(tracks: Track[]) {
+    const allSelected = tracks.every((track) => multiSelectedIds.has(track.id));
+    const next = new Set(multiSelectedIds);
+
+    for (const track of tracks) {
+      if (allSelected) {
+        next.delete(track.id);
+      } else {
+        next.add(track.id);
+      }
     }
+
+    multiSelectedIds = next;
   }
 
   $effect(() => {
@@ -354,18 +373,11 @@
     const handler = (e: KeyboardEvent) => {
       if (!isSelectAllShortcut(e)) return;
       e.preventDefault();
-      if (album?.tracks) multiSelectedIds = new Set(album.tracks.map(track => track.id));
+      multiSelectedIds = new Set(filteredTracks.map(track => track.id));
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   });
-
-  const selectAllState = $derived(
-    !album?.tracks || album.tracks.length === 0 ? 'none' as const
-    : multiSelectedIds.size === 0 ? 'none' as const
-    : multiSelectedIds.size === album.tracks.length ? 'all' as const
-    : 'partial' as const
-  );
 
   function buildAlbumQueueTracks(tracks: Track[]) {
     return tracks.map(trk => ({
@@ -886,14 +898,15 @@
       </div>
     </div>
 
-    {#snippet tableHeader()}
+    {#snippet tableHeader(sectionTracks: Track[])}
+      {@const sectionSelectState = getSelectStateForTracks(sectionTracks)}
       <div class="table-header">
         <div class="col-select-all" class:active={multiSelectMode}>
           <input
             type="checkbox"
-            checked={selectAllState === 'all'}
-            indeterminate={selectAllState === 'partial'}
-            onchange={toggleSelectAll}
+            checked={sectionSelectState === 'all'}
+            indeterminate={sectionSelectState === 'partial'}
+            onchange={() => toggleSelectTracks(sectionTracks)}
             title={$t('actions.selectAll')}
             tabindex={multiSelectMode ? 0 : -1}
           />
@@ -929,14 +942,15 @@
           </div>
         {/if}
 
-        {@render tableHeader()}
+        {@render tableHeader(section.tracks)}
 
-        {#each section.tracks as track, trackIndex (track.id)}
+        {#each section.tracks as track (track.id)}
           {@const downloadInfo = getTrackOfflineCacheStatus?.(track.id) ?? { status: 'none' as const, progress: 0 }}
           {@const isTrackDownloaded = downloadInfo.status === 'ready'}
           {@const trackArtistId = track.artistId ?? album.artistId}
           {@const trackBlacklisted = trackArtistId ? isArtistBlacklisted(trackArtistId) : false}
           {@const trackUnavailable = checkTrackUnavailable(track)}
+          {@const visibleTrackIndex = filteredTrackIndexById.get(track.id) ?? 0}
 
           <TrackRow
             trackId={track.id}
@@ -954,7 +968,7 @@
             selectable={multiSelectMode}
             selected={multiSelectedIds.has(track.id)}
             dragTrackIds={multiSelectMode && multiSelectedIds.has(track.id) ? [...multiSelectedIds] : undefined}
-            onToggleSelect={(e) => toggleMultiSelect(track.id, trackIndex, e)}
+            onToggleSelect={(e) => toggleMultiSelect(track.id, visibleTrackIndex, e)}
             downloadStatus={downloadInfo.status}
             downloadProgress={downloadInfo.progress}
             hideFavorite={trackBlacklisted}
