@@ -14,7 +14,8 @@
 //! show/hide toggles the winit window in place.
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use slint::ComponentHandle;
 
@@ -35,6 +36,15 @@ pub(crate) type Runtime = Arc<AppRuntime<SlintAdapter>>;
 /// close-to-tray both flip this so left-click / "Show/Hide" stay consistent
 /// even on backends where querying winit visibility is unreliable (Wayland).
 static WINDOW_SHOWN: AtomicBool = AtomicBool::new(true);
+
+/// Last tray-toggle timestamp, for the double-click debounce (see `toggle_window`).
+static LAST_TOGGLE: Mutex<Option<Instant>> = Mutex::new(None);
+/// Ignore a 2nd tray activation within this window. A tray double-click otherwise
+/// fires two `Activate` in milliseconds; on Wayland each toggle destroys/recreates
+/// the winit surface AND the wgpu shader underlay, and a render in flight then
+/// use-after-frees a `TextureView` (wgpu-core panic). Collapsing the double-click
+/// to one toggle avoids the churn.
+const TOGGLE_DEBOUNCE_MS: u128 = 400;
 
 /// Cross-thread handle to the live tray. Cloneable; mutators forward to the
 /// platform backend (ksni on Linux) and are no-ops when the tray is disabled
@@ -178,6 +188,19 @@ pub fn init(
 
 /// Toggle the main window: hide if shown, else show + focus.
 pub(crate) fn toggle_window(weak: &slint::Weak<AppWindow>) {
+    // Debounce: ignore the 2nd click of a tray double-click. Two rapid toggles
+    // churn the Wayland surface + wgpu shader underlay and use-after-free a
+    // TextureView (wgpu-core panic). The first click always passes.
+    {
+        let now = Instant::now();
+        let mut last = LAST_TOGGLE.lock().unwrap_or_else(|p| p.into_inner());
+        if let Some(prev) = *last {
+            if now.duration_since(prev).as_millis() < TOGGLE_DEBOUNCE_MS {
+                return;
+            }
+        }
+        *last = Some(now);
+    }
     if WINDOW_SHOWN.load(Ordering::Relaxed) {
         hide_window(weak);
     } else {
