@@ -14,7 +14,6 @@ import { Spacing } from "../foundation/spacing.slint";
 import { Typography } from "../foundation/typography.slint";
 import { Radius } from "../foundation/radius.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
-import { QbzSelect } from "../primitives/QbzSelect.slint";
 import { ContextMenu } from "../primitives/ContextMenu.slint";
 import { ContextMenuItem } from "../primitives/ContextMenuItem.slint";
 import { ShellState, QueueState, QueueItem, NowPlayingState, UiFocusState, SleepTimerState, SleepTimerActions } from "../state.slint";
@@ -807,6 +806,10 @@ export component QueueSidebar inherits Rectangle {
                     x: -188px;
                     y: -214px;
                     width: 220px;
+                    // Default close-policy is close-on-click, which closed the
+                    // flyout on ANY click inside it (you couldn't pick a preset
+                    // without it closing first). Only an outside click closes.
+                    close-policy: close-on-click-outside;
                     Rectangle {
                         width: 220px;
                         border-radius: Radius.md;
@@ -864,12 +867,34 @@ export component QueueSidebar inherits Rectangle {
                                     color: Theme.text-muted;
                                     font-size: 11px;
                                 }
-                                QbzSelect {
-                                    options: [@tr("30 min"), @tr("1 hr"), @tr("2 hr"), @tr("3 hr"), @tr("5 hr"), @tr("Custom…")];
-                                    current-index: SleepTimerState.selected-index;
-                                    sm: true;
-                                    selected(idx) => {
-                                        SleepTimerState.selected-index = idx;
+                                // Inline preset rows. A QbzSelect here would nest a
+                                // PopupWindow inside this PopupWindow (Slint can't
+                                // open that), so the list is rendered inline.
+                                VerticalLayout {
+                                    spacing: 2px;
+                                    for opt[i] in [@tr("30 min"), @tr("1 hr"), @tr("2 hr"), @tr("3 hr"), @tr("5 hr"), @tr("Custom…")]: Rectangle {
+                                        height: 30px;
+                                        border-radius: Radius.sm;
+                                        background: SleepTimerState.selected-index == i
+                                            ? Theme.accent
+                                            : (preset-ta.has-hover ? Theme.surface-hover : transparent);
+                                        Text {
+                                            x: 10px;
+                                            width: parent.width - 20px;
+                                            height: 100%;
+                                            text: opt;
+                                            color: SleepTimerState.selected-index == i
+                                                ? Theme.accent-text
+                                                : Theme.text-primary;
+                                            font-size: 12px;
+                                            vertical-alignment: center;
+                                        }
+                                        preset-ta := TouchArea {
+                                            mouse-cursor: pointer;
+                                            clicked => {
+                                                SleepTimerState.selected-index = i;
+                                            }
+                                        }
                                     }
                                 }
                                 Rectangle {
