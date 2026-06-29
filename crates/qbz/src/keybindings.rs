@@ -134,7 +134,11 @@ pub fn set_mods(ctrl: bool, alt: bool, shift: bool) {
     MODS.with(|m| m.set((ctrl, alt, shift)));
 }
 
-fn mods() -> (bool, bool, bool) {
+/// Current modifier state `(ctrl, alt, shift)` as last reported by winit's
+/// `ModifiersChanged`. `ctrl` already folds in Meta/Super. Read by the keyboard
+/// dispatch AND by the multi-select toggle arm (to decide Shift-range vs single
+/// toggle at click time — see `selection`).
+pub fn mods() -> (bool, bool, bool) {
     MODS.with(|m| m.get())
 }
 
@@ -578,6 +582,11 @@ fn handle_escape(window: &AppWindow) {
     }
     if window.global::<ImmersiveState>().get_open() {
         window.global::<ImmersiveState>().set_open(false);
+        return;
+    }
+    // Leaving a multi-select session (clear + mode off) takes priority over
+    // closing the queue. No-op when no surface is in select mode.
+    if crate::exit_active_multi_select(window) {
         return;
     }
     let shell = window.global::<ShellState>();

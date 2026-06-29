@@ -720,6 +720,9 @@ pub fn reset_album(window: &AppWindow) {
 pub fn set_multi_select(window: &AppWindow, on: bool) {
     let state = window.global::<AlbumState>();
     state.set_multi_select(on);
+    // Reset the Shift-range anchor whenever the mode changes (fresh session on
+    // enter, no stale anchor on leave).
+    crate::selection::clear_anchor();
     if !on {
         clear_selection(window);
     }

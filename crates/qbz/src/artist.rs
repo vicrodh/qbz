@@ -1066,6 +1066,7 @@ pub fn append_release_page(
 pub fn set_multi_select(window: &AppWindow, on: bool) {
     let state = window.global::<ArtistState>();
     state.set_top_tracks_multi_select(on);
+    crate::selection::clear_anchor();
     if !on {
         clear_selection(window);
     }

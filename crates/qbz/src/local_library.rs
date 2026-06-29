@@ -934,6 +934,7 @@ pub fn set_tracks_group(window: &AppWindow, mode: &str) {
 /// Enter/leave multi-select; leaving clears the selection.
 pub fn set_tracks_multi_select(window: &AppWindow, on: bool) {
     window.global::<LocalLibraryState>().set_tracks_multi_select(on);
+    crate::selection::clear_anchor();
     if !on {
         clear_tracks_selection(window);
     }
@@ -949,16 +950,40 @@ pub fn recount_tracks_selected(window: &AppWindow) {
     s.set_tracks_selected_count(count as i32);
 }
 
-/// Toggle one row's selection (by id) in the visible model.
+/// Toggle one row's selection (by id) in the visible model. Plain/Ctrl+Click =
+/// single toggle; Shift+Click = additive range from the anchor (1:1 with the
+/// central track arm — LocalLibrary routes its own toggle, not that arm).
 pub fn toggle_track_select(window: &AppWindow, id: &str) {
     let model = window.global::<LocalLibraryState>().get_tracks_visible();
-    for i in 0..model.row_count() {
-        if let Some(mut item) = model.row_data(i) {
-            if item.id.as_str() == id {
-                item.selected = !item.selected;
-                model.set_row_data(i, item);
-                break;
+    if let Some(vm) = model.as_any().downcast_ref::<slint::VecModel<TrackItem>>() {
+        let clicked = (0..vm.row_count())
+            .find(|&i| vm.row_data(i).map(|t| t.id.as_str() == id).unwrap_or(false));
+        if let Some(clicked) = clicked {
+            let shift = crate::keybindings::mods().2;
+            let anchor = if shift {
+                crate::selection::resolve_anchor(
+                    crate::selection::SURFACE_LOCAL_TRACKS,
+                    vm,
+                    |t| t.id.to_string(),
+                )
+            } else {
+                None
+            };
+            match anchor {
+                Some(anchor) => crate::selection::apply_shift_range(
+                    vm,
+                    anchor,
+                    clicked,
+                    |t, v| t.selected = v,
+                ),
+                None => {
+                    if let Some(mut item) = vm.row_data(clicked) {
+                        item.selected = !item.selected;
+                        vm.set_row_data(clicked, item);
+                    }
+                }
             }
+            crate::selection::set_anchor(crate::selection::SURFACE_LOCAL_TRACKS, clicked, id);
         }
     }
     recount_tracks_selected(window);

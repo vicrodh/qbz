@@ -1228,6 +1228,7 @@ pub fn set_track_artwork(window: &AppWindow, id: &str, image: slint::Image) {
 /// Enter/leave multi-select mode; leaving clears the selection.
 pub fn set_multi_select(window: &AppWindow, on: bool) {
     window.global::<FavoritesState>().set_tracks_multi_select(on);
+    crate::selection::clear_anchor();
     if !on {
         clear_selection(window);
     }

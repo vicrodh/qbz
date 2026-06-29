@@ -782,6 +782,7 @@ pub fn set_multi_select(window: &AppWindow, on: bool) {
     if !on {
         clear_selection(window);
     }
+    crate::selection::clear_anchor();
     window.global::<PlaylistState>().set_multi_select_mode(on);
 }
 

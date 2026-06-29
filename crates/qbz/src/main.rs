@@ -111,6 +111,7 @@ mod recently;
 mod scrobble;
 mod scrobbler_settings;
 mod search;
+mod selection;
 mod session_persist;
 mod search_service;
 // WGPU UNDERLAY SPIKE: GPU fragment-shader background for ImmersiveView.
@@ -792,6 +793,105 @@ fn apply_resolved_link(
     }
 }
 
+/// Ctrl/Cmd+A handler: select-all (NEVER toggles to clear — 1:1 Tauri
+/// `isSelectAllShortcut`) in whichever track surface is showing AND has its
+/// multi-select mode ON. Returns true iff a surface consumed it. Routed by
+/// `NavState.view`, mirroring the central toggle-select arm. LocalLibrary
+/// Tracks / Offline / Mix / Label route through their own paths (slices 3-5).
+fn select_all_active_surface(window: &AppWindow) -> bool {
+    let view = window.global::<NavState>().get_view();
+    // Offline Manager is always-on selection over OfflineRow (not TrackItem) —
+    // Ctrl+A always selects all there.
+    if view == ContentView::OfflineManager {
+        offline_manager::set_all_selected(window, true);
+        return true;
+    }
+    let (model, on): (slint::ModelRc<TrackItem>, bool) = match view {
+        ContentView::Album => (
+            window.global::<AlbumState>().get_tracks(),
+            window.global::<AlbumState>().get_multi_select(),
+        ),
+        ContentView::Artist => (
+            window.global::<ArtistState>().get_top_tracks(),
+            window.global::<ArtistState>().get_top_tracks_multi_select(),
+        ),
+        ContentView::Playlist => (
+            window.global::<PlaylistState>().get_tracks(),
+            window.global::<PlaylistState>().get_multi_select_mode(),
+        ),
+        ContentView::Favorites => (
+            window.global::<FavoritesState>().get_tracks_visible(),
+            window.global::<FavoritesState>().get_tracks_multi_select(),
+        ),
+        ContentView::LocalLibrary => (
+            window.global::<LocalLibraryState>().get_tracks_visible(),
+            window.global::<LocalLibraryState>().get_tracks_multi_select(),
+        ),
+        _ => return false,
+    };
+    if !on {
+        return false;
+    }
+    if let Some(vm) = model.as_any().downcast_ref::<slint::VecModel<TrackItem>>() {
+        selection::select_all(vm, |t, v| t.selected = v);
+    }
+    match view {
+        ContentView::Album => album::recount_selected(window),
+        ContentView::Artist => artist::recount_selected(window),
+        ContentView::Playlist => playlist::recount_selected(window),
+        ContentView::Favorites => favorites::recount_selected(window),
+        ContentView::LocalLibrary => local_library::recount_tracks_selected(window),
+        _ => {}
+    }
+    true
+}
+
+/// Escape: leave multi-select mode on the active track surface (clears the
+/// selection AND turns the mode off, via the surface's `set_multi_select`,
+/// which also drops the Shift-range anchor). Returns true iff a surface was in
+/// select mode (so Escape is consumed before the queue/other dismissables).
+pub(crate) fn exit_active_multi_select(window: &AppWindow) -> bool {
+    let view = window.global::<NavState>().get_view();
+    match view {
+        ContentView::Album if window.global::<AlbumState>().get_multi_select() => {
+            album::set_multi_select(window, false);
+            true
+        }
+        ContentView::Artist
+            if window.global::<ArtistState>().get_top_tracks_multi_select() =>
+        {
+            artist::set_multi_select(window, false);
+            true
+        }
+        ContentView::Playlist if window.global::<PlaylistState>().get_multi_select_mode() => {
+            playlist::set_multi_select(window, false);
+            true
+        }
+        ContentView::Favorites
+            if window.global::<FavoritesState>().get_tracks_multi_select() =>
+        {
+            favorites::set_multi_select(window, false);
+            true
+        }
+        ContentView::LocalLibrary
+            if window.global::<LocalLibraryState>().get_tracks_multi_select() =>
+        {
+            local_library::set_tracks_multi_select(window, false);
+            true
+        }
+        // Offline Manager has no mode to leave (always-on selection); Escape
+        // clears the selection when something is selected.
+        ContentView::OfflineManager
+            if window.global::<OfflineManagerState>().get_selected_count() > 0 =>
+        {
+            offline_manager::set_all_selected(window, false);
+            crate::selection::clear_anchor();
+            true
+        }
+        _ => false,
+    }
+}
+
 /// Capture browser mouse buttons before Slint routes them to the topmost
 /// TouchArea, and mirror the cursor position into `ShellState` for passive
 /// hover chrome that must not install a TouchArea over interactive content.
@@ -916,6 +1016,18 @@ fn install_browser_mouse_nav(window: &AppWindow) {
                 // (mirrors the Tauri `isInputTarget` guard).
                 if window.global::<UiFocusState>().get_text_input_focused() {
                     return EventResult::Propagate;
+                }
+                // (C2) Ctrl/Cmd+A = select-all in the active multi-select
+                // surface (select-all-ONLY — 1:1 Tauri isSelectAllShortcut).
+                // A manual branch because select-all is view+mode contextual,
+                // not a rebindable global; falls through to dispatch when no
+                // surface is in select mode.
+                if keybindings::mods().0 {
+                    if let Some(tok) = keybindings::token_from_key(&key_event.logical_key) {
+                        if tok.eq_ignore_ascii_case("a") && select_all_active_surface(&window) {
+                            return EventResult::PreventDefault;
+                        }
+                    }
                 }
                 crate::keybindings::dispatch(&window, &key_event.logical_key)
             }
@@ -8976,34 +9088,69 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     });
                 }
                 ("track", "toggle-select") => {
-                    // Flip `selected` on the matching row, in whichever
-                    // multi-select surface is showing: the playlist detail,
-                    // the artist Popular Tracks, or the label Popular Tracks.
+                    // Plain / Ctrl+Click = single per-row toggle; Shift+Click =
+                    // additive range from the per-surface anchor to the clicked
+                    // row (1:1 with Tauri applyShiftRange — only ever adds). The
+                    // anchor moves to the clicked row after either gesture. The
+                    // surface id keys the anchor so a range never leaks across
+                    // views; the model `match` mirrors the surface `match`.
                     if let Some(w) = weak.upgrade() {
-                        let model = match w.global::<NavState>().get_view() {
-                            ContentView::Album => w.global::<AlbumState>().get_tracks(),
-                            ContentView::Playlist => w.global::<PlaylistState>().get_tracks(),
-                            ContentView::Label => w.global::<LabelState>().get_top_tracks(),
-                            ContentView::Favorites => {
-                                w.global::<FavoritesState>().get_tracks_visible()
+                        let view = w.global::<NavState>().get_view();
+                        let (model, surface) = match view {
+                            ContentView::Album => {
+                                (w.global::<AlbumState>().get_tracks(), selection::SURFACE_ALBUM)
                             }
-                            _ => w.global::<ArtistState>().get_top_tracks(),
+                            ContentView::Playlist => (
+                                w.global::<PlaylistState>().get_tracks(),
+                                selection::SURFACE_PLAYLIST,
+                            ),
+                            ContentView::Label => (
+                                w.global::<LabelState>().get_top_tracks(),
+                                selection::SURFACE_LABEL,
+                            ),
+                            ContentView::Favorites => (
+                                w.global::<FavoritesState>().get_tracks_visible(),
+                                selection::SURFACE_FAVORITES,
+                            ),
+                            _ => (
+                                w.global::<ArtistState>().get_top_tracks(),
+                                selection::SURFACE_ARTIST,
+                            ),
                         };
                         if let Some(vm) = model
                             .as_any()
                             .downcast_ref::<slint::VecModel<TrackItem>>()
                         {
-                            for i in 0..vm.row_count() {
-                                if let Some(mut item) = vm.row_data(i) {
-                                    if item.id == id.as_str() {
-                                        item.selected = !item.selected;
-                                        vm.set_row_data(i, item);
-                                        break;
+                            let clicked = (0..vm.row_count()).find(|&i| {
+                                vm.row_data(i)
+                                    .map(|t| t.id.as_str() == id.as_str())
+                                    .unwrap_or(false)
+                            });
+                            if let Some(clicked) = clicked {
+                                let shift = keybindings::mods().2;
+                                let anchor = if shift {
+                                    selection::resolve_anchor(surface, vm, |t| t.id.to_string())
+                                } else {
+                                    None
+                                };
+                                match anchor {
+                                    Some(anchor) => selection::apply_shift_range(
+                                        vm,
+                                        anchor,
+                                        clicked,
+                                        |t, v| t.selected = v,
+                                    ),
+                                    None => {
+                                        if let Some(mut item) = vm.row_data(clicked) {
+                                            item.selected = !item.selected;
+                                            vm.set_row_data(clicked, item);
+                                        }
                                     }
                                 }
+                                selection::set_anchor(surface, clicked, id.as_str());
                             }
                         }
-                        match w.global::<NavState>().get_view() {
+                        match view {
                             ContentView::Album => album::recount_selected(&w),
                             ContentView::Artist => artist::recount_selected(&w),
                             ContentView::Playlist => playlist::recount_selected(&w),
