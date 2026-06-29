@@ -27,6 +27,7 @@ export struct AlbumCardItem {
     artwork: image,        // empty until the artwork pipeline resolves it
     is-favorite: bool,     // filled accent heart on the card when favorited
     removing: bool,        // fading out (un-favorited in the favorites view)
+    selected: bool,        // checkbox state in a multi-select grid (LocalLibrary)
     // --- List-row extras (AlbumListRow; ignored by the grid AlbumCard) ----
     release-type: string,  // "Album" | "EP" | "Single" | "Live" | "Compilation"
     source: string,        // "qobuz" | "local" | "plex" | "" — hideable column
@@ -1026,6 +1027,8 @@ export global LocalLibraryState {
     in-out property <string> albums-group: "off";        // off | alpha | artist
     in property <[AlphaJump]> albums-alpha: [];           // A-Z jumps (alpha group)
     in property <int> albums-shown: 0;                    // count after filter
+    in-out property <bool> albums-multi-select: false;    // album checkboxes on
+    in property <int> albums-selected-count: 0;           // bar count + select-all
 
     // --- Tracks tab (server-paginated flat list — the 16K-freeze fix) ---
     // Group-by / multi-select / per-row play land with the playback slice.
@@ -1150,9 +1153,14 @@ export global LocalLibraryActions {
     callback open-album(string /* album id */);
     // Open an artist (lands with the Artists slice).
     callback open-artist(string /* artist id */);
-    // Per-card action (play / queue / play-next) — lands with the playback
-    // slice. Wired now so the shared AlbumCollectionView contract is honored.
+    // Per-card action (play / queue / play-next / toggle-select). The Albums
+    // grid honors the shared AlbumCollectionView contract.
     callback album-action(string /* album id */, string /* action */);
+    // Toggle the Albums-grid multi-select mode.
+    callback albums-toggle-multi-select();
+    // Albums bulk bar action: select-all | clear | queue | play-next |
+    // add-to-playlist | add-to-mixtape.
+    callback albums-bulk-action(string /* action */);
 
     // --- Tracks tab ---
     callback tracks-search(string /* query */);
@@ -3370,6 +3378,10 @@ export global LabelState {
     in property <bool> is-following: false;
     // Popular tracks (album-thumbnail rows, multi-select capable).
     in property <[TrackItem]> top-tracks: [];
+    // Multi-select (mirrors AlbumState): mode flag + count. Per-row toggle
+    // routes through the shared media-action("track",...) arm.
+    in-out property <bool> multi-select: false;
+    in property <int> selected-count: 0;
     // Releases + Critics' Picks carousels (reuse Carousel).
     in property <DiscoverSection> releases-section;
     in property <DiscoverSection> critics-section;
@@ -4798,6 +4810,10 @@ export global MixState {
     in property <int> track-count: 0;
     in property <string> total-duration;
     in property <bool> loading: false;
+    // Keyboard/checkbox multi-select (mirrors AlbumState): mode flag + count.
+    // Per-row toggle routes through the shared media-action("track",...) arm.
+    in-out property <bool> multi-select: false;
+    in property <int> selected-count: 0;
 }
 
 // Search results screen state. The Rust search controller populates the

@@ -1048,6 +1048,203 @@ pub fn local_track_by_id(id: &str) -> Option<qbz_library::LocalTrack> {
     tracks_current().iter().find(|t| t.id.to_string() == id).cloned()
 }
 
+// ==================== Albums multi-select ====================
+//
+// Albums are `AlbumCardItem` (not `TrackItem`), so they get their own select
+// path (not the central toggle arm). The rendered set is either the flat
+// `albums-visible` or, when grouping is on, the concatenation of the
+// `albums-grouped` sections — both are patched so a Shift-range / select-all
+// stays consistent across the duplicate copies of an album id.
+
+/// Enter/leave Albums multi-select; leaving clears the selection + anchor.
+pub fn set_albums_multi_select(window: &AppWindow, on: bool) {
+    window.global::<LocalLibraryState>().set_albums_multi_select(on);
+    crate::selection::clear_anchor();
+    if !on {
+        clear_albums_selection(window);
+    }
+}
+
+/// Rendered album ids in display order (flat `albums-visible`, or the
+/// concatenation of the grouped sections when grouping is on).
+fn rendered_album_ids(window: &AppWindow) -> Vec<String> {
+    let s = window.global::<LocalLibraryState>();
+    let grouped = s.get_albums_grouped();
+    if grouped.row_count() > 0 {
+        let mut out = Vec::new();
+        for gi in 0..grouped.row_count() {
+            if let Some(sec) = grouped.row_data(gi) {
+                for i in 0..sec.albums.row_count() {
+                    if let Some(a) = sec.albums.row_data(i) {
+                        out.push(a.id.to_string());
+                    }
+                }
+            }
+        }
+        out
+    } else {
+        let m = s.get_albums_visible();
+        (0..m.row_count())
+            .filter_map(|i| m.row_data(i))
+            .map(|a| a.id.to_string())
+            .collect()
+    }
+}
+
+/// Apply `f` to each rendered album model (flat `albums-visible` + every grouped
+/// section). The source `albums` set is intentionally NOT touched — a re-sort /
+/// re-filter rebuilds the rendered set from it and resets the selection, which
+/// matches Tauri's anchor-reset-on-rebuild behavior.
+fn for_each_album_model(window: &AppWindow, mut f: impl FnMut(&ModelRc<AlbumCardItem>)) {
+    let s = window.global::<LocalLibraryState>();
+    f(&s.get_albums_visible());
+    let grouped = s.get_albums_grouped();
+    for gi in 0..grouped.row_count() {
+        if let Some(sec) = grouped.row_data(gi) {
+            f(&sec.albums);
+        }
+    }
+}
+
+/// Set `selected = value` on every album row whose id is in `ids`.
+fn set_albums_selected(window: &AppWindow, ids: &std::collections::HashSet<String>, value: bool) {
+    for_each_album_model(window, |m| {
+        for i in 0..m.row_count() {
+            if let Some(mut it) = m.row_data(i) {
+                if ids.contains(it.id.as_str()) && it.selected != value {
+                    it.selected = value;
+                    m.set_row_data(i, it);
+                }
+            }
+        }
+    });
+}
+
+/// Current selected state of one album id (read from the rendered set).
+fn album_is_selected(window: &AppWindow, id: &str) -> bool {
+    let mut found = false;
+    for_each_album_model(window, |m| {
+        if found {
+            return;
+        }
+        for i in 0..m.row_count() {
+            if let Some(a) = m.row_data(i) {
+                if a.id.as_str() == id {
+                    found = a.selected;
+                    return;
+                }
+            }
+        }
+    });
+    found
+}
+
+/// Recount distinct selected albums into `albums-selected-count`.
+pub fn recount_albums_selected(window: &AppWindow) {
+    let mut seen = std::collections::HashSet::new();
+    for_each_album_model(window, |m| {
+        for i in 0..m.row_count() {
+            if let Some(a) = m.row_data(i) {
+                if a.selected {
+                    seen.insert(a.id.to_string());
+                }
+            }
+        }
+    });
+    window
+        .global::<LocalLibraryState>()
+        .set_albums_selected_count(seen.len() as i32);
+}
+
+/// Per-card toggle (by id). Plain/Ctrl+Click = single toggle; Shift+Click =
+/// additive range from the anchor over the rendered album order.
+pub fn toggle_album_select(window: &AppWindow, id: &str) {
+    let ids = rendered_album_ids(window);
+    let Some(clicked) = ids.iter().position(|a| a == id) else {
+        return;
+    };
+    let shift = crate::keybindings::mods().2;
+    if shift {
+        if let Some((a_idx, a_id)) =
+            crate::selection::anchor_for(crate::selection::SURFACE_LOCAL_ALBUMS)
+        {
+            // Re-resolve the anchor against the live order (resilient to re-sort).
+            let anchor = if ids.get(a_idx).map(|s| *s == a_id).unwrap_or(false) {
+                Some(a_idx)
+            } else {
+                ids.iter().position(|s| *s == a_id)
+            };
+            if let Some(anchor) = anchor {
+                let lo = anchor.min(clicked);
+                let hi = anchor.max(clicked);
+                let range: std::collections::HashSet<String> =
+                    ids[lo..=hi].iter().cloned().collect();
+                set_albums_selected(window, &range, true);
+                crate::selection::set_anchor(
+                    crate::selection::SURFACE_LOCAL_ALBUMS,
+                    clicked,
+                    id,
+                );
+                recount_albums_selected(window);
+                return;
+            }
+        }
+    }
+    let now = !album_is_selected(window, id);
+    let one: std::collections::HashSet<String> = std::iter::once(id.to_string()).collect();
+    set_albums_selected(window, &one, now);
+    crate::selection::set_anchor(crate::selection::SURFACE_LOCAL_ALBUMS, clicked, id);
+    recount_albums_selected(window);
+}
+
+/// Select-all toggle (the bulk bar button) — select all, or clear if all are
+/// already selected. Ctrl+A uses `select_all_albums_only` (never clears).
+pub fn select_all_albums(window: &AppWindow) {
+    let ids = rendered_album_ids(window);
+    let total = ids.len();
+    let selected = ids.iter().filter(|id| album_is_selected(window, id)).count();
+    let target = selected != total;
+    let all: std::collections::HashSet<String> = ids.into_iter().collect();
+    set_albums_selected(window, &all, target);
+    recount_albums_selected(window);
+}
+
+/// Select every rendered album (Ctrl+A — never clears).
+pub fn select_all_albums_only(window: &AppWindow) {
+    let all: std::collections::HashSet<String> =
+        rendered_album_ids(window).into_iter().collect();
+    set_albums_selected(window, &all, true);
+    recount_albums_selected(window);
+}
+
+/// Clear the album selection (multi-select mode stays on).
+pub fn clear_albums_selection(window: &AppWindow) {
+    let all: std::collections::HashSet<String> =
+        rendered_album_ids(window).into_iter().collect();
+    set_albums_selected(window, &all, false);
+    window
+        .global::<LocalLibraryState>()
+        .set_albums_selected_count(0);
+}
+
+/// The selected album ids (group keys), in rendered order.
+pub fn selected_album_ids(window: &AppWindow) -> Vec<String> {
+    let ids = rendered_album_ids(window);
+    ids.into_iter()
+        .filter(|id| album_is_selected(window, id))
+        .collect()
+}
+
+/// Resolve the selected albums to their `LocalTrack`s (BLOCKING — DB; call from
+/// `spawn_blocking`). Each album's tracks are concatenated in rendered order.
+pub fn selected_albums_tracks_blocking(album_keys: &[String]) -> Vec<qbz_library::LocalTrack> {
+    let mut out = Vec::new();
+    for key in album_keys {
+        out.extend(fetch_album_tracks_blocking(key));
+    }
+    out
+}
+
 fn spawn_tracks_page_load(window: &AppWindow, handle: tokio::runtime::Handle, gen: u64) {
     let s = window.global::<LocalLibraryState>();
     let query = s.get_tracks_search().to_string();

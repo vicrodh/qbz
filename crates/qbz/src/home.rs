@@ -604,6 +604,7 @@ pub(crate) fn card_to_item(card: CardData) -> AlbumCardItem {
         plain_year: card.plain_year.into(),
         is_favorite: false,
         removing: false,
+        selected: false,
     }
 }
 

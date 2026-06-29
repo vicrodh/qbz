@@ -806,6 +806,17 @@ fn select_all_active_surface(window: &AppWindow) -> bool {
         offline_manager::set_all_selected(window, true);
         return true;
     }
+    // LocalLibrary Albums tab selects AlbumCardItem (not TrackItem) — its own
+    // select-all-only path. The Tracks tab falls through to the TrackItem match.
+    if view == ContentView::LocalLibrary
+        && window.global::<LocalLibraryState>().get_active_tab().as_str() == "albums"
+    {
+        if window.global::<LocalLibraryState>().get_albums_multi_select() {
+            local_library::select_all_albums_only(window);
+            return true;
+        }
+        return false;
+    }
     let (model, on): (slint::ModelRc<TrackItem>, bool) = match view {
         ContentView::Album => (
             window.global::<AlbumState>().get_tracks(),
@@ -827,6 +838,14 @@ fn select_all_active_surface(window: &AppWindow) -> bool {
             window.global::<LocalLibraryState>().get_tracks_visible(),
             window.global::<LocalLibraryState>().get_tracks_multi_select(),
         ),
+        ContentView::Mix => (
+            window.global::<MixState>().get_tracks(),
+            window.global::<MixState>().get_multi_select(),
+        ),
+        ContentView::Label => (
+            window.global::<LabelState>().get_top_tracks(),
+            window.global::<LabelState>().get_multi_select(),
+        ),
         _ => return false,
     };
     if !on {
@@ -841,6 +860,8 @@ fn select_all_active_surface(window: &AppWindow) -> bool {
         ContentView::Playlist => playlist::recount_selected(window),
         ContentView::Favorites => favorites::recount_selected(window),
         ContentView::LocalLibrary => local_library::recount_tracks_selected(window),
+        ContentView::Mix => mix::recount_selected(window),
+        ContentView::Label => label::recount_selected(window),
         _ => {}
     }
     true
@@ -874,9 +895,23 @@ pub(crate) fn exit_active_multi_select(window: &AppWindow) -> bool {
             true
         }
         ContentView::LocalLibrary
+            if window.global::<LocalLibraryState>().get_albums_multi_select() =>
+        {
+            local_library::set_albums_multi_select(window, false);
+            true
+        }
+        ContentView::LocalLibrary
             if window.global::<LocalLibraryState>().get_tracks_multi_select() =>
         {
             local_library::set_tracks_multi_select(window, false);
+            true
+        }
+        ContentView::Mix if window.global::<MixState>().get_multi_select() => {
+            mix::set_multi_select(window, false);
+            true
+        }
+        ContentView::Label if window.global::<LabelState>().get_multi_select() => {
+            label::set_multi_select(window, false);
             true
         }
         // Offline Manager has no mode to leave (always-on selection); Escape
@@ -8986,6 +9021,51 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         );
                     }
                 }
+                // Label Popular Tracks multi-select: mode toggle + bulk bar.
+                ("label", "select-toggle") => {
+                    if let Some(w) = weak.upgrade() {
+                        let on = w.global::<LabelState>().get_multi_select();
+                        label::set_multi_select(&w, !on);
+                    }
+                }
+                ("label", "select-all") => {
+                    if let Some(w) = weak.upgrade() {
+                        label::select_all(&w);
+                    }
+                }
+                ("label", "clear") => {
+                    if let Some(w) = weak.upgrade() {
+                        label::clear_selection(&w);
+                    }
+                }
+                ("label", "queue") => {
+                    if let Some(w) = weak.upgrade() {
+                        let tracks = label::selected_play_tracks(&w);
+                        playback::enqueue_tracks(runtime.clone(), handle.clone(), tracks, false);
+                    }
+                }
+                ("label", "play-next") => {
+                    if let Some(w) = weak.upgrade() {
+                        let tracks = label::selected_play_tracks(&w);
+                        playback::enqueue_tracks(runtime.clone(), handle.clone(), tracks, true);
+                    }
+                }
+                ("label", "add-to-playlist") => {
+                    if let Some(w) = weak.upgrade() {
+                        let ids = label::selected_ids(&w);
+                        if !ids.is_empty() {
+                            playlist_picker::open_multi(&w, &ids, false);
+                            let runtime = runtime.clone();
+                            let weak = weak.clone();
+                            handle.spawn(async move {
+                                let playlists = playlist_picker::load(&runtime).await;
+                                let _ = weak.upgrade_in_event_loop(move |w| {
+                                    playlist_picker::apply(&w, playlists);
+                                });
+                            });
+                        }
+                    }
+                }
                 // More-Labels card click -> open that label's landing.
                 ("label", "open") => {
                     if let Ok(label_id) = id.parse::<u64>() {
@@ -9112,6 +9192,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 w.global::<FavoritesState>().get_tracks_visible(),
                                 selection::SURFACE_FAVORITES,
                             ),
+                            ContentView::Mix => (
+                                w.global::<MixState>().get_tracks(),
+                                selection::SURFACE_MIX,
+                            ),
                             _ => (
                                 w.global::<ArtistState>().get_top_tracks(),
                                 selection::SURFACE_ARTIST,
@@ -9155,6 +9239,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             ContentView::Artist => artist::recount_selected(&w),
                             ContentView::Playlist => playlist::recount_selected(&w),
                             ContentView::Favorites => favorites::recount_selected(&w),
+                            ContentView::Mix => mix::recount_selected(&w),
+                            ContentView::Label => label::recount_selected(&w),
                             _ => {}
                         }
                     }
@@ -9203,6 +9289,52 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 image_cache.clone(),
                                 kind,
                             );
+                        }
+                    }
+                }
+                // Mix multi-select: mode toggle + bulk bar (select-all toggles
+                // all/none; Ctrl+A select-all-only goes through the key handler).
+                ("mix", "select-toggle") => {
+                    if let Some(w) = weak.upgrade() {
+                        let on = w.global::<MixState>().get_multi_select();
+                        mix::set_multi_select(&w, !on);
+                    }
+                }
+                ("mix", "select-all") => {
+                    if let Some(w) = weak.upgrade() {
+                        mix::select_all(&w);
+                    }
+                }
+                ("mix", "clear") => {
+                    if let Some(w) = weak.upgrade() {
+                        mix::clear_selection(&w);
+                    }
+                }
+                ("mix", "queue") => {
+                    if let Some(w) = weak.upgrade() {
+                        let tracks = mix::selected_play_tracks(&w);
+                        playback::enqueue_tracks(runtime.clone(), handle.clone(), tracks, false);
+                    }
+                }
+                ("mix", "play-next") => {
+                    if let Some(w) = weak.upgrade() {
+                        let tracks = mix::selected_play_tracks(&w);
+                        playback::enqueue_tracks(runtime.clone(), handle.clone(), tracks, true);
+                    }
+                }
+                ("mix", "add-to-playlist") => {
+                    if let Some(w) = weak.upgrade() {
+                        let ids = mix::selected_ids(&w);
+                        if !ids.is_empty() {
+                            playlist_picker::open_multi(&w, &ids, false);
+                            let runtime = runtime.clone();
+                            let weak = weak.clone();
+                            handle.spawn(async move {
+                                let playlists = playlist_picker::load(&runtime).await;
+                                let _ = weak.upgrade_in_event_loop(move |w| {
+                                    playlist_picker::apply(&w, playlists);
+                                });
+                            });
                         }
                     }
                 }
@@ -14236,8 +14368,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let handle = tokio_rt.handle().clone();
         window
             .global::<LocalLibraryActions>()
-            .on_album_action(move |id, action| {
-                if action.as_str() == "play" {
+            .on_album_action(move |id, action| match action.as_str() {
+                "play" => {
                     // The whole album becomes the queue and auto-advances.
                     playback::play_local_album(
                         runtime.clone(),
@@ -14246,8 +14378,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         id.to_string(),
                         None,
                     );
-                } else {
-                    // play-next / queue land with a later slice.
+                }
+                "toggle-select" => {
+                    if let Some(w) = weak.upgrade() {
+                        local_library::toggle_album_select(&w, id.as_str());
+                    }
+                }
+                _ => {
+                    // Single-album play-next / queue land with a later slice.
                     log::debug!("[qbz-slint] local album action (queue slice pending): {id} {action}");
                 }
             });
@@ -14559,6 +14697,100 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         if !items.is_empty() {
                             open_add_to_mixtape(weak.clone(), handle.clone(), items);
                             local_library::clear_tracks_selection(&w);
+                        }
+                    }
+                    _ => {}
+                }
+            });
+    }
+    {
+        // Albums-grid multi-select toggle.
+        let weak = window.as_weak();
+        window
+            .global::<LocalLibraryActions>()
+            .on_albums_toggle_multi_select(move || {
+                if let Some(w) = weak.upgrade() {
+                    let on = w.global::<LocalLibraryState>().get_albums_multi_select();
+                    local_library::set_albums_multi_select(&w, !on);
+                }
+            });
+    }
+    {
+        // Albums-grid bulk bar. Album->tracks resolution is a blocking DB read
+        // (fetch_album_tracks_blocking), so it runs on spawn_blocking; the
+        // resulting LocalTracks feed the same enqueue/playlist/mixtape paths as
+        // the Tracks tab.
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window
+            .global::<LocalLibraryActions>()
+            .on_albums_bulk_action(move |action| {
+                let Some(w) = weak.upgrade() else {
+                    return;
+                };
+                match action.as_str() {
+                    "select-all" => local_library::select_all_albums(&w),
+                    "clear" => local_library::clear_albums_selection(&w),
+                    "queue" | "play-next" => {
+                        let keys = local_library::selected_album_ids(&w);
+                        let play_next = action.as_str() == "play-next";
+                        let runtime = runtime.clone();
+                        let handle2 = handle.clone();
+                        handle.spawn(async move {
+                            let rows = tokio::task::spawn_blocking(move || {
+                                local_library::selected_albums_tracks_blocking(&keys)
+                            })
+                            .await
+                            .unwrap_or_default();
+                            playback::enqueue_local_tracks(runtime, handle2, rows, play_next);
+                        });
+                        local_library::clear_albums_selection(&w);
+                    }
+                    "add-to-playlist" => {
+                        let keys = local_library::selected_album_ids(&w);
+                        if !keys.is_empty() {
+                            let runtime = runtime.clone();
+                            let weak2 = weak.clone();
+                            handle.spawn(async move {
+                                let rows = tokio::task::spawn_blocking(move || {
+                                    local_library::selected_albums_tracks_blocking(&keys)
+                                })
+                                .await
+                                .unwrap_or_default();
+                                let ids: Vec<String> = rows.iter().map(local_picker_ref).collect();
+                                let runtime2 = runtime.clone();
+                                let _ = weak2.upgrade_in_event_loop(move |w| {
+                                    if !ids.is_empty() {
+                                        playlist_picker::open_multi(&w, &ids, true);
+                                    }
+                                });
+                                let playlists = playlist_picker::load(&runtime2).await;
+                                let _ = weak2.upgrade_in_event_loop(move |w| {
+                                    playlist_picker::apply(&w, playlists);
+                                });
+                            });
+                        }
+                    }
+                    "add-to-mixtape" => {
+                        let keys = local_library::selected_album_ids(&w);
+                        if !keys.is_empty() {
+                            let weak2 = weak.clone();
+                            let handle2 = handle.clone();
+                            handle.spawn(async move {
+                                let rows = tokio::task::spawn_blocking(move || {
+                                    local_library::selected_albums_tracks_blocking(&keys)
+                                })
+                                .await
+                                .unwrap_or_default();
+                                let _ = weak2.upgrade_in_event_loop(move |w| {
+                                    let items = myqbz_add::track_items_from_local(&rows);
+                                    if !items.is_empty() {
+                                        open_add_to_mixtape(w.as_weak(), handle2, items);
+                                        local_library::clear_albums_selection(&w);
+                                    }
+                                });
+                            });
                         }
                     }
                     _ => {}

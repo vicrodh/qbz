@@ -77,6 +77,10 @@ export component AlbumCard inherits Rectangle {
     // Always-visible source badge on the artwork (Local Library: local |
     // qobuz-offline | plex). Off elsewhere (single-source catalogs).
     in property <bool> show-source-badge: false;
+    // Multi-select mode (Local Library albums): a checkbox overlay replaces the
+    // hover action buttons, and the card click toggles selection instead of
+    // opening. Default false → every other AlbumCard consumer is untouched.
+    in property <bool> select-mode: false;
     // Fade out when the card is being removed (favorites un-favorite).
     opacity: root.album.removing ? 0.0 : 1.0;
     animate opacity { duration: 250ms; }
@@ -161,12 +165,41 @@ export component AlbumCard inherits Rectangle {
                 height: 100%;
                 mouse-cursor: pointer;
                 clicked => {
-                    root.clicked(root.album.id);
+                    if (root.select-mode) {
+                        root.media-action("album", root.album.id, "toggle-select");
+                    } else {
+                        root.clicked(root.album.id);
+                    }
                 }
             }
 
-            // Hover action buttons — favorite / play / more.
+            // Multi-select checkbox — top-right of the art, shown only in
+            // select-mode (the card click toggles; this is the indicator).
+            if root.select-mode: Rectangle {
+                x: parent.width - self.width - 8px;
+                y: 8px;
+                width: 24px;
+                height: 24px;
+                border-radius: 12px;
+                background: root.album.selected ? Theme.accent : #00000099;
+                border-width: 1.5px;
+                border-color: root.album.selected ? Theme.accent : #ffffffcc;
+                animate background { duration: 120ms; }
+                QbzIcon {
+                    source: @image-url("../assets/icons/check.svg");
+                    visible: root.album.selected;
+                    width: 14px;
+                    height: 14px;
+                    x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                    y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                    tint: #ffffff;
+                }
+            }
+
+            // Hover action buttons — favorite / play / more. Hidden in
+            // select-mode (the click toggles selection instead).
             HorizontalLayout {
+                visible: !root.select-mode;
                 x: 0px;
                 y: 120px;
                 width: 200px;

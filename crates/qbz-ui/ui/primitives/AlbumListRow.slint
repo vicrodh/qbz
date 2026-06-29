@@ -143,6 +143,10 @@ export component AlbumListRow inherits Rectangle {
     in property <string> rank;
     // The SOURCE column is hidden in single-source contexts (Discover).
     in property <bool> show-source: true;
+    // Multi-select mode (Local Library albums): a leading checkbox + row click
+    // toggles selection instead of opening. Default false → other consumers
+    // (Discover/Label/Favorites lists) are untouched.
+    in property <bool> select-mode: false;
 
     callback clicked(string);
     // kind ("album" | "artist"), id, action ("play" | "queue" |
@@ -164,7 +168,11 @@ export component AlbumListRow inherits Rectangle {
     ta := TouchArea {
         mouse-cursor: pointer;
         clicked => {
-            root.clicked(root.album.id);
+            if (root.select-mode) {
+                root.media-action("album", root.album.id, "toggle-select");
+            } else {
+                root.clicked(root.album.id);
+            }
         }
     }
 
@@ -172,6 +180,29 @@ export component AlbumListRow inherits Rectangle {
         padding-left: 12px;
         padding-right: 12px;
         spacing: AlbumListCols.gap;
+
+        // --- Multi-select checkbox (leading) --------------------------
+        if root.select-mode: VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 18px;
+                height: 18px;
+                border-radius: 9px;
+                background: root.album.selected ? Theme.accent : transparent;
+                border-width: root.album.selected ? 0px : 1.5px;
+                border-color: Theme.text-muted;
+                animate background { duration: 120ms; }
+                QbzIcon {
+                    source: @image-url("../assets/icons/check.svg");
+                    visible: root.album.selected;
+                    width: 11px;
+                    height: 11px;
+                    x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                    y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                    tint: #ffffff;
+                }
+            }
+        }
 
         // --- # ---------------------------------------------------------
         if root.show-rank: Text {
@@ -216,7 +247,11 @@ export component AlbumListRow inherits Rectangle {
                 art-ta := TouchArea {
                     mouse-cursor: pointer;
                     clicked => {
-                        root.media-action("album", root.album.id, "play");
+                        if (root.select-mode) {
+                            root.media-action("album", root.album.id, "toggle-select");
+                        } else {
+                            root.media-action("album", root.album.id, "play");
+                        }
                     }
                 }
             }

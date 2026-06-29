@@ -12,12 +12,13 @@
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
 import { Radius } from "../foundation/radius.slint";
-import { LabelState, LabelActions, TrackItem, DragState, NavState } from "../state.slint";
+import { LabelState, LabelActions, TrackItem, DragState, NavState, BulkAction } from "../state.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { TrackRow } from "../primitives/TrackRow.slint";
 import { CircleAction } from "../primitives/CircleAction.slint";
 import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
 import { ListScrollbar } from "../primitives/ListScrollbar.slint";
+import { MultiSelectBar } from "../primitives/MultiSelectBar.slint";
 import { NavButtons } from "../shell/NavButtons.slint";
 import { JumpNavBar } from "../primitives/JumpNavBar.slint";
 import { Carousel } from "../discover/Carousel.slint";
@@ -42,7 +43,6 @@ export component LabelPageView inherits Rectangle {
     property <string> active-jump-tab: "about";
     // Popular Tracks progressive reveal: 5 -> 20 -> 50 (Tauri's steps).
     property <int> preview-count: 5;
-    property <bool> multi-select-mode: false;
 
     background: Theme.surface-main;
 
@@ -227,9 +227,9 @@ export component LabelPageView inherits Rectangle {
                     }
                     CircleAction {
                         icon: @image-url("../assets/icons/square-check-big.svg");
-                        active: root.multi-select-mode;
+                        active: LabelState.multi-select;
                         clicked => {
-                            root.multi-select-mode = !root.multi-select-mode;
+                            root.media-action("label", "", "select-toggle");
                         }
                     }
                     CircleAction {
@@ -242,48 +242,23 @@ export component LabelPageView inherits Rectangle {
             }
             if LabelState.top-tracks.length > 0: Rectangle { height: 10px; }
 
-            // Select-all row (multi-select mode).
-            if root.multi-select-mode && LabelState.top-tracks.length > 0: HorizontalLayout {
-                height: 36px;
-                padding-left: 12px;
-                padding-right: 12px;
-                spacing: 16px;
-                VerticalLayout {
-                    alignment: center;
-                    Rectangle {
-                        width: 28px;
-                        height: 28px;
-                        Rectangle {
-                            x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
-                            y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
-                            width: 22px;
-                            height: 22px;
-                            border-radius: 11px;
-                            background: transparent;
-                            border-width: 1.5px;
-                            border-color: check-all-ta.has-hover
-                                ? Theme.text-primary
-                                : Theme.text-muted;
-                            check-all-ta := TouchArea {
-                                mouse-cursor: pointer;
-                                clicked => {
-                                    root.media-action("label", "", "select-all-top-tracks");
-                                }
-                            }
-                        }
-                    }
-                }
-                VerticalLayout {
-                    alignment: center;
-                    horizontal-stretch: 1;
-                    Text {
-                        text: @tr("Select all");
-                        color: Theme.text-secondary;
-                        font-size: Typography.body;
-                        font-weight: Typography.medium;
-                    }
+            // Bulk action bar — visible in multi-select mode. Actions bubble
+            // via media-action("label",...). Replaces the old dead Select-all
+            // row (the checkbox now lives on each TrackRow + this bar).
+            if LabelState.multi-select && LabelState.top-tracks.length > 0: MultiSelectBar {
+                selected-count: LabelState.selected-count;
+                actions: [
+                    { id: "select-all", label: @tr("Select all"), icon: @image-url("../assets/icons/square-check-big.svg"), danger: false, needs-selection: false },
+                    { id: "play-next", label: @tr("Play next"), icon: @image-url("../assets/icons/list-plus.svg"), danger: false, needs-selection: true },
+                    { id: "queue", label: @tr("Add to queue"), icon: @image-url("../assets/icons/list-end.svg"), danger: false, needs-selection: true },
+                    { id: "add-to-playlist", label: @tr("Add to playlist"), icon: @image-url("../assets/icons/list-music.svg"), danger: false, needs-selection: true },
+                    { id: "clear", label: @tr("Clear"), icon: @image-url("../assets/icons/x.svg"), danger: false, needs-selection: true },
+                ];
+                action(id) => {
+                    root.media-action("label", "", id);
                 }
             }
+            if LabelState.multi-select && LabelState.top-tracks.length > 0: Rectangle { height: 8px; }
 
             for track[index] in LabelState.top-tracks: TrackRow {
                 visible: index < root.preview-count;
@@ -292,7 +267,7 @@ export component LabelPageView inherits Rectangle {
                 index: index;
                 // Label tracks carry the album thumbnail (Tauri shows it).
                 show-artwork: true;
-                multi-select-mode: root.multi-select-mode;
+                multi-select-mode: LabelState.multi-select;
                 media-action(kind, id, action) => {
                     root.media-action(kind, id, action);
                 }

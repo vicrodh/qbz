@@ -20,6 +20,7 @@ component AlbumGrid inherits Rectangle {
     in property <length> card-gap: 24px;
     in property <bool> show-favorite: true;
     in property <bool> show-source-badge: false;
+    in property <bool> select-mode: false;
     callback open-album(string);
     callback open-artist(string);
     callback media-action(string, string, string);
@@ -40,6 +41,7 @@ component AlbumGrid inherits Rectangle {
         album: album;
         show-favorite: root.show-favorite;
         show-source-badge: root.show-source-badge;
+        select-mode: root.select-mode;
         clicked(id) => {
             root.open-album(id);
         }
@@ -65,6 +67,9 @@ export component AlbumCollectionView inherits VerticalLayout {
     // Forwarded to AlbumCard — show the always-visible source badge on the
     // grid card art (Local Library: local | qobuz-offline | plex).
     in property <bool> show-source-badge: false;
+    // Forwarded to AlbumCard / AlbumListRow — checkbox + toggle-on-click
+    // (Local Library albums multi-select). Default false everywhere else.
+    in property <bool> select-mode: false;
     in property <length> card-width: 200px;
     in property <length> card-height: 246px;
     in property <length> card-gap: 24px;
@@ -98,6 +103,7 @@ export component AlbumCollectionView inherits VerticalLayout {
                     album: album;
                     index: i;
                     show-source: root.show-source;
+                    select-mode: root.select-mode;
                     clicked(id) => {
                         root.open-album(id);
                     }
@@ -115,6 +121,7 @@ export component AlbumCollectionView inherits VerticalLayout {
                 albums: section.albums;
                 show-favorite: root.show-favorite;
                 show-source-badge: root.show-source-badge;
+                select-mode: root.select-mode;
                 card-width: root.card-width;
                 card-height: root.card-height;
                 card-gap: root.card-gap;
@@ -136,6 +143,7 @@ export component AlbumCollectionView inherits VerticalLayout {
         albums: root.albums;
         show-favorite: root.show-favorite;
         show-source-badge: root.show-source-badge;
+        select-mode: root.select-mode;
         card-width: root.card-width;
         card-height: root.card-height;
         card-gap: root.card-gap;
@@ -160,6 +168,7 @@ export component AlbumCollectionView inherits VerticalLayout {
             album: album;
             index: i;
             show-source: root.show-source;
+            select-mode: root.select-mode;
             clicked(id) => {
                 root.open-album(id);
             }

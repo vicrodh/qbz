@@ -8,17 +8,19 @@
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
 import { Radius } from "../foundation/radius.slint";
-import { MixState, DragState, NavState } from "../state.slint";
+import { MixState, DragState, NavState, BulkAction } from "../state.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { TrackRow } from "../primitives/TrackRow.slint";
 import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
 import { ListScrollbar } from "../primitives/ListScrollbar.slint";
+import { MultiSelectBar } from "../primitives/MultiSelectBar.slint";
 import { NavButtons } from "../shell/NavButtons.slint";
 
 // Circular header action button (Play / Shuffle / Save / Refresh).
 component CircleAction inherits Rectangle {
     in property <image> icon;
     in property <bool> primary: false;
+    in property <bool> active: false;
     in property <length> diameter: 38px;
     in property <bool> enabled: true;
     callback clicked();
@@ -36,7 +38,9 @@ component CircleAction inherits Rectangle {
         height: root.primary ? 18px : 16px;
         x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
         y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
-        tint: root.primary ? #ffffff : Theme.text-secondary;
+        tint: root.primary
+            ? #ffffff
+            : (root.active ? Theme.accent : Theme.text-secondary);
     }
     ta := TouchArea {
         mouse-cursor: root.enabled ? pointer : default;
@@ -182,6 +186,18 @@ export component MixView inherits Rectangle {
                                 enabled: MixState.tracks.length > 0;
                             }
                         }
+                        // Multi-select toggle (accent-tinted when active).
+                        VerticalLayout {
+                            alignment: center;
+                            CircleAction {
+                                icon: @image-url("../assets/icons/square-check-big.svg");
+                                active: MixState.multi-select;
+                                enabled: MixState.tracks.length > 0;
+                                clicked => {
+                                    root.media-action("mix", "", "select-toggle");
+                                }
+                            }
+                        }
                         VerticalLayout {
                             alignment: center;
                             CircleAction {
@@ -196,6 +212,23 @@ export component MixView inherits Rectangle {
             }
 
             Rectangle { height: 28px; }
+
+            // Bulk action bar — visible in multi-select mode. Scrolls with the
+            // page (same as AlbumView). Actions bubble via media-action("mix").
+            if MixState.multi-select: MultiSelectBar {
+                selected-count: MixState.selected-count;
+                actions: [
+                    { id: "select-all", label: @tr("Select all"), icon: @image-url("../assets/icons/square-check-big.svg"), danger: false, needs-selection: false },
+                    { id: "play-next", label: @tr("Play next"), icon: @image-url("../assets/icons/list-plus.svg"), danger: false, needs-selection: true },
+                    { id: "queue", label: @tr("Add to queue"), icon: @image-url("../assets/icons/list-end.svg"), danger: false, needs-selection: true },
+                    { id: "add-to-playlist", label: @tr("Add to playlist"), icon: @image-url("../assets/icons/list-music.svg"), danger: false, needs-selection: true },
+                    { id: "clear", label: @tr("Clear"), icon: @image-url("../assets/icons/x.svg"), danger: false, needs-selection: true },
+                ];
+                action(id) => {
+                    root.media-action("mix", "", id);
+                }
+            }
+            if MixState.multi-select: Rectangle { height: 8px; }
 
             if MixState.loading: HorizontalLayout {
                 alignment: center;
@@ -261,6 +294,7 @@ export component MixView inherits Rectangle {
             for track[i] in MixState.tracks: TrackRow {
                 track: track;
                 index: i;
+                multi-select-mode: MixState.multi-select;
                 show-artwork: true;
                 show-album: true;
                 show-favorite: true;

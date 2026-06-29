@@ -32,6 +32,8 @@ pub const SURFACE_FAVORITES: u16 = 4;
 pub const SURFACE_LABEL: u16 = 5;
 pub const SURFACE_LOCAL_TRACKS: u16 = 6;
 pub const SURFACE_OFFLINE: u16 = 7;
+pub const SURFACE_MIX: u16 = 8;
+pub const SURFACE_LOCAL_ALBUMS: u16 = 9;
 
 #[derive(Clone)]
 struct Anchor {

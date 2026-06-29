@@ -852,6 +852,16 @@ export component LocalLibraryView inherits Rectangle {
                         }
                     }
                 }
+                // Multi-select toggle.
+                VerticalLayout {
+                    alignment: center;
+                    CircleIconBtn {
+                        icon: @image-url("../assets/icons/square-check-big.svg");
+                        clicked => {
+                            LocalLibraryActions.albums-toggle-multi-select();
+                        }
+                    }
+                }
             }
 
             // Tracks toolbar — multi-select toggle + search + group-by.
@@ -1131,11 +1141,28 @@ export component LocalLibraryView inherits Rectangle {
                             padding-bottom: 100px;
                             spacing: 0px;
                             alignment: start;
+                            // Bulk action bar — visible in albums multi-select.
+                            if LocalLibraryState.albums-multi-select: MultiSelectBar {
+                                selected-count: LocalLibraryState.albums-selected-count;
+                                actions: [
+                                    { id: "select-all", label: @tr("Select all"), icon: @image-url("../assets/icons/square-check-big.svg"), danger: false, needs-selection: false },
+                                    { id: "queue", label: @tr("Add to queue"), icon: @image-url("../assets/icons/list-end.svg"), danger: false, needs-selection: true },
+                                    { id: "play-next", label: @tr("Play next"), icon: @image-url("../assets/icons/list-plus.svg"), danger: false, needs-selection: true },
+                                    { id: "add-to-playlist", label: @tr("Add to playlist"), icon: @image-url("../assets/icons/list-music.svg"), danger: false, needs-selection: true },
+                                    { id: "add-to-mixtape", label: @tr("Add to Mixtape/Collection"), icon: @image-url("../assets/icons/cassette-tape.svg"), danger: false, needs-selection: true },
+                                    { id: "clear", label: @tr("Clear"), icon: @image-url("../assets/icons/x.svg"), danger: false, needs-selection: true },
+                                ];
+                                action(id) => {
+                                    LocalLibraryActions.albums-bulk-action(id);
+                                }
+                            }
+                            if LocalLibraryState.albums-multi-select: Rectangle { height: 8px; }
                             AlbumCollectionView {
                                 albums: LocalLibraryState.albums-visible;
                                 grouped: LocalLibraryState.albums-grouped;
                                 is-grouped: LocalLibraryState.albums-group != "off";
                                 view-mode: LocalLibraryState.albums-view-mode;
+                                select-mode: LocalLibraryState.albums-multi-select;
                                 // List view shows the SOURCE column (local/offline/plex).
                                 show-source: true;
                                 // Local albums aren't Qobuz-favoritable — hide the heart.
