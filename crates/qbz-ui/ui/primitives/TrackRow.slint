@@ -116,7 +116,7 @@ export component TrackRow inherits Rectangle {
     // pointer offset; the TouchArea grabs on press so moves keep
     // arriving even once the pointer leaves the row.
     ta := TouchArea {
-        mouse-cursor: default;
+        mouse-cursor: root.multi-select-mode ? pointer : default;
         // Double-click the row body = play the track (or toggle play/pause
         // if it's already the current track) — mirrors the play-cell click,
         // applied to every TrackRow across the app.
@@ -125,10 +125,26 @@ export component TrackRow inherits Rectangle {
             if (root.row-inert) {
                 return;
             }
+            // In select mode a double-click just selects (via `clicked`); no play.
+            if (root.multi-select-mode) {
+                return;
+            }
             if (NowPlayingState.has-track && NowPlayingState.track-id == root.track.id) {
                 NowPlayingState.toggle-play();
             } else {
                 root.media-action("track", root.track.id, "play");
+            }
+        }
+        // In multi-select mode the WHOLE row body is a selection target (Tauri
+        // whole-row selectable). It routes the same media-action the checkbox
+        // does, so the central toggle arm reads the modifier — Shift+Click range
+        // and Ctrl+Click work on the body too. The "..." menu button + checkbox
+        // keep their own handlers; the other in-row controls (artist/album link,
+        // heart, offline) are disabled in select mode so their click passes
+        // through to here. Inert (blacklisted) rows never select.
+        clicked => {
+            if (root.multi-select-mode && !root.row-inert) {
+                root.media-action("track", root.track.id, "toggle-select");
             }
         }
         property <length> down-x;
@@ -472,8 +488,9 @@ export component TrackRow inherits Rectangle {
                         overflow: elide;
                     }
                     artist-ta := TouchArea {
-                        // Only interactive when there is an artist to open.
-                        enabled: root.track.artist-id != "";
+                        // Only interactive when there is an artist to open;
+                        // disabled in select mode so the click selects the row.
+                        enabled: root.track.artist-id != "" && !root.multi-select-mode;
                         mouse-cursor: root.track.artist-id != "" ? pointer : default;
                         clicked => {
                             root.media-action("artist", root.track.artist-id, "open");
@@ -504,7 +521,7 @@ export component TrackRow inherits Rectangle {
                 width: album-link.preferred-width < parent.width
                     ? album-link.preferred-width
                     : parent.width;
-                enabled: root.track.album-id != "";
+                enabled: root.track.album-id != "" && !root.multi-select-mode;
                 mouse-cursor: root.track.album-id != "" ? pointer : default;
                 clicked => {
                     root.media-action("album", root.track.album-id, "open");
@@ -568,6 +585,8 @@ export component TrackRow inherits Rectangle {
                         : (fav-ta.has-hover ? Theme.text-primary : Theme.text-muted);
                 }
                 fav-ta := TouchArea {
+                    // Disabled in select mode so the click selects the row.
+                    enabled: !root.multi-select-mode;
                     mouse-cursor: pointer;
                     clicked => {
                         root.media-action("track", root.track.id, "favorite");
@@ -629,6 +648,8 @@ export component TrackRow inherits Rectangle {
                             : (dl-ta.has-hover ? Theme.text-primary : Theme.text-muted));
                 }
                 dl-ta := TouchArea {
+                    // Disabled in select mode so the click selects the row.
+                    enabled: !root.multi-select-mode;
                     mouse-cursor: pointer;
                     clicked => {
                         root.media-action("track", root.track.id,
