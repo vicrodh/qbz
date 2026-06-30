@@ -22,8 +22,123 @@ import {
     KeyboardShortcutsState,
     KeybindingsState,
     KeybindingsActions,
+    KeybindingCategoryGroup,
 } from "../state.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
+
+// One editable category block (header + capture rows). Extracted so the body
+// can lay the categories out across three columns instead of one tall column.
+component KbEditGroup inherits VerticalLayout {
+    in property <KeybindingCategoryGroup> group;
+    spacing: Spacing.sm;
+
+    // Category header.
+    Text {
+        text: group.label;
+        color: Theme.text-muted;
+        font-size: Typography.legal;
+        font-weight: Typography.semibold;
+    }
+
+    for entry in group.rows: HorizontalLayout {
+        spacing: 10px;
+        min-height: 36px;
+
+        // LEFT: action label.
+        Text {
+            text: entry.label;
+            color: Theme.text-primary;
+            font-size: Typography.body;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+        }
+
+        // RIGHT: keycap capture button + reset, conflict message below.
+        VerticalLayout {
+            spacing: 4px;
+            alignment: center;
+
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: end;
+
+                // Keycap button (Radius.sm rect, NOT a pill — ADR-008).
+                capture := Rectangle {
+                    property <bool> recording: KeybindingsState.recording-id == entry.id;
+                    property <bool> conflicting: self.recording && KeybindingsState.conflict-label != "";
+                    width: Math.max(120px, cap-label.preferred-width + 24px);
+                    height: 32px;
+                    y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                    border-radius: Radius.sm;
+                    background: capture.recording
+                        ? Theme.bg-hover
+                        : (cap-ta.has-hover ? Theme.surface-hover : Theme.surface-elevated);
+                    border-width: (capture.recording || entry.modified) ? 2px : 1px;
+                    border-color: capture.conflicting
+                        ? Theme.danger
+                        : (capture.recording
+                            ? Theme.accent
+                            : (entry.modified ? Theme.accent : Theme.border-subtle));
+
+                    cap-label := Text {
+                        text: capture.recording
+                            ? (KeybindingsState.pending-display != ""
+                                ? KeybindingsState.pending-display
+                                : @tr("Press keys…"))
+                            : entry.shortcut;
+                        color: Theme.text-primary;
+                        font-size: Typography.body;
+                        font-weight: Typography.medium;
+                        font-family: "monospace";
+                        x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                        y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                    }
+
+                    cap-ta := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            KeybindingsActions.start-record(entry.id);
+                        }
+                    }
+                }
+
+                // Per-row reset — only when modified.
+                if entry.modified: reset-row := Rectangle {
+                    width: 30px;
+                    height: 30px;
+                    y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                    border-radius: Radius.sm;
+                    background: reset-ta.has-hover ? Theme.surface-hover : Theme.surface-elevated;
+                    border-width: 1px;
+                    border-color: Theme.border-subtle;
+                    QbzIcon {
+                        source: @image-url("../assets/icons/rotate-ccw.svg");
+                        width: 14px;
+                        height: 14px;
+                        x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                        y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                        tint: reset-ta.has-hover ? Theme.text-primary : Theme.text-muted;
+                    }
+                    reset-ta := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            KeybindingsActions.reset-one(entry.id);
+                        }
+                    }
+                }
+            }
+
+            // Conflict message BELOW the keycap.
+            if KeybindingsState.recording-id == entry.id
+                && KeybindingsState.conflict-label != "": Text {
+                text: @tr("Already used by") + " " + KeybindingsState.conflict-label;
+                color: Theme.danger;
+                font-size: Typography.legal;
+                horizontal-alignment: right;
+            }
+        }
+    }
+}
 
 export component CustomizeShortcutsModal inherits Rectangle {
     visible: KeyboardShortcutsState.customize-open;
@@ -45,7 +160,7 @@ export component CustomizeShortcutsModal inherits Rectangle {
         // The panel is a FocusScope so Escape cancels recording if recording,
         // else closes the modal (mirrors the Svelte handler).
         keys := FocusScope {
-            width: Math.min(root.width - 80px, 720px);
+            width: Math.min(root.width - 80px, 1080px);
             height: Math.min(Math.max(420px, panel.preferred-height), root.height - 80px);
             x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
             y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
@@ -157,130 +272,30 @@ export component CustomizeShortcutsModal inherits Rectangle {
                         viewport-width: self.width;
                         viewport-height: groups-col.preferred-height;
 
-                        groups-col := VerticalLayout {
+                        // Categories laid out across THREE columns (round-robin
+                        // by index, same split as the read-only cheatsheet) so
+                        // the editor fits without a tall scroll.
+                        groups-col := HorizontalLayout {
                             padding-left: Spacing.lg;
                             padding-right: Spacing.lg;
                             padding-top: Spacing.md;
                             padding-bottom: Spacing.md;
                             spacing: Spacing.lg;
 
-                            for group in KeybindingsState.groups: VerticalLayout {
-                                spacing: Spacing.sm;
-
-                                // Category header.
-                                Text {
-                                    text: group.label;
-                                    color: Theme.text-muted;
-                                    font-size: Typography.legal;
-                                    font-weight: Typography.semibold;
-                                }
-
-                                for entry in group.rows: HorizontalLayout {
-                                    spacing: 10px;
-                                    min-height: 36px;
-
-                                    // LEFT: action label.
-                                    Text {
-                                        text: entry.label;
-                                        color: Theme.text-primary;
-                                        font-size: Typography.body;
-                                        vertical-alignment: center;
-                                        horizontal-stretch: 1;
-                                    }
-
-                                    // RIGHT: keycap capture button + reset.
-                                    // A small column so the conflict message
-                                    // can sit BELOW the keycap while recording.
-                                    VerticalLayout {
-                                        spacing: 4px;
-                                        alignment: center;
-
-                                        HorizontalLayout {
-                                            spacing: 8px;
-                                            alignment: end;
-
-                                            // Keycap button — Radius.sm rounded
-                                            // rect with a border (NOT a pill,
-                                            // ADR-008). Accent border while
-                                            // recording; danger border on
-                                            // conflict.
-                                            capture := Rectangle {
-                                                property <bool> recording: KeybindingsState.recording-id == entry.id;
-                                                property <bool> conflicting: self.recording && KeybindingsState.conflict-label != "";
-                                                width: Math.max(120px, cap-label.preferred-width + 24px);
-                                                height: 32px;
-                                                y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
-                                                border-radius: Radius.sm;
-                                                background: capture.recording
-                                                    ? Theme.bg-hover
-                                                    : (cap-ta.has-hover ? Theme.surface-hover : Theme.surface-elevated);
-                                                border-width: (capture.recording || entry.modified) ? 2px : 1px;
-                                                border-color: capture.conflicting
-                                                    ? Theme.danger
-                                                    : (capture.recording
-                                                        ? Theme.accent
-                                                        : (entry.modified ? Theme.accent : Theme.border-subtle));
-
-                                                cap-label := Text {
-                                                    text: capture.recording
-                                                        ? (KeybindingsState.pending-display != ""
-                                                            ? KeybindingsState.pending-display
-                                                            : @tr("Press keys…"))
-                                                        : entry.shortcut;
-                                                    color: Theme.text-primary;
-                                                    font-size: Typography.legal;
-                                                    font-weight: Typography.medium;
-                                                    font-family: "monospace";
-                                                    x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
-                                                    y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
-                                                }
-
-                                                cap-ta := TouchArea {
-                                                    mouse-cursor: pointer;
-                                                    clicked => {
-                                                        KeybindingsActions.start-record(entry.id);
-                                                    }
-                                                }
-                                            }
-
-                                            // Per-row reset — only when modified.
-                                            if entry.modified: reset-row := Rectangle {
-                                                width: 30px;
-                                                height: 30px;
-                                                y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
-                                                border-radius: Radius.sm;
-                                                background: reset-ta.has-hover ? Theme.surface-hover : Theme.surface-elevated;
-                                                border-width: 1px;
-                                                border-color: Theme.border-subtle;
-                                                QbzIcon {
-                                                    source: @image-url("../assets/icons/rotate-ccw.svg");
-                                                    width: 14px;
-                                                    height: 14px;
-                                                    x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
-                                                    y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
-                                                    tint: reset-ta.has-hover ? Theme.text-primary : Theme.text-muted;
-                                                }
-                                                reset-ta := TouchArea {
-                                                    mouse-cursor: pointer;
-                                                    clicked => {
-                                                        KeybindingsActions.reset-one(entry.id);
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        // Conflict message BELOW the keycap —
-                                        // recording stays active so the user can
-                                        // pick another combo.
-                                        if KeybindingsState.recording-id == entry.id
-                                            && KeybindingsState.conflict-label != "": Text {
-                                            text: @tr("Already used by") + " " + KeybindingsState.conflict-label;
-                                            color: Theme.danger;
-                                            font-size: Typography.legal;
-                                            horizontal-alignment: right;
-                                        }
-                                    }
-                                }
+                            VerticalLayout {
+                                alignment: start;
+                                spacing: Spacing.lg;
+                                for group in KeybindingsState.groups-col1: KbEditGroup { group: group; }
+                            }
+                            VerticalLayout {
+                                alignment: start;
+                                spacing: Spacing.lg;
+                                for group in KeybindingsState.groups-col2: KbEditGroup { group: group; }
+                            }
+                            VerticalLayout {
+                                alignment: start;
+                                spacing: Spacing.lg;
+                                for group in KeybindingsState.groups-col3: KbEditGroup { group: group; }
                             }
                         }
                     }

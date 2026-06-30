@@ -65,7 +65,9 @@ component KbGroupBlock inherits VerticalLayout {
                 keycap-label := Text {
                     text: entry.shortcut;
                     color: Theme.text-secondary;
-                    font-size: Typography.legal;
+                    // Bigger than the rest so the arrow-key glyphs (← → ↑ ↓)
+                    // read clearly — their heads were faint at 13px.
+                    font-size: Typography.body;
                     font-family: "monospace";
                     x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
                     y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
