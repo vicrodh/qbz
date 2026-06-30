@@ -40,6 +40,12 @@ export component AlbumContextMenu inherits PopupWindow {
     // offline row swaps label/action on `fully-cached` (count constant); the
     // block row swaps label/action on `is-blocked` (count constant).
     height: 8 * 33px + 4 * 1px + 10px;
+    // Default close-policy is close-on-click, which races the row's TouchArea:
+    // the popup can dismiss on the press before the item's `clicked` fires, so
+    // some rows (e.g. Share Qobuz link) needed a second open+click to register.
+    // Close only on outside clicks; each row closes the menu explicitly after
+    // its action. Same fix as Sidebar.slint / QueueSidebar.slint.
+    close-policy: PopupClosePolicy.close-on-click-outside;
 
     ContextMenu {
         ContextMenuItem {
@@ -47,6 +53,7 @@ export component AlbumContextMenu inherits PopupWindow {
             label: @tr("Play next");
             clicked => {
                 root.media-action("album", root.album-id, "play-next");
+                root.close();
             }
         }
         ContextMenuItem {
@@ -54,6 +61,7 @@ export component AlbumContextMenu inherits PopupWindow {
             label: @tr("Add to queue");
             clicked => {
                 root.media-action("album", root.album-id, "queue");
+                root.close();
             }
         }
         Rectangle { height: 1px; background: Theme.border-subtle; }
@@ -62,6 +70,7 @@ export component AlbumContextMenu inherits PopupWindow {
             label: @tr("Add to playlist");
             clicked => {
                 root.media-action("album", root.album-id, "add-to-playlist");
+                root.close();
             }
         }
         ContextMenuItem {
@@ -69,6 +78,7 @@ export component AlbumContextMenu inherits PopupWindow {
             label: @tr("Add to mixtape");
             clicked => {
                 root.media-action("album", root.album-id, "add-to-mixtape");
+                root.close();
             }
         }
         Rectangle { height: 1px; background: Theme.border-subtle; }
@@ -77,6 +87,7 @@ export component AlbumContextMenu inherits PopupWindow {
             label: @tr("Share Qobuz link");
             clicked => {
                 root.media-action("album", root.album-id, "share-qobuz");
+                root.close();
             }
         }
         ContextMenuItem {
@@ -84,6 +95,7 @@ export component AlbumContextMenu inherits PopupWindow {
             label: @tr("Share Album.link");
             clicked => {
                 root.media-action("album", root.album-id, "share-songlink");
+                root.close();
             }
         }
         Rectangle { height: 1px; background: Theme.border-subtle; }
@@ -92,6 +104,7 @@ export component AlbumContextMenu inherits PopupWindow {
             label: @tr("Make available offline");
             clicked => {
                 root.media-action("album", root.album-id, "cache");
+                root.close();
             }
         }
         if root.fully-cached: ContextMenuItem {
@@ -99,6 +112,7 @@ export component AlbumContextMenu inherits PopupWindow {
             label: @tr("Refresh offline copy");
             clicked => {
                 root.media-action("album", root.album-id, "recache");
+                root.close();
             }
         }
         Rectangle { height: 1px; background: Theme.border-subtle; }
@@ -110,6 +124,7 @@ export component AlbumContextMenu inherits PopupWindow {
             label: @tr("Block this album");
             clicked => {
                 root.media-action("album", root.album-id, "block");
+                root.close();
             }
         }
         if root.is-blocked: ContextMenuItem {
@@ -117,6 +132,7 @@ export component AlbumContextMenu inherits PopupWindow {
             label: @tr("Unblock album");
             clicked => {
                 root.media-action("album", root.album-id, "unblock");
+                root.close();
             }
         }
     }

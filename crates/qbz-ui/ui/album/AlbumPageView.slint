@@ -277,7 +277,11 @@ export component AlbumPageView inherits Rectangle {
                         x: cover-ta.mouse-x;
                         y: cover-ta.mouse-y;
                         width: 220px;
-                        close-policy: close-on-click;
+                        // close-on-click races the row's TouchArea (can dismiss
+                        // on the press before `clicked` fires); close only on
+                        // outside clicks and dismiss explicitly per row. Matches
+                        // Sidebar.slint / AlbumContextMenu.slint.
+                        close-policy: close-on-click-outside;
                         ContextMenu {
                             if !AlbumState.has-custom-cover: ContextMenuItem {
                                 icon: @image-url("../assets/icons/image-plus.svg");
@@ -285,6 +289,7 @@ export component AlbumPageView inherits Rectangle {
                                 clicked => {
                                     ArtworkActions.add-custom(
                                         "album", AlbumState.id);
+                                    cover-menu.close();
                                 }
                             }
                             if AlbumState.has-custom-cover: ContextMenuItem {
@@ -293,6 +298,7 @@ export component AlbumPageView inherits Rectangle {
                                 clicked => {
                                     ArtworkActions.add-custom(
                                         "album", AlbumState.id);
+                                    cover-menu.close();
                                 }
                             }
                             if AlbumState.has-custom-cover: ContextMenuItem {
@@ -301,6 +307,7 @@ export component AlbumPageView inherits Rectangle {
                                 clicked => {
                                     ArtworkActions.remove-custom(
                                         "album", AlbumState.id);
+                                    cover-menu.close();
                                 }
                             }
                             Rectangle {
@@ -313,6 +320,7 @@ export component AlbumPageView inherits Rectangle {
                                 clicked => {
                                     ArtworkActions.open-in-browser(
                                         AlbumState.artwork-url);
+                                    cover-menu.close();
                                 }
                             }
                             ContextMenuItem {
@@ -322,6 +330,7 @@ export component AlbumPageView inherits Rectangle {
                                     ArtworkActions.save-as(
                                         AlbumState.artwork-url,
                                         AlbumState.title + " - Cover.jpg");
+                                    cover-menu.close();
                                 }
                             }
                         }
