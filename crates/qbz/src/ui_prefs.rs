@@ -325,6 +325,13 @@ pub struct UiPrefs {
     /// "collections". Detail views (album/artist/playlist/…) are never stored.
     #[serde(default = "default_last_view")]
     pub last_view: String,
+    /// Full last nav destination as JSON-encoded `nav::NavEntry`, for
+    /// "remember". Unlike `last_view` (top-level only) this restores the EXACT
+    /// view — album/artist/playlist/mix/label/etc. (re-fetched by id, falling
+    /// back to Home on failure). `None` until a view is visited. Search and
+    /// Settings are intentionally not persisted here (transient/config).
+    #[serde(default)]
+    pub last_nav: Option<String>,
     /// Immersive in-view search action: `"disabled"` | `"replace"` | `"next"` |
     /// `"queue"`. Doubles as the enable switch (`"disabled"` keeps the field
     /// inert). See [`DEFAULT_IMMERSIVE_SEARCH_ACTION`].
@@ -508,6 +515,7 @@ impl Default for UiPrefs {
             volume: default_volume(),
             startup_page: default_startup_page(),
             last_view: default_last_view(),
+            last_nav: None,
             immersive_search_action: default_immersive_search_action(),
             immersive_default_view: default_immersive_default_view(),
             immersive_last_view_mode: 0,

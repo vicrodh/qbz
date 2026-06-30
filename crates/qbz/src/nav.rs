@@ -16,7 +16,12 @@
 use std::cell::{Cell, RefCell};
 
 /// One navigable destination.
-#[derive(Clone, Debug, PartialEq)]
+///
+/// `Serialize`/`Deserialize` back the "Startup page = where you left off"
+/// restore: the current entry is persisted as JSON in `ui_prefs.last_nav` and
+/// reconstructed at launch (every payload is a plain String/u64/Vec<String>,
+/// so the derive round-trips the whole enum).
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum NavEntry {
     Home,
     /// A Discover tab page ("home" | "editorPicks" | "forYou"). Each
@@ -189,6 +194,15 @@ thread_local! {
 /// `NavState.report-scroll`, fired from the view's `changed viewport-y`.
 pub fn set_live_scroll(y: f32) {
     LIVE_SCROLL.with(|s| s.set(y));
+}
+
+/// The entry currently shown (history top at the cursor). Used to persist the
+/// "where you left off" startup destination.
+pub fn current() -> Option<NavEntry> {
+    HISTORY.with(|h| {
+        let h = h.borrow();
+        h.entries.get(h.cursor).map(|e| e.nav.clone())
+    })
 }
 
 fn live_scroll() -> f32 {

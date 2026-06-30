@@ -449,21 +449,36 @@ async fn enter_shell(
     {
         let prefs = crate::ui_prefs::load();
         if prefs.startup_page == "remember" {
-            let entry = match prefs.last_view.as_str() {
+            // Legacy top-level fallback (id-free surfaces) — the only thing that
+            // can be restored offline (these load from local/offline data).
+            let legacy = |key: &str| match key {
                 "favorites" => Some(nav::NavEntry::Favorites { tab: "tracks".to_string() }),
                 "local-library" => Some(nav::NavEntry::LocalLibrary {
                     tab: local_library::LibTab::Albums.tab_id().to_string(),
                 }),
                 "mixtapes" => Some(nav::NavEntry::Mixtapes),
                 "collections" => Some(nav::NavEntry::Collections),
-                // Purchases restores at startup (id-free top-level surface).
-                // `purchase-album` is never persisted (id-gated, not in
-                // safe_view_key), so it never reaches here.
                 "purchases" => Some(nav::NavEntry::Purchases),
-                // "home" / unknown → keep the Home already loaded above.
                 _ => None,
             };
-            if let Some(entry) = entry {
+            // Online: restore the EXACT last view from the full JSON entry
+            // (album/artist/playlist/mix/label/… re-fetched by id), falling back
+            // to the legacy top-level key. Offline: only the legacy fallback, so
+            // a remembered online detail view doesn't fail-load behind the
+            // offline gate (it keeps the D12 LocalLibrary/Home root).
+            let entry = if crate::offline_mode::engine().is_offline() {
+                legacy(&prefs.last_view)
+            } else {
+                prefs
+                    .last_nav
+                    .as_deref()
+                    .and_then(|j| serde_json::from_str::<nav::NavEntry>(j).ok())
+                    .or_else(|| legacy(&prefs.last_view))
+            };
+            // Home was loaded above; only re-root when a different view is
+            // remembered. apply_entry loads the view's data (re-fetch by id); a
+            // stale id surfaces its own "couldn't load" toast.
+            if let Some(entry) = entry.filter(|e| !matches!(e, nav::NavEntry::Home)) {
                 let root_entry = entry.clone();
                 let _ = weak.upgrade_in_event_loop(move |_w| {
                     nav::reset_root(root_entry);
@@ -10337,12 +10352,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let weak = window.as_weak();
         shell.on_persist_view(move || {
             let Some(w) = weak.upgrade() else { return };
+            let mut prefs = crate::ui_prefs::load();
+            let mut dirty = false;
+            // Legacy top-level key (offline-restore fallback).
             if let Some(key) = safe_view_key(w.global::<NavState>().get_view()) {
-                let mut prefs = crate::ui_prefs::load();
                 if prefs.last_view != key {
                     prefs.last_view = key.to_string();
-                    crate::ui_prefs::save(&prefs);
+                    dirty = true;
                 }
+            }
+            // Full entry for exact restore. Skip transient/config destinations
+            // (a relaunch into the live-search results page or Settings is not
+            // "where you left off"); those keep the prior last_nav.
+            if let Some(entry) = nav::current() {
+                let persistable =
+                    !matches!(entry, nav::NavEntry::Search(_) | nav::NavEntry::Settings);
+                if persistable {
+                    if let Ok(json) = serde_json::to_string(&entry) {
+                        if prefs.last_nav.as_deref() != Some(json.as_str()) {
+                            prefs.last_nav = Some(json);
+                            dirty = true;
+                        }
+                    }
+                }
+            }
+            if dirty {
+                crate::ui_prefs::save(&prefs);
             }
         });
     }
