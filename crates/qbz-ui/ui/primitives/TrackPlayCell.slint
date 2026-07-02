@@ -16,11 +16,12 @@
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
 import { Radius } from "../foundation/radius.slint";
-import { NowPlayingState } from "../state.slint";
+import { NowPlayingState, ShellState } from "../state.slint";
 import { QbzIcon } from "QbzIcon.slint";
 
 // One equalizer bar — oscillates continuously while it is shown
-// (`animation-tick()` drives the height; a 1s triangle wave).
+// (a 1s triangle wave; display-rate animation-tick, or the shared ~8fps
+// coarse clock under reduce-motion — each step is a full-window repaint).
 component EqBar inherits Rectangle {
     in property <length> base;
     in property <float> delay;   // 0..1 phase offset
@@ -29,7 +30,10 @@ component EqBar inherits Rectangle {
     border-radius: 1.5px;
     background: Theme.accent;
 
-    property <float> phase: Math.mod((animation-tick() / 1ms) / 1000.0 + root.delay, 1.0);
+    property <float> anim-ms: ShellState.reduce-motion
+        ? ShellState.coarse-tick-ms * 1.0
+        : animation-tick() / 1ms;
+    property <float> phase: Math.mod(root.anim-ms / 1000.0 + root.delay, 1.0);
     property <float> tri: 1.0 - Math.abs(root.phase - 0.5) * 2.0;
     height: root.base * (0.5 + 0.5 * root.tri);
 }
@@ -133,7 +137,9 @@ export component TrackPlayCell inherits Rectangle {
             y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
             source: @image-url("../assets/icons/loader-circle.svg");
             colorize: #ffffff;
-            transform-rotation: ((animation-tick() / 1ms) * 0.36) * 1deg;
+            transform-rotation: ((ShellState.reduce-motion
+                ? ShellState.coarse-tick-ms * 1.0
+                : animation-tick() / 1ms) * 0.36) * 1deg;
         }
         if root.show-overlay && !root.show-bars && !root.is-loading: QbzIcon {
             source: (root.is-playing && root.row-hovered)
@@ -172,7 +178,9 @@ export component TrackPlayCell inherits Rectangle {
             y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
             source: @image-url("../assets/icons/loader-circle.svg");
             colorize: Theme.accent;
-            transform-rotation: ((animation-tick() / 1ms) * 0.36) * 1deg;
+            transform-rotation: ((ShellState.reduce-motion
+                ? ShellState.coarse-tick-ms * 1.0
+                : animation-tick() / 1ms) * 0.36) * 1deg;
         }
         if root.show-overlay && !root.show-bars && !root.is-loading: QbzIcon {
             source: (root.is-playing && root.row-hovered)

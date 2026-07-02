@@ -3,6 +3,7 @@
 // loads (search, large grids, the playlist manager, etc.).
 
 import { Theme } from "../foundation/semantic-colors.slint";
+import { ShellState } from "../state.slint";
 
 component Dot inherits Rectangle {
     in property <float> delay;   // 0..1 phase offset
@@ -10,7 +11,11 @@ component Dot inherits Rectangle {
     height: 8px;
     border-radius: 4px;
     background: Theme.text-secondary;
-    property <float> phase: Math.mod((animation-tick() / 1ms) / 900.0 + root.delay, 1.0);
+    // Reduce-motion: ~8fps coarse clock instead of display-rate repaints.
+    property <float> anim-ms: ShellState.reduce-motion
+        ? ShellState.coarse-tick-ms * 1.0
+        : animation-tick() / 1ms;
+    property <float> phase: Math.mod(root.anim-ms / 900.0 + root.delay, 1.0);
     property <float> tri: 1.0 - Math.abs(root.phase - 0.5) * 2.0;
     opacity: 0.25 + 0.55 * tri;
 }

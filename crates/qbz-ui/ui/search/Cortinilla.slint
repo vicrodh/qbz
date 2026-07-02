@@ -119,11 +119,16 @@ component CortinillaResultRow inherits Rectangle {
 // single real paint lands once the query settles.
 component CortinillaSkeletonRow inherits Rectangle {
     height: 56px;
-    // Subtle continuous pulse via animation-tick (a Timer would leave it
-    // static — the documented gotcha). Opacity oscillates ~0.16..0.48.
-    // Math.sin takes an ANGLE in Slint, so scale ms -> degrees (0.25deg/ms ≈ a
-    // 1.4 s period) instead of feeding a bare float.
-    property <float> pulse: 0.32 + 0.16 * Math.sin((animation-tick() / 1ms) * 0.25deg);
+    // Subtle continuous pulse. Opacity oscillates ~0.16..0.48. Math.sin takes
+    // an ANGLE in Slint, so scale ms -> degrees (0.25deg/ms ≈ a 1.4 s period).
+    // Under reduce-motion the ms source is the shared ~8fps coarse clock (a
+    // property that CHANGES, unlike the static-Timer gotcha) instead of the
+    // display-rate animation-tick — this pulse was the main cost of opening
+    // the cortinilla on weak GPUs (every frame = full-window repaint).
+    property <float> anim-ms: ShellState.reduce-motion
+        ? ShellState.coarse-tick-ms * 1.0
+        : animation-tick() / 1ms;
+    property <float> pulse: 0.32 + 0.16 * Math.sin(root.anim-ms * 0.25deg);
 
     HorizontalLayout {
         padding-left: 10px;

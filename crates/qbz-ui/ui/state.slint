@@ -3623,6 +3623,14 @@ export global LocationViewActions {
 // Globals are imported directly by the shell components, so toggles
 // need no callback plumbing.
 export global ShellState {
+    // --- Reduce motion (weak renderer tiers) -------------------------------
+    // Seeded from Rust: true on the femtovg-GL / software tiers, where every
+    // animation frame is a full-window repaint on a weak GPU. When set,
+    // loading indicators / eq bars step at ~8fps from `coarse-tick-ms`
+    // (advanced by one Timer in AppShell) instead of the display-rate
+    // animation-tick(). Same phase math, 60fps -> 8fps repaints.
+    in-out property <bool> reduce-motion: false;
+    in-out property <int> coarse-tick-ms: 0;
     // Three-state sidebar: 0 = open (240px, labels), 1 = mini (64px, icons
     // only, Tauri-style), 2 = closed (0px). The collapse toggle cycles
     // open -> mini -> closed -> open.

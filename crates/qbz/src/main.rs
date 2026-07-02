@@ -5834,6 +5834,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     window
         .global::<ImmersiveState>()
         .set_shader_scenes_available(use_gpu_renderer);
+    // Same tiers: every animation frame is a full-window femtovg repaint on a
+    // weak GPU — step loading indicators / eq bars at ~8fps (coarse clock in
+    // AppShell) instead of display rate.
+    window
+        .global::<ShellState>()
+        .set_reduce_motion(!use_gpu_renderer);
+    // Diagnostic for the circle-AA investigation (and the future UI-scale
+    // presets): femtovg's fringe AA halves at fractional scale factors
+    // (internal dpi = ceil(scale)), so knowing the real factor matters.
+    log::info!(
+        "[renderer] window scale factor: {}",
+        window.window().scale_factor()
+    );
     // Tell the user their renderer override was rolled back (set in
     // renderer_tier_from_prefs when the previous start died before painting).
     if RENDERER_REVERTED.load(std::sync::atomic::Ordering::Relaxed) {

@@ -14,18 +14,22 @@
 // Timer.
 
 import { QualityBadgeFull } from "../primitives/QualityBadgeFull.slint";
-import { NowPlayingState } from "../state.slint";
+import { NowPlayingState, ShellState } from "../state.slint";
 
 // Four-bar "now playing" equalizer. A continuous loop driven by the global
 // animation-tick() (pull-based) — NOT a Timer. Each bar phase-offset mirrors the
-// Svelte animation-delay / per-bar base height.
+// Svelte animation-delay / per-bar base height. Under reduce-motion the ms
+// source is the shared ~8fps coarse clock.
 export component EqualizerBars inherits Rectangle {
     in property <color> tint: #7c3aed;
     width: 18px;
     height: 14px;
 
+    property <float> anim-ms: ShellState.reduce-motion
+        ? ShellState.coarse-tick-ms * 1.0
+        : animation-tick() / 1ms;
     // 0.8s loop (Svelte `equalize 0.8s`): tick ms -> phase 0..1.
-    property <float> t: Math.mod(animation-tick() / 1ms, 800.0) / 800.0;
+    property <float> t: Math.mod(root.anim-ms, 800.0) / 800.0;
     // scaleY 0.3..1.0 sweep (Svelte keyframes 0/100% -> 0.3, 50% -> 1.0).
     function wave(phase: float) -> float {
         return 0.3 + 0.7 * (0.5 - 0.5 * Math.cos((Math.mod(self.t + phase, 1.0)) * 6.283185 * 1rad));

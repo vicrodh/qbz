@@ -13,7 +13,7 @@ import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
 import { Radius } from "../foundation/radius.slint";
 import { OfflineManagerState, OfflineManagerActions, OfflineRow, OfflineArtist } from "../state.slint";
-import { NavState, TooltipState, UiFocusState } from "../state.slint";
+import { NavState, TooltipState, UiFocusState, ShellState } from "../state.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { QbzSelect } from "../primitives/QbzSelect.slint";
 import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
@@ -56,7 +56,9 @@ component StatusIcon inherits Rectangle {
         y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
         source: @image-url("../assets/icons/loader-circle.svg");
         colorize: Theme.accent;
-        transform-rotation: ((animation-tick() / 1ms) * 0.36) * 1deg;
+        transform-rotation: ((ShellState.reduce-motion
+            ? ShellState.coarse-tick-ms * 1.0
+            : animation-tick() / 1ms) * 0.36) * 1deg;
     }
     if root.status != 2: QbzIcon {
         width: 16px;

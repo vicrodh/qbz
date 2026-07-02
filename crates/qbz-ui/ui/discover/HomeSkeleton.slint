@@ -6,15 +6,22 @@
 
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Radius } from "../foundation/radius.slint";
+import { ShellState } from "../state.slint";
 
 // A single shimmering block. Opacity breathes between two values on a
-// shared phase so the whole skeleton pulses in unison.
+// shared phase so the whole skeleton pulses in unison. Under reduce-motion
+// the fade collapses to a snap: the 900ms Timer still flips the phase, but
+// no continuous opacity animation runs between flips (~1fps repaints
+// instead of display-rate while the skeleton is mounted).
 component Shimmer inherits Rectangle {
     in property <bool> phase;
     background: Theme.surface-elevated;
     border-radius: Radius.sm;
     opacity: root.phase ? 0.85 : 0.4;
-    animate opacity { duration: 900ms; easing: ease-in-out; }
+    animate opacity {
+        duration: ShellState.reduce-motion ? 0ms : 900ms;
+        easing: ease-in-out;
+    }
 }
 
 // One placeholder carousel: a short title bar over a row of card

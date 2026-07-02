@@ -18,7 +18,7 @@
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
 import { Radius } from "../foundation/radius.slint";
-import { TrackItem, DragActions, NowPlayingState, NavState, TooltipState } from "../state.slint";
+import { TrackItem, DragActions, NowPlayingState, NavState, TooltipState, ShellState } from "../state.slint";
 import { QbzIcon } from "QbzIcon.slint";
 import { TrackPlayCell } from "TrackPlayCell.slint";
 import { TrackContextMenu } from "TrackContextMenu.slint";
@@ -628,7 +628,9 @@ export component TrackRow inherits Rectangle {
                     y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
                     source: @image-url("../assets/icons/loader-circle.svg");
                     colorize: Theme.accent;
-                    transform-rotation: ((animation-tick() / 1ms) * 0.36) * 1deg;
+                    transform-rotation: ((ShellState.reduce-motion
+                        ? ShellState.coarse-tick-ms * 1.0
+                        : animation-tick() / 1ms) * 0.36) * 1deg;
                 }
                 // Idle / ready / failed: a static glyph.
                 if root.track.cache-status != 1 && root.track.cache-status != 2: QbzIcon {

@@ -23,7 +23,7 @@
 // cortinilla; used for the keyboard scroll-into-view math).
 
 import { Typography } from "../foundation/typography.slint";
-import { ImmersiveState, ImmersiveSearchActions, CortinillaRow, CortinillaSection } from "../state.slint";
+import { ImmersiveState, ImmersiveSearchActions, CortinillaRow, CortinillaSection, ShellState } from "../state.slint";
 import { ListScrollbar } from "../primitives/ListScrollbar.slint";
 
 // A single immersive-tinted result row — 40x40 thumbnail (circle for artists,
@@ -111,12 +111,15 @@ component ImmersiveResultRow inherits Rectangle {
 }
 
 // A placeholder "skeleton" row shown WHILE results load — a pulsing thumbnail box
-// + two text bars. Replaces a cached instant-paint so results never "jump". The
-// pulse is driven by animation-tick (a Timer would leave it static — the
-// documented gotcha); Math.sin takes an ANGLE in Slint, so scale ms -> degrees.
+// + two text bars. Replaces a cached instant-paint so results never "jump".
+// Math.sin takes an ANGLE in Slint, so scale ms -> degrees. Under reduce-motion
+// the ms source is the shared ~8fps coarse clock instead of animation-tick.
 component ImmersiveSkeletonRow inherits Rectangle {
     height: 56px;
-    property <float> pulse: 0.20 + 0.12 * Math.sin((animation-tick() / 1ms) * 0.25deg);
+    property <float> anim-ms: ShellState.reduce-motion
+        ? ShellState.coarse-tick-ms * 1.0
+        : animation-tick() / 1ms;
+    property <float> pulse: 0.20 + 0.12 * Math.sin(root.anim-ms * 0.25deg);
 
     HorizontalLayout {
         padding-left: 10px;

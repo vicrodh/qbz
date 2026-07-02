@@ -3,10 +3,18 @@
 // `LoadingDots` reads too lightweight.
 
 import { Theme } from "../foundation/semantic-colors.slint";
+import { ShellState } from "../state.slint";
 
 export component LoadingSpinner inherits Rectangle {
     in property <length> size: 32px;
     in property <color> tint: Theme.accent;
+
+    // Reduce-motion: step from the shared ~8fps coarse clock instead of the
+    // display-rate animation-tick (each step is a full-window repaint on
+    // femtovg). 125ms * 0.36 = 45deg per step — a clean 8-step spin.
+    property <float> anim-ms: ShellState.reduce-motion
+        ? ShellState.coarse-tick-ms * 1.0
+        : animation-tick() / 1ms;
 
     width: root.size;
     height: root.size;
@@ -16,7 +24,7 @@ export component LoadingSpinner inherits Rectangle {
         height: root.size;
         source: @image-url("../assets/icons/loader-circle.svg");
         colorize: root.tint;
-        // Linear 1s/full-turn spin driven by animation-tick (360deg / 1000ms).
-        transform-rotation: ((animation-tick() / 1ms) * 0.36) * 1deg;
+        // Linear 1s/full-turn spin (360deg / 1000ms).
+        transform-rotation: (root.anim-ms * 0.36) * 1deg;
     }
 }

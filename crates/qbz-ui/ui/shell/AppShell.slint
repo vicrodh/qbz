@@ -161,6 +161,20 @@ export component AppShell inherits Rectangle {
         VisualizerState.set-enabled(self.viz-should-run);
     }
 
+    // Reduce-motion clock: on the GL/software tiers (ShellState.reduce-motion,
+    // seeded from Rust) the ONE timer below advances a coarse ~8fps millisecond
+    // counter that loading indicators / eq bars use instead of the display-rate
+    // animation-tick() — every step is a full-window femtovg repaint, so 60→8fps
+    // cuts the transient CPU of spinners/skeletons on weak GPUs by ~7x. Wraps
+    // daily to keep the int well away from overflow.
+    Timer {
+        interval: 125ms;
+        running: ShellState.reduce-motion;
+        triggered => {
+            ShellState.coarse-tick-ms = Math.mod(ShellState.coarse-tick-ms + 125, 86400000);
+        }
+    }
+
     // Bottom layer: catches the mouse back / forward buttons for history
     // navigation. Declared first so the real UI sits on top of it.
     TouchArea {
