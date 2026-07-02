@@ -255,13 +255,14 @@ export component AudioSettings inherits VerticalLayout {
         label: @tr("HiFi Wizard");
         description: @tr("Auto-detect your DACs and set up bit-perfect playback, step by step.");
         wizard-btn := Rectangle {
-            width: 160px;
+            // 160px floor keeps the settings right-edge grid; longer translations grow.
+            width: Math.max(wizard-content.preferred-width + 32px, 160px);
             height: 34px;
             border-radius: Radius.sm;
             border-width: 1px;
             border-color: Theme.border-subtle;
             background: wizard-ta.has-hover ? Theme.surface-hover : Theme.surface-elevated;
-            HorizontalLayout {
+            wizard-content := HorizontalLayout {
                 alignment: center;
                 spacing: 8px;
                 VerticalLayout {
@@ -328,13 +329,14 @@ export component AudioSettings inherits VerticalLayout {
     HorizontalLayout {
         alignment: start;
         reset-btn := Rectangle {
-            width: 200px;
+            // 200px floor; longer translations grow instead of overflowing.
+            width: Math.max(reset-label.preferred-width + 32px, 200px);
             height: 36px;
             border-radius: Radius.sm;
             border-width: 1px;
             border-color: Theme.border-subtle;
             background: reset-ta.has-hover ? Theme.surface-hover : Theme.surface-elevated;
-            Text {
+            reset-label := Text {
                 text: @tr("Reset to defaults");
                 color: Theme.text-secondary;
                 font-size: Typography.body;

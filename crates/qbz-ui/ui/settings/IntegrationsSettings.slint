@@ -30,7 +30,8 @@ component SecondaryButton inherits Rectangle {
     in property <bool> enabled: true;
     callback clicked();
 
-    width: 160px;
+    // 160px floor keeps the settings right-edge grid; longer translations grow.
+    width: Math.max(label-txt.preferred-width + 32px, 160px);
     height: 34px;
     border-radius: Radius.sm;
     border-width: 1px;
@@ -38,7 +39,7 @@ component SecondaryButton inherits Rectangle {
     background: ta.has-hover && root.enabled ? Theme.surface-hover : Theme.surface-elevated;
     opacity: root.enabled ? 1.0 : 0.4;
 
-    Text {
+    label-txt := Text {
         width: 100%;
         height: 100%;
         text: root.label;
