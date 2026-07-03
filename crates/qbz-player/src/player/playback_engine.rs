@@ -21,15 +21,19 @@ use std::time::Duration;
 /// A boxed sample iterator that can be sent across threads
 type BoxedSampleIter = Box<dyn Iterator<Item = f32> + Send>;
 
+/// A boxed DoP word iterator (pre-packed S32 DoP samples — see qbz-dsd)
+#[cfg(target_os = "linux")]
+type BoxedDopIter = Box<dyn Iterator<Item = i32> + Send>;
+
 /// Thread-safe source queue for gapless playback.
 /// The writer thread consumes sources; append() pushes new ones.
-pub(crate) struct SourceQueue {
-    queue: Mutex<VecDeque<BoxedSampleIter>>,
+pub(crate) struct SourceQueue<S> {
+    queue: Mutex<VecDeque<S>>,
     /// Notifies the writer thread that a new source is available
     notify: Condvar,
 }
 
-impl SourceQueue {
+impl<S> SourceQueue<S> {
     fn new() -> Self {
         Self {
             queue: Mutex::new(VecDeque::new()),
@@ -38,21 +42,21 @@ impl SourceQueue {
     }
 
     /// Push a new source to the back of the queue
-    fn push(&self, source: BoxedSampleIter) {
+    fn push(&self, source: S) {
         let mut q = self.queue.lock().unwrap();
         q.push_back(source);
         self.notify.notify_one();
     }
 
     /// Try to pop the next source (non-blocking)
-    fn try_pop(&self) -> Option<BoxedSampleIter> {
+    fn try_pop(&self) -> Option<S> {
         let mut q = self.queue.lock().unwrap();
         q.pop_front()
     }
 
     /// Wait for a source to become available (with timeout)
     /// Returns None on timeout (used to check stop/pause flags)
-    fn wait_for_source(&self, timeout: Duration) -> Option<BoxedSampleIter> {
+    fn wait_for_source(&self, timeout: Duration) -> Option<S> {
         let mut q = self.queue.lock().unwrap();
         if q.is_empty() {
             let (guard, _) = self.notify.wait_timeout(q, timeout).unwrap();
@@ -77,7 +81,7 @@ pub enum PlaybackEngine {
         should_stop: Arc<AtomicBool>,
         position_frames: Arc<AtomicU64>,
         duration_frames: Arc<AtomicU64>,
-        source_queue: Arc<SourceQueue>,
+        source_queue: Arc<SourceQueue<BoxedSampleIter>>,
         playback_thread: Option<thread::JoinHandle<()>>,
         /// Signals that the writer thread has consumed a source and moved to next
         source_transition: Arc<AtomicBool>,
@@ -93,10 +97,26 @@ pub enum PlaybackEngine {
         should_stop: Arc<AtomicBool>,
         position_frames: Arc<AtomicU64>,
         duration_frames: Arc<AtomicU64>,
-        source_queue: Arc<SourceQueue>,
+        source_queue: Arc<SourceQueue<BoxedSampleIter>>,
         feeder_thread: Option<thread::JoinHandle<()>>,
         source_transition: Arc<AtomicBool>,
         graph_rate: u32,
+    },
+    /// DoP (DSD over PCM) direct output (DSD plan Phase 2). Mirrors
+    /// AlsaDirect's writer-thread + source-queue shape but carries
+    /// pre-packed S32 DoP words written VERBATIM (no f32, no gain — one
+    /// altered sample breaks the DoP markers and the DAC plays the raw
+    /// bitstream as loud noise). Pause feeds 0x69 DSD silence so the DAC
+    /// stays locked in DSD mode; the queue gives gapless DSD.
+    #[cfg(target_os = "linux")]
+    AlsaDop {
+        stream: Arc<AlsaDirectStream>,
+        is_playing: Arc<AtomicBool>,
+        should_stop: Arc<AtomicBool>,
+        position_frames: Arc<AtomicU64>,
+        source_queue: Arc<SourceQueue<BoxedDopIter>>,
+        writer_thread: Option<thread::JoinHandle<()>>,
+        source_transition: Arc<AtomicBool>,
     },
 }
 
@@ -195,6 +215,81 @@ impl PlaybackEngine {
         }
     }
 
+    /// Create a DoP engine over an S32 ALSA direct stream created with
+    /// `AlsaDirectStream::new_dop`. Sources are queued via [`Self::append_dop`].
+    #[cfg(target_os = "linux")]
+    pub fn new_alsa_dop(stream: Arc<AlsaDirectStream>, native: bool) -> Self {
+        let is_playing = Arc::new(AtomicBool::new(false));
+        let should_stop = Arc::new(AtomicBool::new(false));
+        let position_frames = Arc::new(AtomicU64::new(0));
+        let source_queue: Arc<SourceQueue<BoxedDopIter>> = Arc::new(SourceQueue::new());
+        let source_transition = Arc::new(AtomicBool::new(false));
+        let handle = {
+            let stream_c = stream.clone();
+            let playing_c = is_playing.clone();
+            let stop_c = should_stop.clone();
+            let pos_c = position_frames.clone();
+            let queue_c = source_queue.clone();
+            let transition_c = source_transition.clone();
+            let channels = stream.channels();
+            thread::spawn(move || {
+                dop_writer_thread(
+                    stream_c, playing_c, stop_c, pos_c, queue_c, transition_c, channels, native,
+                );
+            })
+        };
+        Self::AlsaDop {
+            stream,
+            is_playing,
+            should_stop,
+            position_frames,
+            source_queue,
+            writer_thread: Some(handle),
+            source_transition,
+        }
+    }
+
+    /// Queue a DoP word source (gapless when one is already playing).
+    #[cfg(target_os = "linux")]
+    pub fn append_dop(&mut self, source: BoxedDopIter) -> Result<(), String> {
+        match self {
+            Self::AlsaDop {
+                is_playing,
+                should_stop,
+                position_frames,
+                source_queue,
+                source_transition,
+                ..
+            } => {
+                let is_first = source_queue.is_empty() && !is_playing.load(Ordering::SeqCst);
+                source_queue.push(source);
+                if is_first {
+                    position_frames.store(0, Ordering::SeqCst);
+                    should_stop.store(false, Ordering::SeqCst);
+                    source_transition.store(false, Ordering::SeqCst);
+                    is_playing.store(true, Ordering::SeqCst);
+                    log::info!("[DoP Engine] First source queued, playback starting");
+                } else {
+                    log::info!("[DoP Engine] Source queued for gapless DSD transition");
+                }
+                Ok(())
+            }
+            _ => Err("append_dop on a non-DoP engine".to_string()),
+        }
+    }
+
+    /// True when this engine is the DoP (DSD over PCM) writer.
+    pub fn is_dop(&self) -> bool {
+        #[cfg(target_os = "linux")]
+        {
+            matches!(self, Self::AlsaDop { .. })
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            false
+        }
+    }
+
     /// Append audio source.
     /// For ALSA Direct: pushes to the source queue for gapless transition.
     /// For Rodio: delegates to Sink's built-in queue.
@@ -265,6 +360,10 @@ impl PlaybackEngine {
                 }
                 Ok(())
             }
+            #[cfg(target_os = "linux")]
+            Self::AlsaDop { .. } => {
+                Err("cannot append a PCM source to a DoP engine".to_string())
+            }
         }
     }
 
@@ -281,6 +380,11 @@ impl PlaybackEngine {
                 log::info!("[JACK Engine] Resume requested");
                 is_playing.store(true, Ordering::SeqCst);
             }
+            #[cfg(target_os = "linux")]
+            Self::AlsaDop { is_playing, .. } => {
+                log::info!("[DoP Engine] Resume requested");
+                is_playing.store(true, Ordering::SeqCst);
+            }
         }
     }
 
@@ -295,6 +399,13 @@ impl PlaybackEngine {
             #[cfg(target_os = "linux")]
             Self::Jack { is_playing, .. } => {
                 log::info!("[JACK Engine] Pause requested");
+                is_playing.store(false, Ordering::SeqCst);
+            }
+            #[cfg(target_os = "linux")]
+            Self::AlsaDop { is_playing, .. } => {
+                // The writer keeps feeding 0x69 DSD silence while paused so
+                // the DAC stays locked in DSD mode (no pop on resume).
+                log::info!("[DoP Engine] Pause requested (DSD silence keeps flowing)");
                 is_playing.store(false, Ordering::SeqCst);
             }
         }
@@ -353,6 +464,27 @@ impl PlaybackEngine {
                 }
                 // JackStream's Drop deactivates the client + unregisters the ports.
             }
+            #[cfg(target_os = "linux")]
+            Self::AlsaDop {
+                stream,
+                is_playing,
+                should_stop,
+                writer_thread,
+                ..
+            } => {
+                if should_stop.load(Ordering::SeqCst) {
+                    return;
+                }
+                log::info!("[DoP Engine] Stop requested");
+                should_stop.store(true, Ordering::SeqCst);
+                is_playing.store(false, Ordering::SeqCst);
+                if let Some(handle) = writer_thread.take() {
+                    let _ = handle.join();
+                }
+                if let Err(e) = stream.stop() {
+                    log::warn!("[DoP Engine] Stop failed: {}", e);
+                }
+            }
         }
     }
 
@@ -384,6 +516,12 @@ impl PlaybackEngine {
                 // feeder writes unattenuated f32. (Software volume could later be
                 // applied by scaling in the feeder.)
             }
+            #[cfg(target_os = "linux")]
+            Self::AlsaDop { .. } => {
+                // ANY gain applied to DoP words breaks the marker sequence —
+                // volume must be controlled at the DAC/amplifier.
+                log::debug!("[DoP Engine] Volume is fixed during DoP playback");
+            }
         }
     }
 
@@ -398,6 +536,12 @@ impl PlaybackEngine {
             } => !is_playing.load(Ordering::SeqCst) && source_queue.is_empty(),
             #[cfg(target_os = "linux")]
             Self::Jack {
+                is_playing,
+                source_queue,
+                ..
+            } => !is_playing.load(Ordering::SeqCst) && source_queue.is_empty(),
+            #[cfg(target_os = "linux")]
+            Self::AlsaDop {
                 is_playing,
                 source_queue,
                 ..
@@ -417,6 +561,12 @@ impl PlaybackEngine {
                 .is_ok(),
             #[cfg(target_os = "linux")]
             Self::Jack {
+                source_transition, ..
+            } => source_transition
+                .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
+                .is_ok(),
+            #[cfg(target_os = "linux")]
+            Self::AlsaDop {
                 source_transition, ..
             } => source_transition
                 .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
@@ -447,6 +597,15 @@ impl PlaybackEngine {
                 let frames = position_frames.load(Ordering::SeqCst);
                 Some(frames / (*graph_rate as u64).max(1))
             }
+            #[cfg(target_os = "linux")]
+            Self::AlsaDop {
+                position_frames,
+                stream,
+                ..
+            } => {
+                let frames = position_frames.load(Ordering::SeqCst);
+                Some(frames / (stream.sample_rate() as u64).max(1))
+            }
         }
     }
 
@@ -473,6 +632,8 @@ impl PlaybackEngine {
                 let frames = duration_frames.load(Ordering::SeqCst);
                 Some(frames / (*graph_rate as u64).max(1))
             }
+            #[cfg(target_os = "linux")]
+            Self::AlsaDop { .. } => None,
         }
     }
 
@@ -495,7 +656,7 @@ fn alsa_writer_thread(
     should_stop: Arc<AtomicBool>,
     position_frames: Arc<AtomicU64>,
     duration_frames: Arc<AtomicU64>,
-    source_queue: Arc<SourceQueue>,
+    source_queue: Arc<SourceQueue<BoxedSampleIter>>,
     source_transition: Arc<AtomicBool>,
     channels: u16,
 ) {
@@ -615,7 +776,7 @@ fn jack_feeder_thread(
     should_stop: Arc<AtomicBool>,
     position_frames: Arc<AtomicU64>,
     duration_frames: Arc<AtomicU64>,
-    source_queue: Arc<SourceQueue>,
+    source_queue: Arc<SourceQueue<BoxedSampleIter>>,
     source_transition: Arc<AtomicBool>,
 ) {
     const CHUNK_FRAMES: usize = 4096;
@@ -702,5 +863,113 @@ fn jack_feeder_thread(
 impl Drop for PlaybackEngine {
     fn drop(&mut self) {
         self.stop_inner();
+    }
+}
+
+/// Single long-lived writer thread for DoP (DSD over PCM).
+///
+/// Mirrors `alsa_writer_thread`'s shape: pulls pre-packed S32 DoP words from
+/// the current source, writes them VERBATIM, and picks up the next queued
+/// source seamlessly (gapless DSD). Differences forced by the format:
+/// - pause writes 0x69 DSD silence (with valid alternating markers) instead
+///   of going quiet, so the DAC stays locked in DSD mode;
+/// - stop / end-of-queue pads ~150 ms of DSD silence before the stream
+///   closes (DACs pop when a DSD stream stops mid-pattern).
+#[cfg(target_os = "linux")]
+#[allow(clippy::too_many_arguments)]
+fn dop_writer_thread(
+    stream: Arc<AlsaDirectStream>,
+    is_playing: Arc<AtomicBool>,
+    should_stop: Arc<AtomicBool>,
+    position_frames: Arc<AtomicU64>,
+    source_queue: Arc<SourceQueue<BoxedDopIter>>,
+    source_transition: Arc<AtomicBool>,
+    channels: u16,
+    native: bool,
+) {
+    const CHUNK_FRAMES: usize = 4096;
+    let chunk_words = CHUNK_FRAMES * channels as usize;
+    let carrier = stream.sample_rate() as usize;
+    let mut silence_packer = qbz_dsd::DopPacker::new();
+    let mut silence_buf: Vec<i32> = Vec::new();
+    let mut buf: Vec<i32> = Vec::with_capacity(chunk_words);
+    let mut current: Option<BoxedDopIter> = None;
+    let mut had_source = false;
+
+    let write_silence = |packer: &mut qbz_dsd::DopPacker,
+                             silence_buf: &mut Vec<i32>,
+                             frames: usize| {
+        silence_buf.clear();
+        if native {
+            // Native DSD silence: 0x69 in every byte lane, no DoP markers.
+            silence_buf.resize(frames * channels as usize, qbz_dsd::NATIVE_DSD_SILENCE_U32);
+        } else {
+            packer.silence(frames, channels, silence_buf);
+        }
+        if let Err(e) = stream.write_dop_i32(silence_buf) {
+            log::warn!("[DoP Engine] Silence write failed: {}", e);
+        }
+    };
+
+    log::info!("[DoP Engine] Writer thread started (gapless-capable)");
+    'thread: loop {
+        if should_stop.load(Ordering::SeqCst) {
+            write_silence(&mut silence_packer, &mut silence_buf, carrier * 150 / 1000);
+            log::info!("[DoP Engine] Stop signal, writer thread exiting");
+            break 'thread;
+        }
+
+        if current.is_none() {
+            match source_queue.wait_for_source(Duration::from_millis(100)) {
+                Some(src) => {
+                    current = Some(src);
+                    if had_source {
+                        source_transition.store(true, Ordering::SeqCst);
+                    }
+                    had_source = true;
+                    position_frames.store(0, Ordering::SeqCst);
+                    log::info!("[DoP Engine] Acquired new DoP source");
+                }
+                None => continue 'thread,
+            }
+        }
+
+        if !is_playing.load(Ordering::SeqCst) {
+            // Paused: keep the DAC locked in DSD with real DSD silence. The
+            // blocking PCM write self-paces this loop (~100 ms per chunk).
+            write_silence(&mut silence_packer, &mut silence_buf, carrier / 10);
+            continue 'thread;
+        }
+
+        buf.clear();
+        let source = current.as_mut().unwrap();
+        let mut source_ended = false;
+        for _ in 0..chunk_words {
+            match source.next() {
+                Some(w) => buf.push(w),
+                None => {
+                    source_ended = true;
+                    break;
+                }
+            }
+        }
+
+        if !buf.is_empty() {
+            if let Err(e) = stream.write_dop_i32(&buf) {
+                log::error!("[DoP Engine] Write failed: {}", e);
+            }
+            position_frames.fetch_add((buf.len() / channels as usize) as u64, Ordering::SeqCst);
+        }
+
+        if source_ended {
+            current = None;
+            if source_queue.is_empty() {
+                write_silence(&mut silence_packer, &mut silence_buf, carrier * 150 / 1000);
+                is_playing.store(false, Ordering::SeqCst);
+                log::info!("[DoP Engine] Source ended, no next source (padded DSD silence)");
+            }
+            // else: the queued next source is picked up on the next iteration
+            // with the PCM still running — the gapless DSD transition.
+        }
     }
 }

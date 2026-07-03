@@ -10,6 +10,7 @@ qbz-models = { path = "../qbz-models" }
 qbz-audio = { path = "../qbz-audio" }
 qbz-qobuz = { path = "../qbz-qobuz" }
 qbz-cmaf = { path = "../qbz-cmaf" }
+qbz-dsd = { path = "../qbz-dsd" }
 qbz-cache = { path = "../qbz-cache" }
 
 # Serialization
