@@ -4329,3 +4329,26 @@ msgstr "Открытия недели"
 
 msgid "Weekly Jams"
 msgstr "Любимое за неделю"
+
+msgid "Keep your system's native window decorations. Turn off to use the QBZ header as the title bar, with its own window controls and drag support. Takes effect after restarting QBZ."
+msgstr "Сохраняет системное оформление окна. Отключите, чтобы использовать шапку QBZ как строку заголовка — с собственными кнопками управления окном и перетаскиванием. Вступает в силу после перезапуска QBZ."
+
+msgid "Frameless window without window controls or header drag (for tiling window manager users)"
+msgstr "Окно без рамки, без кнопок управления и перетаскивания за шапку (для пользователей тайловых оконных менеджеров)"
+
+msgid "Title bar mode changed — restart QBZ to apply"
+msgstr "Режим строки заголовка изменён — перезапустите QBZ, чтобы применить"
+
+# Compact header navigation (opt-in, 2026-07-03)
+msgid "Compact header navigation"
+msgstr "Компактная навигация в заголовке"
+
+msgid "Use the icon-only section navigation in the header even while the sidebar is open."
+msgstr "Использовать навигацию по разделам только со значками в заголовке, даже когда боковая панель открыта."
+
+# DSD support Phase 1 (2026-07-03)
+msgid "DSD: {}"
+msgstr "DSD: {}"
+
+msgid "Cannot play DSD file"
+msgstr "Не удаётся воспроизвести файл DSD"

@@ -122,11 +122,6 @@ export component AppearanceSettings inherits VerticalLayout {
     // Derived: title-bar customization rows are disabled when the title bar
     // is hidden or the system title bar is used (mirrors Tauri).
     property <bool> tb-locked: AppearanceState.hide-title-bar || AppearanceState.use-system-title-bar;
-    // Any nav-in-title-bar target enabled — gates the nav position dropdown.
-    property <bool> nav-tb-any:
-        AppearanceState.nav-tb-discover || AppearanceState.nav-tb-favorites
-        || AppearanceState.nav-tb-library || AppearanceState.nav-tb-myqbz
-        || AppearanceState.nav-tb-purchases;
 
     // ===================================================================
     // THEME
@@ -333,6 +328,19 @@ export component AppearanceSettings inherits VerticalLayout {
             }
         }
     }
+    // Compact header nav — only meaningful while the nav lives in the header,
+    // so the row mounts only when the toggle above is OFF (ADR-010).
+    if !ShellState.nav-in-sidebar: SettingRow {
+        label: @tr("Compact header navigation");
+        description: @tr("Use the icon-only section navigation in the header even while the sidebar is open.");
+        QbzToggle {
+            checked: ShellState.nav-header-compact;
+            toggled(v) => {
+                ShellState.nav-header-compact = v;
+                ShellState.persist-nav-compact(v);
+            }
+        }
+    }
     // "My QBZ" nav branding — RENAME ONLY (DQ3, owner decision: no custom icon).
     // The icon is fixed to QBZ's monochrome (tray) glyph. The label input
     // commits on edit (blank coerces to "My QBZ" in Rust); the reset button
@@ -474,10 +482,8 @@ export component AppearanceSettings inherits VerticalLayout {
         }
     }
 
-    // Title-template row + the TITLE BAR and WINDOW CONTROLS blocks — hidden per
-    // owner request. The window title now uses a fixed format (see
-    // AppWindow.title in app.slint); the custom titlebar is the only chrome mode
-    // shipping for now. Code kept commented for re-enable; do NOT delete.
+    // Title-template row — hidden per owner request. The window title uses a
+    // fixed format (see AppWindow.title in app.slint). Kept commented.
     /*
     if AppearanceState.window-title-show: SettingRow {
         unsupported: true;
@@ -500,20 +506,23 @@ export component AppearanceSettings inherits VerticalLayout {
             }
         }
     }
+    */
 
     Rectangle { height: 12px; }
     Divider { }
     Rectangle { height: 12px; }
 
     // ===================================================================
-    // TITLE BAR
+    // TITLE BAR (custom window chrome — the header IS the title bar: it is
+    // always present; custom mode adds window controls + drag to it and
+    // drops the system decorations. Linux defaults to system chrome; macOS
+    // defaults to the overlay (native traffic lights over the header).)
     // ===================================================================
     GroupHeader { text: @tr("TITLE BAR"); }
 
     SettingRow {
-        unsupported: true;
         label: @tr("Use system title bar");
-        description: @tr("Replace QBZ custom title bar with your system's native window decorations. Changing this will restart the app.");
+        description: @tr("Keep your system's native window decorations. Turn off to use the QBZ header as the title bar, with its own window controls and drag support. Takes effect after restarting QBZ.");
         QbzToggle {
             checked: AppearanceState.use-system-title-bar;
             toggled(v) => {
@@ -523,9 +532,8 @@ export component AppearanceSettings inherits VerticalLayout {
         }
     }
     SettingRow {
-        unsupported: true;
         label: @tr("Hide title bar");
-        description: @tr("Hide the title bar completely (for tiling window manager users)");
+        description: @tr("Frameless window without window controls or header drag (for tiling window manager users)");
         enabled: !AppearanceState.use-system-title-bar;
         QbzToggle {
             checked: AppearanceState.hide-title-bar;
@@ -541,12 +549,12 @@ export component AppearanceSettings inherits VerticalLayout {
     Rectangle { height: 12px; }
 
     // ===================================================================
-    // WINDOW CONTROLS
+    // WINDOW CONTROLS (drawn in-app on Linux custom chrome; macOS keeps
+    // the native traffic lights so these rows are hidden there)
     // ===================================================================
-    GroupHeader { text: @tr("WINDOW CONTROLS"); }
+    if !AppearanceState.is-macos: GroupHeader { text: @tr("WINDOW CONTROLS"); }
 
-    SettingRow {
-        unsupported: true;
+    if !AppearanceState.is-macos: SettingRow {
         label: @tr("Window controls position");
         description: @tr("Place the window control buttons on the left or right side of the title bar");
         enabled: !root.tb-locked;
@@ -561,8 +569,7 @@ export component AppearanceSettings inherits VerticalLayout {
             }
         }
     }
-    SettingRow {
-        unsupported: true;
+    if !AppearanceState.is-macos: SettingRow {
         label: @tr("Show window controls");
         description: @tr("Show minimize, maximize, and close buttons in the title bar. Disable if your window manager handles these.");
         enabled: !root.tb-locked;
@@ -575,7 +582,6 @@ export component AppearanceSettings inherits VerticalLayout {
             }
         }
     }
-    */
 
     Rectangle { height: 12px; }
     Divider { }

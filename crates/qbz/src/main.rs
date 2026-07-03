@@ -1113,6 +1113,15 @@ fn install_browser_mouse_nav(window: &AppWindow) {
             // logical). Ignore smaller frames (minimize reports 0x0,
             // mid-transition frames undershoot).
             WindowEvent::Resized(size) => {
+                // Keep the custom-chrome maximize/restore icon honest: WM-side
+                // maximize (keyboard shortcut, edge-snap, taskbar) never goes
+                // through our toggle, so sync the flag from the window state on
+                // every resize (cheap — a property set with a change guard
+                // inside Slint).
+                if let Some(w) = weak.upgrade() {
+                    w.global::<WindowControlActions>()
+                        .set_is_maximized(w.window().is_maximized());
+                }
                 let scale = slint_window.scale_factor().max(0.01) as f64;
                 let lw = (size.width as f64 / scale) as f32;
                 let lh = (size.height as f64 / scale) as f32;
@@ -1163,11 +1172,16 @@ fn wire_window_controls(window: &AppWindow) {
     // miniplayer's decorations fix. `slint::Window::{set_minimized,set_maximized,
     // set_fullscreen}` (api.rs:576/586/596) write the property the adapter reads.
 
-    // Minimize.
+    // Minimize — ALWAYS a normal WM minimize (owner decision 2026-07-03).
+    // The old Tauri-parity branch routed this through minimize-to-tray, which
+    // made the button visually identical to close-to-tray (window vanishes);
+    // the titlebar button must minimize, period. The minimize-to-tray setting
+    // keeps its Settings row but no longer affects this button.
     {
         let weak = window.as_weak();
         actions.on_minimize(move || {
             if let Some(w) = weak.upgrade() {
+                log::info!("[qbz-slint] minimize (titlebar): WM minimize");
                 w.window().set_minimized(true);
             }
         });
@@ -3420,11 +3434,6 @@ fn reseed_i18n_labels(window: &AppWindow) {
         t("Lyrics"),
         t("Queue"),
     ])));
-    state.set_nav_tb_positions(ModelRc::new(VecModel::from(vec![
-        t("Auto (opposite to window controls)"),
-        t("Left"),
-        t("Right"),
-    ])));
     state.set_wc_positions(ModelRc::new(VecModel::from(vec![t("Left"), t("Right")])));
     state.set_wc_styles(ModelRc::new(VecModel::from(vec![
         t("Rectangular"),
@@ -5504,6 +5513,22 @@ fn select_slint_backend() -> Result<bool, slint::PlatformError> {
         // Opaque one, sparing the compositor a full-window alpha blend every frame.
         #[cfg(not(target_os = "macos"))]
         i_slint_renderer_femtovg::wgpu::set_surface_prefers_transparent(creating_mini);
+        // macOS custom chrome (owner decision 2026-07-03, default ON there):
+        // keep the native decorations but make the title bar transparent and
+        // extend the content underneath — the native traffic lights float over
+        // the app's own header (which reserves a left inset for them). This is
+        // the macOS analog of Linux's `no-frame`; we never draw Mac controls.
+        // Same restart-to-apply semantics: attributes are fixed at creation.
+        #[cfg(target_os = "macos")]
+        let attributes = if !creating_mini && !crate::ui_prefs::load().use_system_title_bar {
+            use i_slint_backend_winit::winit::platform::macos::WindowAttributesExtMacOS;
+            attributes
+                .with_titlebar_transparent(true)
+                .with_title_hidden(true)
+                .with_fullsize_content_view(true)
+        } else {
+            attributes
+        };
         if creating_mini {
             attributes.with_decorations(false)
         } else {
@@ -5963,6 +5988,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // section-nav placement before the shell renders.
         shell.set_sidebar_state(restored_prefs.sidebar_state);
         shell.set_nav_in_sidebar(restored_prefs.nav_in_sidebar);
+        shell.set_nav_header_compact(restored_prefs.nav_header_compact);
         // Large dock toggles — restore the persisted visualizer state + spectrum
         // choice (default ON / Bars) before the shell renders.
         shell.set_large_visualizer_on(restored_prefs.large_visualizer);
@@ -6065,6 +6091,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let appearance = window.global::<AppearanceState>();
         appearance.set_show_purchases(prefs.show_purchases);
         appearance.set_nav_tb_purchases(prefs.nav_tb_purchases);
+        // Custom window chrome — MUST be seeded before the first `show()`:
+        // `AppWindow.no-frame` reads `use-system-title-bar` at surface
+        // creation (decorations negotiate then on Wayland), and the macOS
+        // attributes hook reads the same pref straight from ui_prefs.
+        appearance.set_use_system_title_bar(prefs.use_system_title_bar);
+        appearance.set_hide_title_bar(prefs.hide_title_bar);
+        appearance.set_show_window_controls(prefs.show_window_controls);
+        appearance.set_wc_position_index(if prefs.wc_position == "left" { 0 } else { 1 });
     }
     // Purchases per-machine filter prefs + region-notice state. Seeded here so
     // filter selections survive restart and the region notice does not reappear
@@ -8299,7 +8333,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // are wired as they land).
     {
         let appearance = window.global::<AppearanceState>();
-        appearance.on_appearance_bool(|key, value| match key.as_str() {
+        let chrome_weak = window.as_weak();
+        appearance.on_appearance_bool(move |key, value| match key.as_str() {
+            "use-system-title-bar" => {
+                // Startup-time choice: `AppWindow.no-frame` / the macOS overlay
+                // attributes are fixed at surface creation (Wayland negotiates
+                // decorations then), so this applies on the next launch.
+                let mut prefs = crate::ui_prefs::load();
+                prefs.use_system_title_bar = value;
+                crate::ui_prefs::save(&prefs);
+                crate::toast::info_weak(
+                    &chrome_weak,
+                    qbz_i18n::t("Title bar mode changed — restart QBZ to apply"),
+                );
+            }
+            "hide-title-bar" => {
+                // Live for the controls/drag (bindings read the flag); the
+                // frameless state itself already follows use-system-title-bar.
+                let mut prefs = crate::ui_prefs::load();
+                prefs.hide_title_bar = value;
+                crate::ui_prefs::save(&prefs);
+            }
+            "show-window-controls" => {
+                let mut prefs = crate::ui_prefs::load();
+                prefs.show_window_controls = value;
+                crate::ui_prefs::save(&prefs);
+            }
             "album-header-gradient" => {
                 let mut prefs = crate::ui_prefs::load();
                 prefs.album_header_gradient = value;
@@ -8377,6 +8436,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if let Some(t) = tray::handle() {
                     t.set_icon_theme(tray_settings::theme_for_index(index));
                 }
+            }
+            "wc-position" => {
+                // 0 = Left, 1 = Right. Live — HeaderBar re-anchors the drawn
+                // controls from `wc-position-index`; persist only.
+                let mut prefs = crate::ui_prefs::load();
+                prefs.wc_position = if index == 0 { "left" } else { "right" }.to_string();
+                crate::ui_prefs::save(&prefs);
             }
             "immersive-search-action" => {
                 // 0 = Disabled, 1 = Replace, 2 = Play next, 3 = Add to queue.
@@ -10941,6 +11007,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         shell.on_persist_nav(|enabled| {
             let mut prefs = crate::ui_prefs::load();
             prefs.nav_in_sidebar = enabled;
+            crate::ui_prefs::save(&prefs);
+        });
+        shell.on_persist_nav_compact(|enabled| {
+            let mut prefs = crate::ui_prefs::load();
+            prefs.nav_header_compact = enabled;
             crate::ui_prefs::save(&prefs);
         });
         window.global::<NowPlayingState>().on_persist_volume(|fraction| {

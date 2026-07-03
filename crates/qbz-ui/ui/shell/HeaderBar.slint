@@ -14,7 +14,8 @@ import { Spacing } from "../foundation/spacing.slint";
 import { Typography } from "../foundation/typography.slint";
 import { Layout } from "../foundation/layout.slint";
 import { Radius } from "../foundation/radius.slint";
-import { SessionState, NavState, ContentView, ShellState, HeaderMenuState, NavMenuEntry, SearchActions, SearchState, SidebarPlaylistsPopupState, OfflineState, SettingsState, OfflineModeActions, AppearanceState, KeyboardShortcutsState, LinkResolverState, UiFocusState, ReportIssueState, AboutState, WhatsNewActions, AlbumActions } from "../state.slint";
+import { SessionState, NavState, ContentView, ShellState, HeaderMenuState, NavMenuEntry, SearchActions, SearchState, SidebarPlaylistsPopupState, OfflineState, SettingsState, OfflineModeActions, AppearanceState, KeyboardShortcutsState, LinkResolverState, UiFocusState, ReportIssueState, AboutState, WhatsNewActions, AlbumActions, WindowControlActions } from "../state.slint";
+import { WindowControls } from "WindowControls.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { SecondaryButton } from "../primitives/SecondaryButton.slint";
 import { QbzToggle } from "../primitives/QbzToggle.slint";
@@ -574,6 +575,66 @@ export component HeaderBar inherits Rectangle {
         UiFocusState.text-input-focused = false;
     }
 
+    // --- Custom window chrome (the header IS the title bar) ----------------
+    // Owner decision 2026-07-03: the header is always present; custom chrome
+    // only adds the window controls + drag to it (and app.slint drops the
+    // system decorations). Linux draws the min/max/close cluster; macOS keeps
+    // the native traffic lights (overlay attributes from the winit hook) and
+    // only needs the drag surface + a left inset under the lights.
+    property <bool> chrome-drag-enabled:
+        !AppearanceState.use-system-title-bar && !AppearanceState.hide-title-bar;
+    property <bool> chrome-controls:
+        root.chrome-drag-enabled && !AppearanceState.is-macos
+        && AppearanceState.show-window-controls;
+    property <bool> wc-on-left: AppearanceState.wc-position-index == 0;
+    // 3 × 34px buttons + 2 × 2px spacing (WindowControls.slint).
+    property <length> wc-cluster-width: 106px;
+    // Left inset: the native traffic-light band on macOS (~70px logical; 78px
+    // keeps a comfortable gap) or the drawn cluster when positioned left.
+    property <length> chrome-left-inset:
+        AppearanceState.is-macos && !AppearanceState.use-system-title-bar ? 78px
+        : (root.chrome-controls && root.wc-on-left ? root.wc-cluster-width + 6px : 0px);
+
+    // Custom-chrome drag surface. Declared FIRST among the header's elements
+    // so every interactive element declared later wins hit-testing — presses
+    // on empty header area move the window; double-click toggles maximize.
+    // The drag starts only after a real movement: the OS drag steals the
+    // pointer, which would kill click/double-click semantics (same threshold
+    // idiom as the TrackRow drag).
+    if root.chrome-drag-enabled: TouchArea {
+        // drag_window() must fire ONCE per press: on Wayland the compositor
+        // move-grab swallows the button release, so `pressed` goes stale-true
+        // and every later motion would re-grab the window onto the cursor.
+        // The latch resets on the next real press (pointer-event down).
+        property <bool> drag-started: false;
+        double-clicked => { WindowControlActions.toggle-maximize(); }
+        pointer-event(ev) => {
+            if (ev.kind == PointerEventKind.down) {
+                self.drag-started = false;
+            }
+        }
+        moved => {
+            if (self.pressed && !self.drag-started
+                && (Math.abs((self.mouse-x - self.pressed-x) / 1px) > 4
+                    || Math.abs((self.mouse-y - self.pressed-y) / 1px) > 4)) {
+                self.drag-started = true;
+                WindowControlActions.drag-move();
+            }
+        }
+    }
+
+    // Drawn window controls (Linux custom chrome). Right placement sits at the
+    // window edge, right of the hamburger; left placement takes the corner the
+    // traffic lights use on macOS (the left cluster shifts right to clear it).
+    if root.chrome-controls && !root.wc-on-left: WindowControls {
+        x: root.width - self.preferred-width - 8px;
+        y: (root.height - self.preferred-height) / 2;
+    }
+    if root.chrome-controls && root.wc-on-left: WindowControls {
+        x: 8px;
+        y: (root.height - self.preferred-height) / 2;
+    }
+
     // --- Search (absolutely centered on the window) ------------------------
     // The search box is wrapped in a FocusScope so the cortinilla (the live
     // dropdown) can be driven by the keyboard WITHOUT stealing focus from the
@@ -748,7 +809,7 @@ export component HeaderBar inherits Rectangle {
     // The three navigation buttons (back / forward / sidebar-collapse) float
     // at the header's LEFT edge.
     left-controls := HorizontalLayout {
-        x: Spacing.md;
+        x: Spacing.md + root.chrome-left-inset;
         y: (root.height - self.height) / 2;
         width: self.preferred-width;
         height: 36px;
@@ -779,8 +840,10 @@ export component HeaderBar inherits Rectangle {
         // Full section nav (text tabs) — header-nav mode (nav-in-sidebar OFF)
         // while the sidebar isn't fully closed. Sits AFTER the three sacred
         // buttons, so it never overlaps them. Mutually exclusive with the
-        // compact icons below (which only show when fully closed).
-        if !ShellState.nav-in-sidebar && ShellState.sidebar-state != 2: HorizontalLayout {
+        // compact icons below (which show when fully closed, or always when
+        // the user opted into the compact header nav).
+        if !ShellState.nav-in-sidebar && ShellState.sidebar-state != 2
+            && !ShellState.nav-header-compact: HorizontalLayout {
             spacing: 2px;
             Rectangle { width: 6px; }
             // Qobuz-only — HIDDEN entirely while offline (ADR-010 `if` at
@@ -889,10 +952,13 @@ export component HeaderBar inherits Rectangle {
                 }
             }
         }
-        // Compact section nav — only while the sidebar is fully closed
-        // (Cerrado), so Discover / Library / Local Library / My QBZ stay
-        // reachable. Icon-only; each opens a titled downward dropdown.
-        if ShellState.sidebar-state == 2: HorizontalLayout {
+        // Compact section nav — while the sidebar is fully closed (Cerrado),
+        // so Discover / Library / Local Library / My QBZ stay reachable, or
+        // ALWAYS when the user opted into the compact header nav (nav in
+        // header + "Compact header navigation" ON). Icon-only; each opens a
+        // titled downward dropdown.
+        if ShellState.sidebar-state == 2
+            || (!ShellState.nav-in-sidebar && ShellState.nav-header-compact): HorizontalLayout {
             spacing: 2px;
             // A small gap from the history buttons.
             Rectangle { width: 6px; }
@@ -990,14 +1056,17 @@ export component HeaderBar inherits Rectangle {
                 }
             }
             // Thin separator, then the playlists flyout button (no sidebar list
-            // to reach playlists from while fully closed).
-            Rectangle {
+            // to reach playlists from while fully closed). Gated on the
+            // sidebar actually being closed — in the opt-in always-compact
+            // mode the sidebar list is reachable, so the button keeps its
+            // original closed-sidebar-only behavior.
+            if ShellState.sidebar-state == 2: Rectangle {
                 width: 1px;
                 height: 18px;
                 y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
                 background: Theme.border-subtle;
             }
-            VerticalLayout {
+            if ShellState.sidebar-state == 2: VerticalLayout {
                 alignment: center;
                 CompactPlaylistsBtn { }
             }
@@ -1006,7 +1075,9 @@ export component HeaderBar inherits Rectangle {
 
     // --- Right controls: status badge + app menu (anchored right) ----------
     right-controls := HorizontalLayout {
-        x: root.width - self.width - Spacing.md + 2px;
+        // Shifts left of the drawn window controls when those sit on the right.
+        x: root.width - self.width - Spacing.md + 2px
+            - (root.chrome-controls && !root.wc-on-left ? root.wc-cluster-width + 4px : 0px);
         y: (root.height - self.height) / 2;
         width: self.preferred-width;
         height: 36px;
@@ -1034,7 +1105,10 @@ export component HeaderBar inherits Rectangle {
     }
 
     menu := PopupWindow {
-        x: parent.width - 234px - Spacing.md;
+        // Tracks the hamburger, which shifts left of the drawn window controls
+        // in custom-chrome mode (right placement).
+        x: parent.width - 234px - Spacing.md
+            - (root.chrome-controls && !root.wc-on-left ? root.wc-cluster-width + 4px : 0px);
         y: Layout.header-height - 4px;
         width: 234px;
         height: 344px;

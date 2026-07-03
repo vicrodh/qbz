@@ -2946,24 +2946,24 @@ export global AppearanceState {
     in-out property <string> window-title-template: "";
 
     // --- TITLE BAR / WINDOW CHROME -----------------------------------------
-    in-out property <bool> use-system-title-bar: false;
+    // The header IS the title bar (merged model, owner decision 2026-07-03):
+    // it is always present; custom chrome (use-system-title-bar off) makes it
+    // gain the window controls + drag and drops the system decorations.
+    // Defaults are per-OS, seeded from ui_prefs at startup BEFORE the first
+    // show (decorations negotiate at surface creation): Linux = system chrome,
+    // macOS = overlay (native traffic lights over the header). The .slint
+    // default is the safe Linux one.
+    in-out property <bool> use-system-title-bar: true;
+    // Tiling-WM variant: frameless without drawn controls / header drag.
     in-out property <bool> hide-title-bar: false;
+    // Phase 2 (deferred): rounded corners matching the desktop decoration.
     in-out property <bool> match-system-chrome: false;
-    // True when GPU acceleration is on (gates match-system-chrome). Default
-    // true so the row is interactive in the unwired replica.
+    // True when GPU acceleration is on (gates match-system-chrome).
     in-out property <bool> hardware-accel-enabled: true;
-    in-out property <bool> search-in-title-bar: false;
-
-    // Navigation-in-title-bar group: the parent label row plus per-target
-    // toggles (Discover/Home, Favorites, Library, My QBZ, Purchases).
-    in-out property <bool> nav-tb-discover: false;
-    in-out property <bool> nav-tb-favorites: false;
-    in-out property <bool> nav-tb-library: false;
-    in-out property <bool> nav-tb-myqbz: false;
+    // Purchases nav entry placement (the only per-item relocation kept —
+    // the old search-in-title-bar / nav-tb-* toggles were dropped, owner
+    // decision 2026-07-03).
     in-out property <bool> nav-tb-purchases: false;
-    // Nav buttons position: 0 = Auto, 1 = Left, 2 = Right.
-    in-out property <[string]> nav-tb-positions: [@tr("Auto (opposite to window controls)"), @tr("Left"), @tr("Right")];
-    in-out property <int> nav-tb-position-index: 0;
 
     // Window controls group.
     in-out property <[string]> wc-positions: [@tr("Left"), @tr("Right")];
@@ -3668,6 +3668,7 @@ export global ShellState {
     // Persist the sidebar state / nav placement (wired to ui_prefs in Rust).
     callback persist-sidebar-state(int);
     callback persist-nav(bool);
+    callback persist-nav-compact(bool);
     // Persist the current top-level view for "Startup page = where you left off"
     // (Rust reads NavState.view and stores only SAFE, id-free views).
     callback persist-view();
@@ -3704,6 +3705,11 @@ export global ShellState {
     // Section navigation placement: the sections (Discover/Library/Local
     // Library/My QBZ) now live in the sidebar and open right-flyout menus.
     in-out property <bool> nav-in-sidebar: true;
+    // Header-nav flavor while nav-in-sidebar is OFF: when true, the header
+    // always uses the icon-only compact nav (the sidebar-fully-closed look)
+    // instead of the full text tabs, regardless of the sidebar state. No
+    // effect while nav-in-sidebar is ON. Persisted (`nav_header_compact`).
+    in-out property <bool> nav-header-compact: false;
     // Now-playing bar layout mode: 0 = New (default), 1 = Classic, 2 = Small,
     // 3 = Large. Persisted in ui_prefs.json (`npb_mode`
     // "new"|"classic"|"small"|"large"); set on startup from the store and on the

@@ -4305,3 +4305,26 @@ msgstr "今週の発見"
 
 msgid "Weekly Jams"
 msgstr "今週のお気に入り"
+
+msgid "Keep your system's native window decorations. Turn off to use the QBZ header as the title bar, with its own window controls and drag support. Takes effect after restarting QBZ."
+msgstr "システムのネイティブなウィンドウ装飾を使用します。オフにすると、QBZのヘッダーがタイトルバーになり、独自のウィンドウコントロールとドラッグに対応します。QBZの再起動後に反映されます。"
+
+msgid "Frameless window without window controls or header drag (for tiling window manager users)"
+msgstr "フレームなしウィンドウ。ウィンドウコントロールやヘッダーのドラッグなし（タイル型ウィンドウマネージャーのユーザー向け）"
+
+msgid "Title bar mode changed — restart QBZ to apply"
+msgstr "タイトルバーモードを変更しました — 適用するにはQBZを再起動してください"
+
+# Compact header navigation (opt-in, 2026-07-03)
+msgid "Compact header navigation"
+msgstr "ヘッダーのコンパクトナビゲーション"
+
+msgid "Use the icon-only section navigation in the header even while the sidebar is open."
+msgstr "サイドバーが開いていても、ヘッダーにアイコンのみのセクションナビゲーションを使用します。"
+
+# DSD support Phase 1 (2026-07-03)
+msgid "DSD: {}"
+msgstr "DSD: {}"
+
+msgid "Cannot play DSD file"
+msgstr "DSDファイルを再生できません"

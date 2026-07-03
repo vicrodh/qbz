@@ -342,6 +342,25 @@ pub struct UiPrefs {
     /// is disabled in Settings when the title bar is hidden / system-native.
     #[serde(default)]
     pub nav_tb_purchases: bool,
+    /// Use the system window decorations for the main window. Per-OS default
+    /// (owner decision 2026-07-03): TRUE on Linux (native KDE/GNOME chrome is
+    /// fine — Tauri only defaulted to custom because its webview CSD was ugly),
+    /// FALSE on macOS (the native pattern there is the overlay: traffic lights
+    /// over the app's own header). Startup-time choice — decorations negotiate
+    /// at surface creation on Wayland, so changes need a restart.
+    #[serde(default = "default_use_system_title_bar")]
+    pub use_system_title_bar: bool,
+    /// Custom-chrome variant for tiling-WM users: frameless window WITHOUT the
+    /// drawn window controls / header drag. Only meaningful when
+    /// `use_system_title_bar` is false. Default OFF.
+    #[serde(default)]
+    pub hide_title_bar: bool,
+    /// Show the min/max/close cluster in the header (Linux custom chrome).
+    #[serde(default = "default_show_window_controls")]
+    pub show_window_controls: bool,
+    /// Window-controls side: `"left"` | `"right"`. Default right.
+    #[serde(default = "default_wc_position")]
+    pub wc_position: String,
     /// Purchases filter: hide unavailable items. Default OFF (show all). Mirrors
     /// Tauri's per-user persisted purchase filter; here it is per-machine like
     /// the other Slint Purchases prefs. Re-seeded into
@@ -369,6 +388,10 @@ pub struct UiPrefs {
     /// Section navigation lives in the sidebar (vs the header). Default true.
     #[serde(default = "default_nav_in_sidebar")]
     pub nav_in_sidebar: bool,
+    /// Header nav (nav_in_sidebar = false) always uses the icon-only compact
+    /// mode instead of the full text tabs. Default false (opt-in).
+    #[serde(default)]
+    pub nav_header_compact: bool,
     /// Player volume, 0.0..=1.0. Restored at startup. Default full.
     #[serde(default = "default_volume")]
     pub volume: f32,
@@ -479,6 +502,20 @@ pub struct UiPrefs {
 /// Sentinel for "no saved window position" (let the WM place the window).
 fn default_window_pos() -> i32 {
     i32::MIN
+}
+
+/// Per-OS chrome default: Linux keeps the system decorations; macOS defaults
+/// to the overlay (custom) mode — see the field doc.
+fn default_use_system_title_bar() -> bool {
+    !cfg!(target_os = "macos")
+}
+
+fn default_show_window_controls() -> bool {
+    true
+}
+
+fn default_wc_position() -> String {
+    "right".to_string()
 }
 
 fn default_renderer() -> String {
@@ -594,12 +631,17 @@ impl Default for UiPrefs {
             discord_rpc_enabled: false,
             show_purchases: false,
             nav_tb_purchases: false,
+            use_system_title_bar: default_use_system_title_bar(),
+            hide_title_bar: false,
+            show_window_controls: default_show_window_controls(),
+            wc_position: default_wc_position(),
             purchases_hide_unavailable: false,
             purchases_hide_downloaded: false,
             purchases_quality_filter: default_purchases_quality_filter(),
             purchases_region_notice_seen: false,
             sidebar_state: 0,
             nav_in_sidebar: default_nav_in_sidebar(),
+            nav_header_compact: false,
             volume: default_volume(),
             startup_page: default_startup_page(),
             last_view: default_last_view(),

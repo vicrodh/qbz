@@ -1,0 +1,78 @@
+// In-app window controls for the custom-chrome mode (Linux only — macOS keeps
+// the native traffic lights via the winit overlay attributes). Three buttons,
+// 1:1 with Tauri's TitleBar.svelte: order flips per side (left = close·max·min,
+// the macOS order; right = min·max·close), the maximize icon swaps with the
+// window state, and close gets the danger-red hover. Styles / sizes / color
+// presets from the parked wc-* model are a fast-follow (owner decision
+// 2026-07-03) — v1 renders the Default preset, rectangular, normal size.
+//
+// Actions go through the WindowControlActions global (wired in main.rs
+// `wire_window_controls`): min/max via slint::Window setters (adapter-safe),
+// close via the app's close-to-tray choreography. Minimize honors the
+// minimize-to-tray tray setting on the Rust side.
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Radius } from "../foundation/radius.slint";
+import { QbzIcon } from "../primitives/QbzIcon.slint";
+import { WindowControlActions, AppearanceState } from "../state.slint";
+
+component WcBtn inherits Rectangle {
+    in property <image> icon;
+    in property <bool> danger: false;
+    callback pressed-action();
+    width: 34px;
+    height: 26px;
+    border-radius: Radius.sm;
+    background: ta.has-hover
+        ? (root.danger ? #e81123 : Theme.surface-hover)
+        : transparent;
+    QbzIcon {
+        source: root.icon;
+        width: 14px;
+        height: 14px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        tint: ta.has-hover && root.danger ? #ffffff : Theme.text-secondary;
+    }
+    ta := TouchArea {
+        clicked => { root.pressed-action(); }
+    }
+}
+
+export component WindowControls inherits HorizontalLayout {
+    property <bool> on-left: AppearanceState.wc-position-index == 0;
+    spacing: 2px;
+
+    // Left placement — macOS order: close, maximize, minimize.
+    if root.on-left: WcBtn {
+        icon: @image-url("../assets/icons/x.svg");
+        danger: true;
+        pressed-action => { WindowControlActions.close-app(); }
+    }
+    if root.on-left: WcBtn {
+        icon: WindowControlActions.is-maximized
+            ? @image-url("../assets/icons/minimize-2.svg")
+            : @image-url("../assets/icons/maximize-2.svg");
+        pressed-action => { WindowControlActions.toggle-maximize(); }
+    }
+    if root.on-left: WcBtn {
+        icon: @image-url("../assets/icons/minus.svg");
+        pressed-action => { WindowControlActions.minimize(); }
+    }
+
+    // Right placement — Windows/KDE order: minimize, maximize, close.
+    if !root.on-left: WcBtn {
+        icon: @image-url("../assets/icons/minus.svg");
+        pressed-action => { WindowControlActions.minimize(); }
+    }
+    if !root.on-left: WcBtn {
+        icon: WindowControlActions.is-maximized
+            ? @image-url("../assets/icons/minimize-2.svg")
+            : @image-url("../assets/icons/maximize-2.svg");
+        pressed-action => { WindowControlActions.toggle-maximize(); }
+    }
+    if !root.on-left: WcBtn {
+        icon: @image-url("../assets/icons/x.svg");
+        danger: true;
+        pressed-action => { WindowControlActions.close-app(); }
+    }
+}

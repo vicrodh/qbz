@@ -17,7 +17,7 @@ import { SplashScreen } from "splash/SplashScreen.slint";
 import { LoginScreen } from "login/LoginScreen.slint";
 import { AppShell } from "shell/AppShell.slint";
 import { Toast } from "primitives/Toast.slint";
-import { ShellState, MiniPlayerState, NowPlayingState, AppearanceState, UiScale } from "state.slint";
+import { ShellState, MiniPlayerState, NowPlayingState, AppearanceState, UiScale, WindowControlActions } from "state.slint";
 import { MiniShell } from "miniplayer/MiniShell.slint";
 
 // Re-export the theming globals so the Rust layer can push palettes (Theme.c /
@@ -50,6 +50,21 @@ export component AppWindow inherits Window {
     min-width: 940px / UiScale.factor;
     min-height: 600px / UiScale.factor;
     background: Theme.surface-main;
+
+    // Custom window chrome (owner decision 2026-07-03: the header IS the
+    // title bar — it is always present; custom mode only drops the system
+    // decorations while HeaderBar gains the window controls + drag).
+    // Linux-only: macOS keeps native decorations and gets the overlay
+    // attributes (transparent titlebar + fullsize content view) from the
+    // winit attributes hook instead. `no-frame` is the authoritative switch
+    // (the adapter re-applies it at every realization — same lesson as the
+    // miniplayer, see MiniPlayerWindow below); the persisted pref is seeded
+    // into AppearanceState BEFORE the first show, and changing it takes an
+    // app restart (Wayland negotiates decorations at surface creation).
+    no-frame: !AppearanceState.is-macos && !AppearanceState.use-system-title-bar;
+    // Edge-resize for the frameless mode (the winit backend only engages it
+    // on undecorated windows, so this is inert under system chrome).
+    resize-border-width: 6px;
 
     // Resolved by the Rust layer from the desktop environment (e.g. the
     // KDE Plasma general font). Empty falls back to the Slint default.
@@ -164,6 +179,20 @@ export component AppWindow inherits Window {
     Toast {
         width: 100%;
         height: 100%;
+    }
+
+    // Frameless hairline: with the system decorations gone (custom chrome on
+    // Linux) the compositor draws no border or shadow, so a 1px in-app frame
+    // keeps the window edge readable against same-tone backgrounds. Skipped
+    // while maximized / fullscreen (no visible edge to mark). Declared last
+    // so it paints at the very rim, over everything.
+    if root.no-frame && !WindowControlActions.is-maximized
+        && !WindowControlActions.is-fullscreen: Rectangle {
+        width: 100%;
+        height: 100%;
+        background: transparent;
+        border-width: 1px;
+        border-color: Theme.border-subtle;
     }
 }
 

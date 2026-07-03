@@ -4316,3 +4316,26 @@ msgstr "{} artistas, {} álbuns bloqueados"
 
 msgid "{} artists, {} albums blocked (disabled)"
 msgstr "{} artistas, {} álbuns bloqueados (desativado)"
+
+msgid "Keep your system's native window decorations. Turn off to use the QBZ header as the title bar, with its own window controls and drag support. Takes effect after restarting QBZ."
+msgstr "Mantém as decorações de janela nativas do sistema. Desative para usar o cabeçalho do QBZ como barra de título, com seus próprios controles de janela e suporte a arrastar. Tem efeito após reiniciar o QBZ."
+
+msgid "Frameless window without window controls or header drag (for tiling window manager users)"
+msgstr "Janela sem moldura, sem controles de janela nem arrastar pelo cabeçalho (para usuários de gerenciadores de janelas em mosaico)"
+
+msgid "Title bar mode changed — restart QBZ to apply"
+msgstr "Modo da barra de título alterado — reinicie o QBZ para aplicar"
+
+# Compact header navigation (opt-in, 2026-07-03)
+msgid "Compact header navigation"
+msgstr "Navegação compacta no cabeçalho"
+
+msgid "Use the icon-only section navigation in the header even while the sidebar is open."
+msgstr "Usa a navegação de secções apenas com ícones no cabeçalho mesmo com a barra lateral aberta."
+
+# DSD support Phase 1 (2026-07-03)
+msgid "DSD: {}"
+msgstr "DSD: {}"
+
+msgid "Cannot play DSD file"
+msgstr "Não é possível reproduzir o ficheiro DSD"

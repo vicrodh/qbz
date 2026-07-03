@@ -4346,3 +4346,26 @@ msgstr "Novedades"
 
 msgid "modified"
 msgstr "modificado"
+
+msgid "Keep your system's native window decorations. Turn off to use the QBZ header as the title bar, with its own window controls and drag support. Takes effect after restarting QBZ."
+msgstr "Conserva las decoraciones de ventana nativas del sistema. Desactívalo para usar el encabezado de QBZ como barra de título, con sus propios controles de ventana y arrastre. Se aplica al reiniciar QBZ."
+
+msgid "Frameless window without window controls or header drag (for tiling window manager users)"
+msgstr "Ventana sin marco, sin controles de ventana ni arrastre en el encabezado (para usuarios de gestores de ventanas en mosaico)"
+
+msgid "Title bar mode changed — restart QBZ to apply"
+msgstr "Modo de barra de título cambiado — reinicia QBZ para aplicar"
+
+# Compact header navigation (opt-in, 2026-07-03)
+msgid "Compact header navigation"
+msgstr "Navegación compacta en el encabezado"
+
+msgid "Use the icon-only section navigation in the header even while the sidebar is open."
+msgstr "Usa la navegación de secciones de solo iconos en el encabezado aunque la barra lateral esté abierta."
+
+# DSD support Phase 1 (2026-07-03)
+msgid "DSD: {}"
+msgstr "DSD: {}"
+
+msgid "Cannot play DSD file"
+msgstr "No se puede reproducir el archivo DSD"
