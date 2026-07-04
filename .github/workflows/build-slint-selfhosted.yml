@@ -36,8 +36,14 @@ jobs:
             echo "::warning::Only ${avail} MB free — earlyoom may SIGTERM the qbz-slint rustc. Close apps / drop to TTY for headroom."
           fi
 
-      - name: Build qbz-slint (box-proven settings — uncapped, threads=2)
-        run: NORUN=1 CAPPED=0 THREADS=2 ./scripts/slint-run.sh
+      # Desktop-proof recipe (2026-07-04): the old uncapped opt-3/threads-2
+      # settings die to earlyoom whenever the desktop holds RAM — its trigger
+      # is RAM-only (-s 100), so free swap can never save an uncapped build.
+      # threads=1 + opt-2 under the cgroup cap pages to swap gracefully and
+      # was proven end-to-end under an 8G/10G cap with the desktop open.
+      # Slower, but it finishes regardless of what the box is doing.
+      - name: Build qbz-slint (desktop-proof: capped, threads=1, opt-2)
+        run: NORUN=1 CAPPED=1 THREADS=1 OPT=2 ./scripts/slint-run.sh
 
       - name: Strip + report size
         run: |
