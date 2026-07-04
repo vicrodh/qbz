@@ -16,9 +16,9 @@
         # when tagging a new release. (npmHash is gone —
         # v2.0+ is the Slint crates/ workspace, no node.)
         # ──────────────────────────────────────────────
-        qbzVersion = "1.2.15";
+        qbzVersion = "2.0.0";
         qbzRev     = "v${qbzVersion}";
-        srcHash    = "sha256-G7wR5HV0qwlrCPmKTv68+EeDTTyCAvvmPr7GDhrwTaA=";
+        srcHash    = "sha256-2h6eXFDBklb75sryjVN7fRiLNRZuynAHIbdsRZ1pncI=";
 
         # Runtime libraries winit/wgpu/glutin dlopen at runtime — a Nix
         # binary cannot find system copies, so the installed program is
