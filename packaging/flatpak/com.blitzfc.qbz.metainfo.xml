@@ -69,6 +69,17 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="2.0.0" date="2026-07-03">
+      <description>
+        <p>QBZ 2.0 "Rebuild": the frontend is completely rebuilt as a native application — considerably smaller CPU and memory footprint, first-class macOS support, and a friendlier, more minimalist layout.</p>
+        <ul>
+          <li>Native UI rebuild: memory goes to playback, not to drawing the app; Wayland, X11 and Metal all work out of the box</li>
+          <li>DSD support (DSF/DFF): plays everywhere via high-quality PCM conversion, plus bit-perfect DoP and native DSD delivery on capable DACs</li>
+          <li>Gapless playback for local files, granular artist/album blocking, new search overlay, faster lyrics, offline mode hardening</li>
+          <li>Russian and Japanese translations — the UI now ships in 7 languages</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.2.15" date="2026-06-05">
       <description>
         <p>A small maintenance release while a major update is in the works: two bug fixes, no new features.</p>
