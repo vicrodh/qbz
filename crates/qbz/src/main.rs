@@ -5503,6 +5503,24 @@ fn select_slint_backend() -> Result<bool, slint::PlatformError> {
     let attributes_hook = |attributes: i_slint_backend_winit::winit::window::WindowAttributes| {
         let creating_mini = crate::miniplayer::is_creating_mini();
         log::info!("[mini] window-attributes hook: creating_mini={creating_mini}");
+        // Wayland app_id / X11 WM_CLASS: without an explicit name winit sends
+        // no xdg_toplevel.set_app_id at all (and derives WM_CLASS from the
+        // binary name), so the compositor cannot match the window to
+        // com.blitzfc.qbz.desktop — blank dock icon, no running indicator,
+        // and clicking the pin spawns a second instance (#544). Set on BOTH
+        // windows so the miniplayer groups under the same icon.
+        #[cfg(all(unix, not(target_os = "macos")))]
+        let attributes = {
+            use i_slint_backend_winit::winit::platform::wayland::WindowAttributesExtWayland;
+            use i_slint_backend_winit::winit::platform::x11::WindowAttributesExtX11;
+            // Both traits expose `with_name`; UFCS picks each apart.
+            let attributes = WindowAttributesExtWayland::with_name(
+                attributes,
+                "com.blitzfc.qbz",
+                "com.blitzfc.qbz",
+            );
+            WindowAttributesExtX11::with_name(attributes, "com.blitzfc.qbz", "com.blitzfc.qbz")
+        };
         // Per-window swapchain alpha (vendored femtovg-wgpu patch): this hook runs
         // on the event loop thread right before the window ADAPTER — and therefore
         // its renderer backend — is created, and the backend CAPTURES the flag at
