@@ -5439,6 +5439,10 @@ static RENDERER_ADAPTERS: std::sync::OnceLock<String> = std::sync::OnceLock::new
 /// previous start died before its first paint; read once the UI is up to show
 /// the explanatory toast.
 static RENDERER_REVERTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// Set when the AUTO-DETECTED wgpu tier crashed pre-paint on the previous
+/// start and the setting was degraded to "gl" (#542); read once the UI is up
+/// to show the explanatory toast.
+static RENDERER_DEGRADED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// One-line diagnostics summary of the active renderer + adapters.
 pub fn renderer_decision_summary() -> (String, String) {
@@ -5478,6 +5482,92 @@ fn clear_renderer_sentinel() {
 
 fn renderer_sentinel_armed() -> bool {
     renderer_sentinel_path().map(|p| p.exists()).unwrap_or(false)
+}
+
+/// What the armed sentinel was protecting ("wgpu"/"gl"/"software" for a
+/// Settings override, "auto-wgpu" for the auto-detected wgpu tier).
+fn renderer_sentinel_value() -> Option<String> {
+    std::fs::read_to_string(renderer_sentinel_path()?).ok()
+}
+
+/// GPU topology seen during adapter enumeration: whether a discrete and an
+/// integrated GPU are BOTH present (hybrid machine). Set by
+/// `detect_hardware_gpu`; probed on demand for the forced-wgpu paths.
+#[derive(Clone, Copy, Default)]
+struct GpuTopology {
+    discrete: bool,
+    integrated: bool,
+}
+static GPU_TOPOLOGY: std::sync::OnceLock<GpuTopology> = std::sync::OnceLock::new();
+
+/// Minimal adapter probe for the paths that skip `detect_hardware_gpu`
+/// (QBZ_RENDERER / Settings forcing the wgpu tier).
+fn probe_gpu_topology() -> GpuTopology {
+    use slint::wgpu_28::wgpu;
+    let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        backends: wgpu::Backends::all(),
+        ..Default::default()
+    });
+    let adapters =
+        poll_ready(instance.enumerate_adapters(wgpu::Backends::all())).unwrap_or_default();
+    let mut topo = GpuTopology::default();
+    for adapter in &adapters {
+        match adapter.get_info().device_type {
+            wgpu::DeviceType::DiscreteGpu => topo.discrete = true,
+            wgpu::DeviceType::IntegratedGpu => topo.integrated = true,
+            _ => {}
+        }
+    }
+    topo
+}
+
+/// True when /sys/class/power_supply exposes a SYSTEM battery. Peripheral
+/// batteries (wireless mice etc.) report `scope=Device` — exclude them, or
+/// every desktop with a wireless mouse would classify as a laptop.
+fn linux_has_system_battery() -> bool {
+    let Ok(entries) = std::fs::read_dir("/sys/class/power_supply") else {
+        return false;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let is_battery = std::fs::read_to_string(path.join("type"))
+            .map(|t| t.trim() == "Battery")
+            .unwrap_or(false);
+        if !is_battery {
+            continue;
+        }
+        let device_scope = std::fs::read_to_string(path.join("scope"))
+            .map(|s| s.trim().eq_ignore_ascii_case("device"))
+            .unwrap_or(false);
+        if !device_scope {
+            return true;
+        }
+    }
+    false
+}
+
+/// Default wgpu power preference (WGPU_POWER_PREF always wins, in the caller).
+/// LowPower keeps hybrid LAPTOPS on their integrated GPU: the panel is wired
+/// to it and this mostly-idle UI doesn't need the discrete card. On a hybrid
+/// DESKTOP the monitor usually hangs off the discrete card and the display-less
+/// iGPU cannot present the window surface — wgpu still picks it under LowPower
+/// and `Surface::configure` panics with "Invalid surface" (#542). So a hybrid
+/// machine WITHOUT a system battery (= desktop) defaults to HighPerformance.
+fn default_wgpu_power_preference() -> slint::wgpu_28::wgpu::PowerPreference {
+    use slint::wgpu_28::wgpu::PowerPreference;
+    if cfg!(target_os = "macos") {
+        return PowerPreference::LowPower;
+    }
+    let topo = GPU_TOPOLOGY.get_or_init(probe_gpu_topology);
+    if topo.discrete && topo.integrated && !linux_has_system_battery() {
+        log::info!(
+            "[renderer] hybrid discrete+integrated GPUs with no system battery (desktop) \
+             -> HighPerformance adapter default"
+        );
+        PowerPreference::HighPerformance
+    } else {
+        PowerPreference::LowPower
+    }
 }
 
 /// Decide + activate the Slint backend, returning whether the GPU (wgpu) renderer was
@@ -5558,11 +5648,13 @@ fn select_slint_backend() -> Result<bool, slint::PlatformError> {
         RendererTier::Wgpu => {
             // Explicit configuration instead of `default()`: default leaves the
             // adapter PowerPreference at None. Prefer the low-power (integrated)
-            // adapter — this UI is mostly idle and doesn't need a discrete GPU.
-            // WGPU_POWER_PREF still wins if set (same as WGPUSettings::default()).
+            // adapter — this UI is mostly idle — EXCEPT on hybrid desktops,
+            // where the iGPU can't present the surface (#542, see
+            // default_wgpu_power_preference). WGPU_POWER_PREF still wins if
+            // set (same as WGPUSettings::default()).
             let mut wgpu_settings = slint::wgpu_28::WGPUSettings::default();
             wgpu_settings.power_preference = slint::wgpu_28::wgpu::PowerPreference::from_env()
-                .unwrap_or(slint::wgpu_28::wgpu::PowerPreference::LowPower);
+                .unwrap_or_else(default_wgpu_power_preference);
             log::info!(
                 "[renderer] selecting wgpu (GPU) renderer (power_preference={:?})",
                 wgpu_settings.power_preference
@@ -5645,7 +5737,34 @@ fn renderer_tier_from_prefs() -> (RendererTier, String) {
     let mut prefs = crate::ui_prefs::load();
     let key = prefs.renderer.clone();
     if key == "auto" {
-        return (detect_hardware_gpu(), "auto-detect".to_string());
+        // The sentinel also guards the AUTO-DETECTED wgpu tier (#542): if the
+        // previous auto start picked wgpu and died before first paint,
+        // re-detecting would pick wgpu again — an unrecoverable crash loop.
+        // Degrade the persisted setting to "gl" (the user can switch back in
+        // Settings) and explain with a toast. macOS has no GL tier (it
+        // degrades back to wgpu), so the guard is Linux-shaped by design.
+        if renderer_sentinel_armed() {
+            let attempted = renderer_sentinel_value();
+            clear_renderer_sentinel();
+            if attempted.as_deref() == Some("auto-wgpu") && !cfg!(target_os = "macos") {
+                log::warn!(
+                    "[renderer] previous start with the auto-detected wgpu renderer never \
+                     reached first paint -> persisting the GL (compatibility) renderer"
+                );
+                prefs.renderer = "gl".to_string();
+                crate::ui_prefs::save(&prefs);
+                RENDERER_DEGRADED.store(true, std::sync::atomic::Ordering::Relaxed);
+                return (
+                    RendererTier::FemtovgGl,
+                    "Settings (gl — auto-detected wgpu failed to start)".to_string(),
+                );
+            }
+        }
+        let tier = detect_hardware_gpu();
+        if tier == RendererTier::Wgpu && !cfg!(target_os = "macos") {
+            arm_renderer_sentinel("auto-wgpu");
+        }
+        return (tier, "auto-detect".to_string());
     }
     if renderer_sentinel_armed() {
         log::warn!(
@@ -5712,8 +5831,14 @@ fn detect_hardware_gpu() -> RendererTier {
         ["v3dv", "hasvk", "panfrost", "panvk", "lima", "mali", "videocore", "llvmpipe"];
     let mut best = RendererTier::Software;
     let mut adapter_summary: Vec<String> = Vec::new();
+    let mut topo = GpuTopology::default();
     for adapter in &adapters {
         let info = adapter.get_info();
+        match info.device_type {
+            wgpu::DeviceType::DiscreteGpu => topo.discrete = true,
+            wgpu::DeviceType::IntegratedGpu => topo.integrated = true,
+            _ => {}
+        }
         if info.device_type == wgpu::DeviceType::Cpu {
             log::info!(
                 "[renderer] wgpu adapter: '{}' backend={:?} type={:?} class=cpu",
@@ -5766,6 +5891,7 @@ fn detect_hardware_gpu() -> RendererTier {
         }
     }
     let _ = RENDERER_ADAPTERS.set(adapter_summary.join("; "));
+    let _ = GPU_TOPOLOGY.set(topo);
     match best {
         RendererTier::Wgpu => log::info!("[renderer] real GPU adapter found -> wgpu renderer"),
         RendererTier::FemtovgGl => log::info!(
@@ -5975,6 +6101,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         crate::toast::warning(
             &window,
             qbz_i18n::t("Renderer setting reverted to Auto — the previous start didn't finish"),
+        );
+    }
+    // Same idea for the auto-detect path (#542): wgpu crashed pre-paint last
+    // time, this start persisted the GL fallback instead.
+    if RENDERER_DEGRADED.load(std::sync::atomic::Ordering::Relaxed) {
+        crate::toast::warning(
+            &window,
+            qbz_i18n::t(
+                "Renderer switched to GPU (compatibility) — the GPU renderer failed to start",
+            ),
         );
     }
     install_browser_mouse_nav(&window);

@@ -4347,3 +4347,9 @@ msgstr "ネイティブDSD（カーネルサポートが必要）"
 
 msgid "Date added"
 msgstr "追加日"
+
+msgid "Renderer setting reverted to Auto — the previous start didn't finish"
+msgstr "レンダラー設定を自動に戻しました — 前回の起動が完了しませんでした"
+
+msgid "Renderer switched to GPU (compatibility) — the GPU renderer failed to start"
+msgstr "レンダラーをGPU（互換）に切り替えました — GPUレンダラーを起動できませんでした"

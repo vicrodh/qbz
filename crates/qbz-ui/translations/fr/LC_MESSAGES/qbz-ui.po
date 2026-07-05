@@ -4358,3 +4358,9 @@ msgstr "DSD natif (prise en charge du noyau requise)"
 
 msgid "Date added"
 msgstr "Date d'ajout"
+
+msgid "Renderer setting reverted to Auto — the previous start didn't finish"
+msgstr "Réglage du moteur de rendu revenu sur Automatique — le démarrage précédent ne s'est pas terminé"
+
+msgid "Renderer switched to GPU (compatibility) — the GPU renderer failed to start"
+msgstr "Moteur de rendu basculé sur GPU (compatibilité) — le rendu GPU n'a pas pu démarrer"

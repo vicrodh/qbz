@@ -4358,3 +4358,9 @@ msgstr "DSD nativo (requer suporte do kernel)"
 
 msgid "Date added"
 msgstr "Data de adição"
+
+msgid "Renderer setting reverted to Auto — the previous start didn't finish"
+msgstr "Configuração do renderizador revertida para Automático — a inicialização anterior não foi concluída"
+
+msgid "Renderer switched to GPU (compatibility) — the GPU renderer failed to start"
+msgstr "Renderizador alterado para GPU (compatibilidade) — o renderizador GPU não conseguiu iniciar"
