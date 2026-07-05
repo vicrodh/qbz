@@ -333,6 +333,7 @@ export component PlaylistView inherits Rectangle {
         : PlaylistState.sort-field == "artist" ? @tr("Artist")
         : PlaylistState.sort-field == "album" ? @tr("Album")
         : PlaylistState.sort-field == "duration" ? @tr("Duration")
+        : PlaylistState.sort-field == "added" ? @tr("Date added")
         : PlaylistState.sort-field == "custom" ? @tr("Custom")
         : @tr("Default");
 
@@ -800,6 +801,16 @@ export component PlaylistView inherits Rectangle {
                                                 active: PlaylistState.sort-field == "duration";
                                                 asc: PlaylistState.sort-asc;
                                                 chosen => { PlaylistActions.set-sort("duration"); }
+                                            }
+                                            // Positional proxy for when each
+                                            // track entered the playlist (the
+                                            // API returns insertion order) —
+                                            // v1.x parity, starts newest-first.
+                                            SortOption {
+                                                label: @tr("Date added");
+                                                active: PlaylistState.sort-field == "added";
+                                                asc: PlaylistState.sort-asc;
+                                                chosen => { PlaylistActions.set-sort("added"); }
                                             }
                                             // Manual order — enables the per-row
                                             // up/down reorder controls. Hidden on

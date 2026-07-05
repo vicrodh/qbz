@@ -4344,3 +4344,6 @@ msgstr "DoP — PCM上のDSD（ビットパーフェクト）"
 
 msgid "Native DSD (kernel support required)"
 msgstr "ネイティブDSD（カーネルサポートが必要）"
+
+msgid "Date added"
+msgstr "追加日"

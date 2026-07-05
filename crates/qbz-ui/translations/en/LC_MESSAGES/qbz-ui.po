@@ -94,3 +94,6 @@ msgstr "Signing you in…"
 
 msgid "Sign-in failed"
 msgstr "Sign-in failed"
+
+msgid "Date added"
+msgstr "Date added"

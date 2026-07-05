@@ -4368,3 +4368,6 @@ msgstr "DoP — DSD поверх PCM (бит-перфект)"
 
 msgid "Native DSD (kernel support required)"
 msgstr "Нативный DSD (требуется поддержка ядра)"
+
+msgid "Date added"
+msgstr "Дата добавления"

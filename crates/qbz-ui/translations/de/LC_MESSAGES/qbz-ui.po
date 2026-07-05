@@ -4355,3 +4355,6 @@ msgstr "DoP — DSD über PCM (bit-perfekt)"
 
 msgid "Native DSD (kernel support required)"
 msgstr "Natives DSD (Kernel-Unterstützung erforderlich)"
+
+msgid "Date added"
+msgstr "Hinzugefügt am"

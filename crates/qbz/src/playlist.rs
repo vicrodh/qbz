@@ -106,6 +106,14 @@ fn refresh_view(window: &AppWindow) {
                 .and_then(|k| order.get(&k).copied())
                 .unwrap_or(i32::MAX)
         });
+    } else if field == "added" {
+        // "Date added" is a positional proxy (v1.x parity): FULL_ITEMS is in
+        // the playlist's natural insertion order (the API returns tracks
+        // oldest-first) and the filter above preserves it, so asc = oldest
+        // first and desc = newest first is a plain reversal.
+        if !asc {
+            view.reverse();
+        }
     } else if field != "default" {
         view.sort_by(|a, b| {
             let ord = match field.as_str() {
@@ -171,7 +179,9 @@ pub fn set_sort(window: &AppWindow, field: &str) {
         } else if cur.0 == field {
             cur.1 = !cur.1;
         } else {
-            *cur = (field.to_string(), true);
+            // "added" starts newest-first (desc) — v1.x parity; the other
+            // fields start ascending.
+            *cur = (field.to_string(), field != "added");
         }
     });
     let (field, asc) = SORT.with(|s| s.borrow().clone());
