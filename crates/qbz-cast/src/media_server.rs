@@ -17,6 +17,28 @@ use tiny_http::{Header, Method, Response, Server, StatusCode};
 
 use crate::CastError;
 
+/// DLNA `contentFeatures.dlna.org` value advertised on GET/HEAD responses.
+///
+/// `DLNA.ORG_OP=01` = byte-range seek supported, no time-seek.
+/// `DLNA.ORG_FLAGS=01700000...` = streaming/interactive-transfer flags.
+/// No `DLNA.ORG_PN` — FLAC has no standard DLNA profile name.
+///
+/// Strict renderers (e.g. HQPlayer) HEAD-probe the URL and treat the stream as
+/// invalid/finished without these headers. Kept in sync with the DIDL
+/// `protocolInfo` in `dlna::device::build_didl_metadata`.
+pub const DLNA_CONTENT_FEATURES: &str =
+    "DLNA.ORG_OP=01;DLNA.ORG_FLAGS=01700000000000000000000000000000";
+
+/// Chunked-encoding threshold for media responses.
+///
+/// tiny_http 0.12.0 auto-selects `Transfer-Encoding: chunked` (dropping
+/// `Content-Length`) once a body reaches its default 32 KiB threshold. Strict
+/// DLNA renderers (e.g. HQPlayer) reject a chunked media body: they play the
+/// few seconds they buffer, then go STOPPED without range-continuing. Raising
+/// the threshold above any real file size forces Identity encoding with an
+/// explicit `Content-Length` on every media response (200, 206, and HEAD).
+const NO_CHUNK_THRESHOLD: usize = usize::MAX;
+
 #[derive(Clone)]
 struct MediaEntry {
     content_type: String,
@@ -242,8 +264,12 @@ fn handle_request(
         url
     );
 
-    if method != &Method::Get {
-        log::warn!("MediaServer: Rejected non-GET request: {}", method);
+    // Allow GET and HEAD. Strict DLNA renderers HEAD-probe the URL to validate
+    // the resource before playing; 405-rejecting HEAD makes them treat the
+    // stream as invalid and stop shortly after buffering.
+    let is_head = method == &Method::Head;
+    if method != &Method::Get && !is_head {
+        log::warn!("MediaServer: Rejected unsupported method: {}", method);
         return Response::from_data(Vec::new()).with_status_code(StatusCode(405));
     }
 
@@ -280,6 +306,26 @@ fn handle_request(
         }
     };
 
+    // HEAD: advertise the resource (type/size/DLNA features) without reading
+    // any bytes. tiny_http suppresses the body for HEAD while still emitting the
+    // advertised Content-Length.
+    if is_head {
+        let headers = vec![
+            header("Content-Type", &entry.content_type),
+            header("Accept-Ranges", "bytes"),
+            header("transferMode.dlna.org", "Streaming"),
+            header("contentFeatures.dlna.org", DLNA_CONTENT_FEATURES),
+        ];
+        return Response::new(
+            StatusCode(200),
+            headers,
+            std::io::Cursor::new(Vec::new()),
+            Some(entry.size as usize),
+            None,
+        )
+        .with_chunked_threshold(NO_CHUNK_THRESHOLD);
+    }
+
     let range_header = request
         .headers()
         .iter()
@@ -294,9 +340,12 @@ fn handle_request(
     };
 
     let mut response = Response::from_data(data)
+        .with_chunked_threshold(NO_CHUNK_THRESHOLD)
         .with_status_code(status_code)
         .with_header(header("Content-Type", &entry.content_type))
-        .with_header(header("Accept-Ranges", "bytes"));
+        .with_header(header("Accept-Ranges", "bytes"))
+        .with_header(header("transferMode.dlna.org", "Streaming"))
+        .with_header(header("contentFeatures.dlna.org", DLNA_CONTENT_FEATURES));
 
     if let Some(content_range) = content_range {
         response = response.with_header(header("Content-Range", &content_range));

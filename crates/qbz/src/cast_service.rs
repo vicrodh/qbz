@@ -33,6 +33,12 @@ type Runtime = Arc<AppRuntime<SlintAdapter>>;
 /// Cast position poll cadence (mirrors Tauri's `POSITION_POLL_INTERVAL_MS`).
 const POSITION_POLL_INTERVAL_MS: u64 = 1000;
 
+/// How close (in seconds) the renderer must get to a track's end before a DLNA
+/// `STOPPED`/`NO_MEDIA_PRESENT` counts as genuine end-of-track. A stop while the
+/// max observed position is further than this from the end is treated as a
+/// renderer hiccup (logged, no auto-advance) rather than a track end.
+const CAST_END_GUARD_SECS: f64 = 5.0;
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum CastProtocol {
     Chromecast,
@@ -92,6 +98,12 @@ struct CastInner {
     is_playing: bool,
     // Track-end one-shot latch (reset on PLAYING).
     track_end_detected: bool,
+    // DLNA track-end guard: whether we've seen PLAYING for the current track,
+    // and the max position observed while playing. Many renderers reset RelTime
+    // to 0 on STOP, so the instantaneous position at the STOPPED poll is
+    // unreliable — track the max instead. Both reset per new track.
+    cast_saw_playing: bool,
+    cast_max_position: f64,
     // QConnect coexistence: remember whether QConnect was on before casting.
     qconnect_was_on_before_cast: bool,
     // Position-poll task; aborted on disconnect.
@@ -243,6 +255,8 @@ impl SlintCastService {
             inner.protocol = Some(proto);
             inner.connected_device_ip = Some(device_ip);
             inner.track_end_detected = false;
+            inner.cast_saw_playing = false;
+            inner.cast_max_position = 0.0;
         }
         self.push_connection_state().await;
         self.start_position_poll();
@@ -422,6 +436,8 @@ impl SlintCastService {
             inner.current_track_id = Some(track.id);
             inner.is_playing = true;
             inner.track_end_detected = false;
+            inner.cast_saw_playing = false;
+            inner.cast_max_position = 0.0;
         }
         // Quality label comes from the track's catalog metadata (always present,
         // no network call) so it's the same whether bytes came from cache,
@@ -743,14 +759,39 @@ impl SlintCastService {
         // Track-end detection (mirrors castStore): Chromecast {PLAYING,BUFFERING}
         // -> IDLE; DLNA PLAYING -> {STOPPED, NO_MEDIA_PRESENT}. One-shot latch,
         // reset on PLAYING.
+        //
+        // For DLNA a bare STOPPED is ambiguous: a strict renderer that hiccups
+        // mid-track also reports STOPPED. We only treat it as end-of-track when
+        // the track actually reached (near) its end — guarded by the max
+        // position observed while PLAYING. A premature STOPPED is logged and
+        // NOT advanced, and is not latched so a resume to PLAYING recovers.
+        let max_position;
         let ended = {
             let mut inner = self.inner.lock().await;
             inner.is_playing = playing;
+            if state == "PLAYING" {
+                inner.cast_saw_playing = true;
+                inner.cast_max_position = inner.cast_max_position.max(position);
+            }
+            max_position = inner.cast_max_position;
             let ended = match proto {
                 CastProtocol::Chromecast => state == "IDLE" && !inner.track_end_detected,
                 CastProtocol::Dlna => {
-                    matches!(state.as_str(), "STOPPED" | "NO_MEDIA_PRESENT")
-                        && !inner.track_end_detected
+                    let stopped =
+                        matches!(state.as_str(), "STOPPED" | "NO_MEDIA_PRESENT");
+                    // When duration is unknown (<= 0) keep the old behavior and
+                    // honor STOPPED, so we never get stuck. Otherwise require the
+                    // track to have played to within CAST_END_GUARD_SECS of the end.
+                    let near_end = duration <= 0.0
+                        || (inner.cast_saw_playing
+                            && max_position >= duration - CAST_END_GUARD_SECS);
+                    if stopped && !near_end && inner.cast_saw_playing {
+                        log::warn!(
+                            "[Cast] premature STOPPED, not advancing (state={state}, \
+                             max_position={max_position:.1}, duration={duration:.1})"
+                        );
+                    }
+                    stopped && near_end && !inner.track_end_detected
                 }
             };
             if state == "PLAYING" {
@@ -760,6 +801,11 @@ impl SlintCastService {
             }
             ended
         };
+
+        log::debug!(
+            "[Cast] poll: state={state} position={position:.1} duration={duration:.1} \
+             max_position={max_position:.1}"
+        );
 
         // Feed the lyrics engine our position so it auto-follows while casting
         // (the local poll is skipped, so it can't drive lyrics). The 30Hz sync
@@ -794,7 +840,10 @@ impl SlintCastService {
         });
 
         if ended {
-            log::info!("[Cast] track ended (state={state}); auto-advancing");
+            log::info!(
+                "[Cast] track ended (state={state}, position={position:.1}, \
+                 duration={duration:.1}, max_position={max_position:.1}); auto-advancing"
+            );
             // Run the SAME local advance the next button uses: it moves the
             // core cursor, refreshes the card + queue, and play_audible casts
             // the new current track. Keeps the UI and renderer in sync.
