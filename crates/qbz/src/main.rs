@@ -19216,5 +19216,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // tray Quit), so hide-to-tray works.
     window.show()?;
     slint::run_event_loop_until_quit()?;
+    // Single choke point for ALL quit paths (custom-titlebar close, WM close,
+    // tray Quit): release anything QBZ parked on the audio graph before the
+    // process exits. Quitting mid-playback never runs the audio thread's Stop
+    // handler, so a forced PipeWire clock (DAC passthrough) outlived the app
+    // and pinned every other program to the last track's sample rate until
+    // PipeWire restarted (#521). Both calls are self-gating no-ops when QBZ
+    // didn't set anything — same pair the Stop/ReleaseDevice handlers use.
+    #[cfg(target_os = "linux")]
+    {
+        qbz_audio::alsa_backend::resume_suspended_sink();
+        qbz_audio::pipewire_backend::PipeWireBackend::reset_pipewire_clock();
+    }
     Ok(())
 }
