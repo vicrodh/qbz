@@ -5439,6 +5439,10 @@ static RENDERER_ADAPTERS: std::sync::OnceLock<String> = std::sync::OnceLock::new
 /// previous start died before its first paint; read once the UI is up to show
 /// the explanatory toast.
 static RENDERER_REVERTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// Set when the AUTO-DETECTED wgpu tier crashed pre-paint on the previous
+/// start and the setting was degraded to "gl" (#542); read once the UI is up
+/// to show the explanatory toast.
+static RENDERER_DEGRADED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// One-line diagnostics summary of the active renderer + adapters.
 pub fn renderer_decision_summary() -> (String, String) {
@@ -5733,7 +5737,34 @@ fn renderer_tier_from_prefs() -> (RendererTier, String) {
     let mut prefs = crate::ui_prefs::load();
     let key = prefs.renderer.clone();
     if key == "auto" {
-        return (detect_hardware_gpu(), "auto-detect".to_string());
+        // The sentinel also guards the AUTO-DETECTED wgpu tier (#542): if the
+        // previous auto start picked wgpu and died before first paint,
+        // re-detecting would pick wgpu again — an unrecoverable crash loop.
+        // Degrade the persisted setting to "gl" (the user can switch back in
+        // Settings) and explain with a toast. macOS has no GL tier (it
+        // degrades back to wgpu), so the guard is Linux-shaped by design.
+        if renderer_sentinel_armed() {
+            let attempted = renderer_sentinel_value();
+            clear_renderer_sentinel();
+            if attempted.as_deref() == Some("auto-wgpu") && !cfg!(target_os = "macos") {
+                log::warn!(
+                    "[renderer] previous start with the auto-detected wgpu renderer never \
+                     reached first paint -> persisting the GL (compatibility) renderer"
+                );
+                prefs.renderer = "gl".to_string();
+                crate::ui_prefs::save(&prefs);
+                RENDERER_DEGRADED.store(true, std::sync::atomic::Ordering::Relaxed);
+                return (
+                    RendererTier::FemtovgGl,
+                    "Settings (gl — auto-detected wgpu failed to start)".to_string(),
+                );
+            }
+        }
+        let tier = detect_hardware_gpu();
+        if tier == RendererTier::Wgpu && !cfg!(target_os = "macos") {
+            arm_renderer_sentinel("auto-wgpu");
+        }
+        return (tier, "auto-detect".to_string());
     }
     if renderer_sentinel_armed() {
         log::warn!(
@@ -6070,6 +6101,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         crate::toast::warning(
             &window,
             qbz_i18n::t("Renderer setting reverted to Auto — the previous start didn't finish"),
+        );
+    }
+    // Same idea for the auto-detect path (#542): wgpu crashed pre-paint last
+    // time, this start persisted the GL fallback instead.
+    if RENDERER_DEGRADED.load(std::sync::atomic::Ordering::Relaxed) {
+        crate::toast::warning(
+            &window,
+            qbz_i18n::t(
+                "Renderer switched to GPU (compatibility) — the GPU renderer failed to start",
+            ),
         );
     }
     install_browser_mouse_nav(&window);

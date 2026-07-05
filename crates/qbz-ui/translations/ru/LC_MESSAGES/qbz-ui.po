@@ -4371,3 +4371,9 @@ msgstr "Нативный DSD (требуется поддержка ядра)"
 
 msgid "Date added"
 msgstr "Дата добавления"
+
+msgid "Renderer setting reverted to Auto — the previous start didn't finish"
+msgstr "Настройка рендерера возвращена на «Авто» — предыдущий запуск не завершился"
+
+msgid "Renderer switched to GPU (compatibility) — the GPU renderer failed to start"
+msgstr "Рендерер переключён на GPU (совместимость) — GPU-рендерер не смог запуститься"
