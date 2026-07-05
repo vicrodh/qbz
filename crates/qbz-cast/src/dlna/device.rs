@@ -1,7 +1,6 @@
 //! DLNA device connection and playback via AVTransport SOAP
 
 use rupnp::http::Uri;
-use rupnp::ssdp::URN;
 use rupnp::{Device, Service};
 use serde::{Deserialize, Serialize};
 
@@ -63,10 +62,9 @@ impl DlnaConnection {
             DlnaError::Connection(format!("Failed to load device description: {}", e))
         })?;
 
-        let av_transport_service = parsed_device.find_service(&av_transport_urn()).cloned();
-        let rendering_control_service = parsed_device
-            .find_service(&rendering_control_urn())
-            .cloned();
+        let av_transport_service = find_service_any_version(&parsed_device, "AVTransport");
+        let rendering_control_service =
+            find_service_any_version(&parsed_device, "RenderingControl");
 
         log::info!(
             "DLNA: Connected to {} (AVT: {:?}, RC: {:?})",
@@ -477,8 +475,15 @@ fn build_didl_metadata(uri: &str, metadata: &DlnaMetadata, content_type: &str) -
         .unwrap_or_default();
 
     // Use actual content type for protocolInfo - critical for DLNA compatibility
-    // Many devices reject content if protocolInfo doesn't match actual MIME type
-    let protocol_info = format!("http-get:*:{}:*", content_type);
+    // Many devices reject content if protocolInfo doesn't match actual MIME type.
+    // The 4th field advertises the same DLNA content features the media server
+    // sends on GET/HEAD (see `media_server::DLNA_CONTENT_FEATURES`); strict
+    // renderers cross-check these against the response headers.
+    let protocol_info = format!(
+        "http-get:*:{}:{}",
+        content_type,
+        crate::media_server::DLNA_CONTENT_FEATURES
+    );
 
     format!(
         r#"<DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/">
@@ -512,10 +517,45 @@ fn xml_escape(s: &str) -> String {
         .replace('\'', "&apos;")
 }
 
-fn av_transport_urn() -> URN {
-    URN::Service("schemas-upnp-org".into(), "AVTransport".into(), 1)
+/// Version-agnostic service-type match: `true` when `service_type` names
+/// `service` at any UPnP version. Shared by [`find_service_any_version`] so the
+/// rule can be unit-tested without constructing a real rupnp `Device`.
+fn service_type_matches(service_type: &str, service: &str) -> bool {
+    service_type.contains(&format!(":service:{}:", service))
 }
 
-fn rendering_control_urn() -> URN {
-    URN::Service("schemas-upnp-org".into(), "RenderingControl".into(), 1)
+/// Find a service by name regardless of its UPnP version (`:1`/`:2`/`:3`),
+/// matching discovery's substring logic so a `:2`/`:3`-only renderer connects.
+fn find_service_any_version(device: &Device, service: &str) -> Option<Service> {
+    device
+        .services_iter()
+        .find(|s| service_type_matches(&s.service_type().to_string(), service))
+        .cloned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::service_type_matches;
+
+    #[test]
+    fn matches_any_upnp_version() {
+        for st in [
+            "urn:schemas-upnp-org:service:AVTransport:1",
+            "urn:schemas-upnp-org:service:AVTransport:2",
+            "urn:schemas-upnp-org:service:AVTransport:3",
+        ] {
+            assert!(
+                service_type_matches(st, "AVTransport"),
+                "expected {st} to match AVTransport"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_unrelated_service() {
+        assert!(!service_type_matches(
+            "urn:schemas-upnp-org:service:ConnectionManager:1",
+            "AVTransport"
+        ));
+    }
 }
