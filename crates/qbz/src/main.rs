@@ -32,6 +32,7 @@ mod blacklist_manager;
 mod booklet;
 mod commands;
 mod custom_artwork;
+mod custom_theme;
 mod diagnostics;
 #[cfg(target_os = "linux")]
 mod glibc_compat;
@@ -6391,16 +6392,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let slug = crate::ui_prefs::load().theme;
         let is_auto = slug == crate::theme::AUTO_SLUG;
+        let is_custom = slug == crate::theme::CUSTOM_SLUG;
         let selected_index = crate::theme::selected_index_for_slug(&slug);
         appearance.set_theme_index(selected_index);
         appearance.set_theme_is_auto(is_auto);
+        appearance.set_theme_is_custom(is_custom);
         // Auto-theme controls read from the persisted source; seed them so they
         // reflect the saved choice when Settings opens.
         crate::auto_theme::seed_state(&window);
+        // Custom-theme editor swatches read from custom_theme.json; seed them so
+        // the editor reflects the saved base when Settings opens.
+        crate::custom_theme::seed_state(&window);
         if is_auto {
             appearance.set_theme_is_system(false);
             // Generate + apply the dynamic palette (falls back to OLED on error).
             crate::auto_theme::apply_startup(&window);
+        } else if is_custom {
+            appearance.set_theme_is_system(false);
+            // Derive + apply the persisted custom palette (seeds OLED if absent).
+            crate::custom_theme::apply_startup(&window);
         } else {
             let id = crate::theme::id_for_slug(&slug);
             appearance.set_theme_is_system(id == qbz_theme::ThemeId::System);
@@ -8785,9 +8795,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if let Some(w) = theme_weak.upgrade() {
                         let st = w.global::<AppearanceState>();
                         st.set_theme_is_auto(true);
+                        st.set_theme_is_custom(false);
                         st.set_theme_is_system(false);
                     }
                     crate::auto_theme::regenerate(theme_weak.clone(), theme_handle.clone());
+                } else if crate::theme::is_custom_index(index) {
+                    // "Custom": persist the slug, derive from the persisted (or
+                    // freshly seeded) custom base, and apply live. The editor
+                    // swatches are seeded from the same base.
+                    prefs.theme = crate::theme::CUSTOM_SLUG.to_string();
+                    crate::ui_prefs::save(&prefs);
+                    if let Some(w) = theme_weak.upgrade() {
+                        let st = w.global::<AppearanceState>();
+                        st.set_theme_is_auto(false);
+                        st.set_theme_is_custom(true);
+                        st.set_theme_is_system(false);
+                        crate::custom_theme::seed_state(&w);
+                        crate::custom_theme::apply_startup(&w);
+                    }
                 } else {
                     let id = crate::theme::id_for_index(index);
                     prefs.theme = id.slug().to_string();
@@ -8795,6 +8820,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if let Some(w) = theme_weak.upgrade() {
                         let st = w.global::<AppearanceState>();
                         st.set_theme_is_auto(false);
+                        st.set_theme_is_custom(false);
                         st.set_theme_is_system(id == qbz_theme::ThemeId::System);
                         crate::theme::apply_theme(&w, id);
                     }

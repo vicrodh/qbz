@@ -2909,6 +2909,34 @@ export global AppearanceState {
     in-out property <bool> auto-theme-generating: false;
     in-out property <string> auto-theme-detected-de: "";
 
+    // --- Custom theme editor (shown when the appended "Custom" theme is
+    // selected). The editable base is 12 semantic tokens; Rust seeds these
+    // swatch colors from the persisted custom_theme.json and re-derives the
+    // whole palette live on every edit. `custom-open-token` holds the key of the
+    // single token whose inline ColorPicker is expanded ("" = none).
+    in-out property <bool> theme-is-custom: false;
+    // Swatch colors for each editable base token, seeded from Rust.
+    in-out property <color> custom-surface-main: #000000;
+    in-out property <color> custom-surface-card: #0a0a0a;
+    in-out property <color> custom-surface-elevated: #1a1a1a;
+    in-out property <color> custom-text-primary: #ffffff;
+    in-out property <color> custom-text-secondary: #cccccc;
+    in-out property <color> custom-accent: #4285f4;
+    in-out property <color> custom-danger: #ef4444;
+    in-out property <color> custom-warning: #fbbf24;
+    in-out property <color> custom-success: #3fae6a;
+    in-out property <color> custom-border: #2a2a2a;
+    in-out property <color> custom-favorite: #ef4444;
+    in-out property <bool> custom-is-dark: true;
+    // Key of the token whose inline picker is open ("" = all collapsed).
+    in-out property <string> custom-open-token: "";
+    // A single token's color changed (drag-live). key = token id, color = value.
+    callback custom-set-token(string /* key */, color /* value */);
+    // Re-seed the base from the currently active theme ("Start from current").
+    callback custom-seed-from-current();
+    // Flip the custom theme polarity (dark/light) and re-derive.
+    callback custom-toggle-dark(bool /* is-dark */);
+
     // --- TYPOGRAPHY / SCALE / LANGUAGE -------------------------------------
     // NOTE: the old Tauri-style percentage `ui-scales` placeholder properties
     // that lived here were superseded by the working interface-size presets

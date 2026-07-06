@@ -124,10 +124,25 @@ pub const AUTO_SLUG: &str = "auto";
 /// UI data pushed from Rust, not a `@tr` catalog string.
 pub const AUTO_LABEL: &str = "Auto (dynamic)";
 
-/// Dropdown index of the appended "Auto (dynamic)" entry (last position, right
-/// after every registry theme).
+/// Stable slug persisted for the user-authored "Custom" theme. Like `AUTO_SLUG`
+/// it has no static `ThemeId`: the dropdown appends it after "Auto (dynamic)"
+/// and `crate::custom_theme` derives the palette from `custom_theme.json`.
+pub const CUSTOM_SLUG: &str = "custom";
+
+/// Display label for the appended "Custom" dropdown entry. Proper-noun-style UI
+/// data pushed from Rust, not a `@tr` catalog string (matches `AUTO_LABEL`).
+pub const CUSTOM_LABEL: &str = "Custom";
+
+/// Dropdown index of the appended "Auto (dynamic)" entry (right after every
+/// registry theme; the "Custom" entry follows it).
 pub fn auto_index() -> i32 {
     dropdown_themes().len() as i32
+}
+
+/// Dropdown index of the appended "Custom" entry (last position, right after
+/// "Auto (dynamic)").
+pub fn custom_index() -> i32 {
+    auto_index() + 1
 }
 
 /// Whether a dropdown index refers to the appended "Auto (dynamic)" entry.
@@ -135,11 +150,19 @@ pub fn is_auto_index(index: i32) -> bool {
     index == auto_index()
 }
 
-/// The dropdown index for a persisted theme slug, auto-aware: `"auto"` maps to
-/// the appended entry, everything else maps through the registry.
+/// Whether a dropdown index refers to the appended "Custom" entry.
+pub fn is_custom_index(index: i32) -> bool {
+    index == custom_index()
+}
+
+/// The dropdown index for a persisted theme slug, auto/custom-aware: the two
+/// synthetic slugs map to their appended entries, everything else through the
+/// registry.
 pub fn selected_index_for_slug(slug: &str) -> i32 {
     if slug == AUTO_SLUG {
         auto_index()
+    } else if slug == CUSTOM_SLUG {
+        custom_index()
     } else {
         index_for_id(id_for_slug(slug))
     }
@@ -155,13 +178,15 @@ pub fn dropdown_themes() -> Vec<ThemeId> {
 }
 
 /// Display names for the dropdown, matching [`dropdown_themes`] order, with the
-/// dynamic "Auto (dynamic)" entry appended last (index == [`auto_index`]).
+/// dynamic "Auto (dynamic)" entry (index == [`auto_index`]) and the "Custom"
+/// entry (index == [`custom_index`]) appended last, in that order.
 pub fn dropdown_labels() -> Vec<String> {
     let mut labels: Vec<String> = dropdown_themes()
         .into_iter()
         .map(|id| id.display_name().to_string())
         .collect();
     labels.push(AUTO_LABEL.to_string());
+    labels.push(CUSTOM_LABEL.to_string());
     labels
 }
 
@@ -214,5 +239,29 @@ mod tests {
     fn out_of_range_index_falls_back_to_default() {
         assert_eq!(id_for_index(9999), qbz_theme::default_theme_id());
         assert_eq!(id_for_index(-1), qbz_theme::default_theme_id());
+    }
+
+    #[test]
+    fn auto_then_custom_are_the_last_two_entries() {
+        // Auto is appended first, Custom right after it.
+        assert_eq!(auto_index(), dropdown_themes().len() as i32);
+        assert_eq!(custom_index(), auto_index() + 1);
+        assert!(is_auto_index(auto_index()));
+        assert!(is_custom_index(custom_index()));
+        assert!(!is_auto_index(custom_index()));
+        assert!(!is_custom_index(auto_index()));
+        // The labels list is registry rows + Auto + Custom, in that order.
+        let labels = dropdown_labels();
+        assert_eq!(labels.len(), dropdown_themes().len() + 2);
+        assert_eq!(labels[auto_index() as usize], AUTO_LABEL);
+        assert_eq!(labels[custom_index() as usize], CUSTOM_LABEL);
+    }
+
+    #[test]
+    fn synthetic_slugs_map_to_appended_indices() {
+        assert_eq!(selected_index_for_slug(AUTO_SLUG), auto_index());
+        assert_eq!(selected_index_for_slug(CUSTOM_SLUG), custom_index());
+        // A real slug still resolves through the registry.
+        assert_eq!(selected_index_for_slug("oled"), index_for_id(ThemeId::Oled));
     }
 }
