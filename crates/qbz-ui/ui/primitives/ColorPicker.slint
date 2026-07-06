@@ -1,0 +1,240 @@
+// ColorPicker — an inline, expandable HSV color picker primitive.
+//
+// Design decisions (per the custom-theme-editor spec):
+//   - INLINE panel, never a PopupWindow: the parent mounts exactly one picker at
+//     a time (behind an `if`), so there is no z-order / positioning fight.
+//   - The picker OWNS its hue/sat/val state (seeded from `color` on mount and on
+//     any EXTERNAL change), so dragging saturation/value to an edge never loses
+//     the hue — a fully-derived model would reset hue at s=0 or v=0.
+//   - HSV->RGB uses the built-in `Colors.hsv`; RGB->HSV + int->hex are
+//     self-contained pure functions (Slint has no local `let`, so intermediates
+//     live in derived helper properties).
+//   - The HEX field commits its string through `hex-committed`: Slint cannot
+//     parse a hex string to a color (no char indexing), so the parent (Rust)
+//     resolves it and feeds the result back into `color`, which reseeds us.
+//   - NO Timer here (Timer-in-`if` + restart() panics the Slint compiler).
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Typography } from "../foundation/typography.slint";
+import { Radius } from "../foundation/radius.slint";
+import { UiFocusState } from "../state.slint";
+import { LineEdit } from "std-widgets.slint";
+
+export component ColorPicker inherits Rectangle {
+    // The current value, driven by the parent. Read on mount + on external change.
+    in property <color> value: #4285f4;
+    // Emitted live (drag included) whenever the SV area or hue strip moves.
+    callback changed(color);
+    // Emitted when the HEX field is committed (the parent parses + feeds back).
+    callback hex-committed(string);
+
+    // --- owned HSV state ---------------------------------------------------
+    property <float> hue: 217.0; // 0..360
+    property <float> sat: 0.74; // 0..1
+    property <float> val: 0.96; // 0..1
+    // True only while an SV/hue drag is in flight, so the round-tripped color the
+    // parent feeds back does NOT reseed (and fight) the crosshair mid-drag.
+    property <bool> dragging: false;
+
+    // --- incoming color decomposed to 0..1 channels (helpers for RGB->HSV) --
+    property <float> cr: root.value.red / 255.0;
+    property <float> cg: root.value.green / 255.0;
+    property <float> cb: root.value.blue / 255.0;
+    property <float> cmax: Math.max(root.cr, Math.max(root.cg, root.cb));
+    property <float> cmin: Math.min(root.cr, Math.min(root.cg, root.cb));
+    property <float> cdelta: root.cmax - root.cmin;
+
+    // The live color built from the owned HSV (for preview + emit).
+    property <color> current: Colors.hsv(root.hue, root.sat, root.val);
+
+    // RGB -> hue (0..360). Undefined hue (gray) resolves to 0.
+    pure function compute-hue() -> float {
+        if (root.cdelta <= 0.0) {
+            return 0.0;
+        }
+        if (root.cmax == root.cr) {
+            return Math.mod(((root.cg - root.cb) / root.cdelta) + 6.0, 6.0) * 60.0;
+        }
+        if (root.cmax == root.cg) {
+            return (((root.cb - root.cr) / root.cdelta) + 2.0) * 60.0;
+        }
+        return (((root.cr - root.cg) / root.cdelta) + 4.0) * 60.0;
+    }
+
+    // Seed the owned HSV from the incoming `color` (mount + external change).
+    function decompose() {
+        root.val = root.cmax;
+        root.sat = root.cmax <= 0.0 ? 0.0 : root.cdelta / root.cmax;
+        root.hue = root.compute-hue();
+    }
+
+    init => {
+        root.decompose();
+    }
+    // Reseed on EXTERNAL changes only (a hex commit fed back, a token re-seed);
+    // our own drag holds `dragging` so the crosshair does not jump.
+    changed value => {
+        if (!root.dragging) {
+            root.decompose();
+        }
+    }
+
+    // --- int -> hex (for the read-out / editable HEX field) ----------------
+    pure function hex-digit(n: int) -> string {
+        n == 1 ? "1" : n == 2 ? "2" : n == 3 ? "3" : n == 4 ? "4"
+            : n == 5 ? "5" : n == 6 ? "6" : n == 7 ? "7" : n == 8 ? "8"
+            : n == 9 ? "9" : n == 10 ? "a" : n == 11 ? "b" : n == 12 ? "c"
+            : n == 13 ? "d" : n == 14 ? "e" : n == 15 ? "f" : "0"
+    }
+    pure function byte-hex(b: int) -> string {
+        root.hex-digit(Math.floor(b / 16)) + root.hex-digit(Math.mod(b, 16))
+    }
+    property <string> current-hex: "#"
+        + root.byte-hex(root.current.red)
+        + root.byte-hex(root.current.green)
+        + root.byte-hex(root.current.blue);
+
+    // --- layout ------------------------------------------------------------
+    background: Theme.surface-card;
+    border-radius: Radius.sm;
+    border-width: 1px;
+    border-color: Theme.border-subtle;
+
+    VerticalLayout {
+        padding: 12px;
+        spacing: 10px;
+
+        // Saturation / Value square.
+        sv := Rectangle {
+            height: 140px;
+            border-radius: Radius.sm;
+            clip: true;
+            // Base: the pure hue.
+            background: Colors.hsv(root.hue, 1.0, 1.0);
+            // White -> transparent (left to right) = saturation.
+            Rectangle {
+                background: @linear-gradient(90deg, #ffffff 0%, #ffffff00 100%);
+            }
+            // Transparent -> black (top to bottom) = value.
+            Rectangle {
+                background: @linear-gradient(180deg, #00000000 0%, #000000 100%);
+            }
+            // Crosshair: x = saturation, y = (1 - value).
+            Rectangle {
+                width: 14px;
+                height: 14px;
+                border-radius: 7px;
+                x: Math.clamp(root.sat * sv.width, 0, sv.width - self.width);
+                y: Math.clamp((1.0 - root.val) * sv.height, 0, sv.height - self.height);
+                background: transparent;
+                border-width: 2px;
+                border-color: #ffffff;
+                Rectangle {
+                    width: parent.width - 4px;
+                    height: parent.height - 4px;
+                    x: 2px;
+                    y: 2px;
+                    border-radius: self.width / 2;
+                    border-width: 1px;
+                    border-color: #00000080;
+                    background: transparent;
+                }
+            }
+            sv-ta := TouchArea {
+                mouse-cursor: crosshair;
+                pointer-event(e) => {
+                    if (e.kind == PointerEventKind.down) {
+                        root.dragging = true;
+                        root.sat = Math.clamp(self.mouse-x / sv.width, 0, 1.0);
+                        root.val = Math.clamp(1.0 - self.mouse-y / sv.height, 0, 1.0);
+                        root.changed(root.current);
+                    }
+                    if (e.kind == PointerEventKind.up) {
+                        root.dragging = false;
+                    }
+                }
+                moved => {
+                    if (root.dragging) {
+                        root.sat = Math.clamp(self.mouse-x / sv.width, 0, 1.0);
+                        root.val = Math.clamp(1.0 - self.mouse-y / sv.height, 0, 1.0);
+                        root.changed(root.current);
+                    }
+                }
+            }
+        }
+
+        // Hue strip.
+        hue-strip := Rectangle {
+            height: 14px;
+            border-radius: 7px;
+            clip: true;
+            background: @linear-gradient(90deg,
+                #ff0000 0%, #ffff00 16.66%, #00ff00 33.33%, #00ffff 50%,
+                #0000ff 66.66%, #ff00ff 83.33%, #ff0000 100%);
+            // Marker.
+            Rectangle {
+                width: 4px;
+                height: parent.height + 4px;
+                y: -2px;
+                x: Math.clamp((root.hue / 360.0) * hue-strip.width, 0, hue-strip.width - self.width);
+                border-radius: 2px;
+                background: #ffffff;
+                border-width: 1px;
+                border-color: #00000080;
+            }
+            hue-ta := TouchArea {
+                mouse-cursor: pointer;
+                pointer-event(e) => {
+                    if (e.kind == PointerEventKind.down) {
+                        root.dragging = true;
+                        root.hue = Math.clamp(self.mouse-x / hue-strip.width, 0, 1.0) * 360.0;
+                        root.changed(root.current);
+                    }
+                    if (e.kind == PointerEventKind.up) {
+                        root.dragging = false;
+                    }
+                }
+                moved => {
+                    if (root.dragging) {
+                        root.hue = Math.clamp(self.mouse-x / hue-strip.width, 0, 1.0) * 360.0;
+                        root.changed(root.current);
+                    }
+                }
+            }
+        }
+
+        // Preview swatch + editable HEX field.
+        HorizontalLayout {
+            spacing: 10px;
+            Rectangle {
+                width: 40px;
+                height: 34px;
+                border-radius: Radius.sm;
+                border-width: 1px;
+                border-color: Theme.border-subtle;
+                background: root.current;
+            }
+            VerticalLayout {
+                alignment: center;
+                horizontal-stretch: 1;
+                hex-edit := LineEdit {
+                    text: root.current-hex;
+                    placeholder-text: "#rrggbb";
+                    changed has-focus => {
+                        UiFocusState.text-input-focused = self.has-focus;
+                    }
+                    accepted(s) => {
+                        root.hex-committed(s);
+                    }
+                    edited(s) => {
+                        // Commit only well-formed #rrggbb (7 chars); shorter input
+                        // is an in-progress edit and is ignored until valid.
+                        if (s.character-count == 7) {
+                            root.hex-committed(s);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
