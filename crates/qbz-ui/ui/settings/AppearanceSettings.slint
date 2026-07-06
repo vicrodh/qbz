@@ -18,6 +18,7 @@ import { AppearanceState, SidebarState, ShellState, ToastState, MyQbzBrandingSta
 import { QbzToggle } from "../primitives/QbzToggle.slint";
 import { QbzSelect } from "../primitives/QbzSelect.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
+import { ColorPicker } from "../primitives/ColorPicker.slint";
 import { SettingRow } from "SettingRow.slint";
 import { LineEdit } from "std-widgets.slint";
 
@@ -26,6 +27,66 @@ component GroupHeader inherits Text {
     font-size: 11px;
     letter-spacing: 1.5px;
     font-weight: Typography.semibold;
+}
+
+// A small muted sub-group label inside the custom-theme editor grid.
+component TokenGroupLabel inherits Text {
+    color: Theme.text-muted;
+    font-size: 10px;
+    letter-spacing: 1px;
+    font-weight: Typography.semibold;
+}
+
+// One editable base-token row in the custom-theme editor: a color swatch + label
+// that toggles an inline ColorPicker beneath it. The swatch color is bound from
+// the parent (an AppearanceState.custom-* property); edits route back to Rust
+// through AppearanceState.custom-set-token / custom-set-token-hex.
+component CustomTokenRow inherits VerticalLayout {
+    in property <string> token-key;
+    in property <string> label;
+    in property <color> swatch-color;
+    spacing: 8px;
+
+    property <bool> open: AppearanceState.custom-open-token == root.token-key;
+
+    HorizontalLayout {
+        spacing: 12px;
+        Rectangle {
+            width: 44px;
+            height: 30px;
+            border-radius: Radius.sm;
+            border-width: root.open ? 2px : 1px;
+            border-color: root.open ? Theme.accent : Theme.border-subtle;
+            background: root.swatch-color;
+            TouchArea {
+                mouse-cursor: pointer;
+                clicked => {
+                    AppearanceState.custom-open-token =
+                        AppearanceState.custom-open-token == root.token-key ? "" : root.token-key;
+                }
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            Text {
+                text: root.label;
+                color: Theme.text-secondary;
+                font-size: Typography.body;
+                vertical-alignment: center;
+            }
+        }
+    }
+
+    if root.open: ColorPicker {
+        value: root.swatch-color;
+        changed(c) => {
+            AppearanceState.custom-set-token(root.token-key, c);
+        }
+        hex-committed(s) => {
+            AppearanceState.custom-set-token-hex(root.token-key, s);
+        }
+    }
 }
 
 component Divider inherits Rectangle {
@@ -236,6 +297,101 @@ export component AppearanceSettings inherits VerticalLayout {
             clicked => {
                 AppearanceState.appearance-action("auto-theme-regenerate");
             }
+        }
+    }
+
+    // Custom-theme editor — only when the appended "Custom" theme is selected.
+    // "Start from current theme" re-seeds the base from the live palette; the
+    // "Dark theme" toggle flips polarity; the grouped grid edits each base token
+    // (the rest of the palette is derived live in Rust on every change).
+    if AppearanceState.theme-is-custom: SettingRow {
+        label: @tr("Start from current theme");
+        description: @tr("Copy the colors of the currently applied theme into the editor as a starting point.");
+        SecondaryButton {
+            label: @tr("Use current colors");
+            clicked => {
+                AppearanceState.custom-seed-from-current();
+            }
+        }
+    }
+    if AppearanceState.theme-is-custom: SettingRow {
+        label: @tr("Dark theme");
+        description: @tr("Set the overall light or dark polarity. Affects derived shades, borders and overlays.");
+        QbzToggle {
+            checked: AppearanceState.custom-is-dark;
+            toggled(v) => {
+                AppearanceState.custom-toggle-dark(v);
+            }
+        }
+    }
+    if AppearanceState.theme-is-custom: VerticalLayout {
+        padding-top: 8px;
+        padding-bottom: 8px;
+        spacing: 12px;
+
+        TokenGroupLabel { text: @tr("SURFACES"); }
+        CustomTokenRow {
+            token-key: "surface-main";
+            label: @tr("Background");
+            swatch-color: AppearanceState.custom-surface-main;
+        }
+        CustomTokenRow {
+            token-key: "surface-card";
+            label: @tr("Surface");
+            swatch-color: AppearanceState.custom-surface-card;
+        }
+        CustomTokenRow {
+            token-key: "surface-elevated";
+            label: @tr("Elevated");
+            swatch-color: AppearanceState.custom-surface-elevated;
+        }
+
+        TokenGroupLabel { text: @tr("TEXT"); }
+        CustomTokenRow {
+            token-key: "text-primary";
+            label: @tr("Text");
+            swatch-color: AppearanceState.custom-text-primary;
+        }
+        CustomTokenRow {
+            token-key: "text-secondary";
+            label: @tr("Secondary text");
+            swatch-color: AppearanceState.custom-text-secondary;
+        }
+
+        TokenGroupLabel { text: @tr("ACCENT"); }
+        CustomTokenRow {
+            token-key: "accent";
+            label: @tr("Accent");
+            swatch-color: AppearanceState.custom-accent;
+        }
+
+        TokenGroupLabel { text: @tr("STATUS"); }
+        CustomTokenRow {
+            token-key: "danger";
+            label: @tr("Danger");
+            swatch-color: AppearanceState.custom-danger;
+        }
+        CustomTokenRow {
+            token-key: "warning";
+            label: @tr("Warning");
+            swatch-color: AppearanceState.custom-warning;
+        }
+        CustomTokenRow {
+            token-key: "success";
+            label: @tr("Success");
+            swatch-color: AppearanceState.custom-success;
+        }
+
+        TokenGroupLabel { text: @tr("OTHER"); }
+        CustomTokenRow {
+            token-key: "border";
+            label: @tr("Border");
+            swatch-color: AppearanceState.custom-border;
+        }
+        CustomTokenRow {
+            token-key: "favorite";
+            label: @tr("Favorite");
+            swatch-color: AppearanceState.custom-favorite;
         }
     }
 

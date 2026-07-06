@@ -4394,3 +4394,60 @@ msgstr "Zufällige Playlist abspielen"
 
 msgid "Open a random label"
 msgstr "Zufälliges Label öffnen"
+
+msgid "Start from current theme"
+msgstr "Vom aktuellen Theme ausgehen"
+
+msgid "Copy the colors of the currently applied theme into the editor as a starting point."
+msgstr "Kopiert die Farben des aktuell angewendeten Themes als Ausgangspunkt in den Editor."
+
+msgid "Use current colors"
+msgstr "Aktuelle Farben verwenden"
+
+msgid "Dark theme"
+msgstr "Dunkles Theme"
+
+msgid "Set the overall light or dark polarity. Affects derived shades, borders and overlays."
+msgstr "Legt die generelle helle oder dunkle Polarität fest. Betrifft abgeleitete Schattierungen, Ränder und Overlays."
+
+msgid "SURFACES"
+msgstr "OBERFLÄCHEN"
+
+msgid "Background"
+msgstr "Hintergrund"
+
+msgid "Surface"
+msgstr "Oberfläche"
+
+msgid "Elevated"
+msgstr "Erhöht"
+
+msgid "TEXT"
+msgstr "TEXT"
+
+msgid "Text"
+msgstr "Text"
+
+msgid "Secondary text"
+msgstr "Sekundärer Text"
+
+msgid "ACCENT"
+msgstr "AKZENT"
+
+msgid "Accent"
+msgstr "Akzent"
+
+msgid "Danger"
+msgstr "Gefahr"
+
+msgid "Warning"
+msgstr "Warnung"
+
+msgid "Success"
+msgstr "Erfolg"
+
+msgid "OTHER"
+msgstr "SONSTIGES"
+
+msgid "Border"
+msgstr "Rand"

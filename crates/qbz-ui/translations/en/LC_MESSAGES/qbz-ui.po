@@ -160,3 +160,66 @@ msgstr "Play a random playlist"
 
 msgid "Open a random label"
 msgstr "Open a random label"
+
+msgid "Start from current theme"
+msgstr "Start from current theme"
+
+msgid "Copy the colors of the currently applied theme into the editor as a starting point."
+msgstr "Copy the colors of the currently applied theme into the editor as a starting point."
+
+msgid "Use current colors"
+msgstr "Use current colors"
+
+msgid "Dark theme"
+msgstr "Dark theme"
+
+msgid "Set the overall light or dark polarity. Affects derived shades, borders and overlays."
+msgstr "Set the overall light or dark polarity. Affects derived shades, borders and overlays."
+
+msgid "SURFACES"
+msgstr "SURFACES"
+
+msgid "Background"
+msgstr "Background"
+
+msgid "Surface"
+msgstr "Surface"
+
+msgid "Elevated"
+msgstr "Elevated"
+
+msgid "TEXT"
+msgstr "TEXT"
+
+msgid "Text"
+msgstr "Text"
+
+msgid "Secondary text"
+msgstr "Secondary text"
+
+msgid "ACCENT"
+msgstr "ACCENT"
+
+msgid "Accent"
+msgstr "Accent"
+
+msgid "STATUS"
+msgstr "STATUS"
+
+msgid "Danger"
+msgstr "Danger"
+
+msgid "Warning"
+msgstr "Warning"
+
+msgid "Success"
+msgstr "Success"
+
+msgid "OTHER"
+msgstr "OTHER"
+
+msgid "Border"
+msgstr "Border"
+
+msgid "Favorite"
+msgstr "Favorite"

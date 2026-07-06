@@ -4407,3 +4407,60 @@ msgstr "Воспроизвести случайный плейлист"
 
 msgid "Open a random label"
 msgstr "Открыть случайный лейбл"
+
+msgid "Start from current theme"
+msgstr "Начать с текущей темы"
+
+msgid "Copy the colors of the currently applied theme into the editor as a starting point."
+msgstr "Копирует цвета текущей темы в редактор как отправную точку."
+
+msgid "Use current colors"
+msgstr "Использовать текущие цвета"
+
+msgid "Dark theme"
+msgstr "Тёмная тема"
+
+msgid "Set the overall light or dark polarity. Affects derived shades, borders and overlays."
+msgstr "Задаёт общую светлую или тёмную полярность. Влияет на производные оттенки, границы и наложения."
+
+msgid "SURFACES"
+msgstr "ПОВЕРХНОСТИ"
+
+msgid "Background"
+msgstr "Фон"
+
+msgid "Surface"
+msgstr "Поверхность"
+
+msgid "Elevated"
+msgstr "Приподнятый"
+
+msgid "TEXT"
+msgstr "ТЕКСТ"
+
+msgid "Text"
+msgstr "Текст"
+
+msgid "Secondary text"
+msgstr "Вторичный текст"
+
+msgid "ACCENT"
+msgstr "АКЦЕНТ"
+
+msgid "Accent"
+msgstr "Акцент"
+
+msgid "Danger"
+msgstr "Опасность"
+
+msgid "Warning"
+msgstr "Предупреждение"
+
+msgid "Success"
+msgstr "Успех"
+
+msgid "OTHER"
+msgstr "ДРУГОЕ"
+
+msgid "Border"
+msgstr "Граница"

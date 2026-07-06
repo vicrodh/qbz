@@ -4383,3 +4383,60 @@ msgstr "ランダムなプレイリストを再生"
 
 msgid "Open a random label"
 msgstr "ランダムなレーベルを開く"
+
+msgid "Start from current theme"
+msgstr "現在のテーマから開始"
+
+msgid "Copy the colors of the currently applied theme into the editor as a starting point."
+msgstr "現在適用中のテーマの色を出発点としてエディターにコピーします。"
+
+msgid "Use current colors"
+msgstr "現在の色を使用"
+
+msgid "Dark theme"
+msgstr "ダークテーマ"
+
+msgid "Set the overall light or dark polarity. Affects derived shades, borders and overlays."
+msgstr "全体の明暗の極性を設定します。派生する陰影、境界線、オーバーレイに影響します。"
+
+msgid "SURFACES"
+msgstr "サーフェス"
+
+msgid "Background"
+msgstr "背景"
+
+msgid "Surface"
+msgstr "サーフェス"
+
+msgid "Elevated"
+msgstr "浮き出し"
+
+msgid "TEXT"
+msgstr "テキスト"
+
+msgid "Text"
+msgstr "テキスト"
+
+msgid "Secondary text"
+msgstr "セカンダリテキスト"
+
+msgid "ACCENT"
+msgstr "アクセント"
+
+msgid "Accent"
+msgstr "アクセント"
+
+msgid "Danger"
+msgstr "危険"
+
+msgid "Warning"
+msgstr "警告"
+
+msgid "Success"
+msgstr "成功"
+
+msgid "OTHER"
+msgstr "その他"
+
+msgid "Border"
+msgstr "境界線"

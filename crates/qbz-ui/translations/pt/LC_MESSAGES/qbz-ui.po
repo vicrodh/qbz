@@ -4394,3 +4394,60 @@ msgstr "Reproduzir uma playlist aleatória"
 
 msgid "Open a random label"
 msgstr "Abrir um selo aleatório"
+
+msgid "Start from current theme"
+msgstr "Partir do tema atual"
+
+msgid "Copy the colors of the currently applied theme into the editor as a starting point."
+msgstr "Copia as cores do tema aplicado atualmente para o editor como ponto de partida."
+
+msgid "Use current colors"
+msgstr "Usar cores atuais"
+
+msgid "Dark theme"
+msgstr "Tema escuro"
+
+msgid "Set the overall light or dark polarity. Affects derived shades, borders and overlays."
+msgstr "Define a polaridade geral clara ou escura. Afeta os tons derivados, as bordas e as sobreposições."
+
+msgid "SURFACES"
+msgstr "SUPERFÍCIES"
+
+msgid "Background"
+msgstr "Fundo"
+
+msgid "Surface"
+msgstr "Superfície"
+
+msgid "Elevated"
+msgstr "Elevado"
+
+msgid "TEXT"
+msgstr "TEXTO"
+
+msgid "Text"
+msgstr "Texto"
+
+msgid "Secondary text"
+msgstr "Texto secundário"
+
+msgid "ACCENT"
+msgstr "DESTAQUE"
+
+msgid "Accent"
+msgstr "Destaque"
+
+msgid "Danger"
+msgstr "Perigo"
+
+msgid "Warning"
+msgstr "Aviso"
+
+msgid "Success"
+msgstr "Sucesso"
+
+msgid "OTHER"
+msgstr "OUTROS"
+
+msgid "Border"
+msgstr "Borda"

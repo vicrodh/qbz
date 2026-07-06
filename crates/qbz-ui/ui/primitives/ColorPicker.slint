@@ -71,10 +71,14 @@ export component ColorPicker inherits Rectangle {
     init => {
         root.decompose();
     }
-    // Reseed on EXTERNAL changes only (a hex commit fed back, a token re-seed);
-    // our own drag holds `dragging` so the crosshair does not jump.
+    // Reseed on EXTERNAL changes only. Two guards: `dragging` skips mid-drag
+    // feedback, and `value != current` skips our OWN round-tripped color (the
+    // parent feeds the emitted color back into `value`) — otherwise the final
+    // post-drag feedback would re-decompose and reset the hue when v or s is 0.
+    // A genuine external change (a hex commit, a re-seed) differs from `current`
+    // and does decompose.
     changed value => {
-        if (!root.dragging) {
+        if (!root.dragging && root.value != root.current) {
             root.decompose();
         }
     }

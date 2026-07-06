@@ -8854,6 +8854,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             other => log::debug!("[qbz-slint] unhandled appearance-action '{other}'"),
         });
+
+        // Custom-theme editor callbacks: per-token live edits (drag + hex),
+        // polarity toggle, and "start from current theme". Each re-derives the
+        // whole palette in Rust and pushes it live (derivation is cheap).
+        let ct_weak = window.as_weak();
+        appearance.on_custom_set_token(move |key, color| {
+            if let Some(w) = ct_weak.upgrade() {
+                crate::custom_theme::set_token(&w, key.as_str(), color);
+            }
+        });
+        let ct_hex_weak = window.as_weak();
+        appearance.on_custom_set_token_hex(move |key, hex| {
+            if let Some(w) = ct_hex_weak.upgrade() {
+                crate::custom_theme::set_token_hex(&w, key.as_str(), hex.as_str());
+            }
+        });
+        let ct_dark_weak = window.as_weak();
+        appearance.on_custom_toggle_dark(move |is_dark| {
+            if let Some(w) = ct_dark_weak.upgrade() {
+                crate::custom_theme::toggle_dark(&w, is_dark);
+            }
+        });
+        let ct_seed_weak = window.as_weak();
+        appearance.on_custom_seed_from_current(move || {
+            if let Some(w) = ct_seed_weak.upgrade() {
+                crate::custom_theme::seed_from_current(&w);
+            }
+        });
     }
 
     // "My QBZ" nav branding (Settings > Appearance) — persist the label /

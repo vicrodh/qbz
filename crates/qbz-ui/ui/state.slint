@@ -2932,6 +2932,8 @@ export global AppearanceState {
     in-out property <string> custom-open-token: "";
     // A single token's color changed (drag-live). key = token id, color = value.
     callback custom-set-token(string /* key */, color /* value */);
+    // A single token committed from the HEX field. key = token id, hex = #rrggbb.
+    callback custom-set-token-hex(string /* key */, string /* hex */);
     // Re-seed the base from the currently active theme ("Start from current").
     callback custom-seed-from-current();
     // Flip the custom theme polarity (dark/light) and re-derive.
