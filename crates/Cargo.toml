@@ -138,3 +138,11 @@ i-slint-core = { path = "vendor/i-slint-core-1.16.1" }
 # case the glyph draws at regular weight instead of not at all. No effect
 # on fonts/instances that already render.
 femtovg = { path = "vendor/femtovg-0.23.2" }
+# macOS Skia renderer: skia bug 310510989 makes new_from_data fail for TTC
+# faces at index > 0, and for some system collections (AppleSDGothicNeo.ttc,
+# where EVERY weight sits at index > 0) the upstream read/write-fonts rebuild
+# workaround ALSO fails — every Korean glyph run at non-regular weights drew
+# nothing. The patch adds a second-chance workaround: resolve the same face
+# through CoreText by family name + OS/2 weight, guarded by cmap glyph-id
+# spot checks so a wrong match is rejected instead of drawing wrong glyphs.
+i-slint-renderer-skia = { path = "vendor/i-slint-renderer-skia-1.16.1" }
