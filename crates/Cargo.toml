@@ -121,6 +121,14 @@ i-slint-renderer-femtovg = { path = "vendor/i-slint-renderer-femtovg-1.16.1" }
 # collection creation, which takes priority over the CoreText query. macOS-only
 # (#[cfg]); Linux keeps its working fontconfig fallback.
 i-slint-common = { path = "vendor/i-slint-common-1.16.1" }
+# With `overflow: elide`, sharedparley culled EVERY line whose bottom edge
+# exceeded max_height — including the FIRST one, eliding the text to nothing.
+# CJK fallback fonts (Hiragino on macOS) report line metrics taller than
+# snug fixed-height boxes (TrackRow's 20px title line at 14px), so every
+# CJK track title rendered blank on macOS while Latin fit (#543; verified
+# with a headless repro matrix on the Mac Mini). The patch always draws the
+# first line — it still gets the ellipsis treatment as the last visible one.
+i-slint-core = { path = "vendor/i-slint-core-1.16.1" }
 # Slint compiles femtovg with the swash raster path. Swash fails to scale
 # some variable fonts at a non-default variation instance (the CFF2-based
 # CJK system fonts on modern macOS), and femtovg cached those glyphs as
