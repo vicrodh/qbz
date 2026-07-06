@@ -130,6 +130,7 @@ pub use qbz_slint_common::toast;
 mod tray;
 mod tray_settings;
 mod ui_prefs;
+mod viewport;
 mod whats_new;
 
 use std::sync::Arc;

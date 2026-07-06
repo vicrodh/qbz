@@ -307,12 +307,38 @@ pub fn album_artwork_job_done(id: &str) {
     albums_inflight().lock().unwrap().remove(id);
 }
 
-/// The windowed grid reported a new visible row band.
+/// Dispatch throttle for the grid's band reports (leading + trailing edge,
+/// UI thread). During a fling the grid crosses a row boundary every ~270px
+/// and each crossing used to spawn artwork jobs for rows flying straight
+/// past the viewport; coalescing to one dispatch per interval keeps the
+/// decode pipeline on rows the user can actually see.
+const ALBUMS_DISPATCH_THROTTLE_MS: u64 = 180;
+thread_local! {
+    static ALBUMS_BAND: crate::viewport::BandDispatcher =
+        crate::viewport::BandDispatcher::new(ALBUMS_DISPATCH_THROTTLE_MS);
+}
+
+/// The windowed grid reported a new visible row band. The band is stored
+/// immediately (model rebuilds re-read it); the artwork dispatch is
+/// throttled, and gen-guarded so a pass scheduled before a reload cannot
+/// dispatch/evict against the replacement model — the reload's own
+/// `derive_albums` dispatch is authoritative for the new generation.
 pub fn albums_window_changed(window: &AppWindow, first: i32, last: i32) {
     let first = first.max(0) as usize;
     let last = last.max(first as i32) as usize;
     *ALBUMS_WINDOW.lock().unwrap() = (first, last);
-    dispatch_albums_window(window);
+    let gen = ALBUMS_GEN.load(Ordering::SeqCst);
+    let weak = window.as_weak();
+    ALBUMS_BAND.with(|d| {
+        d.report(Box::new(move || {
+            if !albums_gen_current(gen) {
+                return;
+            }
+            if let Some(w) = weak.upgrade() {
+                dispatch_albums_window(&w);
+            }
+        }));
+    });
 }
 
 /// Dispatch covers for the current albums window (over `albums-visible`) and
