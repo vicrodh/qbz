@@ -37,55 +37,41 @@ component TokenGroupLabel inherits Text {
     font-weight: Typography.semibold;
 }
 
-// One editable base-token row in the custom-theme editor: a color swatch + label
-// that toggles an inline ColorPicker beneath it. The swatch color is bound from
-// the parent (an AppearanceState.custom-* property); edits route back to Rust
-// through AppearanceState.custom-set-token / custom-set-token-hex.
-component CustomTokenRow inherits VerticalLayout {
+// One editable base-token CELL in the custom-theme editor: a compact color
+// swatch with its label underneath, laid INLINE with its group siblings.
+// Clicking toggles the shared ColorPicker at the bottom of the editor panel
+// (one picker for the whole grid keeps the layout stable while editing).
+component CustomTokenCell inherits VerticalLayout {
     in property <string> token-key;
     in property <string> label;
     in property <color> swatch-color;
-    spacing: 8px;
+    spacing: 6px;
+    alignment: start;
 
     property <bool> open: AppearanceState.custom-open-token == root.token-key;
 
-    HorizontalLayout {
-        spacing: 12px;
-        Rectangle {
-            width: 44px;
-            height: 30px;
-            border-radius: Radius.sm;
-            border-width: root.open ? 2px : 1px;
-            border-color: root.open ? Theme.accent : Theme.border-subtle;
-            background: root.swatch-color;
-            TouchArea {
-                mouse-cursor: pointer;
-                clicked => {
-                    AppearanceState.custom-open-token =
-                        AppearanceState.custom-open-token == root.token-key ? "" : root.token-key;
-                }
-            }
-        }
-        VerticalLayout {
-            alignment: center;
-            horizontal-stretch: 1;
-            Text {
-                text: root.label;
-                color: Theme.text-secondary;
-                font-size: Typography.body;
-                vertical-alignment: center;
+    Rectangle {
+        width: 56px;
+        height: 32px;
+        border-radius: Radius.sm;
+        border-width: root.open ? 2px : 1px;
+        border-color: root.open ? Theme.accent : Theme.border-subtle;
+        background: root.swatch-color;
+        TouchArea {
+            mouse-cursor: pointer;
+            clicked => {
+                AppearanceState.custom-open-token =
+                    AppearanceState.custom-open-token == root.token-key ? "" : root.token-key;
             }
         }
     }
-
-    if root.open: ColorPicker {
-        value: root.swatch-color;
-        changed(c) => {
-            AppearanceState.custom-set-token(root.token-key, c);
-        }
-        hex-committed(s) => {
-            AppearanceState.custom-set-token-hex(root.token-key, s);
-        }
+    Text {
+        text: root.label;
+        color: root.open ? Theme.text-primary : Theme.text-muted;
+        font-size: Typography.legal;
+        width: 56px;
+        horizontal-alignment: center;
+        overflow: elide;
     }
 }
 
@@ -327,71 +313,94 @@ export component AppearanceSettings inherits VerticalLayout {
     if AppearanceState.theme-is-custom: VerticalLayout {
         padding-top: 8px;
         padding-bottom: 8px;
-        spacing: 12px;
+        spacing: 14px;
 
-        TokenGroupLabel { text: @tr("SURFACES"); }
-        CustomTokenRow {
-            token-key: "surface-main";
-            label: @tr("Background");
-            swatch-color: AppearanceState.custom-surface-main;
+        // Inline swatch grid — groups side by side, cells inline within each
+        // group; the shared ColorPicker for the open token expands below.
+        HorizontalLayout {
+            spacing: 28px;
+            alignment: start;
+            VerticalLayout {
+                spacing: 8px;
+                alignment: start;
+                TokenGroupLabel { text: @tr("SURFACES"); }
+                HorizontalLayout {
+                    spacing: 10px;
+                    alignment: start;
+                    CustomTokenCell { token-key: "surface-main"; label: @tr("Background"); swatch-color: AppearanceState.custom-surface-main; }
+                    CustomTokenCell { token-key: "surface-card"; label: @tr("Surface"); swatch-color: AppearanceState.custom-surface-card; }
+                    CustomTokenCell { token-key: "surface-elevated"; label: @tr("Elevated"); swatch-color: AppearanceState.custom-surface-elevated; }
+                }
+            }
+            VerticalLayout {
+                spacing: 8px;
+                alignment: start;
+                TokenGroupLabel { text: @tr("TEXT"); }
+                HorizontalLayout {
+                    spacing: 10px;
+                    alignment: start;
+                    CustomTokenCell { token-key: "text-primary"; label: @tr("Text"); swatch-color: AppearanceState.custom-text-primary; }
+                    CustomTokenCell { token-key: "text-secondary"; label: @tr("Secondary text"); swatch-color: AppearanceState.custom-text-secondary; }
+                }
+            }
+            VerticalLayout {
+                spacing: 8px;
+                alignment: start;
+                TokenGroupLabel { text: @tr("ACCENT"); }
+                HorizontalLayout {
+                    spacing: 10px;
+                    alignment: start;
+                    CustomTokenCell { token-key: "accent"; label: @tr("Accent"); swatch-color: AppearanceState.custom-accent; }
+                }
+            }
         }
-        CustomTokenRow {
-            token-key: "surface-card";
-            label: @tr("Surface");
-            swatch-color: AppearanceState.custom-surface-card;
-        }
-        CustomTokenRow {
-            token-key: "surface-elevated";
-            label: @tr("Elevated");
-            swatch-color: AppearanceState.custom-surface-elevated;
+        HorizontalLayout {
+            spacing: 28px;
+            alignment: start;
+            VerticalLayout {
+                spacing: 8px;
+                alignment: start;
+                TokenGroupLabel { text: @tr("STATUS"); }
+                HorizontalLayout {
+                    spacing: 10px;
+                    alignment: start;
+                    CustomTokenCell { token-key: "danger"; label: @tr("Danger"); swatch-color: AppearanceState.custom-danger; }
+                    CustomTokenCell { token-key: "warning"; label: @tr("Warning"); swatch-color: AppearanceState.custom-warning; }
+                    CustomTokenCell { token-key: "success"; label: @tr("Success"); swatch-color: AppearanceState.custom-success; }
+                }
+            }
+            VerticalLayout {
+                spacing: 8px;
+                alignment: start;
+                TokenGroupLabel { text: @tr("OTHER"); }
+                HorizontalLayout {
+                    spacing: 10px;
+                    alignment: start;
+                    CustomTokenCell { token-key: "border"; label: @tr("Border"); swatch-color: AppearanceState.custom-border; }
+                    CustomTokenCell { token-key: "favorite"; label: @tr("Favorite"); swatch-color: AppearanceState.custom-favorite; }
+                }
+            }
         }
 
-        TokenGroupLabel { text: @tr("TEXT"); }
-        CustomTokenRow {
-            token-key: "text-primary";
-            label: @tr("Text");
-            swatch-color: AppearanceState.custom-text-primary;
-        }
-        CustomTokenRow {
-            token-key: "text-secondary";
-            label: @tr("Secondary text");
-            swatch-color: AppearanceState.custom-text-secondary;
-        }
-
-        TokenGroupLabel { text: @tr("ACCENT"); }
-        CustomTokenRow {
-            token-key: "accent";
-            label: @tr("Accent");
-            swatch-color: AppearanceState.custom-accent;
-        }
-
-        TokenGroupLabel { text: @tr("STATUS"); }
-        CustomTokenRow {
-            token-key: "danger";
-            label: @tr("Danger");
-            swatch-color: AppearanceState.custom-danger;
-        }
-        CustomTokenRow {
-            token-key: "warning";
-            label: @tr("Warning");
-            swatch-color: AppearanceState.custom-warning;
-        }
-        CustomTokenRow {
-            token-key: "success";
-            label: @tr("Success");
-            swatch-color: AppearanceState.custom-success;
-        }
-
-        TokenGroupLabel { text: @tr("OTHER"); }
-        CustomTokenRow {
-            token-key: "border";
-            label: @tr("Border");
-            swatch-color: AppearanceState.custom-border;
-        }
-        CustomTokenRow {
-            token-key: "favorite";
-            label: @tr("Favorite");
-            swatch-color: AppearanceState.custom-favorite;
+        // Shared picker — one instance for whichever token is open.
+        if AppearanceState.custom-open-token != "": ColorPicker {
+            value: AppearanceState.custom-open-token == "surface-main" ? AppearanceState.custom-surface-main
+                : AppearanceState.custom-open-token == "surface-card" ? AppearanceState.custom-surface-card
+                : AppearanceState.custom-open-token == "surface-elevated" ? AppearanceState.custom-surface-elevated
+                : AppearanceState.custom-open-token == "text-primary" ? AppearanceState.custom-text-primary
+                : AppearanceState.custom-open-token == "text-secondary" ? AppearanceState.custom-text-secondary
+                : AppearanceState.custom-open-token == "accent" ? AppearanceState.custom-accent
+                : AppearanceState.custom-open-token == "danger" ? AppearanceState.custom-danger
+                : AppearanceState.custom-open-token == "warning" ? AppearanceState.custom-warning
+                : AppearanceState.custom-open-token == "success" ? AppearanceState.custom-success
+                : AppearanceState.custom-open-token == "border" ? AppearanceState.custom-border
+                : AppearanceState.custom-favorite;
+            changed(c) => {
+                AppearanceState.custom-set-token(AppearanceState.custom-open-token, c);
+            }
+            hex-committed(s) => {
+                AppearanceState.custom-set-token-hex(AppearanceState.custom-open-token, s);
+            }
         }
     }
 
