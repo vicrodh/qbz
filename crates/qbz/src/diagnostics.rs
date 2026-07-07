@@ -499,6 +499,20 @@ pub async fn build_full_report(runtime: &Runtime) -> String {
             ),
         );
         md_line(&mut out, "GPU Adapters", &renderer_adapters);
+        md_line(
+            &mut out,
+            "UI Loop Latency",
+            &format!(
+                "{} ms (worst {} ms{})",
+                crate::ui_watchdog::last_latency_ms(),
+                crate::ui_watchdog::worst_latency_ms(),
+                if crate::ui_watchdog::flagged() {
+                    ", sustained degradation flagged"
+                } else {
+                    ""
+                }
+            ),
+        );
     }
     md_line(&mut out, "GDK Scale", &opt(&d.gfx_gdk_scale));
     md_line(&mut out, "GDK DPI Scale", &opt(&d.gfx_gdk_dpi_scale));
@@ -867,9 +881,25 @@ fn build_graphics_rows(d: &qbz_app::diagnostics::RuntimeDiagnostics) -> Vec<Diag
         2
     };
 
+    // Event-loop responsiveness probe (#555): dispatch latency of a
+    // cross-thread closure — renderer-independent, so a bad number here with
+    // a healthy GPU points ABOVE the renderer. status 2 = sustained
+    // degradation was flagged this session.
+    let ui_latency = {
+        let last = crate::ui_watchdog::last_latency_ms();
+        let worst = crate::ui_watchdog::worst_latency_ms();
+        if last == 0 && worst == 0 {
+            "not sampled yet".to_string()
+        } else {
+            format!("{last} ms (worst {worst} ms)")
+        }
+    };
+    let ui_latency_status = if crate::ui_watchdog::flagged() { 2 } else { 0 };
+
     vec![
         row("Renderer (Slint)", &renderer_saved, &renderer_runtime, 0),
         row("GPU Adapters", "—", &renderer_adapters, 0),
+        row("UI Loop Latency", "—", &ui_latency, ui_latency_status),
         row(
             "Hardware Acceleration",
             hw_saved,

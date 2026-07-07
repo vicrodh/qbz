@@ -520,6 +520,22 @@ pub struct UiPrefs {
     /// window comes up, the next start reverts this to "auto".
     #[serde(default = "default_renderer")]
     pub renderer: String,
+    /// App version that AUTO-degraded `renderer` (the ladder persisted "gl"
+    /// or "software" after failed starts). Empty = `renderer` is the user's
+    /// own choice. A NEW build re-probes "auto" once (vendored renderer
+    /// fixes / driver updates are likely) — the ladder re-degrades within
+    /// one start if the stack is still broken. Cleared when the user picks
+    /// a renderer manually in Settings.
+    #[serde(default)]
+    pub renderer_auto_degraded: String,
+    /// App version whose ALT-adapter wgpu rung SURVIVED a session (stamped
+    /// at sentinel-disarm time). While it matches the running build, fresh
+    /// auto-detects arm the alternate adapter directly — without this the
+    /// rung-2 success dies with the process and a #542-family machine would
+    /// crash every other launch forever. Version-keyed like
+    /// `renderer_auto_degraded`; cleared on a manual renderer pick.
+    #[serde(default)]
+    pub renderer_wgpu_alt: String,
     /// Interface-size preset: `"default"` | `"small"` | `"large"` | `"xl"`.
     /// Read at the very top of main() (before ANY thread exists) to set
     /// SLINT_SCALE_FACTOR, so changes apply on restart.
@@ -704,6 +720,8 @@ impl Default for UiPrefs {
             window_x: default_window_pos(),
             window_y: default_window_pos(),
             renderer: default_renderer(),
+            renderer_auto_degraded: String::new(),
+            renderer_wgpu_alt: String::new(),
             ui_scale: default_ui_scale(),
             last_dpr: default_last_dpr(),
         }

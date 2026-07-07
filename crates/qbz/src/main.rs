@@ -132,6 +132,7 @@ mod tray;
 mod tray_settings;
 mod ui_prefs;
 mod viewport;
+mod ui_watchdog;
 mod whats_new;
 
 use std::sync::Arc;
@@ -1004,11 +1005,21 @@ fn install_browser_mouse_nav(window: &AppWindow) {
                 }
                 return EventResult::Propagate;
             }
+            // A deliberate close is also liveness (a crash never emits one) —
+            // without this, a launch-then-close-from-the-taskbar inside the
+            // fallback window would falsely degrade the renderer next start.
+            WindowEvent::CloseRequested => {
+                disarm_renderer_sentinel_on_liveness("close request");
+                return EventResult::Propagate;
+            }
             WindowEvent::MouseInput {
                 state: ElementState::Pressed,
                 button,
                 ..
             } => {
+                // A real click = the app reached a usable state; the startup
+                // renderer sentinel can stand down (see its doc).
+                disarm_renderer_sentinel_on_liveness("mouse input");
                 let Some(window) = weak.upgrade() else {
                     return EventResult::Propagate;
                 };
@@ -1047,6 +1058,8 @@ fn install_browser_mouse_nav(window: &AppWindow) {
             WindowEvent::KeyboardInput { event: key_event, .. }
                 if key_event.state == ElementState::Pressed =>
             {
+                // Key press = usable app; stand the startup sentinel down.
+                disarm_renderer_sentinel_on_liveness("key input");
                 let Some(window) = weak.upgrade() else {
                     return EventResult::Propagate;
                 };
@@ -5548,8 +5561,62 @@ fn renderer_sentinel_armed() -> bool {
     renderer_sentinel_path().map(|p| p.exists()).unwrap_or(false)
 }
 
+/// Disarm the sentinel on proof of LIVENESS: the first real user input (or
+/// a close request — a crash never emits one), with a 30s timer as the
+/// no-touch fallback. Once-guarded so the hot input path costs one relaxed
+/// swap after the first call.
+fn disarm_renderer_sentinel_on_liveness(signal: &str) {
+    static DISARMED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if !DISARMED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        log::info!("[renderer] startup sentinel disarmed ({signal})");
+        clear_renderer_sentinel();
+        // The surviving rung must OUTLIVE the process: when this session ran
+        // on the ALTERNATE wgpu adapter, version-stamp that success so the
+        // next start arms the alt rung directly — otherwise the rung-2 win
+        // dies with the process and the machine crash-cycles every other
+        // launch (rung 1 default adapter, crash, rung 2, work, repeat).
+        if WGPU_ALT_ADAPTER.load(std::sync::atomic::Ordering::Relaxed) {
+            let mut prefs = crate::ui_prefs::load();
+            if prefs.renderer_wgpu_alt != env!("CARGO_PKG_VERSION") {
+                prefs.renderer_wgpu_alt = env!("CARGO_PKG_VERSION").to_string();
+                crate::ui_prefs::save(&prefs);
+                log::info!(
+                    "[renderer] alternate wgpu adapter survived — persisted for this build"
+                );
+            }
+        }
+    }
+}
+
+/// Arm the sentinel for a freshly auto-detected tier. Wgpu goes straight to
+/// the ALT-adapter rung when this build already proved the default adapter
+/// dead (`renderer_wgpu_alt` stamped at disarm time on an alt-rung run).
+/// Software is the unarmored floor. macOS stays out of the ladder.
+fn arm_auto_tier(tier: RendererTier, prefs: &crate::ui_prefs::UiPrefs) {
+    if cfg!(target_os = "macos") {
+        return;
+    }
+    match tier {
+        RendererTier::Wgpu => {
+            if prefs.renderer_wgpu_alt == env!("CARGO_PKG_VERSION") {
+                log::info!(
+                    "[renderer] default wgpu adapter is known-bad on this build -> \
+                     alternate adapter directly"
+                );
+                WGPU_ALT_ADAPTER.store(true, std::sync::atomic::Ordering::Relaxed);
+                arm_renderer_sentinel("auto-wgpu-alt");
+            } else {
+                arm_renderer_sentinel("auto-wgpu");
+            }
+        }
+        RendererTier::FemtovgGl => arm_renderer_sentinel("auto-gl"),
+        RendererTier::Software => {}
+    }
+}
+
 /// What the armed sentinel was protecting ("wgpu"/"gl"/"software" for a
-/// Settings override, "auto-wgpu" for the auto-detected wgpu tier).
+/// Settings override, "auto-wgpu"/"auto-wgpu-alt"/"auto-gl" for the auto
+/// ladder rungs).
 fn renderer_sentinel_value() -> Option<String> {
     std::fs::read_to_string(renderer_sentinel_path()?).ok()
 }
@@ -5563,6 +5630,12 @@ struct GpuTopology {
     integrated: bool,
 }
 static GPU_TOPOLOGY: std::sync::OnceLock<GpuTopology> = std::sync::OnceLock::new();
+
+/// Ladder rung 2 (see `renderer_tier_from_prefs`): retry wgpu with the
+/// OPPOSITE PowerPreference after the default adapter failed a start —
+/// the #542 family is an adapter mixup, not a wgpu failure.
+static WGPU_ALT_ADAPTER: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
 
 /// Minimal adapter probe for the paths that skip `detect_hardware_gpu`
 /// (QBZ_RENDERER / Settings forcing the wgpu tier).
@@ -5719,6 +5792,20 @@ fn select_slint_backend() -> Result<bool, slint::PlatformError> {
             let mut wgpu_settings = slint::wgpu_28::WGPUSettings::default();
             wgpu_settings.power_preference = slint::wgpu_28::wgpu::PowerPreference::from_env()
                 .unwrap_or_else(default_wgpu_power_preference);
+            // Alternate-adapter rung: the previous start died on the adapter
+            // this preference picks, so flip it (even over WGPU_POWER_PREF —
+            // anyone setting that env is debugging and reads the log line).
+            if WGPU_ALT_ADAPTER.load(std::sync::atomic::Ordering::Relaxed) {
+                use slint::wgpu_28::wgpu::PowerPreference;
+                wgpu_settings.power_preference = match wgpu_settings.power_preference {
+                    PowerPreference::HighPerformance => PowerPreference::LowPower,
+                    _ => PowerPreference::HighPerformance,
+                };
+                log::warn!(
+                    "[renderer] alternate-adapter rung: flipped power preference to {:?}",
+                    wgpu_settings.power_preference
+                );
+            }
             log::info!(
                 "[renderer] selecting wgpu (GPU) renderer (power_preference={:?})",
                 wgpu_settings.power_preference
@@ -5793,56 +5880,144 @@ fn requested_renderer_tier() -> (RendererTier, String) {
 
 /// Resolve the persisted Settings>Appearance renderer key ("auto" | "wgpu" |
 /// "gl" | "software"). A non-auto override is wrapped in the startup sentinel:
-/// armed here (before the risky backend/window init), disarmed shortly after
-/// the main window is up. If we find it still armed from the PREVIOUS run,
-/// that run never reached first paint with this override — revert to "auto"
-/// and auto-detect, so users can't lock themselves out with a bad choice.
+/// armed here (before the risky backend/window init), disarmed on the first
+/// real user input (or a fallback timer). If we find it still armed from the
+/// PREVIOUS run, that run never reached a usable state with this override —
+/// revert to "auto" and auto-detect, so users can't lock themselves out.
+///
+/// AUTO runs a degradation LADDER instead of a single fallback: each failed
+/// start moves one rung down, and the first rung that survives wins.
+///
+///   wgpu (default adapter)  -> wgpu (opposite PowerPreference) -> GL -> software
+///
+/// The alternate-adapter rung exists because the #542 family is an ADAPTER
+/// mixup, not a wgpu failure: on hybrid machines (mux laptops, desktops with
+/// the monitor on the discrete card) the heuristically-preferred adapter may
+/// be unable to present while the other one works perfectly — surrendering
+/// the whole GPU tier over that would be wrong. macOS stays out of the
+/// ladder by design (no GL tier there; it degrades back to wgpu).
 fn renderer_tier_from_prefs() -> (RendererTier, String) {
     let mut prefs = crate::ui_prefs::load();
-    let key = prefs.renderer.clone();
+    let mut key = prefs.renderer.clone();
+    // A persisted AUTO-degradation is version-keyed: a new build re-probes
+    // "auto" once (vendored renderer fixes / driver updates are likely since
+    // the rung was recorded); the ladder re-degrades within one start if the
+    // stack is still broken. User-chosen overrides carry no version marker
+    // and are never re-probed.
+    if key != "auto"
+        && !prefs.renderer_auto_degraded.is_empty()
+        && prefs.renderer_auto_degraded != env!("CARGO_PKG_VERSION")
+    {
+        log::info!(
+            "[renderer] '{key}' was auto-degraded by version {} — re-probing auto once on {}",
+            prefs.renderer_auto_degraded,
+            env!("CARGO_PKG_VERSION")
+        );
+        prefs.renderer = "auto".to_string();
+        prefs.renderer_auto_degraded.clear();
+        crate::ui_prefs::save(&prefs);
+        key = "auto".to_string();
+    }
     if key == "auto" {
-        // The sentinel also guards the AUTO-DETECTED wgpu tier (#542): if the
-        // previous auto start picked wgpu and died before first paint,
-        // re-detecting would pick wgpu again — an unrecoverable crash loop.
-        // Degrade the persisted setting to "gl" (the user can switch back in
-        // Settings) and explain with a toast. macOS has no GL tier (it
-        // degrades back to wgpu), so the guard is Linux-shaped by design.
         if renderer_sentinel_armed() {
             let attempted = renderer_sentinel_value();
             clear_renderer_sentinel();
-            if attempted.as_deref() == Some("auto-wgpu") && !cfg!(target_os = "macos") {
-                log::warn!(
-                    "[renderer] previous start with the auto-detected wgpu renderer never \
-                     reached first paint -> persisting the GL (compatibility) renderer"
-                );
-                prefs.renderer = "gl".to_string();
-                crate::ui_prefs::save(&prefs);
-                RENDERER_DEGRADED.store(true, std::sync::atomic::Ordering::Relaxed);
-                return (
-                    RendererTier::FemtovgGl,
-                    "Settings (gl — auto-detected wgpu failed to start)".to_string(),
-                );
+            if !cfg!(target_os = "macos") {
+                match attempted.as_deref() {
+                    // Rung 2: the default-preference adapter died before the
+                    // app became usable. Retry wgpu on the OPPOSITE
+                    // PowerPreference before surrendering the GPU tier.
+                    Some("auto-wgpu") => {
+                        log::warn!(
+                            "[renderer] auto wgpu (default adapter) never reached a usable \
+                             state -> retrying wgpu on the alternate adapter"
+                        );
+                        WGPU_ALT_ADAPTER.store(true, std::sync::atomic::Ordering::Relaxed);
+                        arm_renderer_sentinel("auto-wgpu-alt");
+                        return (
+                            RendererTier::Wgpu,
+                            "auto-detect (alternate wgpu adapter after a failed start)"
+                                .to_string(),
+                        );
+                    }
+                    // Rung 3: both wgpu adapters failed -> persist GL
+                    // (compatibility), version-stamped for the re-probe.
+                    Some("auto-wgpu-alt") => {
+                        log::warn!(
+                            "[renderer] both wgpu adapters failed to start -> persisting \
+                             the GL (compatibility) renderer"
+                        );
+                        prefs.renderer = "gl".to_string();
+                        prefs.renderer_auto_degraded = env!("CARGO_PKG_VERSION").to_string();
+                        crate::ui_prefs::save(&prefs);
+                        RENDERER_DEGRADED.store(true, std::sync::atomic::Ordering::Relaxed);
+                        arm_renderer_sentinel("auto-gl");
+                        return (
+                            RendererTier::FemtovgGl,
+                            "Settings (gl — both wgpu adapters failed to start)".to_string(),
+                        );
+                    }
+                    // Rung 4: even GL died (broken EGL stacks exist) ->
+                    // software, the floor that cannot fail.
+                    Some("auto-gl") => {
+                        log::warn!(
+                            "[renderer] the GL renderer also failed to start -> persisting \
+                             the software renderer"
+                        );
+                        prefs.renderer = "software".to_string();
+                        prefs.renderer_auto_degraded = env!("CARGO_PKG_VERSION").to_string();
+                        crate::ui_prefs::save(&prefs);
+                        RENDERER_DEGRADED.store(true, std::sync::atomic::Ordering::Relaxed);
+                        return (
+                            RendererTier::Software,
+                            "Settings (software — wgpu and GL failed to start)".to_string(),
+                        );
+                    }
+                    _ => {}
+                }
             }
         }
         let tier = detect_hardware_gpu();
-        if tier == RendererTier::Wgpu && !cfg!(target_os = "macos") {
-            arm_renderer_sentinel("auto-wgpu");
-        }
+        // Every fallible auto rung is sentinel-armed (GL stacks can be as
+        // broken as wgpu ones); a known-bad default adapter goes straight
+        // to the alt rung.
+        arm_auto_tier(tier, &prefs);
         return (tier, "auto-detect".to_string());
     }
     if renderer_sentinel_armed() {
+        let attempted = renderer_sentinel_value();
+        clear_renderer_sentinel();
+        // Ladder continuation (rung 4 via the persisted-"gl" route): rung 3
+        // wrote prefs.renderer="gl" and armed "auto-gl", so its failure
+        // surfaces HERE, not in the auto branch. A USER-picked gl arms the
+        // literal "gl", never "auto-gl" — no ambiguity.
+        if attempted.as_deref() == Some("auto-gl") && !cfg!(target_os = "macos") {
+            log::warn!(
+                "[renderer] the ladder-persisted GL renderer also failed to start -> \
+                 persisting the software renderer"
+            );
+            prefs.renderer = "software".to_string();
+            prefs.renderer_auto_degraded = env!("CARGO_PKG_VERSION").to_string();
+            crate::ui_prefs::save(&prefs);
+            RENDERER_DEGRADED.store(true, std::sync::atomic::Ordering::Relaxed);
+            return (
+                RendererTier::Software,
+                "Settings (software — wgpu and GL failed to start)".to_string(),
+            );
+        }
         log::warn!(
-            "[renderer] previous start with renderer='{key}' never reached first paint \
+            "[renderer] previous start with renderer='{key}' never reached a usable state \
              -> reverting the setting to auto"
         );
-        clear_renderer_sentinel();
         prefs.renderer = "auto".to_string();
+        prefs.renderer_auto_degraded.clear();
         crate::ui_prefs::save(&prefs);
         RENDERER_REVERTED.store(true, std::sync::atomic::Ordering::Relaxed);
-        return (
-            detect_hardware_gpu(),
-            format!("auto-detect (reverted: '{key}' failed to start)"),
-        );
+        let tier = detect_hardware_gpu();
+        // Arm the re-detected tier too — if IT also fails, the next start
+        // continues down the ladder instead of looping.
+        arm_auto_tier(tier, &prefs);
+        return (tier, format!("auto-detect (reverted: '{key}' failed to start)"));
     }
     let tier = match key.as_str() {
         "wgpu" => RendererTier::Wgpu,
@@ -5853,8 +6028,14 @@ fn renderer_tier_from_prefs() -> (RendererTier, String) {
             return (detect_hardware_gpu(), "auto-detect".to_string());
         }
     };
-    log::info!("[renderer] Settings renderer override '{key}' (sentinel armed)");
-    arm_renderer_sentinel(&key);
+    // Software cannot fail to start — arming it would only invite false
+    // reverts from no-input quick sessions.
+    if tier != RendererTier::Software {
+        log::info!("[renderer] Settings renderer override '{key}' (sentinel armed)");
+        arm_renderer_sentinel(&key);
+    } else {
+        log::info!("[renderer] Settings renderer override 'software'");
+    }
     (tier, format!("Settings ({key})"))
 }
 
@@ -6105,22 +6286,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let window = AppWindow::new()?;
-    // Renderer auto-revert sentinel: disarm it once the window has been alive
-    // for a few seconds (renderer/driver init crashes happen at or shortly
-    // after realization; surviving this long counts as a working renderer).
-    // Single-shot timer — the binding must outlive this scope's run loop.
-    // Piggybacked: persist the REAL compositor DPR as `last_dpr` (the surface
-    // is mapped by now, so winit reports the true value — unlike right after
+    // Renderer auto-revert sentinel: disarmed on the FIRST real user input
+    // (or window close request) via the winit event filter — proof the app
+    // reached a usable state — with a 30s fallback for no-touch sessions.
+    // The old fixed 5s disarm lost the race against late startup crashes
+    // (#558: the swapchain error lands seconds after first paint, the timer
+    // had already disarmed, and the crash looped forever).
+    let _renderer_sentinel_timer = slint::Timer::default();
+    _renderer_sentinel_timer.start(
+        slint::TimerMode::SingleShot,
+        std::time::Duration::from_secs(30),
+        || {
+            disarm_renderer_sentinel_on_liveness("30s fallback");
+        },
+    );
+    // Event-loop responsiveness watchdog (#555): background probe thread,
+    // read by the Diagnostics panel. Detection only — never switches tiers.
+    ui_watchdog::spawn();
+    // Persist the REAL compositor DPR as `last_dpr` once the surface is
+    // mapped (winit reports the true value there — unlike right after
     // creation on Wayland). Read from the WINIT window, not the Slint one:
     // SLINT_SCALE_FACTOR overrides Slint's factor but winit still sees the
     // compositor's. The next scaled launch bakes this into the env value.
-    let _renderer_sentinel_timer = slint::Timer::default();
+    let _dpr_probe_timer = slint::Timer::default();
     let sentinel_weak = window.as_weak();
-    _renderer_sentinel_timer.start(
+    _dpr_probe_timer.start(
         slint::TimerMode::SingleShot,
         std::time::Duration::from_secs(5),
         move || {
-            clear_renderer_sentinel();
             if let Some(w) = sentinel_weak.upgrade() {
                 w.window().with_winit_window(|win| {
                     let real_dpr = win.scale_factor() as f32;
@@ -6180,10 +6373,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Same idea for the auto-detect path (#542): wgpu crashed pre-paint last
     // time, this start persisted the GL fallback instead.
     if RENDERER_DEGRADED.load(std::sync::atomic::Ordering::Relaxed) {
+        // Generic on purpose: the ladder can land on GL or software.
         crate::toast::warning(
             &window,
             qbz_i18n::t(
-                "Renderer switched to GPU (compatibility) — the GPU renderer failed to start",
+                "Renderer switched automatically — the previous renderer failed to start",
             ),
         );
     }
@@ -8766,6 +8960,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // sentinel there).
                 let mut prefs = crate::ui_prefs::load();
                 prefs.renderer = crate::ui_prefs::renderer_for_index(index).to_string();
+                // A manual pick is the USER's choice — drop the auto-degrade
+                // and alt-adapter markers so the ladder starts clean if they
+                // ever return to "auto".
+                prefs.renderer_auto_degraded.clear();
+                prefs.renderer_wgpu_alt.clear();
                 crate::ui_prefs::save(&prefs);
                 crate::toast::info_weak(
                     &theme_weak,
@@ -19381,6 +19580,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // tray Quit), so hide-to-tray works.
     window.show()?;
     slint::run_event_loop_until_quit()?;
+    // Reaching here = a CLEAN exit (tray Quit calls quit_event_loop directly,
+    // with no window input event) — without this, launch-then-quit-from-tray
+    // inside the 30s fallback would leave the sentinel armed and falsely
+    // walk the renderer ladder on the next start.
+    disarm_renderer_sentinel_on_liveness("clean exit");
     // Single choke point for ALL quit paths (custom-titlebar close, WM close,
     // tray Quit): release anything QBZ parked on the audio graph before the
     // process exits. Quitting mid-playback never runs the audio thread's Stop

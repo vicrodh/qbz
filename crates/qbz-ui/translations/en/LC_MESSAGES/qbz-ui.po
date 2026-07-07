@@ -230,3 +230,6 @@ msgstr "Share logs"
 # Guest local-only mode disclaimer line (login screen, #553)
 msgid "QBZ can be used as an offline player without a Qobuz™ account (no access to the Qobuz™ library)."
 msgstr "QBZ can be used as an offline player without a Qobuz™ account (no access to the Qobuz™ library)."
+# Renderer degradation ladder toast (generic: GL or software rung)
+msgid "Renderer switched automatically — the previous renderer failed to start"
+msgstr "Renderer switched automatically — the previous renderer failed to start"
