@@ -279,11 +279,9 @@ where
             break;
         }
     }
-    let items = serde_json::Value::Array(all_items);
-
     Ok(match tab {
         FavTab::Tracks => {
-            let tracks: Vec<Track> = serde_json::from_value(items).unwrap_or_default();
+            let tracks: Vec<Track> = parse_items(all_items, "track");
             let play = tracks.clone();
             FavData::Tracks {
                 items: tracks.into_iter().map(map_track).collect(),
@@ -292,7 +290,7 @@ where
             }
         }
         FavTab::Albums => {
-            let albums: Vec<Album> = serde_json::from_value(items).unwrap_or_default();
+            let albums: Vec<Album> = parse_items(all_items, "album");
             // Drop blocked albums at the SOURCE so the model + the artwork jobs
             // (both derived from `items`) stay index-aligned.
             let (bl, abl) = if crate::artist_blacklist::is_enabled() {
@@ -313,14 +311,14 @@ where
             }
         }
         FavTab::Artists => {
-            let artists: Vec<Artist> = serde_json::from_value(items).unwrap_or_default();
+            let artists: Vec<Artist> = parse_items(all_items, "artist");
             FavData::Artists {
                 items: artists.into_iter().map(map_artist).collect(),
                 total,
             }
         }
         FavTab::Labels => {
-            let labels: Vec<FavLabel> = serde_json::from_value(items).unwrap_or_default();
+            let labels: Vec<FavLabel> = parse_items(all_items, "label");
             FavData::Labels {
                 items: labels.into_iter().map(map_label).collect(),
                 total,
@@ -328,6 +326,43 @@ where
         }
         FavTab::Playlists => unreachable!("handled above"),
     })
+}
+
+/// Deserialize each favorites item individually, skipping (and logging) the
+/// ones that don't fit the model instead of nuking the whole tab. The old
+/// `from_value::<Vec<T>>(...).unwrap_or_default()` was all-or-nothing: ONE
+/// delisted/odd-shaped favorite among thousands blanked the entire list
+/// while the count badge (parsed separately from `total`) stayed correct —
+/// "Tracks 6125" over "No favorite tracks yet" (#556).
+fn parse_items<T: serde::de::DeserializeOwned>(
+    items: Vec<serde_json::Value>,
+    what: &str,
+) -> Vec<T> {
+    let total = items.len();
+    let mut out = Vec::with_capacity(total);
+    let mut dropped = 0usize;
+    for item in items {
+        // Grab the id for the log before the value is consumed.
+        let id_hint = item
+            .get("id")
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| "?".into());
+        match serde_json::from_value::<T>(item) {
+            Ok(t) => out.push(t),
+            Err(e) => {
+                dropped += 1;
+                log::warn!(
+                    "[qbz-slint] favorites: skipping malformed {what} item (id {id_hint}): {e}"
+                );
+            }
+        }
+    }
+    if dropped > 0 {
+        log::warn!(
+            "[qbz-slint] favorites: skipped {dropped}/{total} {what} items (model mismatch — see warnings above)"
+        );
+    }
+    out
 }
 
 /// All five favorites tab counts, seeded up front so the tab badges are
