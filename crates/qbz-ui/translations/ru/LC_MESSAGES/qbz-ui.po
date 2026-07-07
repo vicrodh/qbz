@@ -4468,3 +4468,6 @@ msgstr "Граница"
 # Unavailable-track auto-skip (Tauri #467 parity)
 msgid "No available tracks to play"
 msgstr "Нет доступных треков для воспроизведения"
+# Always-visible log uploader entry (settings sub-nav footer)
+msgid "Share logs"
+msgstr "Поделиться журналами"

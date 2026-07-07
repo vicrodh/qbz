@@ -4444,3 +4444,6 @@ msgstr "境界線"
 # Unavailable-track auto-skip (Tauri #467 parity)
 msgid "No available tracks to play"
 msgstr "再生できるトラックがありません"
+# Always-visible log uploader entry (settings sub-nav footer)
+msgid "Share logs"
+msgstr "ログを共有"

@@ -4485,3 +4485,6 @@ msgstr "Borde"
 # Unavailable-track auto-skip (Tauri #467 parity)
 msgid "No available tracks to play"
 msgstr "No hay pistas disponibles para reproducir"
+# Always-visible log uploader entry (settings sub-nav footer)
+msgid "Share logs"
+msgstr "Compartir registros"

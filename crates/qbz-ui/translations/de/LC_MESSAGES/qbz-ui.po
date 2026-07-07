@@ -4455,3 +4455,6 @@ msgstr "Rand"
 # Unavailable-track auto-skip (Tauri #467 parity)
 msgid "No available tracks to play"
 msgstr "Keine verfügbaren Titel zum Abspielen"
+# Always-visible log uploader entry (settings sub-nav footer)
+msgid "Share logs"
+msgstr "Protokolle teilen"

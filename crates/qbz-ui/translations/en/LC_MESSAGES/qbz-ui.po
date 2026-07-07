@@ -223,3 +223,7 @@ msgstr "Border"
 
 msgid "Favorite"
 msgstr "Favorite"
+
+# Always-visible log uploader entry (settings sub-nav footer)
+msgid "Share logs"
+msgstr "Share logs"
