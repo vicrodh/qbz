@@ -21,9 +21,17 @@ pub fn install(default_level: &str) {
         return;
     }
 
-    let inner = env_logger::Builder::from_env(
-        env_logger::Env::default().default_filter_or(default_level),
-    )
+    // Demote chatty foreign crates in the DEFAULT filter: zbus 5 logs every
+    // D-Bus message it dispatches/reads as multi-KB Debug dumps at INFO (via
+    // the tracing-log bridge, which also emits `tracing::span` events). On a
+    // desktop with an MPRIS applet polling GetAll this flooded the file sink
+    // within ~1s of startup and drowned real entries (field-confirmed twice
+    // in #555 logs) — and each suppressed record now costs nothing, since
+    // `log!` checks the filter before formatting. An explicit RUST_LOG still
+    // replaces the whole default, so full zbus tracing stays one env var away.
+    let inner = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or(
+        format!("{default_level},zbus=warn,tracing=warn"),
+    ))
     .build();
     let level = inner.filter();
     let file = open_log_file();
