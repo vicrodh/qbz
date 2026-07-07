@@ -119,6 +119,7 @@ mod search;
 mod selection;
 mod session_persist;
 mod search_service;
+mod single_instance;
 // WGPU UNDERLAY SPIKE: GPU fragment-shader background for ImmersiveView.
 mod shader_underlay;
 mod settings;
@@ -6039,6 +6040,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let tokio_rt = tokio::runtime::Runtime::new()?;
     let _enter = tokio_rt.enter();
+
+    // Single-instance guard (issue #559, Tauri parity): a second launch asks
+    // the running instance to raise its window (MPRIS Raise → the tray raise
+    // path) and exits instead of starting a duplicate player. Any D-Bus
+    // problem falls through as primary — the guard never blocks startup.
+    #[cfg(target_os = "linux")]
+    if !single_instance::acquire_or_raise() {
+        log::info!("[qbz-slint] another instance owns the session bus name — raised it, exiting");
+        return Ok(());
+    }
 
     // RENDERER SELECTION — pick wgpu (GPU) vs femtovg GL vs Slint's software
     // renderer BEFORE the first window is created. All three use the winit backend,
