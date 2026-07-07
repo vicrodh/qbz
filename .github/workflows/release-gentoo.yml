@@ -1,5 +1,11 @@
 name: release-gentoo
 
+# The overlay repo (vicrodh/qbz-overlay) must NEVER be edited by hand: any
+# ebuild change without a Manifest regeneration bricks emerge with a digest
+# mismatch (issue #557 — the 2.0.0 RESTRICT edit was pushed manually and
+# skipped the Manifest). Template changes between releases are published by
+# re-running THIS workflow via workflow_dispatch with the released version.
+
 on:
   workflow_run:
     workflows: ["release-linux"]
@@ -103,14 +109,29 @@ jobs:
           cd /tmp/qbz-overlay/media-sound/qbz-bin
           MANIFEST=""
 
-          # Download DIST files and hash them
+          # Download DIST files and hash them. amd64 is REQUIRED: publishing a
+          # Manifest without its DIST entry bricks emerge for every amd64 user
+          # (digest missing), which is worse than failing this job. A short
+          # retry absorbs release-asset propagation lag right after the tag.
           for arch_pair in "amd64:amd64" "aarch64:arm64"; do
             arch="${arch_pair%%:*}"
             dist_name="qbz_${VERSION}_${arch}.tar.gz"
             url="https://github.com/vicrodh/qbz/releases/download/v${VERSION}/${dist_name}"
             echo "Downloading ${dist_name}..."
-            if curl -sLf "$url" -o "/tmp/${dist_name}"; then
+            ok=0
+            for attempt in 1 2 3; do
+              if curl -sLf "$url" -o "/tmp/${dist_name}"; then
+                ok=1
+                break
+              fi
+              echo "Attempt ${attempt} failed for ${dist_name}, retrying in 30s..."
+              sleep 30
+            done
+            if [[ "$ok" == 1 ]]; then
               MANIFEST+="$(manifest_line DIST "$dist_name" "/tmp/${dist_name}")"$'\n'
+            elif [[ "$arch" == "amd64" ]]; then
+              echo "ERROR: required asset ${dist_name} not found at ${url}"
+              exit 1
             else
               echo "WARNING: ${dist_name} not found at ${url}, skipping"
             fi
