@@ -258,7 +258,10 @@ export component LoginScreen inherits Rectangle {
                         Rectangle { height: Spacing.sm; }
                     }
 
-                    if OfflineState.has-previous-session: HorizontalLayout {
+                    // Always visible (#553): without a previous session this
+                    // opens the GUEST profile (user 0) — Local Library only,
+                    // adopted by the account on the first real login.
+                    HorizontalLayout {
                         alignment: center;
                         QbzTextLink {
                             label: @tr("Start offline (no access to Qobuz™ services)");

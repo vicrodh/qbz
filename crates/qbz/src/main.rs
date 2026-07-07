@@ -537,12 +537,19 @@ async fn enter_shell_offline(
     image_cache: artwork::ImageCache,
     settings_ctx: Arc<settings::SettingsCtx>,
 ) -> Result<(), String> {
-    // Never open the empty user-0 profile: offline mode needs a previous
-    // session's data (Tauri falls back to user 0; the port refuses — the
-    // login UI hides the link in that case, this is the backstop).
-    let Some(user_id) = qbz_app::user_data::UserDataPaths::load_last_user_id() else {
-        return Err("no previous session — offline mode requires a prior login".to_string());
-    };
+    // No previous session → the GUEST profile, user 0 (#553; restores the
+    // Tauri fallback this port used to refuse). The guest builds a real
+    // per-user store set (local library, mixtapes, prefs) under users/0;
+    // the first successful login ADOPTS it (AppRuntime::activate renames
+    // users/0 to the real id when that account has no profile here yet).
+    // `activate_offline` below resolves the same id — 0 is never persisted
+    // as the last-user marker, so it never masquerades as a real session.
+    let user_id = qbz_app::user_data::UserDataPaths::load_last_user_id().unwrap_or(0);
+    if user_id == 0 {
+        log::info!(
+            "[qbz-slint] offline shell: no previous session — entering the guest profile (user 0)"
+        );
+    }
 
     // Session scaffolding at the last user (session store, runtime state).
     runtime.activate_offline().await?;

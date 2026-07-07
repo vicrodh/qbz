@@ -82,6 +82,23 @@ impl UserDataPaths {
         Ok(base)
     }
 
+    /// Data directory for an ARBITRARY user id (no active-user requirement):
+    /// ~/.local/share/qbz/users/{uid}/ — the same layout `user_data_dir`
+    /// resolves for the active user. Used by the guest-profile adoption
+    /// (#553), which must compare two users' paths before either is active.
+    pub fn data_dir_for(user_id: u64) -> Result<PathBuf, String> {
+        Ok(Self::global_data_dir()?
+            .join("users")
+            .join(user_id.to_string()))
+    }
+
+    /// Cache twin of [`Self::data_dir_for`]: ~/.cache/qbz/users/{uid}/.
+    pub fn cache_dir_for(user_id: u64) -> Result<PathBuf, String> {
+        Ok(Self::global_cache_dir()?
+            .join("users")
+            .join(user_id.to_string()))
+    }
+
     /// Get the global (non-user-scoped) data directory: ~/.local/share/qbz/
     pub fn global_data_dir() -> Result<PathBuf, String> {
         dirs::data_dir()

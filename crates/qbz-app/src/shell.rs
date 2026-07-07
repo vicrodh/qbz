@@ -193,12 +193,52 @@ impl<A: FrontendAdapter + Send + Sync + 'static> AppRuntime<A> {
     /// activates against them, and persists the last-user marker so the
     /// session can be restored on the next launch.
     pub async fn activate(&self, user_id: u64) -> Result<(), String> {
+        Self::adopt_guest_profile(user_id);
         self.user_paths.set_user(user_id);
         let data_dir = self.user_paths.user_data_dir()?;
         let cache_dir = self.user_paths.user_cache_dir()?;
         self.activate_at(user_id, &data_dir, &cache_dir).await?;
         UserDataPaths::save_last_user_id(user_id)?;
         Ok(())
+    }
+
+    /// First real login takes possession of the guest profile (#553): data
+    /// built while logged off (local library, mixtapes, per-user prefs —
+    /// `users/0/`) is renamed to this account IF the account has no profile
+    /// on this machine yet. An existing profile always wins — the guest
+    /// dirs then stay parked at user 0, no merge is attempted. Best-effort:
+    /// a failed rename logs and falls through to a fresh profile; login
+    /// must never break here.
+    fn adopt_guest_profile(user_id: u64) {
+        if user_id == 0 {
+            return;
+        }
+        for (kind, guest, target) in [
+            (
+                "data",
+                UserDataPaths::data_dir_for(0),
+                UserDataPaths::data_dir_for(user_id),
+            ),
+            (
+                "cache",
+                UserDataPaths::cache_dir_for(0),
+                UserDataPaths::cache_dir_for(user_id),
+            ),
+        ] {
+            let (Ok(guest), Ok(target)) = (guest, target) else {
+                continue;
+            };
+            if guest.is_dir() && !target.exists() {
+                match std::fs::rename(&guest, &target) {
+                    Ok(()) => {
+                        log::info!("[AppRuntime] guest profile {kind} adopted by the new session")
+                    }
+                    Err(e) => log::warn!(
+                        "[AppRuntime] guest profile {kind} adoption failed ({e}); starting fresh"
+                    ),
+                }
+            }
+        }
     }
 
     /// Activate an offline-only session using the last known user.
