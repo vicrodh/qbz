@@ -4451,3 +4451,7 @@ msgstr "SONSTIGES"
 
 msgid "Border"
 msgstr "Rand"
+
+# Guest local-only mode disclaimer line (login screen, #553)
+msgid "QBZ can be used as an offline player without a Qobuz™ account (no access to the Qobuz™ library)."
+msgstr "QBZ kann ohne Qobuz™-Konto als Offline-Player genutzt werden (kein Zugriff auf die Qobuz™-Bibliothek)."
