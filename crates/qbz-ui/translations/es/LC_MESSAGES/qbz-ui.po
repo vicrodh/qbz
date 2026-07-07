@@ -4494,3 +4494,15 @@ msgstr "QBZ puede usarse como reproductor sin conexión sin una cuenta de Qobuz�
 # Renderer degradation ladder toast (generic: GL or software rung)
 msgid "Renderer switched automatically — the previous renderer failed to start"
 msgstr "El renderizador cambió automáticamente — el anterior no pudo iniciar"
+
+# QConnect startup behavior (Settings > Playback, ported from Tauri)
+msgid "Auto-connect Qobuz Connect on startup"
+msgstr "Conectar Qobuz Connect automáticamente al iniciar"
+msgid "Choose whether Qobuz Connect activates automatically when QBZ launches."
+msgstr "Elige si Qobuz Connect se activa automáticamente cuando QBZ inicia."
+msgid "Remember state"
+msgstr "Recordar estado"
+msgid "On by default"
+msgstr "Activado de forma predeterminada"
+msgid "Off by default"
+msgstr "Desactivado de forma predeterminada"

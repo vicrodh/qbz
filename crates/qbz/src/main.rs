@@ -420,6 +420,13 @@ async fn enter_shell(
     // background — store reads and device enumeration are blocking.
     spawn_settings_snapshot_load(runtime.clone(), weak.clone(), settings_ctx.clone());
 
+    // Qobuz Connect startup auto-connect (Settings > Playback): "On by
+    // default", or "Remember state" + last session ended connected, drives the
+    // SAME connect path as the bar toggle. Online shell entries only — the
+    // offline entry (`enter_shell_offline`) never auto-connects, and connect()
+    // itself refuses offline / uninitialized sessions. Fires once per process.
+    qconnect_service::spawn_startup_auto_connect(&tokio::runtime::Handle::current());
+
     // Load the genre-filter parents + persisted selection, then seed
     // the popup state. Done before the discover load so the first
     // fetch honors a remembered genre selection.
@@ -11265,20 +11272,39 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 };
                 let weak = weak.clone();
                 handle.spawn(async move {
-                    let connected = if svc.is_running().await {
+                    // `record`: the "Remember state" write-through value — Some
+                    // only when the operation SUCCEEDED (Tauri v2_qconnect_connect
+                    // / _disconnect wrote nothing on failure, so a failed manual
+                    // connect never downgrades a remembered "connected").
+                    let (connected, record) = if svc.is_running().await {
                         if let Err(err) = svc.disconnect().await {
                             log::warn!("[QConnect] disconnect failed: {err}");
                         }
-                        false
+                        (false, Some(false))
                     } else {
                         match svc.connect().await {
-                            Ok(()) => true,
+                            Ok(()) => (true, Some(true)),
                             Err(err) => {
                                 log::warn!("[QConnect] connect failed: {err}");
-                                false
+                                (false, None)
                             }
                         }
                     };
+                    // Record the USER-chosen on/off here — the authoritative
+                    // intent point (the bar toggle, the only manual path) — so a
+                    // crash can't lose it and internal teardowns (offline
+                    // force-disconnect, bootstrap cleanup) never overwrite it.
+                    // Only while mode == RememberLast, mirroring Tauri.
+                    if let Some(state) = record {
+                        let _ = tokio::task::spawn_blocking(move || {
+                            if qconnect_transport::load_startup_mode()
+                                == qconnect_app::QconnectStartupMode::RememberLast
+                            {
+                                qconnect_transport::save_last_known_state(state);
+                            }
+                        })
+                        .await;
+                    }
                     let _ = weak.upgrade_in_event_loop(move |w| {
                         w.global::<NowPlayingState>()
                             .set_qconnect_connected(connected);

@@ -99,6 +99,19 @@ export component PlaybackSettings inherits VerticalLayout {
             }
         }
     }
+    SettingRow {
+        label: @tr("Auto-connect Qobuz Connect on startup");
+        description: @tr("Choose whether Qobuz Connect activates automatically when QBZ launches.");
+        QbzSelect {
+            menu-width: 240px;
+            options: SettingsState.qconnect-startup-modes;
+            current-index: SettingsState.qconnect-startup-index;
+            selected(i) => {
+                SettingsState.qconnect-startup-index = i;
+                root.settings-select("qconnect-startup", i);
+            }
+        }
+    }
 
     Rectangle { height: 12px; }
     Divider { }

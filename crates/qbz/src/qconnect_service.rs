@@ -110,6 +110,99 @@ pub fn service() -> Option<Arc<SlintQconnectService>> {
     SERVICE.get().cloned()
 }
 
+/// Startup auto-connect (Settings > Playback, "Auto-connect Qobuz Connect on
+/// startup"). Ports the Tauri `startup.rs::maybe_auto_connect_after_bootstrap`
+/// + its bounded retry schedule (gap #8): decide from the persisted mode (and,
+/// for RememberLast, the last-known connect state), then drive the SAME
+/// `connect()` path as the bar toggle — no duplicated connection logic.
+///
+/// Called from `enter_shell` AFTER session activation, online sessions only
+/// (the offline shell entry never calls this); `connect()` itself additionally
+/// refuses an uninitialized API and offline mode (D5). Fires at most once per
+/// process, so a logout/login cycle does not re-trigger it.
+pub fn spawn_startup_auto_connect(handle: &tokio::runtime::Handle) {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static FIRED: AtomicBool = AtomicBool::new(false);
+    if FIRED.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    handle.spawn(async move {
+        // Blocking SQLite reads — cheap, but keep them off the caller's path.
+        let mode = crate::qconnect_transport::load_startup_mode();
+        let last = crate::qconnect_transport::load_last_known_state();
+        let should_connect = qconnect_app::compute_effective_startup(mode, None, last);
+        log::info!(
+            "[QConnect] startup auto-connect decision: mode={} last_known={:?} -> {}",
+            mode.as_str(),
+            last,
+            should_connect
+        );
+        if !should_connect {
+            return;
+        }
+        // The service singleton is initialized during main() wiring, which runs
+        // concurrently with the session-restore task that enters the shell —
+        // wait for it briefly instead of racing (it lands within milliseconds).
+        let service = {
+            let mut waited_ms = 0u64;
+            loop {
+                if let Some(svc) = service() {
+                    break svc;
+                }
+                if waited_ms >= 5_000 {
+                    log::warn!("[QConnect] startup auto-connect: service never initialized");
+                    return;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                waited_ms += 100;
+            }
+        };
+        // Tauri's `startup_retry_schedule()` (gap #8): one immediate attempt,
+        // then one per scheduled delay; give up for the session after the last
+        // step. Each connect() re-resolves the transport config internally, so
+        // a transient credential/network failure can clear on a later attempt.
+        let schedule: [u64; 4] = [2_000, 5_000, 15_000, 30_000];
+        for attempt in 0..=schedule.len() {
+            // D5: offline (incl. persisted induced-offline surviving a
+            // restart) — bail silently instead of letting connect()'s
+            // offline refusal TOAST on every retry (5 spams over ~52s).
+            if crate::offline_mode::engine().is_offline() {
+                log::info!("[QConnect] startup auto-connect skipped: offline mode active (D5)");
+                return;
+            }
+            match service.connect().await {
+                Ok(()) => {
+                    log::info!("[QConnect] startup auto-connect succeeded");
+                    // Mirror the manual toggle's tail: flip the bar badge on.
+                    let _ = service.window.upgrade_in_event_loop(|w| {
+                        use slint::ComponentHandle;
+                        w.global::<crate::NowPlayingState>().set_qconnect_connected(true);
+                    });
+                    return;
+                }
+                Err(err) => {
+                    log::warn!(
+                        "[QConnect] startup auto-connect attempt {} failed: {err}",
+                        attempt + 1
+                    );
+                }
+            }
+            match schedule.get(attempt) {
+                Some(delay_ms) => {
+                    tokio::time::sleep(std::time::Duration::from_millis(*delay_ms)).await;
+                }
+                None => {
+                    log::warn!(
+                        "[QConnect] startup auto-connect gave up for this session after {} attempts",
+                        attempt + 1
+                    );
+                    return;
+                }
+            }
+        }
+    });
+}
+
 // ---- DEV diagnostics (QconnectDevModal) ------------------------------------
 // A rolling, runtime-inspectable event log + live status block, so QConnect can
 // be debugged WITHOUT a rebuild (Slint builds are slow). Populated by the event

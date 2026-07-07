@@ -24,6 +24,7 @@ use qbz_app::settings::playback::{
 use qbz_app::shell::AppRuntime;
 use qbz_audio::backend::{AlsaPlugin, AudioBackendType, BackendManager};
 use qbz_audio::settings::{AudioSettingsState, AudioSettingsStore};
+use qconnect_app::QconnectStartupMode;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use crate::adapter::SlintAdapter;
@@ -67,6 +68,19 @@ const RETRY_BEHAVIORS: &[(&str, &str)] = &[
     (qbz_i18n::mark("Ask me"), "ask"),
     (qbz_i18n::mark("Always try lowest quality"), "always_fallback"),
     (qbz_i18n::mark("Always skip track"), "always_skip"),
+];
+
+/// "Auto-connect Qobuz Connect on startup" dropdown options. The value is the
+/// persisted QConnect startup mode — same DB key + values as the Tauri app
+/// (`startup_mode` in `qconnect_settings.db`), persisted via
+/// `crate::qconnect_transport`, NOT the audio/playback stores.
+const QCONNECT_STARTUP_MODES: &[(&str, QconnectStartupMode)] = &[
+    (
+        qbz_i18n::mark("Remember state"),
+        QconnectStartupMode::RememberLast,
+    ),
+    (qbz_i18n::mark("On by default"), QconnectStartupMode::On),
+    (qbz_i18n::mark("Off by default"), QconnectStartupMode::Off),
 ];
 
 /// What a persisted audio change requires of the live `Player`.
@@ -171,6 +185,8 @@ pub struct SettingsSnapshot {
     buffer_seconds: i32,
     retry_behaviors: Vec<String>,
     retry_behavior_index: i32,
+    qconnect_startup_modes: Vec<String>,
+    qconnect_startup_index: i32,
     // Now-playing output indicators (backend + effective bit-perfect mode).
     output_backend_label: String,
     output_mode_label: String,
@@ -489,6 +505,13 @@ fn build_snapshot(
         .iter()
         .position(|(_, v)| *v == audio.quality_fallback_behavior)
         .unwrap_or(0);
+    // QConnect startup mode — read from the QConnect settings DB (blocking
+    // SQLite, fine here: build_snapshot always runs inside spawn_blocking).
+    let qconnect_startup_mode = crate::qconnect_transport::load_startup_mode();
+    let qconnect_startup_index = QCONNECT_STARTUP_MODES
+        .iter()
+        .position(|(_, m)| *m == qconnect_startup_mode)
+        .unwrap_or(QCONNECT_STARTUP_MODES.len() - 1); // last entry = Off (default)
 
     let backend_is_alsa = active_backend == AudioBackendType::Alsa;
     let backend_is_pipewire = active_backend == AudioBackendType::PipeWire;
@@ -555,6 +578,11 @@ fn build_snapshot(
         buffer_seconds: audio.stream_buffer_seconds as i32,
         retry_behaviors: RETRY_BEHAVIORS.iter().map(|(l, _)| qbz_i18n::t(l)).collect(),
         retry_behavior_index: retry_behavior_index as i32,
+        qconnect_startup_modes: QCONNECT_STARTUP_MODES
+            .iter()
+            .map(|(l, _)| qbz_i18n::t(l))
+            .collect(),
+        qconnect_startup_index: qconnect_startup_index as i32,
         output_backend_label: out_backend_label,
         output_mode_label: out_mode_label,
         output_backend_active: out_backend_active,
@@ -643,6 +671,8 @@ pub fn apply_snapshot(window: &AppWindow, snap: SettingsSnapshot) {
     st.set_buffer_seconds(snap.buffer_seconds);
     st.set_retry_behaviors(string_model(snap.retry_behaviors));
     st.set_retry_behavior_index(snap.retry_behavior_index);
+    st.set_qconnect_startup_modes(string_model(snap.qconnect_startup_modes));
+    st.set_qconnect_startup_index(snap.qconnect_startup_index);
     st.set_loading(false);
 }
 
@@ -1190,6 +1220,21 @@ pub async fn handle_select(
                 return;
             }
             apply_audio(&ctx, &runtime, Apply::Reload);
+        }
+        "qconnect-startup" => {
+            // Persisted in the QConnect settings DB (same key/values as the
+            // Tauri app) — nothing to apply to the live player: the mode is
+            // only consulted at startup (and by the toggle's write-through).
+            let Some((_, mode)) = QCONNECT_STARTUP_MODES.get(index) else {
+                return;
+            };
+            let mode = *mode;
+            if let Err(e) =
+                tokio::task::spawn_blocking(move || crate::qconnect_transport::save_startup_mode(mode))
+                    .await
+            {
+                log::error!("[qbz-slint] persist qconnect startup mode failed: {e}");
+            }
         }
         other => log::warn!("[qbz-slint] unknown settings select key: {other}"),
     }

@@ -327,6 +327,89 @@ pub fn persist_device_name(name: Option<&str>) {
     }
 }
 
+/// Open the QConnect settings DB (key/value table), creating it when missing.
+/// Fail-open helper for the startup-mode persistence below — mirrors the Tauri
+/// `startup.rs::open_settings_conn`.
+fn open_qconnect_settings_conn() -> Option<rusqlite::Connection> {
+    let db_path = qconnect_settings_db_path()?;
+    let conn = rusqlite::Connection::open(&db_path).ok()?;
+    conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")
+        .ok()?;
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )",
+    )
+    .ok()?;
+    Some(conn)
+}
+
+/// Load the persisted QConnect startup mode (Settings > Playback,
+/// "Auto-connect Qobuz Connect on startup"). Same DB + key + values as the
+/// Tauri app (`startup_mode` = "off" | "on" | "remember_last" in
+/// `qconnect_settings.db`), so an existing setting survives the Tauri -> Slint
+/// migration. Fail-open: returns `Off` (the default) when missing or invalid.
+pub fn load_startup_mode() -> qconnect_app::QconnectStartupMode {
+    let Some(conn) = open_qconnect_settings_conn() else {
+        return qconnect_app::QconnectStartupMode::default();
+    };
+    conn.query_row(
+        "SELECT value FROM settings WHERE key = 'startup_mode'",
+        [],
+        |row| row.get::<_, String>(0),
+    )
+    .ok()
+    .as_deref()
+    .and_then(qconnect_app::QconnectStartupMode::from_str)
+    .unwrap_or_default()
+}
+
+/// Persist the QConnect startup mode.
+pub fn save_startup_mode(mode: qconnect_app::QconnectStartupMode) {
+    let Some(conn) = open_qconnect_settings_conn() else {
+        return;
+    };
+    let _ = conn.execute(
+        "INSERT OR REPLACE INTO settings (key, value) VALUES ('startup_mode', ?1)",
+        rusqlite::params![mode.as_str()],
+    );
+}
+
+/// Load the last-known QConnect on/off state, if recorded. Same key/values as
+/// Tauri (`last_known_state` = "on" | "off").
+pub fn load_last_known_state() -> Option<bool> {
+    let conn = open_qconnect_settings_conn()?;
+    let value: Option<String> = conn
+        .query_row(
+            "SELECT value FROM settings WHERE key = 'last_known_state'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .ok();
+    match value.as_deref() {
+        Some("on") => Some(true),
+        Some("off") => Some(false),
+        _ => None,
+    }
+}
+
+/// Persist the last-known on/off state. Written from the USER-facing
+/// connect/disconnect path (the bar toggle) when `startup_mode ==
+/// RememberLast` — never from internal teardowns (offline force-disconnect,
+/// bootstrap-failure cleanup), mirroring Tauri's command-layer write-through:
+/// a transient failure must not clobber a remembered "connected".
+pub fn save_last_known_state(state: bool) {
+    let Some(conn) = open_qconnect_settings_conn() else {
+        return;
+    };
+    let value = if state { "on" } else { "off" };
+    let _ = conn.execute(
+        "INSERT OR REPLACE INTO settings (key, value) VALUES ('last_known_state', ?1)",
+        rusqlite::params![value],
+    );
+}
+
 /// Build the WS transport config: env overrides first, then auto-discovery via
 /// `qws/createToken`. Mirrors the Tauri `resolve_transport_config` (the
 /// per-option knobs are deferred — the Slint connect path uses defaults +

@@ -4476,3 +4476,15 @@ msgstr "QBZ kan worden gebruikt als offline speler zonder Qobuz™-account (geen
 
 msgid "Renderer switched automatically — the previous renderer failed to start"
 msgstr "Renderer automatisch overgeschakeld — de vorige renderer kon niet starten"
+
+# QConnect startup behavior (Settings > Playback, ported from Tauri)
+msgid "Auto-connect Qobuz Connect on startup"
+msgstr "Qobuz Connect automatisch verbinden bij opstarten"
+msgid "Choose whether Qobuz Connect activates automatically when QBZ launches."
+msgstr "Kies of Qobuz Connect automatisch wordt geactiveerd wanneer QBZ start."
+msgid "Remember state"
+msgstr "Status onthouden"
+msgid "On by default"
+msgstr "Standaard aan"
+msgid "Off by default"
+msgstr "Standaard uit"

@@ -2865,6 +2865,12 @@ export global SettingsState {
     in-out property <[string]> retry-behaviors: [];
     in-out property <int> retry-behavior-index: 0;
 
+    // Playback — "Auto-connect Qobuz Connect on startup" dropdown
+    // (remember-last / on / off). Backed by the QConnect settings DB via the
+    // Rust controller, which owns the index -> mode mapping.
+    in-out property <[string]> qconnect-startup-modes: [];
+    in-out property <int> qconnect-startup-index: 0;
+
     // --- OFFLINE MODE --------------------------------------------------------
 
     // Settings > Offline, MODE group (the app operating without Qobuz — NOT
