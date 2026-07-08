@@ -4471,3 +4471,10 @@ msgstr "デフォルトでオフ"
 
 msgid "QBZ recovered from repeated startup crashes — some restored state was reset"
 msgstr "QBZ は起動時の連続クラッシュから復旧しました — 復元された状態の一部がリセットされました"
+
+# QConnect device name (Settings > Playback, ported from Tauri)
+msgid "Qobuz Connect device name"
+msgstr "Qobuz Connectのデバイス名"
+
+msgid "The name other Qobuz Connect apps see for this device. Applies on the next connection."
+msgstr "他のQobuz Connectアプリに表示されるこのデバイスの名前です。次回の接続時に適用されます。"

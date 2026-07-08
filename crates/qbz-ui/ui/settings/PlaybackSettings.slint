@@ -3,9 +3,10 @@
 // SettingsState global and persisted through the Rust settings
 // controller.
 
+import { LineEdit } from "std-widgets.slint";
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
-import { SettingsState } from "../state.slint";
+import { SettingsState, UiFocusState } from "../state.slint";
 import { QbzToggle } from "../primitives/QbzToggle.slint";
 import { QbzSelect } from "../primitives/QbzSelect.slint";
 import { QbzSlider } from "../primitives/QbzSlider.slint";
@@ -27,6 +28,7 @@ export component PlaybackSettings inherits VerticalLayout {
     callback settings-bool(string, bool);
     callback settings-select(string, int);
     callback settings-slider(string, int);
+    callback settings-string(string, string);
 
     spacing: 4px;
 
@@ -109,6 +111,37 @@ export component PlaybackSettings inherits VerticalLayout {
             selected(i) => {
                 SettingsState.qconnect-startup-index = i;
                 root.settings-select("qconnect-startup", i);
+            }
+        }
+    }
+    SettingRow {
+        label: @tr("Qobuz Connect device name");
+        description: @tr("The name other Qobuz Connect apps see for this device. Applies on the next connection.");
+        // Same fixed width as the select rows so the input right-aligns
+        // flush with the rest of the panel (alignment standard).
+        HorizontalLayout {
+            width: 240px;
+            VerticalLayout {
+                alignment: center;
+                horizontal-stretch: 1;
+                LineEdit {
+                    text: SettingsState.qconnect-device-name;
+                    placeholder-text: SettingsState.qconnect-device-name-default;
+                    // Commit on focus loss too (mirrors the Tauri onchange
+                    // semantics: blur or Enter), not only on Enter.
+                    changed has-focus => {
+                        UiFocusState.text-input-focused = self.has-focus;
+                        if (!self.has-focus) {
+                            root.settings-string("qconnect-device-name", self.text);
+                        }
+                    }
+                    edited(s) => {
+                        SettingsState.qconnect-device-name = s;
+                    }
+                    accepted(s) => {
+                        root.settings-string("qconnect-device-name", s);
+                    }
+                }
             }
         }
     }

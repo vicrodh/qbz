@@ -4512,3 +4512,10 @@ msgstr "Desactivado de forma predeterminada"
 
 msgid "QBZ recovered from repeated startup crashes — some restored state was reset"
 msgstr "QBZ se recuperó de fallos repetidos al iniciar — se restableció parte del estado guardado"
+
+# QConnect device name (Settings > Playback, ported from Tauri)
+msgid "Qobuz Connect device name"
+msgstr "Nombre del dispositivo en Qobuz Connect"
+
+msgid "The name other Qobuz Connect apps see for this device. Applies on the next connection."
+msgstr "El nombre que otras apps de Qobuz Connect ven para este dispositivo. Se aplica en la próxima conexión."

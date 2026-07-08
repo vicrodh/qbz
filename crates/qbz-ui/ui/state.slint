@@ -2891,6 +2891,12 @@ export global SettingsState {
     // Rust controller, which owns the index -> mode mapping.
     in-out property <[string]> qconnect-startup-modes: [];
     in-out property <int> qconnect-startup-index: 0;
+    // Playback — Qobuz Connect device name. The persisted custom override
+    // ("" = unset) plus the effective default name shown as the input
+    // placeholder ("Qbz - {hostname}"). Backed by the QConnect settings DB
+    // via the settings-string callback; applies on the next connect.
+    in-out property <string> qconnect-device-name: "";
+    in-out property <string> qconnect-device-name-default: "";
 
     // --- OFFLINE MODE --------------------------------------------------------
 

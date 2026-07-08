@@ -251,3 +251,10 @@ msgstr "Remove album from collection"
 
 msgid "QBZ recovered from repeated startup crashes — some restored state was reset"
 msgstr "QBZ recovered from repeated startup crashes — some restored state was reset"
+
+# QConnect device name (Settings > Playback, ported from Tauri)
+msgid "Qobuz Connect device name"
+msgstr "Qobuz Connect device name"
+
+msgid "The name other Qobuz Connect apps see for this device. Applies on the next connection."
+msgstr "The name other Qobuz Connect apps see for this device. Applies on the next connection."

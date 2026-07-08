@@ -457,6 +457,16 @@ impl SlintQconnectService {
         self.inner.lock().await.runtime.is_some()
     }
 
+    /// Update the cached custom device name (Settings > Playback). The name
+    /// is only announced by `bootstrap_remote_presence` during `connect()`,
+    /// so — mirroring the Tauri `v2_qconnect_set_device_name` — a rename
+    /// takes effect on the NEXT connect; the live session is untouched.
+    /// `None` clears the override (falls back to "Qbz - {hostname}").
+    /// Persistence is the caller's job (`qconnect_transport::persist_device_name`).
+    pub async fn set_custom_device_name(&self, name: Option<String>) {
+        *self.custom_device_name.write().await = name;
+    }
+
     /// Pure read of the live session for the Diagnostics panel (Settings >
     /// Developer). Mirrors the Tauri `snapshotQconnect`: reads `inner.last_error`,
     /// the transport-connected flag (`app.state_handle().transport_connected`),

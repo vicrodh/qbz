@@ -4495,3 +4495,10 @@ msgstr "Выключено по умолчанию"
 
 msgid "QBZ recovered from repeated startup crashes — some restored state was reset"
 msgstr "QBZ восстановился после повторных сбоев при запуске — часть восстановленного состояния была сброшена"
+
+# QConnect device name (Settings > Playback, ported from Tauri)
+msgid "Qobuz Connect device name"
+msgstr "Имя устройства в Qobuz Connect"
+
+msgid "The name other Qobuz Connect apps see for this device. Applies on the next connection."
+msgstr "Имя, под которым это устройство видят другие приложения Qobuz Connect. Применяется при следующем подключении."

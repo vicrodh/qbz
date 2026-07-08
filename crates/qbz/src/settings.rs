@@ -187,6 +187,10 @@ pub struct SettingsSnapshot {
     retry_behavior_index: i32,
     qconnect_startup_modes: Vec<String>,
     qconnect_startup_index: i32,
+    // QConnect device name — persisted custom override ("" = unset) + the
+    // effective default used as the input's placeholder.
+    qconnect_device_name: String,
+    qconnect_device_name_default: String,
     // Now-playing output indicators (backend + effective bit-perfect mode).
     output_backend_label: String,
     output_mode_label: String,
@@ -512,6 +516,13 @@ fn build_snapshot(
         .iter()
         .position(|(_, m)| *m == qconnect_startup_mode)
         .unwrap_or(QCONNECT_STARTUP_MODES.len() - 1); // last entry = Off (default)
+    // QConnect device name — same DB (and same blocking-SQLite caveat) as the
+    // startup mode above. Empty = no custom override; the placeholder shows
+    // the name that will actually be announced (env var -> "Qbz - {hostname}").
+    let qconnect_device_name =
+        crate::qconnect_transport::load_persisted_device_name().unwrap_or_default();
+    let qconnect_device_name_default =
+        crate::qconnect_transport::resolve_qconnect_friendly_name(None);
 
     let backend_is_alsa = active_backend == AudioBackendType::Alsa;
     let backend_is_pipewire = active_backend == AudioBackendType::PipeWire;
@@ -583,6 +594,8 @@ fn build_snapshot(
             .map(|(l, _)| qbz_i18n::t(l))
             .collect(),
         qconnect_startup_index: qconnect_startup_index as i32,
+        qconnect_device_name,
+        qconnect_device_name_default,
         output_backend_label: out_backend_label,
         output_mode_label: out_mode_label,
         output_backend_active: out_backend_active,
@@ -673,6 +686,8 @@ pub fn apply_snapshot(window: &AppWindow, snap: SettingsSnapshot) {
     st.set_retry_behavior_index(snap.retry_behavior_index);
     st.set_qconnect_startup_modes(string_model(snap.qconnect_startup_modes));
     st.set_qconnect_startup_index(snap.qconnect_startup_index);
+    st.set_qconnect_device_name(snap.qconnect_device_name.into());
+    st.set_qconnect_device_name_default(snap.qconnect_device_name_default.into());
     st.set_loading(false);
 }
 
@@ -1065,6 +1080,43 @@ pub fn handle_slider(
             }
         }
         other => log::warn!("[qbz-slint] unknown settings slider key: {other}"),
+    }
+}
+
+/// Handle a text-input commit (Enter or focus loss). Currently only the
+/// QConnect device name — mirrors the Tauri `v2_qconnect_set_device_name`:
+/// trim; empty clears the override so the announced name falls back to the
+/// default ("Qbz - {hostname}"). Persisted in the QConnect settings DB and
+/// pushed into the live service's cache; the name is only announced during
+/// `connect()`, so a rename takes effect on the next connection.
+pub async fn handle_string(weak: slint::Weak<AppWindow>, key: String, value: String) {
+    match key.as_str() {
+        "qconnect-device-name" => {
+            let trimmed = value.trim().to_string();
+            let stored = (!trimmed.is_empty()).then(|| trimmed.clone());
+            // Persist (blocking SQLite) off the async runtime.
+            let to_persist = stored.clone();
+            if let Err(e) = tokio::task::spawn_blocking(move || {
+                crate::qconnect_transport::persist_device_name(to_persist.as_deref())
+            })
+            .await
+            {
+                log::error!("[qbz-slint] persist qconnect device name failed: {e}");
+            }
+            // Update the live service cache so the next connect announces the
+            // new name without an app restart (it loads the DB only once, at
+            // construction).
+            if let Some(svc) = crate::qconnect_service::service() {
+                svc.set_custom_device_name(stored).await;
+            }
+            // Push the trimmed value back so a whitespace-only entry visibly
+            // resets the input to the placeholder/default state.
+            let _ = weak.upgrade_in_event_loop(move |w| {
+                w.global::<SettingsState>()
+                    .set_qconnect_device_name(trimmed.into());
+            });
+        }
+        other => log::warn!("[qbz-slint] unknown settings string key: {other}"),
     }
 }
 

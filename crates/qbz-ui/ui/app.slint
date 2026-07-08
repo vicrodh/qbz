@@ -98,6 +98,7 @@ export component AppWindow inherits Window {
     callback settings-bool(string, bool);
     callback settings-select(string, int);
     callback settings-slider(string, int);
+    callback settings-string(string, string);
     callback settings-reset();
     callback settings-release-device();
     callback logout();
@@ -157,6 +158,9 @@ export component AppWindow inherits Window {
         }
         settings-slider(k, v) => {
             root.settings-slider(k, v);
+        }
+        settings-string(k, s) => {
+            root.settings-string(k, s);
         }
         settings-reset => {
             root.settings-reset();

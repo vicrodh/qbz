@@ -4494,3 +4494,10 @@ msgstr "Standaard uit"
 
 msgid "QBZ recovered from repeated startup crashes — some restored state was reset"
 msgstr "QBZ is hersteld van herhaalde crashes bij het opstarten — een deel van de herstelde staat is gereset"
+
+# QConnect device name (Settings > Playback, ported from Tauri)
+msgid "Qobuz Connect device name"
+msgstr "Qobuz Connect-apparaatnaam"
+
+msgid "The name other Qobuz Connect apps see for this device. Applies on the next connection."
+msgstr "De naam die andere Qobuz Connect-apps voor dit apparaat zien. Wordt toegepast bij de volgende verbinding."

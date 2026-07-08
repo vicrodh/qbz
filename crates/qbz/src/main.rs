@@ -9029,6 +9029,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 
+    // Settings — a text input committed (QConnect device name): persist it
+    // and refresh the live QConnect service cache; the new name is announced
+    // on the next connect.
+    {
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window.on_settings_string(move |key, value| {
+            let weak = weak.clone();
+            let key = key.to_string();
+            let value = value.to_string();
+            handle.spawn(async move {
+                settings::handle_string(weak, key, value).await;
+            });
+        });
+    }
+
     // Settings — Reset: restore Audio + Playback defaults, rebuild the
     // snapshot, and re-apply the audio settings to the player.
     {
