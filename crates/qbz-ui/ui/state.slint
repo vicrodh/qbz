@@ -3002,6 +3002,14 @@ export global AppearanceState {
     // macOS = overlay (native traffic lights over the header). The .slint
     // default is the safe Linux one.
     in-out property <bool> use-system-title-bar: true;
+    // APPLIED chrome state (what the window was actually created with, vs the
+    // persisted pref above which the settings toggle edits). All chrome
+    // bindings (no-frame, header drag/inset/controls, Purchases placement)
+    // read THIS one. Rust decides per platform how the pref propagates:
+    // Linux mirrors the pref here live (hot apply, today's behavior); macOS
+    // leaves it at the startup value (the overlay attributes are fixed at
+    // window creation — restart to apply).
+    in-out property <bool> system-title-bar-active: true;
     // Tiling-WM variant: frameless without drawn controls / header drag.
     in-out property <bool> hide-title-bar: false;
     // Phase 2 (deferred): rounded corners matching the desktop decoration.

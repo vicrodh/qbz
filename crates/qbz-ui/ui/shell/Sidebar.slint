@@ -782,7 +782,7 @@ export component Sidebar inherits Rectangle {
             if AppearanceState.show-purchases && !OfflineState.offline
                 && !(AppearanceState.nav-tb-purchases
                     && !AppearanceState.hide-title-bar
-                    && !AppearanceState.use-system-title-bar): SidebarDirectRow {
+                    && !AppearanceState.system-title-bar-active): SidebarDirectRow {
                 icon: @image-url("../assets/icons/shopping-bag.svg");
                 label: @tr("Purchases");
                 active: NavState.view == ContentView.purchases

@@ -582,7 +582,7 @@ export component HeaderBar inherits Rectangle {
     // the native traffic lights (overlay attributes from the winit hook) and
     // only needs the drag surface + a left inset under the lights.
     property <bool> chrome-drag-enabled:
-        !AppearanceState.use-system-title-bar && !AppearanceState.hide-title-bar;
+        !AppearanceState.system-title-bar-active && !AppearanceState.hide-title-bar;
     property <bool> chrome-controls:
         root.chrome-drag-enabled && !AppearanceState.is-macos
         && AppearanceState.show-window-controls;
@@ -592,7 +592,7 @@ export component HeaderBar inherits Rectangle {
     // Left inset: the native traffic-light band on macOS (~70px logical; 78px
     // keeps a comfortable gap) or the drawn cluster when positioned left.
     property <length> chrome-left-inset:
-        AppearanceState.is-macos && !AppearanceState.use-system-title-bar ? 78px
+        AppearanceState.is-macos && !AppearanceState.system-title-bar-active ? 78px
         : (root.chrome-controls && root.wc-on-left ? root.wc-cluster-width + 6px : 0px);
 
     // Custom-chrome drag surface. Declared FIRST among the header's elements
@@ -938,7 +938,7 @@ export component HeaderBar inherits Rectangle {
             if AppearanceState.show-purchases && !OfflineState.offline
                 && AppearanceState.nav-tb-purchases
                 && !AppearanceState.hide-title-bar
-                && !AppearanceState.use-system-title-bar: VerticalLayout {
+                && !AppearanceState.system-title-bar-active: VerticalLayout {
                 alignment: center;
                 NavTab {
                     icon: @image-url("../assets/icons/shopping-bag.svg");
@@ -1044,7 +1044,7 @@ export component HeaderBar inherits Rectangle {
             if AppearanceState.show-purchases && !OfflineState.offline
                 && AppearanceState.nav-tb-purchases
                 && !AppearanceState.hide-title-bar
-                && !AppearanceState.use-system-title-bar: VerticalLayout {
+                && !AppearanceState.system-title-bar-active: VerticalLayout {
                 alignment: center;
                 CompactDirectBtn {
                     icon: @image-url("../assets/icons/shopping-bag.svg");

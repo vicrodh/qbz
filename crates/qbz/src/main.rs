@@ -6675,6 +6675,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // creation (decorations negotiate then on Wayland), and the macOS
         // attributes hook reads the same pref straight from ui_prefs.
         appearance.set_use_system_title_bar(prefs.use_system_title_bar);
+        // Applied chrome state — what this window is actually created with.
+        // The chrome bindings (no-frame, header drag/inset, Purchases
+        // placement) read THIS; the settings toggle edits the pref above.
+        // On Linux the appearance-bool handler mirrors pref -> active live;
+        // on macOS it does not (overlay attributes are fixed at creation),
+        // so this seed is the value for the whole session there.
+        appearance.set_system_title_bar_active(prefs.use_system_title_bar);
         appearance.set_hide_title_bar(prefs.hide_title_bar);
         appearance.set_show_window_controls(prefs.show_window_controls);
         appearance.set_wc_position_index(if prefs.wc_position == "left" { 0 } else { 1 });
@@ -8938,12 +8945,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let chrome_weak = window.as_weak();
         appearance.on_appearance_bool(move |key, value| match key.as_str() {
             "use-system-title-bar" => {
-                // Startup-time choice: `AppWindow.no-frame` / the macOS overlay
-                // attributes are fixed at surface creation (Wayland negotiates
-                // decorations then), so this applies on the next launch.
+                // The toggle only edits the PREF (`use-system-title-bar`);
+                // whether it reaches the applied chrome state
+                // (`system-title-bar-active`, which no-frame / the header
+                // drag+inset / Purchases placement read) is decided HERE,
+                // per platform.
                 let mut prefs = crate::ui_prefs::load();
                 prefs.use_system_title_bar = value;
                 crate::ui_prefs::save(&prefs);
+                // Linux: mirror live (today's hot path — no-frame drives
+                // winit set_decorations on the next properties update, and
+                // the drawn controls/drag follow).
+                #[cfg(not(target_os = "macos"))]
+                if let Some(w) = chrome_weak.upgrade() {
+                    w.global::<AppearanceState>()
+                        .set_system_title_bar_active(value);
+                }
+                // macOS: persist-only, restart to apply. The overlay
+                // attributes (titlebar_transparent / fullsize_content_view)
+                // are fixed at window creation; flipping the header bindings
+                // live desyncs them from the real chrome (traffic lights
+                // overlapped by content, or system bar + overlay inset at
+                // once), so `system-title-bar-active` keeps its startup
+                // value there.
                 crate::toast::info_weak(
                     &chrome_weak,
                     qbz_i18n::t("Title bar mode changed — restart QBZ to apply"),
