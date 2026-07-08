@@ -38,6 +38,13 @@ pub struct VisualizerTap {
     pub ring_buffer: Arc<RingBuffer>,
     /// Whether visualization is enabled
     pub enabled: Arc<AtomicBool>,
+    /// Whether playback is paused. While `enabled && paused` the FFT producer
+    /// parks instead of re-FFTing the stale ring buffer at TARGET_FPS (the
+    /// buffer receives no new samples while the player is paused/stopped).
+    /// Consumer-side gate only — `push()` does NOT check it, so the
+    /// sample-submit path is untouched. Defaults to `false` (not paused) so
+    /// frontends that never wire it keep the historical behavior.
+    pub paused: Arc<AtomicBool>,
     /// Current sample rate
     pub sample_rate: Arc<AtomicU32>,
 }
@@ -48,6 +55,7 @@ impl VisualizerTap {
         Self {
             ring_buffer: Arc::new(RingBuffer::new(FFT_SIZE * 2)),
             enabled: Arc::new(AtomicBool::new(false)),
+            paused: Arc::new(AtomicBool::new(false)),
             sample_rate: Arc::new(AtomicU32::new(44100)),
         }
     }
@@ -69,6 +77,20 @@ impl VisualizerTap {
     /// Enable or disable visualization
     pub fn set_enabled(&self, enabled: bool) {
         self.enabled.store(enabled, Ordering::Relaxed);
+    }
+
+    /// Check if playback is paused (fast atomic check)
+    #[inline]
+    pub fn is_paused(&self) -> bool {
+        self.paused.load(Ordering::Relaxed)
+    }
+
+    /// Mark playback as paused/resumed. While paused (and enabled) the FFT
+    /// producer parks on a bounded timeout instead of burning CPU on the
+    /// stale buffer; it self-wakes within that bound after a resume, so no
+    /// caller is required to unpark it. Atomic store — never blocks.
+    pub fn set_paused(&self, paused: bool) {
+        self.paused.store(paused, Ordering::Relaxed);
     }
 
     /// Update the sample rate

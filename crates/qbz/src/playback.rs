@@ -642,6 +642,7 @@ fn auto_skip_unavailable<'a>(
     if failed_track_id != 0
         && runtime.core().consume_stop_after_if(failed_track_id).await
     {
+        set_viz_paused(runtime, true);
         let _ = weak.upgrade_in_event_loop(|w| {
             w.global::<NowPlayingState>().set_playing(false);
         });
@@ -657,6 +658,7 @@ fn auto_skip_unavailable<'a>(
             qbz_i18n::t("No available tracks to play"),
             crate::ToastKind::Warning,
         );
+        set_viz_paused(runtime, true);
         let _ = weak.upgrade_in_event_loop(|w| {
             w.global::<NowPlayingState>().set_playing(false);
         });
@@ -1494,6 +1496,19 @@ fn load_now_playing_artwork_large(weak: slint::Weak<AppWindow>, art: qbz_models:
     });
 }
 
+/// Mirror the playing/paused state onto the visualizer tap so the FFT producer
+/// parks while nothing plays (paused/stopped it would otherwise re-FFT the
+/// stale ring buffer at 30fps — the NPB Large dock idled at ~2.5% CPU). Called
+/// next to every `NowPlayingState.set_playing` flip so the producer stays
+/// consistent with the UI-thread drain gate (visualizer.rs), which keys off the
+/// same flag. Atomic store — safe from any thread, never blocks; a paused park
+/// self-wakes within 200ms after resume (no unpark required).
+fn set_viz_paused(runtime: &Runtime, paused: bool) {
+    if let Some(tap) = runtime.visualizer_tap() {
+        tap.set_paused(paused);
+    }
+}
+
 /// Wall-clock now in milliseconds. Used by the poll loop to extrapolate the
 /// peer renderer's position (`position_ms + (now - updated_at_ms)`) while
 /// QBZ is CONTROLLING a peer (the local player is stopped, so the seek bar
@@ -1812,6 +1827,10 @@ pub(crate) async fn refresh_now_playing_meta(runtime: &Runtime, weak: &slint::We
     // renders add vs remove honestly for the new track. Kept live between
     // track changes by set_album_row_favorite (main.rs).
     let album_favorite = crate::fav_cache::is_album_favorite(&album_id);
+    // The bar is seeded playing=true below — wake the visualizer producer with
+    // it (stored BEFORE the UI post so the drain gate never opens while the
+    // producer is still marked paused).
+    set_viz_paused(runtime, false);
     let _ = weak.upgrade_in_event_loop(move |w| {
         let np = w.global::<NowPlayingState>();
         np.set_has_track(true);
@@ -3658,6 +3677,10 @@ pub fn toggle_play_pause(
         if runtime.core().get_playback_state().is_playing {
             if let Err(e) = runtime.core().pause() {
                 log::error!("[qbz-slint] playback: pause failed: {e}");
+            } else {
+                // Park the visualizer producer on the edge, ahead of the
+                // 450ms poll tick that mirrors the flag onto the bar.
+                set_viz_paused(&runtime, true);
             }
             // Persist the paused position so a restart resumes near where the
             // user stopped (no-op unless `persist_session` is on).
@@ -3669,6 +3692,9 @@ pub fn toggle_play_pause(
         if runtime.core().player().has_loaded_audio() {
             if let Err(e) = runtime.core().resume() {
                 log::error!("[qbz-slint] playback: resume failed: {e}");
+            } else {
+                // Wake the producer on the edge — resume must feel instant.
+                set_viz_paused(&runtime, false);
             }
             return;
         }
@@ -4041,6 +4067,11 @@ pub fn start_poll_loop(
                 );
                 if last_remote_ui_push != Some(remote_snapshot) {
                     last_remote_ui_push = Some(remote_snapshot);
+                    // Keep the visualizer producer in step with the same flag
+                    // the drain gate reads (a paused PEER parks it too; while
+                    // the peer plays, the local buffer is stale — historical
+                    // behavior, the bars simply freeze).
+                    set_viz_paused(&runtime, !playing);
                     let elapsed = fmt_elapsed(position_secs);
                     let remaining = fmt_remaining(position_secs, duration_secs);
                     let _ = weak.upgrade_in_event_loop(move |w| {
@@ -4337,6 +4368,13 @@ pub fn start_poll_loop(
             );
             if last_ui_push != Some(ui_snapshot) {
                 last_ui_push = Some(ui_snapshot);
+                // Mirror engine truth onto the visualizer tap alongside the
+                // set_playing push below. This is the catch-all: EVERY local
+                // transition (pause/resume from any surface — MPRIS, tray,
+                // hotkey, QConnect renderer command — plus stop, track end,
+                // seek-while-paused snapshots) lands here within one 450ms
+                // tick; the direct edge sites above only shave latency.
+                set_viz_paused(&runtime, !is_playing);
                 let progress = if duration > 0 {
                     (position as f32 / duration as f32).clamp(0.0, 1.0)
                 } else {
@@ -4492,6 +4530,8 @@ pub fn start_poll_loop(
                     if let Err(e) = runtime.core().pause() {
                         log::warn!("[qbz-slint] stop-after: pause failed: {e}");
                     }
+                    // Stop counts as paused for the visualizer tap.
+                    set_viz_paused(&runtime, true);
                     last_track_id = 0;
                     was_playing = false;
                     seen_position = 0;
@@ -4516,8 +4556,10 @@ pub fn start_poll_loop(
                     // replaced the queue and refreshes the sidebar itself).
                 } else {
                     log::info!("[qbz-slint] playback: queue finished");
-                    // Nothing more will play — force-clear any lingering spinner.
+                    // Nothing more will play — force-clear any lingering spinner
+                    // and park the visualizer producer (stop counts as paused).
                     clear_loading(&weak, 0);
+                    set_viz_paused(&runtime, true);
                     let _ = weak.upgrade_in_event_loop(|w| {
                         let np = w.global::<NowPlayingState>();
                         np.set_playing(false);

@@ -116,10 +116,33 @@ pub fn install(window: &AppWindow, runtime: &Arc<AppRuntime<SlintAdapter>>) {
     let mut last_progress = 0.0f32;
     // Smoothed highest-active-band fraction → the spectral-ribbon ceiling line.
     let mut last_peak = 0.0f32;
+    // Paused gate edge tracker (see the top of the closure).
+    let mut drain_saw_playing = false;
+    // Second handle to the producer thread for the resume unpark below (the
+    // original moves into the set-enabled handler).
+    let fft_thread_drain = fft_thread.clone();
     timer.start(
         slint::TimerMode::Repeated,
         std::time::Duration::from_millis(33),
         move || {
+            // Paused gate: while NowPlayingState says not-playing, skip the
+            // whole drain (cell takes, 28 set_row_data models, shader frame) —
+            // the producer is parked via the tap's `paused` flag (playback.rs
+            // mirrors every set_playing flip), so there is no fresh data; the
+            // bars simply freeze at their last values. On the paused→playing
+            // edge, unpark the producer so resume feels instant (≤33ms to
+            // observe the flag here vs its 200ms park self-wake).
+            let Some(win) = weak.upgrade() else {
+                return;
+            };
+            let playing = win.global::<NowPlayingState>().get_playing();
+            if playing && !drain_saw_playing {
+                fft_thread_drain.unpark();
+            }
+            drain_saw_playing = playing;
+            if !playing {
+                return;
+            }
             if let Some(b) = cells.bars.lock().unwrap().take() {
                 for (i, v) in b.iter().enumerate() {
                     bars.set_row_data(i, *v);

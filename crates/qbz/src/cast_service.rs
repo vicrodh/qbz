@@ -870,6 +870,12 @@ impl SlintCastService {
 
         // Push position to CastState + the now-playing bar (the local poll is
         // stopped while casting, so the cast poll drives the bar).
+        // Mirror the flag onto the visualizer tap too: the local poll (which
+        // normally owns it) is skipped while casting, and a paused renderer
+        // must park the FFT producer like a local pause does.
+        if let Some(tap) = self.runtime.visualizer_tap() {
+            tap.set_paused(!playing);
+        }
         let weak = self.window.clone();
         let _ = weak.upgrade_in_event_loop(move |w| {
             use slint::ComponentHandle;
@@ -1007,6 +1013,13 @@ impl SlintCastService {
                 inner.is_playing,
             )
         };
+        // Same tap mirror as poll_once: while connected this owns the bar's
+        // playing flag, so it owns the producer gate too.
+        if connected {
+            if let Some(tap) = self.runtime.visualizer_tap() {
+                tap.set_paused(!playing);
+            }
+        }
         let weak = self.window.clone();
         let _ = weak.upgrade_in_event_loop(move |w| {
             use slint::ComponentHandle;

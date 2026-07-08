@@ -1176,6 +1176,7 @@ pub fn run(qconnect_cli_override: Option<bool>) {
                 let v2_viz_tap = qbz_audio::VisualizerTap {
                     ring_buffer: v1_viz_tap.ring_buffer.clone(),
                     enabled: v1_viz_tap.enabled.clone(),
+                    paused: v1_viz_tap.paused.clone(),
                     sample_rate: v1_viz_tap.sample_rate.clone(),
                 };
                 tauri::async_runtime::spawn(async move {

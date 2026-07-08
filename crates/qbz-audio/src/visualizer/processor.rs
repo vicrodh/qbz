@@ -65,11 +65,13 @@ pub trait VizSink: Send + Sync {
     fn submit(&self, frame: VizFrame);
 }
 
-/// Disabled-state idle poll. Instead of spinning at `TARGET_FPS` while the tap
-/// is off, the producer parks for this long between `enabled` re-checks. An
-/// enable path MAY `unpark()` the thread (via the returned `JoinHandle`'s
-/// `.thread()`) for an instant wake — the Slint frontend does; callers that
-/// don't still get picked up within this bound.
+/// Idle poll for the disabled AND paused states. Instead of spinning at
+/// `TARGET_FPS` while the tap is off (or the player is paused and the ring
+/// buffer is stale), the producer parks for this long between re-checks of the
+/// `enabled`/`paused` atomics. An enable/resume path MAY `unpark()` the thread
+/// (via the returned `JoinHandle`'s `.thread()`) for an instant wake — the
+/// Slint frontend does; callers that don't still get picked up within this
+/// bound (≤200ms, well under the ~250ms resume-latency budget).
 const IDLE_POLL: Duration = Duration::from_millis(200);
 
 /// Spawn the FFT processing thread. Idempotency is the caller's concern (the
@@ -88,8 +90,8 @@ pub fn spawn_visualizer_thread(tap: VisualizerTap, sink: Arc<dyn VizSink>) -> Jo
 /// Main FFT processing loop. Reads samples from the tap's ring buffer, computes
 /// all five streams at `TARGET_FPS`, and submits them to the sink. The enabled
 /// path (pacing, `sample_rate` reads, `SpectralAnalyzer` cadence, DSP) matches
-/// the historical Tauri loop; while DISABLED the thread parks (see [`IDLE_POLL`])
-/// instead of spinning at `TARGET_FPS`.
+/// the historical Tauri loop; while DISABLED or PAUSED the thread parks (see
+/// [`IDLE_POLL`]) instead of spinning at `TARGET_FPS`.
 fn run_fft_loop(tap: VisualizerTap, sink: Arc<dyn VizSink>) {
     // Pre-allocate all buffers to avoid allocations in the hot path
     let mut samples = vec![0.0f32; FFT_SIZE];
@@ -124,11 +126,14 @@ fn run_fft_loop(tap: VisualizerTap, sink: Arc<dyn VizSink>) {
     let frame_duration = Duration::from_micros(1_000_000 / TARGET_FPS);
 
     loop {
-        if !tap.enabled.load(Ordering::Relaxed) {
-            // Disabled: park instead of pacing at TARGET_FPS doing nothing.
-            // Spurious wakeups are fine (the loop just re-checks the atomic);
-            // the bounded timeout means no enable path is REQUIRED to unpark.
-            // Never blocks shutdown: the thread is detached and always wakes.
+        if !tap.enabled.load(Ordering::Relaxed) || tap.paused.load(Ordering::Relaxed) {
+            // Disabled OR paused: park instead of pacing at TARGET_FPS doing
+            // nothing (paused = the ring buffer receives no new samples, so
+            // re-FFTing it would burn CPU on identical stale data).
+            // Spurious wakeups are fine (the loop just re-checks the atomics);
+            // the bounded timeout means no enable/resume path is REQUIRED to
+            // unpark. Never blocks shutdown: the thread is detached and always
+            // wakes.
             std::thread::park_timeout(IDLE_POLL);
             continue;
         }
