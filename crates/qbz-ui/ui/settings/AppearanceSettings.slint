@@ -670,19 +670,20 @@ export component AppearanceSettings inherits VerticalLayout {
     }
     */
 
-    Rectangle { height: 12px; }
-    Divider { }
-    Rectangle { height: 12px; }
+    if !AppearanceState.is-macos: Rectangle { height: 12px; }
+    if !AppearanceState.is-macos: Divider { }
+    if !AppearanceState.is-macos: Rectangle { height: 12px; }
 
     // ===================================================================
     // TITLE BAR (custom window chrome — the header IS the title bar: it is
     // always present; custom mode adds window controls + drag to it and
     // drops the system decorations. Linux defaults to system chrome; macOS
-    // defaults to the overlay (native traffic lights over the header).)
+    // keeps the native overlay (traffic lights over the header), so this
+    // whole section is hidden there.)
     // ===================================================================
-    GroupHeader { text: @tr("TITLE BAR"); }
+    if !AppearanceState.is-macos: GroupHeader { text: @tr("TITLE BAR"); }
 
-    SettingRow {
+    if !AppearanceState.is-macos: SettingRow {
         label: @tr("Use system title bar");
         description: @tr("Keep your system's native window decorations. Turn off to use the QBZ header as the title bar, with its own window controls and drag support. Takes effect after restarting QBZ.");
         QbzToggle {
@@ -693,7 +694,7 @@ export component AppearanceSettings inherits VerticalLayout {
             }
         }
     }
-    SettingRow {
+    if !AppearanceState.is-macos: SettingRow {
         label: @tr("Hide title bar");
         description: @tr("Frameless window without window controls or header drag (for tiling window manager users)");
         enabled: !AppearanceState.use-system-title-bar;
