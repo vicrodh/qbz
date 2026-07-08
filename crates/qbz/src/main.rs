@@ -443,7 +443,12 @@ async fn enter_shell(
     // refresh its metadata explicitly. No audio is loaded — playback stays
     // stopped until the user hits play (Phase B then seeks to the saved
     // position when `resume_playback_position` is on).
-    if session_persist::restore(&runtime).await {
+    if crash_chain_level() >= 3 {
+        // Crash-chain level >=3: two consecutive starts died even after the
+        // view-restore reset — bypass the queue restore for THIS boot only
+        // (the persisted queue stays on disk; a healthy boot restores it).
+        log::warn!("[crash-chain] session-persist queue restore bypassed this boot");
+    } else if session_persist::restore(&runtime).await {
         playback::refresh_now_playing_meta(&runtime, &weak).await;
         // Repaint the queue sidebar/list — set_queue_with_order emits
         // QueueUpdated, but the queue UI repaints from explicit refreshes.
@@ -479,7 +484,21 @@ async fn enter_shell(
     // — which loads the view's data, NOT a blank set_view (the Tauri precedent).
     {
         let prefs = crate::ui_prefs::load();
-        if prefs.startup_page == "remember" {
+        // Crash-chain gate: at level >=2 the persisted view restore was
+        // already reset by `arm_startup_probe` (last_nav "{}" / last_view
+        // "home"), so there is nothing valid to restore — skip the block
+        // explicitly, tell the user what happened, and stay on Home.
+        if crash_chain_level() >= 2 {
+            log::warn!("[crash-chain] persisted view restore skipped (recovery)");
+            let _ = weak.upgrade_in_event_loop(|w| {
+                crate::toast::info(
+                    &w,
+                    qbz_i18n::t(
+                        "QBZ recovered from repeated startup crashes — some restored state was reset",
+                    ),
+                );
+            });
+        } else if prefs.startup_page == "remember" {
             // Legacy top-level fallback (id-free surfaces) — the only thing that
             // can be restored offline (these load from local/offline data).
             let legacy = |key: &str| match key {
@@ -5711,6 +5730,79 @@ fn renderer_sentinel_armed() -> bool {
     renderer_sentinel_path().map(|p| p.exists()).unwrap_or(false)
 }
 
+/// Startup crash-chain watchdog — the renderer-sentinel pattern generalized
+/// to the whole startup path (incident 2026-07-08: a "Recursion detected"
+/// render panic inside the RESTORED view fired before first input, so every
+/// start re-restored the crashing view and died — a crash-loop the renderer
+/// ladder could not see). A counter file is incremented at every launch
+/// BEFORE risky init and cleared by the same liveness proof that disarms
+/// the renderer sentinel; the value it had already reached at launch is the
+/// number of consecutive starts that died before liveness.
+///
+/// Recovery ladder (surgical: state is reset or bypassed, never deleted):
+/// - level 2 (one prior start died): reset the persisted view restore —
+///   `last_nav` -> "{}", `last_view` -> "home" — so this and future boots
+///   start on Home.
+/// - level >=3: additionally BYPASS the session-persist queue restore for
+///   this boot only (the persisted queue file is kept untouched).
+fn startup_probe_path() -> Option<std::path::PathBuf> {
+    Some(dirs::data_dir()?.join("qbz").join("startup_probe"))
+}
+
+/// This boot's crash-chain level (1 = clean previous shutdown/liveness).
+static CRASH_CHAIN_LEVEL: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+fn crash_chain_level() -> u8 {
+    CRASH_CHAIN_LEVEL.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+fn arm_startup_probe() {
+    let Some(path) = startup_probe_path() else { return };
+    let prev: u8 = std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|s| s.trim().parse().ok())
+        .unwrap_or(0);
+    let level = prev.saturating_add(1);
+    CRASH_CHAIN_LEVEL.store(level, std::sync::atomic::Ordering::Relaxed);
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if let Err(e) = std::fs::write(&path, level.to_string()) {
+        log::warn!("[crash-chain] could not arm the startup probe: {e}");
+    }
+    if level < 2 {
+        return;
+    }
+    log::warn!(
+        "[crash-chain] {} consecutive start(s) died before liveness — recovery level {level}",
+        level - 1
+    );
+    // Level 2: the persisted view restore is the prime suspect — reset it so
+    // the app starts on Home. This edits exactly last_nav/last_view; nothing
+    // else in ui_prefs is touched.
+    let mut prefs = crate::ui_prefs::load();
+    if prefs.last_nav.as_deref() != Some("{}") || prefs.last_view != "home" {
+        prefs.last_nav = Some("{}".to_string());
+        prefs.last_view = "home".to_string();
+        crate::ui_prefs::save(&prefs);
+        log::warn!(
+            "[crash-chain] reset persisted view restore: last_nav -> {{}}, last_view -> home"
+        );
+    }
+    if level >= 3 {
+        log::warn!(
+            "[crash-chain] level {level} — the session-persist queue restore will be \
+             bypassed this boot (queue data kept on disk)"
+        );
+    }
+}
+
+fn clear_startup_probe() {
+    if let Some(path) = startup_probe_path() {
+        let _ = std::fs::remove_file(path);
+    }
+}
+
 /// Disarm the sentinel on proof of LIVENESS: the first real user input (or
 /// a close request — a crash never emits one), with a 30s timer as the
 /// no-touch fallback. Once-guarded so the hot input path costs one relaxed
@@ -5720,6 +5812,9 @@ fn disarm_renderer_sentinel_on_liveness(signal: &str) {
     if !DISARMED.swap(true, std::sync::atomic::Ordering::Relaxed) {
         log::info!("[renderer] startup sentinel disarmed ({signal})");
         clear_renderer_sentinel();
+        // Same liveness proof clears the startup crash-chain probe.
+        clear_startup_probe();
+        log::info!("[crash-chain] startup probe cleared ({signal})");
         // The surviving rung must OUTLIVE the process: when this session ran
         // on the ALTERNATE wgpu adapter, version-stamp that success so the
         // next start arms the alt rung directly — otherwise the rung-2 win
@@ -6388,6 +6483,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         log::info!("[qbz-slint] another instance owns the session bus name — raised it, exiting");
         return Ok(());
     }
+
+    // STARTUP CRASH-CHAIN WATCHDOG — armed after the single-instance guard
+    // (a raise-and-exit must not count as a crash) and BEFORE any risky init
+    // (renderer probing, window creation, view restore). Cleared by the same
+    // liveness proof that disarms the renderer sentinel. See
+    // `arm_startup_probe` for the recovery ladder.
+    arm_startup_probe();
 
     // RENDERER SELECTION — pick wgpu (GPU) vs femtovg GL vs Slint's software
     // renderer BEFORE the first window is created. All three use the winit backend,

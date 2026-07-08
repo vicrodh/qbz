@@ -4492,3 +4492,6 @@ msgid "On by default"
 msgstr "Включено по умолчанию"
 msgid "Off by default"
 msgstr "Выключено по умолчанию"
+
+msgid "QBZ recovered from repeated startup crashes — some restored state was reset"
+msgstr "QBZ восстановился после повторных сбоев при запуске — часть восстановленного состояния была сброшена"

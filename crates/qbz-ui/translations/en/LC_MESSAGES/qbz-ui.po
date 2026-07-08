@@ -248,3 +248,6 @@ msgstr "Off by default"
 
 msgid "Remove album from collection"
 msgstr "Remove album from collection"
+
+msgid "QBZ recovered from repeated startup crashes — some restored state was reset"
+msgstr "QBZ recovered from repeated startup crashes — some restored state was reset"

@@ -208,17 +208,21 @@ component AlbumGrid inherits Rectangle {
         ? root.row-count * root.card-h + (root.row-count - 1) * root.gap
         : 0px;
 
-    // Target band = visible rows ± one full viewport. Row-granular ints, so
-    // the `changed` handlers only fire when a row boundary is crossed, not
-    // per scrolled pixel.
+    // POST-LAYOUT SNAPSHOT SAMPLING — same discipline as the shared
+    // AlbumGrid in AlbumCollectionView.slint (read the long comment there;
+    // third hit of the "Recursion detected" class). Band state is PLAIN
+    // properties written only by the sampler Timer below: `changed`
+    // handlers and init-time reads of the windowing inputs are forbidden
+    // here because this grid instantiates from `ensure_updated` inside
+    // layout/render property evaluation, where reading layout results
+    // (visible-top <- -flick.viewport-y, visible-height <- flick.height)
+    // can re-enter a mid-flight property and panic. Do not wire these back
+    // to reactive bindings.
     property <length> row-stride: root.card-h + root.gap;
-    property <length> local-top: root.visible-top - root.content-offset;
-    property <int> target-first-row: root.windowed
-        ? Math.max(0, Math.floor((root.local-top - root.visible-height) / root.row-stride))
-        : 0;
-    property <int> target-last-row: root.windowed
-        ? Math.max(0, Math.floor((root.local-top + 2 * root.visible-height) / root.row-stride))
-        : 0;
+    // Pre-seed [0, 3]: roughly one viewport of cards mounted for the <=80ms
+    // between mount and the first sampler tick.
+    property <int> target-first-row: 0;
+    property <int> target-last-row: 3;
     // Mounted band = target band + contract hysteresis. Expansion follows the
     // target immediately (a card must be mounted before it can reach the
     // visible area); contraction lags by `hysteresis-rows`, so a few-px
@@ -226,7 +230,7 @@ component AlbumGrid inherits Rectangle {
     // cards on every direction change.
     property <int> hysteresis-rows: 1;
     property <int> first-window-row: 0;
-    property <int> last-window-row: 0;
+    property <int> last-window-row: 3;
     pure function desired-first-row() -> int {
         if (root.target-first-row < root.first-window-row) {
             return root.target-first-row;
@@ -252,11 +256,25 @@ component AlbumGrid inherits Rectangle {
             root.last-window-row = root.desired-last-row();
         }
     }
-    changed target-first-row => { root.apply-window(); }
-    changed target-last-row => { root.apply-window(); }
-    init => {
-        root.first-window-row = root.target-first-row;
-        root.last-window-row = root.target-last-row;
+    // The sampler: reads the live inputs (safe here — event-loop context),
+    // recomputes the target band, applies hysteresis. The one-viewport
+    // margin absorbs the 80ms cadence.
+    function sample-window() {
+        if (!root.windowed) {
+            return;
+        }
+        root.target-first-row = Math.max(0, Math.floor(
+            ((root.visible-top - root.content-offset) - root.visible-height)
+            / root.row-stride));
+        root.target-last-row = Math.max(0, Math.floor(
+            ((root.visible-top - root.content-offset) + 2 * root.visible-height)
+            / root.row-stride));
+        root.apply-window();
+    }
+    Timer {
+        interval: 80ms;
+        running: root.windowed;
+        triggered => { root.sample-window(); }
     }
 
     for album[i] in root.albums: card-slot := Rectangle {

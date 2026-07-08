@@ -4468,3 +4468,6 @@ msgid "On by default"
 msgstr "デフォルトでオン"
 msgid "Off by default"
 msgstr "デフォルトでオフ"
+
+msgid "QBZ recovered from repeated startup crashes — some restored state was reset"
+msgstr "QBZ は起動時の連続クラッシュから復旧しました — 復元された状態の一部がリセットされました"

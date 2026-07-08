@@ -98,19 +98,21 @@ export component Carousel inherits VerticalLayout {
     // dispatches artwork for the whole strip up front and it lands on the
     // model, so a card mounting later picks its cover up instantly.
     // The strip starts at x=0 inside the Flickable's content (no leading
-    // padding), so local-left is just the negated viewport-x.
-    // Target band = visible columns ± one full viewport. Column-granular
-    // ints, so the `changed` handlers only fire when a column boundary is
-    // crossed (~every 232px of scroll), not per scrolled pixel — and a page
-    // jump from the nav buttons is just a big boundary crossing.
+    // padding), so the local left edge is just the negated viewport-x.
+    //
+    // POST-LAYOUT SNAPSHOT SAMPLING — same discipline as AlbumGrid in
+    // AlbumCollectionView.slint (read the long comment there; third hit of
+    // the "Recursion detected" class). The band state is PLAIN properties
+    // written only by the sampler Timer: `changed` handlers and init-time
+    // reads of flick.viewport-x / flick.width are forbidden here because
+    // carousels instantiate from `ensure_updated` inside layout/render
+    // property evaluation, where such reads can re-enter a mid-flight
+    // property and panic. Do not wire these back to reactive bindings.
     property <length> col-stride: root.card-width + root.gap;
-    property <length> local-left: -flick.viewport-x;
-    property <int> target-first-col: Math.max(
-        0,
-        Math.floor((root.local-left - flick.width) / root.col-stride));
-    property <int> target-last-col: Math.max(
-        0,
-        Math.floor((root.local-left + 2 * flick.width) / root.col-stride));
+    // Pre-seed [0, 6]: roughly one viewport of cards mounted for the <=80ms
+    // between mount and the first sampler tick.
+    property <int> target-first-col: 0;
+    property <int> target-last-col: 6;
     // Mounted band = target band + contract hysteresis. Expansion follows
     // the target immediately (a card must be mounted before it can reach the
     // visible area); contraction lags by `hysteresis-cols`, so a few-px
@@ -118,7 +120,7 @@ export component Carousel inherits VerticalLayout {
     // every direction change.
     property <int> hysteresis-cols: 1;
     property <int> first-window-col: 0;
-    property <int> last-window-col: 0;
+    property <int> last-window-col: 6;
     pure function desired-first-col() -> int {
         if (root.target-first-col < root.first-window-col) {
             return root.target-first-col;
@@ -144,11 +146,23 @@ export component Carousel inherits VerticalLayout {
             root.last-window-col = root.desired-last-col();
         }
     }
-    changed target-first-col => { root.apply-window(); }
-    changed target-last-col => { root.apply-window(); }
-    init => {
-        root.first-window-col = root.target-first-col;
-        root.last-window-col = root.target-last-col;
+    // The sampler: reads viewport-x / width live (safe — event-loop
+    // context), recomputes the target band, applies hysteresis. The
+    // one-viewport margin absorbs the 80ms cadence; a page jump from the
+    // nav buttons shows placeholder slots for at most one tick.
+    function sample-window() {
+        root.target-first-col = Math.max(
+            0,
+            Math.floor((-flick.viewport-x - flick.width) / root.col-stride));
+        root.target-last-col = Math.max(
+            0,
+            Math.floor((-flick.viewport-x + 2 * flick.width) / root.col-stride));
+        root.apply-window();
+    }
+    Timer {
+        interval: 80ms;
+        running: root.count > 0;
+        triggered => { root.sample-window(); }
     }
 
     spacing: 12px;

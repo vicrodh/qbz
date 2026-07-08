@@ -206,6 +206,17 @@ pub async fn capture_and_save(runtime: &Runtime) {
         return;
     }
     let (tracks, current_index) = runtime.core().get_all_queue_tracks().await;
+    // Crash-chain level >=3 bypassed the restore this boot, so the queue on
+    // disk is the GOOD copy the user wants back on a healthy start — don't
+    // clobber it with this session's empty queue at exit. A queue the user
+    // actually built during the recovered boot still saves normally.
+    if tracks.is_empty() && crate::crash_chain_level() >= 3 {
+        log::info!(
+            "[qbz-slint] session_persist: crash-chain recovery boot with empty queue — \
+             keeping the preserved snapshot on disk"
+        );
+        return;
+    }
     let full = runtime.core().get_queue_state_full().await;
     let pb = runtime.core().get_playback_state();
     let snapshot = PersistedSessionSnapshot {

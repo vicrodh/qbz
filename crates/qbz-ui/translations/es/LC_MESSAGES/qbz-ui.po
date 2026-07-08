@@ -4509,3 +4509,6 @@ msgid "On by default"
 msgstr "Activado de forma predeterminada"
 msgid "Off by default"
 msgstr "Desactivado de forma predeterminada"
+
+msgid "QBZ recovered from repeated startup crashes — some restored state was reset"
+msgstr "QBZ se recuperó de fallos repetidos al iniciar — se restableció parte del estado guardado"

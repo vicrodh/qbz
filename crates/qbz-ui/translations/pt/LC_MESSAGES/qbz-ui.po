@@ -4479,3 +4479,6 @@ msgid "On by default"
 msgstr "Ligado por padrão"
 msgid "Off by default"
 msgstr "Desligado por padrão"
+
+msgid "QBZ recovered from repeated startup crashes — some restored state was reset"
+msgstr "O QBZ se recuperou de falhas repetidas na inicialização — parte do estado restaurado foi redefinida"

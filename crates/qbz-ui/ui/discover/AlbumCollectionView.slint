@@ -28,6 +28,11 @@ component AlbumGrid inherits Rectangle {
     // `visible-top`/`visible-height` arrive in the surrounding Flickable's
     // CONTENT coordinates; `content-offset` is this grid's approximate y
     // inside that content — small errors are absorbed by the margin.
+    //
+    // CONTRACT: these inputs are POLLED, never observed. The grid reads them
+    // only from its sampler Timer (see below); wiring them to live layout
+    // expressions (-flick.viewport-y / flick.height) is safe BECAUSE nothing
+    // here evaluates them from a binding or `changed` handler.
     in property <bool> windowed: false;
     in property <length> visible-top: 0px;
     in property <length> visible-height: 0px;
@@ -47,17 +52,41 @@ component AlbumGrid inherits Rectangle {
         ? self.rows * root.card-height + Math.max(0, self.rows - 1) * root.card-gap
         : 0px;
 
-    // Target band = visible rows ± one full viewport. Row-granular ints, so
-    // the `changed` handlers only fire when a row boundary is crossed (~every
-    // 270px of scroll), not per scrolled pixel.
+    // ------------------------------------------------------------------
+    // WINDOWING ENGINE — POST-LAYOUT SNAPSHOT SAMPLING. Read this before
+    // touching anything below; this is the THIRD hit of the "Recursion
+    // detected" panic class (i-slint-core properties.rs:583) and the sampler
+    // is the class-kill.
+    //
+    // The mechanism that crashes (field-hit 2026-07-07 on LL grouped via an
+    // absolute-position binding, and 2026-07-08 on DiscoverBrowse at startup
+    // view-restore when the album model filled): a `changed x => {}` handler
+    // compiles to a ChangeTracker whose watched expression is evaluated
+    // SYNCHRONOUSLY inside `user_init` at component instantiation — and a
+    // conditional/repeated component instantiates from `ensure_updated`,
+    // which runs INSIDE whatever property evaluation triggered it (a layout
+    // cache, a layout_info/preferred-height chain, the render pass). If the
+    // watched expression reads layout-RESULT properties (flick.viewport-y /
+    // flick.height / self.width / absolute-position), that read can land on
+    // a property that is mid-evaluation higher up the same stack → re-entry
+    // → panic. It is timing-sensitive: it needs the model to fill in the
+    // same pass that instantiates the grid (startup view-restore hits it
+    // deterministically; warm navigation usually mounts the grid empty
+    // first and survives).
+    //
+    // The kill: the band state below consists of PLAIN properties written
+    // ONLY by the sampler Timer. Timer callbacks run from the event loop
+    // with no property evaluation on the stack, so reading the live layout
+    // inputs there cannot re-enter anything. There are deliberately NO
+    // `changed` handlers and NO init-time reads of the inputs in this
+    // component. Do not "optimize" this back to reactive bindings.
+    // ------------------------------------------------------------------
     property <length> row-stride: root.card-height + root.card-gap;
-    property <length> local-top: root.visible-top - root.content-offset;
-    property <int> target-first-row: root.windowed
-        ? Math.max(0, Math.floor((root.local-top - root.visible-height) / root.row-stride))
-        : 0;
-    property <int> target-last-row: root.windowed
-        ? Math.max(0, Math.floor((root.local-top + 2 * root.visible-height) / root.row-stride))
-        : 0;
+    // Snapshot band — plain values, sampler-written. The pre-seed [0, 3]
+    // keeps roughly the first viewport of cards mounted for the <=80ms
+    // between mount and the first tick (placeholder tiles cover the rest).
+    property <int> target-first-row: 0;
+    property <int> target-last-row: 3;
     // Mounted band = target band + contract hysteresis. Expansion follows the
     // target immediately (a card must be mounted before it can reach the
     // visible area); contraction lags by `hysteresis-rows`, so a few-px
@@ -65,7 +94,10 @@ component AlbumGrid inherits Rectangle {
     // cards on every direction change.
     property <int> hysteresis-rows: 1;
     property <int> first-window-row: 0;
-    property <int> last-window-row: 0;
+    property <int> last-window-row: 3;
+    // Last column count reported through window-changed (columns shift on
+    // resize, which re-keys the band's ITEM indices).
+    property <int> notified-columns: 0;
     pure function desired-first-row() -> int {
         if (root.target-first-row < root.first-window-row) {
             return root.target-first-row;
@@ -92,29 +124,32 @@ component AlbumGrid inherits Rectangle {
             root.notify-window();
         }
     }
-    changed target-first-row => { root.apply-window(); }
-    changed target-last-row => { root.apply-window(); }
-    // Column count changes on first layout and on window resize — the band's
-    // ITEM indices depend on it, so re-notify.
-    changed columns => { root.notify-window(); }
-    // Post-layout seed. Reading the target bindings from `init` would pull
-    // `absolute-position` (a grouped section's content-offset) while layout
-    // is still evaluating — the documented "Recursion detected" panic. A
-    // one-shot Timer a tick after mount is the sanctioned probe (same
-    // pattern as the modal focus timers); until it fires, the default [0,0]
-    // band keeps at most the first row mounted for one frame. The `changed`
-    // handlers run from the post-layout change queue, so they stay direct.
-    property <bool> seeded: false;
-    Timer {
-        interval: 16ms;
-        running: root.windowed && !root.seeded;
-        triggered => {
-            self.running = false;
-            root.seeded = true;
-            root.first-window-row = root.target-first-row;
-            root.last-window-row = root.target-last-row;
+    // The sampler: reads the live inputs (safe here — event-loop context),
+    // recomputes the target band, applies hysteresis, and notifies on
+    // change. ~12.5 Hz is enough: the band carries a full-viewport margin,
+    // so a fling would have to cross more than one viewport in 80ms to
+    // outrun it — and then the placeholder tiles (the designed fast-scroll
+    // fallback) cover until the next tick.
+    function sample-window() {
+        if (!root.windowed) {
+            return;
+        }
+        root.target-first-row = Math.max(0, Math.floor(
+            ((root.visible-top - root.content-offset) - root.visible-height)
+            / root.row-stride));
+        root.target-last-row = Math.max(0, Math.floor(
+            ((root.visible-top - root.content-offset) + 2 * root.visible-height)
+            / root.row-stride));
+        root.apply-window();
+        if (root.columns != root.notified-columns) {
+            root.notified-columns = root.columns;
             root.notify-window();
         }
+    }
+    Timer {
+        interval: 80ms;
+        running: root.windowed;
+        triggered => { root.sample-window(); }
     }
     function notify-window() {
         if (root.windowed) {
