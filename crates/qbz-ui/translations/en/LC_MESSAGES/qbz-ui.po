@@ -245,3 +245,6 @@ msgid "On by default"
 msgstr "On by default"
 msgid "Off by default"
 msgstr "Off by default"
+
+msgid "Remove album from collection"
+msgstr "Remove album from collection"

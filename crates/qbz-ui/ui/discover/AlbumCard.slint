@@ -372,8 +372,12 @@ export component AlbumCard inherits Rectangle {
                         }
                     }
                     if root.show-favorite: ContextMenuItem {
-                        icon: @image-url("../assets/icons/heart.svg");
-                        label: @tr("Add to Library");
+                        icon: root.album.is-favorite
+                            ? @image-url("../assets/icons/heart-filled.svg")
+                            : @image-url("../assets/icons/heart.svg");
+                        label: root.album.is-favorite
+                            ? @tr("Remove from Library")
+                            : @tr("Add to Library");
                         clicked => {
                             root.media-action("album", root.album.id, "favorite");
                         }

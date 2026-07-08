@@ -170,8 +170,14 @@ export component TransportControls inherits HorizontalLayout {
                         }
                     }
                     ContextMenuItem {
+                        // State-honest since the album "favorite" arm became a
+                        // toggle. The icon STAYS disc-3: the flyout already has
+                        // a heart entry (the track one right above) — the disc
+                        // is what tells the two apart; the label carries state.
                         icon: @image-url("../assets/icons/disc-3.svg");
-                        label: @tr("Add album to collection");
+                        label: NowPlayingState.album-favorite
+                            ? @tr("Remove album from collection")
+                            : @tr("Add album to collection");
                         enabled: NowPlayingState.album-id != "";
                         clicked => {
                             root.media-action("album", NowPlayingState.album-id, "favorite");

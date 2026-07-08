@@ -1807,6 +1807,11 @@ pub(crate) async fn refresh_now_playing_meta(runtime: &Runtime, weak: &slint::We
         });
     }
 
+    // Seed the "+" flyout's album-collection entry from the favorite-album
+    // cache — the SAME source the card/header toggles flip — so the entry
+    // renders add vs remove honestly for the new track. Kept live between
+    // track changes by set_album_row_favorite (main.rs).
+    let album_favorite = crate::fav_cache::is_album_favorite(&album_id);
     let _ = weak.upgrade_in_event_loop(move |w| {
         let np = w.global::<NowPlayingState>();
         np.set_has_track(true);
@@ -1814,6 +1819,7 @@ pub(crate) async fn refresh_now_playing_meta(runtime: &Runtime, weak: &slint::We
         np.set_artist(artist.into());
         np.set_album(album_display.into());
         np.set_album_id(album_id.into());
+        np.set_album_favorite(album_favorite);
         np.set_artist_id(artist_id.into());
         np.set_track_id(track_id.into());
         // Mirror the active track + playing flag onto the Purchases globals so a

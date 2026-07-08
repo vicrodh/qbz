@@ -2285,6 +2285,9 @@ msgstr "追加先…"
 msgid "Add album to collection"
 msgstr "アルバムをコレクションに追加"
 
+msgid "Remove album from collection"
+msgstr "アルバムをコレクションから削除"
+
 msgid "Remove from library"
 msgstr "ライブラリから削除"
 

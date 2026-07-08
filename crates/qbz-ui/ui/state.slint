@@ -3951,6 +3951,12 @@ export global NowPlayingState {
     in property <string> artist;
     in property <string> album;
     in property <string> album-id;
+    // Whether the playing track's ALBUM is a library favorite. Seeded from
+    // fav_cache in refresh_now_playing_meta (playback.rs) on every track-meta
+    // push, and flipped live by set_album_row_favorite (main.rs) when a
+    // favorite toggle from ANY surface matches album-id. Drives the "+"
+    // flyout's add/remove-album-to-collection entry (TransportControls).
+    in property <bool> album-favorite: false;
     in property <string> artist-id;
     in property <image> artwork;
     // Higher-res cover (~300px) for the hover preview that floats above the

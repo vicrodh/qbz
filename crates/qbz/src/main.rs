@@ -1494,6 +1494,23 @@ fn set_album_row_favorite(window: &AppWindow, album_id: &str, favorite: bool) {
     flip(&favs.get_albums_visible());
     flip_sections(&favs.get_albums_grouped());
     flip_sections(&favs.get_selected_artist_sections());
+    // Now-playing bar "+" flyout — its add/remove-album-to-collection entry
+    // reads NowPlayingState.album-favorite; flip it when the toggled album is
+    // the one playing so the label stays honest without a track change.
+    // (Seeded per-track from fav_cache in playback::refresh_now_playing_meta.)
+    let np = window.global::<NowPlayingState>();
+    if np.get_album_id() == album_id {
+        np.set_album_favorite(favorite);
+    }
+    // Album-detail HEADER heart: without this, a toggle from any other
+    // surface (cards, NPB flyout) leaves the open album page's heart stale
+    // and its next click silently UNDOES the user's action (the toggle
+    // reads the already-flipped cache). Redundant-but-harmless when the
+    // header arm itself called us — same value.
+    let album_state = window.global::<AlbumState>();
+    if album_state.get_id() == album_id {
+        album_state.set_is_favorite(favorite);
+    }
 }
 
 /// Feed Capa B (intelligent-search ranking) from a RESULTS-PAGE click, but only
@@ -9309,8 +9326,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             //   - track play              -> Play
             //   - album play              -> Play (an album-card play is still a
             //                                play interaction with the entity)
-            //   - album favorite (add)    -> Favorite (the grid/menu heart arm is
-            //                                add-only)
+            //   - album favorite (toggle) -> Favorite ONLY when transitioning to
+            //                                favorited (the card heart arm is a
+            //                                toggle since 2026-07; Favorite
+            //                                weight must only ADD)
             //   - artist follow (add)     -> Favorite (search artist cards show
             //                                "Follow" only when NOT following, so
             //                                this action is always an add)
@@ -9323,8 +9342,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     ("track", "play") | ("album", "play") => {
                         record_search_interaction(&w, &kind, &id, InteractionAction::Play);
                     }
-                    ("album", "favorite") | ("artist", "follow") => {
-                        // Both are add-only paths on a search card.
+                    ("album", "favorite") => {
+                        // Toggle: record ONLY when this click ADDS the favorite
+                        // (mirrors the track arm below; the album card arm flips
+                        // off the same `fav_cache::is_album_favorite`).
+                        if !crate::fav_cache::is_album_favorite(&id) {
+                            record_search_interaction(&w, &kind, &id, InteractionAction::Favorite);
+                        }
+                    }
+                    ("artist", "follow") => {
+                        // Add-only on a search card ("Follow" shows only when
+                        // NOT following).
                         record_search_interaction(&w, &kind, &id, InteractionAction::Favorite);
                     }
                     ("track", "favorite") => {
@@ -9647,34 +9675,58 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     id.clone(),
                 ),
                 ("album", "favorite") => {
-                    // Add the album to the user's favorites. The album cards
-                    // (grid hover heart + the "…" menu) all bubble this; the
-                    // shared component means one handler covers the app.
-                    // Optimistic: fill the heart on every visible card right
-                    // away (mirrors the track rows); rolled back on failure.
+                    // Album-card heart + "…" menu entry: a TRUE TOGGLE keyed
+                    // off the favorite-album cache (filled heart → remove,
+                    // empty → add), mirroring the header "favorite-toggle"
+                    // arm below. Was add-only while the cards couldn't show
+                    // favorite state; now that they do, re-adding from a
+                    // filled heart would lie. Optimistic: flip the heart on
+                    // every visible card right away (mirrors the track
+                    // rows); rolled back on failure. NOTE: the Favorites
+                    // albums tab never reaches this arm — FavoritesView
+                    // intercepts "favorite" to unfavorite-album (fade-out +
+                    // row removal).
                     let was_fav = crate::fav_cache::is_album_favorite(&id);
+                    let new_state = !was_fav;
                     if let Some(w) = weak.upgrade() {
-                        set_album_row_favorite(&w, &id, true);
+                        set_album_row_favorite(&w, &id, new_state);
                     }
                     let runtime = runtime.clone();
                     let weak = weak.clone();
                     let album_id = id.clone();
                     handle.spawn(async move {
-                        match runtime.core().add_favorite("album", &album_id).await {
+                        let res = if new_state {
+                            runtime.core().add_favorite("album", &album_id).await
+                        } else {
+                            runtime.core().remove_favorite("album", &album_id).await
+                        };
+                        match res {
                             Ok(()) => {
                                 // Keep the favorite-album cache in sync so the
-                                // album-header heart reflects a grid favorite.
-                                crate::fav_cache::set_album(&album_id, true);
-                                crate::toast::success_weak(&weak, "Added to favorites");
-                                // reco: log the album favorite (add-only arm).
-                                let aid = album_id.clone();
-                                tokio::task::spawn_blocking(move || {
-                                    crate::reco::log_favorite_album(aid, None)
-                                });
+                                // album-header heart reflects a card toggle.
+                                crate::fav_cache::set_album(&album_id, new_state);
+                                crate::toast::success_weak(
+                                    &weak,
+                                    if new_state {
+                                        "Added to favorites"
+                                    } else {
+                                        "Removed from favorites"
+                                    },
+                                );
+                                // reco: log the album favorite ADD on success
+                                // only — Capa B scores adds, never removals.
+                                if new_state {
+                                    let aid = album_id.clone();
+                                    tokio::task::spawn_blocking(move || {
+                                        crate::reco::log_favorite_album(aid, None)
+                                    });
+                                }
                             }
                             Err(e) => {
-                                log::error!("[qbz-slint] favorite album failed: {e}");
-                                crate::toast::error_weak(&weak, "Couldn't add to favorites");
+                                log::error!(
+                                    "[qbz-slint] toggle favorite album {album_id} failed: {e}"
+                                );
+                                crate::toast::error_weak(&weak, "Couldn't update favorites");
                                 // Roll the optimistic hearts back to the
                                 // pre-click state.
                                 let _ = weak.upgrade_in_event_loop(move |w| {
@@ -9686,9 +9738,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 ("album", "favorite-toggle") => {
                     // The album-header heart: a TRUE toggle that reflects the
-                    // favorite-album cache (the grid "favorite" arm above stays
-                    // add-only). Optimistic on the open header, reconciled on
-                    // the server result.
+                    // favorite-album cache (the card "favorite" arm above is
+                    // the same toggle, minus the AlbumState header sync).
+                    // Optimistic on the open header, reconciled on the server
+                    // result.
                     let Some(w) = weak.upgrade() else {
                         return;
                     };

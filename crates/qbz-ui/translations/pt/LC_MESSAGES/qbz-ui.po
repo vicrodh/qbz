@@ -2408,6 +2408,9 @@ msgstr "Adicionar a…"
 msgid "Add album to collection"
 msgstr "Adicionar álbum à coleção"
 
+msgid "Remove album from collection"
+msgstr "Remover álbum da coleção"
+
 msgid "Remove from library"
 msgstr "Remover da biblioteca"
 
