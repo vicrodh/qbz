@@ -41,6 +41,11 @@
     isTrackToggling,
     toggleTrackFavorite
   } from '$lib/stores/favoritesStore';
+  import {
+    subscribe as subscribeAlbumFavorites,
+    isAlbumFavorite,
+    toggleAlbumFavorite
+  } from '$lib/stores/albumFavoritesStore';
   import { tick, onMount, onDestroy } from 'svelte';
   import { getUserItem, setUserItem } from '$lib/utils/userStorage';
   import ImageLightbox from '../ImageLightbox.svelte';
@@ -246,6 +251,7 @@
   let isFavorite = $state(false);
   let isFavoriteLoading = $state(false);
   let trackFavoritesVersion = $state(0); // Bumped on favoritesStore changes to trigger reactivity
+  let albumFavoritesVersion = $state(0); // Bumped on albumFavoritesStore changes to trigger reactivity
 
   // Helpers that read trackFavoritesVersion to establish reactive dependency for the {#each} block
   function checkTrackFav(trackId: number): boolean {
@@ -253,6 +259,11 @@
   }
   function checkTrackToggling(trackId: number): boolean {
     return trackFavoritesVersion >= 0 && isTrackToggling(trackId);
+  }
+  // Reads albumFavoritesVersion so discography {#each} blocks re-evaluate when
+  // an album's favorite state changes (here or from the album detail view).
+  function checkAlbumFav(albumId: string): boolean {
+    return albumFavoritesVersion >= 0 && isAlbumFavorite(albumId);
   }
 
   let isRadioLoading = $state(false);
@@ -268,6 +279,7 @@
   let unsubscribeSidebar: (() => void) | null = null;
   let unsubscribeBlacklist: (() => void) | null = null;
   let unsubscribeTrackFavorites: (() => void) | null = null;
+  let unsubscribeAlbumFavorites: (() => void) | null = null;
 
   function updateBlacklistState() {
     artistIsBlacklisted = isBlacklisted(artist.id);
@@ -300,6 +312,11 @@
     // Subscribe to track favorites changes
     unsubscribeTrackFavorites = subscribeFavorites(() => {
       trackFavoritesVersion++;
+    });
+
+    // Subscribe to album favorites changes so discography hearts stay in sync
+    unsubscribeAlbumFavorites = subscribeAlbumFavorites(() => {
+      albumFavoritesVersion++;
     });
 
     // Load custom image status
@@ -337,6 +354,7 @@
     unsubscribeSidebar?.();
     unsubscribeBlacklist?.();
     unsubscribeTrackFavorites?.();
+    unsubscribeAlbumFavorites?.();
     unsubscribeAppearance?.();
     jumpNavObserver?.disconnect();
     // Close the network sidebar when leaving artist view
@@ -2460,6 +2478,8 @@
           {#each filteredAlbums as album}
             <AlbumCard
               albumId={album.id}
+              isFavorite={checkAlbumFav(album.id)}
+              onFavorite={() => toggleAlbumFavorite(album.id)}
               artwork={album.artwork}
               title={album.title}
               artist={album.year ? String(album.year) : ''}
@@ -2525,6 +2545,8 @@
         {#each filteredEpsSingles as album}
           <AlbumCard
             albumId={album.id}
+            isFavorite={checkAlbumFav(album.id)}
+            onFavorite={() => toggleAlbumFavorite(album.id)}
             artwork={album.artwork}
             title={album.title}
             artist={album.year ? String(album.year) : ''}
@@ -2589,6 +2611,8 @@
         {#each filteredLiveAlbums as album}
           <AlbumCard
             albumId={album.id}
+            isFavorite={checkAlbumFav(album.id)}
+            onFavorite={() => toggleAlbumFavorite(album.id)}
             artwork={album.artwork}
             title={album.title}
             artist={album.year ? String(album.year) : ''}
@@ -2653,6 +2677,8 @@
         {#each filteredCompilations as album}
           <AlbumCard
             albumId={album.id}
+            isFavorite={checkAlbumFav(album.id)}
+            onFavorite={() => toggleAlbumFavorite(album.id)}
             artwork={album.artwork}
             title={album.title}
             artist={album.year ? String(album.year) : ''}
@@ -2710,6 +2736,8 @@
         {#each filteredOthers as album}
           <AlbumCard
             albumId={album.id}
+            isFavorite={checkAlbumFav(album.id)}
+            onFavorite={() => toggleAlbumFavorite(album.id)}
             artwork={album.artwork}
             title={album.title}
             artist={album.year ? String(album.year) : ''}
@@ -2837,6 +2865,8 @@
           {#each visibleTributes as album}
             <AlbumCard
               albumId={album.id}
+              isFavorite={checkAlbumFav(album.id)}
+              onFavorite={() => toggleAlbumFavorite(album.id)}
               artwork={album.artwork}
               title={album.title}
               artist={album.year ? String(album.year) : ''}

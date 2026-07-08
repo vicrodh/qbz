@@ -209,6 +209,12 @@
 
   let isFavorite = $state(false);
   let isFavoriteLoading = $state(false);
+  // Bumped on albumFavoritesStore changes so the "By the same artist" grid's
+  // per-card `isFavorite` reads stay reactive.
+  let relatedFavoritesVersion = $state(0);
+  function isRelatedFav(albumId: string): boolean {
+    return relatedFavoritesVersion >= 0 && isAlbumFavorite(albumId);
+  }
   // Counter incremented when the unavailable-tracks store mutates so reactive
   // reads in {@const} blocks re-evaluate.
   let unavailableVersion = $state(0);
@@ -560,6 +566,7 @@
         loadCustomCoverStatus();
         unsubscribe = subscribeAlbumFavorites(() => {
           isFavorite = isAlbumFavorite(album.id);
+          relatedFavoritesVersion++;
         });
       } catch (err) {
         console.error('Failed to check album favorite status:', err);
@@ -1030,6 +1037,8 @@
                 genre={relatedAlbum.genre}
                 releaseYear={Number(relatedAlbum.releaseDate?.slice(0, 4)) || undefined}
                 quality={relatedAlbum.quality}
+                isFavorite={isRelatedFav(relatedAlbum.id)}
+                onFavorite={() => toggleAlbumFavorite(relatedAlbum.id)}
                 isAlbumFullyDownloaded={isRelatedAlbumDownloaded(relatedAlbum.id)}
                 onArtistClick={album.artistId && onTrackGoToArtist ? () => onTrackGoToArtist(album.artistId!) : undefined}
                 onClick={() => onRelatedAlbumClick?.(relatedAlbum.id)}
