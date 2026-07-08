@@ -59,9 +59,11 @@ export component AppWindow inherits Window {
     // winit attributes hook instead. `no-frame` is the authoritative switch
     // (the adapter re-applies it at every realization — same lesson as the
     // miniplayer, see MiniPlayerWindow below); the persisted pref is seeded
-    // into AppearanceState BEFORE the first show, and changing it takes an
-    // app restart (Wayland negotiates decorations at surface creation).
-    no-frame: !AppearanceState.is-macos && !AppearanceState.use-system-title-bar;
+    // into `system-title-bar-active` BEFORE the first show; the settings
+    // toggle edits the pref (`use-system-title-bar`) and Rust decides per
+    // platform whether it reaches this applied state live (Linux) or only
+    // on the next launch (macOS — attributes fixed at surface creation).
+    no-frame: !AppearanceState.is-macos && !AppearanceState.system-title-bar-active;
     // Edge-resize for the frameless mode (the winit backend only engages it
     // on undecorated windows, so this is inert under system chrome).
     resize-border-width: 6px;

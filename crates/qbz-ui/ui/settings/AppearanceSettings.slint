@@ -693,7 +693,11 @@ export component AppearanceSettings inherits VerticalLayout {
             }
         }
     }
-    SettingRow {
+    // Tiling-WM row: Linux-only — on macOS the native traffic lights are
+    // always present (overlay or system bar), so a "hide completely"
+    // frameless mode does not exist there (same gating idiom as the
+    // WINDOW CONTROLS rows below).
+    if !AppearanceState.is-macos: SettingRow {
         label: @tr("Hide title bar");
         description: @tr("Frameless window without window controls or header drag (for tiling window manager users)");
         enabled: !AppearanceState.use-system-title-bar;
