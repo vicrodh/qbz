@@ -202,8 +202,10 @@ const getHelperCmds = (type: DownloadItem['type'], fileName?: string): { label: 
 
 const getDepsCmd = (type: DownloadItem['type']): string | undefined => {
   switch (type) {
-    case 'deb': return 'sudo apt install -y libwebkit2gtk-4.1-0 libgtk-3-0 libayatana-appindicator3-1 gstreamer1.0-plugins-base gstreamer1.0-plugins-good'
-    case 'rpm': return 'sudo dnf install -y webkit2gtk4.1 gtk3 libappindicator-gtk3 gstreamer1-plugins-base gstreamer1-plugins-good'
+    // v2.0+ (Slint/winit binary): no webkit/gtk. Runtime link set is
+    // alsa/fontconfig/freetype/png + the wayland/xkbcommon/GL stack.
+    case 'deb': return 'sudo apt install -y libasound2 libfontconfig1 libfreetype6 libpng16-16 libxkbcommon0 libwayland-client0 libegl1 libgl1'
+    case 'rpm': return 'sudo dnf install -y alsa-lib fontconfig freetype libpng libxkbcommon wayland mesa-libEGL mesa-libGL'
     default: return undefined
   }
 }
@@ -597,9 +599,9 @@ function SourceContent() {
           <div className="terminal terminal--deps">
             <code>
               <span className="terminal__prompt">$</span>
-              <span className="terminal__cmd">sudo pacman -S base-devel rust nodejs npm webkit2gtk-4.1 gtk3</span>
+              <span className="terminal__cmd">sudo pacman -S base-devel rust clang cmake nasm alsa-lib fontconfig freetype2 libxkbcommon wayland libglvnd</span>
             </code>
-            <CopyButton text="sudo pacman -S base-devel rust nodejs npm webkit2gtk-4.1 gtk3" />
+            <CopyButton text="sudo pacman -S base-devel rust clang cmake nasm alsa-lib fontconfig freetype2 libxkbcommon wayland libglvnd" />
           </div>
         </details>
         <details className="deps-details">
@@ -607,9 +609,9 @@ function SourceContent() {
           <div className="terminal terminal--deps">
             <code>
               <span className="terminal__prompt">$</span>
-              <span className="terminal__cmd">sudo apt install build-essential curl libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev</span>
+              <span className="terminal__cmd">sudo apt install build-essential pkg-config cmake clang libclang-dev nasm libasound2-dev libjack-jackd2-dev libfontconfig1-dev libfreetype-dev libxkbcommon-dev libwayland-dev libxcb1-dev libgl1-mesa-dev libegl1-mesa-dev libdbus-1-dev libssl-dev</span>
             </code>
-            <CopyButton text="sudo apt install build-essential curl libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev" />
+            <CopyButton text="sudo apt install build-essential pkg-config cmake clang libclang-dev nasm libasound2-dev libjack-jackd2-dev libfontconfig1-dev libfreetype-dev libxkbcommon-dev libwayland-dev libxcb1-dev libgl1-mesa-dev libegl1-mesa-dev libdbus-1-dev libssl-dev" />
           </div>
         </details>
         <details className="deps-details">
@@ -617,13 +619,13 @@ function SourceContent() {
           <div className="terminal terminal--deps">
             <code>
               <span className="terminal__prompt">$</span>
-              <span className="terminal__cmd">sudo dnf install webkit2gtk4.1-devel gtk3-devel libappindicator-gtk3-devel librsvg2-devel</span>
+              <span className="terminal__cmd">sudo dnf install gcc gcc-c++ pkg-config cmake clang clang-devel nasm alsa-lib-devel pipewire-jack-audio-connection-kit-devel fontconfig-devel freetype-devel libxkbcommon-devel wayland-devel libxcb-devel mesa-libGL-devel mesa-libEGL-devel dbus-devel openssl-devel</span>
             </code>
-            <CopyButton text="sudo dnf install webkit2gtk4.1-devel gtk3-devel libappindicator-gtk3-devel librsvg2-devel" />
+            <CopyButton text="sudo dnf install gcc gcc-c++ pkg-config cmake clang clang-devel nasm alsa-lib-devel pipewire-jack-audio-connection-kit-devel fontconfig-devel freetype-devel libxkbcommon-devel wayland-devel libxcb-devel mesa-libGL-devel mesa-libEGL-devel dbus-devel openssl-devel" />
           </div>
         </details>
         <details className="deps-details">
-          <summary className="deps-summary">Rust + Node.js</summary>
+          <summary className="deps-summary">Rust toolchain</summary>
           <div className="terminal terminal--deps">
             <code>
               <span className="terminal__prompt">$</span>
@@ -645,23 +647,16 @@ function SourceContent() {
         <div className="terminal" style={{ marginTop: 8 }}>
           <code>
             <span className="terminal__prompt">$</span>
-            <span className="terminal__cmd">npm install</span>
+            <span className="terminal__cmd">cargo build --release --manifest-path crates/Cargo.toml -p qbz</span>
           </code>
-          <CopyButton text="npm install" />
+          <CopyButton text="cargo build --release --manifest-path crates/Cargo.toml -p qbz" />
         </div>
         <div className="terminal" style={{ marginTop: 8 }}>
           <code>
             <span className="terminal__prompt">$</span>
-            <span className="terminal__cmd">npm run tauri dev</span>
+            <span className="terminal__cmd">./crates/target/release/qbz</span>
           </code>
-          <CopyButton text="npm run tauri dev" />
-        </div>
-        <div className="terminal" style={{ marginTop: 8 }}>
-          <code>
-            <span className="terminal__prompt">$</span>
-            <span className="terminal__cmd">npm run tauri build</span>
-          </code>
-          <CopyButton text="npm run tauri build" />
+          <CopyButton text="./crates/target/release/qbz" />
         </div>
 
         <div className="download-meta__name" style={{ fontSize: 14, marginBottom: 8, marginTop: 16 }}>{t('downloads.buildInstructions.apiTitle')}</div>

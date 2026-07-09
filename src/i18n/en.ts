@@ -90,7 +90,7 @@ export const en = {
       audio: {
         title: 'Native audio playback',
         bullets: [
-          'Native decoding for FLAC, ALAC, AAC, and MP3.',
+          'Native decoding for FLAC, ALAC, AAC, MP3, and DSD.',
           'Preserve sample rate and bit depth end-to-end.',
           'DAC passthrough and exclusive mode support.',
         ],
@@ -125,6 +125,7 @@ export const en = {
           'MPRIS media controls and media keys.',
           'Desktop notifications and keyboard shortcuts.',
           'PipeWire device enumeration and selection.',
+          'Auto theme from your desktop accent, wallpaper, or an image.',
         ],
       },
       casting: {
@@ -231,8 +232,8 @@ export const en = {
       tarball: 'tar -xzf qbz.tar.gz && ./qbz',
     },
     glibcNote: {
-      deb: 'Requires glibc 2.38+ (Ubuntu 24.04+, Debian 13+, Mint 22+). Older distros? Use Flatpak, Snap, or AppImage.',
-      rpm: 'Requires glibc 2.38+ (Fedora 39+, openSUSE Tumbleweed). Older distros? Use Flatpak, Snap, or AppImage.',
+      deb: 'Requires glibc 2.39+ (Ubuntu 24.04+, Debian 13+, Mint 22+). Older distros? Use Flatpak, Snap, or AppImage.',
+      rpm: 'Requires glibc 2.39+ (Fedora 40+, openSUSE Tumbleweed). Older distros? Use Flatpak, Snap, or AppImage.',
     },
     aptRepo: {
       label: 'APT Repository (recommended)',
@@ -240,23 +241,23 @@ export const en = {
       updateNote: 'After setup, updates are automatic: sudo apt update && sudo apt upgrade qbz',
     },
     buildTitle: 'Build from source (advanced)',
-    buildBody: 'QBZ targets Linux. macOS builds may work, but features like PipeWire, casting, and device control can be incomplete or unstable.',
+    buildBody: 'QBZ 2.0 is a pure Rust workspace — no Node.js, no npm, no webview. The workspace manifest is crates/Cargo.toml and the app binary is the qbz crate. Linux is the primary target; macOS builds with Xcode Command Line Tools and a Rust toolchain.',
     buildInstructions: {
       summary: 'Show build instructions',
       prereqTitle: 'Prerequisites',
-      nodeNote: 'Node.js 20+ required. Use nvm, fnm, or your distro package manager.',
+      nodeNote: 'The UI compiles into one large generated crate; a release build peaks at 20–30 GB of RAM. On < 32 GB, pass CARGO_BUILD_JOBS=1 and lower codegen-units/opt-level (the CI recipe) — it is slow, not impossible.',
       cloneTitle: 'Clone and build',
       apiTitle: 'API keys (optional)',
       apiLead: 'API keys are embedded at compile-time. Copy the example file and add your keys:',
-      apiBody: 'Edit .env with your API keys, then run npm run dev:tauri to load them automatically.',
+      apiBody: 'Edit .env with your API keys before building; the build reads them automatically.',
       apiKeysTitle: 'Where to get API keys',
       apiOptional: 'All integrations are optional. The app works without them, but corresponding features will be disabled.',
     },
     buildDisclaimer: 'If you build your own binaries, you are responsible for API keys and platform-specific dependencies.',
     macos: {
-      experimental: 'Experimental',
-      disclaimer: 'QBZ is a Linux-first application. macOS support is experimental and limited.',
-      limitations: 'Features like PipeWire, ALSA Direct, casting, and device control are unavailable on macOS.',
+      experimental: 'macOS',
+      disclaimer: 'QBZ is Linux-first, but macOS is a supported platform as of 2.0 — out of its experimental phase thanks to the macOS contributors.',
+      limitations: 'A few Linux-specific bit-perfect backends (ALSA Direct, PipeWire passthrough) do not apply on macOS; playback uses the native CoreAudio path.',
       credit: 'macOS port maintained by',
       downloadDmg: 'Download DMG (Apple Silicon)',
     },
@@ -318,7 +319,7 @@ export const en = {
     categories: {
       core: {
         title: 'Core technologies',
-        items: ['Rust', 'Tauri', 'Svelte', 'Vite', 'SQLite', 'Kawarp'],
+        items: ['Rust', 'Slint', 'winit', 'wgpu', 'SQLite', 'Kawarp'],
       },
       audio: {
         title: 'Audio and media libraries',
@@ -398,12 +399,12 @@ Like many people in 2025, I integrated AI code agents into my workflow (the real
     },
     different: {
       title: 'What makes QBZ different',
-      lead: 'QBZ is not a web wrapper. It is a native Linux application built with Rust and Tauri, using a dedicated audio engine that bypasses browser limitations entirely.',
+      lead: 'QBZ is not a web wrapper. As of 2.0 it is a single native Rust process with a Slint UI — no webview at all — using a dedicated audio engine that bypasses browser limitations entirely.',
       features: [
-        { title: 'Native audio pipeline', text: 'Built-in decoders for FLAC, ALAC, AAC, and MP3. No browser audio stack. No hidden resampling.' },
+        { title: 'Native audio pipeline', text: 'Built-in decoders for FLAC, ALAC, AAC, MP3, and DSD. No browser audio stack. No hidden resampling.' },
         { title: 'Direct DAC access', text: 'Supports ALSA exclusive mode (hw: devices) and PipeWire passthrough for bit-perfect output.' },
         { title: 'Per-track sample-rate switching', text: 'Automatically adjusts output sample rate to match source (44.1, 48, 88.2, 96, 176.4, 192 kHz).' },
-        { title: 'No Chromium', text: 'QBZ uses Tauri (WebView-based UI) with a Rust backend. It does not bundle Chromium or Electron.' },
+        { title: 'No Chromium', text: 'QBZ renders a native Slint UI (winit + wgpu) on a Rust core. It does not bundle a webview, Chromium, or Electron.' },
       ],
     },
     bitPerfect: {
