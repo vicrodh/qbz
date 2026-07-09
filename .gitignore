@@ -23,3 +23,6 @@ dist-ssr
 *.sln
 *.sw?
 *.kra
+
+# Raw screenshot/video sources (staging inbox — only processed webp/video are shipped)
+public/assets/screenshots/unprocessed/

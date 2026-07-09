@@ -451,6 +451,7 @@ p {
 
 .screenshot-grid {
   display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
   gap: 24px;
 }
 
@@ -479,6 +480,23 @@ p {
 .screenshot__text {
   color: var(--text-tertiary);
   font-size: 0.95rem;
+}
+
+.launch-video {
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  max-width: 960px;
+  margin-inline: auto;
+}
+
+.launch-video__player {
+  width: 100%;
+  height: auto;
+  display: block;
+  aspect-ratio: 16 / 9;
+  background: #000;
 }
 
 .feature-grid {

@@ -579,6 +579,21 @@ function MacOSContent({ downloads }: { downloads: DownloadItem[] }) {
             No DMG available in the current release.
           </p>
         )}
+        <div style={{ marginTop: 20 }}>
+          <div className="download-meta__name" style={{ fontSize: 14, marginBottom: 8 }}>
+            {t('downloads.macos.unlockTitle')}
+          </div>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 12, lineHeight: 1.5 }}>
+            {t('downloads.macos.unlockNote')}
+          </p>
+          <div className="terminal">
+            <code>
+              <span className="terminal__prompt">$</span>
+              <span className="terminal__cmd">xattr -dr com.apple.quarantine /Applications/QBZ.app</span>
+            </code>
+            <CopyButton text="xattr -dr com.apple.quarantine /Applications/QBZ.app" />
+          </div>
+        </div>
       </div>
     </div>
   )

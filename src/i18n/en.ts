@@ -59,21 +59,37 @@ export const en = {
   },
   screenshots: {
     title: 'Interface snapshots',
-    lead: 'Native views optimized for long listening sessions.',
+    lead: 'The native Slint interface of QBZ 2.0, built for long listening sessions.',
     items: [
       {
-        title: 'Home and queue control',
-        text: 'Fast navigation with direct queue and playback context.',
+        title: 'Discover and For You',
+        text: 'Personalized rows blending Qobuz editorial with your own listening.',
       },
       {
-        title: 'Immersive mode',
-        text: 'Full-screen coverflow, lyrics, and ambient backgrounds.',
+        title: 'Playlist manager',
+        text: 'Build, reorder, and manage playlists across Qobuz and local sources.',
       },
       {
-        title: 'Local library management',
+        title: 'Playlist view',
+        text: 'Track lists with artwork, quality badges, and one-click playback.',
+      },
+      {
+        title: 'Immersive spectrum',
+        text: 'Full-screen visualizers with lyrics and ambient backgrounds.',
+      },
+      {
+        title: 'Local library',
         text: 'Indexed local collections with artwork, CUE, and metadata support.',
       },
+      {
+        title: 'Artist view',
+        text: 'Discography, credits, and related artists in one place.',
+      },
     ],
+  },
+  launchVideo: {
+    title: 'QBZ 2.0 in motion',
+    lead: 'A quick look at the native Slint interface in action.',
   },
   capabilities: {
     title: 'Key capabilities',
@@ -256,10 +272,12 @@ export const en = {
     buildDisclaimer: 'If you build your own binaries, you are responsible for API keys and platform-specific dependencies.',
     macos: {
       experimental: 'macOS',
-      disclaimer: 'QBZ is Linux-first, but macOS is a supported platform as of 2.0 — out of its experimental phase thanks to the macOS contributors.',
-      limitations: 'A few Linux-specific bit-perfect backends (ALSA Direct, PipeWire passthrough) do not apply on macOS; playback uses the native CoreAudio path.',
+      disclaimer: 'QBZ is Linux-first, but macOS is a supported platform as of 2.0 — out of its experimental phase thanks to the macOS contributors. Casting and Qobuz Connect work here too.',
+      limitations: 'PipeWire, ALSA, and JACK are Linux-specific; macOS plays through CoreAudio, including a Core Audio Direct passthrough path for bit-perfect output.',
       credit: 'macOS port maintained by',
-      downloadDmg: 'Download DMG (Apple Silicon)',
+      downloadDmg: 'Download DMG (Apple Silicon or Intel)',
+      unlockTitle: 'First launch: unlock Gatekeeper',
+      unlockNote: 'QBZ is ad-hoc signed but not notarized, so Gatekeeper blocks the first run. Either open it once, then go to System Settings → Privacy & Security and click "Open Anyway" — or run this one-time unlock in Terminal:',
     },
   },
   audience: {

@@ -8,6 +8,17 @@ import { CapabilitiesCarousel } from '../components/CapabilitiesCarousel'
 // Lazy load heavy sections below fold
 const DownloadSection = lazy(() => import('../components/DownloadSection').then(m => ({ default: m.DownloadSection })))
 const ComingSoonSection = lazy(() => import('../components/ComingSoonSection').then(m => ({ default: m.ComingSoonSection })))
+const LaunchVideo = lazy(() => import('../components/LaunchVideo').then(m => ({ default: m.LaunchVideo })))
+
+// Screenshot basenames, index-aligned with the t('screenshots.items') array.
+const SCREENSHOT_IMAGES = [
+  'qbz-discover-foryou',
+  'qbz-playlist-manager',
+  'qbz-playlist-view',
+  'qbz-immersive-spectrum',
+  'qbz-locallibrary-artists',
+  'qbz-artist-view',
+]
 
 const SectionLoader = ({ muted = false }: { muted?: boolean }) => (
   <div className={`section ${muted ? 'section--muted' : ''}`} style={{ minHeight: 400, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -91,21 +102,16 @@ export function HomePage() {
           <div className="hero__image">
             <picture>
               <source
-                type="image/avif"
-                srcSet="/assets/screenshots/qbz-home-xs.avif 400w, /assets/screenshots/qbz-home-sm.avif 640w, /assets/screenshots/qbz-home.avif 1280w"
-                sizes="(max-width: 480px) 400px, (max-width: 768px) 640px, 1280px"
-              />
-              <source
                 type="image/webp"
                 srcSet="/assets/screenshots/qbz-home-xs.webp 400w, /assets/screenshots/qbz-home-sm.webp 640w, /assets/screenshots/qbz-home.webp 1280w"
                 sizes="(max-width: 480px) 400px, (max-width: 768px) 640px, 1280px"
               />
               <img
                 src="/assets/screenshots/qbz-home.webp"
-                alt="QBZ application interface showing home view with queue and playback controls"
+                alt="QBZ application interface showing the home and discover view"
                 title="QBZ home view"
                 width={1280}
-                height={800}
+                height={720}
                 fetchPriority="high"
               />
             </picture>
@@ -151,19 +157,10 @@ export function HomePage() {
           <p className="section__subtitle">{t('screenshots.lead')}</p>
           <div className="screenshot-grid" style={{ marginTop: 32 }}>
             {screenshots.map((shot, index) => {
-              const imgBase = index === 0
-                ? 'qbz-playlist-view'
-                : index === 1
-                  ? 'qbz-immersivecoverflow'
-                  : 'qbz-locallibrary'
+              const imgBase = SCREENSHOT_IMAGES[index] ?? SCREENSHOT_IMAGES[0]
               return (
                 <div key={shot.title} className="screenshot">
                   <picture>
-                    <source
-                      type="image/avif"
-                      srcSet={`/assets/screenshots/${imgBase}-xs.avif 400w, /assets/screenshots/${imgBase}-sm.avif 640w, /assets/screenshots/${imgBase}.avif 1280w`}
-                      sizes="(max-width: 480px) 400px, (max-width: 768px) 640px, 1280px"
-                    />
                     <source
                       type="image/webp"
                       srcSet={`/assets/screenshots/${imgBase}-xs.webp 400w, /assets/screenshots/${imgBase}-sm.webp 640w, /assets/screenshots/${imgBase}.webp 1280w`}
@@ -174,7 +171,7 @@ export function HomePage() {
                       alt={`QBZ screenshot: ${shot.title}`}
                       title={shot.title}
                       width={1280}
-                      height={800}
+                      height={720}
                       loading="lazy"
                     />
                   </picture>
@@ -188,6 +185,10 @@ export function HomePage() {
           </div>
         </div>
       </section>
+
+      <Suspense fallback={<SectionLoader muted />}>
+        <LaunchVideo />
+      </Suspense>
 
       <Suspense fallback={<SectionLoader />}>
         <DownloadSection />
