@@ -138,8 +138,11 @@ jobs:
           workspaces: crates -> target
           shared-key: slint-linux
           cache-on-failure: true
-          # Releases only READ the cache; build-slint.yml owns writing it.
-          save-if: false
+          # Own the amd64 `slint-linux` cache: save on main so pre-flights warm
+          # it and tag/PR runs restore it. build-slint.yml no longer runs, so
+          # deferring to it (save-if: false) left the amd64 dep cache EMPTY and
+          # every release/snap amd64 build fully cold. Mirrors release-linux-aarch64.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Build (release, MIN memory tier)
         env:
