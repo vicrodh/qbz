@@ -183,6 +183,11 @@ jobs:
     # but snapcraft's container bootstrap alone is highly variable on public
     # runners — give it real headroom.
     timeout-minutes: 90
+    # Credentials at job level so the publish step can gate on them: an empty /
+    # unset secret SKIPS publish instead of failing the whole run (the snap is
+    # still built and uploaded as an artifact).
+    env:
+      SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
     steps:
       - uses: actions/checkout@v4
 
@@ -225,10 +230,9 @@ jobs:
           path: ${{ steps.build.outputs.snap }}
           if-no-files-found: error
 
-      - name: Publish to the Snap Store
+      - name: Publish to the Snap Store (skipped when no store credentials)
+        if: ${{ env.SNAPCRAFT_STORE_CREDENTIALS != '' }}
         uses: snapcore/action-publish@v1
-        env:
-          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
         with:
           snap: ${{ steps.build.outputs.snap }}
           release: ${{ github.event.inputs.channel || 'edge' }}
@@ -239,6 +243,8 @@ jobs:
     # No compilation here (plugin: dump); the headroom is for snapcraft's LXD
     # bootstrap, which is variable on hosted runners.
     timeout-minutes: 90
+    env:
+      SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
     steps:
       - uses: actions/checkout@v4
 
@@ -278,10 +284,9 @@ jobs:
           path: ${{ steps.build.outputs.snap }}
           if-no-files-found: error
 
-      - name: Publish to the Snap Store
+      - name: Publish to the Snap Store (skipped when no store credentials)
+        if: ${{ env.SNAPCRAFT_STORE_CREDENTIALS != '' }}
         uses: snapcore/action-publish@v1
-        env:
-          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
         with:
           snap: ${{ steps.build.outputs.snap }}
           release: ${{ github.event.inputs.channel || 'edge' }}
