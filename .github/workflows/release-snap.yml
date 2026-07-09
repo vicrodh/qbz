@@ -1,19 +1,21 @@
 name: Release Snap (Slint, all-hosted)
 
-# All-hosted Snap pipeline for the native (Slint) qbz. NOTHING runs on the dev
-# box, so the lack of systemd/snapd there does not matter:
-#   job 1 (build-binary): a 16 GB Ubuntu runner compiles the qbz binary using
-#     the same MIN-tier + 18 GB swap recipe as build-slint.yml (the ~30 GB
-#     qbz_ui peak fits in 16 GB RAM + swap), and uploads it as an artifact.
-#   job 2 (snap): a second Ubuntu runner (which HAS snapd) downloads that
-#     prebuilt binary and packages it with `plugin: dump` (NO compilation, runs
-#     in seconds), then publishes to the Snap Store.
-# So the heavy compile is on a free public runner, and the snap packaging is on
-# a runner that has snapd — neither needs your OpenRC box.
+# All-hosted Snap pipeline for the native (Slint) qbz — BOTH arches. NOTHING
+# runs on the dev box, so the lack of systemd/snapd there does not matter. Two
+# independent tracks, each = build-binary -> dump-pack -> publish:
+#   amd64: build-binary (ubuntu-24.04, MIN-tier + 18 GB swap) -> snap
+#     (packaging/snap-slint/snapcraft.yaml, plugin: dump).
+#   arm64: build-binary-arm64 (native ubuntu-24.04-arm, free for public repos,
+#     reuses release-linux-aarch64.yml's cargo cache) -> snap-arm64
+#     (packaging/snap-slint/snapcraft-arm64.yaml, plugin: dump).
+# The heavy compile is on free public runners; the snap pack (dump, no compile)
+# runs in seconds on a runner that has snapd. This CI upload is the SOLE publish
+# path — no Launchpad / "Build from GitHub" is used (the root snapcraft.yaml is
+# reference/local-dev only and is removed from the CI working copy below).
 #
-# NOTE: build-binary duplicates build-slint.yml's build. When the release
+# NOTE: build-binary* duplicates the deb/rpm builders' compile. When the release
 # pipeline is unified (build-once -> fan out to deb/rpm/appimage/snap/flatpak),
-# this job becomes a `download-artifact` of the shared binary instead.
+# these jobs become `download-artifact` of the shared per-arch binaries instead.
 
 on:
   workflow_dispatch:
@@ -104,6 +106,75 @@ jobs:
           path: crates/target/release/qbz
           if-no-files-found: error
 
+  build-binary-arm64:
+    # Native arm64 build (mirrors release-linux-aarch64.yml). Reuses that
+    # workflow's cargo cache (shared-key slint-linux-aarch64) so it does not
+    # recompile qbz_ui from cold when the aarch64 build already ran.
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk + swap (sized for the ~30 GB qbz_ui peak)
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android \
+            /opt/hostedtoolcache /usr/local/share/boost /usr/share/swift \
+            /usr/local/lib/node_modules || true
+          sudo docker image prune --all --force || true
+          ( sudo fallocate -l 18G /swap_extra \
+            && sudo chmod 600 /swap_extra \
+            && sudo mkswap /swap_extra \
+            && sudo swapon /swap_extra ) || echo "extra swap skipped (non-fatal)"
+          free -h; df -h /
+
+      - name: System dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config cmake clang libclang-dev mold nasm \
+            libasound2-dev libjack-jackd2-dev \
+            libfontconfig1-dev libfreetype-dev \
+            libxkbcommon-dev libwayland-dev libxcb1-dev \
+            libgl1-mesa-dev libegl1-mesa-dev \
+            libdbus-1-dev libssl-dev \
+            libharfbuzz-dev libjbig2dec0-dev libopenjp2-7-dev \
+            libjpeg-dev zlib1g-dev libgumbo-dev
+
+      - name: Rust toolchain (pinned dated nightly)
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-06-23
+
+      - name: Cargo cache (Swatinem/rust-cache)
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates -> target
+          shared-key: slint-linux-aarch64
+          cache-on-failure: true
+          # reuse release-linux-aarch64.yml's cache (same shared-key); do not
+          # clobber it from here.
+          save-if: false
+
+      - name: Build qbz (memory-tuned MIN tier, swap-backed)
+        env:
+          CARGO_INCREMENTAL: '0'
+          CARGO_BUILD_JOBS: '1'
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: '256'
+          CARGO_PROFILE_RELEASE_OPT_LEVEL: '2'
+          # No x86 target-features here (aarch64 baseline has NEON).
+          RUSTFLAGS: '-C link-arg=-fuse-ld=mold -Z threads=1'
+        run: |
+          cargo build --release --manifest-path crates/Cargo.toml -p qbz
+          strip crates/target/release/qbz || true
+          ls -lh crates/target/release/qbz
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: qbz-bin-arm64
+          path: crates/target/release/qbz
+          if-no-files-found: error
+
   snap:
     needs: build-binary
     runs-on: ubuntu-24.04
@@ -151,6 +222,59 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: qbz-snap-amd64
+          path: ${{ steps.build.outputs.snap }}
+          if-no-files-found: error
+
+      - name: Publish to the Snap Store
+        uses: snapcore/action-publish@v1
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        with:
+          snap: ${{ steps.build.outputs.snap }}
+          release: ${{ github.event.inputs.channel || 'edge' }}
+
+  snap-arm64:
+    needs: build-binary-arm64
+    runs-on: ubuntu-24.04-arm
+    # No compilation here (plugin: dump); the headroom is for snapcraft's LXD
+    # bootstrap, which is variable on hosted runners.
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download prebuilt binary
+        uses: actions/download-artifact@v4
+        with:
+          name: qbz-bin-arm64
+          path: dl
+
+      - name: Stage snap payload (binary + desktop + icon) and recipe
+        run: |
+          set -eux
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          VER="${TAG#v}"
+          mkdir -p snap-payload
+          install -m755 dl/qbz snap-payload/qbz
+          cp packaging/snap/snap/gui/qbz.desktop snap-payload/qbz.desktop
+          cp packaging/snap/snap/gui/qbz.png     snap-payload/qbz.png
+          # Place the arm64 dump recipe where snapcraft looks for it, stamp version.
+          mkdir -p snap
+          cp packaging/snap-slint/snapcraft-arm64.yaml snap/snapcraft.yaml
+          sed -i "s/^version:.*/version: '${VER}'/" snap/snapcraft.yaml
+          # Remove the root source-build recipe from the CI working copy so
+          # snapcraft resolves ONLY the dump recipe (see the amd64 job).
+          rm -f snapcraft.yaml .snapcraft.yaml
+          echo "Built snap version: ${VER} (arm64)"
+          cat snap/snapcraft.yaml | head -20
+
+      - name: Build the snap (no compilation — dump of the prebuilt binary)
+        id: build
+        uses: snapcore/action-build@v1
+
+      - name: Upload .snap artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: qbz-snap-arm64
           path: ${{ steps.build.outputs.snap }}
           if-no-files-found: error
 
