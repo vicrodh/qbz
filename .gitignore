@@ -82,3 +82,6 @@ AGENTS.md
 # /crates/Cargo.lock  # tracked for reproducible CI builds
 test-results/
 
+
+# Isolated cargo test target dir (scripts / agents)
+/crates/target-test/

@@ -105,8 +105,25 @@ fn now_ms() -> i64 {
 /// Create the local-playlist tables. Idempotent (`IF NOT EXISTS`), run by
 /// `LibraryDatabase::open` next to the rest of the schema.
 pub fn init_schema(conn: &Connection) -> Result<()> {
+    // `local_playlists.folder_id` references the shared sidebar folders table
+    // owned by `LibraryDatabase`. Create it here too so this module's schema
+    // is self-contained (unit tests open an in-memory DB and only call
+    // `init_schema`; production already creates `playlist_folders` first).
     conn.execute_batch(
         r#"
+        CREATE TABLE IF NOT EXISTS playlist_folders (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            icon_type TEXT DEFAULT 'preset',
+            icon_preset TEXT DEFAULT 'folder',
+            icon_color TEXT DEFAULT '#6366f1',
+            custom_image_path TEXT,
+            is_hidden INTEGER DEFAULT 0,
+            position INTEGER DEFAULT 0,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS local_playlists (
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL,

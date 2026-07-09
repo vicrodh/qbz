@@ -12,7 +12,7 @@
 //! ## Usage
 //!
 //! ```no_run
-//! use qbz_integrations::{ListenBrainzClient, ListenBrainzConfig, ListenType};
+//! use qbz_integrations::{ListenBrainzClient, ListenBrainzConfig};
 //!
 //! async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //!     let config = ListenBrainzConfig {
@@ -23,15 +23,15 @@
 //!
 //!     let client = ListenBrainzClient::with_config(config);
 //!
-//!     // Submit now playing
-//!     client.submit_listen(
-//!         ListenType::PlayingNow,
-//!         "Artist",
-//!         "Track",
-//!         Some("Album"),
-//!         None, // No timestamp for now playing
-//!         None, // No MBIDs
-//!     ).await?;
+//!     // Now playing (no timestamp)
+//!     client
+//!         .submit_playing_now("Artist", "Track", Some("Album"), None)
+//!         .await?;
+//!
+//!     // Scrobble after the track finishes
+//!     client
+//!         .submit_listen("Artist", "Track", Some("Album"), 1_700_000_000, None)
+//!         .await?;
 //!
 //!     Ok(())
 //! }

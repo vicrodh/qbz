@@ -327,6 +327,7 @@ mod tests {
             id,
             title: title.to_string(),
             version: None,
+            work: None,
             isrc: None,
             duration: 0,
             track_number: 0,

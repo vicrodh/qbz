@@ -1,0 +1,68 @@
+name: Test crates
+
+# Unit/doc tests for the shipping Rust workspace (no Slint UI graph).
+# Intentionally excludes qbz / qbz-ui / qbz-dac-wizard / qbz-slint-common so
+# CI never hits the 20–30 GB UI compile wall. Warm runs are a few seconds;
+# cold first run is dominated by dependency compile + rust-cache restore.
+
+on:
+  pull_request:
+    branches: [pre-release, main]
+    paths:
+      - "crates/**"
+      - "scripts/cargo-test.sh"
+      - ".github/workflows/test-crates.yml"
+  push:
+    branches: [pre-release]
+    paths:
+      - "crates/**"
+      - "scripts/cargo-test.sh"
+      - ".github/workflows/test-crates.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: test-crates-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: cargo test (workspace, no UI)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: System dependencies
+        run: |
+          # Non-UI crates still link Linux audio / D-Bus stubs (qbz-audio).
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config \
+            libasound2-dev libjack-jackd2-dev \
+            libdbus-1-dev libssl-dev
+
+      - name: Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cargo cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates -> target
+          shared-key: test-crates-linux
+          cache-on-failure: true
+
+      - name: cargo test
+        env:
+          CARGO_TERM_COLOR: always
+          CARGO_BUILD_JOBS: "2"
+          # Keyring / credentials tests skip themselves when CI=true.
+          CI: "true"
+        run: |
+          echo "::group::rustc / cargo"
+          rustc -V
+          cargo -V
+          echo "::endgroup::"
+          START=$(date +%s)
+          ./scripts/cargo-test.sh
+          END=$(date +%s)
+          echo "cargo test wall time: $((END - START))s"
