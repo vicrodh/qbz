@@ -69,6 +69,18 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="2.0.1" date="2026-07-08">
+      <description>
+        <p>QBZ 2.0.1 is the first maintenance release on top of the 2.0 native rebuild: lighter scrolling, self-recovery from bad states, and more faithful text rendering across languages, plus a few features that missed the 2.0 cutoff.</p>
+        <ul>
+          <li>Performance: viewport windowing across Home, Discover, Favorites, Search and the carousels; near-zero idle CPU</li>
+          <li>Resilience: autonomous renderer degradation with a UI watchdog, startup crash-chain recovery, and a single-instance guard on Linux</li>
+          <li>Text: faithful CJK/Korean rendering on macOS, decoded HTML entities, lenient list parsing, and a new Dutch translation (8 languages)</li>
+          <li>New: automatic theme from your wallpaper or accent, an inline custom-theme editor, and a guest offline mode</li>
+          <li>Fixes: auto-skip unavailable tracks, visible stream errors, DLNA casting compatibility, and working Queue row menu actions</li>
+        </ul>
+      </description>
+    </release>
     <release version="2.0.0" date="2026-07-03">
       <description>
         <p>QBZ 2.0 "Rebuild": the frontend is completely rebuilt as a native application — considerably smaller CPU and memory footprint, first-class macOS support, and a friendlier, more minimalist layout.</p>
