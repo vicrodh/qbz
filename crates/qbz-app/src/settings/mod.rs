@@ -1,13 +1,9 @@
 pub mod artist_blacklist;
 pub mod developer;
 pub mod discover_prefs;
-pub mod download;
 pub mod favorites;
 pub mod favorites_cache;
 pub mod graphics;
-pub mod image_cache;
-pub mod legal;
-pub mod library;
 pub mod playback;
 pub mod plex;
 pub mod reco_store;
