@@ -243,6 +243,9 @@ where
             return Ok(None);
         }
     };
+    // Same redaction registration as the browser login path — cold restore
+    // must scrub bare token substrings from logs for the whole session.
+    qbz_log::register_secret(token.clone());
 
     let core = runtime.core();
     // Same scoped handling of the gated cold bundle init as the browser

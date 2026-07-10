@@ -115,8 +115,7 @@ impl LastFmClient {
             .await?;
 
         let response_text = response.text().await?;
-        log::debug!("Last.fm auth.getSession response: {}", response_text);
-
+        // Do not log the raw body: it includes the session key.
         let data: LastFmResponse<AuthGetSessionResponse> = serde_json::from_str(&response_text)?;
 
         match data {

@@ -11,8 +11,7 @@ use crate::{redact, ring};
 
 /// Wraps `env_logger`'s built `Logger` and tees every record to the in-memory ring and
 /// (optionally) the on-disk log file, with secret redaction applied once at this single
-/// write choke point. stderr output is preserved verbatim by delegating to the inner
-/// logger after the tee.
+/// write choke point. **All** sinks (ring, file, and stderr) receive the redacted text.
 pub struct TeeLogger {
     pub(crate) inner: env_logger::Logger,
     pub(crate) file: Option<Mutex<BufWriter<File>>>,
@@ -20,6 +19,17 @@ pub struct TeeLogger {
 
 fn now_epoch_ms() -> i64 {
     chrono::Local::now().timestamp_millis()
+}
+
+/// Format a redacted log line the same way the file sink does (stable, greppable).
+fn format_line(line: &LogLine) -> String {
+    format!(
+        "{} {:5} {} {}",
+        line.format_ts(),
+        line.level_str(),
+        line.target,
+        line.message
+    )
 }
 
 impl Log for TeeLogger {
@@ -46,19 +56,14 @@ impl Log for TeeLogger {
 
         if let Some(file) = &self.file {
             if let Ok(mut writer) = file.lock() {
-                let _ = writeln!(
-                    writer,
-                    "{} {:5} {} {}",
-                    line.format_ts(),
-                    line.level_str(),
-                    line.target,
-                    msg
-                );
+                let _ = writeln!(writer, "{}", format_line(&line));
             }
         }
 
-        // Preserve the original env_logger stderr output verbatim.
-        self.inner.log(record);
+        // stderr: write the redacted line ourselves. Delegating to
+        // `self.inner.log(record)` would reprint the *original* Record args
+        // and bypass redaction (terminal transcripts, CI logs, support dumps).
+        let _ = writeln!(std::io::stderr(), "{}", format_line(&line));
     }
 
     fn flush(&self) {
@@ -68,5 +73,34 @@ impl Log for TeeLogger {
                 let _ = writer.flush();
             }
         }
+        let _ = std::io::stderr().flush();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use log::Level;
+
+    #[test]
+    fn stderr_line_is_redacted_before_formatting() {
+        redact::register_secret("SEKRET_STDERR_TOKEN".into());
+
+        // Same pipeline as `TeeLogger::log`: redact the raw message once, then
+        // format the line that every sink (including stderr) receives.
+        let msg = redact::redact("login ok, issued SEKRET_STDERR_TOKEN for session");
+        let line = LogLine {
+            ts: 0,
+            level: Level::Info,
+            target: "qbz".into(),
+            message: msg,
+        };
+
+        let s = format_line(&line);
+        assert!(
+            !s.contains("SEKRET_STDERR_TOKEN"),
+            "secret leaked into stderr line: {s}"
+        );
+        assert!(s.contains("***REDACTED***"), "no redaction marker: {s}");
     }
 }
