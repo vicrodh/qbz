@@ -232,7 +232,7 @@ jobs:
       # Attaches to the Release created by release-linux.yml.
       - name: Publish GitHub Release Assets
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: dist/*
           prerelease: ${{ needs.build.outputs.prerelease }}
