@@ -260,18 +260,42 @@ impl QueueManager {
         let mut state = self.state.lock().unwrap();
         state.stop_after_track_id = None;
 
-        if keep_current && state.current_index.is_some() {
-            state.tracks.truncate(1);
-            state.current_index = Some(0);
+        if keep_current {
+            // Keep the track at `current_index`, not always `tracks[0]`.
+            // `truncate(1)` was wrong mid-queue: clear while playing track N
+            // would leave the first row as now-playing while audio kept N.
+            if let Some(idx) = state.current_index {
+                if idx < state.tracks.len() {
+                    let kept = state.tracks[idx].clone();
+                    // History stores indices into `tracks`. Remap by track id
+                    // so entries for removed rows drop and any entry that still
+                    // refers to the kept track points at index 0.
+                    Self::remap_history_by_track_id_internal(&mut state, std::slice::from_ref(&kept));
+                    state.tracks = vec![kept];
+                    state.current_index = Some(0);
+                } else {
+                    state.tracks.clear();
+                    state.current_index = None;
+                    state.history.clear();
+                }
+            } else {
+                state.tracks.clear();
+                state.current_index = None;
+                state.history.clear();
+            }
         } else {
             state.tracks.clear();
             state.current_index = None;
+            // Indices into an empty list are meaningless.
+            state.history.clear();
         }
 
         state.shuffle_order.clear();
         state.shuffle_position = 0;
-        // Keep playback history when clearing queue.
-        // UX expectation: "Clear queue" only affects current/upcoming queue items.
+        // Playback history is remapped (or cleared) above. "Clear queue" only
+        // affects current/upcoming queue rows; it is not an intentional history
+        // wipe when the kept track still resolves. Removed tracks, however,
+        // cannot stay in index-based history.
     }
 
     /// Remove a track by index
@@ -1271,6 +1295,27 @@ mod tests {
         assert_eq!(state.total_tracks, 1);
     }
 
+    /// Regression: clear(true) must keep the track at `current_index`, not
+    /// always `tracks[0]`. Mid-album "Clear queue" previously left the first
+    /// row as now-playing while audio kept the real current track.
+    #[test]
+    fn test_clear_keeps_mid_queue_current_track() {
+        let queue = QueueManager::new();
+
+        queue.add_track(create_test_track(100));
+        queue.add_track(create_test_track(200));
+        queue.add_track(create_test_track(300));
+        queue.play_index(1); // current = 200
+
+        queue.clear(true);
+
+        let state = queue.get_state();
+        assert!(state.current_track.is_some());
+        assert_eq!(state.current_track.unwrap().id, 200);
+        assert!(state.upcoming.is_empty());
+        assert_eq!(state.total_tracks, 1);
+    }
+
     #[test]
     fn test_clear_wipes_current_track_when_not_kept() {
         let queue = QueueManager::new();
@@ -1406,12 +1451,23 @@ mod tests {
         let before = queue.get_state();
         assert_eq!(before.history.len(), 1);
         assert_eq!(before.history[0].id, 123);
+        assert_eq!(before.current_track.as_ref().map(|t| t.id), Some(124));
 
         queue.clear(true);
 
         let after = queue.get_state();
-        assert_eq!(after.history.len(), 1);
-        assert_eq!(after.history[0].id, 123);
+        // Kept track is the one that was current (124), not tracks[0] (123).
+        assert_eq!(after.current_track.as_ref().map(|t| t.id), Some(124));
+        assert_eq!(after.total_tracks, 1);
+        // History is index-based: entries for tracks that left the queue are
+        // dropped (same remap-by-id path as set_queue). Under the old
+        // truncate(1) bug, 123 stayed as the sole row so history still
+        // "resolved" — that was an accident of the bug, not the contract.
+        assert!(
+            after.history.is_empty(),
+            "history must not resolve removed tracks after clear: {:?}",
+            after.history.iter().map(|t| t.id).collect::<Vec<_>>()
+        );
     }
 
     #[test]
