@@ -3113,18 +3113,26 @@ impl Player {
 
                             log::info!("Audio thread: seeking to {}s", position_secs);
 
+                            // After take(), every failure path must clear playing
+                            // state, otherwise UI can show "playing" with no engine.
                             if let Some(engine) = current_engine.take() {
                                 engine.stop();
                             }
+                            let seek_abort = |thread_state: &SharedState, why: &str| {
+                                log::error!("Audio thread: seek aborted: {why}");
+                                thread_state.is_playing.store(false, Ordering::SeqCst);
+                                thread_state
+                                    .record_stream_error(format!("Seek failed: {why}"));
+                            };
 
                             let mut engine = match stream {
                                 StreamType::Rodio { sink: mixer_sink, .. } => {
                                     match PlaybackEngine::new_rodio(&mixer_sink.mixer()) {
                                         Ok(e) => e,
                                         Err(e) => {
-                                            log::error!(
-                                                "Failed to create rodio engine for seek: {}",
-                                                e
+                                            seek_abort(
+                                                &thread_state,
+                                                &format!("rodio engine create failed: {e}"),
                                             );
                                             return;
                                         }
@@ -3171,18 +3179,18 @@ impl Player {
                                 match IncrementalStreamingSource::new(stream_src.clone()) {
                                     Ok(mut s) => {
                                         if let Err(e) = s.seek_to(skip_duration) {
-                                            log::error!(
-                                                "Failed to native-seek streaming source: {}",
-                                                e
+                                            seek_abort(
+                                                &thread_state,
+                                                &format!("streaming native seek failed: {e}"),
                                             );
                                             return;
                                         }
                                         Box::new(s)
                                     }
                                     Err(e) => {
-                                        log::error!(
-                                            "Failed to create streaming source for seek: {}",
-                                            e
+                                        seek_abort(
+                                            &thread_state,
+                                            &format!("streaming source for seek failed: {e}"),
                                         );
                                         return;
                                     }
@@ -3202,9 +3210,11 @@ impl Player {
                                             match decode_with_fallback(audio_data) {
                                                 Ok(fb) => Box::new(fb.skip_duration(skip_duration)),
                                                 Err(e) => {
-                                                    log::error!(
-                                                        "Failed to decode audio for seek: {}",
-                                                        e
+                                                    seek_abort(
+                                                        &thread_state,
+                                                        &format!(
+                                                            "decode for seek failed: {e}"
+                                                        ),
                                                     );
                                                     return;
                                                 }
@@ -3219,9 +3229,11 @@ impl Player {
                                         match decode_with_fallback(audio_data) {
                                             Ok(fb) => Box::new(fb.skip_duration(skip_duration)),
                                             Err(e) => {
-                                                log::error!(
-                                                    "Failed to decode audio for seek: {}",
-                                                    e
+                                                seek_abort(
+                                                    &thread_state,
+                                                    &format!(
+                                                        "decode for seek failed: {e}"
+                                                    ),
                                                 );
                                                 return;
                                             }
@@ -3243,7 +3255,10 @@ impl Player {
                                 &analyzer_enabled,
                             );
                             if let Err(e) = engine.append(skipped_source) {
-                                log::error!("Failed to append source for seek: {}", e);
+                                seek_abort(
+                                    &thread_state,
+                                    &format!("append source for seek failed: {e}"),
+                                );
                                 return;
                             }
 
@@ -3258,6 +3273,7 @@ impl Player {
                             }
 
                             *current_engine = Some(engine);
+                            thread_state.set_stream_error(false);
                             log::info!(
                                 "Audio thread: seeked to {}s (was_playing: {})",
                                 position_secs,
