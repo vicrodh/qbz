@@ -34,5 +34,8 @@ thiserror = "2"
 # Logging
 log = "0.4"
 
+# CSPRNG for cast media path tokens (not RandomState hash)
+getrandom = "0.2"
+
 # Async runtime (for DLNA)
 tokio = { version = "1", features = ["rt", "sync"] }

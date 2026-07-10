@@ -91,12 +91,9 @@ impl MediaServer {
         let base_ip = local_ip().unwrap_or_else(|| IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)));
         let base_url = format_base_url(base_ip, port);
 
-        log::info!(
-            "MediaServer: Started on {}:{} (base_url: {})",
-            base_ip,
-            port,
-            base_url
-        );
+        // Do not log the full base_url once the path token is embedded in
+        // request paths; host:port is enough for diagnostics.
+        log::info!("MediaServer: Started on {base_ip}:{port}");
 
         let entries = Arc::new(Mutex::new(HashMap::new()));
         let shutdown = Arc::new(AtomicBool::new(false));
@@ -501,14 +498,20 @@ fn content_type_for_path(path: &Path) -> String {
     }
 }
 
-/// Generate a 128-bit hex session token seeded from OS entropy (via
-/// `RandomState`), without pulling in a `rand` dependency. Not cryptographic,
-/// but enough to stop a LAN peer from guessing `/audio/<id>`.
+/// Generate a 128-bit hex session token from OS CSPRNG entropy.
+/// Embedded in the path (`/audio/<token>/<id>`) so LAN peers cannot guess
+/// a sequential id alone.
 fn generate_token() -> String {
-    use std::hash::BuildHasher;
-    let hi = std::collections::hash_map::RandomState::new().hash_one(0x9E37_79B9u64);
-    let lo = std::collections::hash_map::RandomState::new().hash_one(0x85EB_CA77u64);
-    format!("{:016x}{:016x}", hi, lo)
+    let mut bytes = [0u8; 16];
+    if getrandom::getrandom(&mut bytes).is_err() {
+        // Extremely rare; fall back to a non-crypto scramble so cast still works.
+        log::warn!("Cast: OS CSPRNG unavailable, using a weaker fallback media token");
+        use std::hash::BuildHasher;
+        let hi = std::collections::hash_map::RandomState::new().hash_one(0x9E37_79B9u64);
+        let lo = std::collections::hash_map::RandomState::new().hash_one(0x85EB_CA77u64);
+        return format!("{:016x}{:016x}", hi, lo);
+    }
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
 #[cfg(test)]

@@ -5543,6 +5543,7 @@ name = "qbz-cast"
 version = "0.1.0"
 dependencies = [
  "futures-util",
+ "getrandom 0.2.17",
  "log",
  "mdns-sd",
  "rupnp",
