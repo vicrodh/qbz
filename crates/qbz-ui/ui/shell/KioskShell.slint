@@ -15,10 +15,11 @@
 // and extracting it into a sub-component needs that height re-threaded — a
 // change worth doing only once the kiosk shell is build-verified. Kept isolated
 // here so the desktop shell is untouched and cannot regress.
+import { LineEdit } from "std-widgets.slint";
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Layout } from "../foundation/layout.slint";
 import { Radius } from "../foundation/radius.slint";
-import { NavState, ContentView, OfflineState, PlaylistState, PurchaseDetailState } from "../state.slint";
+import { NavState, ContentView, OfflineState, PlaylistState, PurchaseDetailState, SearchActions } from "../state.slint";
 import { PlayerBarSmall } from "PlayerBarSmall.slint";
 import { NavRail } from "NavRail.slint";
 import { HomeView } from "../discover/HomeView.slint";
@@ -101,19 +102,22 @@ export component KioskShell inherits Rectangle {
     VerticalLayout {
         spacing: 0px;
 
-        // --- Back bar (workstream B: persistent global back, wired to NavState
-        // history, honoring ADR-004). ----------------------------------------
+        // --- Back bar: persistent global back (workstream B, wired to NavState
+        // history, ADR-004) + the kiosk search entry. The desktop search box
+        // lives in the HeaderBar, which the kiosk drops, so a persistent search
+        // field here is what makes Search functional; Enter submits through the
+        // same SearchActions seam the header uses and lands on the results view.
         Rectangle {
             height: Layout.header-height;
             background: Theme.surface-card;
             HorizontalLayout {
                 padding-left: 6px;
-                padding-right: 6px;
-                alignment: start;
+                padding-right: 8px;
+                padding-top: 4px;
+                padding-bottom: 4px;
+                spacing: 8px;
                 back-btn := Rectangle {
                     width: 44px;
-                    height: 44px;
-                    y: (parent.height - self.height) / 2;
                     border-radius: Radius.sm;
                     background: back-ta.has-hover && NavState.can-back ? Theme.alpha-8 : transparent;
                     opacity: NavState.can-back ? 1.0 : 0.32;
@@ -128,6 +132,14 @@ export component KioskShell inherits Rectangle {
                         clicked => {
                             NavState.request-back();
                         }
+                    }
+                }
+                search-field := LineEdit {
+                    horizontal-stretch: 1;
+                    placeholder-text: @tr("Search");
+                    accepted(text) => {
+                        SearchActions.submit(text);
+                        NavState.view = ContentView.search;
                     }
                 }
             }
