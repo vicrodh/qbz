@@ -1,0 +1,153 @@
+// KioskMyQBZ — lightweight kiosk My QBZ view (2.0.2 frente #3). Reads the same
+// MyQbzState the desktop MixtapesView/CollectionsView read. Tabs Mixtapes /
+// Collections (separate ContentView routes); simple cover cards, tap opens the
+// detail. Covers are push-only. Mounted for both ContentView.mixtapes and
+// ContentView.collections.
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Radius } from "../foundation/radius.slint";
+import { MyQbzState, MyQbzActions, MixtapeCardItem, NavState, ContentView } from "../state.slint";
+
+component MyQbzTab inherits Rectangle {
+    in property <string> label;
+    in property <bool> active;
+    callback picked;
+    horizontal-stretch: 0;
+    HorizontalLayout {
+        padding-left: 2px;
+        padding-right: 2px;
+        VerticalLayout {
+            Text {
+                text: root.label;
+                color: root.active ? Theme.text-primary : Theme.text-muted;
+                font-size: 15px;
+                font-weight: 600;
+                vertical-alignment: center;
+            }
+            Rectangle {
+                height: 2px;
+                background: root.active ? Theme.accent : transparent;
+                border-radius: 2px;
+            }
+        }
+    }
+    ta := TouchArea {
+        clicked => {
+            root.picked();
+        }
+    }
+}
+
+component MyQbzCardLite inherits Rectangle {
+    in property <MixtapeCardItem> item;
+    in property <length> size: 150px;
+    callback clicked(string);
+    width: root.size;
+    VerticalLayout {
+        alignment: start;
+        spacing: 7px;
+        Rectangle {
+            width: root.size;
+            height: root.size;
+            border-radius: Radius.md;
+            background: Theme.surface-elevated;
+            clip: true;
+            if root.item.has-custom-cover: Image {
+                width: 100%;
+                height: 100%;
+                source: root.item.custom-cover;
+                image-fit: cover;
+            }
+            if !root.item.has-custom-cover && root.item.url1 != "": Image {
+                width: 100%;
+                height: 100%;
+                source: root.item.cover1;
+                image-fit: cover;
+            }
+        }
+        Text {
+            text: root.item.name;
+            color: Theme.text-primary;
+            font-size: 14px;
+            font-weight: 600;
+            overflow: elide;
+            wrap: no-wrap;
+        }
+        Text {
+            text: root.item.label + " · " + root.item.meta;
+            color: Theme.text-muted;
+            font-size: 12px;
+            overflow: elide;
+            wrap: no-wrap;
+        }
+    }
+    ta := TouchArea {
+        clicked => {
+            root.clicked(root.item.id);
+        }
+    }
+}
+
+export component KioskMyQBZ inherits Rectangle {
+    // Tab switch routes through the same header-menu navigation the Sidebar uses.
+    callback navigate(string);
+
+    property <length> pad: 16px;
+    property <bool> on-collections: NavState.view == ContentView.collections;
+
+    VerticalLayout {
+        spacing: 0px;
+
+        Rectangle {
+            height: 48px;
+            background: Theme.surface-main;
+            HorizontalLayout {
+                padding-left: root.pad;
+                padding-right: root.pad;
+                spacing: 22px;
+                alignment: start;
+                MyQbzTab {
+                    label: @tr("Mixtapes");
+                    active: !root.on-collections;
+                    picked => {
+                        root.navigate("myqbz-mixtapes");
+                    }
+                }
+                MyQbzTab {
+                    label: @tr("Collections");
+                    active: root.on-collections;
+                    picked => {
+                        root.navigate("myqbz-collections");
+                    }
+                }
+            }
+            Rectangle {
+                y: parent.height - 1px;
+                height: 1px;
+                background: Theme.border-subtle;
+            }
+        }
+
+        content := Rectangle {
+            vertical-stretch: 1;
+            clip: true;
+            grid := Flickable {
+                property <int> cols: 6;
+                property <length> gap: 16px;
+                property <length> cell: (self.width - 2 * root.pad - (self.cols - 1) * self.gap) / self.cols;
+                viewport-width: self.width;
+                viewport-height: Math.ceil((root.on-collections ? MyQbzState.collections.length : MyQbzState.mixtapes.length) / self.cols) * (self.cell + 44px + self.gap) + root.pad;
+                Rectangle {
+                    for item[i] in (root.on-collections ? MyQbzState.collections : MyQbzState.mixtapes): MyQbzCardLite {
+                        x: root.pad + Math.mod(i, grid.cols) * (grid.cell + grid.gap);
+                        y: root.pad + Math.floor(i / grid.cols) * (grid.cell + 44px + grid.gap);
+                        size: grid.cell;
+                        item: item;
+                        clicked(id) => {
+                            MyQbzActions.open-card(id);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

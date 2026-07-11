@@ -44,14 +44,13 @@ import { FavoritesOfflineRail } from "../favorites/FavoritesOfflineRail.slint";
 import { MixView } from "../mix/MixView.slint";
 import { PlaylistView } from "../playlist/PlaylistView.slint";
 import { PlaylistManagerView } from "../playlist/PlaylistManagerView.slint";
-import { MixtapesView } from "../myqbz/MixtapesView.slint";
-import { CollectionsView } from "../myqbz/CollectionsView.slint";
+import { KioskMyQBZ } from "KioskMyQBZ.slint";
 import { MixtapeDetailView } from "../myqbz/MixtapeDetailView.slint";
 import { DiscographyBuilderView } from "../myqbz/DiscographyBuilderView.slint";
 import { OfflineManagerView } from "../offline/OfflineManagerView.slint";
 import { BlacklistManagerView } from "../settings/BlacklistManagerView.slint";
 import { OfflinePlaceholder } from "../offline/OfflinePlaceholder.slint";
-import { LocalLibraryView } from "../locallibrary/LocalLibraryView.slint";
+import { KioskLocalLibrary } from "KioskLocalLibrary.slint";
 import { SettingsView } from "../settings/SettingsView.slint";
 import { KioskSearch } from "KioskSearch.slint";
 
@@ -357,13 +356,21 @@ export component KioskShell inherits Rectangle {
                         && !OfflineState.offline
                         && PurchaseDetailState.album-id != "": PurchaseDetailView { }
                     if NavState.view == ContentView.playlist-manager: PlaylistManagerView { }
-                    if NavState.view == ContentView.mixtapes: MixtapesView { }
-                    if NavState.view == ContentView.collections: CollectionsView { }
+                    if NavState.view == ContentView.mixtapes: KioskMyQBZ {
+                        navigate(r) => {
+                            root.header-menu-navigate(r);
+                        }
+                    }
+                    if NavState.view == ContentView.collections: KioskMyQBZ {
+                        navigate(r) => {
+                            root.header-menu-navigate(r);
+                        }
+                    }
                     if NavState.view == ContentView.mixtape-detail: MixtapeDetailView { }
                     if NavState.view == ContentView.discography-builder: DiscographyBuilderView { }
                     if NavState.view == ContentView.offline-manager: OfflineManagerView { }
                     if NavState.view == ContentView.blacklist-manager: BlacklistManagerView { }
-                    if NavState.view == ContentView.local-library: LocalLibraryView { }
+                    if NavState.view == ContentView.local-library: KioskLocalLibrary { }
                     if NavState.view == ContentView.mix && !OfflineState.offline: MixView {
                         play-track(id) => {
                             root.media-action("track", id, "play");

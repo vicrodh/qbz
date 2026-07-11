@@ -1,0 +1,122 @@
+// KioskLocalLibrary — lightweight kiosk Local Library (2.0.2 frente #3). Reads
+// the same LocalLibraryState the desktop LocalLibraryView reads (3 sources
+// unified: local / offline / plex). Tabs Albums / Artists / Folders / Tracks,
+// rendered with the shared kiosk cards. Drives LocalLibraryActions directly
+// (open-album routes to ContentView.local-album in Rust). v1 simplifications:
+// no album-window / tracks-load-more hooks yet (first band loads), folders as a
+// flat grid.
+import { ListView } from "std-widgets.slint";
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Radius } from "../foundation/radius.slint";
+import { LocalLibraryState, LocalLibraryActions } from "../state.slint";
+import { KioskAlbumGrid } from "KioskAlbumGrid.slint";
+import { KioskArtistCard } from "KioskArtistCard.slint";
+import { KioskTrackRow } from "KioskTrackRow.slint";
+
+component LLTab inherits Rectangle {
+    in property <string> label;
+    in property <string> id;
+    callback picked(string);
+    property <bool> active: LocalLibraryState.active-tab == root.id;
+    horizontal-stretch: 0;
+    HorizontalLayout {
+        padding-left: 2px;
+        padding-right: 2px;
+        VerticalLayout {
+            Text {
+                text: root.label;
+                color: root.active ? Theme.text-primary : Theme.text-muted;
+                font-size: 15px;
+                font-weight: 600;
+                vertical-alignment: center;
+            }
+            Rectangle {
+                height: 2px;
+                background: root.active ? Theme.accent : transparent;
+                border-radius: 2px;
+            }
+        }
+    }
+    ta := TouchArea {
+        clicked => {
+            root.picked(root.id);
+        }
+    }
+}
+
+export component KioskLocalLibrary inherits Rectangle {
+    property <length> pad: 16px;
+
+    VerticalLayout {
+        spacing: 0px;
+
+        Rectangle {
+            height: 48px;
+            background: Theme.surface-main;
+            HorizontalLayout {
+                padding-left: root.pad;
+                padding-right: root.pad;
+                spacing: 22px;
+                alignment: start;
+                LLTab { label: @tr("Albums"); id: "albums"; picked(t) => { LocalLibraryActions.select-tab(t); } }
+                LLTab { label: @tr("Artists"); id: "artists"; picked(t) => { LocalLibraryActions.select-tab(t); } }
+                LLTab { label: @tr("Folders"); id: "folders"; picked(t) => { LocalLibraryActions.select-tab(t); } }
+                LLTab { label: @tr("Tracks"); id: "tracks"; picked(t) => { LocalLibraryActions.select-tab(t); } }
+            }
+            Rectangle {
+                y: parent.height - 1px;
+                height: 1px;
+                background: Theme.border-subtle;
+            }
+        }
+
+        content := Rectangle {
+            vertical-stretch: 1;
+            clip: true;
+
+            if LocalLibraryState.active-tab == "albums": KioskAlbumGrid {
+                albums: LocalLibraryState.albums-visible;
+                open(id) => {
+                    LocalLibraryActions.open-album(id);
+                }
+            }
+
+            if LocalLibraryState.active-tab == "folders": KioskAlbumGrid {
+                albums: LocalLibraryState.folders-visible;
+                open(id) => {
+                    LocalLibraryActions.open-album(id);
+                }
+            }
+
+            if LocalLibraryState.active-tab == "artists": arts := Flickable {
+                property <int> cols: 7;
+                property <length> gap: 14px;
+                property <length> cell: (self.width - 2 * root.pad - (self.cols - 1) * self.gap) / self.cols;
+                viewport-width: self.width;
+                viewport-height: Math.ceil(LocalLibraryState.artists.length / self.cols) * (self.cell + 26px + self.gap) + root.pad;
+                Rectangle {
+                    for artist[i] in LocalLibraryState.artists: KioskArtistCard {
+                        x: root.pad + Math.mod(i, arts.cols) * (arts.cell + arts.gap);
+                        y: root.pad + Math.floor(i / arts.cols) * (arts.cell + 26px + arts.gap);
+                        size: arts.cell;
+                        id: artist.name;
+                        name: artist.display-name;
+                        avatar: artist.image;
+                        clicked(id) => {
+                            LocalLibraryActions.open-artist(id);
+                        }
+                    }
+                }
+            }
+
+            if LocalLibraryState.active-tab == "tracks": ListView {
+                for track in LocalLibraryState.tracks-visible: KioskTrackRow {
+                    track: track;
+                    play(id) => {
+                        LocalLibraryActions.track-action(id, "play");
+                    }
+                }
+            }
+        }
+    }
+}
