@@ -19,10 +19,10 @@ import { LineEdit } from "std-widgets.slint";
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Layout } from "../foundation/layout.slint";
 import { Radius } from "../foundation/radius.slint";
-import { NavState, ContentView, OfflineState, PlaylistState, PurchaseDetailState, SearchActions } from "../state.slint";
+import { NavState, ContentView, OfflineState, PlaylistState, PurchaseDetailState, SearchActions, UiFocusState } from "../state.slint";
 import { PlayerBarSmall } from "PlayerBarSmall.slint";
 import { NavRail } from "NavRail.slint";
-import { HomeView } from "../discover/HomeView.slint";
+import { KioskDiscover } from "KioskDiscover.slint";
 import { DiscoverBrowseView } from "../discover/DiscoverBrowseView.slint";
 import { RecentAlbumsView } from "../discover/RecentAlbumsView.slint";
 import { AlbumPageView } from "../album/AlbumPageView.slint";
@@ -137,6 +137,12 @@ export component KioskShell inherits Rectangle {
                 search-field := LineEdit {
                     horizontal-stretch: 1;
                     placeholder-text: @tr("Search");
+                    // Suppress the global single-key hotkeys while typing (the
+                    // desktop search box drives the same guard); without this,
+                    // letters fire hotkeys instead of reaching the field.
+                    changed has-focus => {
+                        UiFocusState.text-input-focused = self.has-focus;
+                    }
                     accepted(text) => {
                         SearchActions.submit(text);
                         NavState.view = ContentView.search;
@@ -175,7 +181,7 @@ export component KioskShell inherits Rectangle {
                         FavoritesOfflineRail { }
                     }
 
-                    if NavState.view == ContentView.home && !OfflineState.offline: HomeView {
+                    if NavState.view == ContentView.home && !OfflineState.offline: KioskDiscover {
                         album-clicked(id) => {
                             root.open-album(id);
                         }

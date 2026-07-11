@@ -1,0 +1,83 @@
+// KioskCard — the lightweight album card for the kiosk browse shelves
+// (2.0.2 frente #3, Axis B). Deliberately SIMPLER than the desktop AlbumCard:
+// square art + a quality badge + title + artist, tap-to-open. No hover-reveal
+// actions, no context menu, no source/ribbon chrome — that weight is what made
+// the reused desktop views too heavy for a Pi. Binds `album` reactively (the
+// artwork pipeline pushes covers into the shared model in place, so a plain
+// `Image.source: album.artwork` picks them up without any request hook).
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Radius } from "../foundation/radius.slint";
+import { AlbumCardItem } from "../state.slint";
+
+export component KioskCard inherits Rectangle {
+    in property <AlbumCardItem> album;
+    in property <length> art-size: 128px;
+    in property <bool> round: false;
+    callback clicked(string);
+
+    width: root.art-size;
+
+    VerticalLayout {
+        alignment: start;
+        spacing: 7px;
+
+        art := Rectangle {
+            width: root.art-size;
+            height: root.art-size;
+            border-radius: root.round ? root.art-size / 2 : Radius.sm;
+            background: Theme.surface-elevated;
+            clip: true;
+
+            Image {
+                width: 100%;
+                height: 100%;
+                source: root.album.artwork;
+                image-fit: cover;
+            }
+
+            // Quality badge — bottom-left, only for hi-res / lossless.
+            if root.album.quality-tier != "": Rectangle {
+                x: 6px;
+                y: art.height - self.height - 6px;
+                height: 19px;
+                background: #04070cd9;
+                border-radius: 4px;
+                HorizontalLayout {
+                    padding-left: 6px;
+                    padding-right: 6px;
+                    Text {
+                        text: root.album.quality-tier == "hires" ? "Hi-Res" : "CD";
+                        color: root.album.quality-tier == "hires" ? #e6b24d : Theme.text-secondary;
+                        font-size: 10px;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+
+        Text {
+            text: root.album.title;
+            color: Theme.text-primary;
+            font-size: 14px;
+            font-weight: 600;
+            overflow: elide;
+            wrap: no-wrap;
+            horizontal-alignment: root.round ? center : left;
+        }
+        Text {
+            text: root.album.artist;
+            color: Theme.text-muted;
+            font-size: 13px;
+            overflow: elide;
+            wrap: no-wrap;
+            horizontal-alignment: root.round ? center : left;
+        }
+    }
+
+    ta := TouchArea {
+        clicked => {
+            root.clicked(root.album.id);
+        }
+    }
+}

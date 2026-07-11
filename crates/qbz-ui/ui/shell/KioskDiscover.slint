@@ -1,0 +1,123 @@
+// KioskDiscover — lightweight Discover/Home for the kiosk (2.0.2 frente #3).
+//
+// Reads the SAME DiscoverState the desktop HomeView reads (no data copy, so the
+// artwork pipeline's in-place cover pushes flow through), but renders simple
+// horizontal shelves of KioskCards instead of the heavy Carousel/AlbumCard
+// stack — lighter for a Pi. v1 covers the album-carousel rows (newReleases,
+// qobuzissimes, editorPicks, pressAwards, idealDiscography, mostStreamed); the
+// non-album rows (playlists, mixes, slim rails) are skipped for now.
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Radius } from "../foundation/radius.slint";
+import { DiscoverState, HomeState, HomeActions } from "../state.slint";
+import { KioskCard } from "KioskCard.slint";
+
+component TabPill inherits Rectangle {
+    in property <string> label;
+    in property <bool> active;
+    callback clicked;
+    horizontal-stretch: 0;
+    height: 40px;
+    border-radius: Radius.sm;
+    background: root.active ? Theme.accent : ta.has-hover ? Theme.alpha-6 : transparent;
+    HorizontalLayout {
+        padding-left: 16px;
+        padding-right: 16px;
+        Text {
+            text: root.label;
+            color: root.active ? Theme.accent-text : Theme.text-secondary;
+            font-size: 15px;
+            font-weight: 600;
+            vertical-alignment: center;
+        }
+    }
+    ta := TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+export component KioskDiscover inherits Rectangle {
+    callback album-clicked(string);
+    callback open-artist(string);
+    callback media-action(string, string, string);
+    callback discover-view-all(string, string);
+
+    Flickable {
+        viewport-width: self.width;
+        viewport-height: page.preferred-height;
+
+        page := VerticalLayout {
+            padding: 16px;
+            spacing: 22px;
+
+            // Tab pill — Home / Editor's Picks / For You.
+            HorizontalLayout {
+                spacing: 6px;
+                alignment: start;
+                Rectangle {
+                    width: pills.preferred-width;
+                    height: 50px;
+                    border-radius: Radius.md;
+                    background: Theme.surface-card;
+                    border-width: 1px;
+                    border-color: Theme.border-subtle;
+                    pills := HorizontalLayout {
+                        padding: 5px;
+                        spacing: 4px;
+                        TabPill {
+                            label: @tr("Home");
+                            active: DiscoverState.active-tab == "home";
+                            clicked => { HomeActions.select-tab("home"); }
+                        }
+                        TabPill {
+                            label: @tr("Editor's Picks");
+                            active: DiscoverState.active-tab == "editorPicks";
+                            clicked => { HomeActions.select-tab("editorPicks"); }
+                        }
+                        TabPill {
+                            label: @tr("For You");
+                            active: DiscoverState.active-tab == "forYou";
+                            clicked => { HomeActions.select-tab("forYou"); }
+                        }
+                    }
+                }
+            }
+
+            // Album shelves for the active tab. Only rows carrying album data
+            // render (length > 0); playlist/mix/slim rows are skipped in v1.
+            for desc in (DiscoverState.active-tab == "editorPicks"
+                    ? DiscoverState.editor-sections
+                    : DiscoverState.active-tab == "forYou"
+                        ? DiscoverState.foryou-sections
+                        : DiscoverState.home-sections): VerticalLayout {
+                if desc.section.albums.length > 0: VerticalLayout {
+                    spacing: 12px;
+
+                    Text {
+                        text: desc.section.title;
+                        color: Theme.text-primary;
+                        font-size: 18px;
+                        font-weight: 600;
+                    }
+
+                    Flickable {
+                        height: 182px;
+                        viewport-width: strip.preferred-width;
+                        viewport-height: self.height;
+                        strip := HorizontalLayout {
+                            spacing: 14px;
+                            alignment: start;
+                            for album in desc.section.albums: KioskCard {
+                                album: album;
+                                clicked(id) => {
+                                    root.album-clicked(id);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
