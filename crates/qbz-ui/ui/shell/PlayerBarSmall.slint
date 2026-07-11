@@ -788,14 +788,14 @@ export component PlayerBarSmall inherits Rectangle {
                                             background: Theme.border-subtle;
                                         }
                                     }
-                                    ContextMenuItem {
+                                    if !ShellState.kiosk-profile: ContextMenuItem {
                                         icon: @image-url("../assets/icons/picture-in-picture-2.svg");
                                         label: @tr("Miniplayer");
                                         clicked => {
                                             root.media-action("npb-view", "", "miniplayer");
                                         }
                                     }
-                                    ContextMenuItem {
+                                    if !ShellState.kiosk-profile: ContextMenuItem {
                                         icon: @image-url("../assets/icons/maximize-2.svg");
                                         label: @tr("Immersive");
                                         clicked => {

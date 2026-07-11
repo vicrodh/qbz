@@ -1,0 +1,196 @@
+// KioskNowPlaying — the kiosk Now Playing centerpiece (2.0.2 frente #3).
+//
+// A 50/50 full screen: the current track (big cover + title/artist + AudioStamp
+// + SeekBar + the 7-control TransportControls) on the left, the Up-Next queue on
+// the right. Reuses the real transport/seek/stamp components and reads the same
+// NowPlayingState/QueueState the desktop uses (all covers push-only). Must call
+// QueueState.panel-opened() on init so the paginated queue slice is fresh.
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Radius } from "../foundation/radius.slint";
+import { NowPlayingState, QueueState } from "../state.slint";
+import { SeekBar } from "SeekBar.slint";
+import { TransportControls } from "TransportControls.slint";
+import { AudioStamp } from "AudioStamp.slint";
+
+export component KioskNowPlaying inherits Rectangle {
+    callback open-album(string);
+    callback open-artist(string);
+    callback media-action(string, string, string);
+
+    init => {
+        QueueState.panel-opened();
+    }
+
+    HorizontalLayout {
+        spacing: 0px;
+
+        // LEFT — the current track.
+        Rectangle {
+            horizontal-stretch: 1;
+            VerticalLayout {
+                padding: 26px;
+                spacing: 16px;
+                alignment: center;
+
+                HorizontalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: 240px;
+                        height: 240px;
+                        border-radius: Radius.lg;
+                        background: Theme.surface-elevated;
+                        clip: true;
+                        if NowPlayingState.artwork-large.width > 0: Image {
+                            width: 100%;
+                            height: 100%;
+                            source: NowPlayingState.artwork-large;
+                            image-fit: cover;
+                        }
+                    }
+                }
+
+                Text {
+                    text: NowPlayingState.title;
+                    color: Theme.text-primary;
+                    font-size: 24px;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                }
+                artist-row := Rectangle {
+                    height: 24px;
+                    HorizontalLayout {
+                        alignment: center;
+                        Text {
+                            text: NowPlayingState.artist;
+                            color: Theme.text-secondary;
+                            font-size: 16px;
+                            vertical-alignment: center;
+                        }
+                    }
+                    art-ta := TouchArea {
+                        clicked => {
+                            root.open-artist(NowPlayingState.artist-id);
+                        }
+                    }
+                }
+
+                HorizontalLayout {
+                    alignment: center;
+                    AudioStamp { }
+                }
+
+                SeekBar {
+                    show-times: true;
+                    progress: NowPlayingState.progress;
+                    cache: NowPlayingState.cache;
+                    seekable-max: NowPlayingState.seekable-max;
+                    elapsed: NowPlayingState.elapsed;
+                    remaining: NowPlayingState.remaining;
+                    duration-secs: NowPlayingState.duration-secs;
+                    seek(fraction) => {
+                        NowPlayingState.seek(fraction);
+                    }
+                }
+
+                HorizontalLayout {
+                    alignment: center;
+                    TransportControls {
+                        play-circle: true;
+                        classic-actions: true;
+                        media-action(k, i, a) => {
+                            root.media-action(k, i, a);
+                        }
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            width: 1px;
+            background: Theme.border-subtle;
+        }
+
+        // RIGHT — the Up-Next queue.
+        Rectangle {
+            width: (parent.width - 1px) * 0.42;
+            background: Theme.surface-card;
+            VerticalLayout {
+                padding: 18px;
+                spacing: 10px;
+                Text {
+                    text: @tr("Up Next");
+                    color: Theme.text-muted;
+                    font-size: 12px;
+                    font-weight: 700;
+                    letter-spacing: 1.4px;
+                }
+                Flickable {
+                    viewport-width: self.width;
+                    viewport-height: qlist.preferred-height;
+                    qlist := VerticalLayout {
+                        spacing: 2px;
+                        for item[i] in QueueState.upcoming-page: qrow-rect := Rectangle {
+                            height: 58px;
+                            border-radius: Radius.sm;
+                            background: qrow.has-hover ? Theme.alpha-6 : transparent;
+                            HorizontalLayout {
+                                padding-left: 8px;
+                                padding-right: 12px;
+                                spacing: 12px;
+                                Rectangle {
+                                    width: 44px;
+                                    Rectangle {
+                                        width: 44px;
+                                        height: 44px;
+                                        y: (parent.height - self.height) / 2;
+                                        border-radius: 5px;
+                                        background: Theme.surface-elevated;
+                                        clip: true;
+                                        if item.artwork.width > 0: Image {
+                                            width: 100%;
+                                            height: 100%;
+                                            source: item.artwork;
+                                            image-fit: cover;
+                                        }
+                                    }
+                                }
+                                VerticalLayout {
+                                    horizontal-stretch: 1;
+                                    alignment: center;
+                                    spacing: 2px;
+                                    Text {
+                                        text: item.title;
+                                        color: Theme.text-primary;
+                                        font-size: 14px;
+                                        font-weight: 500;
+                                        overflow: elide;
+                                        wrap: no-wrap;
+                                    }
+                                    Text {
+                                        text: item.artist;
+                                        color: Theme.text-muted;
+                                        font-size: 12.5px;
+                                        overflow: elide;
+                                        wrap: no-wrap;
+                                    }
+                                }
+                                Text {
+                                    text: item.duration;
+                                    color: Theme.text-muted;
+                                    font-size: 12.5px;
+                                    vertical-alignment: center;
+                                }
+                            }
+                            qrow := TouchArea {
+                                clicked => {
+                                    QueueState.play-upcoming(i);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

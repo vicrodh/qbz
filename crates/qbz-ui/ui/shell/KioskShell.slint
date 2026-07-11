@@ -28,6 +28,7 @@ import { RecentAlbumsView } from "../discover/RecentAlbumsView.slint";
 import { KioskAlbum } from "KioskAlbum.slint";
 import { LocalAlbumView } from "../album/LocalAlbumView.slint";
 import { KioskArtist } from "KioskArtist.slint";
+import { KioskNowPlaying } from "KioskNowPlaying.slint";
 import { ArtistReleasesView } from "../artist/ArtistReleasesView.slint";
 import { MusicianPageView } from "../musician/MusicianPageView.slint";
 import { LabelReleasesView } from "../label/LabelReleasesView.slint";
@@ -404,6 +405,17 @@ export component KioskShell inherits Rectangle {
                             root.media-action(kind, id, action);
                         }
                     }
+                    if NavState.view == ContentView.now-playing: KioskNowPlaying {
+                        open-album(id) => {
+                            root.open-album(id);
+                        }
+                        open-artist(id) => {
+                            root.open-artist(id);
+                        }
+                        media-action(kind, id, action) => {
+                            root.media-action(kind, id, action);
+                        }
+                    }
                 }
             }
         }
@@ -446,7 +458,7 @@ export component KioskShell inherits Rectangle {
                 NavState.view = ContentView.search;
             }
             playing => {
-                root.media-action("npb-view", "", "immersive");
+                NavState.view = ContentView.now-playing;
             }
             visualizer => {
                 root.media-action("npb-view", "", "immersive");

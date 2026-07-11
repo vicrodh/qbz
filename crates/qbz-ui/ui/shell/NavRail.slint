@@ -147,7 +147,7 @@ export component NavRail inherits Rectangle {
         height: root.th;
         icon: @image-url("../assets/icons/play-fill.svg");
         label: @tr("Now Playing");
-        active: ImmersiveState.open;
+        active: NavState.view == ContentView.now-playing;
         clicked => {
             root.playing();
         }
