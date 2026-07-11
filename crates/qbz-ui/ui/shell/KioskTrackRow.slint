@@ -1,0 +1,75 @@
+// KioskTrackRow — lightweight track row for the kiosk Search/Library track
+// tabs (2.0.2 frente #3). Art + title/artist + duration, tap to play. Takes the
+// shared TrackItem so it works for both SearchState.tracks and
+// FavoritesState.tracks-visible.
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Radius } from "../foundation/radius.slint";
+import { TrackItem } from "../state.slint";
+
+export component KioskTrackRow inherits Rectangle {
+    in property <TrackItem> track;
+    callback play(string);
+
+    height: 62px;
+    border-radius: Radius.sm;
+    background: ta.has-hover ? Theme.alpha-6 : transparent;
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 14px;
+        spacing: 12px;
+
+        // Art slot — fixed 46x46 centered in the row height.
+        Rectangle {
+            width: 46px;
+            Rectangle {
+                width: 46px;
+                height: 46px;
+                y: (parent.height - self.height) / 2;
+                border-radius: 5px;
+                background: Theme.surface-elevated;
+                clip: true;
+                Image {
+                    width: 100%;
+                    height: 100%;
+                    source: root.track.artwork;
+                    image-fit: cover;
+                }
+            }
+        }
+
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            spacing: 2px;
+            Text {
+                text: root.track.title;
+                color: Theme.text-primary;
+                font-size: 15px;
+                font-weight: 500;
+                overflow: elide;
+                wrap: no-wrap;
+            }
+            Text {
+                text: root.track.artist;
+                color: Theme.text-muted;
+                font-size: 13px;
+                overflow: elide;
+                wrap: no-wrap;
+            }
+        }
+
+        Text {
+            text: root.track.duration;
+            color: Theme.text-muted;
+            font-size: 13px;
+            vertical-alignment: center;
+        }
+    }
+
+    ta := TouchArea {
+        clicked => {
+            root.play(root.track.id);
+        }
+    }
+}

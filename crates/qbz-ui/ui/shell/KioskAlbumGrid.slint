@@ -1,0 +1,35 @@
+// KioskAlbumGrid — a lightweight wrapping grid of KioskCards for the kiosk
+// Search/Library album tabs (2.0.2 frente #3). Absolute-positioned cells
+// (Math.mod/Math.floor columns, the same idiom the desktop grids use) inside a
+// vertical Flickable; card width derives from the grid width so it reflows.
+// Binds `[AlbumCardItem]` directly so the artwork pipeline's in-place pushes
+// land on the cards.
+import { AlbumCardItem } from "../state.slint";
+import { KioskCard } from "KioskCard.slint";
+
+export component KioskAlbumGrid inherits Flickable {
+    in property <[AlbumCardItem]> albums;
+    in property <int> columns: 6;
+    in property <length> gap: 16px;
+    in property <length> pad: 16px;
+    callback open(string);
+
+    property <length> card-w: (self.width - 2 * root.pad - (root.columns - 1) * root.gap) / root.columns;
+    property <length> card-h: root.card-w + 46px;
+    property <float> rows: Math.ceil(root.albums.length / root.columns);
+
+    viewport-width: self.width;
+    viewport-height: root.rows * (root.card-h + root.gap) + root.pad;
+
+    Rectangle {
+        for album[i] in root.albums: KioskCard {
+            x: root.pad + Math.mod(i, root.columns) * (root.card-w + root.gap);
+            y: root.pad + Math.floor(i / root.columns) * (root.card-h + root.gap);
+            art-size: root.card-w;
+            album: album;
+            clicked(id) => {
+                root.open(id);
+            }
+        }
+    }
+}

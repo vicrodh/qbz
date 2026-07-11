@@ -37,7 +37,7 @@ import { AwardAlbumsView } from "../award/AwardAlbumsView.slint";
 import { PurchasesView } from "../purchases/PurchasesView.slint";
 import { PurchaseDetailView } from "../purchases/PurchaseDetailView.slint";
 import { ArtistsByLocationView } from "../location/ArtistsByLocationView.slint";
-import { FavoritesView } from "../favorites/FavoritesView.slint";
+import { KioskLibrary } from "KioskLibrary.slint";
 import { FavoritesOfflineRail } from "../favorites/FavoritesOfflineRail.slint";
 import { MixView } from "../mix/MixView.slint";
 import { PlaylistView } from "../playlist/PlaylistView.slint";
@@ -51,7 +51,7 @@ import { BlacklistManagerView } from "../settings/BlacklistManagerView.slint";
 import { OfflinePlaceholder } from "../offline/OfflinePlaceholder.slint";
 import { LocalLibraryView } from "../locallibrary/LocalLibraryView.slint";
 import { SettingsView } from "../settings/SettingsView.slint";
-import { SearchResultsView } from "../search/SearchResultsView.slint";
+import { KioskSearch } from "KioskSearch.slint";
 
 export component KioskShell inherits Rectangle {
     // Public interface mirrors AppShell 1:1 (app.slint forwards these to the
@@ -303,7 +303,7 @@ export component KioskShell inherits Rectangle {
                             root.open-artist(id);
                         }
                     }
-                    if NavState.view == ContentView.favorites && !OfflineState.offline: FavoritesView {
+                    if NavState.view == ContentView.favorites && !OfflineState.offline: KioskLibrary {
                         open-album(id) => {
                             root.open-album(id);
                         }
@@ -393,7 +393,7 @@ export component KioskShell inherits Rectangle {
                             root.settings-release-device();
                         }
                     }
-                    if NavState.view == ContentView.search && !OfflineState.offline: SearchResultsView {
+                    if NavState.view == ContentView.search && !OfflineState.offline: KioskSearch {
                         open-album(id) => {
                             root.open-album(id);
                         }

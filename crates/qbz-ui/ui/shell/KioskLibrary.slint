@@ -1,0 +1,190 @@
+// KioskLibrary — lightweight kiosk Library (Favorites) view (2.0.2 frente #3).
+//
+// Reads the SAME FavoritesState the desktop FavoritesView reads, rendered with
+// the simple kiosk cards. Tabs Tracks/Albums/Artists/Playlists/Labels switch via
+// FavoritesActions.select-tab (Rust lazy-loads each tab). Covers are push-only
+// except album covers (windowed — v1 shows the first ~60; the window hook is a
+// follow-up).
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Radius } from "../foundation/radius.slint";
+import { FavoritesState, FavoritesActions } from "../state.slint";
+import { KioskAlbumGrid } from "KioskAlbumGrid.slint";
+import { KioskArtistCard } from "KioskArtistCard.slint";
+import { KioskTrackRow } from "KioskTrackRow.slint";
+
+component LibTab inherits Rectangle {
+    in property <string> label;
+    in property <string> id;
+    callback picked(string);
+    property <bool> active: FavoritesState.active-tab == root.id;
+    horizontal-stretch: 0;
+    HorizontalLayout {
+        padding-left: 2px;
+        padding-right: 2px;
+        VerticalLayout {
+            Text {
+                text: root.label;
+                color: root.active ? Theme.text-primary : Theme.text-muted;
+                font-size: 15px;
+                font-weight: 600;
+                vertical-alignment: center;
+            }
+            Rectangle {
+                height: 2px;
+                background: root.active ? Theme.accent : transparent;
+                border-radius: 2px;
+            }
+        }
+    }
+    ta := TouchArea {
+        clicked => {
+            root.picked(root.id);
+        }
+    }
+}
+
+export component KioskLibrary inherits Rectangle {
+    callback open-album(string);
+    callback open-artist(string);
+
+    property <length> pad: 16px;
+
+    VerticalLayout {
+        spacing: 0px;
+
+        Rectangle {
+            height: 48px;
+            background: Theme.surface-main;
+            HorizontalLayout {
+                padding-left: root.pad;
+                padding-right: root.pad;
+                spacing: 22px;
+                alignment: start;
+                LibTab { label: @tr("Tracks"); id: "tracks"; picked(t) => { FavoritesActions.select-tab(t); } }
+                LibTab { label: @tr("Albums"); id: "albums"; picked(t) => { FavoritesActions.select-tab(t); } }
+                LibTab { label: @tr("Artists"); id: "artists"; picked(t) => { FavoritesActions.select-tab(t); } }
+                LibTab { label: @tr("Playlists"); id: "playlists"; picked(t) => { FavoritesActions.select-tab(t); } }
+                LibTab { label: @tr("Labels"); id: "labels"; picked(t) => { FavoritesActions.select-tab(t); } }
+            }
+            Rectangle {
+                y: parent.height - 1px;
+                height: 1px;
+                background: Theme.border-subtle;
+            }
+        }
+
+        content := Rectangle {
+            vertical-stretch: 1;
+            clip: true;
+
+            if FavoritesState.active-tab == "tracks": Flickable {
+                viewport-width: self.width;
+                viewport-height: tracklist.preferred-height;
+                tracklist := VerticalLayout {
+                    padding: root.pad;
+                    spacing: 2px;
+                    for track in FavoritesState.tracks-visible: KioskTrackRow {
+                        track: track;
+                        play(id) => {
+                            FavoritesActions.play-track(id);
+                        }
+                    }
+                }
+            }
+
+            if FavoritesState.active-tab == "albums": KioskAlbumGrid {
+                albums: FavoritesState.albums-visible;
+                open(id) => {
+                    root.open-album(id);
+                }
+            }
+
+            if FavoritesState.active-tab == "artists": arts := Flickable {
+                property <int> cols: 7;
+                property <length> gap: 14px;
+                property <length> cell: (self.width - 2 * root.pad - (self.cols - 1) * self.gap) / self.cols;
+                viewport-width: self.width;
+                viewport-height: Math.ceil(FavoritesState.artists-visible.length / self.cols) * (self.cell + 26px + self.gap) + root.pad;
+                Rectangle {
+                    for artist[i] in FavoritesState.artists-visible: KioskArtistCard {
+                        x: root.pad + Math.mod(i, arts.cols) * (arts.cell + arts.gap);
+                        y: root.pad + Math.floor(i / arts.cols) * (arts.cell + 26px + arts.gap);
+                        size: arts.cell;
+                        id: artist.id;
+                        name: artist.name;
+                        avatar: artist.image;
+                        clicked(id) => {
+                            root.open-artist(id);
+                        }
+                    }
+                }
+            }
+
+            if FavoritesState.active-tab == "labels": labs := Flickable {
+                property <int> cols: 7;
+                property <length> gap: 14px;
+                property <length> cell: (self.width - 2 * root.pad - (self.cols - 1) * self.gap) / self.cols;
+                viewport-width: self.width;
+                viewport-height: Math.ceil(FavoritesState.labels-visible.length / self.cols) * (self.cell + 26px + self.gap) + root.pad;
+                Rectangle {
+                    for label[i] in FavoritesState.labels-visible: KioskArtistCard {
+                        x: root.pad + Math.mod(i, labs.cols) * (labs.cell + labs.gap);
+                        y: root.pad + Math.floor(i / labs.cols) * (labs.cell + 26px + labs.gap);
+                        size: labs.cell;
+                        id: label.id;
+                        name: label.name;
+                        avatar: label.image;
+                        clicked(id) => {
+                            FavoritesActions.open-label(label.id, label.name);
+                        }
+                    }
+                }
+            }
+
+            if FavoritesState.active-tab == "playlists": pls := Flickable {
+                property <int> cols: 6;
+                property <length> gap: 16px;
+                property <length> cell: (self.width - 2 * root.pad - (self.cols - 1) * self.gap) / self.cols;
+                viewport-width: self.width;
+                viewport-height: Math.ceil(FavoritesState.playlists-visible.length / self.cols) * (self.cell + 42px + self.gap) + root.pad;
+                Rectangle {
+                    for pl[i] in FavoritesState.playlists-visible: Rectangle {
+                        x: root.pad + Math.mod(i, pls.cols) * (pls.cell + pls.gap);
+                        y: root.pad + Math.floor(i / pls.cols) * (pls.cell + 42px + pls.gap);
+                        width: pls.cell;
+                        VerticalLayout {
+                            alignment: start;
+                            spacing: 7px;
+                            Rectangle {
+                                width: parent.width;
+                                height: parent.width;
+                                border-radius: Radius.sm;
+                                background: Theme.surface-elevated;
+                                clip: true;
+                                Image {
+                                    width: 100%;
+                                    height: 100%;
+                                    source: pl.cover1;
+                                    image-fit: cover;
+                                }
+                            }
+                            Text {
+                                text: pl.title;
+                                color: Theme.text-primary;
+                                font-size: 14px;
+                                font-weight: 600;
+                                overflow: elide;
+                                wrap: no-wrap;
+                            }
+                        }
+                        pl-ta := TouchArea {
+                            clicked => {
+                                FavoritesActions.open-playlist(pl.id);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

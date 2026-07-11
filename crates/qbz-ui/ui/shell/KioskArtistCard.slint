@@ -1,0 +1,48 @@
+// KioskArtistCard — lightweight round artist card for the kiosk Search/Library
+// artist tabs (2.0.2 frente #3). Takes primitive fields so it works for both
+// SearchState.artists (SlimItem: id/title/artwork) and FavoritesState.artists
+// (FavoriteArtistItem: id/name/image).
+import { Theme } from "../foundation/semantic-colors.slint";
+
+export component KioskArtistCard inherits Rectangle {
+    in property <string> id;
+    in property <string> name;
+    in property <image> avatar;
+    in property <length> size: 120px;
+    callback clicked(string);
+
+    width: root.size;
+
+    VerticalLayout {
+        alignment: start;
+        spacing: 8px;
+        Rectangle {
+            width: root.size;
+            height: root.size;
+            border-radius: root.size / 2;
+            background: Theme.surface-elevated;
+            clip: true;
+            Image {
+                width: 100%;
+                height: 100%;
+                source: root.avatar;
+                image-fit: cover;
+            }
+        }
+        Text {
+            text: root.name;
+            color: Theme.text-primary;
+            font-size: 13px;
+            font-weight: 600;
+            horizontal-alignment: center;
+            overflow: elide;
+            wrap: no-wrap;
+        }
+    }
+
+    ta := TouchArea {
+        clicked => {
+            root.clicked(root.id);
+        }
+    }
+}

@@ -1,0 +1,176 @@
+// KioskSearch — lightweight kiosk Search results (2.0.2 frente #3).
+//
+// Reads the SAME SearchState the desktop SearchResultsView reads (albums,
+// tracks, artists, playlists + tab int), rendered with the simple kiosk cards.
+// The query is entered in the KioskShell back-bar field (SearchActions.submit);
+// this view is the tabbed results. Covers are push-only, so binding the shared
+// arrays is enough.
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Radius } from "../foundation/radius.slint";
+import { SearchState, SearchActions } from "../state.slint";
+import { KioskAlbumGrid } from "KioskAlbumGrid.slint";
+import { KioskArtistCard } from "KioskArtistCard.slint";
+import { KioskTrackRow } from "KioskTrackRow.slint";
+
+component SearchTab inherits Rectangle {
+    in property <string> label;
+    in property <int> index;
+    callback picked(int);
+    property <bool> active: SearchState.tab == root.index;
+    horizontal-stretch: 0;
+    HorizontalLayout {
+        padding-left: 2px;
+        padding-right: 2px;
+        VerticalLayout {
+            Text {
+                text: root.label;
+                color: root.active ? Theme.text-primary : Theme.text-muted;
+                font-size: 15px;
+                font-weight: 600;
+                vertical-alignment: center;
+            }
+            Rectangle {
+                height: 2px;
+                background: root.active ? Theme.accent : transparent;
+                border-radius: 2px;
+            }
+        }
+    }
+    ta := TouchArea {
+        clicked => {
+            root.picked(root.index);
+        }
+    }
+}
+
+export component KioskSearch inherits Rectangle {
+    callback open-album(string);
+    callback open-artist(string);
+    callback media-action(string, string, string);
+
+    property <length> pad: 16px;
+
+    VerticalLayout {
+        spacing: 0px;
+
+        // Tabs — All / Albums / Tracks / Artists / Playlists.
+        Rectangle {
+            height: 48px;
+            background: Theme.surface-main;
+            HorizontalLayout {
+                padding-left: root.pad;
+                padding-right: root.pad;
+                spacing: 22px;
+                alignment: start;
+                SearchTab { label: @tr("All"); index: 0; picked(i) => { SearchActions.tab-changed(i); } }
+                SearchTab { label: @tr("Albums"); index: 1; picked(i) => { SearchActions.tab-changed(i); } }
+                SearchTab { label: @tr("Tracks"); index: 2; picked(i) => { SearchActions.tab-changed(i); } }
+                SearchTab { label: @tr("Artists"); index: 3; picked(i) => { SearchActions.tab-changed(i); } }
+                SearchTab { label: @tr("Playlists"); index: 4; picked(i) => { SearchActions.tab-changed(i); } }
+            }
+            Rectangle {
+                y: parent.height - 1px;
+                height: 1px;
+                background: Theme.border-subtle;
+            }
+        }
+
+        // Content.
+        content := Rectangle {
+            vertical-stretch: 1;
+            clip: true;
+
+            // Albums (All shares the album grid in v1).
+            if SearchState.tab == 0 || SearchState.tab == 1: KioskAlbumGrid {
+                albums: SearchState.albums;
+                open(id) => {
+                    root.open-album(id);
+                }
+            }
+
+            // Tracks — simple vertical list.
+            if SearchState.tab == 2: Flickable {
+                viewport-width: self.width;
+                viewport-height: tracklist.preferred-height;
+                tracklist := VerticalLayout {
+                    padding: root.pad;
+                    spacing: 2px;
+                    for track in SearchState.tracks: KioskTrackRow {
+                        track: track;
+                        play(id) => {
+                            root.media-action("track", id, "play");
+                        }
+                    }
+                }
+            }
+
+            // Artists — round-card wrapping grid.
+            if SearchState.tab == 3: agrid := Flickable {
+                property <int> cols: 7;
+                property <length> gap: 14px;
+                property <length> cell: (self.width - 2 * root.pad - (self.cols - 1) * self.gap) / self.cols;
+                viewport-width: self.width;
+                viewport-height: Math.ceil(SearchState.artists.length / self.cols) * (self.cell + 26px + self.gap) + root.pad;
+                Rectangle {
+                    for artist[i] in SearchState.artists: KioskArtistCard {
+                        x: root.pad + Math.mod(i, agrid.cols) * (agrid.cell + agrid.gap);
+                        y: root.pad + Math.floor(i / agrid.cols) * (agrid.cell + 26px + agrid.gap);
+                        size: agrid.cell;
+                        id: artist.id;
+                        name: artist.title;
+                        avatar: artist.artwork;
+                        clicked(id) => {
+                            root.open-artist(id);
+                        }
+                    }
+                }
+            }
+
+            // Playlists — square cover grid (uses the first collage cover).
+            if SearchState.tab == 4: pgrid := Flickable {
+                property <int> cols: 6;
+                property <length> gap: 16px;
+                property <length> cell: (self.width - 2 * root.pad - (self.cols - 1) * self.gap) / self.cols;
+                viewport-width: self.width;
+                viewport-height: Math.ceil(SearchState.playlists.length / self.cols) * (self.cell + 42px + self.gap) + root.pad;
+                Rectangle {
+                    for pl[i] in SearchState.playlists: Rectangle {
+                        x: root.pad + Math.mod(i, pgrid.cols) * (pgrid.cell + pgrid.gap);
+                        y: root.pad + Math.floor(i / pgrid.cols) * (pgrid.cell + 42px + pgrid.gap);
+                        width: pgrid.cell;
+                        VerticalLayout {
+                            alignment: start;
+                            spacing: 7px;
+                            Rectangle {
+                                width: parent.width;
+                                height: parent.width;
+                                border-radius: Radius.sm;
+                                background: Theme.surface-elevated;
+                                clip: true;
+                                Image {
+                                    width: 100%;
+                                    height: 100%;
+                                    source: pl.cover1;
+                                    image-fit: cover;
+                                }
+                            }
+                            Text {
+                                text: pl.title;
+                                color: Theme.text-primary;
+                                font-size: 14px;
+                                font-weight: 600;
+                                overflow: elide;
+                                wrap: no-wrap;
+                            }
+                        }
+                        pl-ta := TouchArea {
+                            clicked => {
+                                root.media-action("playlist", pl.id, "open");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
