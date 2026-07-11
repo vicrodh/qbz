@@ -1,0 +1,166 @@
+// KioskAlbum — lightweight kiosk album detail (2.0.2 frente #3). Reads AlbumState
+// (same as the desktop AlbumPageView): a header (big cover + title + artist +
+// quality + Play/Shuffle) and a simple track list (number + title + duration).
+// Album track rows carry no artwork, so we show the track number.
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Radius } from "../foundation/radius.slint";
+import { AlbumState, NowPlayingState } from "../state.slint";
+
+component PillButton inherits Rectangle {
+    in property <string> label;
+    in property <bool> primary;
+    callback clicked;
+    width: 132px;
+    height: 44px;
+    border-radius: Radius.sm;
+    background: root.primary ? Theme.accent : (ta.has-hover ? Theme.alpha-8 : Theme.surface-elevated);
+    border-width: root.primary ? 0px : 1px;
+    border-color: Theme.border-subtle;
+    Text {
+        text: root.label;
+        color: root.primary ? Theme.accent-text : Theme.text-primary;
+        font-size: 15px;
+        font-weight: 600;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    ta := TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+export component KioskAlbum inherits Rectangle {
+    callback open-artist(string);
+    callback media-action(string, string, string);
+
+    property <length> pad: 22px;
+
+    Flickable {
+        viewport-width: self.width;
+        viewport-height: page.preferred-height;
+
+        page := VerticalLayout {
+            padding: root.pad;
+            spacing: 22px;
+
+            // Header.
+            HorizontalLayout {
+                spacing: 22px;
+                Rectangle {
+                    width: 180px;
+                    height: 180px;
+                    border-radius: Radius.md;
+                    background: Theme.surface-elevated;
+                    clip: true;
+                    Image {
+                        width: 100%;
+                        height: 100%;
+                        source: AlbumState.artwork;
+                        image-fit: cover;
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    spacing: 10px;
+                    Text {
+                        text: AlbumState.title;
+                        color: Theme.text-primary;
+                        font-size: 25px;
+                        font-weight: 700;
+                        wrap: word-wrap;
+                    }
+                    artist-row := Rectangle {
+                        height: 26px;
+                        horizontal-stretch: 0;
+                        HorizontalLayout {
+                            alignment: start;
+                            Text {
+                                text: AlbumState.artist;
+                                color: Theme.text-secondary;
+                                font-size: 17px;
+                                vertical-alignment: center;
+                            }
+                        }
+                        art-ta := TouchArea {
+                            clicked => {
+                                root.open-artist(AlbumState.artist-id);
+                            }
+                        }
+                    }
+                    Text {
+                        text: AlbumState.quality-detail;
+                        color: Theme.text-muted;
+                        font-size: 13px;
+                    }
+                    HorizontalLayout {
+                        alignment: start;
+                        spacing: 10px;
+                        PillButton {
+                            label: @tr("Play");
+                            primary: true;
+                            clicked => {
+                                root.media-action("album", AlbumState.id, "play");
+                            }
+                        }
+                        PillButton {
+                            label: @tr("Shuffle");
+                            clicked => {
+                                root.media-action("album", AlbumState.id, "shuffle");
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Track list.
+            VerticalLayout {
+                spacing: 2px;
+                for track[i] in AlbumState.tracks: trow-rect := Rectangle {
+                    height: 52px;
+                    border-radius: Radius.sm;
+                    property <bool> current: NowPlayingState.track-id == track.id;
+                    background: trow.has-hover
+                        ? Theme.alpha-6
+                        : self.current ? Theme.accent.with-alpha(0.10) : transparent;
+                    HorizontalLayout {
+                        padding-left: 12px;
+                        padding-right: 12px;
+                        spacing: 14px;
+                        Text {
+                            text: track.number;
+                            width: 30px;
+                            color: Theme.text-muted;
+                            font-size: 14px;
+                            vertical-alignment: center;
+                            horizontal-alignment: right;
+                        }
+                        VerticalLayout {
+                            horizontal-stretch: 1;
+                            alignment: center;
+                            Text {
+                                text: track.title;
+                                color: trow-rect.current ? Theme.accent : Theme.text-primary;
+                                font-size: 15px;
+                                overflow: elide;
+                                wrap: no-wrap;
+                            }
+                        }
+                        Text {
+                            text: track.duration;
+                            color: Theme.text-muted;
+                            font-size: 13px;
+                            vertical-alignment: center;
+                        }
+                    }
+                    trow := TouchArea {
+                        clicked => {
+                            root.media-action("track", track.id, "play");
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

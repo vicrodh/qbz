@@ -25,9 +25,9 @@ import { NavRail } from "NavRail.slint";
 import { KioskDiscover } from "KioskDiscover.slint";
 import { DiscoverBrowseView } from "../discover/DiscoverBrowseView.slint";
 import { RecentAlbumsView } from "../discover/RecentAlbumsView.slint";
-import { AlbumPageView } from "../album/AlbumPageView.slint";
+import { KioskAlbum } from "KioskAlbum.slint";
 import { LocalAlbumView } from "../album/LocalAlbumView.slint";
-import { ArtistPageView } from "../artist/ArtistPageView.slint";
+import { KioskArtist } from "KioskArtist.slint";
 import { ArtistReleasesView } from "../artist/ArtistReleasesView.slint";
 import { MusicianPageView } from "../musician/MusicianPageView.slint";
 import { LabelReleasesView } from "../label/LabelReleasesView.slint";
@@ -217,7 +217,7 @@ export component KioskShell inherits Rectangle {
                             root.media-action(kind, id, action);
                         }
                     }
-                    if NavState.view == ContentView.album && !OfflineState.offline: AlbumPageView {
+                    if NavState.view == ContentView.album && !OfflineState.offline: KioskAlbum {
                         open-artist(id) => {
                             root.open-artist(id);
                         }
@@ -230,7 +230,7 @@ export component KioskShell inherits Rectangle {
                             root.open-artist(name);
                         }
                     }
-                    if NavState.view == ContentView.artist && !OfflineState.offline: ArtistPageView {
+                    if NavState.view == ContentView.artist && !OfflineState.offline: KioskArtist {
                         open-album(id) => {
                             root.open-album(id);
                         }

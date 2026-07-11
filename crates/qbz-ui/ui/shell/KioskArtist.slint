@@ -1,0 +1,124 @@
+// KioskArtist — lightweight kiosk artist detail (2.0.2 frente #3). Reads
+// ArtistState (same as the desktop ArtistPageView): a header (round portrait +
+// name + Play/Radio) and the discography as simple KioskCard shelves per release
+// section (the junk "other" bucket is skipped).
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Radius } from "../foundation/radius.slint";
+import { ArtistState } from "../state.slint";
+import { KioskCard } from "KioskCard.slint";
+
+export component KioskArtist inherits Rectangle {
+    callback open-album(string);
+    callback media-action(string, string, string);
+
+    property <length> pad: 22px;
+
+    Flickable {
+        viewport-width: self.width;
+        viewport-height: page.preferred-height;
+
+        page := VerticalLayout {
+            padding: root.pad;
+            spacing: 22px;
+
+            HorizontalLayout {
+                spacing: 22px;
+                Rectangle {
+                    width: 140px;
+                    height: 140px;
+                    border-radius: 70px;
+                    background: Theme.surface-elevated;
+                    clip: true;
+                    Image {
+                        width: 100%;
+                        height: 100%;
+                        source: ArtistState.artwork;
+                        image-fit: cover;
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    spacing: 12px;
+                    Text {
+                        text: ArtistState.name;
+                        color: Theme.text-primary;
+                        font-size: 25px;
+                        font-weight: 700;
+                        wrap: word-wrap;
+                    }
+                    HorizontalLayout {
+                        alignment: start;
+                        spacing: 10px;
+                        Rectangle {
+                            width: 150px;
+                            height: 44px;
+                            border-radius: Radius.sm;
+                            background: playtop-ta.has-hover ? Theme.accent-hover : Theme.accent;
+                            Text {
+                                text: @tr("Play");
+                                color: Theme.accent-text;
+                                font-size: 15px;
+                                font-weight: 600;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                            playtop-ta := TouchArea {
+                                clicked => {
+                                    root.media-action("artist", ArtistState.id, "play-top");
+                                }
+                            }
+                        }
+                        Rectangle {
+                            width: 130px;
+                            height: 44px;
+                            border-radius: Radius.sm;
+                            background: radio-ta.has-hover ? Theme.alpha-8 : Theme.surface-elevated;
+                            border-width: 1px;
+                            border-color: Theme.border-subtle;
+                            Text {
+                                text: @tr("Radio");
+                                color: Theme.text-primary;
+                                font-size: 15px;
+                                font-weight: 600;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                            radio-ta := TouchArea {
+                                clicked => {
+                                    root.media-action("artist", ArtistState.id, "radio-qbz");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            for section in ArtistState.release-sections: VerticalLayout {
+                if section.release-type != "other" && section.albums.length > 0: VerticalLayout {
+                    spacing: 12px;
+                    Text {
+                        text: section.title;
+                        color: Theme.text-primary;
+                        font-size: 18px;
+                        font-weight: 600;
+                    }
+                    Flickable {
+                        height: 182px;
+                        viewport-width: strip.preferred-width;
+                        viewport-height: self.height;
+                        strip := HorizontalLayout {
+                            spacing: 14px;
+                            alignment: start;
+                            for album in section.albums: KioskCard {
+                                album: album;
+                                clicked(id) => {
+                                    root.open-album(id);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
