@@ -139,12 +139,15 @@ impl DlnaConnection {
         // Build DIDL-Lite metadata with actual content type
         let didl_metadata = build_didl_metadata(uri, metadata, content_type);
 
-        log::info!("DLNA: Loading media URI: {}", redact_media_uri(uri));
+        log::info!(
+            "DLNA: Loading media URI: {}",
+            crate::media_server::redact_media_uri(uri)
+        );
         log::info!("DLNA: Content-Type: {}", content_type);
         // DIDL embeds the full URI; log only at debug and redacted.
         log::debug!(
             "DLNA: DIDL Metadata (redacted URI):\n{}",
-            redact_media_uri(&didl_metadata)
+            crate::media_server::redact_media_uri(&didl_metadata)
         );
 
         let payload = format!(
@@ -173,7 +176,10 @@ impl DlnaConnection {
         // later reports 702 "no contents" (see the retry loop in `play`).
         self.last_set_uri_payload = Some(payload);
         self.uri_freshly_set = true;
-        log::info!("DLNA: Set URI to {}", redact_media_uri(uri));
+        log::info!(
+            "DLNA: Set URI to {}",
+            crate::media_server::redact_media_uri(uri)
+        );
 
         Ok(())
     }
@@ -666,42 +672,9 @@ fn find_service_any_version(device: &Device, service: &str) -> Option<Service> {
         .cloned()
 }
 
-/// Redact the cast media path token in logs (`/audio/<token>/<id>` → `/audio/***/<id>`).
-fn redact_media_uri(s: &str) -> String {
-    // Fast path: no cast audio path.
-    if !s.contains("/audio/") {
-        return s.to_string();
-    }
-    let mut out = String::with_capacity(s.len());
-    let mut rest = s;
-    while let Some(i) = rest.find("/audio/") {
-        out.push_str(&rest[..i]);
-        out.push_str("/audio/");
-        rest = &rest[i + "/audio/".len()..];
-        // token until next /
-        if let Some(slash) = rest.find('/') {
-            out.push_str("***/");
-            rest = &rest[slash + 1..];
-        } else {
-            out.push_str("***");
-            rest = "";
-        }
-    }
-    out.push_str(rest);
-    out
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{redact_media_uri, service_type_matches};
-
-    #[test]
-    fn redacts_path_token() {
-        assert_eq!(
-            redact_media_uri("http://192.168.1.2:9876/audio/deadbeefcafebabe/42"),
-            "http://192.168.1.2:9876/audio/***/42"
-        );
-    }
+    use super::service_type_matches;
 
     #[test]
     fn matches_any_upnp_version() {
