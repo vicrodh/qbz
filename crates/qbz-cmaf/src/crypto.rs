@@ -8,11 +8,23 @@ use crate::error::CmafError;
 type Aes128CbcDec = cbc::Decryptor<aes::Aes128>;
 type Aes128Ctr = ctr::Ctr128BE<aes::Aes128>;
 
-fn hex_decode(hex: &str) -> Vec<u8> {
-    (0..hex.len())
-        .step_by(2)
-        .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap_or(0))
-        .collect()
+/// Strict hex decode for the app seed (HKDF IKM). Fail closed on odd length
+/// or non-hex digits — never zero-fill bad nibbles.
+fn hex_decode(hex: &str) -> Result<Vec<u8>, CmafError> {
+    if hex.len() % 2 != 0 {
+        return Err(CmafError::InvalidInfos(format!(
+            "seed hex must have even length, got {}",
+            hex.len()
+        )));
+    }
+    let mut out = Vec::with_capacity(hex.len() / 2);
+    for i in (0..hex.len()).step_by(2) {
+        let byte = u8::from_str_radix(&hex[i..i + 2], 16).map_err(|_| {
+            CmafError::InvalidInfos(format!("invalid seed hex digit at offset {i}"))
+        })?;
+        out.push(byte);
+    }
+    Ok(out)
 }
 
 /// Derive the 16-byte session key from the session/start `infos` field.
@@ -30,7 +42,7 @@ pub fn derive_session_key(seed: &str, infos: &str) -> Result<[u8; 16], CmafError
     let salt = URL_SAFE_NO_PAD.decode(parts[0])?;
     let info = URL_SAFE_NO_PAD.decode(parts[1])?;
 
-    let ikm = hex_decode(seed);
+    let ikm = hex_decode(seed)?;
 
     let hk = Hkdf::<Sha256>::new(Some(&salt), &ikm);
     let mut okm = [0u8; 16];
@@ -144,6 +156,30 @@ mod tests {
     fn test_derive_session_key_invalid_infos() {
         let result = derive_session_key(TEST_SEED, "no_dot_here");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_hex_decode_rejects_odd_length() {
+        assert!(hex_decode("abc").is_err());
+    }
+
+    #[test]
+    fn test_hex_decode_rejects_non_hex() {
+        assert!(hex_decode("zz").is_err());
+        assert!(hex_decode("0g").is_err());
+    }
+
+    #[test]
+    fn test_hex_decode_empty_and_valid() {
+        assert_eq!(hex_decode("").unwrap(), Vec::<u8>::new());
+        assert_eq!(hex_decode("00ff").unwrap(), vec![0x00, 0xff]);
+        assert_eq!(hex_decode(TEST_SEED).unwrap().len(), 16);
+    }
+
+    #[test]
+    fn test_derive_session_key_rejects_bad_seed_hex() {
+        assert!(derive_session_key("not-hex!!", "YQ.YQ").is_err());
+        assert!(derive_session_key("abc", "YQ.YQ").is_err());
     }
 
     #[test]
