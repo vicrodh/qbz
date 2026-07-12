@@ -59,15 +59,16 @@ export component NavRail inherits Rectangle {
     callback library();
     callback local-library();
     callback myqbz();
-    callback search();
     callback playing();
     callback visualizer();
     callback menu();
 
     background: Theme.surface-main;
 
-    // 8 tiles, 8px outer padding, 6px gaps (7 gaps).
-    property <length> tw: (root.width - 16px - 7 * 6px) / 8;
+    // 7 tiles, 8px outer padding, 6px gaps (6 gaps). Search is intentionally
+    // absent — the back-bar carries a persistent search field, so a footer
+    // Search tile is redundant.
+    property <length> tw: (root.width - 16px - 6 * 6px) / 7;
     property <length> th: root.height - 18px;
 
     Rectangle {
@@ -133,18 +134,6 @@ export component NavRail inherits Rectangle {
         y: 9px;
         width: root.tw;
         height: root.th;
-        icon: @image-url("../assets/icons/search.svg");
-        label: @tr("Search");
-        active: NavState.view == ContentView.search;
-        clicked => {
-            root.search();
-        }
-    }
-    NavTile {
-        x: 8px + 5 * (root.tw + 6px);
-        y: 9px;
-        width: root.tw;
-        height: root.th;
         icon: @image-url("../assets/icons/play-fill.svg");
         label: @tr("Now Playing");
         active: NavState.view == ContentView.now-playing;
@@ -153,7 +142,7 @@ export component NavRail inherits Rectangle {
         }
     }
     NavTile {
-        x: 8px + 6 * (root.tw + 6px);
+        x: 8px + 5 * (root.tw + 6px);
         y: 9px;
         width: root.tw;
         height: root.th;
@@ -165,7 +154,7 @@ export component NavRail inherits Rectangle {
         }
     }
     NavTile {
-        x: 8px + 7 * (root.tw + 6px);
+        x: 8px + 6 * (root.tw + 6px);
         y: 9px;
         width: root.tw;
         height: root.th;

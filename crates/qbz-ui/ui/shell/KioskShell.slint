@@ -19,7 +19,8 @@ import { LineEdit } from "std-widgets.slint";
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Layout } from "../foundation/layout.slint";
 import { Radius } from "../foundation/radius.slint";
-import { NavState, ContentView, OfflineState, PlaylistState, PurchaseDetailState, SearchActions, UiFocusState, AppearanceState } from "../state.slint";
+import { NavState, ContentView, OfflineState, PlaylistState, PurchaseDetailState, SearchActions, UiFocusState, AppearanceState, ImmersiveState } from "../state.slint";
+import { ImmersiveView } from "../immersive/ImmersiveView.slint";
 import { PlayerBarSmall } from "PlayerBarSmall.slint";
 import { NavRail } from "NavRail.slint";
 import { WindowControls } from "WindowControls.slint";
@@ -197,8 +198,12 @@ export component KioskShell inherits Rectangle {
 
                 Rectangle {
                     // window - back bar - transport(PlayerBarSmall = one header
-                    // row) - NavRail - this VL's bottom padding.
-                    height: root.height - Layout.header-height - Layout.header-height
+                    // row) - NavRail - this VL's bottom padding. The transport
+                    // row is HIDDEN on Now Playing (redundant there), so DON'T
+                    // subtract it then — otherwise the content stays short and the
+                    // NavRail rides up, leaving dead space below the footer.
+                    height: root.height - Layout.header-height
+                        - (NavState.view == ContentView.now-playing ? 0px : Layout.header-height)
                         - root.navrail-height - 8px;
                     vertical-stretch: 1;
                     background: Theme.surface-main;
@@ -459,7 +464,9 @@ export component KioskShell inherits Rectangle {
 
         // --- Persistent transport: force PlayerBarSmall (npb=2 seam). Reused
         // verbatim; it self-heights to one header row and reads its own globals.
-        PlayerBarSmall {
+        // Hidden on the Now Playing view — that view already carries the full
+        // transport, so the bar would be redundant there.
+        if NavState.view != ContentView.now-playing: PlayerBarSmall {
             height: Layout.header-height;
             open-album(id) => {
                 root.open-album(id);
@@ -491,9 +498,6 @@ export component KioskShell inherits Rectangle {
             myqbz => {
                 root.header-menu-navigate("myqbz-mixtapes");
             }
-            search => {
-                NavState.view = ContentView.search;
-            }
             playing => {
                 NavState.view = ContentView.now-playing;
             }
@@ -503,6 +507,18 @@ export component KioskShell inherits Rectangle {
             menu => {
                 NavState.request-settings();
             }
+        }
+    }
+
+    // Immersive / visualizer overlay — the same app-level view the desktop
+    // mounts, but the desktop hangs it inside AppShell, so the kiosk shell must
+    // mount its own copy. Reached from the NavRail visualizer tile (which fires
+    // the "npb-view"/"immersive" action). Rendered last = on top of everything.
+    if ImmersiveState.open: ImmersiveView {
+        width: 100%;
+        height: 100%;
+        media-action(kind, id, action) => {
+            root.media-action(kind, id, action);
         }
     }
 }
