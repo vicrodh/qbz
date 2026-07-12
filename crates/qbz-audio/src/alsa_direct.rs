@@ -30,6 +30,21 @@ fn log_pcm_recovery(suffix: &str) {
     crate::network_throttle::state().record_underrun();
 }
 
+/// Fail closed when ALSA selected a different rate than requested (exclusive /
+/// bit-perfect paths must not silently nearest-neighbor).
+#[cfg(target_os = "linux")]
+fn ensure_exact_rate(hwp: &HwParams<'_>, requested: u32, kind: &str) -> Result<(), String> {
+    let actual = hwp
+        .get_rate()
+        .map_err(|e| format!("Failed to read back {kind} sample rate: {e}"))?;
+    if actual != requested {
+        return Err(format!(
+            "ALSA {kind} rate mismatch: requested {requested} Hz, device selected {actual} Hz (refusing non-bit-perfect nearest)"
+        ));
+    }
+    Ok(())
+}
+
 /// Direct ALSA PCM stream for hw: devices
 ///
 /// Field order is significant: Rust drops struct fields top-to-bottom, so the
@@ -156,7 +171,8 @@ impl AlsaDirectStream {
             hwp.set_channels(channels as u32)
                 .map_err(|e| format!("Failed to set channels: {}", e))?;
 
-            // Set sample rate (exact match - bit-perfect!)
+            // Request the track rate. ValueOr::Nearest is still used so ALSA
+            // accepts the set; we fail closed below if hardware did not match.
             hwp.set_rate(sample_rate, ValueOr::Nearest)
                 .map_err(|e| format!("Failed to set sample rate: {}", e))?;
 
@@ -182,6 +198,8 @@ impl AlsaDirectStream {
             // Apply hardware parameters
             pcm.hw_params(&hwp)
                 .map_err(|e| format!("Failed to apply hardware params: {}", e))?;
+
+            ensure_exact_rate(&hwp, sample_rate, "exclusive PCM")?;
 
             log::info!(
                 "[ALSA Direct] Hardware configured: {}Hz, {}ch, buffer: {} frames, format: {:?}",
@@ -260,6 +278,7 @@ impl AlsaDirectStream {
                 .map_err(|e| format!("Failed to set period size: {}", e))?;
             pcm.hw_params(&hwp)
                 .map_err(|e| format!("Failed to apply hardware params: {}", e))?;
+            ensure_exact_rate(&hwp, carrier_rate, "DoP carrier")?;
             log::info!(
                 "[ALSA Direct] DoP hardware configured: {}Hz, {}ch, S32_LE, buffer {} frames",
                 carrier_rate,
@@ -342,6 +361,7 @@ impl AlsaDirectStream {
                 .map_err(|e| format!("Failed to set period size: {}", e))?;
             pcm.hw_params(&hwp)
                 .map_err(|e| format!("Failed to apply hardware params: {}", e))?;
+            ensure_exact_rate(&hwp, rate, "native DSD")?;
             log::info!(
                 "[ALSA Direct] Native DSD configured: {:?} @ {} Hz, {}ch",
                 format,
