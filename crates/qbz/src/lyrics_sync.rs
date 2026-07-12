@@ -201,7 +201,14 @@ fn resolve_position_ms(runtime: &Runtime) -> (u64, bool) {
 /// in place (`active-index`/`line-progress` never advanced, and the open-time
 /// `kick()` no-op'd because it bails here before computing).
 fn lyrics_surface_open(window: &AppWindow) -> bool {
-    if window.global::<ShellState>().get_lyrics_open() {
+    let shell = window.global::<ShellState>();
+    if shell.get_lyrics_open() {
+        return true;
+    }
+    // Kiosk Now Playing Cover<->Lyrics toggle: it has no desktop sidebar, so it
+    // raises its own flag while lyrics are on screen (see ShellState
+    // `kiosk-lyrics-follow`). Same widen-the-gate fix the immersive panels got.
+    if shell.get_kiosk_lyrics_follow() {
         return true;
     }
     let imm = window.global::<ImmersiveState>();

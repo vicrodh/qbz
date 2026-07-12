@@ -7,7 +7,101 @@
 // QueueState.panel-opened() on init so the paginated queue slice is fresh.
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Radius } from "../foundation/radius.slint";
-import { NowPlayingState, QueueState } from "../state.slint";
+import { NowPlayingState, QueueState, QueueItem, LyricsState, ShellState } from "../state.slint";
+import { LyricsLinesView } from "LyricsLinesView.slint";
+
+component QueueRowLite inherits Rectangle {
+    in property <QueueItem> item;
+    callback play;
+    height: 58px;
+    border-radius: Radius.sm;
+    background: qrow.has-hover ? Theme.alpha-6 : transparent;
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 12px;
+        spacing: 12px;
+        Rectangle {
+            width: 44px;
+            Rectangle {
+                width: 44px;
+                height: 44px;
+                y: (parent.height - self.height) / 2;
+                border-radius: 5px;
+                background: Theme.surface-elevated;
+                clip: true;
+                if root.item.artwork.width > 0: Image {
+                    width: 100%;
+                    height: 100%;
+                    source: root.item.artwork;
+                    image-fit: cover;
+                }
+            }
+        }
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            spacing: 2px;
+            Text {
+                text: root.item.title;
+                color: root.item.playing ? Theme.accent : Theme.text-primary;
+                font-size: 14px;
+                font-weight: 500;
+                overflow: elide;
+                wrap: no-wrap;
+            }
+            Text {
+                text: root.item.artist;
+                color: Theme.text-muted;
+                font-size: 12.5px;
+                overflow: elide;
+                wrap: no-wrap;
+            }
+        }
+        Text {
+            text: root.item.duration;
+            color: Theme.text-muted;
+            font-size: 12.5px;
+            vertical-alignment: center;
+        }
+    }
+    qrow := TouchArea {
+        clicked => {
+            root.play();
+        }
+    }
+}
+
+component QueueTab inherits Rectangle {
+    in property <string> label;
+    in property <bool> active;
+    callback picked;
+    horizontal-stretch: 0;
+    HorizontalLayout {
+        padding-left: 2px;
+        padding-right: 2px;
+        VerticalLayout {
+            alignment: start;
+            spacing: 4px;
+            Text {
+                text: root.label;
+                color: root.active ? Theme.text-primary : Theme.text-muted;
+                font-size: 14px;
+                font-weight: 700;
+                vertical-alignment: center;
+            }
+            Rectangle {
+                height: 2px;
+                background: root.active ? Theme.accent : transparent;
+                border-radius: 2px;
+            }
+        }
+    }
+    ta := TouchArea {
+        clicked => {
+            root.picked();
+        }
+    }
+}
 import { SeekBar } from "SeekBar.slint";
 import { TransportControls } from "TransportControls.slint";
 import { AudioStamp } from "AudioStamp.slint";
@@ -17,8 +111,15 @@ export component KioskNowPlaying inherits Rectangle {
     callback open-artist(string);
     callback media-action(string, string, string);
 
+    // Left panel toggles between the big cover and synced lyrics — the kiosk's
+    // lightweight lyrics surface (no immersive visualizer needed, Pi-friendly).
+    property <bool> show-lyrics: false;
+
     init => {
         QueueState.panel-opened();
+        // Mount in Cover mode — make sure a stale follow flag from a prior visit
+        // doesn't keep the sync engine running.
+        ShellState.kiosk-lyrics-follow = false;
     }
 
     HorizontalLayout {
@@ -30,76 +131,161 @@ export component KioskNowPlaying inherits Rectangle {
             VerticalLayout {
                 padding: 26px;
                 spacing: 16px;
-                alignment: center;
 
+                // Cover / Lyrics toggle — pinned to the TOP so it lines up with
+                // the Up Next / History tabs on the right panel.
                 HorizontalLayout {
-                    alignment: center;
-                    Rectangle {
-                        width: 240px;
-                        height: 240px;
-                        border-radius: Radius.lg;
-                        background: Theme.surface-elevated;
-                        clip: true;
-                        if NowPlayingState.artwork-large.width > 0: Image {
-                            width: 100%;
-                            height: 100%;
-                            source: NowPlayingState.artwork-large;
-                            image-fit: cover;
+                    alignment: start;
+                    spacing: 18px;
+                    QueueTab {
+                        label: @tr("Cover");
+                        active: !root.show-lyrics;
+                        picked => {
+                            root.show-lyrics = false;
+                            // Stop the lyrics-sync engine (see ShellState).
+                            ShellState.kiosk-lyrics-follow = false;
+                        }
+                    }
+                    QueueTab {
+                        label: @tr("Lyrics");
+                        active: root.show-lyrics;
+                        picked => {
+                            root.show-lyrics = true;
+                            // Open the gate so the karaoke follow runs (the
+                            // wrapper's panel-opened() kick then lands instantly).
+                            ShellState.kiosk-lyrics-follow = true;
                         }
                     }
                 }
 
-                Text {
-                    text: NowPlayingState.title;
-                    color: Theme.text-primary;
-                    font-size: 24px;
-                    font-weight: 700;
-                    horizontal-alignment: center;
-                    wrap: word-wrap;
-                }
-                artist-row := Rectangle {
-                    height: 24px;
+                // Cover/lyrics + metadata + transport fill the rest, vertically
+                // centered — the stretch absorbs the slack so the toggle above
+                // stays pinned to the top (no dead space over it).
+                VerticalLayout {
+                    vertical-stretch: 1;
+                    alignment: center;
+                    spacing: 16px;
+
+                    if !root.show-lyrics: HorizontalLayout {
+                        alignment: center;
+                        Rectangle {
+                            width: 240px;
+                            height: 240px;
+                            border-radius: Radius.lg;
+                            background: Theme.surface-elevated;
+                            clip: true;
+                            if NowPlayingState.artwork-large.width > 0: Image {
+                                width: 100%;
+                                height: 100%;
+                                source: NowPlayingState.artwork-large;
+                                image-fit: cover;
+                            }
+                        }
+                    }
+
+                    if root.show-lyrics: HorizontalLayout {
+                        alignment: center;
+                        Rectangle {
+                            width: 420px;
+                            height: 320px;
+                            // Ask Rust for this track's lyrics when the surface
+                            // appears (global callback — no geometry read, safe).
+                            // Mount the karaoke view ONLY when lyrics are READY
+                            // (status 2 + lines) and inside a FIXED-size box:
+                            // instantiating LyricsLinesView against empty/loading
+                            // state or a still-resolving stretch width trips its
+                            // geometry FOOTGUN (properties.rs:583 "Recursion
+                            // detected" — crash on tap 2026-07-12). status==2 lands
+                            // async in a clean turn; the fixed width keeps
+                            // `changed width` reading a constant. Mirrors the
+                            // desktop LyricsSidebar gate.
+                            init => {
+                                LyricsState.panel-opened();
+                            }
+                            if LyricsState.status == 2 && LyricsState.lines.length > 0: LyricsLinesView {
+                                width: 100%;
+                                height: 100%;
+                                side-padding: 10px;
+                                line-gap: 14px;
+                                size-inactive: 20px;
+                                size-active: 25px;
+                                dimming-mode: LyricsState.dimming-mode;
+                                auto-follow: true;
+                                uppercase: LyricsState.uppercase;
+                                show-attribution: false;
+                                font-name: LyricsState.font-index == 1 ? "LINE Seed JP"
+                                    : LyricsState.font-index == 2 ? "Montserrat"
+                                    : LyricsState.font-index == 3 ? "Noto Sans"
+                                    : LyricsState.font-index == 4 ? "Source Sans 3"
+                                    : "";
+                                active-color: Theme.accent;
+                            }
+                            if !(LyricsState.status == 2 && LyricsState.lines.length > 0): Text {
+                                width: 100%;
+                                height: 100%;
+                                text: LyricsState.status == 5 ? @tr("Lyrics unavailable offline")
+                                    : (LyricsState.status == 3 || LyricsState.status == 4) ? @tr("No lyrics available")
+                                    : @tr("Fetching lyrics...");
+                                color: Theme.text-muted;
+                                font-size: 14px;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+
+                    Text {
+                        text: NowPlayingState.title;
+                        color: Theme.text-primary;
+                        font-size: 24px;
+                        font-weight: 700;
+                        horizontal-alignment: center;
+                        wrap: word-wrap;
+                    }
+                    artist-row := Rectangle {
+                        height: 24px;
+                        HorizontalLayout {
+                            alignment: center;
+                            Text {
+                                text: NowPlayingState.artist;
+                                color: Theme.text-secondary;
+                                font-size: 16px;
+                                vertical-alignment: center;
+                            }
+                        }
+                        art-ta := TouchArea {
+                            clicked => {
+                                root.open-artist(NowPlayingState.artist-id);
+                            }
+                        }
+                    }
+
                     HorizontalLayout {
                         alignment: center;
-                        Text {
-                            text: NowPlayingState.artist;
-                            color: Theme.text-secondary;
-                            font-size: 16px;
-                            vertical-alignment: center;
+                        AudioStamp { }
+                    }
+
+                    SeekBar {
+                        show-times: true;
+                        progress: NowPlayingState.progress;
+                        cache: NowPlayingState.cache;
+                        seekable-max: NowPlayingState.seekable-max;
+                        elapsed: NowPlayingState.elapsed;
+                        remaining: NowPlayingState.remaining;
+                        duration-secs: NowPlayingState.duration-secs;
+                        seek(fraction) => {
+                            NowPlayingState.seek(fraction);
                         }
                     }
-                    art-ta := TouchArea {
-                        clicked => {
-                            root.open-artist(NowPlayingState.artist-id);
-                        }
-                    }
-                }
 
-                HorizontalLayout {
-                    alignment: center;
-                    AudioStamp { }
-                }
-
-                SeekBar {
-                    show-times: true;
-                    progress: NowPlayingState.progress;
-                    cache: NowPlayingState.cache;
-                    seekable-max: NowPlayingState.seekable-max;
-                    elapsed: NowPlayingState.elapsed;
-                    remaining: NowPlayingState.remaining;
-                    duration-secs: NowPlayingState.duration-secs;
-                    seek(fraction) => {
-                        NowPlayingState.seek(fraction);
-                    }
-                }
-
-                HorizontalLayout {
-                    alignment: center;
-                    TransportControls {
-                        play-circle: true;
-                        classic-actions: true;
-                        media-action(k, i, a) => {
-                            root.media-action(k, i, a);
+                    HorizontalLayout {
+                        alignment: center;
+                        TransportControls {
+                            play-circle: true;
+                            classic-actions: true;
+                            media-action(k, i, a) => {
+                                root.media-action(k, i, a);
+                            }
                         }
                     }
                 }
@@ -111,80 +297,63 @@ export component KioskNowPlaying inherits Rectangle {
             background: Theme.border-subtle;
         }
 
-        // RIGHT — the Up-Next queue.
+        // RIGHT — the queue, with Queue / History tabs. ListView windows the
+        // rows so a long history never mounts every cover at once (Pi-safe).
         Rectangle {
             width: (parent.width - 1px) * 0.42;
             background: Theme.surface-card;
             VerticalLayout {
                 padding: 18px;
-                spacing: 10px;
-                Text {
-                    text: @tr("Up Next");
-                    color: Theme.text-muted;
-                    font-size: 12px;
-                    font-weight: 700;
-                    letter-spacing: 1.4px;
+                spacing: 12px;
+                HorizontalLayout {
+                    height: 30px;
+                    spacing: 20px;
+                    alignment: start;
+                    QueueTab {
+                        label: @tr("Up Next");
+                        active: QueueState.tab == 0;
+                        picked => {
+                            QueueState.set-tab(0);
+                        }
+                    }
+                    QueueTab {
+                        label: @tr("History");
+                        active: QueueState.tab == 1;
+                        picked => {
+                            QueueState.set-tab(1);
+                        }
+                    }
                 }
-                Flickable {
-                    viewport-width: self.width;
-                    viewport-height: qlist.preferred-height;
-                    qlist := VerticalLayout {
-                        spacing: 2px;
-                        for item[i] in QueueState.upcoming-page: qrow-rect := Rectangle {
-                            height: 58px;
-                            border-radius: Radius.sm;
-                            background: qrow.has-hover ? Theme.alpha-6 : transparent;
-                            HorizontalLayout {
-                                padding-left: 8px;
-                                padding-right: 12px;
-                                spacing: 12px;
-                                Rectangle {
-                                    width: 44px;
-                                    Rectangle {
-                                        width: 44px;
-                                        height: 44px;
-                                        y: (parent.height - self.height) / 2;
-                                        border-radius: 5px;
-                                        background: Theme.surface-elevated;
-                                        clip: true;
-                                        if item.artwork.width > 0: Image {
-                                            width: 100%;
-                                            height: 100%;
-                                            source: item.artwork;
-                                            image-fit: cover;
-                                        }
-                                    }
-                                }
-                                VerticalLayout {
-                                    horizontal-stretch: 1;
-                                    alignment: center;
-                                    spacing: 2px;
-                                    Text {
-                                        text: item.title;
-                                        color: Theme.text-primary;
-                                        font-size: 14px;
-                                        font-weight: 500;
-                                        overflow: elide;
-                                        wrap: no-wrap;
-                                    }
-                                    Text {
-                                        text: item.artist;
-                                        color: Theme.text-muted;
-                                        font-size: 12.5px;
-                                        overflow: elide;
-                                        wrap: no-wrap;
-                                    }
-                                }
-                                Text {
-                                    text: item.duration;
-                                    color: Theme.text-muted;
-                                    font-size: 12.5px;
-                                    vertical-alignment: center;
+                // Body: the desktop QueueSidebar pattern — a stretching Rectangle
+                // holds a Flickable whose viewport-height IS the content height,
+                // so the rows top-anchor. (A ListView with height:100% bottom-
+                // anchored a short list — the recurrent Slint distribution trap;
+                // upcoming-page/history are already paginated slices, so mounting
+                // the page is cheap.)
+                Rectangle {
+                    vertical-stretch: 1;
+                    if QueueState.tab == 0: Flickable {
+                        viewport-width: self.width;
+                        viewport-height: up-body.preferred-height;
+                        up-body := VerticalLayout {
+                            spacing: 2px;
+                            for item[i] in QueueState.upcoming-page: QueueRowLite {
+                                item: item;
+                                play => {
+                                    QueueState.play-upcoming(i);
                                 }
                             }
-                            qrow := TouchArea {
-                                clicked => {
-                                    QueueState.play-upcoming(i);
+                        }
+                    }
+                    if QueueState.tab == 1: Flickable {
+                        viewport-width: self.width;
+                        viewport-height: hist-body.preferred-height;
+                        hist-body := VerticalLayout {
+                            spacing: 2px;
+                            for item[i] in QueueState.history: QueueRowLite {
+                                item: item;
+                                play => {
+                                    QueueState.play-history(i);
                                 }
                             }
                         }

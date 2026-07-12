@@ -3727,6 +3727,12 @@ export global ShellState {
     // Kiosk profile active (2.0.2 frente #3). Seeded from Rust at startup and
     // flipped by the NPB "Kiosk/Desktop mode" toggle; drives that toggle's label.
     in-out property <bool> kiosk-profile: false;
+    // Set by the kiosk Now Playing while its Cover<->Lyrics toggle shows lyrics.
+    // The Rust lyrics-sync engine (lyrics_sync.rs `lyrics_surface_open`) polls
+    // this so the karaoke follow runs in the kiosk WITHOUT reusing the desktop
+    // `lyrics-open` (which also drives the compact drawer). Reset to false when
+    // showing the cover or leaving Now Playing.
+    in-out property <bool> kiosk-lyrics-follow: false;
     // --- Reduce motion (weak renderer tiers) -------------------------------
     // Seeded from Rust: true on the femtovg-GL / software tiers, where every
     // animation frame is a full-window repaint on a weak GPU. When set,
