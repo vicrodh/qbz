@@ -2288,6 +2288,15 @@ impl Player {
                                                 "Failed to create engine for streaming: {}",
                                                 e
                                             );
+                                            *current_streaming_source = None;
+                                            *current_audio_data = None;
+                                            thread_state.set_loaded_audio(false);
+                                            thread_state
+                                                .is_playing
+                                                .store(false, Ordering::SeqCst);
+                                            thread_state.record_stream_error(
+                                                "Failed to create the playback engine for streaming",
+                                            );
                                             return;
                                         }
                                     }
@@ -2356,6 +2365,13 @@ impl Player {
 
                             if !source.has_min_buffer() {
                                 log::error!("Streaming: timeout waiting for initial buffer");
+                                *current_streaming_source = None;
+                                *current_audio_data = None;
+                                thread_state.set_loaded_audio(false);
+                                thread_state.is_playing.store(false, Ordering::SeqCst);
+                                thread_state.record_stream_error(
+                                    "Timed out waiting for the stream buffer to fill",
+                                );
                                 return;
                             }
                             if resume_buffer_target > 0
@@ -2383,6 +2399,13 @@ impl Player {
                                         log::error!(
                                             "Failed to create incremental streaming source: {}",
                                             e
+                                        );
+                                        *current_streaming_source = None;
+                                        *current_audio_data = None;
+                                        thread_state.set_loaded_audio(false);
+                                        thread_state.is_playing.store(false, Ordering::SeqCst);
+                                        thread_state.record_stream_error(
+                                            "Failed to start the streaming decoder",
                                         );
                                         return;
                                     }
