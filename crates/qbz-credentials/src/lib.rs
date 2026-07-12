@@ -26,7 +26,8 @@ use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs;
-use std::path::PathBuf;
+use std::io::Write;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::mpsc;
 use std::thread;
@@ -39,6 +40,50 @@ const LEGACY_FALLBACK_FILE_NAME: &str = ".qbz-auth.legacy";
 const OAUTH_TOKEN_FILE_NAME: &str = ".qbz-oauth-token";
 const INSTALLATION_SALT_FILE_NAME: &str = ".qbz-cred-salt";
 const MACHINE_ID_FALLBACK_FILE_NAME: &str = ".qbz-machine-id";
+
+/// Write secret-adjacent bytes with restrictive permissions on Unix (`0o600`).
+fn write_private_file(path: &Path, bytes: impl AsRef<[u8]>) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create directory {}: {e}", parent.display()))?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if let Err(e) = fs::set_permissions(parent, fs::Permissions::from_mode(0o700)) {
+                log::warn!(
+                    "[Credentials] Failed to tighten permissions on {}: {}",
+                    parent.display(),
+                    e
+                );
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+        let mut opts = fs::OpenOptions::new();
+        opts.write(true).create(true).truncate(true).mode(0o600);
+        let mut f = opts
+            .open(path)
+            .map_err(|e| format!("Failed to open {}: {e}", path.display()))?;
+        f.write_all(bytes.as_ref())
+            .map_err(|e| format!("Failed to write {}: {e}", path.display()))?;
+        if let Err(e) = fs::set_permissions(path, fs::Permissions::from_mode(0o600)) {
+            log::warn!(
+                "[Credentials] Failed to tighten permissions on {}: {}",
+                path.display(),
+                e
+            );
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        fs::write(path, bytes.as_ref())
+            .map_err(|e| format!("Failed to write {}: {e}", path.display()))?;
+    }
+    Ok(())
+}
 
 // Legacy XOR key for migration (only used for reading old format)
 const LEGACY_OBFUSCATION_KEY: &[u8] = b"QbzNixAudiophile2024";
@@ -104,8 +149,7 @@ fn load_or_create_installation_salt() -> Result<Vec<u8>, String> {
 
     let mut salt = [0u8; 32];
     rand::rng().fill(&mut salt);
-    fs::write(&path, BASE64.encode(salt))
-        .map_err(|e| format!("Failed to write installation salt: {}", e))?;
+    write_private_file(&path, BASE64.encode(salt))?;
 
     Ok(salt.to_vec())
 }
@@ -134,8 +178,7 @@ fn load_or_create_machine_id_fallback() -> Result<Vec<u8>, String> {
 
     let mut machine_fallback = [0u8; 32];
     rand::rng().fill(&mut machine_fallback);
-    fs::write(&path, BASE64.encode(machine_fallback))
-        .map_err(|e| format!("Failed to write machine fallback id: {}", e))?;
+    write_private_file(&path, BASE64.encode(machine_fallback))?;
 
     Ok(machine_fallback.to_vec())
 }
@@ -328,7 +371,7 @@ fn save_to_fallback(credentials: &QobuzCredentials) -> Result<(), String> {
 
     let encrypted = encrypt_credentials(credentials)?;
 
-    fs::write(&path, encrypted).map_err(|e| format!("Failed to write credentials file: {}", e))?;
+    write_private_file(&path, encrypted)?;
 
     log::info!("Credentials saved to encrypted fallback file");
     Ok(())
@@ -701,11 +744,7 @@ pub fn save_oauth_token(token: &str) -> Result<(), String> {
     let encrypted = encrypt_credentials(&placeholder)?;
 
     let path = get_oauth_token_path().ok_or("Could not determine config directory")?;
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create config directory: {}", e))?;
-    }
-    fs::write(&path, &encrypted).map_err(|e| format!("Failed to write OAuth token file: {}", e))?;
+    write_private_file(&path, &encrypted)?;
     log::info!("[Credentials] OAuth token saved to encrypted file");
 
     if keyring_set(OAUTH_TOKEN_KEY, &encrypted) {
@@ -872,5 +911,19 @@ mod tests {
         // Verify cleared
         let after_clear = load_qobuz_credentials().expect("Failed to check");
         assert!(after_clear.is_none());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_private_file_is_owner_rw_only() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("qbz-cred-mode-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("secret.bin");
+        write_private_file(&path, b"secret-bytes").unwrap();
+        let mode = fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600, "expected 0o600, got {mode:o}");
+        let _ = fs::remove_dir_all(&dir);
     }
 }
