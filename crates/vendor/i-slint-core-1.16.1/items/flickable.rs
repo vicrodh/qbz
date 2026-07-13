@@ -545,6 +545,23 @@ impl FlickableData {
         delta_x: Coord,
         delta_y: Coord,
     ) -> LogicalVector {
+        // QBZ patch (issue #588): trackpad scrolling is far too slow on Wayland.
+        // The winit backend converts line-based wheel deltas (discrete mouse
+        // wheels) to exact multiples of 60 logical pixels, but converts
+        // pixel-precise `PixelDelta` events (Wayland/macOS trackpads) with
+        // `to_logical(scale_factor)` — i.e. divided by the HiDPI scale — and the
+        // Flickable then applies them 1:1 with no gain. Boost deltas that are not
+        // multiples of the 60px line step (= pixel-precise trackpad input) so
+        // trackpad scroll speed matches other applications; genuine wheel line
+        // deltas pass through unchanged.
+        const LINE_DELTA_STEP: Coord = 60 as Coord;
+        const TRACKPAD_SCROLL_SPEED_FACTOR: Coord = 2.75 as Coord;
+        let is_line_based = |d: Coord| d % LINE_DELTA_STEP == 0 as Coord;
+        let (delta_x, delta_y) = if is_line_based(delta_x) && is_line_based(delta_y) {
+            (delta_x, delta_y)
+        } else {
+            (delta_x * TRACKPAD_SCROLL_SPEED_FACTOR, delta_y * TRACKPAD_SCROLL_SPEED_FACTOR)
+        };
         if window_adapter.window().0.context().0.modifiers.get().shift()
             && !cfg!(target_os = "macos")
         {
