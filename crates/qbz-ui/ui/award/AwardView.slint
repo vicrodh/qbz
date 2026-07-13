@@ -147,6 +147,9 @@ export component AwardView inherits Rectangle {
                         CircleAction {
                             primary: false;
                             diameter: 44px;
+                            // Plain page background — theme-aware variant so it
+                            // reads on light themes.
+                            on-surface: true;
                             active: AwardState.is-following;
                             enabled: !AwardState.following-toggling;
                             icon: AwardState.is-following

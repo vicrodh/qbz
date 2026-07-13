@@ -443,6 +443,9 @@ export component PurchaseDetailView inherits Rectangle {
                                 if PurchaseDetailState.show-play: CircleAction {
                                     icon: @image-url("../assets/icons/play-fill.svg");
                                     primary: true;
+                                    // Plain page background — theme-aware
+                                    // variant so it reads on light themes.
+                                    on-surface: true;
                                     tooltip: @tr("Play");
                                     clicked => { PurchaseDetailActions.play-album(); }
                                 }
@@ -453,6 +456,7 @@ export component PurchaseDetailView inherits Rectangle {
                                     CircleAction {
                                         icon: @image-url("../assets/icons/download.svg");
                                         primary: !PurchaseDetailState.show-play;
+                                        on-surface: true;
                                         loading: PurchaseDetailState.is-downloading-all;
                                         enabled: PurchaseDetailState.can-download-all;
                                         tooltip: @tr("Download all");

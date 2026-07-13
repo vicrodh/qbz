@@ -681,6 +681,9 @@ export component ArtistPageView inherits Rectangle {
                         CircleAction {
                             icon: @image-url("../assets/icons/play-fill.svg");
                             primary: true;
+                            // Plain page background (below the header divider) —
+                            // theme-aware variant so it reads on light themes.
+                            on-surface: true;
                             clicked => {
                                 root.media-action(
                                     "artist", ArtistState.id, "play-top");
@@ -692,6 +695,7 @@ export component ArtistPageView inherits Rectangle {
                         CircleAction {
                             icon: @image-url("../assets/icons/square-check-big.svg");
                             active: ArtistState.top-tracks-multi-select;
+                            on-surface: true;
                             clicked => {
                                 ArtistActions.toggle-top-tracks-select();
                             }
@@ -704,6 +708,7 @@ export component ArtistPageView inherits Rectangle {
                             height: 32px;
                             CircleAction {
                                 icon: @image-url("../assets/icons/ellipsis.svg");
+                                on-surface: true;
                                 clicked => {
                                     top-tracks-menu.show();
                                 }

@@ -740,6 +740,9 @@ export component MixtapeDetailView inherits Rectangle {
                         CircleAction {
                             icon: @image-url("../assets/icons/play-fill.svg");
                             primary: true;
+                            // Plain page background — theme-aware variant so
+                            // these read on light themes.
+                            on-surface: true;
                             enabled: MyQbzDetailState.item-count > 0;
                             clicked => { MyQbzDetailActions.play-all(); }
                         }
@@ -748,6 +751,7 @@ export component MixtapeDetailView inherits Rectangle {
                             alignment: center;
                             CircleAction {
                                 icon: @image-url("../assets/icons/shuffle.svg");
+                                on-surface: true;
                                 enabled: MyQbzDetailState.item-count > 0;
                                 clicked => { MyQbzDetailActions.shuffle(); }
                             }
@@ -758,6 +762,7 @@ export component MixtapeDetailView inherits Rectangle {
                             alignment: center;
                             CircleAction {
                                 icon: @image-url("../assets/icons/turntable.svg");
+                                on-surface: true;
                                 enabled: MyQbzDetailState.item-count > 0;
                                 clicked => { MyQbzDetailActions.dj-mix(); }
                             }
@@ -770,6 +775,7 @@ export component MixtapeDetailView inherits Rectangle {
                                 height: 32px;
                                 CircleAction {
                                     icon: @image-url("../assets/icons/ellipsis.svg");
+                                    on-surface: true;
                                     clicked => { overflow-menu.show(); }
                                 }
                                 overflow-menu := PopupWindow {
