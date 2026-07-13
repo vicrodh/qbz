@@ -19,6 +19,8 @@ pub mod notify;
 pub use notify::{show_track_notification, NotificationMeta};
 
 #[cfg(target_os = "linux")]
+mod inhibit;
+#[cfg(target_os = "linux")]
 mod linux;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 mod platform;

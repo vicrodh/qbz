@@ -23,6 +23,7 @@ use mpris_server::{
     RootInterface, Server, Time, TrackId, Volume,
 };
 
+use crate::inhibit::SleepInhibitor;
 use crate::types::{MediaEvent, MediaIntegration, PlaybackStatus, TrackMeta};
 
 const BUS_SUFFIX: &str = "com.blitzfc.qbz";
@@ -323,7 +324,17 @@ pub fn spawn(on_event: EventCb) -> Option<LinuxHandle> {
                 log::info!(
                     "[mpris] registered org.mpris.MediaPlayer2.{BUS_SUFFIX} (DesktopEntry={DESKTOP_ENTRY})"
                 );
+                // Sleep/idle inhibitor (#522): held while Playing, dropped on
+                // Paused/Stopped. Piggybacks on the same playback updates the
+                // MPRIS server consumes, so it can never disagree with what
+                // the desktop widget shows.
+                let mut inhibitor = SleepInhibitor::new();
                 while let Ok(update) = rx.recv().await {
+                    if let Update::Playback { status, .. } = &update {
+                        inhibitor
+                            .set_playing(matches!(status, MprisStatus::Playing))
+                            .await;
+                    }
                     apply(&server, &state, update).await;
                 }
                 log::debug!("[mpris] update channel closed, server shutting down");
