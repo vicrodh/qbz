@@ -204,6 +204,14 @@ export global HomeActions {
     // "View all" on the Recently Played Albums rail -> the full-page listing
     // (RecentAlbumsView), fed from the local play-history store.
     callback open-recent-albums();
+    // Fired by HomeView's init on every (re)mount. Rust re-reads the LOCAL
+    // recently-played store into the two rails IF a play was recorded while
+    // Home was off-screen (dirty-flag gated in Rust — a no-op otherwise, so
+    // mounting Home stays free).
+    callback home-mounted();
+    // Manual refresh (the toolbar button next to the nav cluster):
+    // unconditionally re-read the local recently-played rails.
+    callback refresh-recent();
 }
 
 // RecentAlbumsView — the full "Recently Played Albums" page opened from the

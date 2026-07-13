@@ -2939,6 +2939,93 @@ fn navigate_recent_albums(
     });
 }
 
+/// Set when a play lands in the recently-played store while the Home view is
+/// not showing, so the next Home mount (`HomeActions.home-mounted`) re-reads
+/// the LOCAL store into the rails. Cleared by `refresh_recent_rails`.
+static RECENT_RAILS_DIRTY: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// Re-read the LOCAL recently-played store and re-push the Home "Recently
+/// Played Tracks" / "Recently Played Albums" rails + their artwork. The rails
+/// were previously read only inside the full discover load (`load_home`), so
+/// plays during a session never surfaced until a restart — this is the
+/// targeted refresh: a small local JSON read plus mostly cache-served artwork,
+/// NO discover-index fetch. Mirrors `navigate_recent_albums`' off-UI-thread
+/// read and its Qobuz vs Plex/local artwork split.
+fn refresh_recent_rails(
+    weak: slint::Weak<AppWindow>,
+    handle: &tokio::runtime::Handle,
+    image_cache: artwork::ImageCache,
+) {
+    RECENT_RAILS_DIRTY.store(false, std::sync::atomic::Ordering::Relaxed);
+    handle.spawn(async move {
+        // Local file reads + blacklist filter — cheap, but keep them off the
+        // UI thread like the sibling loaders.
+        let recent = home::recent_track_slims();
+        let cards = home::recent_album_cards();
+        let mut jobs: Vec<artwork::ArtworkJob> = Vec::new();
+        let mut plex_jobs: Vec<artwork::ArtworkJob> = Vec::new();
+        jobs.extend(recent.iter().enumerate().filter_map(|(idx, slim)| {
+            (!slim.artwork_url.is_empty()).then(|| artwork::ArtworkJob {
+                target: artwork::ArtworkTarget::Recent { idx },
+                url: slim.artwork_url.clone(),
+            })
+        }));
+        for (idx, card) in cards.iter().enumerate() {
+            if card.artwork_url.is_empty() {
+                continue;
+            }
+            let job = artwork::ArtworkJob {
+                target: artwork::ArtworkTarget::RecentAlbum { idx },
+                url: card.artwork_url.clone(),
+            };
+            if card.source == "plex" || card.source == "local" {
+                plex_jobs.push(job);
+            } else {
+                jobs.push(job);
+            }
+        }
+        let weak_for_plex = weak.clone();
+        let image_cache_plex = image_cache.clone();
+        let _ = weak.clone().upgrade_in_event_loop(move |w| {
+            home::apply_recent_rails(&w, recent, cards);
+        });
+        artwork::spawn_loads(jobs, weak, image_cache);
+        if !plex_jobs.is_empty() {
+            let plex = crate::plex_settings::get();
+            artwork::spawn_local_or_plex_loads(
+                plex_jobs,
+                plex.base_url,
+                plex.token,
+                weak_for_plex,
+                image_cache_plex,
+            );
+        }
+    });
+}
+
+/// Playback hook: a play was just recorded in the recently-played store
+/// (`playback::record_recent`). Marks the Home rails stale and — when the
+/// Home view is currently showing — refreshes them immediately, so the rails
+/// track the session live instead of only filling on restart. Off-Home
+/// nothing is read; the dirty flag makes the next Home mount refresh. Event-
+/// driven only — no timer, no polling.
+pub(crate) fn note_recent_store_changed(
+    weak: slint::Weak<AppWindow>,
+    handle: tokio::runtime::Handle,
+) {
+    RECENT_RAILS_DIRTY.store(true, std::sync::atomic::Ordering::Relaxed);
+    let Some(image_cache) = artwork::shared_cache() else {
+        return;
+    };
+    // The visible-view check must read NavState on the UI thread.
+    let _ = weak.clone().upgrade_in_event_loop(move |w| {
+        if w.global::<NavState>().get_view() == ContentView::Home {
+            refresh_recent_rails(weak, &handle, image_cache);
+        }
+    });
+}
+
 /// Open the My-Purchases surface and lazy-load the active tab. Mirrors
 /// `navigate_favorites`: the view mounts immediately (spinner), then the active
 /// tab's data + the metadata (dlIds + per-type totals) load and project onto
@@ -15108,6 +15195,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     update_nav_flags(&w);
                 }
             });
+    }
+
+    // Recently-played rails refresh. `home-mounted` fires on every HomeView
+    // (re)mount: re-read the LOCAL store into the rails IF a play was recorded
+    // while Home was off-screen (dirty flag — a no-op otherwise, so mounting
+    // Home stays free). While Home IS showing, playback refreshes the rails
+    // directly (note_recent_store_changed). No polling anywhere.
+    {
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        let image_cache = image_cache.clone();
+        window.global::<HomeActions>().on_home_mounted(move || {
+            if RECENT_RAILS_DIRTY.load(std::sync::atomic::Ordering::Relaxed) {
+                refresh_recent_rails(weak.clone(), &handle, image_cache.clone());
+            }
+        });
+    }
+    // Manual refresh (the toolbar button next to the nav cluster): an
+    // unconditional local re-read of the recently-played rails on demand.
+    {
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        let image_cache = image_cache.clone();
+        window.global::<HomeActions>().on_refresh_recent(move || {
+            refresh_recent_rails(weak.clone(), &handle, image_cache.clone());
+        });
     }
 
     // Qobuz Playlists category filter (multi-select, client-side). Toggling /

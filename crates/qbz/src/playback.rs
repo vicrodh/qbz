@@ -2133,6 +2133,18 @@ async fn record_recent(runtime: &Runtime) {
     tokio::task::spawn_blocking(move || {
         crate::reco::log_play_gated(rid, ralb, rart, rsrc.as_deref());
     });
+    // Home rails auto-refresh: the recently-played store just changed, so
+    // notify the UI layer — it re-reads the LOCAL store into the Home rails
+    // NOW if the Home view is showing (small JSON read, cached artwork), or
+    // leaves them dirty for the next Home mount. Reaches the window through
+    // the global queue controller, like apply_plex_quality_to_queue
+    // (record_recent does not carry a weak).
+    if let Some(controller) = QUEUE_CONTROLLER.get() {
+        crate::note_recent_store_changed(
+            controller.weak().clone(),
+            controller.handle().clone(),
+        );
+    }
 }
 
 /// THE single queue-drop predicate for an already-built `QueueTrack` (Task 7).

@@ -279,18 +279,7 @@ where
 
     // Recently played comes from the local play-history store, not the
     // discover index. Empty until the playback session records plays.
-    // Capped at 24 (two carousel pages of 12).
-    let recent = crate::recently::load()
-        .into_iter()
-        .take(24)
-        .map(|track| SlimData {
-            id: track.id,
-            title: track.title,
-            subtitle: track.subtitle,
-            rank: String::new(),
-            artwork_url: track.artwork_url,
-        })
-        .collect();
+    let recent = recent_track_slims();
     let recent_albums = recent_album_cards();
 
     // Qobuz Playlists row — both the Home and Editor's Picks tabs draw from
@@ -331,6 +320,24 @@ where
         release_watch,
         top_artists,
     })
+}
+
+/// The recently-played TRACK window mapped to slim-card data, newest first,
+/// capped at 24 (two carousel pages of 12 — the slim carousel does not show
+/// beyond that). Local file read — cheap. Shared by [`load_home`] and the
+/// targeted recent-rails refresh (`main::refresh_recent_rails`).
+pub fn recent_track_slims() -> Vec<SlimData> {
+    crate::recently::load()
+        .into_iter()
+        .take(24)
+        .map(|track| SlimData {
+            id: track.id,
+            title: track.title,
+            subtitle: track.subtitle,
+            rank: String::new(),
+            artwork_url: track.artwork_url,
+        })
+        .collect()
 }
 
 /// The recently-played album history mapped to card data, newest first.
@@ -620,6 +627,33 @@ fn format_rate(rate: f64) -> String {
     } else {
         format!("{rate}")
     }
+}
+
+/// Convert one `SlimData` into the Slint `SlimItem` (shared by `apply_home`
+/// and `apply_recent_rails`).
+pub(crate) fn slim_to_item(slim: SlimData) -> SlimItem {
+    SlimItem {
+        id: slim.id.into(),
+        title: slim.title.into(),
+        subtitle: slim.subtitle.into(),
+        rank: slim.rank.into(),
+        artwork_url: slim.artwork_url.into(),
+        artwork: slint::Image::default(),
+        following: false,
+    }
+}
+
+/// Push ONLY the two recently-played rails onto `HomeState` — the targeted
+/// auto/manual refresh path. Everything else on Home is left untouched: no
+/// discover-index fetch, no descriptor rebuild, no section-cache write. Must
+/// run on the Slint event loop (`card_to_item` seeds is-favorite from the
+/// login cache, same as `apply_home`).
+pub fn apply_recent_rails(window: &AppWindow, recent: Vec<SlimData>, albums: Vec<CardData>) {
+    let recent: Vec<SlimItem> = recent.into_iter().map(slim_to_item).collect();
+    let albums: Vec<AlbumCardItem> = albums.into_iter().map(card_to_item).collect();
+    let state = window.global::<HomeState>();
+    state.set_recent(ModelRc::new(VecModel::from(recent)));
+    state.set_recent_albums(ModelRc::new(VecModel::from(albums)));
 }
 
 /// Convert one `CardData` into the Slint `AlbumCardItem`.
@@ -1018,20 +1052,8 @@ pub fn apply_home(window: &AppWindow, data: HomeData) {
         };
     });
 
-    let to_slim_items = |items: Vec<SlimData>| -> Vec<SlimItem> {
-        items
-            .into_iter()
-            .map(|slim| SlimItem {
-                id: slim.id.into(),
-                title: slim.title.into(),
-                subtitle: slim.subtitle.into(),
-                rank: slim.rank.into(),
-                artwork_url: slim.artwork_url.into(),
-                artwork: slint::Image::default(),
-                following: false,
-            })
-            .collect()
-    };
+    let to_slim_items =
+        |items: Vec<SlimData>| -> Vec<SlimItem> { items.into_iter().map(slim_to_item).collect() };
     let popular = to_slim_items(data.popular);
     let recent = to_slim_items(data.recent);
     let recent_albums: Vec<AlbumCardItem> =
