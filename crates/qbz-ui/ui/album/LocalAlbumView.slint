@@ -273,6 +273,12 @@ export component LocalAlbumView inherits Rectangle {
                         CircleAction {
                             icon: @image-url("../assets/icons/play-fill.svg");
                             primary: true;
+                            // The neutral header band has largely faded out at
+                            // the action row's height — on light themes these
+                            // sit on a mostly-plain surface, so use the
+                            // theme-aware variant (reads fine over the faded
+                            // band on dark themes too).
+                            on-surface: true;
                             loading: NowPlayingState.loading
                                 && NowPlayingState.album-id == LocalAlbumState.id;
                             clicked => {
@@ -283,6 +289,7 @@ export component LocalAlbumView inherits Rectangle {
                             alignment: center;
                             CircleAction {
                                 icon: @image-url("../assets/icons/shuffle.svg");
+                                on-surface: true;
                                 clicked => {
                                     LocalAlbumActions.shuffle();
                                 }
@@ -292,6 +299,7 @@ export component LocalAlbumView inherits Rectangle {
                             alignment: center;
                             CircleAction {
                                 icon: @image-url("../assets/icons/pencil.svg");
+                                on-surface: true;
                                 clicked => {
                                     LocalAlbumActions.edit-tags();
                                 }
@@ -301,6 +309,7 @@ export component LocalAlbumView inherits Rectangle {
                             alignment: center;
                             CircleAction {
                                 icon: @image-url("../assets/icons/list-plus.svg");
+                                on-surface: true;
                                 clicked => {
                                     LocalAlbumActions.add-to-playlist();
                                 }
@@ -310,6 +319,7 @@ export component LocalAlbumView inherits Rectangle {
                             alignment: center;
                             CircleAction {
                                 icon: @image-url("../assets/icons/cassette-tape.svg");
+                                on-surface: true;
                                 clicked => {
                                     LocalAlbumActions.add-to-mixtape();
                                 }

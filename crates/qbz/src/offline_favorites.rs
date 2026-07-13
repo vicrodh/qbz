@@ -84,6 +84,8 @@ fn index_queue_track(row: &CachedTrackInfo, cover: &str) -> QueueTrack {
         source: Some("qobuz_download".to_string()),
         parental_warning: false,
         source_item_id_hint: None,
+        context_kind: None,
+        context_id: None,
     }
 }
 

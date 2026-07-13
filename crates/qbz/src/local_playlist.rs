@@ -920,6 +920,8 @@ pub(crate) fn row_queue_track(item: &RowItem) -> Option<QueueTrack> {
             source: Some("qobuz".to_string()),
             parental_warning: false,
             source_item_id_hint: None,
+            context_kind: None,
+            context_id: None,
         }),
         // `local_queue_track` is source-aware: Plex rows get `source =
         // "plex"` + the rating key in `source_item_id_hint` + the raw
@@ -1571,7 +1573,7 @@ pub fn play_all(
         }
     }
     let ctx_id = window.global::<PlaylistState>().get_id().to_string();
-    crate::playback::set_now_playing_context(&weak, "playlist", &ctx_id);
+    crate::playback::stamp_queue_context(&mut tracks, "playlist", &ctx_id);
     handle.spawn(async move {
         play_stamped(&runtime, &weak, tracks, 0).await;
     });
@@ -1587,12 +1589,12 @@ pub fn play_from_visible(
     handle: tokio::runtime::Handle,
     clicked_id: &str,
 ) -> bool {
-    let tracks = visible_ordered_queue(window);
+    let mut tracks = visible_ordered_queue(window);
     let Some(idx) = tracks.iter().position(|q| q.id.to_string() == clicked_id) else {
         return false;
     };
     let ctx_id = window.global::<PlaylistState>().get_id().to_string();
-    crate::playback::set_now_playing_context(&weak, "playlist", &ctx_id);
+    crate::playback::stamp_queue_context(&mut tracks, "playlist", &ctx_id);
     handle.spawn(async move {
         play_stamped(&runtime, &weak, tracks, idx).await;
     });

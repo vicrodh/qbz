@@ -151,6 +151,14 @@ export global Theme {
     // std-Palette fallback for the System-overridden tokens below.
     in-out property <bool> is-system: false;
 
+    // Whether the ACTIVE theme is dark (Rust sets it from the surface-main
+    // luminance, so it's correct for static, auto, and custom themes alike).
+    // The app root uses it to drive the std-widgets `Palette.color-scheme` so
+    // native widgets (LineEdit, TextEdit, …) follow the QBZ theme instead of
+    // the OS — otherwise a light QBZ theme kept native inputs on the OS/dark
+    // palette and the text collided with its own background (invisible).
+    in-out property <bool> is-dark: true;
+
     // True only for the two High-Contrast themes (HighContrast/HighContrastLight).
     // Set by Rust alongside `c`. Gates HC-ONLY redundant-encoding affordances
     // (1px control borders, slider-thumb borders) so they never leak into the

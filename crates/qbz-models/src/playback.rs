@@ -56,6 +56,19 @@ pub struct QueueTrack {
     /// (the skip commands fall back to album_id when this is absent).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_item_id_hint: Option<String>,
+    /// The container this track was launched FROM — the "playing from" origin
+    /// used by the now-playing song-card "layers" button. `context_kind` is one
+    /// of "album" | "artist" | "playlist" | "label"; `context_id` is that
+    /// container's navigation id. Stamped per-track at enqueue time so the
+    /// button always carries the CURRENT track's true source and is re-derived
+    /// on every track change (never a stale single global). None = no container
+    /// origin (bare single-track / favorites / mix / search play) → the button
+    /// falls back to the track's own album. `serde(default)` keeps the persisted
+    /// session-queue back-compatible (older payloads restore as None).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_id: Option<String>,
 }
 
 fn default_streamable() -> bool {

@@ -69,9 +69,12 @@ component ViewAllLink inherits Rectangle {
 export component Carousel inherits VerticalLayout {
     in property <DiscoverSection> section;
     in property <bool> show-view-all: false;
+    // Optional refresh affordance in the row header (recently-played rows).
+    in property <bool> show-refresh: false;
     callback album-clicked(string);
     callback media-action(string, string, string);
     callback view-all-clicked();
+    callback refresh-clicked();
 
     property <length> card-width: 200px;
     // Overridable so a host view (Discover Recommendations) can give the row a
@@ -186,6 +189,15 @@ export component Carousel inherits VerticalLayout {
                 ViewAllLink {
                     clicked => {
                         root.view-all-clicked();
+                    }
+                }
+            }
+            if root.show-refresh: VerticalLayout {
+                alignment: center;
+                NavButton {
+                    icon: @image-url("../assets/icons/refresh-cw.svg");
+                    clicked => {
+                        root.refresh-clicked();
                     }
                 }
             }

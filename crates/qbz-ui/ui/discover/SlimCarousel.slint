@@ -52,6 +52,10 @@ export component SlimCarousel inherits VerticalLayout {
     // (recent, popular) are unchanged; only the Weekly rows opt in.
     in property <bool> show-list-actions: false;
     callback list-action(string);
+    // Optional refresh affordance in the row header (recently-played rows).
+    // Shown regardless of page count, unlike the chevrons.
+    in property <bool> show-refresh: false;
+    callback refresh-clicked();
 
     property <int> columns: 4;
     property <int> rows: 3;
@@ -95,6 +99,18 @@ export component SlimCarousel inherits VerticalLayout {
                     icon: @image-url("../assets/icons/list-music.svg");
                     clicked => {
                         root.list-action("create-playlist");
+                    }
+                }
+            }
+        }
+        if root.show-refresh: HorizontalLayout {
+            spacing: 4px;
+            VerticalLayout {
+                alignment: center;
+                NavButton {
+                    icon: @image-url("../assets/icons/refresh-cw.svg");
+                    clicked => {
+                        root.refresh-clicked();
                     }
                 }
             }

@@ -196,6 +196,11 @@ fn from_persisted(t: PersistedQueueTrack) -> QueueTrack {
         source: t.source,
         parental_warning: t.parental_warning,
         source_item_id_hint: t.source_item_id_hint,
+        // Not persisted in the session schema — a restored track carries no
+        // container origin, so the "playing from" button falls back to the
+        // track's own album until the next container play re-stamps the queue.
+        context_kind: None,
+        context_id: None,
     }
 }
 

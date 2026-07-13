@@ -150,13 +150,49 @@ impl GraphicsBackend for WGPUBackend {
                 }
                 return Err(Box::new(crate::FrameSkipped));
             }
-            // Outdated or lost: re-configure and try again
+            // Outdated or lost: reconfigure from the current config and retry
+            // ONCE.
+            //
+            // QBZ vendor patch (issue #558): if the retry is STILL Outdated the
+            // reconfigure hasn't caught up with the surface yet — this happens
+            // at startup under a non-default UI scale, where SLINT_SCALE_FACTOR
+            // changes the physical surface size and the first frames race the
+            // winit resize/scale-factor event that reconfigures the swapchain.
+            // Upstream `?`-propagated that second failure, which killed the
+            // event loop with "The underlying surface has changed, and
+            // therefore the swap chain must be updated" and left the app unable
+            // to start at ANY interface size other than default (the crash the
+            // reporter hit even after the degradation-ladder fix). Treat a
+            // persistent Outdated like the #540 timeout instead: skip this
+            // frame and back off briefly, never a fatal error. The next
+            // resize/redraw reconfigures with the correct dimensions and the
+            // following acquire succeeds.
             Err(_) => {
-                let mut device = self.device.borrow_mut();
-                let device = device.as_mut().unwrap();
-
-                surface.configure(device, self.surface_config.borrow().as_ref().unwrap());
-                surface.get_current_texture()?
+                {
+                    let mut device = self.device.borrow_mut();
+                    let device = device.as_mut().unwrap();
+                    surface.configure(device, self.surface_config.borrow().as_ref().unwrap());
+                }
+                match surface.get_current_texture() {
+                    Ok(texture) => texture,
+                    Err(_) => {
+                        let backoff = (self.acquire_backoff_ms.get().max(30) * 2).min(1000);
+                        self.acquire_backoff_ms.set(backoff);
+                        self.acquire_skip_until.set(Some(
+                            std::time::Instant::now()
+                                + std::time::Duration::from_millis(backoff),
+                        ));
+                        static WARNED: std::sync::atomic::AtomicBool =
+                            std::sync::atomic::AtomicBool::new(false);
+                        if !WARNED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                            eprintln!(
+                                "qbz(femtovg-wgpu): surface still outdated after reconfigure \
+                                 (UI-scale/resize race?); skipping frames until it settles"
+                            );
+                        }
+                        return Err(Box::new(crate::FrameSkipped));
+                    }
+                }
             }
         };
         self.acquire_backoff_ms.set(0);

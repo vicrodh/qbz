@@ -562,6 +562,9 @@ export component FavoritesView inherits Rectangle {
                     CircleAction {
                         icon: @image-url("../assets/icons/play-fill.svg");
                         primary: true;
+                        // Fixed chrome on the plain page background — theme-
+                        // aware variant so these read on light themes.
+                        on-surface: true;
                         tooltip: @tr("Play all tracks");
                         clicked => { FavoritesActions.play-all-tracks(); }
                     }
@@ -570,6 +573,7 @@ export component FavoritesView inherits Rectangle {
                     alignment: center;
                     CircleAction {
                         icon: @image-url("../assets/icons/shuffle.svg");
+                        on-surface: true;
                         tooltip: @tr("Shuffle all tracks");
                         clicked => { FavoritesActions.shuffle-tracks(); }
                     }
@@ -579,6 +583,7 @@ export component FavoritesView inherits Rectangle {
                     CircleAction {
                         icon: @image-url("../assets/icons/square-check-big.svg");
                         active: FavoritesState.tracks-multi-select;
+                        on-surface: true;
                         tooltip: @tr("Select multiple tracks");
                         clicked => { FavoritesActions.toggle-multi-select(); }
                     }
@@ -591,6 +596,7 @@ export component FavoritesView inherits Rectangle {
                     alignment: center;
                     CircleAction {
                         icon: @image-url("../assets/icons/shuffle.svg");
+                        on-surface: true;
                         tooltip: @tr("Play a random album");
                         clicked => { FavoritesActions.albums-shuffle(); }
                     }
@@ -603,6 +609,7 @@ export component FavoritesView inherits Rectangle {
                     alignment: center;
                     CircleAction {
                         icon: @image-url("../assets/icons/shuffle.svg");
+                        on-surface: true;
                         tooltip: @tr("Open a random artist");
                         clicked => { FavoritesActions.artists-shuffle(); }
                     }
@@ -616,6 +623,7 @@ export component FavoritesView inherits Rectangle {
                     alignment: center;
                     CircleAction {
                         icon: @image-url("../assets/icons/shuffle.svg");
+                        on-surface: true;
                         tooltip: @tr("Play a random playlist");
                         clicked => { FavoritesActions.playlists-random(); }
                     }
@@ -629,6 +637,7 @@ export component FavoritesView inherits Rectangle {
                     alignment: center;
                     CircleAction {
                         icon: @image-url("../assets/icons/shuffle.svg");
+                        on-surface: true;
                         tooltip: @tr("Open a random label");
                         clicked => { FavoritesActions.labels-random(); }
                     }

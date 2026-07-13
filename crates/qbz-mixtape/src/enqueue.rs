@@ -280,6 +280,8 @@ pub async fn resolve_qobuz_album(
                 parental_warning: track.parental_warning,
                 // Stamped centrally by resolve_collection_tracks; left None here.
                 source_item_id_hint: None,
+                context_kind: None,
+                context_id: None,
             }
         })
         .collect();
@@ -464,6 +466,8 @@ pub fn track_to_queue_track_from_api(track: &ApiTrack) -> CoreQueueTrack {
         source: Some("qobuz".to_string()),
         parental_warning: track.parental_warning,
         source_item_id_hint: None,
+        context_kind: None,
+        context_id: None,
     }
 }
 
@@ -498,6 +502,8 @@ pub fn plex_cached_track_to_queue_track(track: &qbz_plex::PlexCachedTrack) -> Co
         source: Some("plex".to_string()),
         parental_warning: false,
         source_item_id_hint: None,
+        context_kind: None,
+        context_id: None,
     }
 }
 
@@ -541,6 +547,8 @@ pub fn local_track_to_queue_track(track: &qbz_library::LocalTrack) -> CoreQueueT
         source: Some("local".to_string()),
         parental_warning: false,
         source_item_id_hint: None,
+        context_kind: None,
+        context_id: None,
     }
 }
 
@@ -585,6 +593,8 @@ mod tests {
                     }),
                     parental_warning: false,
                     source_item_id_hint: None, // stamped by resolve_collection_tracks
+                    context_kind: None,
+                    context_id: None,
                 })
                 .collect())
         }
@@ -697,6 +707,8 @@ mod tests {
             source: Some("qobuz".into()),
             parental_warning: false,
             source_item_id_hint: item.map(String::from),
+            context_kind: None,
+            context_id: None,
         }
     }
 

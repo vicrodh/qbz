@@ -151,6 +151,9 @@ component EphemeralPane inherits Rectangle {
                     CircleAction {
                         icon: @image-url("../assets/icons/play-fill.svg");
                         primary: true;
+                        // Plain page background — theme-aware variant so these
+                        // read on light themes.
+                        on-surface: true;
                         tooltip: @tr("Play all");
                         clicked => {
                             LocalLibraryActions.ephemeral-play-all();
@@ -161,6 +164,7 @@ component EphemeralPane inherits Rectangle {
                     alignment: center;
                     CircleAction {
                         icon: @image-url("../assets/icons/x.svg");
+                        on-surface: true;
                         tooltip: @tr("Clear session");
                         clicked => {
                             LocalLibraryActions.ephemeral-clear();
@@ -267,6 +271,7 @@ component EphemeralPane inherits Rectangle {
                             CircleAction {
                                 icon: @image-url("../assets/icons/play-fill.svg");
                                 diameter: 34px;
+                                on-surface: true;
                                 tooltip: @tr("Play this album");
                                 clicked => {
                                     LocalLibraryActions.ephemeral-play-album(album.group-key);
@@ -1915,6 +1920,7 @@ export component LocalLibraryView inherits Rectangle {
                                             CircleAction {
                                                 icon: @image-url("../assets/icons/play-fill.svg");
                                                 primary: true;
+                                                on-surface: true;
                                                 tooltip: @tr("Play all");
                                                 clicked => {
                                                     LocalLibraryActions.folders-play-node(

@@ -8,7 +8,7 @@
 
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
-import { HomeState, HomeActions, DiscoverState, DiscoverActions, GenreFilterState, GenreFilterActions, NavState, ContentView, ShellState, SettingsState } from "../state.slint";
+import { HomeState, HomeActions, DiscoverState, DiscoverActions, GenreFilterState, GenreFilterActions, NavState, ContentView, ShellState, SettingsState, TooltipState } from "../state.slint";
 import { Carousel } from "Carousel.slint";
 import { SlimCarousel } from "SlimCarousel.slint";
 import { ArtistCarousel } from "ArtistCarousel.slint";
@@ -121,6 +121,9 @@ component GenreButton inherits Rectangle {
     }
 }
 
+// Manual refresh for the recently-played rails — sits in the toolbar next
+// to the nav cluster. Same 32px icon-button form as GearButton, plus the
+// global hover tooltip (TooltipState — the TransportControls pattern).
 component GearButton inherits Rectangle {
     callback clicked();
 
@@ -156,6 +159,14 @@ export component HomeView inherits Rectangle {
     callback discover-view-all(string, string);
 
     background: Theme.surface-main;
+
+    // The view remounts on every navigation to Home (AppShell's `if` mount),
+    // so this is the "Home regained focus" hook: Rust re-reads the LOCAL
+    // recently-played rails only when a play was recorded while Home was
+    // off-screen (dirty-flag gated — otherwise a no-op).
+    init => {
+        HomeActions.home-mounted();
+    }
 
     VerticalLayout {
         spacing: 0px;
@@ -390,6 +401,13 @@ export component HomeView inherits Rectangle {
                         // play-history, not a /discover endpoint — so it goes
                         // through its own action, not discover-view-all).
                         show-view-all: true;
+                        // Manual refresh, in the row header next to the page
+                        // chevrons (the recently-played rows are the only ones
+                        // that go stale between full home loads).
+                        show-refresh: true;
+                        refresh-clicked => {
+                            HomeActions.refresh-recent();
+                        }
                         album-clicked(id) => {
                             root.album-clicked(id);
                         }
@@ -410,6 +428,10 @@ export component HomeView inherits Rectangle {
                     if desc.id == "continueListening" && HomeState.recent.length > 0: SlimCarousel {
                         title: @tr("Recently Played Tracks");
                         items: HomeState.recent;
+                        show-refresh: true;
+                        refresh-clicked => {
+                            HomeActions.refresh-recent();
+                        }
                         item-clicked(id) => {
                             root.media-action("track", id, "play");
                         }

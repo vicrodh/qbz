@@ -1258,6 +1258,8 @@ mod tests {
             source: Some("test".to_string()),
             parental_warning: false,
             source_item_id_hint: None,
+            context_kind: None,
+            context_id: None,
         }
     }
 

@@ -170,6 +170,9 @@ export component LabelPageView inherits Rectangle {
                         alignment: start;
                         CircleAction {
                             active: LabelState.is-following;
+                            // Plain page background — theme-aware variant so it
+                            // reads on light themes.
+                            on-surface: true;
                             icon: LabelState.is-following
                                 ? @image-url("../assets/icons/check.svg")
                                 : @image-url("../assets/icons/user-plus.svg");
@@ -221,6 +224,7 @@ export component LabelPageView inherits Rectangle {
                     CircleAction {
                         icon: @image-url("../assets/icons/play-fill.svg");
                         primary: true;
+                        on-surface: true;
                         clicked => {
                             root.media-action("label", LabelState.id, "play-top");
                         }
@@ -228,12 +232,14 @@ export component LabelPageView inherits Rectangle {
                     CircleAction {
                         icon: @image-url("../assets/icons/square-check-big.svg");
                         active: LabelState.multi-select;
+                        on-surface: true;
                         clicked => {
                             root.media-action("label", "", "select-toggle");
                         }
                     }
                     CircleAction {
                         icon: @image-url("../assets/icons/ellipsis.svg");
+                        on-surface: true;
                         clicked => {
                             root.media-action("label", "", "top-tracks-menu");
                         }

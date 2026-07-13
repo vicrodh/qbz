@@ -97,6 +97,8 @@ pub fn model_track_to_core_queue_track(track: &Track) -> QueueTrack {
         source: Some(QCONNECT_REMOTE_QUEUE_SOURCE.to_string()),
         parental_warning: track.parental_warning,
         source_item_id_hint: album_id,
+        context_kind: None,
+        context_id: None,
     }
 }
 

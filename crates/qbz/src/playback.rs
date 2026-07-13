@@ -1348,6 +1348,10 @@ pub(crate) fn local_queue_track(track: &qbz_library::LocalTrack) -> QueueTrack {
         } else {
             None
         },
+        // Container origin is stamped by the play path (stamp_queue_context);
+        // the generic builder leaves it unset.
+        context_kind: None,
+        context_id: None,
     }
 }
 
@@ -1676,6 +1680,20 @@ pub(crate) async fn refresh_now_playing_meta(runtime: &Runtime, weak: &slint::We
     };
     let album_id = track.album_id.clone().unwrap_or_default();
     let artist_id = track.artist_id.map(|id| id.to_string()).unwrap_or_default();
+    // "Playing from" origin for the now-playing song-card layers button. Derived
+    // from the CURRENT track's own per-track stamp (context_kind/context_id set
+    // at enqueue time by stamp_queue_context) and re-published on EVERY track
+    // change below — so the button always carries the right source for the track
+    // that is actually playing and is never a stale single global. When the
+    // track carries no container origin (bare single-track / favorites / mix /
+    // search / restored-session play) it falls back to the track's own album.
+    let (context_kind, context_id) = match (
+        track.context_kind.as_deref().filter(|s| !s.is_empty()),
+        track.context_id.as_deref().filter(|s| !s.is_empty()),
+    ) {
+        (Some(kind), Some(id)) => (kind.to_string(), id.to_string()),
+        _ => ("album".to_string(), album_id.clone()),
+    };
     let track_id_num = track.id;
     let track_id = track.id.to_string();
     // Ephemeral tracks have no DB row → metadata-bound actions (favorite,
@@ -1886,6 +1904,10 @@ pub(crate) async fn refresh_now_playing_meta(runtime: &Runtime, weak: &slint::We
         np.set_album_id(album_id.into());
         np.set_album_favorite(album_favorite);
         np.set_artist_id(artist_id.into());
+        // Re-publish the "playing from" origin for THIS track every change — the
+        // authoritative source for the song-card layers button (no stale global).
+        np.set_context_kind(context_kind.into());
+        np.set_context_id(context_id.into());
         np.set_track_id(track_id.into());
         // Mirror the active track + playing flag onto the Purchases globals so a
         // purchase track-row highlights/animates when it is the now-playing one.
@@ -1969,9 +1991,27 @@ fn mirror_now_playing_to_purchases(w: &AppWindow, track_id: u64, is_playing: boo
 
 /// Record the playback CONTEXT — the source the queue was launched from — on
 /// `NowPlayingState`, so the song-card layers button can navigate back to it.
-/// Set once at play time; `refresh_now_playing_meta` leaves it untouched so it
-/// survives track changes within the queue. Pass `("", "")` to clear it (the
-/// button then falls back to the playing track's album).
+/// Stamp every queued track with the container it was launched FROM, so the
+/// now-playing song-card "playing from" button — re-derived per track in
+/// `refresh_now_playing_meta` — always points at the right source for whatever
+/// is actually playing. Pass the same `kind`/`id` the old
+/// `set_now_playing_context` call used at that play path ("album"/album_id,
+/// "artist"/artist_id, "playlist"/playlist_id, "label"/label_id). This replaces
+/// the single-global approach that went stale across track changes: the origin
+/// now travels WITH each track and is republished on every advance (gapless
+/// included), never cached.
+pub(crate) fn stamp_queue_context(tracks: &mut [QueueTrack], kind: &str, id: &str) {
+    for t in tracks.iter_mut() {
+        t.context_kind = Some(kind.to_string());
+        t.context_id = Some(id.to_string());
+    }
+}
+
+/// LEGACY single-global context setter. Superseded by per-track
+/// `stamp_queue_context` + the per-track republish in
+/// `refresh_now_playing_meta` (which is now authoritative). Retained for the
+/// miniplayer mirror path / potential reuse; no live caller remains.
+#[allow(dead_code)]
 pub fn set_now_playing_context(weak: &slint::Weak<AppWindow>, kind: &str, id: &str) {
     let kind = kind.to_string();
     let id = id.to_string();
@@ -2024,6 +2064,11 @@ pub(crate) fn make_queue_track(
         source: Some("qobuz".to_string()),
         parental_warning: track.parental_warning,
         source_item_id_hint: Some(album_id.to_string()),
+        // Container origin is stamped by the play path (stamp_queue_context);
+        // the generic builder leaves it unset so single-track / search plays
+        // fall back to the track's own album.
+        context_kind: None,
+        context_id: None,
     }
 }
 
@@ -2133,6 +2178,18 @@ async fn record_recent(runtime: &Runtime) {
     tokio::task::spawn_blocking(move || {
         crate::reco::log_play_gated(rid, ralb, rart, rsrc.as_deref());
     });
+    // Home rails auto-refresh: the recently-played store just changed, so
+    // notify the UI layer — it re-reads the LOCAL store into the Home rails
+    // NOW if the Home view is showing (small JSON read, cached artwork), or
+    // leaves them dirty for the next Home mount. Reaches the window through
+    // the global queue controller, like apply_plex_quality_to_queue
+    // (record_recent does not carry a weak).
+    if let Some(controller) = QUEUE_CONTROLLER.get() {
+        crate::note_recent_store_changed(
+            controller.weak().clone(),
+            controller.handle().clone(),
+        );
+    }
 }
 
 /// THE single queue-drop predicate for an already-built `QueueTrack` (Task 7).
@@ -2270,12 +2327,12 @@ pub fn play_album(
     start_index: usize,
 ) {
     handle.spawn(async move {
-        let Some(tracks) = fetch_album_for_play(&runtime, &weak, &album_id).await else {
+        let Some(mut tracks) = fetch_album_for_play(&runtime, &weak, &album_id).await else {
             return;
         };
+        stamp_queue_context(&mut tracks, "album", &album_id);
         let start = start_index.min(tracks.len() - 1);
         let start_track_id = tracks[start].id;
-        set_now_playing_context(&weak, "album", &album_id);
         runtime.core().set_queue(tracks, Some(start)).await;
         after_track_change(&runtime, &weak, start_track_id).await;
         refresh_sidebar(true);
@@ -2298,13 +2355,13 @@ pub fn play_album_from(
         let Some(tracks) = fetch_album_for_play(&runtime, &weak, &album_id).await else {
             return;
         };
-        let tracks = reorder_queue_by_visible(tracks, &visible_ids);
+        let mut tracks = reorder_queue_by_visible(tracks, &visible_ids);
+        stamp_queue_context(&mut tracks, "album", &album_id);
         let start = tracks
             .iter()
             .position(|t| t.id.to_string() == clicked_id)
             .unwrap_or(0);
         let start_track_id = tracks[start].id;
-        set_now_playing_context(&weak, "album", &album_id);
         runtime.core().set_queue(tracks, Some(start)).await;
         after_track_change(&runtime, &weak, start_track_id).await;
         refresh_sidebar(true);
@@ -2367,11 +2424,11 @@ pub fn play_artist_top_tracks(
     artist_id: String,
 ) {
     handle.spawn(async move {
-        let Some(tracks) = fetch_artist_top_for_play(&runtime, &weak, &artist_id).await else {
+        let Some(mut tracks) = fetch_artist_top_for_play(&runtime, &weak, &artist_id).await else {
             return;
         };
+        stamp_queue_context(&mut tracks, "artist", &artist_id);
         let start_track_id = tracks[0].id;
-        set_now_playing_context(&weak, "artist", &artist_id);
         runtime.core().set_queue(tracks, Some(0)).await;
         after_track_change(&runtime, &weak, start_track_id).await;
         refresh_sidebar(true);
@@ -2457,8 +2514,8 @@ pub fn play_artist_top_shuffled(
             let j = (seed % (i as u64 + 1)) as usize;
             tracks.swap(i, j);
         }
+        stamp_queue_context(&mut tracks, "artist", &artist_id);
         let start_track_id = tracks[0].id;
-        set_now_playing_context(&weak, "artist", &artist_id);
         runtime.core().set_queue(tracks, Some(0)).await;
         after_track_change(&runtime, &weak, start_track_id).await;
         refresh_sidebar(true);
@@ -2481,8 +2538,8 @@ pub fn play_artist_top_from(
         let Some(tracks) = fetch_artist_top_for_play(&runtime, &weak, &artist_id).await else {
             return;
         };
-        set_now_playing_context(&weak, "artist", &artist_id);
-        let tracks = reorder_queue_by_visible(tracks, &visible_ids);
+        let mut tracks = reorder_queue_by_visible(tracks, &visible_ids);
+        stamp_queue_context(&mut tracks, "artist", &artist_id);
         let start = tracks
             .iter()
             .position(|t| t.id.to_string() == clicked_id)
@@ -2547,6 +2604,9 @@ fn make_top_track_queue(
         source: Some("qobuz".to_string()),
         parental_warning: track.parental_warning.unwrap_or(false),
         source_item_id_hint: album_id,
+        // Stamped "artist" by the artist play paths; unset here.
+        context_kind: None,
+        context_id: None,
     }
 }
 
@@ -2649,6 +2709,9 @@ fn track_item_to_queue(it: &TrackItem) -> Option<QueueTrack> {
         },
         parental_warning: it.explicit,
         source_item_id_hint: album_id,
+        // Stamped by the play path when launched from a container; unset here.
+        context_kind: None,
+        context_id: None,
     })
 }
 
@@ -2773,11 +2836,13 @@ pub fn play_track_in_context(
     clicked_id: &str,
 ) {
     let view = window.global::<NavState>().get_view();
-    // Default: clear the playback context so the song-card layers button falls
-    // back to the track's album. The album/artist/playlist/label branches below
-    // (and the album/artist play paths they call) override it with the real
-    // source; favorites/mix/search/single-track keep the album fallback.
-    set_now_playing_context(&weak, "", "");
+    // Playback context is now stamped PER-TRACK on the enqueued queue (see
+    // stamp_queue_context) and republished every track change in
+    // refresh_now_playing_meta. The playlist/label branches below stamp their
+    // container; favorites/mix/search/single-track leave the tracks unstamped so
+    // the song-card layers button falls back to each track's own album. No
+    // global clear needed — a fresh set_queue replaces the whole queue, and an
+    // unstamped current track derives the album fallback authoritatively.
     match view {
         // Views with an authoritative Vec<Track> cache: order it by the
         // visible model so sort/filter are respected.
@@ -2810,12 +2875,15 @@ pub fn play_track_in_context(
                 crate::playlist::current_tracks(),
                 clicked_id,
             ) {
-                set_now_playing_context(
-                    &weak,
-                    "playlist",
-                    window.global::<PlaylistState>().get_id().as_str(),
+                let ctx_id = window.global::<PlaylistState>().get_id().to_string();
+                play_tracks_ctx(
+                    runtime,
+                    weak,
+                    handle,
+                    tracks,
+                    idx,
+                    Some(("playlist".to_string(), ctx_id)),
                 );
-                play_tracks(runtime, weak, handle, tracks, idx);
                 return;
             }
         }
@@ -2835,12 +2903,15 @@ pub fn play_track_in_context(
                 crate::label::top_tracks_for_play(),
                 clicked_id,
             ) {
-                set_now_playing_context(
-                    &weak,
-                    "label",
-                    window.global::<LabelState>().get_id().as_str(),
+                let ctx_id = window.global::<LabelState>().get_id().to_string();
+                play_tracks_ctx(
+                    runtime,
+                    weak,
+                    handle,
+                    tracks,
+                    idx,
+                    Some(("label".to_string(), ctx_id)),
                 );
-                play_tracks(runtime, weak, handle, tracks, idx);
                 return;
             }
         }
@@ -2937,11 +3008,27 @@ pub fn play_tracks(
     tracks: Vec<qbz_models::Track>,
     start_index: usize,
 ) -> bool {
+    play_tracks_ctx(runtime, weak, handle, tracks, start_index, None)
+}
+
+/// Like [`play_tracks`] but stamps every built queue track with the container
+/// it was launched FROM (`Some((kind, id))`) so the now-playing "playing from"
+/// button resolves to the right source per track. Pass `None` for flat lists
+/// with no container origin (radio / mix / favorites) — those fall back to each
+/// track's own album.
+pub fn play_tracks_ctx(
+    runtime: Runtime,
+    weak: slint::Weak<AppWindow>,
+    handle: tokio::runtime::Handle,
+    tracks: Vec<qbz_models::Track>,
+    start_index: usize,
+    context: Option<(String, String)>,
+) -> bool {
     // Drop blacklisted tracks (performer OR composer — D-FEAT) before building
     // the queue. Shared sink for radio results, the mix views, and album
     // shuffle, so this single filter covers all three. No album-primary
     // fallback here (these are flat track lists, not an album context).
-    let queue: Vec<QueueTrack> = tracks
+    let mut queue: Vec<QueueTrack> = tracks
         .iter()
         .filter(|track| !track_is_blacklisted_full(track, None))
         .map(|track| {
@@ -2964,6 +3051,11 @@ pub fn play_tracks(
             make_queue_track(track, &album_id, &album_title, &album_artist, &album_artwork, None)
         })
         .collect();
+    // Stamp the container origin onto every track so the "playing from" button
+    // is correct for whichever one is current (republished per change).
+    if let Some((kind, id)) = &context {
+        stamp_queue_context(&mut queue, kind, id);
+    }
     if queue.is_empty() {
         // Either nothing was passed, or every track was blacklisted. Silent
         // early-return (the caller logs); radio callers surface their existing
@@ -3426,7 +3518,7 @@ pub fn play_playlist(
         let rows = crate::playlist::interleave_rows(qobuz_tracks, sidecar);
         // Drop blacklisted Qobuz rows (performer; local/Plex rows kept by the
         // source guard). Silent early-return when nothing playable remains.
-        let tracks: Vec<QueueTrack> = filter_blacklisted_queue(
+        let mut tracks: Vec<QueueTrack> = filter_blacklisted_queue(
             rows.iter()
                 .filter_map(|row| crate::local_playlist::row_queue_track(&row.item))
                 .collect(),
@@ -3434,8 +3526,8 @@ pub fn play_playlist(
         if tracks.is_empty() {
             return;
         }
+        stamp_queue_context(&mut tracks, "playlist", &playlist_id);
         let start_track_id = tracks[0].id;
-        set_now_playing_context(&weak, "playlist", &playlist_id);
         runtime.core().set_queue(tracks, Some(0)).await;
         after_track_change(&runtime, &weak, start_track_id).await;
         refresh_sidebar(true);
