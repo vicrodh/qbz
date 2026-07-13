@@ -846,19 +846,22 @@ export component PlayerBar inherits Rectangle {
                         // Large (this slider is outside any npb-mode conditional).
                         // 90 -> 81.
                         width: 81px;
+                        // 0..1000 scale: the shared int slider rounds to whole
+                        // steps, so a 0..100 range quantized volume to 1%.
+                        // 0.1% steps are imperceptible -> fluid drag.
                         minimum: 0;
-                        maximum: 100;
-                        value: NowPlayingState.volume * 100;
+                        maximum: 1000;
+                        value: NowPlayingState.volume * 1000;
                         changed(v) => {
                             if (!root.vol-locked) {
-                                NowPlayingState.set-volume(v / 100.0);
+                                NowPlayingState.set-volume(v / 1000.0);
                             }
                         }
                         // Persist only the final value on drag-end (avoids a
                         // ui_prefs write per drag tick).
                         released(v) => {
                             if (!root.vol-locked) {
-                                NowPlayingState.persist-volume(v / 100.0);
+                                NowPlayingState.persist-volume(v / 1000.0);
                             }
                         }
                     }

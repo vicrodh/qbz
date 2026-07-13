@@ -968,8 +968,10 @@ pub struct SharedState {
     dsd_direct: Arc<std::sync::atomic::AtomicU8>,
     /// True when audio data/source is available for playback or resume
     has_loaded_audio: Arc<AtomicBool>,
-    /// Volume (0.0 - 1.0 stored as 0-100)
-    volume: Arc<AtomicU64>,
+    /// Volume (0.0 - 1.0, f32 stored as u32 bits — same idiom as
+    /// `normalization_gain`; integer-percent storage quantized the volume
+    /// to 1% on every re-apply)
+    volume: Arc<AtomicU32>,
     /// Playback start time (Unix timestamp millis when started/resumed)
     playback_start_millis: Arc<AtomicU64>,
     /// Position when playback was started/resumed (in seconds)
@@ -1015,7 +1017,7 @@ impl SharedState {
             current_track_id: Arc::new(AtomicU64::new(0)),
             dsd_direct: Arc::new(std::sync::atomic::AtomicU8::new(0)),
             has_loaded_audio: Arc::new(AtomicBool::new(false)),
-            volume: Arc::new(AtomicU64::new(75)),
+            volume: Arc::new(AtomicU32::new(0.75f32.to_bits())),
             playback_start_millis: Arc::new(AtomicU64::new(0)),
             position_at_start: Arc::new(AtomicU64::new(0)),
             current_device: Arc::new(std::sync::RwLock::new(None)),
@@ -1287,7 +1289,7 @@ impl SharedState {
     }
 
     pub fn volume(&self) -> f32 {
-        self.volume.load(Ordering::SeqCst) as f32 / 100.0
+        f32::from_bits(self.volume.load(Ordering::SeqCst))
     }
 }
 
@@ -1982,7 +1984,7 @@ impl Player {
                                 }
                             };
 
-                            let volume = thread_state.volume.load(Ordering::SeqCst) as f32 / 100.0;
+                            let volume = f32::from_bits(thread_state.volume.load(Ordering::SeqCst));
                             apply_engine_volume(&stream_opt, &engine, volume);
 
                             let source = match decode_with_fallback(&data) {
@@ -2314,7 +2316,7 @@ impl Player {
                                 }
                             };
 
-                            let volume = thread_state.volume.load(Ordering::SeqCst) as f32 / 100.0;
+                            let volume = f32::from_bits(thread_state.volume.load(Ordering::SeqCst));
                             apply_engine_volume(&stream_opt, &engine, volume);
 
                             // Wait for minimum buffer before starting playback.
@@ -2937,7 +2939,7 @@ impl Player {
                                 };
 
                                 let volume =
-                                    thread_state.volume.load(Ordering::SeqCst) as f32 / 100.0;
+                                    f32::from_bits(thread_state.volume.load(Ordering::SeqCst));
                                 apply_engine_volume(&stream_opt, &engine, volume);
 
                                 let source = match decode_with_fallback(&audio_data) {
@@ -3030,7 +3032,7 @@ impl Player {
                         AudioCommand::SetVolume(volume) => {
                             thread_state
                                 .volume
-                                .store((volume * 100.0) as u64, Ordering::SeqCst);
+                                .store(volume.to_bits(), Ordering::SeqCst);
                             if let Some(ref engine) = *current_engine {
                                 apply_engine_volume(&stream_opt, &engine, volume);
                             }
@@ -3159,7 +3161,7 @@ impl Player {
                                 }
                             };
 
-                            let volume = thread_state.volume.load(Ordering::SeqCst) as f32 / 100.0;
+                            let volume = f32::from_bits(thread_state.volume.load(Ordering::SeqCst));
                             apply_engine_volume(&stream_opt, &engine, volume);
 
                             // Build the decoded source for the seek. Both

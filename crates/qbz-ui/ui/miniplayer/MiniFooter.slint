@@ -143,10 +143,12 @@ component MiniVolume inherits Rectangle {
                 }
                 QbzSlider {
                     width: 96px;
+                    // 0..1000 scale: the int slider rounds to whole steps;
+                    // 0.1% = fluid volume.
                     minimum: 0;
-                    maximum: 100;
-                    value: NowPlayingState.volume * 100;
-                    changed(v) => { NowPlayingState.set-volume(v / 100.0); }
+                    maximum: 1000;
+                    value: NowPlayingState.volume * 1000;
+                    changed(v) => { NowPlayingState.set-volume(v / 1000.0); }
                 }
                 Text {
                     text: Math.round(NowPlayingState.volume * 100) + "";
