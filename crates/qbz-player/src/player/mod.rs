@@ -3909,6 +3909,10 @@ impl Player {
         self.state.begin_play()
     }
 
+    /// A passing check is a snapshot, not a lock: a newer intent can still
+    /// begin between this check and the subsequent AudioCommand send. That
+    /// residual window is accepted; closing it would require the generation
+    /// to travel inside the audio command itself.
     fn is_current_play(&self, gen: u64) -> bool {
         self.state.is_current_play(gen)
     }
@@ -4036,7 +4040,8 @@ impl Player {
                 );
 
                 // Create the streaming buffer and start playback immediately.
-                let buffer_writer = self.play_streaming_dynamic(
+                // Non-bumping variant: this intent already holds `gen`.
+                let buffer_writer = self.apply_play_streaming_dynamic(
                     track_id,
                     sample_rate,
                     channels,
@@ -4640,6 +4645,7 @@ impl Player {
     /// track. DST-compressed DFF and >2ch files are rejected with a
     /// readable error before anything starts.
     pub fn play_dsd_file(&self, path: std::path::PathBuf, track_id: u64) -> Result<(), String> {
+        let _gen = self.begin_play();
         let demux = qbz_dsd::open_dsd(&path).map_err(|e| e.to_string())?;
         let dsd_rate = demux.info().dsd_rate;
 
@@ -4728,8 +4734,15 @@ impl Player {
         );
         self.state.set_stream_quality(rate, 24);
 
-        let writer =
-            self.play_streaming(track_id, rate, channels, content_length, 3, duration_secs, 0)?;
+        let writer = self.apply_play_streaming(
+            track_id,
+            rate,
+            channels,
+            content_length,
+            3,
+            duration_secs,
+            0,
+        )?;
 
         std::thread::spawn(move || {
             if writer
@@ -4817,6 +4830,32 @@ impl Player {
         duration_secs: u64,
         start_position_secs: u64,
     ) -> Result<BufferWriter, String> {
+        let _gen = self.begin_play();
+        self.apply_play_streaming(
+            track_id,
+            sample_rate,
+            channels,
+            content_length,
+            buffer_seconds,
+            duration_secs,
+            start_position_secs,
+        )
+    }
+
+    /// `play_streaming` without bumping generation (used by play paths that
+    /// already did their own `begin_play` + supersede checks, like
+    /// `play_dsd_file`; a mid-intent bump here would invalidate a strictly
+    /// newer play that started in the meantime).
+    fn apply_play_streaming(
+        &self,
+        track_id: u64,
+        sample_rate: u32,
+        channels: u16,
+        content_length: u64,
+        buffer_seconds: u8,
+        duration_secs: u64,
+        start_position_secs: u64,
+    ) -> Result<BufferWriter, String> {
         log::info!(
             "Player: Starting streaming playback for track {} ({}Hz, {}ch, {} bytes total, {}s, start={}s)",
             track_id,
@@ -4856,6 +4895,34 @@ impl Player {
     /// Play from streaming source with dynamic buffer based on measured speed.
     /// `start_position_secs` > 0 signals session resume (see `play_streaming`).
     pub fn play_streaming_dynamic(
+        &self,
+        track_id: u64,
+        sample_rate: u32,
+        channels: u16,
+        bit_depth: u32,
+        content_length: u64,
+        speed_mbps: f64,
+        duration_secs: u64,
+        start_position_secs: u64,
+    ) -> Result<BufferWriter, String> {
+        let _gen = self.begin_play();
+        self.apply_play_streaming_dynamic(
+            track_id,
+            sample_rate,
+            channels,
+            bit_depth,
+            content_length,
+            speed_mbps,
+            duration_secs,
+            start_position_secs,
+        )
+    }
+
+    /// `play_streaming_dynamic` without bumping generation (used by
+    /// `play_track`'s CMAF path, which already holds a generation token; a
+    /// mid-intent bump here would invalidate a strictly newer play that
+    /// started in the meantime).
+    fn apply_play_streaming_dynamic(
         &self,
         track_id: u64,
         sample_rate: u32,
@@ -4961,6 +5028,9 @@ impl Player {
 
     /// Stop playback
     pub fn stop(&self) -> Result<(), String> {
+        // Supersede any in-flight play_track so a slow CMAF/legacy fetch cannot
+        // restart audio after the user stopped.
+        let _ = self.begin_play();
         self.tx
             .send(AudioCommand::Stop)
             .map_err(|e| format!("Failed to send stop command: {}", e))

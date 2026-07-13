@@ -614,7 +614,7 @@ async fn play_audible(runtime: &Runtime, weak: &slint::Weak<AppWindow>, track_id
         Err(e) => {
             log::error!("[qbz-slint] playback: play_track {track_id} failed: {e}");
             // Superseded fetch: the user already started another play while this
-            // one was resolving — that newer play owns the cursor; do NOT skip.
+            // one was resolving. That newer play owns the cursor; do NOT skip.
             let still_current = PENDING_PLAY_ID.load(std::sync::atomic::Ordering::Relaxed)
                 == track_id;
             // The fetch failed: no audio will advance, so the poll loop would never
@@ -623,7 +623,7 @@ async fn play_audible(runtime: &Runtime, weak: &slint::Weak<AppWindow>, track_id
             // Tauri-parity regression fix: an unavailable track used to be
             // auto-skipped by the frontend (playbackService `autoSkipToNext`,
             // bounded, issue #467). Without this the queue cursor parks on the
-            // dead track and playback stops. Terminal errors only — transient
+            // dead track and playback stops. Terminal errors only: transient
             // failures were already retried by the client and should not skip.
             if still_current && is_terminal_unavailable(&e) {
                 auto_skip_unavailable(runtime, weak, track_id).await;
