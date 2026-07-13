@@ -4220,6 +4220,12 @@ export global LyricsState {
     // 0 off · 1 soft · 2 strong (Tauri default 'strong').
     in-out property <int> dimming-mode: 2;
     in-out property <bool> uppercase: false;
+    // Lite fill (perf): when true, the active line is highlighted whole instead
+    // of the per-word karaoke sweep — no per-frame clip animation, so the lyrics
+    // surface stops driving continuous full-window repaints (~4% CPU -> idle
+    // between line changes). Default false (smooth karaoke). Kiosk / weak-GPU
+    // tiers force it on via ShellState.reduce-motion regardless of this pref.
+    in-out property <bool> lite-fill: false;
     // Active (karaoke fill) color. `use-custom-color: false` = follow the theme
     // accent (Tauri activeColor: ''). The palette swatches set both (deviation
     // D6: swatches instead of a native color input — Slint has none).

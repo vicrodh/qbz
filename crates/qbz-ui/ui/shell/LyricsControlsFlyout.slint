@@ -176,6 +176,21 @@ export component LyricsControlsPanel inherits Rectangle {
             }
         }
 
+        // Lite fill (perf): highlight the active line whole instead of the
+        // per-word karaoke sweep — stops the continuous full-window repaints.
+        HorizontalLayout {
+            height: 22px;
+            spacing: 8px;
+            RowLabel { text: @tr("Lite fill (saves CPU)"); }
+            QbzToggle {
+                checked: LyricsState.lite-fill;
+                toggled(v) => {
+                    LyricsState.lite-fill = v;
+                    LyricsState.prefs-changed();
+                }
+            }
+        }
+
         // Dimming (Tauri segmented Off/Soft/Strong -> select).
         HorizontalLayout {
             height: 30px;

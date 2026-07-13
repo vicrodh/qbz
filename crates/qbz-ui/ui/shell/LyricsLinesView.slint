@@ -44,7 +44,7 @@
 
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
-import { LyricsState, LyricsSegment } from "../state.slint";
+import { LyricsState, LyricsSegment, ShellState } from "../state.slint";
 
 // Q6 (SHIPPED): Tauri's four non-system lyric font families, embedded into
 // the binary at compile time (slint-build default EmbedAllResources for Rust
@@ -218,17 +218,24 @@ component LyricsLineRow inherits VerticalLayout {
                 // Bright (sung) overlay, clipped to this segment's LOCAL fill.
                 // local = clamp((line-progress - start-weight) / width-weight, 0, 1)
                 Rectangle {
+                    // Lite fill (pref) or reduce-motion (kiosk / weak GPU): the
+                    // active line is fully lit and STATIC — no per-frame clip
+                    // animation, so the surface stops repainting the whole window
+                    // ~60x/s just to sweep the karaoke fill.
+                    property <bool> cheap: ShellState.reduce-motion || LyricsState.lite-fill;
                     x: 0;
                     y: 0;
-                    width: segbase.width * Math.clamp(
-                        seg.width-weight > 0
-                            ? (LyricsState.line-progress - seg.start-weight) / seg.width-weight
-                            : 0,
-                        0.0, 1.0);
+                    width: self.cheap
+                        ? segbase.width
+                        : segbase.width * Math.clamp(
+                            seg.width-weight > 0
+                                ? (LyricsState.line-progress - seg.start-weight) / seg.width-weight
+                                : 0,
+                            0.0, 1.0);
                     height: segbase.height;
                     clip: true;
                     animate width {
-                        duration: LyricsState.fill-anim-ms * 1ms;
+                        duration: self.cheap ? 0ms : LyricsState.fill-anim-ms * 1ms;
                         easing: linear;
                     }
                     Text {

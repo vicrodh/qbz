@@ -52,6 +52,10 @@ pub struct LyricsPrefs {
     pub active_color: String, // "#RRGGBB" or "" = theme accent
     #[serde(default)]
     pub uppercase: bool,
+    /// Lite fill (perf): highlight the active line whole instead of the per-word
+    /// karaoke sweep, so the lyrics surface stops driving continuous repaints.
+    #[serde(default)]
+    pub lite_fill: bool,
 }
 
 fn d_true() -> bool {
@@ -77,6 +81,7 @@ impl Default for LyricsPrefs {
             dimming: d_dimming(),
             active_color: String::new(),
             uppercase: false,
+            lite_fill: false,
         }
     }
 }
@@ -212,6 +217,7 @@ pub fn apply_to_ui(window: &AppWindow, prefs: &LyricsPrefs) {
         }
         None => state.set_use_custom_color(false),
     }
+    state.set_lite_fill(prefs.lite_fill);
 }
 
 /// Read the in-out props back into a pref set and persist — the
@@ -241,6 +247,7 @@ pub fn persist_from_ui(window: &AppWindow) {
             String::new()
         },
         uppercase: state.get_uppercase(),
+        lite_fill: state.get_lite_fill(),
     };
     save(&prefs);
 }
@@ -283,6 +290,7 @@ mod tests {
             dimming: "max".into(),
             active_color: "purple".into(),
             uppercase: true,
+            lite_fill: false,
         }
         .sanitized();
         assert!(!p.auto_follow); // bools pass through
@@ -302,6 +310,7 @@ mod tests {
             dimming: "off".into(),
             active_color: "#8b5cf6".into(),
             uppercase: false,
+            lite_fill: true,
         }
         .sanitized();
         assert_eq!(p.font, "line-seed-jp");
