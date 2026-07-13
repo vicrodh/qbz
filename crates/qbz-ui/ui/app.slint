@@ -11,6 +11,7 @@ import "assets/fonts/Inter_18pt-Medium.ttf";
 import "assets/fonts/Inter_18pt-SemiBold.ttf";
 import "assets/fonts/Inter_18pt-Bold.ttf";
 
+import { Palette } from "std-widgets.slint";
 import { Theme, ThemeColors } from "foundation/semantic-colors.slint";
 import { ThemeState } from "foundation/theme-state.slint";
 import { SplashScreen } from "splash/SplashScreen.slint";
@@ -78,10 +79,27 @@ export component AppWindow inherits Window {
     // responsiveness decisions (see ShellState.content-constrained).
     init => {
         ShellState.window-width = self.width;
+        root.sync-native-palette();
     }
     changed width => {
         ShellState.window-width = self.width;
     }
+
+    // Keep the std-widgets `Palette` (native LineEdit/TextEdit/… colors) in
+    // step with the active QBZ theme. Without this, native inputs stayed on the
+    // OS palette: pick a light QBZ theme while the OS palette was dark and the
+    // input text rendered in the dark-scheme foreground over the light page —
+    // text the same tone as its background, effectively invisible (Settings
+    // input fields on light themes). `unknown` lets System keep following the OS.
+    property <bool> pal-is-dark: Theme.is-dark;
+    property <bool> pal-is-system: Theme.is-system;
+    function sync-native-palette() {
+        Palette.color-scheme = Theme.is-system
+            ? ColorScheme.unknown
+            : (Theme.is-dark ? ColorScheme.dark : ColorScheme.light);
+    }
+    changed pal-is-dark => { root.sync-native-palette(); }
+    changed pal-is-system => { root.sync-native-palette(); }
 
     in-out property <AppScreen> screen: AppScreen.splash;
 

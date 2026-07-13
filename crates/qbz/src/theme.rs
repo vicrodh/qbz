@@ -103,6 +103,14 @@ pub fn push_colors(
     theme.set_c(to_slint(colors));
     theme.set_is_system(is_system);
     theme.set_is_high_contrast(is_high_contrast);
+    // Relative luminance (BT.709) of the base surface -> is-dark. Drives the
+    // std-widgets `Palette.color-scheme` in app.slint so native inputs follow
+    // the QBZ theme; computed here (not from ThemeId) so it's correct for the
+    // auto/custom themes too. System keeps following the OS (app.slint sets the
+    // scheme to `unknown` when is-system, ignoring this flag).
+    let s = colors.surface_main;
+    let luma = 0.2126 * s.r as f64 + 0.7152 * s.g as f64 + 0.0722 * s.b as f64;
+    theme.set_is_dark(luma < 128.0);
 }
 
 /// Push the palette for `id` into the running window's `Theme` global. Sets
