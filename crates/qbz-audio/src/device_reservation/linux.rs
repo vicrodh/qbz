@@ -157,7 +157,27 @@ impl DeviceReservation {
             }
         };
 
-        match try_acquire_name(&connection, &bus_name, false)? {
+        // RequestName itself can be denied by the bus policy — under Snap
+        // confinement the mediated session bus refuses ownership of the
+        // org.freedesktop.ReserveDevice1.* names (#534). That must not be
+        // fatal: degrade to no reservation and let the PCM open proceed,
+        // exactly like the bus-unavailable case above.
+        let reply = match try_acquire_name(&connection, &bus_name, false) {
+            Ok(reply) => reply,
+            Err(e) => {
+                log::warn!(
+                    "[reservation] could not request name {} (confined session \
+                     bus?): {}. Proceeding without D-Bus reservation (degraded).",
+                    bus_name,
+                    e
+                );
+                return Ok(Self {
+                    state: ReservationState::Degraded,
+                });
+            }
+        };
+
+        match reply {
             // Either we just took ownership, or we already owned this name on
             // this same connection (idempotent for Lifetime-A nested under
             // Lifetime-B in Task 5).
