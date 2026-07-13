@@ -185,6 +185,25 @@ pub async fn download_and_stream_remote_track(
     use futures_util::StreamExt;
     use std::time::Instant;
 
+    struct FailGuard {
+        writer: BufferWriter,
+        armed: bool,
+    }
+    impl Drop for FailGuard {
+        fn drop(&mut self) {
+            if self.armed {
+                let _ = self
+                    .writer
+                    .error("remote stream aborted before completion".into());
+            }
+        }
+    }
+    let mut guard = FailGuard {
+        writer,
+        armed: true,
+    };
+    let writer = &guard.writer;
+
     let client = reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(10))
         .timeout(Duration::from_secs(300))
@@ -221,6 +240,9 @@ pub async fn download_and_stream_remote_track(
                 track_id,
                 err
             );
+            guard.armed = false;
+            let _ = writer.error(format!("push_chunk failed: {err}"));
+            return Err(format!("push_chunk failed: {err}"));
         }
 
         let now = Instant::now();
@@ -241,6 +263,7 @@ pub async fn download_and_stream_remote_track(
         }
     }
 
+    guard.armed = false;
     if let Err(err) = writer.complete() {
         log::error!(
             "[{}/STREAMING] Failed to mark stream complete for track {}: {}",
@@ -248,6 +271,8 @@ pub async fn download_and_stream_remote_track(
             track_id,
             err
         );
+        let _ = writer.error(format!("complete failed: {err}"));
+        return Err(format!("complete failed: {err}"));
     }
 
     log::info!(

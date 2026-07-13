@@ -352,6 +352,14 @@ impl BufferedMediaSource {
             false
         }
     }
+
+    /// Error reported by the feeder, if any. Lets waiters (the initial
+    /// buffer fill loop) bail out immediately instead of sitting through
+    /// the full buffer timeout when the feeder has already died.
+    pub fn download_error(&self) -> Option<String> {
+        let (lock, _) = &*self.state;
+        lock.lock().ok().and_then(|s| s.download_error.clone())
+    }
 }
 
 impl Read for BufferedMediaSource {
@@ -518,11 +526,16 @@ impl BufferWriter {
     /// Mark download as failed
     ///
     /// After this is called, readers will receive the error on next read.
+    /// The first recorded error wins: it is the root cause, and the feeder
+    /// fail-guards fire a generic "aborted" error on drop after a specific
+    /// failure has already been recorded, which must not overwrite it.
     pub fn error(&self, err: String) -> Result<(), String> {
         let (lock, cvar) = &*self.state;
         let mut state = lock.lock().map_err(|_| "Failed to acquire buffer lock")?;
 
-        state.download_error = Some(err);
+        if state.download_error.is_none() {
+            state.download_error = Some(err);
+        }
         cvar.notify_all();
 
         Ok(())
@@ -992,6 +1005,28 @@ mod tests {
     use std::time::Duration;
 
     #[test]
+    fn first_error_wins_over_later_generic_abort() {
+        let (source, writer) = BufferedMediaSource::new(StreamingConfig::from_seconds(1), None);
+        writer.error("root cause".to_string()).unwrap();
+        writer
+            .error("CMAF stream aborted before completion".to_string())
+            .unwrap();
+        assert_eq!(source.download_error().as_deref(), Some("root cause"));
+    }
+
+    #[test]
+    fn feeder_error_is_visible_to_waiters_before_min_buffer() {
+        let (source, writer) = BufferedMediaSource::new(StreamingConfig::from_seconds(1), None);
+        assert!(!source.has_min_buffer());
+        assert!(source.download_error().is_none());
+        writer.error("feeder died".to_string()).unwrap();
+        // The initial-buffer wait loop polls this instead of sleeping out
+        // the full buffer timeout.
+        assert_eq!(source.download_error().as_deref(), Some("feeder died"));
+        assert!(!source.has_min_buffer());
+    }
+
+    #[test]
     fn raw_initial_buffer_for_speed_follows_documented_ladder() {
         // Each band of the documented speed ladder produces its own size.
         assert_eq!(raw_initial_buffer_for_speed(20.0), 256 * 1024);
@@ -1135,5 +1170,21 @@ mod tests {
         let n = source.read(&mut buf).unwrap();
         assert_eq!(n, 7);
         assert_eq!(&buf, b"Delayed");
+    }
+
+    #[test]
+    fn error_unblocks_reader_with_io_error() {
+        use std::io::ErrorKind;
+        let config = StreamingConfig {
+            initial_buffer_bytes: 5,
+            max_buffer_bytes: 100,
+        };
+        let (mut source, writer) = BufferedMediaSource::new(config, None);
+        writer.error("cdn failed".into()).unwrap();
+        let mut buf = [0u8; 8];
+        let err = source.read(&mut buf).unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::Other);
+        let msg = err.to_string();
+        assert!(msg.contains("cdn failed"), "{msg}");
     }
 }
