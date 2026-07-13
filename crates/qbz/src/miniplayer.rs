@@ -546,6 +546,10 @@ fn mirror_now_playing_fast(main: &AppWindow, mini: &MiniPlayerWindow) {
     d.set_repeat_mode(s.get_repeat_mode());
     d.set_quality_tier(s.get_quality_tier());
     d.set_quality_detail(s.get_quality_detail());
+    d.set_effective_sample_rate_hz(s.get_effective_sample_rate_hz());
+    d.set_effective_bit_depth(s.get_effective_bit_depth());
+    d.set_quality_downgraded(s.get_quality_downgraded());
+    d.set_quality_true_detail(s.get_quality_true_detail());
     d.set_is_remote(s.get_is_remote());
     d.set_volume_locked(s.get_volume_locked());
     d.set_qconnect_connected(s.get_qconnect_connected());

@@ -4502,3 +4502,10 @@ msgstr "Имя устройства в Qobuz Connect"
 
 msgid "The name other Qobuz Connect apps see for this device. Applies on the next connection."
 msgstr "Имя, под которым это устройство видят другие приложения Qobuz Connect. Применяется при следующем подключении."
+
+# Quality downgrade tooltip (#590 follow-up)
+msgid "Source: {}"
+msgstr "Источник: {}"
+
+msgid "Output: {}"
+msgstr "Вывод: {}"

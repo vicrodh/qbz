@@ -4478,3 +4478,10 @@ msgstr "Qobuz Connectのデバイス名"
 
 msgid "The name other Qobuz Connect apps see for this device. Applies on the next connection."
 msgstr "他のQobuz Connectアプリに表示されるこのデバイスの名前です。次回の接続時に適用されます。"
+
+# Quality downgrade tooltip (#590 follow-up)
+msgid "Source: {}"
+msgstr "ソース: {}"
+
+msgid "Output: {}"
+msgstr "出力: {}"

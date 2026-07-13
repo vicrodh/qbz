@@ -4489,3 +4489,10 @@ msgstr "Qobuz Connect-Gerätename"
 
 msgid "The name other Qobuz Connect apps see for this device. Applies on the next connection."
 msgstr "Der Name, den andere Qobuz Connect-Apps für dieses Gerät sehen. Wird bei der nächsten Verbindung übernommen."
+
+# Quality downgrade tooltip (#590 follow-up)
+msgid "Source: {}"
+msgstr "Quelle: {}"
+
+msgid "Output: {}"
+msgstr "Ausgabe: {}"

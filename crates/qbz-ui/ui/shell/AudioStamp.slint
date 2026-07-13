@@ -17,7 +17,7 @@
 
 import { Theme } from "../foundation/semantic-colors.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
-import { NowPlayingState } from "../state.slint";
+import { NowPlayingState, TooltipState } from "../state.slint";
 
 export component AudioStamp inherits VerticalLayout {
     spacing: 1px;
@@ -31,25 +31,59 @@ export component AudioStamp inherits VerticalLayout {
             ? "MP3"
             : (NowPlayingState.quality-tier == "lossless" ? "LOSSLESS" : "CD"));
 
+    // Tooltip for Row 1: while downgraded, two lines — the catalog max
+    // ("Source") vs the truly delivered stream ("Output"); otherwise the plain
+    // tier + detail. Shown only when a detail line exists (no empty "CD: ").
+    property <string> quality-tooltip: NowPlayingState.quality-downgraded
+        && NowPlayingState.quality-true-detail != ""
+        ? @tr("Source: {}", NowPlayingState.quality-detail) + "\n"
+            + @tr("Output: {}", NowPlayingState.quality-true-detail)
+        : root.tier-label + ": " + NowPlayingState.quality-detail;
+
     // === Row 1 — quality, INLINE + BRIGHT (the focus) ====================
-    HorizontalLayout {
-        spacing: 5px;
-        alignment: end;
-        Text {
-            text: root.tier-label;
-            font-size: 9px;
-            font-weight: 700;
-            color: Theme.text-secondary;
-            vertical-alignment: center;
-            letter-spacing: 0.3px;
+    // Wrapped in a TouchArea that feeds the global tooltip overlay (same
+    // pattern as PlayerBar's ConnectButton) so hovering the stamp reveals the
+    // TRUE delivered quality when the badge shows the catalog max.
+    quality-hover := TouchArea {
+        changed has-hover => {
+            if (self.has-hover && NowPlayingState.quality-detail != "") {
+                TooltipState.text = root.quality-tooltip;
+                TooltipState.anchor-x = self.absolute-position.x + self.width / 2;
+                TooltipState.anchor-y = self.absolute-position.y;
+                TooltipState.show = true;
+            } else if (!self.has-hover) {
+                TooltipState.show = false;
+            }
         }
-        Text {
-            text: NowPlayingState.quality-detail;
-            font-size: 9px;
-            font-weight: 600;
-            color: Theme.text-primary;
-            vertical-alignment: center;
-            overflow: elide;
+        HorizontalLayout {
+            spacing: 5px;
+            alignment: end;
+            Text {
+                text: root.tier-label;
+                font-size: 9px;
+                font-weight: 700;
+                color: Theme.text-secondary;
+                vertical-alignment: center;
+                letter-spacing: 0.3px;
+            }
+            // Downgrade arrow (glyph, not a pill — ADR-008): the delivered
+            // stream is below the catalog max the badge advertises. Amber so
+            // it reads as "adjusted", not as an error.
+            if NowPlayingState.quality-downgraded: Text {
+                text: "↓";
+                font-size: 9px;
+                font-weight: 700;
+                color: #eab308;
+                vertical-alignment: center;
+            }
+            Text {
+                text: NowPlayingState.quality-detail;
+                font-size: 9px;
+                font-weight: 600;
+                color: Theme.text-primary;
+                vertical-alignment: center;
+                overflow: elide;
+            }
         }
     }
 

@@ -1603,6 +1603,16 @@ static MPRIS_LAST_META: std::sync::Mutex<Option<(u64, Option<String>)>> =
 static FORCE_UI_REPUSH: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
 
+/// Catalog-MAX stream params of the current track, cached at every
+/// track-change meta push so the poll loop can compare the DELIVERED stream
+/// (PlaybackEvent.sample_rate / bit_depth) against the track's advertised
+/// max without an async queue read per tick (#590 follow-up: the badge keeps
+/// the max; a downgrade arrow + tooltip surface the true delivered quality).
+/// Rate in Hz (same normalization as NowPlayingState.sample-rate-hz); 0 =
+/// unknown. Bits: 1 = DSD (nominal 1-bit — exempt from the bit comparison).
+static TRACK_MAX_RATE_HZ: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+static TRACK_MAX_BITS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
 /// Compare-and-record the MPRIS metadata dedupe key. Returns `true` when
 /// `key` differs from the last pushed value (→ caller pushes now), recording
 /// it as the new last-pushed value. A poisoned lock falls back to pushing.
@@ -1718,6 +1728,23 @@ pub(crate) async fn refresh_now_playing_meta(runtime: &Runtime, weak: &slint::We
     } else {
         crate::quality::detail(track.bit_depth, track.sample_rate)
     };
+    // Cache the catalog max for the poll loop's downgrade detection (#590
+    // follow-up). Rate normalized to Hz exactly like the sample-rate-hz push
+    // below (`track.sample_rate` is Hz when >= 1000, else kHz); 0 = unknown.
+    TRACK_MAX_RATE_HZ.store(
+        track.sample_rate.map_or(0, |sr| {
+            if sr >= 1000.0 {
+                sr as u32
+            } else {
+                (sr * 1000.0) as u32
+            }
+        }),
+        std::sync::atomic::Ordering::Relaxed,
+    );
+    TRACK_MAX_BITS.store(
+        track.bit_depth.unwrap_or(0),
+        std::sync::atomic::Ordering::Relaxed,
+    );
 
     // Mirror the now-playing metadata into the system tray tooltip (Linux).
     if let Some(t) = crate::tray::handle() {
@@ -1877,6 +1904,13 @@ pub(crate) async fn refresh_now_playing_meta(runtime: &Runtime, weak: &slint::We
             }
         }));
         np.set_bit_depth(track.bit_depth.unwrap_or(0) as i32);
+        // Reset the EFFECTIVE (delivered) quality on every track change — the
+        // poll loop re-derives it from the engine's PlaybackEvent once the new
+        // stream opens (the old track's downgrade state must not linger).
+        np.set_effective_sample_rate_hz(0);
+        np.set_effective_bit_depth(0);
+        np.set_quality_downgraded(false);
+        np.set_quality_true_detail("".into());
         np.set_duration_secs(duration as i32);
         np.set_position_secs(0);
         np.set_progress(0.0);
@@ -3956,7 +3990,7 @@ pub fn start_poll_loop(
         // bits); when unchanged, the upgrade_in_event_loop is skipped. Reset
         // to None whenever another owner (peer/cast poll) may have written the
         // bar, so returning to this branch re-pushes unconditionally.
-        let mut last_ui_push: Option<(u64, u64, u64, bool, u32, u32, u32)> = None;
+        let mut last_ui_push: Option<(u64, u64, u64, bool, u32, u32, u32, u32, u32)> = None;
         let mut last_remote_ui_push = None;
 
         let mut ticker = tokio::time::interval(std::time::Duration::from_millis(450));
@@ -4169,6 +4203,10 @@ pub fn start_poll_loop(
             let duration = event.duration;
             let is_playing = event.is_playing;
             let volume = event.volume;
+            // DELIVERED stream params (what the engine actually decodes after
+            // the streaming-quality downgrade, #590). 0 = unknown / no stream.
+            let eff_rate_hz = event.sample_rate.unwrap_or(0);
+            let eff_bits = event.bit_depth.unwrap_or(0);
             // Persist the live position periodically (~5s) while playing so a
             // crash keeps a near-current resume point (no-op unless
             // `persist_session` is on; `position` is in seconds).
@@ -4384,9 +4422,48 @@ pub fn start_poll_loop(
                 volume.to_bits(),
                 cache.to_bits(),
                 seekable_max.to_bits(),
+                eff_rate_hz,
+                eff_bits,
             );
             if last_ui_push != Some(ui_snapshot) {
                 last_ui_push = Some(ui_snapshot);
+                // Effective-vs-max quality (#590 follow-up): the badge keeps
+                // advertising the catalog max; when the DELIVERED stream is
+                // below it, flip the downgrade flag + format the true line for
+                // the AudioStamp tooltip. The 0.9 rate guard avoids flagging
+                // 44.1-vs-48 kHz family mismatches (Tauri QualityBadge.svelte
+                // parity). DSD (nominal 1-bit, on either side) is exempt from
+                // the bit-depth comparison — its depth is not comparable to
+                // PCM's (mirrors the DSD special-case in the meta seed).
+                let max_rate_hz =
+                    TRACK_MAX_RATE_HZ.load(std::sync::atomic::Ordering::Relaxed);
+                let max_bits = TRACK_MAX_BITS.load(std::sync::atomic::Ordering::Relaxed);
+                let dsd = max_bits == 1 || eff_bits == 1;
+                // DSD is exempt ENTIRELY (not just the depth arm): past Phase 1
+                // the DoP/native paths play DSD bit-perfect, and its carrier/PCM
+                // rate vs the DSD "max" is apples-to-oranges, so any compare would
+                // flag a false downgrade arrow on a bit-perfect DSD stream.
+                let downgraded = !dsd
+                    && ((eff_rate_hz > 0
+                        && max_rate_hz > 0
+                        && (eff_rate_hz as f64) < max_rate_hz as f64 * 0.9)
+                        || (eff_bits > 0 && max_bits > 0 && eff_bits < max_bits));
+                // True delivered line, via the shared formatter so it matches
+                // the badge style ("16-bit / 44.1 kHz"). Native DSD streams
+                // (1-bit) go through the DSD label instead — the generic
+                // detail would read "1-bit / 2822.4 kHz".
+                let true_detail = if eff_bits == 1 {
+                    crate::quality::dsd_multiple_label(
+                        (eff_rate_hz > 0).then_some(eff_rate_hz as f64),
+                    )
+                } else if eff_rate_hz > 0 || eff_bits > 0 {
+                    crate::quality::detail(
+                        (eff_bits > 0).then_some(eff_bits),
+                        (eff_rate_hz > 0).then_some(eff_rate_hz as f64),
+                    )
+                } else {
+                    String::new()
+                };
                 // Mirror engine truth onto the visualizer tap alongside the
                 // set_playing push below. This is the catch-all: EVERY local
                 // transition (pause/resume from any surface — MPRIS, tray,
@@ -4414,6 +4491,11 @@ pub fn start_poll_loop(
                     np.set_remaining(remaining.into());
                     np.set_playing(is_playing);
                     np.set_volume(volume.clamp(0.0, 1.0));
+                    // Effective quality for the downgrade arrow + tooltip.
+                    np.set_effective_sample_rate_hz(eff_rate_hz as i32);
+                    np.set_effective_bit_depth(eff_bits as i32);
+                    np.set_quality_downgraded(downgraded);
+                    np.set_quality_true_detail(true_detail.into());
                     // Keep the Purchases globals in step with play/pause + the live
                     // track id every tick (the meta-apply seeds them on a track
                     // change; this follows pause/resume + the engine's own id flips).
