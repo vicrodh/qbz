@@ -338,8 +338,10 @@ export component PlaylistView inherits Rectangle {
         : @tr("Default");
 
     // --- Custom-order drag-reorder state (issue #589) -------------------
-    // Component-LOCAL, mirroring QueueSidebar's UP NEXT drag — NOT the
-    // DragState global (that one drives the track->sidebar-playlist ghost).
+    // Slot bookkeeping is component-LOCAL; the floating ghost REUSES the
+    // app-wide DragGhost via the DragState global (with DragState.reorder
+    // set, so sidebar rows skip drop-target detection). DragActions is
+    // never called, so the Rust add-to-playlist drop path never runs.
     // All indices are VISIBLE-list indices into PlaylistState.tracks.
     property <bool> reorder-active: false;
     property <int> reorder-from: -1;        // visible index of the dragged row
@@ -349,8 +351,6 @@ export component PlaylistView inherits Rectangle {
     // list-top, the live viewport-y is folded back in below so the slot
     // math stays scroll-aware.
     property <length> reorder-list-top;
-    // Live pointer window-Y during the drag (positions the floating ghost).
-    property <length> reorder-pointer-y;
 
     // Pointer window-Y -> insertion slot [0..N]. Rows are a fixed 50px
     // stacked with 0 spacing; the +0.5 rounds boundaries to row centers
@@ -361,6 +361,9 @@ export component PlaylistView inherits Rectangle {
     }
     function commit-reorder() {
         root.reorder-active = false;
+        // Release the shared ghost.
+        DragState.active = false;
+        DragState.reorder = false;
         // Fire only a real move. `to == from` and `to == from+1` both drop
         // back onto the same gap (no-op).
         if (root.reorder-over != root.reorder-from
@@ -1027,17 +1030,32 @@ export component PlaylistView inherits Rectangle {
                             // reports the gesture; this view owns the state.
                             reorder-index: i;
                             reorder-source: root.reorder-active && root.reorder-from == i;
-                            reorder-begin(idx, row-top) => {
+                            reorder-begin(idx, row-top, gx, gy) => {
                                 root.reorder-active = true;
                                 root.reorder-from = idx;
                                 root.reorder-over = idx;
                                 root.reorder-list-top =
                                     row-top - idx * 50px - track-list.viewport-y;
-                                root.reorder-pointer-y = row-top;
+                                // Reuse the app-wide DragGhost (proven
+                                // window-coord positioning) for the floating
+                                // pill; reorder=true keeps sidebar rows from
+                                // claiming a drop target. Pointer first, then
+                                // active, so the ghost never flashes at a
+                                // stale position.
+                                DragState.count = 1;
+                                DragState.ghost-title = track.title;
+                                DragState.ghost-subtitle = track.album != ""
+                                    ? track.artist + " · " + track.album
+                                    : track.artist;
+                                DragState.pointer-x = gx;
+                                DragState.pointer-y = gy;
+                                DragState.reorder = true;
+                                DragState.active = true;
                             }
-                            reorder-update(pointer-y) => {
-                                root.reorder-over = root.slot-from-pointer(pointer-y);
-                                root.reorder-pointer-y = pointer-y;
+                            reorder-update(gx, gy) => {
+                                root.reorder-over = root.slot-from-pointer(gy);
+                                DragState.pointer-x = gx;
+                                DragState.pointer-y = gy;
                                 // TODO: auto-scroll during drag when the pointer
                                 // nears the list's top/bottom edge (the drag
                                 // currently reorders within the visible viewport).
@@ -1429,36 +1447,8 @@ export component PlaylistView inherits Rectangle {
         }
     }
 
-    // Floating drag ghost — a pill following the pointer with the dragged
-    // track's title (QueueSidebar parity). A free-positioned child of the
-    // view ROOT (NOT a layout child), declared last so it renders above the
-    // list. Converts the live pointer window-Y into this view's local space.
-    if root.reorder-active
-            && root.reorder-from >= 0
-            && root.reorder-from < PlaylistState.tracks.length: Rectangle {
-        x: 44px;
-        y: root.reorder-pointer-y - root.absolute-position.y - self.height / 2;
-        width: Math.min(360px, root.width - 88px);
-        height: 34px;
-        background: Theme.surface-elevated;
-        border-radius: Radius.sm;
-        border-width: 1px;
-        border-color: Theme.accent;
-        opacity: 0.95;
-        HorizontalLayout {
-            padding-left: 10px;
-            padding-right: 10px;
-            VerticalLayout {
-                alignment: center;
-                horizontal-stretch: 1;
-                Text {
-                    text: PlaylistState.tracks[root.reorder-from].title;
-                    color: Theme.text-primary;
-                    font-size: 12px;
-                    font-weight: Typography.medium;
-                    overflow: elide;
-                }
-            }
-        }
-    }
+    // The floating reorder ghost is the app-wide DragGhost (AppShell),
+    // driven through DragState by the reorder-begin/update handlers above —
+    // no component-local ghost (its absolute-position math double-counted
+    // the row offset inside the ListView and drifted off the cursor).
 }

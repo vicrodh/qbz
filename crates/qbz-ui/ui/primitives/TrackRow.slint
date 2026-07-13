@@ -94,8 +94,9 @@ export component TrackRow inherits Rectangle {
     // playlists) — the handle has its OWN TouchArea.
     in property <int> reorder-index;
     in property <bool> reorder-source: false;   // this row is being dragged
-    callback reorder-begin(int /* visible index */, length /* row window-top */);
-    callback reorder-update(length /* pointer window-y */);
+    callback reorder-begin(int /* visible index */, length /* row window-top */,
+        length /* pointer window-x */, length /* pointer window-y */);
+    callback reorder-update(length /* pointer window-x */, length /* pointer window-y */);
     callback reorder-end();
     // Whether the row can be dragged onto sidebar playlists.
     in property <bool> draggable: true;
@@ -305,10 +306,13 @@ export component TrackRow inherits Rectangle {
                                     && Math.abs(self.absolute-position.y - root.y + self.mouse-y - self.down-y) > 6px) {
                                     self.dragging = true;
                                     root.reorder-begin(root.reorder-index,
-                                        root.absolute-position.y - root.y);
+                                        root.absolute-position.y - root.y,
+                                        self.absolute-position.x - root.x + self.mouse-x,
+                                        self.absolute-position.y - root.y + self.mouse-y);
                                 }
                                 if (self.dragging) {
                                     root.reorder-update(
+                                        self.absolute-position.x - root.x + self.mouse-x,
                                         self.absolute-position.y - root.y + self.mouse-y);
                                 }
                             }

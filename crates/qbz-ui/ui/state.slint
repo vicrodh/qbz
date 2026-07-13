@@ -968,6 +968,12 @@ export global DragState {
     in-out property <length> pointer-y;
     // The sidebar playlist id currently under the pointer (drop target).
     in-out property <string> over-playlist-id;
+    // WITHIN-LIST reorder drag (playlist custom order, issue #589): the
+    // gesture reuses this global purely for the floating ghost (DragGhost's
+    // window-coord positioning), driven from .slint only — DragActions is
+    // never called, so the Rust add-to-playlist drop path never runs.
+    // Sidebar rows skip drop-target detection while this is set.
+    in-out property <bool> reorder: false;
 }
 
 export global DragActions {
@@ -4053,6 +4059,17 @@ export global NowPlayingState {
     // Nyquist). 0 = unknown.
     in property <int> sample-rate-hz: 0;
     in property <int> bit-depth: 0;
+
+    // EFFECTIVE (delivered) stream quality — what the engine is actually
+    // decoding after the streaming-quality setting downgrade (#590 follow-up).
+    // The badge keeps showing the catalog MAX (quality-tier/detail above);
+    // when the delivered stream is below it, `quality-downgraded` turns on
+    // the AudioStamp's downgrade arrow and `quality-true-detail` carries the
+    // true "16-bit / 44.1 kHz" line for the hover tooltip. 0 / "" = unknown.
+    in property <int> effective-sample-rate-hz: 0;
+    in property <int> effective-bit-depth: 0;
+    in property <bool> quality-downgraded: false;
+    in property <string> quality-true-detail;
 
     // Output backend + mode LEDs (Mode C "Small" bar reads these). Mirror of
     // the same four on SettingsState (:2154-2157) — surfaced here so the

@@ -159,6 +159,9 @@ component SidebarRow inherits Rectangle {
         // to get the true window bounds (the drag pointer in DragState is
         // already in true window coords — TrackRow corrects it the same way).
         root.drop-hot = root.drag-on
+            // A within-list reorder drag (playlist custom order) reuses the
+            // DragState ghost but is NOT an add-to-playlist drop.
+            && !DragState.reorder
             && !root.is-folder
             && root.drag-px >= root.absolute-position.x - root.x
             && root.drag-px <= root.absolute-position.x - root.x + root.width
