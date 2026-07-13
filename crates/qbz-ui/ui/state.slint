@@ -1994,6 +1994,11 @@ export global PlaylistActions {
     callback search(string);
     // Sort by a field (re-selecting the active field toggles asc/desc).
     callback set-sort(string);
+    // Drag-reorder commit (custom-order list, issue #589): move the row at
+    // visible index `from` to insertion slot `to` (0..N; slots `from` and
+    // `from+1` are the no-op gaps and never fire). Complements the
+    // single-step ("track","move-up"/"move-down") chevron arms.
+    callback reorder-track(int /* from */, int /* to */);
 }
 
 // "Edit playlist" modal state (rename + description + delete).

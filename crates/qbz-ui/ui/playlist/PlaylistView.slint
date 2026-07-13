@@ -337,6 +337,40 @@ export component PlaylistView inherits Rectangle {
         : PlaylistState.sort-field == "custom" ? @tr("Custom")
         : @tr("Default");
 
+    // --- Custom-order drag-reorder state (issue #589) -------------------
+    // Component-LOCAL, mirroring QueueSidebar's UP NEXT drag — NOT the
+    // DragState global (that one drives the track->sidebar-playlist ghost).
+    // All indices are VISIBLE-list indices into PlaylistState.tracks.
+    property <bool> reorder-active: false;
+    property <int> reorder-from: -1;        // visible index of the dragged row
+    property <int> reorder-over: -1;        // insertion slot 0..N
+    // Window-Y of the track ListView's TOP EDGE, captured at drag-begin
+    // (row window-top - row*50px - viewport-y). Unlike the queue's fixed
+    // list-top, the live viewport-y is folded back in below so the slot
+    // math stays scroll-aware.
+    property <length> reorder-list-top;
+    // Live pointer window-Y during the drag (positions the floating ghost).
+    property <length> reorder-pointer-y;
+
+    // Pointer window-Y -> insertion slot [0..N]. Rows are a fixed 50px
+    // stacked with 0 spacing; the +0.5 rounds boundaries to row centers
+    // (top half of row k -> slot k, bottom half -> slot k+1).
+    pure function slot-from-pointer(win-y: length) -> int {
+        return Math.max(0, Math.min(PlaylistState.tracks.length,
+            Math.floor((win-y - root.reorder-list-top - track-list.viewport-y) / 50px + 0.5)));
+    }
+    function commit-reorder() {
+        root.reorder-active = false;
+        // Fire only a real move. `to == from` and `to == from+1` both drop
+        // back onto the same gap (no-op).
+        if (root.reorder-over != root.reorder-from
+            && root.reorder-over != root.reorder-from + 1) {
+            PlaylistActions.reorder-track(root.reorder-from, root.reorder-over);
+        }
+        root.reorder-from = -1;
+        root.reorder-over = -1;
+    }
+
     background: Theme.surface-main;
 
     page := VerticalLayout {
@@ -989,6 +1023,28 @@ export component PlaylistView inherits Rectangle {
                             local-goto-actions: (track.source == "local" || track.source == "plex")
                                 && track.id.is-float();
                             multi-select-mode: PlaylistState.multi-select-mode;
+                            // Drag-reorder (issue #589): the row's grip handle
+                            // reports the gesture; this view owns the state.
+                            reorder-index: i;
+                            reorder-source: root.reorder-active && root.reorder-from == i;
+                            reorder-begin(idx, row-top) => {
+                                root.reorder-active = true;
+                                root.reorder-from = idx;
+                                root.reorder-over = idx;
+                                root.reorder-list-top =
+                                    row-top - idx * 50px - track-list.viewport-y;
+                                root.reorder-pointer-y = row-top;
+                            }
+                            reorder-update(pointer-y) => {
+                                root.reorder-over = root.slot-from-pointer(pointer-y);
+                                root.reorder-pointer-y = pointer-y;
+                                // TODO: auto-scroll during drag when the pointer
+                                // nears the list's top/bottom edge (the drag
+                                // currently reorders within the visible viewport).
+                            }
+                            reorder-end => {
+                                root.commit-reorder();
+                            }
                             media-action(kind, id, action) => {
                                 if (action == "play") {
                                     root.play-track(id);
@@ -998,6 +1054,23 @@ export component PlaylistView inherits Rectangle {
                             }
                         }
                     }
+                }
+                // Drop indicator: a 2px accent line at the insertion slot,
+                // hidden on the two no-op slots (from, from+1). The slot's
+                // content-space position folds back through viewport-y;
+                // clamped to the list rect so a slot scrolled out of view
+                // never paints outside it. Width stops before the 14px
+                // scrollbar gutter.
+                if root.reorder-active
+                    && root.reorder-over != root.reorder-from
+                    && root.reorder-over != root.reorder-from + 1: Rectangle {
+                    x: 0;
+                    y: Math.max(0px, Math.min(parent.height - 2px,
+                        root.reorder-over * 50px + track-list.viewport-y - 1px));
+                    width: parent.width - 14px;
+                    height: 2px;
+                    background: Theme.accent;
+                    border-radius: 1px;
                 }
                 ListScrollbar {
                     // Anchor to the VIEW's right edge like LocalLibrary > Tracks:
@@ -1351,6 +1424,39 @@ export component PlaylistView inherits Rectangle {
                         font-size: Typography.body;
                         wrap: word-wrap;
                     }
+                }
+            }
+        }
+    }
+
+    // Floating drag ghost — a pill following the pointer with the dragged
+    // track's title (QueueSidebar parity). A free-positioned child of the
+    // view ROOT (NOT a layout child), declared last so it renders above the
+    // list. Converts the live pointer window-Y into this view's local space.
+    if root.reorder-active
+            && root.reorder-from >= 0
+            && root.reorder-from < PlaylistState.tracks.length: Rectangle {
+        x: 44px;
+        y: root.reorder-pointer-y - root.absolute-position.y - self.height / 2;
+        width: Math.min(360px, root.width - 88px);
+        height: 34px;
+        background: Theme.surface-elevated;
+        border-radius: Radius.sm;
+        border-width: 1px;
+        border-color: Theme.accent;
+        opacity: 0.95;
+        HorizontalLayout {
+            padding-left: 10px;
+            padding-right: 10px;
+            VerticalLayout {
+                alignment: center;
+                horizontal-stretch: 1;
+                Text {
+                    text: PlaylistState.tracks[root.reorder-from].title;
+                    color: Theme.text-primary;
+                    font-size: 12px;
+                    font-weight: Typography.medium;
+                    overflow: elide;
                 }
             }
         }

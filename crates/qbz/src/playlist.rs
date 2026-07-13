@@ -240,6 +240,21 @@ pub fn swap_full_items(window: &AppWindow, a: usize, b: usize) {
     refresh_view(window);
 }
 
+/// Remove the FULL row at natural-order index `from` and re-insert it at
+/// `insert_at`, then re-render through the active search/sort. The LOCAL
+/// detail's optimistic DRAG-reorder move (issue #589) — the arbitrary-index
+/// sibling of [`swap_full_items`]. UI thread.
+pub fn move_full_item(window: &AppWindow, from: usize, insert_at: usize) {
+    FULL_ITEMS.with(|cell| {
+        let mut items = cell.borrow_mut();
+        if from < items.len() && insert_at < items.len() {
+            let item = items.remove(from);
+            items.insert(insert_at, item);
+        }
+    });
+    refresh_view(window);
+}
+
 /// Load the playlist's custom order from library.db, seeding it from
 /// `seed` keys (see [`custom_seed_keys`]) if none exists. Returns
 /// `((track_id, is_local), position)` rows — `is_local` is kept (Seam E;
@@ -321,6 +336,76 @@ pub fn move_track(window: &AppWindow, track_id: &str, up: bool) -> Vec<(u64, boo
         idx + 1
     };
     keys.swap(idx, swap);
+    // Rebuild contiguous positions.
+    let orders: Vec<(u64, bool, i32)> = keys
+        .iter()
+        .enumerate()
+        .map(|(i, &(id, is_local))| (id, is_local, i as i32))
+        .collect();
+    CUSTOM_ORDER.with(|c| {
+        let mut m = c.borrow_mut();
+        m.clear();
+        for &(id, is_local, pos) in &orders {
+            m.insert((id, is_local), pos);
+        }
+    });
+    refresh_view(window);
+    orders
+}
+
+/// Drag-reorder (issue #589): move the row at VISIBLE index `from` to
+/// insertion slot `to` (0..=N, visible-list slots) in the custom order —
+/// the arbitrary-index sibling of [`move_track`]. Same rebuild contract:
+/// clean 0..N-1 positions over the keyed rows, optimistic re-render, and
+/// the new `(id, is_local, position)` rows returned for persisting.
+/// Un-keyed rows (no stable numeric id) can't participate: dragging one,
+/// or dropping against one, is a no-op. UI thread.
+pub fn reorder_track(window: &AppWindow, from: usize, to: usize) -> Vec<(u64, bool, i32)> {
+    use slint::Model;
+    // Slots `from` and `from + 1` drop back onto the same gap (the UI
+    // already skips them; keep the guard for safety).
+    if to == from || to == from + 1 {
+        return Vec::new();
+    }
+    let model = window.global::<PlaylistState>().get_tracks();
+    let len = model.row_count();
+    if from >= len || to > len {
+        return Vec::new();
+    }
+    let Some(target) = model.row_data(from).as_ref().and_then(custom_key) else {
+        return Vec::new();
+    };
+    // Anchor: the visible row the dragged row lands AGAINST — moving down,
+    // the row just above the insertion gap (dragged goes after it); moving
+    // up, the row at the gap (dragged goes before it).
+    let moving_down = to > from;
+    let anchor_visible = if moving_down { to - 1 } else { to };
+    let Some(anchor) = model.row_data(anchor_visible).as_ref().and_then(custom_key) else {
+        return Vec::new();
+    };
+    if anchor == target {
+        return Vec::new();
+    }
+    // Current keyed custom order (same derivation as move_track).
+    let order = CUSTOM_ORDER.with(|c| c.borrow().clone());
+    let mut keys: Vec<(u64, bool)> =
+        FULL_ITEMS.with(|cell| cell.borrow().iter().filter_map(custom_key).collect());
+    keys.sort_by_key(|key| order.get(key).copied().unwrap_or(i32::MAX));
+    let Some(idx) = keys.iter().position(|&key| key == target) else {
+        return Vec::new();
+    };
+    let moved = keys.remove(idx);
+    let insert_at = match keys.iter().position(|&key| key == anchor) {
+        Some(a) => {
+            if moving_down {
+                a + 1
+            } else {
+                a
+            }
+        }
+        None => keys.len(),
+    };
+    keys.insert(insert_at.min(keys.len()), moved);
     // Rebuild contiguous positions.
     let orders: Vec<(u64, bool, i32)> = keys
         .iter()

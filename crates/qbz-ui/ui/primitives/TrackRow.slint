@@ -34,8 +34,11 @@ export component TrackRow inherits Rectangle {
     // single shared interaction gate every blacklist surface reuses.
     property <bool> row-inert: root.track.is-blacklisted;
     // Fade out when the row is being removed (favorites un-favorite); a
-    // blacklisted row that isn't fading dims to 0.4.
-    opacity: root.track.removing ? 0.0 : (root.row-inert ? 0.4 : 1.0);
+    // blacklisted row that isn't fading dims to 0.4, and so does the row
+    // currently being drag-reordered (queue-drag parity).
+    opacity: root.track.removing
+        ? 0.0
+        : ((root.row-inert || root.reorder-source) ? 0.4 : 1.0);
     animate opacity { duration: 250ms; }
     in property <int> index;
     in property <bool> show-artwork: true;
@@ -84,6 +87,16 @@ export component TrackRow inherits Rectangle {
     // Custom-order reorder controls (up/down chevrons) at the leading
     // edge — used by the playlist custom sort.
     in property <bool> show-reorder: false;
+    // Drag-reorder (custom-order lists, issue #589). Mirrors QueueRow's
+    // drag contract: the grip handle in the reorder gutter reports the
+    // gesture in WINDOW coords; the parent view owns the list-level state.
+    // NOT the row-body drag (ta + DragActions = drag onto sidebar
+    // playlists) — the handle has its OWN TouchArea.
+    in property <int> reorder-index;
+    in property <bool> reorder-source: false;   // this row is being dragged
+    callback reorder-begin(int /* visible index */, length /* row window-top */);
+    callback reorder-update(length /* pointer window-y */);
+    callback reorder-end();
     // Whether the row can be dragged onto sidebar playlists.
     in property <bool> draggable: true;
     callback media-action(string, string, string);
@@ -234,43 +247,112 @@ export component TrackRow inherits Rectangle {
         padding-right: 12px;
         spacing: 14px;
 
-        // Reorder chevrons (custom-order mode) — leading edge.
-        if root.show-reorder: VerticalLayout {
-            alignment: center;
-            spacing: 0px;
-            Rectangle {
-                width: 22px;
-                height: 18px;
-                QbzIcon {
-                    source: @image-url("../assets/icons/chevron-up.svg");
-                    width: 14px;
-                    height: 14px;
-                    x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
-                    y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
-                    tint: up-ta.has-hover ? Theme.text-primary : Theme.text-muted;
-                }
-                up-ta := TouchArea {
-                    mouse-cursor: pointer;
-                    clicked => {
-                        root.media-action("track", root.track.id, "move-up");
+        // Reorder gutter (custom-order mode) — leading edge: a drag GRIP
+        // handle next to the up/down chevrons. The grip's TouchArea is
+        // deliberately separate from the row-body `ta` (which drives the
+        // drag-onto-sidebar-playlists ghost via DragActions) — this one
+        // implements the queue's drag-reorder gesture (QueueRow) and
+        // reports in window coords via the reorder-* callbacks.
+        if root.show-reorder: HorizontalLayout {
+            spacing: 2px;
+            VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    width: 18px;
+                    height: 36px;
+                    border-radius: Radius.sm;
+                    background: grip-ta.has-hover ? Theme.surface-elevated : transparent;
+                    QbzIcon {
+                        source: @image-url("../assets/icons/grip-vertical.svg");
+                        width: 14px;
+                        height: 14px;
+                        x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                        y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                        tint: grip-ta.has-hover ? Theme.text-primary : Theme.text-muted;
+                    }
+                    grip-ta := TouchArea {
+                        mouse-cursor: grab;
+                        property <length> down-y;
+                        property <bool> dragging: false;
+                        pointer-event(e) => {
+                            if (e.kind == PointerEventKind.down) {
+                                // absolute-position double-counts the ROW's own
+                                // layout offset inside the ListView; subtracting
+                                // root.{y} recovers true window coords — and the
+                                // correction propagates unchanged to this nested
+                                // element (if/for offsets are exact). See
+                                // reference_slint_absolute_position_flickable.
+                                self.down-y = self.absolute-position.y - root.y + self.mouse-y;
+                                self.dragging = false;
+                            }
+                            if (e.kind == PointerEventKind.up && self.dragging) {
+                                root.reorder-end();
+                                self.dragging = false;
+                            }
+                        }
+                        // Safety net: the playlist ListView stays scrollable, so
+                        // it can steal the grab mid-drag and `up` never arrives.
+                        // `pressed` flips false on release AND grab-cancel.
+                        changed pressed => {
+                            if (!self.pressed && self.dragging) {
+                                root.reorder-end();
+                                self.dragging = false;
+                            }
+                        }
+                        moved => {
+                            if (self.pressed) {
+                                if (!self.dragging
+                                    && Math.abs(self.absolute-position.y - root.y + self.mouse-y - self.down-y) > 6px) {
+                                    self.dragging = true;
+                                    root.reorder-begin(root.reorder-index,
+                                        root.absolute-position.y - root.y);
+                                }
+                                if (self.dragging) {
+                                    root.reorder-update(
+                                        self.absolute-position.y - root.y + self.mouse-y);
+                                }
+                            }
+                        }
                     }
                 }
             }
-            Rectangle {
-                width: 22px;
-                height: 18px;
-                QbzIcon {
-                    source: @image-url("../assets/icons/chevron-down.svg");
-                    width: 14px;
-                    height: 14px;
-                    x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
-                    y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
-                    tint: down-ta.has-hover ? Theme.text-primary : Theme.text-muted;
+            VerticalLayout {
+                alignment: center;
+                spacing: 0px;
+                Rectangle {
+                    width: 22px;
+                    height: 18px;
+                    QbzIcon {
+                        source: @image-url("../assets/icons/chevron-up.svg");
+                        width: 14px;
+                        height: 14px;
+                        x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                        y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                        tint: up-ta.has-hover ? Theme.text-primary : Theme.text-muted;
+                    }
+                    up-ta := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            root.media-action("track", root.track.id, "move-up");
+                        }
+                    }
                 }
-                down-ta := TouchArea {
-                    mouse-cursor: pointer;
-                    clicked => {
-                        root.media-action("track", root.track.id, "move-down");
+                Rectangle {
+                    width: 22px;
+                    height: 18px;
+                    QbzIcon {
+                        source: @image-url("../assets/icons/chevron-down.svg");
+                        width: 14px;
+                        height: 14px;
+                        x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                        y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                        tint: down-ta.has-hover ? Theme.text-primary : Theme.text-muted;
+                    }
+                    down-ta := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            root.media-action("track", root.track.id, "move-down");
+                        }
                     }
                 }
             }

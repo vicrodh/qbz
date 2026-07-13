@@ -18000,6 +18000,41 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             });
     }
+    // Drag-reorder within the custom-order track list (issue #589): the
+    // drop commits ONE from->to move. Routes like the move-up/move-down
+    // chevron arms: LOCAL playlists write the repo position order directly
+    // (repo::reorder, B2); Qobuz playlists rebuild the custom-order sidecar
+    // optimistically and persist the full order off-thread.
+    {
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window
+            .global::<PlaylistActions>()
+            .on_reorder_track(move |from, to| {
+                let Some(w) = weak.upgrade() else { return; };
+                if from < 0 || to < 0 || to == from || to == from + 1 {
+                    return;
+                }
+                let (from, to) = (from as usize, to as usize);
+                let pid = w.global::<PlaylistState>().get_id().to_string();
+                if local_playlist::is_local_id(&pid) {
+                    local_playlist::reorder_row(&w, &handle, from, to);
+                } else {
+                    let orders = playlist::reorder_track(&w, from, to);
+                    if !orders.is_empty() {
+                        if let Ok(pid) = pid.parse::<u64>() {
+                            handle.spawn(async move {
+                                tokio::task::spawn_blocking(move || {
+                                    playlist::persist_custom(pid, orders);
+                                })
+                                .await
+                                .ok();
+                            });
+                        }
+                    }
+                }
+            });
+    }
 
     // Edit playlist (rename / delete).
     {
