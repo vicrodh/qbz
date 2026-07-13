@@ -75,6 +75,11 @@ enum AudioCommand {
         /// Total content length in bytes. Combined with `duration_secs`
         /// to estimate bytes-per-second when sizing the resume buffer.
         content_length: u64,
+        /// Play generation this command belongs to (PR #583 counter,
+        /// snapshotted at send time). The audio thread stops waiting for the
+        /// initial buffer as soon as a newer play intent bumps the counter,
+        /// instead of blocking up to 60s on a superseded download (#591).
+        play_gen: u64,
     },
     /// Pause playback
     Pause,
@@ -1000,6 +1005,11 @@ pub struct SharedState {
     /// 0 = Unknown (no stream active yet), 1 = Disabled (CPAL/Rodio / shared
     /// system path), 2 = DirectHardware (ALSA hw:), 3 = PluginFallback (plughw:).
     bit_perfect_mode: Arc<AtomicU8>,
+    /// Monotonic play generation (PR #583). Bumped by `Player::begin_play` on
+    /// every new play intent. Lives in the shared state so the audio thread
+    /// can detect that a queued `PlayStreaming` was superseded by a newer play
+    /// and stop waiting on its initial buffer instead of blocking ~60s (#591).
+    play_generation: Arc<AtomicU64>,
 }
 
 impl Default for SharedState {
@@ -1030,6 +1040,7 @@ impl SharedState {
             gapless_next_track_id: Arc::new(AtomicU64::new(0)),
             buffer_progress: Arc::new(AtomicU32::new(0)),
             bit_perfect_mode: Arc::new(AtomicU8::new(0)),
+            play_generation: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -1083,6 +1094,24 @@ impl SharedState {
             .write()
             .ok()
             .and_then(|mut m| m.take())
+    }
+
+    /// Start a new play intent; returns the generation token for this intent
+    /// (see `Player::begin_play`).
+    pub(crate) fn begin_play(&self) -> u64 {
+        self.play_generation.fetch_add(1, Ordering::SeqCst) + 1
+    }
+
+    /// The most recent play generation (the token a play command sent right
+    /// now would carry).
+    pub(crate) fn current_play_generation(&self) -> u64 {
+        self.play_generation.load(Ordering::SeqCst)
+    }
+
+    /// True while `gen` is still the newest play intent. The audio thread
+    /// uses this to abandon buffer waits for superseded plays (#591).
+    pub(crate) fn is_current_play(&self, gen: u64) -> bool {
+        self.current_play_generation() == gen
     }
 
     pub fn set_stream_quality(&self, sample_rate: u32, bit_depth: u32) {
@@ -1310,10 +1339,6 @@ pub struct Player {
     /// Two-level playback cache (L1 memory + optional L2 disk). A track is
     /// cached after its first play so replays start instantly.
     audio_cache: Arc<qbz_cache::AudioCache>,
-    /// Monotonic play generation. Bumped on every new play intent so a slow
-    /// `play_track` (network/CMAF) that finishes after a newer play cannot
-    /// restart the previous track (last-writer race on `AudioCommand::Play`).
-    play_generation: AtomicU64,
 }
 
 impl Default for Player {
@@ -1692,6 +1717,70 @@ impl Player {
                                     using_coreaudio_exclusive
                                 );
 
+                                // Legacy CPAL path for Play, shared by the
+                                // "backend not configured" and "backend init failed"
+                                // arms below (#591/#592 follow-up — same shape as the
+                                // streaming handler). Uses the track's native
+                                // rate/channels unchanged — no resampling is
+                                // introduced here.
+                                let legacy_stream = || -> Result<StreamType, String> {
+                                    // Get the audio device via CPAL
+                                    let device = if let Some(ref name) = *current_device_name {
+                                        log::info!("Looking for audio device: {}", name);
+                                        let found =
+                                            host.output_devices().ok().and_then(|mut devices| {
+                                                devices.find(|d| {
+                                                    cpal_device_name(d).as_deref()
+                                                        == Some(name.as_str())
+                                                })
+                                            });
+
+                                        match found {
+                                            Some(d) if is_device_valid(&d) => {
+                                                log::info!(
+                                                    "Found and validated device: {}",
+                                                    name
+                                                );
+                                                Some(d)
+                                            }
+                                            Some(_) => {
+                                                log::warn!("Device '{}' found but has no valid output configs, using default", name);
+                                                host.default_output_device()
+                                            }
+                                            None => {
+                                                log::warn!(
+                                                    "Device '{}' not found, using default",
+                                                    name
+                                                );
+                                                host.default_output_device()
+                                            }
+                                        }
+                                    } else {
+                                        log::info!("Using default audio device");
+                                        host.default_output_device()
+                                    };
+
+                                    let Some(device) = device else {
+                                        return Err(
+                                            "No audio output device available".to_string()
+                                        );
+                                    };
+
+                                    // Set current device name
+                                    if let Some(name) = cpal_device_name(&device) {
+                                        log::info!("Using audio device: {}", name);
+                                        thread_state.set_current_device(Some(name));
+                                    }
+
+                                    create_output_stream_with_config(
+                                        device,
+                                        sample_rate,
+                                        channels,
+                                        dac_passthrough,
+                                    )
+                                    .map(StreamType::rodio)
+                                };
+
                                 // Try backend system first (if configured), then fall back to legacy CPAL
                                 // This avoids unnecessary CPAL device enumeration for PipeWire DAC and ALSA Direct
                                 let stream_result = if let Some(settings) =
@@ -1703,84 +1792,41 @@ impl Player {
                                         channels,
                                         &thread_state,
                                     ) {
-                                        Some(result) => {
+                                        Some(Ok(stream)) => {
                                             // Backend system handled it - set device name from settings
-                                            if result.is_ok() {
-                                                let device_name = settings
-                                                    .output_device
-                                                    .clone()
-                                                    .unwrap_or_else(|| "Default".to_string());
-                                                log::info!(
-                                                    "Backend system using device: {}",
-                                                    device_name
-                                                );
-                                                thread_state.set_current_device(Some(device_name));
-                                            }
-                                            result
+                                            let device_name = settings
+                                                .output_device
+                                                .clone()
+                                                .unwrap_or_else(|| "Default".to_string());
+                                            log::info!(
+                                                "Backend system using device: {}",
+                                                device_name
+                                            );
+                                            thread_state.set_current_device(Some(device_name));
+                                            Ok(stream)
+                                        }
+                                        // macOS: the backend path is authoritative
+                                        // (CoreAudio ownership + nominal-rate handling);
+                                        // surface the failure unchanged — see init_device
+                                        // for the rationale.
+                                        #[cfg(target_os = "macos")]
+                                        Some(Err(e)) => Err(e),
+                                        // Linux/other: a backend init failure must not
+                                        // dead-end the Play (#591/#592 follow-up). Fall
+                                        // back to the legacy CPAL path immediately, same
+                                        // as the streaming handler and init_device do.
+                                        #[cfg(not(target_os = "macos"))]
+                                        Some(Err(e)) => {
+                                            log::warn!(
+                                                "Backend system init failed for Play: {}, falling back to legacy",
+                                                e
+                                            );
+                                            legacy_stream()
                                         }
                                         None => {
                                             // Backend system not configured, use legacy CPAL path
                                             log::info!("Backend system not configured, using legacy CPAL path");
-
-                                            // Get the audio device via CPAL
-                                            let device = if let Some(ref name) =
-                                                *current_device_name
-                                            {
-                                                log::info!("Looking for audio device: {}", name);
-                                                let found = host.output_devices().ok().and_then(
-                                                    |mut devices| {
-                                                        devices.find(|d| {
-                                                            cpal_device_name(d).as_deref()
-                                                                == Some(name.as_str())
-                                                        })
-                                                    },
-                                                );
-
-                                                match found {
-                                                    Some(d) if is_device_valid(&d) => {
-                                                        log::info!(
-                                                            "Found and validated device: {}",
-                                                            name
-                                                        );
-                                                        Some(d)
-                                                    }
-                                                    Some(_) => {
-                                                        log::warn!("Device '{}' found but has no valid output configs, using default", name);
-                                                        host.default_output_device()
-                                                    }
-                                                    None => {
-                                                        log::warn!(
-                                                            "Device '{}' not found, using default",
-                                                            name
-                                                        );
-                                                        host.default_output_device()
-                                                    }
-                                                }
-                                            } else {
-                                                log::info!("Using default audio device");
-                                                host.default_output_device()
-                                            };
-
-                                            let Some(device) = device else {
-                                                log::error!("No audio output device available");
-                                                thread_state.set_current_device(None);
-                                                thread_state.set_stream_error(true);
-                                                return;
-                                            };
-
-                                            // Set current device name
-                                            if let Some(name) = cpal_device_name(&device) {
-                                                log::info!("Using audio device: {}", name);
-                                                thread_state.set_current_device(Some(name));
-                                            }
-
-                                            create_output_stream_with_config(
-                                                device,
-                                                sample_rate,
-                                                channels,
-                                                dac_passthrough,
-                                            )
-                                            .map(StreamType::rodio)
+                                            legacy_stream()
                                         }
                                     }
                                 } else {
@@ -2086,6 +2132,7 @@ impl Player {
                             duration_secs,
                             start_position_secs,
                             content_length,
+                            play_gen,
                         } => {
                             log::info!(
                             "Audio thread: starting streaming playback for track {} ({}Hz, {} channels, {}s, start={}s)",
@@ -2381,8 +2428,26 @@ impl Player {
 
                             while !buffer_sufficient(&source)
                                 && start_wait.elapsed() < max_wait
+                                && thread_state.is_current_play(play_gen)
                             {
                                 std::thread::sleep(Duration::from_millis(50));
+                            }
+
+                            // A newer play intent superseded this one while we
+                            // were waiting (user clicked another track). Bail
+                            // out immediately — the newer PlayStreaming command
+                            // is queued right behind us — instead of blocking
+                            // the audio thread up to 60s on a download that no
+                            // longer matters (#591). Not an error: no
+                            // stream_error, quiet return (same shape as the
+                            // timeout return below).
+                            if !thread_state.is_current_play(play_gen) {
+                                log::info!(
+                                    "Streaming: play of track {} superseded after {}ms buffer wait — abandoning",
+                                    track_id,
+                                    start_wait.elapsed().as_millis()
+                                );
+                                return;
                             }
 
                             if !source.has_min_buffer() {
@@ -3830,19 +3895,22 @@ impl Player {
             visualizer_tap,
             diagnostic,
             audio_cache,
-            play_generation: AtomicU64::new(0),
         }
     }
 
     /// Start a new play intent; returns the generation token for this intent.
     /// Any earlier in-flight `play_track` whose generation no longer matches
-    /// must not start audio.
+    /// must not start audio. The monotonic counter lives in `SharedState`
+    /// (bumped on every new play intent) so a slow `play_track`
+    /// (network/CMAF) that finishes after a newer play cannot restart the
+    /// previous track (last-writer race on `AudioCommand::Play`), and so the
+    /// audio thread can abandon superseded buffer waits (#591).
     fn begin_play(&self) -> u64 {
-        self.play_generation.fetch_add(1, Ordering::SeqCst) + 1
+        self.state.begin_play()
     }
 
     fn is_current_play(&self, gen: u64) -> bool {
-        self.play_generation.load(Ordering::SeqCst) == gen
+        self.state.is_current_play(gen)
     }
 
     /// Play a track by ID.
@@ -4774,6 +4842,7 @@ impl Player {
                 duration_secs,
                 start_position_secs,
                 content_length,
+                play_gen: self.state.current_play_generation(),
             })
             .map_err(|e| {
                 log::error!("Player: Failed to send streaming command: {}", e);
@@ -4827,6 +4896,7 @@ impl Player {
                 duration_secs,
                 start_position_secs,
                 content_length,
+                play_gen: self.state.current_play_generation(),
             })
             .map_err(|e| {
                 log::error!("Player: Failed to send streaming command: {}", e);
