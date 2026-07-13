@@ -1,0 +1,96 @@
+# Workspace unit/doc tests for the shipping crates/ tree (Slint-era).
+#
+# Companion to the release/build workflows, not a substitute:
+#   - release-linux / build-slint / release-snap compile -p qbz (full UI, ~30 GB peak)
+#   - this job runs `cargo test` on every non-UI crate only (~5 min cold, ~1–2 min warm)
+#
+# Excludes qbz, qbz-ui, qbz-dac-wizard, qbz-slint-common so the UI compile unit
+# never enters the graph. Cache key is intentionally separate from
+# `slint-linux` (stable + test profile vs nightly + release).
+#
+# Repo policy note: release builds stay tag/dispatch-only. This is the one
+# workflow that runs on pre-release integration so regressions land before a
+# release cut. Path-filtered so packaging/docs PRs skip it.
+
+name: test-crates
+
+on:
+  pull_request:
+    # pre-release is the real base; main is listed so a PR opened against main
+    # still runs once before redirect-pr-to-prerelease retargets it.
+    branches: [pre-release, main]
+    paths:
+      - "crates/**"
+      - "scripts/cargo-test.sh"
+      - ".github/workflows/test-crates.yml"
+  push:
+    # Integration branch only — never main (a push to main is a release merge).
+    branches: [pre-release]
+    paths:
+      - "crates/**"
+      - "scripts/cargo-test.sh"
+      - ".github/workflows/test-crates.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: test-crates-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: cargo test (workspace, no UI)
+    runs-on: ubuntu-24.04
+    # Cold first run ~5 min (compile + test); warm ~1–2 min. Headroom for
+    # registry lag / cache restore, not for a Slint UI compile.
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          # Minimal subset of release-linux.yml deps: non-UI crates still link
+          # ALSA / JACK / D-Bus (qbz-audio) and OpenSSL (reqwest). mold matches
+          # the release linker for faster test-binary link.
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config mold \
+            libasound2-dev libjack-jackd2-dev \
+            libdbus-1-dev libssl-dev
+
+      # Floating stable is fine here: rust-cache keys on rustc -V, so a stable
+      # bump just rebuilds the test cache once. Nightly is reserved for the
+      # release/UI builds that need -Z threads.
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          # Manifest is crates/Cargo.toml → artifacts in crates/target (same
+          # workspaces mapping as release-linux / build-slint).
+          workspaces: crates -> target
+          shared-key: test-crates-linux
+          cache-on-failure: true
+          # PRs restore only. pre-release pushes write so the integration
+          # branch keeps the cache warm (mirrors release-linux save-if policy).
+          save-if: ${{ github.ref == 'refs/heads/pre-release' }}
+
+      - name: cargo test
+        env:
+          CARGO_TERM_COLOR: always
+          CARGO_BUILD_JOBS: "2"
+          # Faster link; no -Z flags (stable toolchain).
+          RUSTFLAGS: "-C link-arg=-fuse-ld=mold"
+        run: |
+          echo "::group::toolchain"
+          rustc -V
+          cargo -V
+          echo "::endgroup::"
+          START=$(date +%s)
+          ./scripts/cargo-test.sh
+          END=$(date +%s)
+          echo "cargo test wall time: $((END - START))s"
