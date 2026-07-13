@@ -2,7 +2,9 @@
 // mirror of QbzSlider, inverted so the TOP of the track is `maximum` and the
 // BOTTOM is `minimum` (the natural orientation for a volume column popping up
 // over a button). Like the other primitives it does not own its value: it
-// emits `changed(new-value)` and the caller updates the bound state.
+// emits `changed(new-value)` and the caller updates the bound state. During a
+// drag the thumb follows the pointer directly (local fraction) so it never
+// visibly steps between levels.
 
 import { Theme } from "../foundation/semantic-colors.slint";
 
@@ -23,6 +25,11 @@ export component QbzVerticalSlider inherits Rectangle {
     // Travel range for the thumb centre (top..bottom of the column).
     property <length> travel: root.height - root.thumb-size;
 
+    // Live drag: while held, the thumb tracks the POINTER directly.
+    property <bool> dragging: false;
+    property <float> live-fraction: 0.0;
+    property <float> shown-fraction: root.dragging ? root.live-fraction : root.fraction;
+
     // Track (the full vertical rail). HC-only outline keeps the rail visible
     // when accent flattens.
     Rectangle {
@@ -38,7 +45,7 @@ export component QbzVerticalSlider inherits Rectangle {
     Rectangle {
         x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
         width: 4px;
-        height: root.thumb-size / 2 + root.fraction * root.travel;
+        height: root.thumb-size / 2 + root.shown-fraction * root.travel;
         // Pin to the bottom so the fill rises from the floor.
         y: root.height - self.height;
         border-radius: 2px;
@@ -49,7 +56,7 @@ export component QbzVerticalSlider inherits Rectangle {
     // HC-only border delineates the disc against the filled track.
     Rectangle {
         x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
-        y: (1.0 - root.fraction) * root.travel;
+        y: (1.0 - root.shown-fraction) * root.travel;
         width: root.thumb-size;
         height: root.thumb-size;
         border-radius: root.thumb-size / 2;
@@ -58,28 +65,38 @@ export component QbzVerticalSlider inherits Rectangle {
         border-color: Theme.border-strong;
     }
 
-    // Map a pointer y to a clamped, rounded integer value (inverted axis).
+    // Continuous pointer fraction [0,1], inverted axis (no rounding).
+    function fraction-from-y(py: length) -> float {
+        max(0.0, min(1.0, 1.0 - (py - root.thumb-size / 2) / max(1px, root.travel)))
+    }
+    // Map a pointer y to the clamped, nearest integer value (closest to position).
     function value-from-y(py: length) -> int {
-        root.minimum + round(
-            max(0.0, min(1.0, 1.0 - (py - root.thumb-size / 2) / max(1px, root.travel)))
-            * (root.maximum - root.minimum)
-        )
+        root.minimum + round(root.fraction-from-y(py) * (root.maximum - root.minimum))
     }
 
     ta := TouchArea {
         mouse-cursor: pointer;
 
-        // Jump to the click point on press-down.
+        // Jump to the click point on press-down and start the live drag.
         pointer-event(e) => {
-            if (e.kind == PointerEventKind.down
-                && root.value-from-y(self.mouse-y) != root.value) {
-                root.changed(root.value-from-y(self.mouse-y));
+            if (e.kind == PointerEventKind.down) {
+                root.dragging = true;
+                root.live-fraction = root.fraction-from-y(self.mouse-y);
+                if (root.value-from-y(self.mouse-y) != root.value) {
+                    root.changed(root.value-from-y(self.mouse-y));
+                }
+            }
+            if (e.kind == PointerEventKind.up) {
+                root.dragging = false;
             }
         }
-        // Continuous drag while held.
+        // Continuous drag while held — thumb follows the pointer every frame.
         moved => {
-            if (root.value-from-y(self.mouse-y) != root.value) {
-                root.changed(root.value-from-y(self.mouse-y));
+            if (root.dragging) {
+                root.live-fraction = root.fraction-from-y(self.mouse-y);
+                if (root.value-from-y(self.mouse-y) != root.value) {
+                    root.changed(root.value-from-y(self.mouse-y));
+                }
             }
         }
     }

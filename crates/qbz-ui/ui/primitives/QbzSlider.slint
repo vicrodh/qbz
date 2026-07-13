@@ -1,8 +1,10 @@
 // Horizontal integer slider primitive — dark-themed, draggable.
 //
 // Like the other primitives it does not own its value: it emits
-// `changed(new-value)` and the caller updates the bound state. The thumb
-// position is derived from `value`, clamped to [minimum, maximum].
+// `changed(new-value)` and the caller updates the bound state. When idle the
+// thumb is derived from `value`; DURING A DRAG the thumb follows the pointer
+// directly (local drag fraction) so it feels 100% fluid instead of stepping to
+// the round-tripped bound value.
 
 import { Theme } from "../foundation/semantic-colors.slint";
 
@@ -26,6 +28,12 @@ export component QbzSlider inherits Rectangle {
     // Travel range for the thumb centre.
     property <length> travel: root.width - root.thumb-size;
 
+    // Live drag: while held, the thumb tracks the POINTER (continuous, no round-
+    // trip through the bound value) so it never visibly steps between levels.
+    property <bool> dragging: false;
+    property <float> live-fraction: 0.0;
+    property <float> shown-fraction: root.dragging ? root.live-fraction : root.fraction;
+
     // Track. HC-only outline so the rail stays visible when accent flattens.
     Rectangle {
         y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
@@ -40,7 +48,7 @@ export component QbzSlider inherits Rectangle {
     Rectangle {
         x: 0;
         y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
-        width: root.thumb-size / 2 + root.fraction * root.travel;
+        width: root.thumb-size / 2 + root.shown-fraction * root.travel;
         height: 4px;
         border-radius: 2px;
         background: Theme.accent;
@@ -48,7 +56,7 @@ export component QbzSlider inherits Rectangle {
 
     // Thumb. HC-only border delineates the disc against the filled track.
     Rectangle {
-        x: root.fraction * root.travel;
+        x: root.shown-fraction * root.travel;
         y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
         width: root.thumb-size;
         height: root.thumb-size;
@@ -58,31 +66,39 @@ export component QbzSlider inherits Rectangle {
         border-color: Theme.border-strong;
     }
 
-    // Map a pointer x to a clamped, rounded integer value.
+    // Continuous pointer fraction [0,1] — no rounding (drives the live thumb).
+    function fraction-from-x(px: length) -> float {
+        max(0.0, min(1.0, (px - root.thumb-size / 2) / max(1px, root.travel)))
+    }
+    // Map a pointer x to the clamped, nearest integer value (closest to position).
     function value-from-x(px: length) -> int {
-        root.minimum + round(
-            max(0.0, min(1.0, (px - root.thumb-size / 2) / max(1px, root.travel)))
-            * (root.maximum - root.minimum)
-        )
+        root.minimum + round(root.fraction-from-x(px) * (root.maximum - root.minimum))
     }
 
     ta := TouchArea {
         mouse-cursor: pointer;
 
-        // Jump to the click point on press-down.
+        // Jump to the click point on press-down and start the live drag.
         pointer-event(e) => {
-            if (e.kind == PointerEventKind.down
-                && root.value-from-x(self.mouse-x) != root.value) {
-                root.changed(root.value-from-x(self.mouse-x));
+            if (e.kind == PointerEventKind.down) {
+                root.dragging = true;
+                root.live-fraction = root.fraction-from-x(self.mouse-x);
+                if (root.value-from-x(self.mouse-x) != root.value) {
+                    root.changed(root.value-from-x(self.mouse-x));
+                }
             }
             if (e.kind == PointerEventKind.up) {
+                root.dragging = false;
                 root.released(root.value);
             }
         }
-        // Continuous drag while held.
+        // Continuous drag while held — thumb follows the pointer every frame.
         moved => {
-            if (root.value-from-x(self.mouse-x) != root.value) {
-                root.changed(root.value-from-x(self.mouse-x));
+            if (root.dragging) {
+                root.live-fraction = root.fraction-from-x(self.mouse-x);
+                if (root.value-from-x(self.mouse-x) != root.value) {
+                    root.changed(root.value-from-x(self.mouse-x));
+                }
             }
         }
     }
