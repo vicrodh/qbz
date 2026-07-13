@@ -956,7 +956,13 @@ fn dop_writer_thread(
 
         if !buf.is_empty() {
             if let Err(e) = stream.write_dop_i32(&buf) {
-                log::error!("[DoP Engine] Write failed: {}", e);
+                // Match PCM ALSA: a hard write failure must stop the writer.
+                // Continuing would desync DoP markers (harsh noise) and leave
+                // exclusive mode stuck while position still advances.
+                log::error!("[DoP Engine] Write failed: {e} — stopping writer");
+                is_playing.store(false, Ordering::SeqCst);
+                should_stop.store(true, Ordering::SeqCst);
+                break 'thread;
             }
             position_frames.fetch_add((buf.len() / channels as usize) as u64, Ordering::SeqCst);
         }
