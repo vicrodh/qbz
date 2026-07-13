@@ -1308,6 +1308,10 @@ pub struct Player {
     /// Two-level playback cache (L1 memory + optional L2 disk). A track is
     /// cached after its first play so replays start instantly.
     audio_cache: Arc<qbz_cache::AudioCache>,
+    /// Monotonic play generation. Bumped on every new play intent so a slow
+    /// `play_track` (network/CMAF) that finishes after a newer play cannot
+    /// restart the previous track (last-writer race on `AudioCommand::Play`).
+    play_generation: AtomicU64,
 }
 
 impl Default for Player {
@@ -3784,7 +3788,19 @@ impl Player {
             visualizer_tap,
             diagnostic,
             audio_cache,
+            play_generation: AtomicU64::new(0),
         }
+    }
+
+    /// Start a new play intent; returns the generation token for this intent.
+    /// Any earlier in-flight `play_track` whose generation no longer matches
+    /// must not start audio.
+    fn begin_play(&self) -> u64 {
+        self.play_generation.fetch_add(1, Ordering::SeqCst) + 1
+    }
+
+    fn is_current_play(&self, gen: u64) -> bool {
+        self.play_generation.load(Ordering::SeqCst) == gen
     }
 
     /// Play a track by ID.
@@ -3802,8 +3818,10 @@ impl Player {
         quality: Quality,
         start_position_secs: u64,
     ) -> Result<(), String> {
+        // Supersede any earlier in-flight play_track for a different intent.
+        let gen = self.begin_play();
         log::info!(
-            "Player: Starting playback for track {} with quality {:?} (start {}s)",
+            "Player: Starting playback for track {} with quality {:?} (start {}s, gen {gen})",
             track_id,
             quality,
             start_position_secs
@@ -3819,16 +3837,23 @@ impl Player {
                     quality
                 );
             } else {
+                if !self.is_current_play(gen) {
+                    log::info!(
+                        "Player: cache-hit play for track {track_id} superseded (gen {gen})"
+                    );
+                    return Ok(());
+                }
                 log::info!(
                     "[CACHE HIT] Track {} ({} bytes) — playing from cache",
                     track_id,
                     cached.size_bytes
                 );
-                let r = self.play_data(cached.data, track_id);
+                // Use apply_play_data so we do not bump generation again.
+                let r = self.apply_play_data(cached.data, track_id);
                 // Cached tracks play from in-memory data (no streaming resume
                 // offset); honor a session-resume position with a best-effort
                 // seek once playback has been handed to the audio thread.
-                if r.is_ok() && start_position_secs > 0 {
+                if r.is_ok() && start_position_secs > 0 && self.is_current_play(gen) {
                     let _ = self.seek(start_position_secs);
                 }
                 return r;
@@ -3848,6 +3873,12 @@ impl Player {
         log::info!("[CMAF] Attempting CMAF streaming for track {}", track_id);
         match qbz_qobuz::cmaf::setup_streaming(client, track_id, quality).await {
             Ok(cmaf_info) => {
+                if !self.is_current_play(gen) {
+                    log::info!(
+                        "Player: CMAF setup for track {track_id} superseded (gen {gen})"
+                    );
+                    return Ok(());
+                }
                 // Derive stream parameters from init segment metadata.
                 let sample_rate = cmaf_info.sampling_rate.unwrap_or(44100);
                 let channels = 2u16; // FLAC from Qobuz is always stereo
@@ -3950,6 +3981,13 @@ impl Player {
             }
         }
 
+        if !self.is_current_play(gen) {
+            log::info!(
+                "Player: legacy path for track {track_id} superseded before URL fetch (gen {gen})"
+            );
+            return Ok(());
+        }
+
         // Legacy fallback: get the stream URL
         log::info!("Player: Getting stream URL...");
         let stream_url = client
@@ -3959,6 +3997,13 @@ impl Player {
                 log::error!("Player: Failed to get stream URL: {}", e);
                 format!("Failed to get stream URL: {}", e)
             })?;
+
+        if !self.is_current_play(gen) {
+            log::info!(
+                "Player: legacy download for track {track_id} superseded after URL (gen {gen})"
+            );
+            return Ok(());
+        }
 
         log::info!(
             "Player: Got stream URL: {} (format: {})",
@@ -3974,14 +4019,21 @@ impl Player {
         })?;
         log::info!("Player: Cached {} bytes of audio data", audio_data.len());
 
+        if !self.is_current_play(gen) {
+            log::info!(
+                "Player: legacy play for track {track_id} superseded after download (gen {gen})"
+            );
+            return Ok(());
+        }
+
         // Store the legacy download in the cache for instant replay.
         if !skip_cache {
             self.audio_cache.insert(track_id, audio_data.clone());
         }
 
-        // Send to audio thread
-        let r = self.play_data(audio_data, track_id);
-        if r.is_ok() && start_position_secs > 0 {
+        // Send to audio thread (do not re-bump generation)
+        let r = self.apply_play_data(audio_data, track_id);
+        if r.is_ok() && start_position_secs > 0 && self.is_current_play(gen) {
             let _ = self.seek(start_position_secs);
         }
         r
@@ -4386,7 +4438,18 @@ impl Player {
     }
 
     /// Play from raw audio data (for cached tracks)
+    /// Play from raw audio data (for cached / offline tracks).
+    ///
+    /// Bumps play generation so this call supersedes any in-flight
+    /// `play_track` that has not yet applied audio.
     pub fn play_data(&self, data: Vec<u8>, track_id: u64) -> Result<(), String> {
+        let _gen = self.begin_play();
+        self.apply_play_data(data, track_id)
+    }
+
+    /// Send `Play` without bumping generation (used by `play_track` after
+    /// its own `begin_play` + supersede checks).
+    fn apply_play_data(&self, data: Vec<u8>, track_id: u64) -> Result<(), String> {
         log::info!(
             "Player: Playing {} bytes of audio data for track {}",
             data.len(),
