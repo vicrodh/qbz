@@ -227,11 +227,13 @@ impl ThemeId {
         use ThemeId::*;
         match self {
             Dark | Oled | Light | System => ThemeCategory::Core,
-            Warm | Nord | Dracula | TokyoNight | CatppuccinMocha | CatppuccinLatte | CatppuccinFrappe | CatppuccinMacchiato | BreezeDark | AdwaitaDark
+            Warm | Nord | Dracula | TokyoNight | CatppuccinMocha | CatppuccinFrappe
+            | CatppuccinMacchiato | BreezeDark | AdwaitaDark
             | Aurora | Ikari | Ayanami | Iscariot | Stratego | Rumi | Zoey | Mira | Frost
             | Langley => ThemeCategory::Dark,
-            Alucard | RosePineDawn | BreezeLight | AdwaitaLight | DuotoneSnow | SnowStorm
-            | Kurosaki => ThemeCategory::Light,
+            // Catppuccin Latte is the LIGHT flavor — groups with the light themes.
+            Alucard | CatppuccinLatte | RosePineDawn | BreezeLight | AdwaitaLight | DuotoneSnow
+            | SnowStorm | Kurosaki => ThemeCategory::Light,
             WcagLight | WcagDark | HighContrast | HighContrastLight | Colorblind => {
                 ThemeCategory::Accessibility
             }
