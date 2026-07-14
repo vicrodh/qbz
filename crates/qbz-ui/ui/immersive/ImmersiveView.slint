@@ -153,7 +153,8 @@ component TinyBar inherits Rectangle {
 component VolumeBar inherits Rectangle {
     in property <float> value: 0.0;        // 0..1
     in property <bool> locked: false;
-    callback changed(float);               // emits 0..1
+    callback changed(float);               // emits 0..1 — live (every drag tick)
+    callback released(float);              // emits 0..1 — drag-end only (persist)
 
     // The visual fill fraction: pinned to 100% when locked (matches Tauri).
     property <float> shown: root.locked ? 1.0 : Math.max(0.0, Math.min(1.0, root.value));
@@ -224,6 +225,13 @@ component VolumeBar inherits Rectangle {
         moved => {
             if (!root.locked && self.pressed) {
                 root.changed(Math.max(0.0, Math.min(1.0, self.mouse-x / self.width)));
+            }
+        }
+        // Persist only the final value on drag-end (matches the NPB sliders'
+        // released -> persist-volume; live changes still fire via changed).
+        pointer-event(e) => {
+            if (!root.locked && e.kind == PointerEventKind.up) {
+                root.released(Math.max(0.0, Math.min(1.0, self.mouse-x / self.width)));
             }
         }
     }
@@ -352,6 +360,11 @@ component ImmersivePlayerBar inherits Rectangle {
         changed(v) => {
             if (!root.vol-locked) {
                 NowPlayingState.set-volume(v);
+            }
+        }
+        released(v) => {
+            if (!root.vol-locked) {
+                NowPlayingState.persist-volume(v);
             }
         }
     }
