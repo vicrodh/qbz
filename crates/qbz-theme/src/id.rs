@@ -43,6 +43,9 @@ pub enum ThemeId {
     Dracula,
     TokyoNight, // P1
     CatppuccinMocha,
+    CatppuccinLatte,
+    CatppuccinFrappe,
+    CatppuccinMacchiato,
     BreezeDark,
     AdwaitaDark,
     Aurora,
@@ -82,6 +85,9 @@ pub const ALL: &[ThemeId] = &[
     ThemeId::Dracula,
     ThemeId::TokyoNight,
     ThemeId::CatppuccinMocha,
+    ThemeId::CatppuccinLatte,
+    ThemeId::CatppuccinFrappe,
+    ThemeId::CatppuccinMacchiato,
     ThemeId::BreezeDark,
     ThemeId::AdwaitaDark,
     ThemeId::Aurora,
@@ -134,6 +140,9 @@ impl ThemeId {
             ThemeId::Dracula => "dracula",
             ThemeId::TokyoNight => "tokyo-night",
             ThemeId::CatppuccinMocha => "catppuccin-mocha",
+            ThemeId::CatppuccinLatte => "catppuccin-latte",
+            ThemeId::CatppuccinFrappe => "catppuccin-frappe",
+            ThemeId::CatppuccinMacchiato => "catppuccin-macchiato",
             ThemeId::BreezeDark => "breeze-dark",
             ThemeId::AdwaitaDark => "adwaita-dark",
             ThemeId::Aurora => "aurora",
@@ -181,6 +190,9 @@ impl ThemeId {
             ThemeId::Dracula => "Dracula",
             ThemeId::TokyoNight => "Tokyo Night",
             ThemeId::CatppuccinMocha => "Catppuccin Mocha",
+            ThemeId::CatppuccinLatte => "Catppuccin Latte",
+            ThemeId::CatppuccinFrappe => "Catppuccin Frappé",
+            ThemeId::CatppuccinMacchiato => "Catppuccin Macchiato",
             ThemeId::BreezeDark => "Breeze Dark",
             ThemeId::AdwaitaDark => "Adwaita Dark",
             ThemeId::Aurora => "Aurora",
@@ -215,7 +227,7 @@ impl ThemeId {
         use ThemeId::*;
         match self {
             Dark | Oled | Light | System => ThemeCategory::Core,
-            Warm | Nord | Dracula | TokyoNight | CatppuccinMocha | BreezeDark | AdwaitaDark
+            Warm | Nord | Dracula | TokyoNight | CatppuccinMocha | CatppuccinLatte | CatppuccinFrappe | CatppuccinMacchiato | BreezeDark | AdwaitaDark
             | Aurora | Ikari | Ayanami | Iscariot | Stratego | Rumi | Zoey | Mira | Frost
             | Langley => ThemeCategory::Dark,
             Alucard | RosePineDawn | BreezeLight | AdwaitaLight | DuotoneSnow | SnowStorm
