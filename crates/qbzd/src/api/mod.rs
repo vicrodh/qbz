@@ -306,6 +306,18 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     diff == 0
 }
 
+/// Canonical JSON number for a volume level (0.0-1.0). `serde_json::Value`
+/// backs f32 via `Number::from_f32`, which stores the value as `f as f64` —
+/// the f32→f64 widening turns `0.8f32` into `0.800000011920929` on the wire.
+/// 02-cli-and-api.md §2.2/§3.3.4 document plain `0.8`, and `--json` is the
+/// frozen machine contract ("scripts parse this"), so every volume-bearing
+/// response routes through this instead of a bare `json!(v)`. 3 decimals is
+/// plenty of precision for a 0.0-1.0 level.
+pub(crate) fn canon_volume(v: f32) -> serde_json::Value {
+    let rounded = (v as f64 * 1000.0).round() / 1000.0;
+    serde_json::json!(rounded)
+}
+
 /// A 2xx JSON response. `pub(crate)` so the per-route handlers in `status.rs`
 /// share the exact same envelope framing.
 pub(crate) fn json(status: u16, body: serde_json::Value) -> Response<Cursor<Vec<u8>>> {
@@ -413,6 +425,16 @@ mod tests {
         // /api/ping answers even with no/ wrong bearer.
         assert!(access_gate(false, "GET", "/api/ping", None, tok).is_none());
         assert!(access_gate(false, "GET", "/api/ping", Some("Bearer nope"), tok).is_none());
+    }
+
+    #[test]
+    fn canon_volume_pins_0_8_exactly_no_f32_widening() {
+        // `serde_json::Number::from_f32` widens f32→f64 (`0.8f32` would
+        // serialize raw as `0.800000011920929`); `canon_volume` must not.
+        assert_eq!(serde_json::to_string(&canon_volume(0.8f32)).unwrap(), "0.8");
+        assert_eq!(serde_json::to_string(&canon_volume(1.0f32)).unwrap(), "1.0");
+        assert_eq!(serde_json::to_string(&canon_volume(0.0f32)).unwrap(), "0.0");
+        assert_eq!(serde_json::to_string(&canon_volume(0.75f32)).unwrap(), "0.75");
     }
 
     #[test]

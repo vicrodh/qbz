@@ -93,10 +93,14 @@ pub fn info(state: &super::ApiState) -> Response<Cursor<Vec<u8>>> {
 /// the CLI maps degradation (needs_auth, missing device) to exit codes.
 pub fn status(state: &super::ApiState) -> Response<Cursor<Vec<u8>>> {
     let doc = assemble_live(state);
-    super::json(
-        200,
-        serde_json::to_value(&doc).unwrap_or_else(|_| serde_json::json!({})),
-    )
+    let mut value = serde_json::to_value(&doc).unwrap_or_else(|_| serde_json::json!({}));
+    // `StatusDoc.playback.volume` is f32; plain `to_value` widens it via
+    // `Number::from_f32` (f32→f64, `0.8` → `0.800000011920929`). Overwrite
+    // with the canonical form — see `super::canon_volume`.
+    if let Some(vol) = value.pointer_mut("/playback/volume") {
+        *vol = super::canon_volume(doc.playback.volume);
+    }
+    super::json(200, value)
 }
 
 /// Compose [`StatusDoc`] from live sources: `DaemonShared` (auth/qconnect/latched
@@ -346,6 +350,22 @@ mod tests {
         );
         let json = serde_json::to_value(&doc.auth).unwrap();
         assert_eq!(json["state"], "needs_auth");
+    }
+
+    #[test]
+    fn status_doc_playback_volume_serializes_canonically() {
+        // Pins the `status()` pointer-overwrite: `to_value(&doc)` widens the
+        // f32 `playback.volume` via `Number::from_f32`; the fix must land
+        // `0.8` on the wire, never `0.800000011920929`.
+        let mut doc = needs_auth_doc();
+        doc.playback.volume = 0.8f32;
+        let mut value = serde_json::to_value(&doc).unwrap();
+        if let Some(vol) = value.pointer_mut("/playback/volume") {
+            *vol = crate::api::canon_volume(doc.playback.volume);
+        }
+        let rendered = serde_json::to_string(&value).unwrap();
+        assert!(rendered.contains("\"volume\":0.8"), "got: {rendered}");
+        assert!(!rendered.contains("0.80000"), "got: {rendered}");
     }
 
     #[test]
