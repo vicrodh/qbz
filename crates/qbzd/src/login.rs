@@ -5,8 +5,12 @@
 //   1. The one-shot listener binds an EPHEMERAL port (`bind((host, 0))`), NEVER
 //      the control-API port (D6 — this is what dissolves the loopback-vs-LAN 401
 //      contradiction: the callback lives on its own throwaway listener).
-//   2. A CSPRNG `state` nonce is added to the authorize URL and validated on the
-//      callback; a mismatched or second callback is dropped.
+//   2. A CSPRNG nonce is bound into the redirect PATH
+//      (`redirect_url=http://<host>:<port>/<nonce>`) and validated against the
+//      callback's request path; a mismatched or second callback is dropped. The
+//      nonce lives in the PATH — not an OAuth `state` param — because the
+//      working desktop flow sends no `state` and there is no evidence Qobuz
+//      echoes one; the redirect URL itself is preserved verbatim.
 //   3. The command only VALIDATES (live `login_with_token` / `login_with_oauth_code`)
 //      and PERSISTS the token into the daemon root, then best-effort nudges a
 //      running daemon to reload. It never activates a session in-process — the
@@ -147,9 +151,9 @@ pub async fn login_browser(
 
 /// Path 2 (02 §2.2): print the authorize URL, read the redirect URL (or a bare
 /// code) back from stdin. No listener binds — useful when the browser cannot
-/// reach this machine at all. A pasted redirect URL still carries the `state`
-/// nonce, so it is validated; a bare code is accepted as-is (explicit operator
-/// action).
+/// reach this machine at all. A pasted redirect URL carries the nonce in its
+/// path, so it is validated (leniently); a bare code is accepted as-is
+/// (explicit operator action).
 pub async fn login_paste(roots: &ProfileRoots) -> Result<UserSession, LoginError> {
     let runtime = build_login_runtime().await?;
     let app_id = read_app_id(&runtime).await?;
@@ -215,49 +219,77 @@ pub fn nudge_reload(host: &str, token: Option<&str>) -> bool {
 // ============================ pure, unit-tested ============================
 
 /// Build the Qobuz browser authorize URL. Mirrors the desktop shape
-/// (`crates/qbz/src/auth.rs:76-80`): bare `redirect_url=http://<host>:<port>`,
-/// plus a CSPRNG `state` nonce for callback binding.
+/// (`crates/qbz/src/auth.rs:76-80`) except the redirect URL carries the CSPRNG
+/// nonce as its path segment: `redirect_url=http://<host>:<port>/<nonce>`. The
+/// binding rides the redirect URL itself (preserved verbatim by the OAuth
+/// round-trip) instead of a `state` param, because the working desktop flow
+/// sends no `state` and Qobuz is not proven to echo one.
 pub fn build_oauth_url(ext_app_id: &str, host: &str, port: u16, nonce: &str) -> String {
-    let redirect = format!("http://{host}:{port}");
+    let redirect = format!("http://{host}:{port}/{nonce}");
     format!(
-        "https://www.qobuz.com/signin/oauth?ext_app_id={}&redirect_url={}&state={}",
+        "https://www.qobuz.com/signin/oauth?ext_app_id={}&redirect_url={}",
         ext_app_id,
         urlencoding::encode(&redirect),
-        nonce,
     )
 }
 
 /// Parse an HTTP request line from the one-shot listener. Returns the
-/// authorization code ONLY when the echoed `state` matches `expected_nonce`
-/// (a mismatched or absent nonce is dropped — the D6 binding). `code_autorisation`
-/// wins over `code`, matching the desktop.
+/// authorization code ONLY when the request PATH carries the expected nonce
+/// (`GET /<nonce>?...`) — a mismatched or absent path nonce is dropped (the D6
+/// binding). No dependency on any `state` query param (Qobuz is not proven to
+/// echo one; one present is simply ignored). `code_autorisation` wins over
+/// `code`, matching the desktop.
 pub fn parse_callback(request_line: &str, expected_nonce: &str) -> Option<String> {
     let target = request_line.split_whitespace().nth(1)?;
-    let query = target.split_once('?')?.1;
-    code_from_query(query, expected_nonce, true)
+    let (path, query) = target.split_once('?')?;
+    if path.trim_matches('/') != expected_nonce {
+        return None; // wrong or absent path nonce → drop
+    }
+    code_from_query(query)
 }
 
-/// Parse pasted `--paste` input: either a full redirect URL (validated against
-/// the nonce like a callback, but leniently — an absent `state` is tolerated
-/// because the operator pasted it by hand) or a bare authorization code.
+/// Parse pasted `--paste` input: either a full redirect URL or a bare
+/// authorization code. A pasted URL carries the nonce in its PATH (that is how
+/// the redirect was built); validation is lenient — an empty path is tolerated
+/// (hand-pasted, possibly truncated), a present-but-wrong path nonce is
+/// rejected.
 pub fn code_from_paste(input: &str, expected_nonce: &str) -> Option<String> {
     let input = input.trim();
     if input.is_empty() {
         return None;
     }
     match input.split_once('?') {
-        Some((_, query)) => code_from_query(query, expected_nonce, false),
+        Some((prefix, query)) => {
+            let seg = url_path(prefix).trim_matches('/');
+            if !seg.is_empty() && seg != expected_nonce {
+                return None; // present but mismatched → drop
+            }
+            code_from_query(query)
+        }
         // No query string: a bare code is fine; a bare URL has nothing to extract.
         None if input.contains("://") => None,
         None => Some(input.to_string()),
     }
 }
 
-/// Extract the code from a `&`-joined query string, enforcing the nonce.
-/// `require_state = true` (listener) drops anything without a matching `state`;
-/// `false` (paste) only rejects a PRESENT-but-wrong `state`.
-fn code_from_query(query: &str, expected_nonce: &str, require_state: bool) -> Option<String> {
-    let mut state: Option<String> = None;
+/// The path component of a URL prefix (everything before `?`): strips a
+/// `scheme://authority` head when present; a bare path passes through.
+fn url_path(prefix: &str) -> &str {
+    match prefix.find("://") {
+        Some(i) => {
+            let rest = &prefix[i + 3..];
+            match rest.find('/') {
+                Some(j) => &rest[j..],
+                None => "",
+            }
+        }
+        None => prefix,
+    }
+}
+
+/// Extract the authorization code from a `&`-joined query string.
+/// `code_autorisation` wins over `code` (desktop parity).
+fn code_from_query(query: &str) -> Option<String> {
     let mut code_aut: Option<String> = None;
     let mut code_plain: Option<String> = None;
     for pair in query.split('&') {
@@ -265,17 +297,10 @@ fn code_from_query(query: &str, expected_nonce: &str, require_state: bool) -> Op
             continue;
         };
         match k {
-            "state" => state = decode(v),
             "code_autorisation" => code_aut = decode(v),
             "code" => code_plain = decode(v),
             _ => {}
         }
-    }
-    match state.as_deref() {
-        Some(s) if s == expected_nonce => {}
-        Some(_) => return None,               // present but mismatched → drop
-        None if require_state => return None, // listener requires the nonce
-        None => {}                            // paste: no state present → allowed
     }
     code_aut.or(code_plain)
 }
@@ -284,7 +309,7 @@ fn decode(v: &str) -> Option<String> {
     urlencoding::decode(v).ok().map(|s| s.into_owned())
 }
 
-/// A 48-hex-char (24-byte) CSPRNG nonce for the OAuth `state` parameter.
+/// A 48-hex-char (24-byte) CSPRNG nonce, bound into the redirect-URL path.
 fn gen_nonce() -> String {
     use rand::RngExt;
     let mut bytes = [0u8; 24];
@@ -491,17 +516,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn build_oauth_url_embeds_redirect_host_port_and_state() {
-        // Step 1(a): the URL embeds redirect_url=http://<host>:<port> and a state nonce.
+    fn build_oauth_url_embeds_nonce_in_the_redirect_path() {
+        // Step 1(a), amended: the URL embeds
+        // redirect_url=http://<host>:<port>/<nonce> — the nonce rides the PATH,
+        // never a state param the provider would have to echo.
         let url = build_oauth_url("app123", "127.0.0.1", 39114, "NONCEabc");
         assert!(url.starts_with("https://www.qobuz.com/signin/oauth?"), "{url}");
         assert!(url.contains("ext_app_id=app123"), "{url}");
         let decoded = urlencoding::decode(&url).unwrap();
         assert!(
-            decoded.contains("redirect_url=http://127.0.0.1:39114"),
+            decoded.contains("redirect_url=http://127.0.0.1:39114/NONCEabc"),
             "{decoded}"
         );
-        assert!(url.contains("state=NONCEabc"), "{url}");
     }
 
     #[test]
@@ -510,40 +536,49 @@ mod tests {
         let url = build_oauth_url("app123", "192.168.0.40", 40000, "n");
         let decoded = urlencoding::decode(&url).unwrap();
         assert!(
-            decoded.contains("redirect_url=http://192.168.0.40:40000"),
+            decoded.contains("redirect_url=http://192.168.0.40:40000/n"),
             "{decoded}"
         );
     }
 
     #[test]
-    fn parse_callback_accepts_matching_nonce_and_extracts_code() {
-        let line = "GET /?state=abc123&code_autorisation=THECODE HTTP/1.1";
+    fn parse_callback_accepts_matching_path_nonce_and_extracts_code() {
+        let line = "GET /abc123?code_autorisation=THECODE HTTP/1.1";
         assert_eq!(parse_callback(line, "abc123"), Some("THECODE".to_string()));
     }
 
     #[test]
     fn parse_callback_falls_back_to_plain_code() {
-        let line = "GET /?state=n&code=plaincode HTTP/1.1";
+        let line = "GET /n?code=plaincode HTTP/1.1";
         assert_eq!(parse_callback(line, "n"), Some("plaincode".to_string()));
     }
 
     #[test]
     fn parse_callback_prefers_code_autorisation_over_code() {
-        let line = "GET /?state=n&code=plain&code_autorisation=preferred HTTP/1.1";
+        let line = "GET /n?code=plain&code_autorisation=preferred HTTP/1.1";
         assert_eq!(parse_callback(line, "n"), Some("preferred".to_string()));
     }
 
     #[test]
-    fn parse_callback_rejects_mismatched_nonce() {
-        // Step 1(b): a mismatched nonce is dropped even with a valid-looking code.
-        let line = "GET /?state=WRONG&code_autorisation=THECODE HTTP/1.1";
+    fn parse_callback_rejects_mismatched_path_nonce() {
+        // Step 1(b): a wrong path nonce is dropped even with a valid-looking code.
+        let line = "GET /WRONG?code_autorisation=THECODE HTTP/1.1";
         assert_eq!(parse_callback(line, "abc123"), None);
     }
 
     #[test]
-    fn parse_callback_rejects_absent_nonce() {
+    fn parse_callback_rejects_absent_path_nonce() {
         let line = "GET /?code_autorisation=THECODE HTTP/1.1";
         assert_eq!(parse_callback(line, "abc123"), None);
+    }
+
+    #[test]
+    fn parse_callback_needs_no_state_param_and_ignores_one() {
+        // The provider echoing state is exactly what we no longer depend on.
+        let no_state = "GET /abc123?code=OK HTTP/1.1";
+        assert_eq!(parse_callback(no_state, "abc123"), Some("OK".to_string()));
+        let stray_state = "GET /abc123?state=whatever&code=OK HTTP/1.1";
+        assert_eq!(parse_callback(stray_state, "abc123"), Some("OK".to_string()));
     }
 
     #[test]
@@ -554,13 +589,20 @@ mod tests {
 
     #[test]
     fn parse_callback_percent_decodes_the_code() {
-        let line = "GET /?state=n&code=x%2Fy HTTP/1.1";
+        let line = "GET /n?code=x%2Fy HTTP/1.1";
         assert_eq!(parse_callback(line, "n"), Some("x/y".to_string()));
     }
 
     #[test]
-    fn code_from_paste_accepts_full_redirect_url() {
-        let pasted = "http://127.0.0.1:43717/?state=nn&code_autorisation=PASTED";
+    fn code_from_paste_accepts_full_redirect_url_with_path_nonce() {
+        let pasted = "http://127.0.0.1:43717/nn?code_autorisation=PASTED";
+        assert_eq!(code_from_paste(pasted, "nn"), Some("PASTED".to_string()));
+    }
+
+    #[test]
+    fn code_from_paste_tolerates_a_missing_path_nonce() {
+        // Lenient by design: the operator pasted the URL by hand.
+        let pasted = "http://127.0.0.1:43717/?code_autorisation=PASTED";
         assert_eq!(code_from_paste(pasted, "nn"), Some("PASTED".to_string()));
     }
 
@@ -571,8 +613,8 @@ mod tests {
     }
 
     #[test]
-    fn code_from_paste_rejects_mismatched_nonce_in_url() {
-        let pasted = "http://127.0.0.1:43717/?state=WRONG&code_autorisation=PASTED";
+    fn code_from_paste_rejects_mismatched_path_nonce_in_url() {
+        let pasted = "http://127.0.0.1:43717/WRONG?code_autorisation=PASTED";
         assert_eq!(code_from_paste(pasted, "nn"), None);
     }
 
