@@ -7140,16 +7140,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // run before the shell renders so the first paint is the right palette.
     {
         let appearance = window.global::<AppearanceState>();
-        let labels: Vec<slint::SharedString> = crate::theme::dropdown_labels()
+        let prefs = crate::ui_prefs::load();
+        // Seed the dropdown honoring the persisted list filter (All/Dark/Light)
+        // so the list and the filter icon agree on the first paint.
+        let filter = prefs.theme_filter;
+        let labels: Vec<slint::SharedString> = crate::theme::filtered_dropdown_labels(filter)
             .into_iter()
             .map(slint::SharedString::from)
             .collect();
         appearance.set_themes(slint::ModelRc::new(slint::VecModel::from(labels)));
 
-        let slug = crate::ui_prefs::load().theme;
+        let slug = prefs.theme;
         let is_auto = slug == crate::theme::AUTO_SLUG;
         let is_custom = slug == crate::theme::CUSTOM_SLUG;
-        let selected_index = crate::theme::selected_index_for_slug(&slug);
+        // Highlight the active theme within the (possibly narrowed) list; -1 when
+        // it is filtered out — the palette is still applied below via the slug.
+        let selected_index = crate::theme::filtered_selected_index_for_slug(&slug, filter);
         appearance.set_theme_index(selected_index);
         appearance.set_theme_is_auto(is_auto);
         appearance.set_theme_is_custom(is_custom);
@@ -7172,9 +7178,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             appearance.set_theme_is_system(id == qbz_theme::ThemeId::System);
             crate::theme::apply_theme(&window, id);
         }
-        // Keep the legacy ThemeState.mode in sync with the dropdown index for
-        // any residual reads; the palette itself is driven above.
-        window.global::<ThemeState>().set_mode(selected_index);
+        // Keep the legacy ThemeState.mode in sync with the UNFILTERED dropdown
+        // index for any residual reads (the filtered index can be -1); the
+        // palette itself is driven above.
+        window
+            .global::<ThemeState>()
+            .set_mode(crate::theme::selected_index_for_slug(&slug));
     }
 
     // Tell the tray settings UI which platform it's on so it can show the
@@ -9595,7 +9604,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // generates the palette off-thread; every other index maps to a
                 // stable registry id and hot-switches the static palette.
                 let mut prefs = crate::ui_prefs::load();
-                if crate::theme::is_auto_index(index) {
+                // The dropdown index is a position in the CURRENTLY filtered list
+                // (All/Dark/Light), so map it through the same filter. Auto/Custom
+                // only exist in the All view (filtered_*_index is -1 otherwise).
+                let filter = prefs.theme_filter;
+                if index == crate::theme::filtered_auto_index(filter) {
                     prefs.theme = crate::theme::AUTO_SLUG.to_string();
                     crate::ui_prefs::save(&prefs);
                     if let Some(w) = theme_weak.upgrade() {
@@ -9605,7 +9618,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         st.set_theme_is_system(false);
                     }
                     crate::auto_theme::regenerate(theme_weak.clone(), theme_handle.clone());
-                } else if crate::theme::is_custom_index(index) {
+                } else if index == crate::theme::filtered_custom_index(filter) {
                     // "Custom": persist the slug, derive from the persisted (or
                     // freshly seeded) custom base, and apply live. The editor
                     // swatches are seeded from the same base.
@@ -9628,7 +9641,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 } else {
-                    let id = crate::theme::id_for_index(index);
+                    let id = crate::theme::filtered_id_for_index(index, filter);
                     prefs.theme = id.slug().to_string();
                     crate::ui_prefs::save(&prefs);
                     if let Some(w) = theme_weak.upgrade() {
@@ -9646,11 +9659,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 crate::auto_theme::set_source(index, theme_weak.clone(), theme_handle.clone());
             }
             "theme-filter" => {
-                // Theme-list filter cycle (0 = All, 1 = Dark, 2 = Light). Cosmetic,
-                // but persist it so the list doesn't reset to All every launch.
+                // Theme-list filter cycle (0 = All, 1 = Dark, 2 = Light): persist
+                // the choice, then rebuild the dropdown to show only matching
+                // themes and re-derive which row (if any) is the active theme. The
+                // applied palette is untouched — this only narrows the list.
                 let mut prefs = crate::ui_prefs::load();
                 prefs.theme_filter = index;
                 crate::ui_prefs::save(&prefs);
+                if let Some(w) = theme_weak.upgrade() {
+                    let st = w.global::<AppearanceState>();
+                    let labels: Vec<slint::SharedString> =
+                        crate::theme::filtered_dropdown_labels(index)
+                            .into_iter()
+                            .map(slint::SharedString::from)
+                            .collect();
+                    st.set_themes(slint::ModelRc::new(slint::VecModel::from(labels)));
+                    st.set_theme_index(crate::theme::filtered_selected_index_for_slug(
+                        &prefs.theme,
+                        index,
+                    ));
+                }
             }
             other => log::debug!("[qbz-slint] unhandled appearance-select '{other}'"),
         });

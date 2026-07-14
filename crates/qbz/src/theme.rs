@@ -141,6 +141,13 @@ pub const CUSTOM_SLUG: &str = "custom";
 /// data pushed from Rust, not a `@tr` catalog string (matches `AUTO_LABEL`).
 pub const CUSTOM_LABEL: &str = "Custom";
 
+/// Theme-list filter (persisted in `ui_prefs.theme_filter`, mirrored to the
+/// Slint `AppearanceState.theme-filter`): `All` shows every theme, `Dark`/`Light`
+/// narrow the dropdown by luminance (`ThemeListEntry.is_light`).
+pub const FILTER_ALL: i32 = 0;
+pub const FILTER_DARK: i32 = 1;
+pub const FILTER_LIGHT: i32 = 2;
+
 /// Dropdown index of the appended "Auto (dynamic)" entry (right after every
 /// registry theme; the "Custom" entry follows it).
 pub fn auto_index() -> i32 {
@@ -179,8 +186,20 @@ pub fn selected_index_for_slug(slug: &str) -> i32 {
 /// The themes shown in the Settings dropdown, in display order. P1 exposes only
 /// the implemented rows. The dropdown index is just a position in THIS list.
 pub fn dropdown_themes() -> Vec<ThemeId> {
+    filtered_dropdown_themes(FILTER_ALL)
+}
+
+/// The implemented themes for a given [filter](FILTER_ALL): `All` keeps every
+/// theme; `Dark`/`Light` narrow by luminance (`ThemeListEntry.is_light`). The
+/// order within each subset matches the full display order.
+pub fn filtered_dropdown_themes(filter: i32) -> Vec<ThemeId> {
     qbz_theme::implemented_theme_list()
         .into_iter()
+        .filter(|e| match filter {
+            FILTER_DARK => !e.is_light,
+            FILTER_LIGHT => e.is_light,
+            _ => true,
+        })
         .map(|e| e.id)
         .collect()
 }
@@ -189,13 +208,71 @@ pub fn dropdown_themes() -> Vec<ThemeId> {
 /// dynamic "Auto (dynamic)" entry (index == [`auto_index`]) and the "Custom"
 /// entry (index == [`custom_index`]) appended last, in that order.
 pub fn dropdown_labels() -> Vec<String> {
-    let mut labels: Vec<String> = dropdown_themes()
+    filtered_dropdown_labels(FILTER_ALL)
+}
+
+/// Display names for [`filtered_dropdown_themes`]. The synthetic "Auto
+/// (dynamic)" and "Custom" entries are appended ONLY in the `All` view — they
+/// have no fixed light/dark polarity, so a narrowed Dark/Light list omits them.
+pub fn filtered_dropdown_labels(filter: i32) -> Vec<String> {
+    let mut labels: Vec<String> = filtered_dropdown_themes(filter)
         .into_iter()
         .map(|id| id.display_name().to_string())
         .collect();
-    labels.push(AUTO_LABEL.to_string());
-    labels.push(CUSTOM_LABEL.to_string());
+    if filter == FILTER_ALL {
+        labels.push(AUTO_LABEL.to_string());
+        labels.push(CUSTOM_LABEL.to_string());
+    }
     labels
+}
+
+/// Dropdown index of the "Auto (dynamic)" entry within a filtered list, or `-1`
+/// when the filter is not `All` (Auto/Custom are only shown in the `All` view).
+pub fn filtered_auto_index(filter: i32) -> i32 {
+    if filter == FILTER_ALL {
+        filtered_dropdown_themes(filter).len() as i32
+    } else {
+        -1
+    }
+}
+
+/// Dropdown index of the "Custom" entry within a filtered list, or `-1` when the
+/// filter is not `All`.
+pub fn filtered_custom_index(filter: i32) -> i32 {
+    if filter == FILTER_ALL {
+        filtered_auto_index(filter) + 1
+    } else {
+        -1
+    }
+}
+
+/// Map a filtered-dropdown index to a `ThemeId`. Out-of-range indices (including
+/// the Auto/Custom rows, which the caller handles separately) fall back to the
+/// default theme.
+pub fn filtered_id_for_index(index: i32, filter: i32) -> ThemeId {
+    filtered_dropdown_themes(filter)
+        .get(index as usize)
+        .copied()
+        .unwrap_or_else(qbz_theme::default_theme_id)
+}
+
+/// Position of a persisted slug within a filtered dropdown, auto/custom-aware.
+/// Returns `-1` when the theme is not present under this filter (e.g. a dark
+/// theme while the Light filter is active): the dropdown then highlights no row
+/// while the theme itself stays applied (selection is slug-driven, not index).
+pub fn filtered_selected_index_for_slug(slug: &str, filter: i32) -> i32 {
+    if slug == AUTO_SLUG {
+        filtered_auto_index(filter)
+    } else if slug == CUSTOM_SLUG {
+        filtered_custom_index(filter)
+    } else {
+        let id = id_for_slug(slug);
+        filtered_dropdown_themes(filter)
+            .iter()
+            .position(|&t| t == id)
+            .map(|p| p as i32)
+            .unwrap_or(-1)
+    }
 }
 
 /// Map a persisted slug to a `ThemeId`, falling back to the default (OLED) when
@@ -271,5 +348,65 @@ mod tests {
         assert_eq!(selected_index_for_slug(CUSTOM_SLUG), custom_index());
         // A real slug still resolves through the registry.
         assert_eq!(selected_index_for_slug("oled"), index_for_id(ThemeId::Oled));
+    }
+
+    #[test]
+    fn filter_all_matches_the_unfiltered_list() {
+        // The `All` filter is a pure passthrough of the existing behaviour.
+        assert_eq!(filtered_dropdown_themes(FILTER_ALL), dropdown_themes());
+        assert_eq!(filtered_dropdown_labels(FILTER_ALL), dropdown_labels());
+        assert_eq!(filtered_auto_index(FILTER_ALL), auto_index());
+        assert_eq!(filtered_custom_index(FILTER_ALL), custom_index());
+        assert_eq!(
+            filtered_selected_index_for_slug("oled", FILTER_ALL),
+            selected_index_for_slug("oled")
+        );
+    }
+
+    #[test]
+    fn dark_and_light_partition_the_themes_by_luminance() {
+        let all = filtered_dropdown_themes(FILTER_ALL);
+        let dark = filtered_dropdown_themes(FILTER_DARK);
+        let light = filtered_dropdown_themes(FILTER_LIGHT);
+        // Every theme lands in exactly one subset; together they cover `All`.
+        assert_eq!(dark.len() + light.len(), all.len());
+        assert!(dark.iter().all(|&id| !qbz_theme::is_light(id)));
+        assert!(light.iter().all(|&id| qbz_theme::is_light(id)));
+        // OLED (dark) is in Dark, absent from Light.
+        assert!(dark.contains(&ThemeId::Oled));
+        assert!(!light.contains(&ThemeId::Oled));
+    }
+
+    #[test]
+    fn narrowed_lists_omit_auto_and_custom() {
+        for filter in [FILTER_DARK, FILTER_LIGHT] {
+            let labels = filtered_dropdown_labels(filter);
+            assert_eq!(labels.len(), filtered_dropdown_themes(filter).len());
+            assert!(!labels.iter().any(|l| l == AUTO_LABEL || l == CUSTOM_LABEL));
+            assert_eq!(filtered_auto_index(filter), -1);
+            assert_eq!(filtered_custom_index(filter), -1);
+            // Synthetic slugs have no row here.
+            assert_eq!(filtered_selected_index_for_slug(AUTO_SLUG, filter), -1);
+            assert_eq!(filtered_selected_index_for_slug(CUSTOM_SLUG, filter), -1);
+        }
+    }
+
+    #[test]
+    fn filtered_index_roundtrips_and_reports_absent_as_minus_one() {
+        // A theme filtered out of the active view reports index -1.
+        assert_eq!(
+            filtered_selected_index_for_slug("oled", FILTER_LIGHT),
+            -1
+        );
+        // Within a subset, slug->index->id round-trips.
+        for filter in [FILTER_DARK, FILTER_LIGHT] {
+            for (i, id) in filtered_dropdown_themes(filter).into_iter().enumerate() {
+                assert_eq!(
+                    filtered_selected_index_for_slug(id.slug(), filter),
+                    i as i32
+                );
+                assert_eq!(filtered_id_for_index(i as i32, filter), id);
+            }
+        }
     }
 }
