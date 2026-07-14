@@ -14,6 +14,7 @@
 // The two-call split — `bind` at boot step 5 (stateless, so the foreign-occupant
 // diagnosis runs BEFORE the stores/runtime exist), `serve` at boot step 11 — is
 // what keeps the 01-architecture.md §8.1 boot order honest.
+pub mod playback;
 pub mod status;
 
 use std::io::Cursor;
@@ -30,14 +31,24 @@ use qbz_app::shell::AppRuntime;
 use qbz_audio::settings::AudioSettingsStore;
 
 /// The counted P0 route table (02 §3.2). A route exists only iff a shipped
-/// client calls it (§3.1.4). This task lands **3**; T7 adds the 9 playback +
-/// now-playing routes, T8 the 4 queue routes, T11 `/api/settings/reload` — the
-/// inline `route_table_matches_spec_count` test pins the number so the
-/// 68-routes failure shape (a route with no caller) cannot creep back in.
+/// client calls it (§3.1.4). T1-T6 landed the first 3; T7 (this task) adds the
+/// 9 playback + now-playing routes (rows 4-12); T8 adds the 4 queue routes,
+/// T11 `/api/settings/reload` — the inline `route_table_matches_spec_count`
+/// test pins the number so the 68-routes failure shape (a route with no
+/// caller) cannot creep back in.
 pub const P0_ROUTES: &[(&str, &str)] = &[
     ("GET", "/api/ping"),
     ("GET", "/api/info"),
     ("GET", "/api/status"),
+    ("GET", "/api/now-playing"),
+    ("POST", "/api/playback/play"),
+    ("POST", "/api/playback/pause"),
+    ("POST", "/api/playback/toggle"),
+    ("POST", "/api/playback/stop"),
+    ("POST", "/api/playback/next"),
+    ("POST", "/api/playback/previous"),
+    ("POST", "/api/playback/seek"),
+    ("POST", "/api/playback/volume"),
 ];
 
 /// A socket bound at boot step 5, not yet serving. Wraps the tiny_http server
@@ -202,10 +213,33 @@ fn route(state: &ApiState, req: &mut Request) -> Response<Cursor<Vec<u8>>> {
         ),
         ("GET", "/api/info") => status::info(state),
         ("GET", "/api/status") => status::status(state),
-        // T7: /api/now-playing + 8 playback routes · T8: 4 queue routes ·
-        // T11: /api/settings/reload.
+        ("GET", "/api/now-playing") => playback::now_playing(state),
+        ("POST", "/api/playback/play") => playback::play(state),
+        ("POST", "/api/playback/pause") => playback::pause(state),
+        ("POST", "/api/playback/toggle") => playback::toggle(state),
+        ("POST", "/api/playback/stop") => playback::stop(state),
+        ("POST", "/api/playback/next") => playback::next(state),
+        ("POST", "/api/playback/previous") => playback::previous(state),
+        ("POST", "/api/playback/seek") => {
+            let body = read_json_body(req);
+            playback::seek(state, &body)
+        }
+        ("POST", "/api/playback/volume") => {
+            let body = read_json_body(req);
+            playback::volume(state, &body)
+        }
+        // T8: 4 queue routes · T11: /api/settings/reload.
         _ => err_json(404, "not_found", "unknown route", "see qbzd --help"),
     }
+}
+
+/// Read and parse a request body as JSON (T7's seek/volume POST bodies).
+/// An unreadable or absent body parses to `Value::Null` — the route handlers
+/// treat a missing expected field as `400 bad_request`, never a panic.
+fn read_json_body(req: &mut Request) -> serde_json::Value {
+    let mut buf = String::new();
+    let _ = req.as_reader().read_to_string(&mut buf);
+    serde_json::from_str(&buf).unwrap_or(serde_json::Value::Null)
 }
 
 /// A pre-routing rejection. Carried as a small enum so [`access_gate`] stays a
@@ -308,11 +342,20 @@ mod tests {
     #[test]
     fn route_table_matches_spec_count() {
         // 02-cli-and-api.md §3.2 — P0 = exactly 17 routes; grows ONLY with a
-        // shipped client. This task lands 3; T7 +9; T8 +4; T11 +1.
-        assert_eq!(P0_ROUTES.len(), 3);
+        // shipped client. T1-T6 landed 3; T7 (this task) +9 = 12; T8 +4; T11 +1.
+        assert_eq!(P0_ROUTES.len(), 12);
         assert!(P0_ROUTES.contains(&("GET", "/api/ping")));
         assert!(P0_ROUTES.contains(&("GET", "/api/info")));
         assert!(P0_ROUTES.contains(&("GET", "/api/status")));
+        assert!(P0_ROUTES.contains(&("GET", "/api/now-playing")));
+        assert!(P0_ROUTES.contains(&("POST", "/api/playback/play")));
+        assert!(P0_ROUTES.contains(&("POST", "/api/playback/pause")));
+        assert!(P0_ROUTES.contains(&("POST", "/api/playback/toggle")));
+        assert!(P0_ROUTES.contains(&("POST", "/api/playback/stop")));
+        assert!(P0_ROUTES.contains(&("POST", "/api/playback/next")));
+        assert!(P0_ROUTES.contains(&("POST", "/api/playback/previous")));
+        assert!(P0_ROUTES.contains(&("POST", "/api/playback/seek")));
+        assert!(P0_ROUTES.contains(&("POST", "/api/playback/volume")));
     }
 
     #[test]

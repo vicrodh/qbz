@@ -50,7 +50,16 @@ impl std::fmt::Display for CliError {
         match self {
             CliError::Unreachable(host) => write!(f, "{}", copy::daemon_down(host)),
             CliError::NeedsAuth => write!(f, "{}", copy::daemon_up_needs_auth()),
-            CliError::Device(m) => write!(f, "error: {m}"),
+            // `error_from_envelope` pre-builds the two DSD-specific codes into
+            // the full verbatim §1.4 copy (already "error: ..." prefixed); a
+            // plain device message from the server gets the generic prefix.
+            CliError::Device(m) => {
+                if m.starts_with("error:") {
+                    write!(f, "{m}")
+                } else {
+                    write!(f, "error: {m}")
+                }
+            }
             CliError::NotFound(m) => write!(f, "error: {m}"),
             CliError::ApiSkew { daemon, cli } => write!(f, "{}", copy::api_version_skew(*daemon, *cli)),
             CliError::Runtime(m) => write!(f, "error: {m}"),
@@ -149,8 +158,8 @@ impl ApiClient {
         self.send(req).await
     }
 
-    /// P0 mutation transport — first consumer is the T7 transport verbs.
-    #[allow(dead_code)] // wired by the T7 play/pause/… verbs
+    /// P0 mutation transport — consumed by the T7 transport verbs
+    /// (play/pause/toggle/stop/next/prev/seek/volume/mute).
     pub async fn post(&self, path: &str, body: Value) -> Result<Value, CliError> {
         let req = self.bearer(self.client.post(format!("{}{}", self.base, path)).json(&body));
         self.send(req).await
@@ -229,7 +238,12 @@ fn error_from_envelope(v: &Value) -> CliError {
     match code {
         "needs_auth" => CliError::NeedsAuth,
         "not_found" => CliError::NotFound(message),
-        "audio_unavailable" | "volume_fixed_dsd" | "seek_unsupported_dsd" | "device_error" => {
+        // §1.4's verbatim DSD blocks are frozen client-side copy, not the
+        // server's short envelope message — swap them in so `qbzd seek`/
+        // `volume`/`mute` print the exact documented multi-line text.
+        "volume_fixed_dsd" => CliError::Device(crate::cli::copy::volume_fixed_dsd()),
+        "seek_unsupported_dsd" => CliError::Device(crate::cli::copy::seek_unsupported_dsd()),
+        "audio_unavailable" | "device_error" => {
             CliError::Device(message)
         }
         _ => CliError::Runtime(message),

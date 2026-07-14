@@ -188,6 +188,46 @@ async fn main() {
             let roots = paths::ProfileRoots::resolve(None, None);
             cli::status::ping(cli.host, json, &roots).await
         }
+        Cmd::Now { json } => {
+            let roots = paths::ProfileRoots::resolve(None, None);
+            cli::transport::now(cli.host, json, &roots).await
+        }
+        Cmd::Play => {
+            let roots = paths::ProfileRoots::resolve(None, None);
+            cli::transport::play(cli.host, &roots).await
+        }
+        Cmd::Pause => {
+            let roots = paths::ProfileRoots::resolve(None, None);
+            cli::transport::pause(cli.host, &roots).await
+        }
+        Cmd::Toggle => {
+            let roots = paths::ProfileRoots::resolve(None, None);
+            cli::transport::toggle(cli.host, &roots).await
+        }
+        Cmd::Stop => {
+            let roots = paths::ProfileRoots::resolve(None, None);
+            cli::transport::stop(cli.host, &roots).await
+        }
+        Cmd::Next => {
+            let roots = paths::ProfileRoots::resolve(None, None);
+            cli::transport::next(cli.host, &roots).await
+        }
+        Cmd::Prev => {
+            let roots = paths::ProfileRoots::resolve(None, None);
+            cli::transport::prev(cli.host, &roots).await
+        }
+        Cmd::Seek { position } => {
+            let roots = paths::ProfileRoots::resolve(None, None);
+            cli::transport::seek(cli.host, &roots, position).await
+        }
+        Cmd::Volume { value, json } => {
+            let roots = paths::ProfileRoots::resolve(None, None);
+            cli::transport::volume(cli.host, &roots, value, json).await
+        }
+        Cmd::Mute { state } => {
+            let roots = paths::ProfileRoots::resolve(None, None);
+            cli::transport::mute(cli.host, &roots, state).await
+        }
         _ => { eprintln!("not implemented yet"); 1 } // burned down task by task
     };
     std::process::exit(code);

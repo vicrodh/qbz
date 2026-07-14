@@ -6,3 +6,4 @@
 pub mod client;
 pub mod copy;
 pub mod status;
+pub mod transport;

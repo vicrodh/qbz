@@ -484,12 +484,14 @@ pub async fn run_driver<A: FrontendAdapter + Send + Sync + 'static>(
 
 /// Run the advance ritual and log its outcome (queue-finished on `Ok(None)`, the
 /// error on `Err`). The daemon stops on a genuine queue edge just like the
-/// pure-decision `QueueFinished` branch does.
+/// pure-decision `QueueFinished` branch does. Always forward — the driver's
+/// auto-advance on track-end never walks backward (reverse is the `qbzd prev`
+/// route's concern, wired directly through `advance_and_play(..., false)`).
 async fn advance_and_play_logged<A: FrontendAdapter + Send + Sync + 'static>(
     runtime: &Arc<AppRuntime<A>>,
     quality: Quality,
 ) {
-    match advance_and_play(runtime, quality).await {
+    match advance_and_play(runtime, quality, true).await {
         Ok(Some(_)) => {}
         Ok(None) => {
             log::info!("[qbzd] driver: advance found nothing playable — queue finished");
@@ -502,18 +504,28 @@ async fn advance_and_play_logged<A: FrontendAdapter + Send + Sync + 'static>(
 }
 
 /// The FULL advance ritual, reused verbatim by the CLI next/prev routes (T7):
-/// bounded skip-walk to the next playable track → play it → warm the successors
-/// for gapless → persist the session. Never a bare cursor move (02 §2.2). The
-/// skip-walk mirrors `playback.rs::advance_to_playable` (capped at
-/// `MAX_OFFLINE_SKIPS`); `next_track()` is the atomic cursor mover.
+/// bounded skip-walk to the next (or previous) playable track → play it → warm
+/// the successors for gapless → persist the session. Never a bare cursor move
+/// (02 §2.2). The skip-walk mirrors `playback.rs::advance_to_playable` (capped
+/// at `MAX_OFFLINE_SKIPS`); `next_track()`/`previous_track()` are the atomic
+/// cursor movers — `forward` selects which one, exactly like the desktop's
+/// `advance_to_playable(runtime, weak, forward)` (`crates/qbz/src/playback.rs:358`),
+/// so `qbzd next` and `qbzd prev` share this one ritual instead of duplicating
+/// the play → prefetch → persist tail.
 pub async fn advance_and_play<A: FrontendAdapter + Send + Sync + 'static>(
     runtime: &AppRuntime<A>,
     quality: Quality,
+    forward: bool,
 ) -> Result<Option<QueueTrack>, String> {
     let core = runtime.core();
     let mut skips = 0usize;
     let next = loop {
-        let Some(track) = core.next_track().await else {
+        let step = if forward {
+            core.next_track().await
+        } else {
+            core.previous_track().await
+        };
+        let Some(track) = step else {
             break None; // queue edge
         };
         // Playable gate: local files always attempt (they play from disk);
