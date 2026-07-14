@@ -280,3 +280,14 @@ msgstr "First added"
 msgid "Random"
 msgstr "Random"
 
+
+# Offline cache clear — communicate it does not remove downloads (#606)
+msgid "Frees up cached data. Your downloaded albums are kept — remove those from the offline manager above."
+msgstr "Frees up cached data. Your downloaded albums are kept — remove those from the offline manager above."
+
+msgid "Cache cleared"
+msgstr "Cache cleared"
+
+msgid "Couldn't clear the cache"
+msgstr "Couldn't clear the cache"
+

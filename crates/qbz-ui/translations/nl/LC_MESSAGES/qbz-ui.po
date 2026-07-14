@@ -4523,3 +4523,11 @@ msgstr "Eerst toegevoegd"
 msgid "Random"
 msgstr "Willekeurig"
 
+
+# Offline cache clear — communicate it does not remove downloads (#606)
+msgid "Frees up cached data. Your downloaded albums are kept — remove those from the offline manager above."
+msgstr "Maakt cachegegevens vrij. Je gedownloade albums blijven behouden — verwijder die via de offline manager hierboven."
+
+msgid "Couldn't clear the cache"
+msgstr "Kan de cache niet wissen"
+

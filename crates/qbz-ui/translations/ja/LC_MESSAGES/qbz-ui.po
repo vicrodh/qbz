@@ -4500,3 +4500,11 @@ msgstr "追加が古い順"
 msgid "Random"
 msgstr "ランダム"
 
+
+# Offline cache clear — communicate it does not remove downloads (#606)
+msgid "Frees up cached data. Your downloaded albums are kept — remove those from the offline manager above."
+msgstr "キャッシュデータを解放します。ダウンロード済みのアルバムは保持されます。削除は上のオフラインマネージャーから行ってください。"
+
+msgid "Couldn't clear the cache"
+msgstr "キャッシュを削除できませんでした"
+

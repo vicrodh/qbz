@@ -511,13 +511,13 @@ pub fn clear_all(weak: slint::Weak<AppWindow>, handle: tokio::runtime::Handle) {
         };
         if let Err(e) = qbz_offline_cache::purge_all_cached_files(&off, &off.library_db).await {
             log::error!("[qbz-slint] clear offline cache failed: {e}");
-            crate::toast::error_weak(&weak, qbz_i18n::t("Couldn't clear the offline cache"));
+            crate::toast::error_weak(&weak, qbz_i18n::t("Couldn't clear the cache"));
             return;
         }
         if let Ok(mut s) = cached_ids().lock() {
             s.clear();
         }
-        crate::toast::success_weak(&weak, qbz_i18n::t("Offline cache cleared"));
+        crate::toast::success_weak(&weak, qbz_i18n::t("Cache cleared"));
         crate::offline_manager::rebuild(weak.clone()).await;
     });
 }

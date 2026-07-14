@@ -4511,3 +4511,11 @@ msgstr "Zuerst hinzugefügt"
 msgid "Random"
 msgstr "Zufällig"
 
+
+# Offline cache clear — communicate it does not remove downloads (#606)
+msgid "Frees up cached data. Your downloaded albums are kept — remove those from the offline manager above."
+msgstr "Gibt zwischengespeicherte Daten frei. Deine heruntergeladenen Alben bleiben erhalten — entferne sie über den Offline-Manager oben."
+
+msgid "Couldn't clear the cache"
+msgstr "Cache konnte nicht geleert werden"
+
