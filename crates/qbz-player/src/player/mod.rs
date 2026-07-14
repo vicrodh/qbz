@@ -5233,13 +5233,16 @@ pub struct PlaybackState {
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 struct DsdErrorReport<S: qbz_dsd::DsdWordSource> {
     inner: S,
-    state: Arc<SharedState>,
+    // SharedState is a #[derive(Clone)] handle of Arc<Atomic..> fields, so a
+    // clone already shares the same state — no extra Arc wrapper (that is also
+    // the type `thread_state` is passed around as at the call sites).
+    state: SharedState,
     reported: bool,
 }
 
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 impl<S: qbz_dsd::DsdWordSource> DsdErrorReport<S> {
-    fn new(inner: S, state: Arc<SharedState>) -> Self {
+    fn new(inner: S, state: SharedState) -> Self {
         Self {
             inner,
             state,
@@ -5285,7 +5288,6 @@ mod tests {
     use super::compute_needs_new_stream;
     use super::external_content_type;
     use super::{DsdErrorReport, SharedState};
-    use std::sync::Arc;
 
     struct FakeDsdSource {
         words: std::vec::IntoIter<i32>,
@@ -5307,7 +5309,7 @@ mod tests {
 
     #[test]
     fn dsd_error_report_surfaces_io_error_at_stream_end() {
-        let state = Arc::new(SharedState::new());
+        let state = SharedState::new();
         let source = FakeDsdSource {
             words: vec![1, 2].into_iter(),
             error: Some("read failed".to_string()),
@@ -5327,7 +5329,7 @@ mod tests {
 
     #[test]
     fn dsd_error_report_clean_eof_is_not_an_error() {
-        let state = Arc::new(SharedState::new());
+        let state = SharedState::new();
         let source = FakeDsdSource {
             words: vec![1].into_iter(),
             error: None,
