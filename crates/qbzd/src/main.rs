@@ -1,5 +1,11 @@
 use clap::{Parser, Subcommand};
 
+mod api;
+mod config;
+mod lock;
+mod paths;
+mod state;
+
 pub const API_VERSION: u32 = 1; // 02-cli-and-api.md §1.6
 
 #[derive(Parser)]

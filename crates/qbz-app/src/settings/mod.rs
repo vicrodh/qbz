@@ -1,4 +1,5 @@
 pub mod artist_blacklist;
+pub mod daemon_prefs;
 pub mod developer;
 pub mod discover_prefs;
 pub mod favorites;
