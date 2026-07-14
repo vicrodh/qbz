@@ -8,6 +8,7 @@ mod daemon;
 mod lock;
 mod login;
 mod paths;
+mod qconnect;
 mod state;
 
 pub const API_VERSION: u32 = 1; // 02-cli-and-api.md §1.6

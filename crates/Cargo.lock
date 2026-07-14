@@ -6002,6 +6002,7 @@ dependencies = [
  "clap",
  "clap_complete",
  "dirs 6.0.0",
+ "futures-util",
  "libc",
  "log",
  "open",
@@ -6019,6 +6020,7 @@ dependencies = [
  "qconnect-transport-ws",
  "rand 0.10.1",
  "reqwest",
+ "rusqlite",
  "serde",
  "serde_json",
  "tempfile",
@@ -6026,6 +6028,7 @@ dependencies = [
  "tokio",
  "toml",
  "urlencoding",
+ "uuid 1.22.0",
 ]
 
 [[package]]

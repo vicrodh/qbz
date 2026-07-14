@@ -113,15 +113,28 @@ pub async fn run(roots: ProfileRoots, cfg: QbzdConfig, warns: Vec<String>) -> Re
     );
     log::info!("control API listening on {bind_addr}");
 
+    // 12. QConnect (T9): mint the daemon's OWN device identity in the daemon-root
+    //     KV, decide auto-connect from the persisted startup mode (cli_override =
+    //     None so the KV that `qbzd qconnect enable|disable` writes is never
+    //     shadowed), and — when enabled — connect-on-Ready with the bounded retry
+    //     schedule. Reads NOTHING from qbzd.toml. Held to shut the session down
+    //     ahead of playback (§8.2-1); it also clones `Arc<AppRuntime>`, so it must
+    //     drop before `drop(booted)` (the #521 ordering).
+    let mut qconnect = crate::qconnect::start(booted.runtime.clone(), booted.shared.clone(), &roots);
+
     // 13. park on SIGTERM/SIGINT. NO startup audio "hygiene": both candidate
     //     fns are verified no-ops from a fresh process and re-adding them is the
     //     documented skeptic-correction #1 trap (§8.1).
     wait_for_signal().await;
 
-    // ── Shutdown (§8.2, ordered). Stop the playback driver FIRST: it holds an
-    //    Arc<AppRuntime> clone, so its task must finish (dropping that Arc)
-    //    before `drop(booted)` can release the audio device ahead of the #521
-    //    pair. Signal, then join.
+    // ── Shutdown (§8.2, ordered). Step 1: disconnect the QConnect session (and
+    //    stop its auto-connect watcher) BEFORE playback is stopped, then drop the
+    //    handle so its Arc<AppRuntime> clone is released ahead of `drop(booted)`.
+    qconnect.shutdown().await;
+    drop(qconnect);
+    // Step 2: stop the playback driver. It holds an Arc<AppRuntime> clone, so its
+    //    task must finish (dropping that Arc) before `drop(booted)` can release
+    //    the audio device ahead of the #521 pair. Signal, then join.
     let _ = shutdown_tx.send(true);
     if let Err(e) = driver.await {
         log::warn!("driver task join failed: {e:?}");

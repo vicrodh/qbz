@@ -32,6 +32,10 @@ dirs = "6"
 rand = { workspace = true }
 log = { workspace = true }
 async-trait = { workspace = true }
+# QConnect glue copies (T9) — mirror the desktop copies' direct imports
+uuid = { version = "1", features = ["v4"] }                    # renderer-report action uuids
+rusqlite = { version = "0.31", features = ["bundled"] }        # daemon-root qconnect_settings.db KV
+futures-util = { workspace = true }                            # remote_stream.rs feeder (byte-exact)
 # new direct deps (versions already in lock where noted)
 tiny_http = "0.12"           # in lock via qbz-cast
 toml = "0.9"                 # in lock transitively
