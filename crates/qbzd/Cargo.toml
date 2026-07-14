@@ -36,6 +36,8 @@ async-trait = { workspace = true }
 tiny_http = "0.12"           # in lock via qbz-cast
 toml = "0.9"                 # in lock transitively
 libc = "0.2"                 # flock
+urlencoding = "2"            # OAuth redirect_url encode + callback decode (in lock via qbz)
+open = "5"                   # system-browser launch for `qbzd login` (in lock via qbz)
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
 # ratatui arrives in T13 — do NOT add it here

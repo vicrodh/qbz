@@ -2,9 +2,11 @@ use clap::{Parser, Subcommand};
 
 mod adapter;
 mod api;
+mod cli;
 mod config;
 mod daemon;
 mod lock;
+mod login;
 mod paths;
 mod state;
 
@@ -140,7 +142,57 @@ async fn main() {
                 }
             }
         }
+        Cmd::Login {
+            callback_host,
+            paste,
+            token,
+        } => {
+            let roots = login_roots();
+            let result = if let Some(tok) = token {
+                login::login_with_token_arg(&roots, &tok).await
+            } else if paste {
+                login::login_paste(&roots).await
+            } else {
+                login::login_browser(&roots, callback_host).await
+            };
+            match result {
+                Ok(session) => {
+                    println!("{}", cli::copy::login_success(&session));
+                    0
+                }
+                Err(e) => {
+                    eprintln!("{e}");
+                    1
+                }
+            }
+        }
+        Cmd::Logout => {
+            let roots = login_roots();
+            match login::logout(&roots) {
+                Ok(daemon_nudged) => {
+                    println!("{}", cli::copy::logout_success(daemon_nudged));
+                    0
+                }
+                Err(e) => {
+                    eprintln!("{e}");
+                    1
+                }
+            }
+        }
         _ => { eprintln!("not implemented yet"); 1 } // burned down task by task
     };
     std::process::exit(code);
+}
+
+/// Resolve the daemon profile roots for a local CLI auth operation. `login` and
+/// `logout` write the credential file into the config root and nudge the LOCAL
+/// daemon, so — like `run` — they honor a `qbzd.toml` `data_root` override while
+/// keeping the config root at its XDG default.
+fn login_roots() -> paths::ProfileRoots {
+    let bootstrap = paths::ProfileRoots::resolve(None, None);
+    let cfg_path = bootstrap.config.join("qbzd.toml");
+    let data_root = config::QbzdConfig::load(&cfg_path)
+        .ok()
+        .and_then(|(c, _)| c.data_root);
+    paths::ProfileRoots::resolve(None, data_root.as_deref().map(std::path::Path::new))
 }

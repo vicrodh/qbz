@@ -6004,6 +6004,7 @@ dependencies = [
  "dirs 6.0.0",
  "libc",
  "log",
+ "open",
  "qbz-app",
  "qbz-audio",
  "qbz-core",
@@ -6024,6 +6025,7 @@ dependencies = [
  "tiny_http",
  "tokio",
  "toml",
+ "urlencoding",
 ]
 
 [[package]]
