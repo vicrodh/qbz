@@ -99,9 +99,12 @@ pub async fn validate_token(token: &str) -> Result<UserSession, LoginError> {
 }
 
 /// Path 1 (02 §2.2): system-browser OAuth on a one-shot, nonce-bound, ephemeral
-/// listener. `callback_host = Some(ip)` binds wide (`0.0.0.0`) so a LAN browser
-/// (a phone) can reach the callback and embeds that host in the redirect URL;
-/// `None` binds loopback only and redirects to `127.0.0.1`.
+/// listener. FB1 (owner feedback, post-smoke): the common real-world case is
+/// configuring the daemon headless over SSH from another machine on the LAN,
+/// so the callback host defaults to that LAN-reachable address — not
+/// loopback-only — via [`resolve_callback_host`]. `callback_host = Some(ip)`
+/// keeps its old explicit-override meaning; `None` now auto-detects from
+/// `SSH_CONNECTION` before falling back to `127.0.0.1`.
 pub async fn login_browser(
     roots: &ProfileRoots,
     callback_host: Option<String>,
@@ -110,14 +113,11 @@ pub async fn login_browser(
     let app_id = read_app_id(&runtime).await?;
 
     // D6: an EPHEMERAL port on its own listener — never the control-API port.
-    let bind_host = if callback_host.is_some() {
-        "0.0.0.0"
-    } else {
-        "127.0.0.1"
-    };
-    let redirect_host = callback_host.as_deref().unwrap_or("127.0.0.1").to_string();
-    let listener = TcpListener::bind((bind_host, 0))
-        .map_err(|e| LoginError::Failed(format!("could not bind the login listener: {e}")))?;
+    let ssh_connection = std::env::var("SSH_CONNECTION").ok();
+    let (redirect_host, auto_detected) =
+        resolve_callback_host(callback_host.as_deref(), ssh_connection.as_deref());
+
+    let listener = bind_login_listener(&redirect_host)?;
     let port = listener
         .local_addr()
         .map_err(|e| LoginError::Failed(e.to_string()))?
@@ -126,12 +126,17 @@ pub async fn login_browser(
     let nonce = gen_nonce();
     let url = build_oauth_url(&app_id, &redirect_host, port, &nonce);
 
+    if auto_detected {
+        println!("{}", crate::cli::copy::login_ssh_detected());
+    }
     println!("Opening your browser to sign in to Qobuz.");
     println!("If it does not open, paste this URL into a browser:\n  {url}\n");
     if let Err(e) = open::that(&url) {
         // Headless boxes have no browser — not fatal; the listener still waits
-        // and the printed URL is what the operator forwards/opens.
+        // and the printed URL (already shown above) is what the operator
+        // forwards/opens from another device. Never an error-looking line.
         log::debug!("could not open a browser automatically: {e}");
+        println!("{}", crate::cli::copy::login_browser_open_failed());
     }
 
     let nonce_owned = nonce.clone();
@@ -240,6 +245,37 @@ pub fn nudge_reload(host: &str, token: Option<&str>) -> bool {
 
 // ============================ pure, unit-tested ============================
 
+/// FB1 (owner feedback, post-smoke): resolve which host the OAuth redirect
+/// targets. The common real-world case is configuring the daemon headless
+/// over SSH from another machine on the LAN — the login URL must be openable
+/// from ANY browser on the network by default, no flags.
+///
+/// Priority:
+///   1. `cli_flag` (`--callback-host`) — explicit, unchanged, always wins.
+///   2. `ssh_connection` (`$SSH_CONNECTION`)'s 3rd whitespace-separated field
+///      — the SERVER ip, i.e. exactly the address the operator's other
+///      machine used to reach this box. Malformed/short/non-IP values fall
+///      through.
+///   3. `127.0.0.1` — today's local-laptop behavior, unchanged.
+///
+/// Returns `(host, auto_detected)`; `auto_detected` is true only for case 2,
+/// so callers can print the one extra explanatory line (§1.4 voice).
+pub fn resolve_callback_host(
+    cli_flag: Option<&str>,
+    ssh_connection: Option<&str>,
+) -> (String, bool) {
+    if let Some(h) = cli_flag {
+        return (h.to_string(), false);
+    }
+    if let Some(server_ip) = ssh_connection
+        .and_then(|c| c.split_whitespace().nth(2))
+        .filter(|candidate| candidate.parse::<std::net::IpAddr>().is_ok())
+    {
+        return (server_ip.to_string(), true);
+    }
+    ("127.0.0.1".to_string(), false)
+}
+
 /// Build the Qobuz browser authorize URL. Mirrors the desktop shape
 /// (`crates/qbz/src/auth.rs:76-80`) except the redirect URL carries the CSPRNG
 /// nonce as its path segment: `redirect_url=http://<host>:<port>/<nonce>`. The
@@ -247,12 +283,24 @@ pub fn nudge_reload(host: &str, token: Option<&str>) -> bool {
 /// round-trip) instead of a `state` param, because the working desktop flow
 /// sends no `state` and Qobuz is not proven to echo one.
 pub fn build_oauth_url(ext_app_id: &str, host: &str, port: u16, nonce: &str) -> String {
-    let redirect = format!("http://{host}:{port}/{nonce}");
+    let redirect = format!("http://{}:{port}/{nonce}", bracket_ipv6_for_url(host));
     format!(
         "https://www.qobuz.com/signin/oauth?ext_app_id={}&redirect_url={}",
         ext_app_id,
         urlencoding::encode(&redirect),
     )
+}
+
+/// Bracket a bare IPv6 literal for use in a URL authority
+/// (`2001:db8::2` → `[2001:db8::2]`); IPv4, hostnames, and already-bracketed
+/// input pass through unchanged. FB1: `SSH_CONNECTION`'s server-IP field can
+/// be IPv6.
+fn bracket_ipv6_for_url(host: &str) -> String {
+    if host.contains(':') && !host.starts_with('[') {
+        format!("[{host}]")
+    } else {
+        host.to_string()
+    }
 }
 
 /// Parse an HTTP request line from the one-shot listener. Returns the
@@ -417,6 +465,32 @@ pub(crate) fn nudge_host(roots: &ProfileRoots) -> String {
     format!("127.0.0.1:{port}")
 }
 
+/// FB1: bind the one-shot login listener on an EPHEMERAL port. Loopback stays
+/// exactly as before (`127.0.0.1`, unconditionally — the local-laptop case is
+/// untouched). Any other resolved host (explicit `--callback-host` or an
+/// SSH-auto-detected LAN address) now binds that SPECIFIC address first —
+/// tighter than the old unconditional `0.0.0.0` — and only falls back to the
+/// wildcard, with a log line, if that specific bind fails (e.g. the env lied
+/// about a locally-reachable address).
+fn bind_login_listener(redirect_host: &str) -> Result<TcpListener, LoginError> {
+    if redirect_host == "127.0.0.1" {
+        return TcpListener::bind(("127.0.0.1", 0))
+            .map_err(|e| LoginError::Failed(format!("could not bind the login listener: {e}")));
+    }
+    match TcpListener::bind((redirect_host, 0)) {
+        Ok(listener) => Ok(listener),
+        Err(e) => {
+            log::warn!(
+                "could not bind the login listener on {redirect_host}: {e} — \
+                 falling back to 0.0.0.0"
+            );
+            TcpListener::bind(("0.0.0.0", 0)).map_err(|e| {
+                LoginError::Failed(format!("could not bind the login listener: {e}"))
+            })
+        }
+    }
+}
+
 fn read_stdin_line() -> Result<String, LoginError> {
     use std::io::BufRead;
     let mut line = String::new();
@@ -561,6 +635,71 @@ mod tests {
             decoded.contains("redirect_url=http://192.168.0.40:40000/n"),
             "{decoded}"
         );
+    }
+
+    #[test]
+    fn build_oauth_url_brackets_an_ipv6_host_and_keeps_the_nonce_in_the_path() {
+        // FB1: a non-loopback IPv6 host (e.g. from SSH_CONNECTION) must be
+        // bracketed in the URL authority; the nonce still rides the path.
+        let url = build_oauth_url("app123", "2001:db8::2", 40000, "nn");
+        let decoded = urlencoding::decode(&url).unwrap();
+        assert!(
+            decoded.contains("redirect_url=http://[2001:db8::2]:40000/nn"),
+            "{decoded}"
+        );
+    }
+
+    // ---------------------- resolve_callback_host (FB1) ----------------------
+
+    #[test]
+    fn resolve_callback_host_cli_flag_wins_over_everything() {
+        let (host, auto) =
+            resolve_callback_host(Some("10.0.0.9"), Some("192.168.1.5 22 192.168.1.1 22"));
+        assert_eq!(host, "10.0.0.9");
+        assert!(!auto, "an explicit --callback-host is never auto-detected");
+    }
+
+    #[test]
+    fn resolve_callback_host_reads_the_server_ip_field_from_ssh_connection() {
+        // SSH_CONNECTION = "client_ip client_port server_ip server_port" —
+        // the SERVER ip (3rd field) is exactly what the operator's other
+        // machine used to reach this box.
+        let (host, auto) = resolve_callback_host(None, Some("203.0.113.4 51820 192.168.1.50 22"));
+        assert_eq!(host, "192.168.1.50");
+        assert!(auto);
+    }
+
+    #[test]
+    fn resolve_callback_host_handles_ipv6_ssh_connection() {
+        let (host, auto) =
+            resolve_callback_host(None, Some("2001:db8::1 51820 2001:db8::2 22"));
+        assert_eq!(host, "2001:db8::2");
+        assert!(auto);
+    }
+
+    #[test]
+    fn resolve_callback_host_falls_through_on_malformed_ssh_connection() {
+        // Too few fields — no server-ip field to read.
+        let (host, auto) = resolve_callback_host(None, Some("only-two fields"));
+        assert_eq!(host, "127.0.0.1");
+        assert!(!auto);
+    }
+
+    #[test]
+    fn resolve_callback_host_falls_through_on_non_ip_server_field() {
+        // 3rd field present but not a parseable IP — reject, don't guess.
+        let (host, auto) =
+            resolve_callback_host(None, Some("203.0.113.4 51820 not-an-ip 22"));
+        assert_eq!(host, "127.0.0.1");
+        assert!(!auto);
+    }
+
+    #[test]
+    fn resolve_callback_host_falls_through_when_ssh_connection_absent() {
+        // The local-laptop case: no flag, no SSH session — unchanged default.
+        let (host, auto) = resolve_callback_host(None, None);
+        assert_eq!(host, "127.0.0.1");
+        assert!(!auto);
     }
 
     #[test]
