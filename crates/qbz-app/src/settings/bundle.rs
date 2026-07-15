@@ -115,6 +115,9 @@ pub struct PlanLine {
 #[derive(Debug, Clone)]
 pub struct DevicePick {
     pub wanted: String,
+    /// The backend the options were enumerated for — the §5.4 prompt names it
+    /// ("Available on Alsa:").
+    pub backend: String,
     pub options: Vec<(String, String)>,
 }
 
@@ -207,6 +210,37 @@ impl Bundle {
     /// Serialize to pretty JSON (the on-disk `.qbzb` form — plain JSON).
     pub fn to_json_string(&self) -> Result<String, BundleError> {
         serde_json::to_string_pretty(self).map_err(|e| BundleError::Io(e.to_string()))
+    }
+
+    /// True when the document actually CARRIES a secret value: an `auth` token,
+    /// or a non-blank scrobbler secret. The export-side §3 warning keys on this
+    /// — not on the auth domain alone (a bundle whose only secrets are scrobbler
+    /// tokens still needs the warning).
+    pub fn contains_secrets(&self) -> bool {
+        let auth_token = self
+            .domains
+            .get("auth")
+            .and_then(Value::as_object)
+            .and_then(|a| a.get("user_auth_token"))
+            .and_then(Value::as_str)
+            .map(|t| !t.is_empty())
+            .unwrap_or(false);
+        if auth_token {
+            return true;
+        }
+        self.domains
+            .get("integrations")
+            .and_then(|i| i.get("scrobblers"))
+            .and_then(Value::as_object)
+            .map(|s| {
+                ["lastfm_session_key", "listenbrainz_token"].iter().any(|k| {
+                    s.get(*k)
+                        .and_then(Value::as_str)
+                        .map(|v| !v.is_empty())
+                        .unwrap_or(false)
+                })
+            })
+            .unwrap_or(false)
     }
 
     /// Parse a bundle from JSON text (import step 1). The version gate (step 2)
@@ -555,6 +589,24 @@ fn applied_line(plan: &mut ImportPlan, key: &str, value: &Value, why: &str) {
     plan.writes.push((key.to_string(), value.clone()));
 }
 
+/// SECRET-class applied line (§5.4): the VALUE COLUMN IS MASKED — the real
+/// value goes only into the write list, never into the rendered summary
+/// (terminal scrollback and CI logs are not a place for bearer tokens).
+/// Non-empty → `(secret, applied)`; empty → `(empty)`, matching the §5.4 example.
+fn applied_secret_line(plan: &mut ImportPlan, key: &str, value: &Value) {
+    let masked = match value.as_str() {
+        Some(s) if !s.is_empty() => "(secret, applied)",
+        _ => "(empty)",
+    };
+    plan.applied.push(PlanLine {
+        key: key.to_string(),
+        old: None,
+        new: masked.to_string(),
+        why: String::new(),
+    });
+    plan.writes.push((key.to_string(), value.clone()));
+}
+
 fn adapted_line(plan: &mut ImportPlan, key: &str, old: &Value, new: &Value, why: &str) {
     plan.adapted.push(PlanLine {
         key: key.to_string(),
@@ -761,6 +813,7 @@ fn plan_audio_machine(
                 if !opts.non_tty {
                     plan.device_pick = Some(DevicePick {
                         wanted: bundle_device.clone().unwrap_or_default(),
+                        backend: pick_backend_name(map, current),
                         options: live.devices.clone(),
                     });
                 }
@@ -897,12 +950,26 @@ fn plan_audio_machine(
                 "audio.dsd_mode",
                 v,
                 &Value::String("convert".into()),
-                "pass --trust-dsd to keep DoP/native",
+                "pass --trust-dsd to keep DoP",
             );
         } else {
             applied_line(plan, "audio.dsd_mode", v, "");
         }
     }
+}
+
+/// The backend the device options belong to: the bundle's backend when present,
+/// else the target's current, else system default (for the §5.4 prompt line).
+fn pick_backend_name(map: &Map<String, Value>, current: &AudioSettings) -> String {
+    let bundle_backend: Option<AudioBackendType> = map
+        .get("backend_type")
+        .and_then(|v| serde_json::from_value(v.clone()).ok());
+    backend_name(
+        bundle_backend
+            .or(current.backend_type)
+            .unwrap_or(AudioBackendType::SystemDefault),
+    )
+    .to_string()
 }
 
 fn backend_name(b: AudioBackendType) -> &'static str {
@@ -1027,7 +1094,7 @@ fn plan_integrations(value: &Value, opts: &ImportOptions, uid_will_exist: bool, 
             applied_line(plan, &full, v, "");
         } else if SCROBBLER_SECRET.contains(&k.as_str()) {
             if opts.include_auth {
-                applied_line(plan, &full, v, "secret, applied");
+                applied_secret_line(plan, &full, v);
             } else {
                 plan.skipped
                     .push(skip_line(&full, "secrets require --include-auth"));

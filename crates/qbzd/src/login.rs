@@ -202,18 +202,40 @@ pub fn logout(roots: &ProfileRoots) -> Result<bool, LoginError> {
     Ok(nudge_reload(&host, None))
 }
 
+/// Three-state outcome of the ping-then-reload nudge. 04-settings-portability.md
+/// §5.3 step 7 needs "daemon simply not running" (not an error) distinguished
+/// from "daemon up but the reload was refused/500" (exit 1 with the restart
+/// hint) — a single bool conflates them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NudgeOutcome {
+    /// Ping answered and the reload returned 2xx.
+    Reloaded,
+    /// Ping did not answer — no daemon to nudge (never an error).
+    DaemonDown,
+    /// Ping answered but the reload did not return 2xx.
+    ReloadRefused,
+}
+
 /// Best-effort `GET /api/ping` → `POST /api/settings/reload` against a local
-/// daemon (the reload route lands in T11). Any failure — daemon down, route not
-/// yet present, timeout — returns `false`, which every caller treats as "the
-/// daemon will pick the credential change up on its next start" (login/logout
-/// are specified to work daemon-down, 02 §2.2). `token` carries the opt-in
-/// `[server] token` as `Authorization: Bearer` when present; T5 callers pass
-/// `None`.
-pub fn nudge_reload(host: &str, token: Option<&str>) -> bool {
+/// daemon. `token` carries the opt-in `[server] token` as
+/// `Authorization: Bearer` when present; T5 callers pass `None`.
+pub fn nudge_reload_outcome(host: &str, token: Option<&str>) -> NudgeOutcome {
     if !http_request_2xx(host, "GET", "/api/ping", token) {
-        return false;
+        return NudgeOutcome::DaemonDown;
     }
-    http_request_2xx(host, "POST", "/api/settings/reload", token)
+    if http_request_2xx(host, "POST", "/api/settings/reload", token) {
+        NudgeOutcome::Reloaded
+    } else {
+        NudgeOutcome::ReloadRefused
+    }
+}
+
+/// Boolean skin over [`nudge_reload_outcome`] for the callers that only need
+/// "did a running daemon acknowledge?" (login/logout/`settings set` — they are
+/// specified to work daemon-down, 02 §2.2, so any non-reload is just "the
+/// daemon picks it up on next start").
+pub fn nudge_reload(host: &str, token: Option<&str>) -> bool {
+    nudge_reload_outcome(host, token) == NudgeOutcome::Reloaded
 }
 
 // ============================ pure, unit-tested ============================
@@ -639,6 +661,18 @@ mod tests {
         let port = l.local_addr().unwrap().port();
         drop(l);
         assert!(!nudge_reload(&format!("127.0.0.1:{port}"), None));
+    }
+
+    #[test]
+    fn nudge_outcome_is_daemon_down_when_nothing_listens() {
+        // The three-state outcome: no listener → DaemonDown (never ReloadRefused).
+        let l = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = l.local_addr().unwrap().port();
+        drop(l);
+        assert_eq!(
+            nudge_reload_outcome(&format!("127.0.0.1:{port}"), None),
+            NudgeOutcome::DaemonDown
+        );
     }
 
     #[test]

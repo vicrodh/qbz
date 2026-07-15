@@ -432,6 +432,14 @@ fn nudge(roots: &ProfileRoots) -> bool {
     crate::login::nudge_reload(&host, token.as_deref())
 }
 
+/// Three-state variant of [`nudge`] for `settings import`, which must
+/// distinguish daemon-down from reload-refused (04 §5.3 step 7).
+fn nudge_outcome(roots: &ProfileRoots) -> crate::login::NudgeOutcome {
+    let host = crate::login::nudge_host(roots);
+    let token = local_token(roots);
+    crate::login::nudge_reload_outcome(&host, token.as_deref())
+}
+
 fn local_token(roots: &ProfileRoots) -> Option<String> {
     if let Ok(t) = std::env::var("QBZD_TOKEN") {
         if !t.is_empty() {
@@ -656,9 +664,10 @@ pub fn export(roots: &ProfileRoots, file: Option<String>, from: &str, include_au
         return 1;
     }
 
-    // The §3 warning prints only when secrets actually made it into the bundle
-    // (--include-auth with a decryptable token present).
-    if bundle.domains.contains_key("auth") {
+    // The §3 warning prints whenever ANY secret actually made it into the file:
+    // the auth token OR a non-blank scrobbler secret (--include-auth exports
+    // scrobbler tokens even when the Qobuz token itself is absent).
+    if bundle.contains_secrets() {
         println!("{}", crate::cli::copy::bundle_secret_warning(&path));
     } else {
         println!("{}", crate::cli::copy::bundle_export_success(&path));
@@ -795,16 +804,52 @@ pub async fn import(
         return 1;
     }
 
-    // Step 7: reload-nudge a running daemon.
-    let reloaded = nudge(roots);
-    let reload_line = if reloaded {
-        "daemon reloaded (was running)"
-    } else {
-        "daemon not running (changes apply on next start)"
-    };
+    // Step 7: reload-nudge a running daemon. Three states (04 §5.3 step 7):
+    // reloaded / not running (fine) / up-but-refused (exit 1, restart hint).
+    let outcome = nudge_outcome(roots);
+    let (done_line, stderr_msg, exit) =
+        reload_disposition(outcome, plan.routing_critical_changed);
 
-    print_buckets(&plan, &bundle, auth_note.as_deref(), Some(reload_line));
-    0
+    print_buckets(&plan, &bundle, auth_note.as_deref(), Some(&done_line));
+    if let Some(msg) = stderr_msg {
+        eprintln!("\n{msg}");
+    }
+    exit
+}
+
+/// Pure mapping of the nudge outcome (+ whether a routing-critical field
+/// changed) to the `done:` reload phrase, an optional stderr error, and the
+/// exit code. Split from IO so the §5.3-step-7 contract is unit-testable.
+fn reload_disposition(
+    outcome: crate::login::NudgeOutcome,
+    routing_critical: bool,
+) -> (String, Option<String>, i32) {
+    use crate::login::NudgeOutcome::*;
+    match outcome {
+        Reloaded => {
+            // §5.3 step 7 honesty rule: a routing-critical change re-inits the
+            // output device on the spot — say so instead of hiding it.
+            let line = if routing_critical {
+                "daemon reloaded (was running; output device reinitialized — an in-flight track may gap)"
+            } else {
+                "daemon reloaded (was running)"
+            };
+            (line.to_string(), None, 0)
+        }
+        DaemonDown => (
+            "daemon not running (changes apply on next start)".to_string(),
+            None,
+            0,
+        ),
+        ReloadRefused => (
+            "daemon answered ping but refused the reload".to_string(),
+            Some(
+                "error: settings saved but the daemon did not reload — restart it: systemctl --user restart qbzd"
+                    .to_string(),
+            ),
+            1,
+        ),
+    }
 }
 
 /// Enumerate the local audio system for [`bundle::plan`]: the available backends
@@ -833,8 +878,8 @@ fn build_live_system(bundle: &Bundle) -> LiveSystem {
 /// always "system default"; an unparseable answer falls to system default.
 fn prompt_device(pick: &bundle::DevicePick) -> DeviceChoice {
     println!(
-        "audio device \"{}\" not found on this machine. Available:",
-        pick.wanted
+        "audio device \"{}\" not found on this machine. Available on {}:",
+        pick.wanted, pick.backend
     );
     for (i, (id, label)) in pick.options.iter().enumerate() {
         println!("  [{}] {}  {}", i + 1, id, label);
@@ -1125,6 +1170,38 @@ mod tests {
         let keys = present_keys(&roots.config.join("qbzd.toml"));
         assert!(keys.is_empty());
         cleanup(&roots);
+    }
+
+    #[test]
+    fn reload_disposition_maps_the_three_outcomes() {
+        use crate::login::NudgeOutcome::*;
+
+        let (line, err, code) = reload_disposition(Reloaded, false);
+        assert_eq!(line, "daemon reloaded (was running)");
+        assert!(err.is_none());
+        assert_eq!(code, 0);
+
+        // §5.3 step 7 honesty rule: routing-critical + reloaded names the gap.
+        let (line, err, code) = reload_disposition(Reloaded, true);
+        assert!(line.contains("output device reinitialized"), "{line}");
+        assert!(line.contains("gap"), "{line}");
+        assert!(err.is_none());
+        assert_eq!(code, 0);
+
+        // Daemon simply not running is NOT an error, routing-critical or not.
+        let (line, err, code) = reload_disposition(DaemonDown, true);
+        assert_eq!(line, "daemon not running (changes apply on next start)");
+        assert!(err.is_none());
+        assert_eq!(code, 0);
+
+        // Up-but-refused → exit 1 with the verbatim restart hint.
+        let (_, err, code) = reload_disposition(ReloadRefused, false);
+        let msg = err.expect("refused must carry the stderr copy");
+        assert_eq!(
+            msg,
+            "error: settings saved but the daemon did not reload — restart it: systemctl --user restart qbzd"
+        );
+        assert_eq!(code, 1);
     }
 
     #[test]
