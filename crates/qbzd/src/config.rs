@@ -39,7 +39,9 @@ pub struct MprisCfg {
 impl Default for ServerCfg {
     fn default() -> Self {
         Self {
-            bind: "127.0.0.1".into(),
+            bind: "0.0.0.0".into(), // LAN-first posture (FB6): Sonos/Chromecast-style
+            // open renderer; the Origin shield still guards browsers and
+            // `[server] token` remains the opt-in restriction for powerusers.
             port: 8182,
             token: None, // open by default (02 §3.1.2)
         }
@@ -123,10 +125,12 @@ mod tests {
     use super::*;
     #[test]
     fn defaults_match_spec() {
-        // 01-architecture.md §10.1
+        // 01-architecture.md §10.1 (FB6: default bind widened to 0.0.0.0 for
+        // LAN-first control — restrict via [server] bind or token to opt back
+        // into loopback-only).
         let (c, warns) = QbzdConfig::from_str("").unwrap();
         assert_eq!(c.config_version, 1);
-        assert_eq!(c.server.bind, "127.0.0.1");
+        assert_eq!(c.server.bind, "0.0.0.0");
         assert_eq!(c.server.port, 8182);
         assert_eq!(c.log.level, "info");
         assert!(c.mpris.enabled);

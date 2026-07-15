@@ -466,51 +466,29 @@ pub(crate) fn nudge_host(roots: &ProfileRoots) -> String {
     format!("127.0.0.1:{port}")
 }
 
-/// FB1: bind the one-shot login listener on an EPHEMERAL port.
+/// FB6: bind the one-shot login listener WIDE by default, on an EPHEMERAL
+/// port — the LAN-first posture applies to the login listener too, so the
+/// OAuth redirect lands regardless of which address on the box is actually
+/// reachable. This is independent of `redirect_host` (the resolved
+/// `--callback-host` > `SSH_CONNECTION` > `127.0.0.1` value embedded in the
+/// URL, unchanged): the listener no longer binds that specific address.
 ///
-///   - Loopback (`127.0.0.1` / `::1`) binds that loopback address, no
-///     fallback — the local-laptop case is untouched.
-///   - Any other IP-literal host (explicit `--callback-host` or an
-///     SSH-auto-detected LAN address) binds that SPECIFIC address first —
-///     tighter than the old unconditional `0.0.0.0` — and only falls back to
-///     the FAMILY-MATCHED wildcard (`0.0.0.0` for v4, `::` for v6), with a
-///     log line, if that specific bind fails (e.g. the env lied about a
-///     locally-reachable address). A v4 wildcard under a v6 redirect URL (or
-///     vice versa) would guarantee a 300 s timeout in exactly the rescue case.
-///   - Non-IP input (a hostname in `--callback-host`) is NEVER handed to
-///     `TcpListener::bind` — that would do a blocking DNS lookup this path
-///     never had. It goes straight to the `0.0.0.0` wildcard with a log line;
-///     the URL still embeds the raw value the operator gave (embedding is
-///     their call; binding stays local and synchronous).
+///   - Family-aware only: an explicit IPv6 `redirect_host` binds the IPv6
+///     wildcard `::` (so a bracketed IPv6 redirect URL still lands — a v4
+///     wildcard under a v6 URL would guarantee a 300 s timeout).
+///   - Everything else — loopback, a v4 LAN IP, or non-IP input (a hostname
+///     in `--callback-host`, never handed to `TcpListener::bind` to avoid a
+///     blocking DNS lookup) — binds the IPv4 wildcard `0.0.0.0`.
 fn bind_login_listener(redirect_host: &str) -> Result<TcpListener, LoginError> {
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
     let fail = |e: std::io::Error| {
         LoginError::Failed(format!("could not bind the login listener: {e}"))
     };
-    match redirect_host.parse::<IpAddr>() {
-        Ok(ip) if ip.is_loopback() => TcpListener::bind((ip, 0)).map_err(fail),
-        Ok(ip) => match TcpListener::bind((ip, 0)) {
-            Ok(listener) => Ok(listener),
-            Err(e) => {
-                let wildcard: IpAddr = match ip {
-                    IpAddr::V4(_) => Ipv4Addr::UNSPECIFIED.into(),
-                    IpAddr::V6(_) => Ipv6Addr::UNSPECIFIED.into(),
-                };
-                log::warn!(
-                    "could not bind the login listener on {redirect_host}: {e} — \
-                     falling back to {wildcard}"
-                );
-                TcpListener::bind((wildcard, 0)).map_err(fail)
-            }
-        },
-        Err(_) => {
-            log::warn!(
-                "callback host {redirect_host:?} is not an IP literal — \
-                 binding the login listener on 0.0.0.0 (no DNS lookup)"
-            );
-            TcpListener::bind((Ipv4Addr::UNSPECIFIED, 0)).map_err(fail)
-        }
-    }
+    let wildcard: IpAddr = match redirect_host.parse::<IpAddr>() {
+        Ok(IpAddr::V6(_)) => Ipv6Addr::UNSPECIFIED.into(),
+        _ => Ipv4Addr::UNSPECIFIED.into(),
+    };
+    TcpListener::bind((wildcard, 0)).map_err(fail)
 }
 
 fn read_stdin_line() -> Result<String, LoginError> {
@@ -732,21 +710,38 @@ mod tests {
         assert!(!auto);
     }
 
-    // ---------------------- bind_login_listener (FB1) ----------------------
+    // ---------------------- bind_login_listener (FB6) ----------------------
 
     #[test]
-    fn bind_login_listener_loopback_v4_binds_loopback() {
+    fn bind_login_listener_loopback_v4_host_binds_the_v4_wildcard() {
+        // FB6: LAN-first posture — even a loopback-resolved redirect host
+        // binds the wide listener now; only the embedded URL stays loopback.
         let l = bind_login_listener("127.0.0.1").unwrap();
-        assert!(l.local_addr().unwrap().ip().is_loopback());
+        let addr = l.local_addr().unwrap();
+        assert!(addr.ip().is_unspecified(), "{addr}");
+        assert!(addr.is_ipv4(), "{addr}");
     }
 
     #[test]
-    fn bind_login_listener_treats_v6_loopback_as_loopback() {
-        // Minor fold: "::1" takes the loopback fast-path (no wildcard fallback).
+    fn bind_login_listener_v4_lan_host_binds_the_v4_wildcard() {
+        // An explicit/SSH-detected LAN v4 host also binds wide, not that
+        // specific address.
+        let l = bind_login_listener("192.168.1.50").unwrap();
+        let addr = l.local_addr().unwrap();
+        assert!(addr.ip().is_unspecified(), "{addr}");
+        assert!(addr.is_ipv4(), "{addr}");
+    }
+
+    #[test]
+    fn bind_login_listener_v6_host_binds_the_v6_wildcard() {
+        // Family-aware: an explicit IPv6 host binds the IPv6 wildcard `::`.
         match bind_login_listener("::1") {
-            Ok(l) => assert!(l.local_addr().unwrap().ip().is_loopback()),
-            // A box with IPv6 disabled can't bind ::1 at all — the error path
-            // (no silent wildcard rescue for loopback) is the assertion then.
+            Ok(l) => {
+                let addr = l.local_addr().unwrap();
+                assert!(addr.ip().is_unspecified(), "{addr}");
+                assert!(addr.is_ipv6(), "{addr}");
+            }
+            // A box with IPv6 disabled can't bind `::` at all.
             Err(e) => assert!(e.to_string().contains("could not bind"), "{e}"),
         }
     }

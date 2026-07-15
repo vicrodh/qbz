@@ -67,9 +67,10 @@ pub async fn run(roots: ProfileRoots, cfg: QbzdConfig, warns: Vec<String>) -> Re
         }
     };
     if !bind_addr.ip().is_loopback() {
-        // §6.3 verbatim — reachable-from-LAN warning (also shown by the TUI).
-        eprintln!("{}", crate::cli::copy::lan_bind_warning(&bind_addr.to_string()));
-        log::warn!("control API bound to non-loopback {bind_addr}");
+        // FB6: the default bind is now 0.0.0.0 — LAN-first posture (Sonos/
+        // Chromecast parity), not a misconfiguration. One INFO line, not a
+        // stderr warning; loopback binds stay silent.
+        log::info!("{}", crate::cli::copy::lan_posture_note(&bind_addr.to_string()));
     }
 
     // 6.-9. compose stores + runtime + restore credentials + restore session.

@@ -129,13 +129,17 @@ pub fn foreign_qbzd(addr: &str) -> String {
     )
 }
 
-/// LAN-exposure warning (02 §6.3, verbatim) — printed by the daemon at boot when
-/// bound to a non-loopback address, and by the TUI Network screen (T13).
-pub fn lan_bind_warning(addr: &str) -> String {
+/// LAN-first posture note (FB6, successor to the old 02 §6.3 LAN-exposure
+/// warning) — one INFO line logged by the daemon at boot when the control API
+/// is NOT loopback-only. Since FB6 the default bind is `0.0.0.0`, so this
+/// fires on every default boot; it is deliberately informational, not a
+/// `warning:` — an open LAN renderer (Sonos/Chromecast posture) is the
+/// intended default, the Origin shield already guards browsers, and this line
+/// just orients the operator toward the two ways to restrict it further.
+/// `addr` is the bound `ip:port`.
+pub fn lan_posture_note(addr: &str) -> String {
     format!(
-        "warning: control API is bound to {addr} — reachable from your network
-  anyone on your LAN can control playback (like Sonos or Chromecast)
-  → set [server] token in qbzd.toml to require a shared secret"
+        "control plane listening on {addr} — anyone on your network can control playback (set [server] bind = \"127.0.0.1\" or [server] token in qbzd.toml to restrict)"
     )
 }
 
