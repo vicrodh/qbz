@@ -26,13 +26,18 @@ pub enum Tier {
 }
 
 impl Tier {
-    /// Short label for the per-block `copied ✓` flash.
+    /// The per-block flash shown after a copy/save attempt. OSC 52 is
+    /// one-way — the local terminal may silently ignore the escape, and
+    /// there is no ack to confirm it landed — so its flash says "sent …
+    /// paste to confirm" rather than claiming a completed copy. wl-copy and
+    /// xclip keep the checkmark (they're locally verifiable-ish: the process
+    /// exited 0 having read the pipe); File keeps naming the artifact.
     pub fn short_label(self) -> &'static str {
         match self {
-            Tier::Osc52 => "OSC 52",
-            Tier::WlCopy => "wl-copy",
-            Tier::Xclip => "xclip",
-            Tier::File => "saved to file",
+            Tier::Osc52 => "sent via OSC 52 — paste to confirm",
+            Tier::WlCopy => "copied ✓ (wl-copy)",
+            Tier::Xclip => "copied ✓ (xclip)",
+            Tier::File => "copied ✓ (saved to file)",
         }
     }
 }
@@ -116,6 +121,21 @@ pub fn osc52_payload(data: &str, tmux: bool) -> String {
     }
 }
 
+/// OSC 52's payload cap, applied to the base64-encoded blob (post-inflation,
+/// which is what actually crosses the wire). Terminals differ wildly in what
+/// they accept for a clipboard-set escape — many silently truncate (or just
+/// drop) anything past a few tens of KB — so past this ceiling `copy` skips
+/// the tier outright rather than risk a truncated, silently-wrong paste.
+/// 100 KB is generous but bounded. Kept as a pure fn so the threshold
+/// decision is unit-tested without a tty.
+const OSC52_MAX_B64_LEN: usize = 100 * 1024;
+
+/// Whether a base64-encoded OSC 52 payload of `b64_len` bytes is small enough
+/// to attempt over OSC 52 (`> 100 KB` post-base64 skips the tier).
+pub fn osc52_fits(b64_len: usize) -> bool {
+    b64_len <= OSC52_MAX_B64_LEN
+}
+
 /// The directory the `w` (write) action and the file-fallback tier save into —
 /// ALWAYS under the operator's home, NEVER a system path (HARD RULE: the wizard
 /// never writes a live config file).
@@ -151,9 +171,26 @@ pub struct CopyReport {
 /// file-fallback save. Never returns an error: the last tier is a file write,
 /// and even if THAT fails the report says so rather than losing the flow.
 pub fn copy(text: &str, stem: &str, env: &ClipEnv) -> CopyReport {
+    // Skip the OSC 52 tier outright when the payload is too big for a
+    // terminal to reliably accept — no tty write is even attempted.
+    let oversized = !osc52_fits(base64(text.as_bytes()).len());
     for tier in plan_tiers(env) {
+        if tier == Tier::Osc52 && oversized {
+            continue; // too large for OSC 52 — go straight to the next tier
+        }
         match try_tier(tier, text, stem, env.tmux) {
-            Some(detail) => return CopyReport { tier, detail },
+            Some(detail) => {
+                // Osc52 always sits directly before File in plan_tiers, so
+                // when it was skipped for size, name that reason instead of
+                // File's generic "clipboard unavailable" (which covers the
+                // headless / no-wl-copy-or-xclip case too).
+                let detail = if oversized && tier == Tier::File {
+                    detail.replacen("clipboard unavailable", "too large for OSC 52", 1)
+                } else {
+                    detail
+                };
+                return CopyReport { tier, detail };
+            }
             None => continue,
         }
     }
@@ -169,8 +206,14 @@ pub fn copy(text: &str, stem: &str, env: &ClipEnv) -> CopyReport {
 fn try_tier(tier: Tier, text: &str, stem: &str, tmux: bool) -> Option<String> {
     match tier {
         Tier::Osc52 => write_osc52(text, tmux).ok().map(|()| {
-            let via = if tmux { "OSC 52 via tmux" } else { "OSC 52" };
-            format!("copied to clipboard ({via})")
+            // Honest wording: the escape reached the tty, but OSC 52 is
+            // one-way — plenty of terminals ignore it by default — so this
+            // is NOT "copied", it's "sent, unconfirmed".
+            if tmux {
+                "sent via OSC 52 (tmux) — paste to confirm".to_string()
+            } else {
+                "sent via OSC 52 — paste to confirm".to_string()
+            }
         }),
         Tier::WlCopy => pipe_to("wl-copy", &[], text)
             .then(|| "copied to clipboard (wl-copy)".to_string()),
@@ -268,6 +311,13 @@ mod tests {
         assert_eq!(plan_tiers(&x11), vec![Tier::Xclip, Tier::Osc52, Tier::File]);
         let headless = ClipEnv { ssh: false, tmux: false, wayland: false, x11: false };
         assert_eq!(plan_tiers(&headless), vec![Tier::Osc52, Tier::File]);
+    }
+
+    #[test]
+    fn osc52_fits_thresholds_at_100kb_post_base64() {
+        assert!(osc52_fits(0));
+        assert!(osc52_fits(100 * 1024)); // exactly the cap still fits
+        assert!(!osc52_fits(100 * 1024 + 1)); // one byte over skips the tier
     }
 
     #[test]

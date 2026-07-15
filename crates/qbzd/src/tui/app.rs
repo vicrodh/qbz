@@ -544,7 +544,7 @@ impl App {
     fn content_uses_horizontal(&self) -> bool {
         match &self.active {
             Active::Audio(s) => s.focused_is_buffer(),
-            Active::Wizard(_) => true,
+            Active::Wizard(s) => s.claims_horizontal(),
             _ => false,
         }
     }
@@ -1612,6 +1612,7 @@ fn expand_tilde(path: &str) -> PathBuf {
 mod tests {
     use super::*;
     use ratatui::backend::TestBackend;
+    use ratatui::crossterm::event::KeyModifiers;
     use ratatui::Terminal;
 
     // ---- landing (FB3): always Account; focus depends on the credential file ----
@@ -1696,6 +1697,20 @@ mod tests {
             classify_key(Focus::Content, KeyCode::Left, false, true),
             NavIntent::ToScreen
         );
+    }
+
+    #[test]
+    fn wizard_welcome_left_drops_focus_to_nav_like_every_other_section() {
+        // A fresh Wizard starts on Welcome, where nothing claims ← — it must
+        // behave exactly like every non-Wizard section: ← walks focus back
+        // to the sidebar instead of being swallowed by the wizard's own
+        // (no-op at Welcome) step-back handling. This only exercises the
+        // FocusNav path (no screen dispatch), so it never touches the
+        // wizard's async health-probe worker.
+        let mut app = bare_app(Screen::Wizard, Focus::Content);
+        assert!(!app.content_uses_horizontal());
+        app.on_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
+        assert_eq!(app.focus, Focus::Nav);
     }
 
     #[test]

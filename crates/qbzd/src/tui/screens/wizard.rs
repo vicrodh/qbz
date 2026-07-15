@@ -125,10 +125,12 @@ impl Candidate {
     }
 }
 
-/// A generated config + its per-block copy flash.
+/// A generated config + its per-block copy flash. The flash stores which
+/// `Tier` won so the render can pick the right wording (OSC 52's is
+/// deliberately not "copied ✓" — see `clipboard::Tier::short_label`).
 struct ConfigBlock {
     data: DacConfigData,
-    flash: Option<(String, Instant)>,
+    flash: Option<(clipboard::Tier, Instant)>,
 }
 
 // ============================ screen state ============================
@@ -212,6 +214,15 @@ impl WizardState {
     /// so the operator can see where they are in the flow.
     pub fn editing_label(&self) -> Option<&'static str> {
         Some(self.step.title())
+    }
+
+    /// Whether the current step consumes ←/→ itself (step back/next) — true
+    /// for every step except Welcome, where nothing in the content claims ←
+    /// (the CTA only listens for Enter/Space): there, ← should behave like
+    /// every other section and drop focus back to the sidebar instead of
+    /// being silently swallowed by a no-op `retreat()`.
+    pub fn claims_horizontal(&self) -> bool {
+        self.step != WStep::Welcome
     }
 
     /// Step-specific help bar.
@@ -496,7 +507,9 @@ impl WizardState {
                 self.follow_focus();
             }
             KeyCode::PageUp => self.review_scroll = self.review_scroll.saturating_sub(8),
-            KeyCode::PageDown => self.review_scroll = self.review_scroll.saturating_add(8),
+            KeyCode::PageDown => {
+                self.review_scroll = self.review_scroll.saturating_add(8).min(self.max_review_scroll());
+            }
             KeyCode::Char('c') => self.copy_focused_block(),
             KeyCode::Char('C') => self.copy_all_blocks(),
             KeyCode::Char('w') => self.write_focused_block(),
@@ -514,7 +527,23 @@ impl WizardState {
             }
             line = line.saturating_add(block_line_count(&cfg.data));
         }
-        self.review_scroll = line;
+        self.review_scroll = line.min(self.max_review_scroll());
+    }
+
+    /// Total rendered lines in the Review body (the backup-hint line + every
+    /// block) — the ceiling `review_scroll` is clamped against so PgDn/↓ can
+    /// never scroll past the last block into blank space.
+    fn review_content_lines(&self) -> u16 {
+        let mut total: u16 = 1; // WIZ_BACKUP_HINT
+        for cfg in &self.configs {
+            total = total.saturating_add(block_line_count(&cfg.data));
+        }
+        total
+    }
+
+    /// The highest `review_scroll` that still shows the last content line.
+    fn max_review_scroll(&self) -> u16 {
+        self.review_content_lines().saturating_sub(1)
     }
 
     fn copy_focused_block(&mut self) {
@@ -522,11 +551,15 @@ impl WizardState {
         if let Some(block) = self.configs.get_mut(self.review_focus) {
             let text = block.data.full_block();
             let report = clipboard::copy(&text, &block.data.short(), &env);
-            block.flash = Some((report.tier.short_label().to_string(), Instant::now()));
+            block.flash = Some((report.tier, Instant::now()));
             self.status_flash = Some((report.detail, Instant::now()));
         }
     }
 
+    /// `C` — copy every block at once. Always ALSO lands a durable file
+    /// artifact at a fixed path, independent of which clipboard tier won:
+    /// OSC 52 is one-way/unverifiable, so the batch copy must never leave the
+    /// operator with nothing to fall back to if the paste silently failed.
     fn copy_all_blocks(&mut self) {
         if self.configs.is_empty() {
             return;
@@ -540,9 +573,18 @@ impl WizardState {
                 .map(|c| format!("# ── {} ──\n{}", c.data.name, c.data.full_block())),
         );
         let all = parts.join("\n\n");
-        let report = clipboard::copy(&all, "all-dacs", &self.clip_env);
+
+        let report = clipboard::copy(&all, "all-blocks", &self.clip_env);
+        let save = clipboard::write_wizard_file("all-blocks", &all);
+        let outcome = match (report.tier, save) {
+            // The clipboard chain already fell back to this exact file —
+            // don't say "saved" twice.
+            (clipboard::Tier::File, Ok(_)) => report.detail,
+            (_, Ok(path)) => format!("{} + saved {}", report.detail, path.display()),
+            (_, Err(e)) => format!("{} (file save also failed: {e})", report.detail),
+        };
         self.status_flash = Some((
-            format!("{} ({})", s::wiz_copied_all(self.configs.len()), report.detail),
+            format!("{} ({outcome})", s::wiz_copied_all(self.configs.len())),
             Instant::now(),
         ));
     }
@@ -552,7 +594,7 @@ impl WizardState {
             let text = block.data.full_block();
             match clipboard::write_wizard_file(&block.data.short(), &text) {
                 Ok(path) => {
-                    block.flash = Some((clipboard::Tier::File.short_label().to_string(), Instant::now()));
+                    block.flash = Some((clipboard::Tier::File, Instant::now()));
                     self.status_flash =
                         Some((format!("{} {}", s::WIZ_SAVED_TO, path.display()), Instant::now()));
                 }
@@ -878,7 +920,7 @@ fn append_block_lines(lines: &mut Vec<Line<'static>>, block: &ConfigBlock, focus
     ];
     if flashing {
         if let Some((tier, _)) = &block.flash {
-            header.push(Span::styled(format!("   copied ✓ ({tier})"), theme::ok()));
+            header.push(Span::styled(format!("   {}", tier.short_label()), theme::ok()));
         }
     }
     lines.push(Line::from(header));
@@ -903,6 +945,7 @@ fn append_block_lines(lines: &mut Vec<Line<'static>>, block: &ConfigBlock, focus
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ratatui::crossterm::event::KeyModifiers;
 
     #[test]
     fn step_transition_table_is_linear_and_bounded() {
@@ -982,6 +1025,38 @@ mod tests {
         assert!(matches!(w.on_escape(), ScreenAction::WizardAbandon));
         w.step = WStep::Done;
         assert!(matches!(w.on_escape(), ScreenAction::Back));
+    }
+
+    #[test]
+    fn only_welcome_declines_to_claim_horizontal() {
+        // Welcome has nothing that consumes ← (the CTA only listens for
+        // Enter/Space), so it must NOT claim ←/→ — otherwise ← is silently
+        // swallowed by a no-op retreat() instead of dropping focus to the
+        // sidebar like every other section.
+        let mut w = WizardState::new();
+        for step in STEP_ORDER {
+            w.step = step;
+            assert_eq!(
+                w.claims_horizontal(),
+                step != WStep::Welcome,
+                "step {step:?} claims_horizontal mismatch"
+            );
+        }
+    }
+
+    #[test]
+    fn review_scroll_page_down_never_overscrolls_past_the_last_block() {
+        let mut w = populated(); // one config block
+        w.step = WStep::Review;
+        let max = w.max_review_scroll();
+        assert!(max > 0, "the populated fixture should have real content to clamp against");
+
+        let page_down = KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE);
+        // Mash PageDown well past the content height.
+        for _ in 0..20 {
+            w.handle_key(page_down);
+        }
+        assert_eq!(w.review_scroll, max);
     }
 
     #[test]
