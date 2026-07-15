@@ -4549,3 +4549,38 @@ msgstr "Libera datos en caché. Tus álbumes descargados se conservan — elimí
 msgid "Couldn't clear the cache"
 msgstr "No se pudo limpiar el caché"
 
+
+# Task 18 — Settings > Developer > Export settings modal (daemon 04 §4.2)
+msgid "SETTINGS PORTABILITY"
+msgstr "PORTABILIDAD DE AJUSTES"
+
+msgid "Export settings…"
+msgstr "Exportar ajustes…"
+
+msgid "Save a portable bundle of your settings to move to another machine or the qbzd daemon."
+msgstr "Guarda un paquete portátil de tus ajustes para llevarlos a otra máquina o al daemon qbzd."
+
+msgid "Export…"
+msgstr "Exportar…"
+
+msgid "Export settings"
+msgstr "Exportar ajustes"
+
+msgid "Save your settings as a bundle to import on the qbzd daemon or another machine."
+msgstr "Guarda tus ajustes como un paquete para importarlos en el daemon qbzd o en otra máquina."
+
+msgid "Include Qobuz login and integration tokens"
+msgstr "Incluir el inicio de sesión de Qobuz y los tokens de integraciones"
+
+msgid "Anyone with the file can use your accounts. It is saved readable only by you; delete it after importing."
+msgstr "Cualquiera que tenga el archivo puede usar tus cuentas. Se guarda de modo que solo tú puedas leerlo; elimínalo después de importarlo."
+
+msgid "Export"
+msgstr "Exportar"
+
+msgid "Bundle saved. On the daemon box:"
+msgstr "Paquete guardado. En la máquina del daemon:"
+
+msgid "Could not export settings"
+msgstr "No se pudieron exportar los ajustes"
+

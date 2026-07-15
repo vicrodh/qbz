@@ -4508,3 +4508,38 @@ msgstr "キャッシュデータを解放します。ダウンロード済みの
 msgid "Couldn't clear the cache"
 msgstr "キャッシュを削除できませんでした"
 
+
+# Task 18 — Settings > Developer > Export settings modal (daemon 04 §4.2)
+msgid "SETTINGS PORTABILITY"
+msgstr "設定の移行"
+
+msgid "Export settings…"
+msgstr "設定をエクスポート…"
+
+msgid "Save a portable bundle of your settings to move to another machine or the qbzd daemon."
+msgstr "設定を持ち運び可能なバンドルとして保存し、別のマシンや qbzd デーモンに移せます。"
+
+msgid "Export…"
+msgstr "エクスポート…"
+
+msgid "Export settings"
+msgstr "設定をエクスポート"
+
+msgid "Save your settings as a bundle to import on the qbzd daemon or another machine."
+msgstr "設定をバンドルとして保存し、qbzd デーモンや別のマシンでインポートできます。"
+
+msgid "Include Qobuz login and integration tokens"
+msgstr "Qobuz のログインと連携トークンを含める"
+
+msgid "Anyone with the file can use your accounts. It is saved readable only by you; delete it after importing."
+msgstr "ファイルを読める人は誰でもあなたのアカウントを使用できます。自分だけが読み取れる形で保存されます。インポート後は削除してください。"
+
+msgid "Export"
+msgstr "エクスポート"
+
+msgid "Bundle saved. On the daemon box:"
+msgstr "バンドルを保存しました。デーモンのマシンで:"
+
+msgid "Could not export settings"
+msgstr "設定をエクスポートできませんでした"
+

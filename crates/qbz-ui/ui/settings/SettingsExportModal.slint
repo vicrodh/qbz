@@ -1,0 +1,192 @@
+// "Export settings" modal (Settings > Developer > Export settings…, 04
+// §4.2). Saves a portable settings bundle via the shared
+// `qbz_app::settings::bundle` engine — the modal adds UI only.
+//
+// One checkbox, default OFF, is the single `--include-auth` gate (one
+// checkbox, not two, to stay 1:1 with the CLI). Its warning line sits
+// under it, indented to the label's edge. Confirm() is wired in Rust
+// (crate::settings::export_settings): it reads `include-auth`, closes the
+// modal, opens a native save dialog seeded with
+// `qbz-settings-YYYYMMDD.qbzb`, writes the bundle 0600, and toasts the
+// import command.
+//
+// Chrome follows the alignment standard: Radius.md surface-card panel,
+// heading + close-X, checkbox row (18px box + 10px + label), footer
+// alignment:end with Cancel before the accent primary. No pills
+// (ADR-008); z via declaration order in AppShell (ADR-009/010).
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Typography } from "../foundation/typography.slint";
+import { Radius } from "../foundation/radius.slint";
+import { SettingsExportState, SettingsExportActions } from "../state.slint";
+import { QbzIcon } from "../primitives/QbzIcon.slint";
+
+export component SettingsExportModal inherits Rectangle {
+    visible: SettingsExportState.open;
+
+    if SettingsExportState.open: Rectangle {
+        background: #000000bf;
+        TouchArea {
+            mouse-cursor: default;
+            clicked => {
+                SettingsExportState.open = false;
+            }
+        }
+        Rectangle {
+            width: Math.min(root.width - 80px, 420px);
+            height: panel.preferred-height;
+            x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+            y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+            border-radius: Radius.md;
+            background: Theme.surface-card;
+            border-width: 1px;
+            border-color: Theme.border-subtle;
+            drop-shadow-blur: 32px;
+            drop-shadow-color: #00000080;
+            TouchArea { }
+
+            panel := VerticalLayout {
+                padding: 20px;
+                spacing: 16px;
+
+                // Header: title + close X.
+                HorizontalLayout {
+                    Text {
+                        text: @tr("Export settings");
+                        color: Theme.text-primary;
+                        font-size: Typography.heading;
+                        font-weight: Typography.semibold;
+                        horizontal-stretch: 1;
+                        vertical-alignment: center;
+                    }
+                    close-x := TouchArea {
+                        width: 28px;
+                        height: 28px;
+                        mouse-cursor: pointer;
+                        clicked => {
+                            SettingsExportState.open = false;
+                        }
+                        QbzIcon {
+                            source: @image-url("../assets/icons/x.svg");
+                            width: 17px;
+                            height: 17px;
+                            x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                            y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                            tint: close-x.has-hover ? Theme.text-primary : Theme.text-muted;
+                        }
+                    }
+                }
+
+                // What the export produces.
+                Text {
+                    text: @tr("Save your settings as a bundle to import on the qbzd daemon or another machine.");
+                    color: Theme.text-muted;
+                    font-size: Typography.legal;
+                    wrap: word-wrap;
+                }
+
+                // Include-auth checkbox (default OFF) — the single
+                // --include-auth gate, with its warning line indented to the
+                // label's left edge.
+                VerticalLayout {
+                    spacing: 6px;
+                    HorizontalLayout {
+                        spacing: 10px;
+                        auth-toggle := TouchArea {
+                            width: 20px;
+                            height: 20px;
+                            mouse-cursor: pointer;
+                            clicked => {
+                                SettingsExportState.include-auth = !SettingsExportState.include-auth;
+                            }
+                            Rectangle {
+                                width: 18px;
+                                height: 18px;
+                                y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                                border-radius: 4px;
+                                background: SettingsExportState.include-auth ? Theme.accent : transparent;
+                                border-width: SettingsExportState.include-auth ? 0px : 1.5px;
+                                border-color: Theme.text-muted;
+                                QbzIcon {
+                                    source: @image-url("../assets/icons/check.svg");
+                                    width: 12px;
+                                    height: 12px;
+                                    x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                                    y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                                    tint: #ffffff;
+                                    visible: SettingsExportState.include-auth;
+                                }
+                            }
+                        }
+                        Text {
+                            text: @tr("Include Qobuz login and integration tokens");
+                            color: Theme.text-secondary;
+                            font-size: Typography.body;
+                            vertical-alignment: center;
+                            horizontal-stretch: 1;
+                            wrap: word-wrap;
+                        }
+                    }
+                    // Warning line — indented to the label's left edge (20px
+                    // box + 10px spacing = 30px).
+                    HorizontalLayout {
+                        padding-left: 30px;
+                        Text {
+                            text: @tr("Anyone with the file can use your accounts. It is saved readable only by you; delete it after importing.");
+                            color: Theme.text-muted;
+                            font-size: Typography.legal;
+                            wrap: word-wrap;
+                        }
+                    }
+                }
+
+                // Footer: Cancel before the accent Export primary.
+                HorizontalLayout {
+                    alignment: end;
+                    spacing: 10px;
+                    // Cancel.
+                    Rectangle {
+                        width: cancel-label.preferred-width + 28px;
+                        height: 36px;
+                        border-radius: Radius.sm;
+                        background: cancel-ta.has-hover ? Theme.surface-hover : Theme.surface-elevated;
+                        cancel-label := Text {
+                            text: @tr("Cancel");
+                            color: Theme.text-primary;
+                            font-size: Typography.body;
+                            x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                            y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                        }
+                        cancel-ta := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                SettingsExportState.open = false;
+                            }
+                        }
+                    }
+                    // Export (opens the native save dialog via Rust).
+                    Rectangle {
+                        width: export-label.preferred-width + 36px;
+                        height: 36px;
+                        border-radius: Radius.sm;
+                        background: export-ta.has-hover ? #ffffffd6 : Theme.accent;
+                        export-label := Text {
+                            text: @tr("Export");
+                            color: #ffffff;
+                            font-size: Typography.body;
+                            font-weight: Typography.semibold;
+                            x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                            y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                        }
+                        export-ta := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                SettingsExportActions.confirm();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

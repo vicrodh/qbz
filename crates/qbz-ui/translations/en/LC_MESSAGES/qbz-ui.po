@@ -291,3 +291,38 @@ msgstr "Cache cleared"
 msgid "Couldn't clear the cache"
 msgstr "Couldn't clear the cache"
 
+
+# Task 18 — Settings > Developer > Export settings modal (daemon 04 §4.2)
+msgid "SETTINGS PORTABILITY"
+msgstr "SETTINGS PORTABILITY"
+
+msgid "Export settings…"
+msgstr "Export settings…"
+
+msgid "Save a portable bundle of your settings to move to another machine or the qbzd daemon."
+msgstr "Save a portable bundle of your settings to move to another machine or the qbzd daemon."
+
+msgid "Export…"
+msgstr "Export…"
+
+msgid "Export settings"
+msgstr "Export settings"
+
+msgid "Save your settings as a bundle to import on the qbzd daemon or another machine."
+msgstr "Save your settings as a bundle to import on the qbzd daemon or another machine."
+
+msgid "Include Qobuz login and integration tokens"
+msgstr "Include Qobuz login and integration tokens"
+
+msgid "Anyone with the file can use your accounts. It is saved readable only by you; delete it after importing."
+msgstr "Anyone with the file can use your accounts. It is saved readable only by you; delete it after importing."
+
+msgid "Export"
+msgstr "Export"
+
+msgid "Bundle saved. On the daemon box:"
+msgstr "Bundle saved. On the daemon box:"
+
+msgid "Could not export settings"
+msgstr "Could not export settings"
+

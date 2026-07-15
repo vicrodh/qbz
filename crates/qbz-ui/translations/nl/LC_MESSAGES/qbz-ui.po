@@ -4531,3 +4531,38 @@ msgstr "Maakt cachegegevens vrij. Je gedownloade albums blijven behouden — ver
 msgid "Couldn't clear the cache"
 msgstr "Kan de cache niet wissen"
 
+
+# Task 18 — Settings > Developer > Export settings modal (daemon 04 §4.2)
+msgid "SETTINGS PORTABILITY"
+msgstr "INSTELLINGEN OVERZETTEN"
+
+msgid "Export settings…"
+msgstr "Instellingen exporteren…"
+
+msgid "Save a portable bundle of your settings to move to another machine or the qbzd daemon."
+msgstr "Slaat een overdraagbare bundel van je instellingen op om ze naar een andere machine of de qbzd-daemon te verplaatsen."
+
+msgid "Export…"
+msgstr "Exporteren…"
+
+msgid "Export settings"
+msgstr "Instellingen exporteren"
+
+msgid "Save your settings as a bundle to import on the qbzd daemon or another machine."
+msgstr "Sla je instellingen op als bundel om ze op de qbzd-daemon of een andere machine te importeren."
+
+msgid "Include Qobuz login and integration tokens"
+msgstr "Qobuz-login en integratietokens meenemen"
+
+msgid "Anyone with the file can use your accounts. It is saved readable only by you; delete it after importing."
+msgstr "Iedereen die het bestand kan lezen, kan je accounts gebruiken. Het wordt opgeslagen zodat alleen jij het kunt lezen; verwijder het na het importeren."
+
+msgid "Export"
+msgstr "Exporteren"
+
+msgid "Bundle saved. On the daemon box:"
+msgstr "Bundel opgeslagen. Op de daemon-machine:"
+
+msgid "Could not export settings"
+msgstr "Kan instellingen niet exporteren"
+

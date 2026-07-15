@@ -1858,6 +1858,21 @@ export global CreateFolderActions {
     callback close();
 }
 
+// "Export settings" modal state (Settings > Developer, 04 §4.2). Opened from
+// the Export settings… row, which resets `include-auth` to false first so the
+// single --include-auth gate is always default-OFF. confirm() is wired in
+// Rust (crate::settings::export_settings): build the bundle via the shared
+// engine, open a native save dialog, write it 0600, and toast the import
+// command. Cancel / backdrop / close-X set `open = false` directly.
+export global SettingsExportState {
+    in-out property <bool> open: false;
+    in-out property <bool> include-auth: false;
+}
+
+export global SettingsExportActions {
+    callback confirm();
+}
+
 // "Create Mixtape / Collection" modal state (My QBZ). Opened from either
 // grid's "+ New" CTA / empty-state button. `kind` is preset by the opening
 // grid ("mixtape" | "collection") and can be flipped via the radio toggle

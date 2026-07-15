@@ -6,7 +6,7 @@
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
 import { Radius } from "../foundation/radius.slint";
-import { QconnectDevState, LogViewerState } from "../state.slint";
+import { QconnectDevState, LogViewerState, SettingsExportState } from "../state.slint";
 import { SettingRow } from "SettingRow.slint";
 import { DiagnosticsPanel } from "DiagnosticsPanel.slint";
 
@@ -70,6 +70,21 @@ export component DeveloperSettings inherits VerticalLayout {
             label: @tr("Open log viewer");
             clicked => {
                 LogViewerState.open = true;
+            }
+        }
+    }
+
+    GroupHeader { text: @tr("SETTINGS PORTABILITY"); }
+
+    SettingRow {
+        label: @tr("Export settings…");
+        description: @tr("Save a portable bundle of your settings to move to another machine or the qbzd daemon.");
+        SecondaryButton {
+            label: @tr("Export…");
+            clicked => {
+                // Always reset the auth gate so it opens default-OFF (04 §4.2).
+                SettingsExportState.include-auth = false;
+                SettingsExportState.open = true;
             }
         }
     }

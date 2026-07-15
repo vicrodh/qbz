@@ -4519,3 +4519,38 @@ msgstr "Gibt zwischengespeicherte Daten frei. Deine heruntergeladenen Alben blei
 msgid "Couldn't clear the cache"
 msgstr "Cache konnte nicht geleert werden"
 
+
+# Task 18 — Settings > Developer > Export settings modal (daemon 04 §4.2)
+msgid "SETTINGS PORTABILITY"
+msgstr "EINSTELLUNGEN ÜBERTRAGEN"
+
+msgid "Export settings…"
+msgstr "Einstellungen exportieren…"
+
+msgid "Save a portable bundle of your settings to move to another machine or the qbzd daemon."
+msgstr "Speichert ein portables Bündel deiner Einstellungen, um sie auf einen anderen Rechner oder den qbzd-Daemon zu übertragen."
+
+msgid "Export…"
+msgstr "Exportieren…"
+
+msgid "Export settings"
+msgstr "Einstellungen exportieren"
+
+msgid "Save your settings as a bundle to import on the qbzd daemon or another machine."
+msgstr "Speichere deine Einstellungen als Bündel, um sie auf dem qbzd-Daemon oder einem anderen Rechner zu importieren."
+
+msgid "Include Qobuz login and integration tokens"
+msgstr "Qobuz-Anmeldung und Integrations-Tokens einschließen"
+
+msgid "Anyone with the file can use your accounts. It is saved readable only by you; delete it after importing."
+msgstr "Wer die Datei lesen kann, kann deine Konten nutzen. Sie wird nur für dich lesbar gespeichert; lösche sie nach dem Import."
+
+msgid "Export"
+msgstr "Exportieren"
+
+msgid "Bundle saved. On the daemon box:"
+msgstr "Bündel gespeichert. Auf dem Daemon-Rechner:"
+
+msgid "Could not export settings"
+msgstr "Einstellungen konnten nicht exportiert werden"
+

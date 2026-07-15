@@ -30,6 +30,7 @@ import { AddToMixtapeModal } from "../myqbz/AddToMixtapeModal.slint";
 import { EphemeralPlayChoiceModal } from "../primitives/EphemeralPlayChoiceModal.slint";
 import { FolderEditModal } from "../primitives/FolderEditModal.slint";
 import { LibFolderEditModal } from "../settings/LibFolderEditModal.slint";
+import { SettingsExportModal } from "../settings/SettingsExportModal.slint";
 import { TagEditorModal } from "../primitives/TagEditorModal.slint";
 import { PlaylistImportModal } from "../primitives/PlaylistImportModal.slint";
 import { DacWizardModal } from "../primitives/DacWizardModal.slint";
@@ -715,6 +716,13 @@ export component AppShell inherits Rectangle {
     // In-app log viewer (Developer settings). Declaration-order z keeps it above
     // the page; self-gated on LogViewerState.open (ADR-009/010).
     LogViewerModal {
+        width: 100%;
+        height: 100%;
+    }
+
+    // "Export settings" modal (Developer settings, 04 §4.2). Self-gated on
+    // SettingsExportState.open; declaration-order z keeps it above the page.
+    SettingsExportModal {
         width: 100%;
         height: 100%;
     }

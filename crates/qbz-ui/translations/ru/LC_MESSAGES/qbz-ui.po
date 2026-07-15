@@ -4532,3 +4532,38 @@ msgstr "Освобождает кэшированные данные. Загру
 msgid "Couldn't clear the cache"
 msgstr "Не удалось очистить кэш"
 
+
+# Task 18 — Settings > Developer > Export settings modal (daemon 04 §4.2)
+msgid "SETTINGS PORTABILITY"
+msgstr "ПЕРЕНОС НАСТРОЕК"
+
+msgid "Export settings…"
+msgstr "Экспорт настроек…"
+
+msgid "Save a portable bundle of your settings to move to another machine or the qbzd daemon."
+msgstr "Сохраняет переносимый набор ваших настроек для переноса на другой компьютер или в демон qbzd."
+
+msgid "Export…"
+msgstr "Экспорт…"
+
+msgid "Export settings"
+msgstr "Экспорт настроек"
+
+msgid "Save your settings as a bundle to import on the qbzd daemon or another machine."
+msgstr "Сохраните настройки в виде набора для импорта на демон qbzd или другой компьютер."
+
+msgid "Include Qobuz login and integration tokens"
+msgstr "Включить вход в Qobuz и токены интеграций"
+
+msgid "Anyone with the file can use your accounts. It is saved readable only by you; delete it after importing."
+msgstr "Любой, кто получит файл, сможет пользоваться вашими аккаунтами. Он сохраняется доступным для чтения только вам; удалите его после импорта."
+
+msgid "Export"
+msgstr "Экспорт"
+
+msgid "Bundle saved. On the daemon box:"
+msgstr "Набор сохранён. На машине демона:"
+
+msgid "Could not export settings"
+msgstr "Не удалось экспортировать настройки"
+
