@@ -55,11 +55,29 @@ QBZD_HOST="127.0.0.1:$PORT"
 LOGFILE="$SCRATCH/qbzd.log"
 DAEMON_PID=""
 
+# Escalating kill helper: SIGTERM → poll 5s → SIGKILL → poll 2s.
+# Returns 0 if confirmed dead, 1 if still alive after SIGKILL.
+# If still alive after SIGKILL, prints a warning with the PID.
+kill_and_confirm() {
+  local pid=$1
+  [ -n "$pid" ] || return 0
+
+  # SIGTERM and poll for up to 5 seconds (25 x 0.2s).
+  kill -TERM "$pid" 2>/dev/null || true
+  for _ in $(seq 1 25); do kill -0 "$pid" 2>/dev/null || return 0; sleep 0.2; done
+
+  # Still alive; escalate to SIGKILL and poll for up to 2 seconds (10 x 0.2s).
+  kill -KILL "$pid" 2>/dev/null || true
+  for _ in $(seq 1 10); do kill -0 "$pid" 2>/dev/null || return 0; sleep 0.2; done
+
+  # Still alive after SIGKILL; print warning and return 1.
+  echo "WARNING: qbzd (PID $pid) still alive after SIGKILL" >&2
+  return 1
+}
+
 cleanup() {
   if [ -n "$DAEMON_PID" ] && kill -0 "$DAEMON_PID" 2>/dev/null; then
-    kill -TERM "$DAEMON_PID" 2>/dev/null || true
-    for _ in $(seq 1 25); do kill -0 "$DAEMON_PID" 2>/dev/null || break; sleep 0.2; done
-    kill -0 "$DAEMON_PID" 2>/dev/null && kill -KILL "$DAEMON_PID" 2>/dev/null || true
+    kill_and_confirm "$DAEMON_PID" || true
   fi
   rm -rf "$SCRATCH"
 }
@@ -102,9 +120,12 @@ start_daemon() {
 
 stop_daemon() {
   [ -n "$DAEMON_PID" ] || return 0
-  kill -TERM "$DAEMON_PID" 2>/dev/null || true
-  for _ in $(seq 1 25); do kill -0 "$DAEMON_PID" 2>/dev/null || break; sleep 0.2; done
-  DAEMON_PID=""
+  if kill_and_confirm "$DAEMON_PID"; then
+    DAEMON_PID=""
+  else
+    # Process still alive after escalation; leave DAEMON_PID set so cleanup() gets another chance.
+    true
+  fi
 }
 
 echo "== isolated-root boot (env-driven scratch XDG) =="
