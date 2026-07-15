@@ -9285,6 +9285,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 
+    // Settings > Developer — "Export settings…" modal confirm: build the
+    // settings bundle via the shared engine, open a native save dialog, write
+    // it 0600, and toast the import command (04 §4.2). No new export logic.
+    {
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window.global::<SettingsExportActions>().on_confirm(move || {
+            settings::export_settings(weak.clone(), handle.clone());
+        });
+    }
+
     // Settings > Offline MODE — re-seed the toggle states on panel mount
     // (the panel's init fires load), and the status row's "Check now"
     // connectivity re-probe. The toggles themselves persist through the
