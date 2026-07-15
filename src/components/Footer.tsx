@@ -25,6 +25,13 @@ export function Footer() {
             <a href={buildPath(language, 'changelog')}>{t('nav.changelog')}</a>
             <a href={buildPath(language, 'licenses')}>{t('nav.licenses')}</a>
             <a href="/qobuz-linux/">Qobuz for Linux</a>
+            <a
+              href="https://github.com/vicrodh/qbz/wiki/Headless-Daemon"
+              target="_blank"
+              rel="noreferrer"
+            >
+              {t('nav.qbzdManual')}
+            </a>
             <a href="https://github.com/vicrodh/qbz" target="_blank" rel="noreferrer">
               {t('nav.github')}
             </a>

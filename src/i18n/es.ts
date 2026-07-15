@@ -3,6 +3,7 @@ export const es = {
     home: 'Inicio',
     changelog: 'Cambios',
     licenses: 'Licencias',
+    qbzdManual: 'Manual de qbzd (headless)',
     github: 'GitHub',
     download: 'Descargar',
     themeDark: 'Oscuro',
