@@ -201,6 +201,16 @@ impl DaemonQconnectService {
             return Err(msg);
         }
 
+        // T10 (OD4, §7.4): if locked volume mode, pin the player to 100% (1.0)
+        // at connect time. Harmless no-op on bit-perfect backends (ALSA-direct
+        // hw_volume=false, JACK, DoP/DSD), corrects Rodio backends (PipeWire/
+        // Pulse) where Player default is 0.75 (not 1.0).
+        if volume_mode == engine::VolumeMode::Locked {
+            if let Err(err) = self.runtime.core().set_volume(1.0) {
+                log::warn!("[QConnect] failed to pin volume to 100% at connect: {err}");
+            }
+        }
+
         // Subscribe to transport events SYNCHRONOUSLY here — after connect()
         // returns and BEFORE the spawn / any further await — so the receiver is
         // live before the WS handshake emits Connected / Subscribed /
