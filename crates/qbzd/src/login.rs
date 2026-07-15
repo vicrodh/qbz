@@ -126,11 +126,12 @@ pub async fn login_browser(
     let nonce = gen_nonce();
     let url = build_oauth_url(&app_id, &redirect_host, port, &nonce);
 
+    // URL first, ALWAYS — the auto-detect note follows it.
+    println!("Opening your browser to sign in to Qobuz.");
+    println!("If it does not open, paste this URL into a browser:\n  {url}\n");
     if auto_detected {
         println!("{}", crate::cli::copy::login_ssh_detected());
     }
-    println!("Opening your browser to sign in to Qobuz.");
-    println!("If it does not open, paste this URL into a browser:\n  {url}\n");
     if let Err(e) = open::that(&url) {
         // Headless boxes have no browser — not fatal; the listener still waits
         // and the printed URL (already shown above) is what the operator
@@ -465,28 +466,49 @@ pub(crate) fn nudge_host(roots: &ProfileRoots) -> String {
     format!("127.0.0.1:{port}")
 }
 
-/// FB1: bind the one-shot login listener on an EPHEMERAL port. Loopback stays
-/// exactly as before (`127.0.0.1`, unconditionally — the local-laptop case is
-/// untouched). Any other resolved host (explicit `--callback-host` or an
-/// SSH-auto-detected LAN address) now binds that SPECIFIC address first —
-/// tighter than the old unconditional `0.0.0.0` — and only falls back to the
-/// wildcard, with a log line, if that specific bind fails (e.g. the env lied
-/// about a locally-reachable address).
+/// FB1: bind the one-shot login listener on an EPHEMERAL port.
+///
+///   - Loopback (`127.0.0.1` / `::1`) binds that loopback address, no
+///     fallback — the local-laptop case is untouched.
+///   - Any other IP-literal host (explicit `--callback-host` or an
+///     SSH-auto-detected LAN address) binds that SPECIFIC address first —
+///     tighter than the old unconditional `0.0.0.0` — and only falls back to
+///     the FAMILY-MATCHED wildcard (`0.0.0.0` for v4, `::` for v6), with a
+///     log line, if that specific bind fails (e.g. the env lied about a
+///     locally-reachable address). A v4 wildcard under a v6 redirect URL (or
+///     vice versa) would guarantee a 300 s timeout in exactly the rescue case.
+///   - Non-IP input (a hostname in `--callback-host`) is NEVER handed to
+///     `TcpListener::bind` — that would do a blocking DNS lookup this path
+///     never had. It goes straight to the `0.0.0.0` wildcard with a log line;
+///     the URL still embeds the raw value the operator gave (embedding is
+///     their call; binding stays local and synchronous).
 fn bind_login_listener(redirect_host: &str) -> Result<TcpListener, LoginError> {
-    if redirect_host == "127.0.0.1" {
-        return TcpListener::bind(("127.0.0.1", 0))
-            .map_err(|e| LoginError::Failed(format!("could not bind the login listener: {e}")));
-    }
-    match TcpListener::bind((redirect_host, 0)) {
-        Ok(listener) => Ok(listener),
-        Err(e) => {
+    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+    let fail = |e: std::io::Error| {
+        LoginError::Failed(format!("could not bind the login listener: {e}"))
+    };
+    match redirect_host.parse::<IpAddr>() {
+        Ok(ip) if ip.is_loopback() => TcpListener::bind((ip, 0)).map_err(fail),
+        Ok(ip) => match TcpListener::bind((ip, 0)) {
+            Ok(listener) => Ok(listener),
+            Err(e) => {
+                let wildcard: IpAddr = match ip {
+                    IpAddr::V4(_) => Ipv4Addr::UNSPECIFIED.into(),
+                    IpAddr::V6(_) => Ipv6Addr::UNSPECIFIED.into(),
+                };
+                log::warn!(
+                    "could not bind the login listener on {redirect_host}: {e} — \
+                     falling back to {wildcard}"
+                );
+                TcpListener::bind((wildcard, 0)).map_err(fail)
+            }
+        },
+        Err(_) => {
             log::warn!(
-                "could not bind the login listener on {redirect_host}: {e} — \
-                 falling back to 0.0.0.0"
+                "callback host {redirect_host:?} is not an IP literal — \
+                 binding the login listener on 0.0.0.0 (no DNS lookup)"
             );
-            TcpListener::bind(("0.0.0.0", 0)).map_err(|e| {
-                LoginError::Failed(format!("could not bind the login listener: {e}"))
-            })
+            TcpListener::bind((Ipv4Addr::UNSPECIFIED, 0)).map_err(fail)
         }
     }
 }
@@ -695,11 +717,49 @@ mod tests {
     }
 
     #[test]
+    fn resolve_callback_host_falls_through_on_empty_ssh_connection() {
+        // SSH_CONNECTION set but empty — no fields at all.
+        let (host, auto) = resolve_callback_host(None, Some(""));
+        assert_eq!(host, "127.0.0.1");
+        assert!(!auto);
+    }
+
+    #[test]
     fn resolve_callback_host_falls_through_when_ssh_connection_absent() {
         // The local-laptop case: no flag, no SSH session — unchanged default.
         let (host, auto) = resolve_callback_host(None, None);
         assert_eq!(host, "127.0.0.1");
         assert!(!auto);
+    }
+
+    // ---------------------- bind_login_listener (FB1) ----------------------
+
+    #[test]
+    fn bind_login_listener_loopback_v4_binds_loopback() {
+        let l = bind_login_listener("127.0.0.1").unwrap();
+        assert!(l.local_addr().unwrap().ip().is_loopback());
+    }
+
+    #[test]
+    fn bind_login_listener_treats_v6_loopback_as_loopback() {
+        // Minor fold: "::1" takes the loopback fast-path (no wildcard fallback).
+        match bind_login_listener("::1") {
+            Ok(l) => assert!(l.local_addr().unwrap().ip().is_loopback()),
+            // A box with IPv6 disabled can't bind ::1 at all — the error path
+            // (no silent wildcard rescue for loopback) is the assertion then.
+            Err(e) => assert!(e.to_string().contains("could not bind"), "{e}"),
+        }
+    }
+
+    #[test]
+    fn bind_login_listener_never_does_dns_for_non_ip_hosts() {
+        // A hostname must NOT reach TcpListener::bind (blocking DNS); it goes
+        // straight to the 0.0.0.0 wildcard. An unresolvable name succeeding
+        // proves no lookup happened.
+        let l = bind_login_listener("definitely-not-resolvable.invalid").unwrap();
+        let addr = l.local_addr().unwrap();
+        assert!(addr.ip().is_unspecified(), "{addr}");
+        assert!(addr.is_ipv4(), "{addr}");
     }
 
     #[test]
