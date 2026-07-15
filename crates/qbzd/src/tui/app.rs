@@ -65,25 +65,137 @@ pub const SCREENS: [Screen; 6] = [
     Screen::Bundle,
 ];
 
+/// Sidebar width (columns, incl. border). 14 keeps the content frame at 64 inner
+/// columns on the 80-col floor — wide enough that the common field lines do NOT
+/// clip their `[toggle]`/`[select]` hints; the inner 12 fits every sidebar label
+/// (dirty-capable ones ≤ 8, so `▸ Name *` lands exactly).
+const SIDEBAR_W: u16 = 14;
+
+/// Which pane holds the keyboard focus. The frames shell has two: the persistent
+/// left navigation sidebar and the right content frame (FB3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Focus {
+    Nav,
+    Content,
+}
+
 /// Construct the path to the OAuth token file in the config root.
 fn cred_file_path(config_root: &PathBuf) -> PathBuf {
     config_root.join(".qbz-oauth-token")
 }
 
-/// Determine the initial landing screen at startup (03 §2.2).
-///
-/// Landing rules:
-/// - Credential file present → None (land on Menu)
-/// - Credential file absent → Some(Screen::Account) (land on Account setup)
+/// Determine the startup focus (03 §2.2, re-shelled for FB3). The landing
+/// SECTION is always Account (there is no menu to land on any more); only the
+/// focus differs:
+/// - No credential file → focus the CONTENT (Account is ready to log in).
+/// - Credential file present → focus the NAV (the operator picks where to go).
 ///
 /// The decision is based on credential-file presence, not live daemon auth state.
-/// The `logged_in` parameter is passed for test clarity (three cases) but does not
-/// affect the decision.
-fn initial_screen(cred_file_present: bool, _logged_in: bool) -> Option<Screen> {
+fn initial_focus(cred_file_present: bool) -> Focus {
     if cred_file_present {
-        None  // land on Menu
+        Focus::Nav
     } else {
-        Some(Screen::Account)  // land on Account
+        Focus::Content
+    }
+}
+
+/// The 0-based index of a section in `SCREENS` (sidebar row / number key).
+fn section_index(screen: Screen) -> usize {
+    SCREENS.iter().position(|s| *s == screen).unwrap_or(0)
+}
+
+/// The full section title for the breadcrumb (the sidebar uses short labels).
+fn section_title(screen: Screen) -> &'static str {
+    match screen {
+        Screen::Account => s::ACCOUNT_TITLE,
+        Screen::Audio => s::AUDIO_TITLE,
+        Screen::Playback => s::PLAYBACK_TITLE,
+        Screen::QConnect => s::QCONNECT_TITLE,
+        Screen::Network => s::NETWORK_TITLE,
+        Screen::Bundle => s::BUNDLE_TITLE,
+    }
+}
+
+/// Breadcrumb node composition (max 2 levels, FB3). Pure so it can be pinned:
+/// - not editing → (`Setup`, section)   — dim prefix, accent current.
+/// - editing a field → (section, field) — the field label is the current node.
+/// Modals/pickers are the third level (overlays); they do NOT change the crumb,
+/// so the caller passes `None` for them (see each screen's `editing_label`).
+fn breadcrumb_nodes<'a>(section: &'a str, editing_field: Option<&'a str>) -> (&'a str, &'a str) {
+    match editing_field {
+        Some(field) => (section, field),
+        None => (s::BREADCRUMB_ROOT, section),
+    }
+}
+
+/// Whether a sidebar row shows the dirty `*`. Only the ACTIVE section can be
+/// dirty — leaving a section is gated by the Save/Discard/Stay modal, so every
+/// other section is clean by construction. Pure for the mapping test.
+fn sidebar_dirty_marker(row: Screen, active: Screen, active_dirty: bool) -> bool {
+    row == active && active_dirty
+}
+
+/// A key's navigation meaning, resolved purely from the focus state (FB3
+/// focus-transition table). The impure `on_key` executes the intent (dirty
+/// guards, section loads, screen dispatch).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum NavIntent {
+    /// Nav: no-op (unbound key).
+    None,
+    /// Nav: move the sidebar highlight by ±1 (wrapping).
+    MoveCursor(isize),
+    /// Nav: activate the highlighted section and focus the content.
+    ActivateCursor,
+    /// Any focus (not editing): jump straight to section `idx` and focus content.
+    JumpSection(usize),
+    /// Content: drop focus back to the nav.
+    FocusNav,
+    /// Nav Esc/q or content q: the quit flow (dirty-guarded).
+    Quit,
+    /// The help overlay.
+    Help,
+    /// Content: hand the key to the active screen (field navigation / edit).
+    ToScreen,
+}
+
+/// Map a keystroke to its `NavIntent` (FB3). `editing` = a field editor/picker
+/// is open in the content (it owns every key); `uses_horizontal` = the focused
+/// content field consumes ←/→ (Audio's Buffer slider), so ← must NOT drop focus.
+fn classify_key(focus: Focus, code: KeyCode, editing: bool, uses_horizontal: bool) -> NavIntent {
+    // Number keys 1-6 jump from ANY focus — but only when no field editor is
+    // capturing input (a port/token/name field must receive its digits).
+    if !editing {
+        if let KeyCode::Char(c @ '1'..='6') = code {
+            return NavIntent::JumpSection(c as usize - '1' as usize);
+        }
+    }
+    match focus {
+        Focus::Nav => match code {
+            KeyCode::Up | KeyCode::Char('k') => NavIntent::MoveCursor(-1),
+            KeyCode::Down | KeyCode::Char('j') => NavIntent::MoveCursor(1),
+            KeyCode::Enter | KeyCode::Right | KeyCode::Tab => NavIntent::ActivateCursor,
+            KeyCode::Esc | KeyCode::Char('q') => NavIntent::Quit,
+            KeyCode::Char('?') => NavIntent::Help,
+            _ => NavIntent::None,
+        },
+        Focus::Content => {
+            // An open editor owns the keyboard (Esc cancels the edit, digits type,
+            // etc.) — nothing is intercepted for focus changes.
+            if editing {
+                return NavIntent::ToScreen;
+            }
+            match code {
+                KeyCode::Tab => NavIntent::FocusNav,
+                // ← walks left toward the sidebar unless the field claims it.
+                KeyCode::Left if !uses_horizontal => NavIntent::FocusNav,
+                KeyCode::Char('?') => NavIntent::Help,
+                KeyCode::Char('q') => NavIntent::Quit,
+                // Everything else (↑↓, s, r, /, Enter, →, Esc→Back) is the
+                // screen's. Esc returns `ScreenAction::Back`, which the App maps
+                // to FocusNav — so Esc in content also lands on the sidebar.
+                _ => NavIntent::ToScreen,
+            }
+        }
     }
 }
 
@@ -129,7 +241,6 @@ pub enum Msg {
 // ============================ active screen ============================
 
 enum Active {
-    Menu,
     Account(AccountState),
     Audio(AudioState),
     Playback(PlaybackState),
@@ -145,9 +256,12 @@ enum Overlay {
     DirtyLeave { target: LeaveTarget },
 }
 
+/// Where a dirty-guarded departure lands. Switching sections and quitting both
+/// route through the SAME Save/Discard/Stay modal (FB3 — the modal is verbatim
+/// the pre-FB3 one; only the target set changed: `Menu` became `Section`).
 #[derive(Clone, Copy)]
 enum LeaveTarget {
-    Menu,
+    Section(Screen),
     Quit,
 }
 
@@ -160,8 +274,15 @@ pub struct App {
     rx: Receiver<Msg>,
 
     active: Active,
-    menu_focus: usize,
-    menu_summaries: Vec<String>,
+    /// Which section `active` currently holds (its state is loaded). The sidebar
+    /// marks it `▸` + accent; the breadcrumb names it.
+    active_section: Screen,
+    /// The sidebar highlight while `focus == Nav`. Reset to `active_section` on
+    /// every entry into nav focus; moving it does NO I/O (it only re-points the
+    /// highlight — a section loads only on activation, §5.5).
+    nav_cursor: usize,
+    /// Which pane owns the keyboard (FB3 dual focus).
+    focus: Focus,
 
     status: Option<Value>,
     reachable: bool,
@@ -184,9 +305,10 @@ impl App {
             handle,
             tx,
             rx,
-            active: Active::Menu,
-            menu_focus: 0,
-            menu_summaries: vec![String::new(); 6],
+            active: Active::Account(AccountState::new(AuthSnapshot::default())),
+            active_section: Screen::Account,
+            nav_cursor: 0,
+            focus: Focus::Nav,
             status: None,
             reachable: false,
             auth: AuthSnapshot::default(),
@@ -196,16 +318,11 @@ impl App {
             should_quit: false,
             leave_after_save: None,
         };
-        app.refresh_status();
-        // Determine landing screen per spec (03 §2.2):
-        // - Credential file exists (any state) → land on Menu (user has auth credentials)
-        // - No credential file → land on Account (needs auth setup)
+        // Landing (FB3): always the Account section; focus depends on whether a
+        // credential file exists (first-run → content, ready to log in).
         let cred_file_exists = cred_file_path(&roots.config).exists();
-        if let Some(screen) = initial_screen(cred_file_exists, app.auth.logged_in) {
-            app.enter_screen(screen);
-        } else {
-            app.refresh_menu();
-        }
+        app.enter_screen(Screen::Account);
+        app.focus = initial_focus(cred_file_exists);
         app
     }
 
@@ -260,7 +377,13 @@ impl App {
 
     // -------------------------- navigation --------------------------
 
+    /// Load a section into the content frame (a §5.5 "screen entry": disk reads
+    /// + a fresh daemon-status fetch happen here, never on a keystroke). Sets the
+    /// active section and syncs the sidebar cursor to it.
     fn enter_screen(&mut self, screen: Screen) {
+        self.refresh_status();
+        self.active_section = screen;
+        self.nav_cursor = section_index(screen);
         self.active = match screen {
             Screen::Account => Active::Account(AccountState::new(self.auth.clone())),
             Screen::Audio => {
@@ -298,50 +421,50 @@ impl App {
         };
     }
 
-    fn refresh_menu(&mut self) {
-        self.refresh_status();
-        self.menu_summaries = self.compute_summaries();
-    }
-
-    fn compute_summaries(&self) -> Vec<String> {
-        let audio = load_audio(&self.roots);
-        let playback = PlaybackPreferencesStore::new_at(&self.roots.data)
-            .and_then(|s| s.get_preferences())
-            .unwrap_or_default();
-        let quality = daemon_prefs::load_at(&self.roots.data).streaming_quality;
-        let db = self.roots.data.join("qconnect_settings.db");
-        let qc_on = matches!(
-            qconnect_kv::load_startup_mode_at(&db),
-            qconnect_app::QconnectStartupMode::On
-        );
-        let qc_name = qconnect_kv::load_device_name_at(&db);
-        let qc_vol = qconnect_kv::load_volume_mode_at(&db);
-        let (cfg, _) = QbzdConfig::load(&self.roots.config.join("qbzd.toml"))
-            .unwrap_or_else(|_| (QbzdConfig::default(), Vec::new()));
-
-        vec![
-            AccountState::new(self.auth.clone()).summary(),
-            AudioState::new(&audio).summary(),
-            PlaybackState::new(&quality, &audio, &playback).summary(),
-            QConnectState::new(qc_on, qc_name, qc_vol).summary(),
-            NetworkState::new(&cfg, Vec::new()).summary(),
-            "bundle tools…".to_string(),
-        ]
-    }
-
-    fn leave_screen(&mut self, target: LeaveTarget) {
-        if self.active_is_dirty() {
-            self.overlay = Overlay::DirtyLeave { target };
+    /// Request a switch to `target` (sidebar activation / number key). Same
+    /// section → just move focus to the content (no reload — §5.5). Different
+    /// section → the dirty guard fires (Save/Discard/Stay) before the load.
+    fn request_section(&mut self, target: Screen) {
+        if target == self.active_section {
+            self.focus = Focus::Content;
             return;
         }
-        self.apply_leave(target);
+        if self.active_is_dirty() {
+            self.overlay = Overlay::DirtyLeave { target: LeaveTarget::Section(target) };
+            return;
+        }
+        self.enter_screen(target);
+        self.focus = Focus::Content;
     }
 
+    /// The quit flow, dirty-guarded (Esc/q in nav, q in content). A dirty active
+    /// section opens the Save/Discard/Stay modal targeting `Quit`.
+    fn leave_quit(&mut self) {
+        if self.active_is_dirty() {
+            self.overlay = Overlay::DirtyLeave { target: LeaveTarget::Quit };
+        } else {
+            self.should_quit = true;
+        }
+    }
+
+    /// Move focus to the sidebar (content → nav), re-seating the highlight on the
+    /// active section.
+    fn enter_nav_focus(&mut self) {
+        self.focus = Focus::Nav;
+        self.nav_cursor = section_index(self.active_section);
+    }
+
+    fn move_cursor(&mut self, delta: isize) {
+        let n = SCREENS.len() as isize;
+        self.nav_cursor = (self.nav_cursor as isize + delta).rem_euclid(n) as usize;
+    }
+
+    /// Execute a dirty-guarded departure once the guard is cleared (or absent).
     fn apply_leave(&mut self, target: LeaveTarget) {
         match target {
-            LeaveTarget::Menu => {
-                self.active = Active::Menu;
-                self.refresh_menu();
+            LeaveTarget::Section(screen) => {
+                self.enter_screen(screen);
+                self.focus = Focus::Content;
             }
             LeaveTarget::Quit => self.should_quit = true,
         }
@@ -365,8 +488,24 @@ impl App {
             Active::QConnect(s) => s.is_editing(),
             Active::Network(s) => s.is_editing(),
             Active::Bundle(s) => s.is_editing(),
-            Active::Menu => false,
         }
+    }
+
+    /// The breadcrumb's level-2 node (field label) when an inline edit is active.
+    fn active_editing_label(&self) -> Option<&'static str> {
+        match &self.active {
+            Active::Account(s) => s.editing_label(),
+            Active::Audio(s) => s.editing_label(),
+            Active::Playback(s) => s.editing_label(),
+            Active::QConnect(s) => s.editing_label(),
+            Active::Network(s) => s.editing_label(),
+            Active::Bundle(s) => s.editing_label(),
+        }
+    }
+
+    /// Whether the focused content field consumes ←/→ (so ← must not drop focus).
+    fn content_uses_horizontal(&self) -> bool {
+        matches!(&self.active, Active::Audio(s) if s.focused_is_buffer())
     }
 
     // -------------------------- key handling --------------------------
@@ -408,43 +547,42 @@ impl App {
             Overlay::None => {}
         }
 
-        if let Active::Menu = self.active {
-            return self.on_menu_key(key);
-        }
-
-        // Global keys when the screen is at top level (not editing a field).
-        if !self.active_is_editing() {
-            match key.code {
-                KeyCode::Char('?') => {
-                    self.overlay = Overlay::Help;
-                    return LoopCmd::None;
-                }
-                KeyCode::Char('q') => {
-                    self.leave_screen(LeaveTarget::Quit);
-                    return LoopCmd::None;
-                }
-                _ => {}
+        // FB3 dual focus: resolve the key's navigation meaning purely, then
+        // execute it. Content field keys (ToScreen) still flow to the active
+        // screen exactly as before.
+        let editing = self.active_is_editing();
+        let uses_h = self.content_uses_horizontal();
+        match classify_key(self.focus, key.code, editing, uses_h) {
+            NavIntent::None => LoopCmd::None,
+            NavIntent::MoveCursor(d) => {
+                self.move_cursor(d);
+                LoopCmd::None
+            }
+            NavIntent::ActivateCursor => {
+                self.request_section(SCREENS[self.nav_cursor]);
+                LoopCmd::None
+            }
+            NavIntent::JumpSection(idx) => {
+                self.request_section(SCREENS[idx]);
+                LoopCmd::None
+            }
+            NavIntent::FocusNav => {
+                self.enter_nav_focus();
+                LoopCmd::None
+            }
+            NavIntent::Quit => {
+                self.leave_quit();
+                LoopCmd::None
+            }
+            NavIntent::Help => {
+                self.overlay = Overlay::Help;
+                LoopCmd::None
+            }
+            NavIntent::ToScreen => {
+                let action = self.dispatch_screen_key(key);
+                self.handle_screen_action(action)
             }
         }
-
-        let action = self.dispatch_screen_key(key);
-        self.handle_screen_action(action)
-    }
-
-    fn on_menu_key(&mut self, key: KeyEvent) -> LoopCmd {
-        match key.code {
-            KeyCode::Up | KeyCode::Char('k') => {
-                self.menu_focus = if self.menu_focus == 0 { SCREENS.len() - 1 } else { self.menu_focus - 1 };
-            }
-            KeyCode::Down | KeyCode::Char('j') => {
-                self.menu_focus = (self.menu_focus + 1) % SCREENS.len();
-            }
-            KeyCode::Enter => self.enter_screen(SCREENS[self.menu_focus]),
-            KeyCode::Char('?') => self.overlay = Overlay::Help,
-            KeyCode::Char('q') | KeyCode::Esc => self.should_quit = true,
-            _ => {}
-        }
-        LoopCmd::None
     }
 
     fn dispatch_screen_key(&mut self, key: KeyEvent) -> ScreenAction {
@@ -455,7 +593,6 @@ impl App {
             Active::QConnect(s) => s.handle_key(key),
             Active::Network(s) => s.handle_key(key),
             Active::Bundle(s) => s.handle_key(key),
-            Active::Menu => ScreenAction::Consumed,
         }
     }
 
@@ -467,7 +604,9 @@ impl App {
                 LoopCmd::None
             }
             ScreenAction::Back => {
-                self.leave_screen(LeaveTarget::Menu);
+                // FB3: Esc in the content returns focus to the sidebar (the
+                // section stays loaded — a dirty section is still dirty).
+                self.enter_nav_focus();
                 LoopCmd::None
             }
             ScreenAction::RefreshDevices => {
@@ -799,28 +938,45 @@ impl App {
             return;
         }
 
+        // FB3 frames layout: header · breadcrumb · [sidebar | content] · footer ·
+        // help. The 80×24 floor budget is 1+1 (top chrome) + 1+1 (bottom chrome)
+        // + a Min(3) body, so the content frame keeps ≥ 18 usable inner rows.
         let rows = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Min(3), Constraint::Length(1), Constraint::Length(1)])
+            .constraints([
+                Constraint::Length(1), // header
+                Constraint::Length(1), // breadcrumb
+                Constraint::Min(3),    // body (sidebar + content)
+                Constraint::Length(1), // footer (daemon state)
+                Constraint::Length(1), // help bar
+            ])
             .split(area);
-        let content_area = rows[0];
-        let footer_area = rows[1];
-        let help_area = rows[2];
+        self.draw_header(f, rows[0]);
+        self.draw_breadcrumb(f, rows[1]);
 
-        // The outer frame stays neutral (dim) so the accent-bordered ACTIVE inner
-        // section is what draws the eye; the accent-bold title carries identity.
+        let body = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Length(SIDEBAR_W), Constraint::Min(0)])
+            .split(rows[2]);
+        self.draw_sidebar(f, body[0]);
+
+        // Content frame: accent border when the content owns focus, dim otherwise
+        // (its title is gone — the breadcrumb names the section now).
+        let border = if self.focus == Focus::Content {
+            theme::accent()
+        } else {
+            theme::dim()
+        };
         let block = Block::bordered()
             .border_type(BorderType::Rounded)
-            .border_style(theme::dim())
-            .title(self.screen_title_line());
-        let inner = block.inner(content_area);
-        f.render_widget(block, content_area);
+            .border_style(border);
+        let inner = block.inner(body[1]);
+        f.render_widget(block, body[1]);
 
         let ctx = DrawCtx {
             status: self.status.as_ref(),
         };
         match &self.active {
-            Active::Menu => self.draw_menu(f, inner),
             Active::Account(sc) => sc.draw(f, inner, &ctx),
             Active::Audio(sc) => sc.draw(f, inner, &ctx),
             Active::Playback(sc) => sc.draw(f, inner, &ctx),
@@ -829,9 +985,11 @@ impl App {
             Active::Bundle(sc) => sc.draw(f, inner, &ctx),
         }
 
-        self.draw_footer(f, footer_area);
-        widgets::help_bar(f, help_area, self.help_text());
+        self.draw_footer(f, rows[3]);
+        widgets::help_bar(f, rows[4], self.help_text());
 
+        // Overlays (help / result / dirty-leave / busy) cover the WHOLE screen —
+        // they are the third navigation level and sit above the frames.
         match &self.overlay {
             Overlay::Help => widgets::panel(
                 f,
@@ -855,46 +1013,87 @@ impl App {
         }
     }
 
-    fn screen_name_dirty(&self) -> (&'static str, bool) {
-        match &self.active {
-            Active::Menu => (s::MENU_TITLE, false),
-            Active::Account(_) => (s::ACCOUNT_TITLE, false),
-            Active::Audio(sc) => (s::AUDIO_TITLE, sc.is_dirty()),
-            Active::Playback(sc) => (s::PLAYBACK_TITLE, sc.is_dirty()),
-            Active::QConnect(sc) => (s::QCONNECT_TITLE, sc.is_dirty()),
-            Active::Network(sc) => (s::NETWORK_TITLE, sc.is_dirty()),
-            Active::Bundle(_) => (s::BUNDLE_TITLE, false),
-        }
+    /// Header row: `QBZ Daemon Setup` (accent-bold, left) · `qbzd <version>`
+    /// (dim, right). One row, always visible.
+    fn draw_header(&self, f: &mut Frame, area: Rect) {
+        let title = s::APP_TITLE;
+        let version = format!("qbzd {}", env!("CARGO_PKG_VERSION"));
+        let used = 1 + title.chars().count() + version.chars().count() + 1;
+        let pad = (area.width as usize).saturating_sub(used);
+        let line = Line::from(vec![
+            Span::raw(" "),
+            Span::styled(title.to_string(), theme::accent_bold()),
+            Span::raw(" ".repeat(pad)),
+            Span::styled(version, theme::dim()),
+            Span::raw(" "),
+        ]);
+        f.render_widget(Paragraph::new(line), area);
     }
 
-    /// The frame title: accent-bold screen name, plus a warn `*` when the screen
-    /// has unsaved edits (the `*` glyph is the meaning; the color reinforces it).
-    fn screen_title_line(&self) -> Line<'static> {
-        let (name, dirty) = self.screen_name_dirty();
-        let mut spans = vec![Span::styled(format!(" {name} "), theme::accent_bold())];
-        if dirty {
-            spans.push(Span::styled("* ", theme::warn()));
-        }
-        Line::from(spans)
+    /// Breadcrumb row (max 2 levels): dim `Setup ›` prefix + accent current node;
+    /// while a field is edited it becomes `<Section> › <Field>`.
+    fn draw_breadcrumb(&self, f: &mut Frame, area: Rect) {
+        let section = section_title(self.active_section);
+        let (prefix, current) = breadcrumb_nodes(section, self.active_editing_label());
+        let line = Line::from(vec![
+            Span::raw(" "),
+            Span::styled(prefix.to_string(), theme::dim()),
+            Span::styled(" › ".to_string(), theme::dim()),
+            Span::styled(current.to_string(), theme::accent()),
+        ]);
+        f.render_widget(Paragraph::new(line), area);
     }
 
-    fn draw_menu(&self, f: &mut Frame, area: Rect) {
+    /// Persistent left navigation: the six sections by name. The active one gets
+    /// `▸` + accent; a dirty active section gets a warn `*`. When the nav owns
+    /// focus, the highlighted row reverses (serial-safe) and the border accents.
+    fn draw_sidebar(&self, f: &mut Frame, area: Rect) {
+        let border = if self.focus == Focus::Nav {
+            theme::accent()
+        } else {
+            theme::dim()
+        };
+        let block = Block::bordered()
+            .border_type(BorderType::Rounded)
+            .border_style(border);
+        let inner = block.inner(area);
+        f.render_widget(block, area);
+
+        let width = inner.width as usize;
+        let active_dirty = self.active_is_dirty();
         let mut lines: Vec<Line> = Vec::new();
-        for (i, label) in s::MENU_ROWS.iter().enumerate() {
-            let focused = i == self.menu_focus;
-            let summary = self.menu_summaries.get(i).map(String::as_str).unwrap_or("");
-            let (marker, marker_style, label_style) = if focused {
-                ("▸ ", theme::accent(), theme::accent_bold())
+        for (i, screen) in SCREENS.iter().enumerate() {
+            let is_active = *screen == self.active_section;
+            let dirty = sidebar_dirty_marker(*screen, self.active_section, active_dirty);
+            let highlighted = self.focus == Focus::Nav && i == self.nav_cursor;
+            let label = s::SIDEBAR_LABELS[i];
+            let marker = if is_active { "▸ " } else { "  " };
+
+            if highlighted {
+                // Full-width reverse bar (accent-reversed) — reads on monochrome
+                // and serial. Padded to the inner width so the bar spans the row.
+                let dirty_str = if dirty { " *" } else { "" };
+                let core = format!("{marker}{label}{dirty_str}");
+                let padded = format!("{core:<width$}");
+                lines.push(Line::from(Span::styled(padded, theme::selection())));
             } else {
-                ("  ", Style::default(), Style::default())
-            };
-            lines.push(Line::from(vec![
-                Span::styled(marker, marker_style),
-                Span::styled(format!("{label:<20}"), label_style),
-                Span::styled(format!("  {summary}"), theme::dim()),
-            ]));
+                let mut spans = vec![
+                    Span::styled(
+                        marker.to_string(),
+                        if is_active { theme::accent() } else { Style::default() },
+                    ),
+                    Span::styled(
+                        label.to_string(),
+                        if is_active { theme::accent_bold() } else { Style::default() },
+                    ),
+                ];
+                if dirty {
+                    spans.push(Span::styled(" *".to_string(), theme::warn()));
+                }
+                lines.push(Line::from(spans));
+            }
         }
-        f.render_widget(Paragraph::new(lines), area);
+        f.render_widget(Paragraph::new(lines), inner);
     }
 
     /// The daemon-state footer, color-coded via `footer_state`. Never color
@@ -909,22 +1108,24 @@ impl App {
     }
 
     fn help_text(&self) -> &'static str {
-        match &self.active {
-            Active::Menu => s::HELP_MENU,
-            Active::Audio(sc) => {
-                if sc.is_dirty() {
-                    s::HELP_AUDIO_DIRTY
-                } else {
-                    s::HELP_AUDIO_CLEAN
+        match self.focus {
+            Focus::Nav => s::HELP_NAV,
+            Focus::Content => match &self.active {
+                Active::Audio(sc) => {
+                    if sc.is_dirty() {
+                        s::HELP_AUDIO_DIRTY
+                    } else {
+                        s::HELP_AUDIO_CLEAN
+                    }
                 }
-            }
-            _ => {
-                if self.active_is_dirty() {
-                    s::HELP_SCREEN_DIRTY
-                } else {
-                    s::HELP_SCREEN_CLEAN
+                _ => {
+                    if self.active_is_dirty() {
+                        s::HELP_CONTENT_DIRTY
+                    } else {
+                        s::HELP_CONTENT_CLEAN
+                    }
                 }
-            }
+            },
         }
     }
 }
@@ -1228,24 +1429,189 @@ fn expand_tilde(path: &str) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ratatui::backend::TestBackend;
+    use ratatui::Terminal;
+
+    // ---- landing (FB3): always Account; focus depends on the credential file ----
 
     #[test]
-    fn test_initial_screen_no_cred_file() {
-        // No credential file → land on Account
-        assert_eq!(initial_screen(false, false), Some(Screen::Account));
-        assert_eq!(initial_screen(false, true), Some(Screen::Account));
+    fn first_run_lands_focus_on_content() {
+        // No credential file → the operator should be able to log in immediately,
+        // so the CONTENT (Account) owns focus.
+        assert_eq!(initial_focus(false), Focus::Content);
     }
 
     #[test]
-    fn test_initial_screen_cred_file_present() {
-        // Credential file present (daemon down) → land on Menu
-        assert_eq!(initial_screen(true, false), None);
+    fn returning_user_lands_focus_on_nav() {
+        // A credential file exists → land with the NAV focused so the operator
+        // picks where to go (the section is still Account underneath).
+        assert_eq!(initial_focus(true), Focus::Nav);
+    }
+
+    // ---- breadcrumb composition (max 2 levels) ----
+
+    #[test]
+    fn breadcrumb_is_setup_then_section_when_not_editing() {
+        assert_eq!(breadcrumb_nodes("Audio", None), ("Setup", "Audio"));
     }
 
     #[test]
-    fn test_initial_screen_cred_file_and_logged_in() {
-        // Credential file present and logged in (daemon up) → land on Menu
-        assert_eq!(initial_screen(true, true), None);
+    fn breadcrumb_is_section_then_field_when_editing() {
+        assert_eq!(breadcrumb_nodes("Audio", Some("Backend")), ("Audio", "Backend"));
+    }
+
+    // ---- sidebar dirty marker: only the active section can show `*` ----
+
+    #[test]
+    fn dirty_marker_only_on_the_active_dirty_section() {
+        assert!(sidebar_dirty_marker(Screen::Audio, Screen::Audio, true));
+        assert!(!sidebar_dirty_marker(Screen::Audio, Screen::Audio, false));
+        // A non-active section is clean by construction (leave is guarded).
+        assert!(!sidebar_dirty_marker(Screen::Playback, Screen::Audio, true));
+    }
+
+    // ---- focus-transition table (Tab / Esc / Enter / arrows / number keys) ----
+
+    #[test]
+    fn nav_focus_key_table() {
+        use NavIntent::*;
+        let n = |code| classify_key(Focus::Nav, code, false, false);
+        assert_eq!(n(KeyCode::Up), MoveCursor(-1));
+        assert_eq!(n(KeyCode::Char('k')), MoveCursor(-1));
+        assert_eq!(n(KeyCode::Down), MoveCursor(1));
+        assert_eq!(n(KeyCode::Char('j')), MoveCursor(1));
+        assert_eq!(n(KeyCode::Enter), ActivateCursor);
+        assert_eq!(n(KeyCode::Right), ActivateCursor);
+        assert_eq!(n(KeyCode::Tab), ActivateCursor);
+        assert_eq!(n(KeyCode::Esc), Quit);
+        assert_eq!(n(KeyCode::Char('q')), Quit);
+        assert_eq!(n(KeyCode::Char('?')), Help);
+        assert_eq!(n(KeyCode::Left), None); // no-op at the left edge
+    }
+
+    #[test]
+    fn content_focus_key_table() {
+        use NavIntent::*;
+        let c = |code| classify_key(Focus::Content, code, false, false);
+        // Tab and (un-consumed) ← walk back to the sidebar.
+        assert_eq!(c(KeyCode::Tab), FocusNav);
+        assert_eq!(c(KeyCode::Left), FocusNav);
+        // These belong to the screen (Esc returns Back → the App re-focuses nav).
+        assert_eq!(c(KeyCode::Esc), ToScreen);
+        assert_eq!(c(KeyCode::Up), ToScreen);
+        assert_eq!(c(KeyCode::Enter), ToScreen);
+        assert_eq!(c(KeyCode::Char('s')), ToScreen);
+        assert_eq!(c(KeyCode::Right), ToScreen);
+        // Global chrome.
+        assert_eq!(c(KeyCode::Char('q')), Quit);
+        assert_eq!(c(KeyCode::Char('?')), Help);
+    }
+
+    #[test]
+    fn left_is_consumed_by_a_horizontal_field() {
+        // Audio's Buffer slider claims ← — it must NOT drop focus to the nav.
+        assert_eq!(
+            classify_key(Focus::Content, KeyCode::Left, false, true),
+            NavIntent::ToScreen
+        );
+    }
+
+    #[test]
+    fn number_keys_jump_from_any_focus_but_not_while_editing() {
+        // 1-6 jump from nav and from content (not editing).
+        assert_eq!(classify_key(Focus::Nav, KeyCode::Char('3'), false, false), NavIntent::JumpSection(2));
+        assert_eq!(classify_key(Focus::Content, KeyCode::Char('1'), false, false), NavIntent::JumpSection(0));
+        assert_eq!(classify_key(Focus::Content, KeyCode::Char('6'), false, false), NavIntent::JumpSection(5));
+        // While a field editor is open, digits are typed into it, not swallowed.
+        assert_eq!(classify_key(Focus::Content, KeyCode::Char('5'), true, false), NavIntent::ToScreen);
+        // ...and so is every other key while editing.
+        assert_eq!(classify_key(Focus::Content, KeyCode::Tab, true, false), NavIntent::ToScreen);
+        assert_eq!(classify_key(Focus::Content, KeyCode::Esc, true, false), NavIntent::ToScreen);
+    }
+
+    // ---- 80×24 floor: every section renders inside the frames shell ----
+
+    fn bare_app(section: Screen, focus: Focus) -> App {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
+        let active = match section {
+            Screen::Account => Active::Account(AccountState::new(AuthSnapshot::default())),
+            Screen::Audio => Active::Audio(AudioState::new(&AudioSettings::default())),
+            Screen::Playback => Active::Playback(PlaybackState::new(
+                "hires_plus",
+                &AudioSettings::default(),
+                &qbz_app::settings::playback::PlaybackPreferences::default(),
+            )),
+            Screen::QConnect => Active::QConnect(QConnectState::new(false, None, None)),
+            Screen::Network => Active::Network(NetworkState::new(&QbzdConfig::default(), Vec::new())),
+            Screen::Bundle => Active::Bundle(BundleState::new(false)),
+        };
+        App {
+            roots: ProfileRoots {
+                config: PathBuf::from("/nonexistent"),
+                data: PathBuf::from("/nonexistent"),
+                cache: PathBuf::from("/nonexistent"),
+            },
+            handle: rt.handle().clone(),
+            tx,
+            rx,
+            active,
+            active_section: section,
+            nav_cursor: section_index(section),
+            focus,
+            status: None,
+            reachable: false,
+            auth: AuthSnapshot::default(),
+            overlay: Overlay::None,
+            busy: None,
+            busy_tick: 0,
+            should_quit: false,
+            leave_after_save: None,
+        }
+    }
+
+    fn render(app: &App, w: u16, h: u16) -> String {
+        let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+        terminal.draw(|f| app.draw(f)).unwrap();
+        let buf = terminal.backend().buffer().clone();
+        let mut out = String::new();
+        for y in 0..h {
+            for x in 0..w {
+                out.push_str(buf[(x, y)].symbol());
+            }
+            out.push('\n');
+        }
+        out
+    }
+
+    #[test]
+    fn every_section_fits_the_80x24_floor() {
+        for screen in SCREENS {
+            for focus in [Focus::Nav, Focus::Content] {
+                let app = bare_app(screen, focus);
+                let out = render(&app, 80, 24);
+                // The shell rendered (not the too-small guard).
+                assert!(
+                    out.contains("QBZ Daemon Setup"),
+                    "header missing for {screen:?}/{focus:?}"
+                );
+                assert!(
+                    !out.contains("terminal too small"),
+                    "80x24 must not trip the resize guard for {screen:?}"
+                );
+                // The sidebar and version chrome are present.
+                assert!(out.contains("Account"), "sidebar missing for {screen:?}");
+                let version = format!("qbzd {}", env!("CARGO_PKG_VERSION"));
+                assert!(out.contains(&version), "version chrome missing for {screen:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn resize_guard_still_fires_below_the_floor() {
+        let app = bare_app(Screen::Audio, Focus::Content);
+        let out = render(&app, 79, 24);
+        assert!(out.contains("terminal too small"));
     }
 
     #[test]

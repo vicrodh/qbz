@@ -69,6 +69,15 @@ impl NetworkState {
         self.baseline = self.staged.clone();
     }
 
+    /// The breadcrumb's level-2 node when a field editor is active.
+    pub fn editing_label(&self) -> Option<&'static str> {
+        self.editor.as_ref().map(|(f, _)| match f {
+            NField::Bind => s::N_BIND,
+            NField::Port => s::N_PORT,
+            NField::Token => s::N_TOKEN,
+        })
+    }
+
     /// Validated (bind, port, token) ready for the TOML rewrite, or field errors.
     pub fn validated(&self) -> Result<(String, u16, Option<String>), String> {
         if self.staged.bind.parse::<IpAddr>().is_err() {
@@ -84,11 +93,6 @@ impl NetworkState {
             Some(self.staged.token.clone())
         };
         Ok((self.staged.bind.clone(), port, token))
-    }
-
-    pub fn summary(&self) -> String {
-        let auth = if self.staged.token.trim().is_empty() { "open" } else { "token" };
-        format!("{}:{} · {auth}", self.staged.bind, self.staged.port)
     }
 
     /// A non-loopback bind is reachable beyond localhost (§3.5); 0.0.0.0

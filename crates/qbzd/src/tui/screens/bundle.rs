@@ -103,6 +103,17 @@ impl BundleState {
             || self.auth_confirm
     }
 
+    /// The breadcrumb's level-2 node when an inline path/dest editor is active.
+    /// The review panel, device picker and auth confirm are third-level overlays
+    /// — the breadcrumb underneath stays `Setup › Import / Export`.
+    pub fn editing_label(&self) -> Option<&'static str> {
+        match &self.editor {
+            Some(Editor::ImportPath(_)) => Some(s::B_IMPORT_PATH),
+            Some(Editor::ExportDest(_)) => Some(s::B_EXPORT_DEST),
+            None => None,
+        }
+    }
+
     /// Store a fresh plan from the App's worker (§3.6 step 3).
     pub fn set_plan(&mut self, planned: PendingImport) {
         self.scroll = 0;

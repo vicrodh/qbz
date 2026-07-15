@@ -135,6 +135,16 @@ impl PlaybackState {
         self.baseline = self.staged.clone();
     }
 
+    /// The breadcrumb's level-2 node when a picker is open.
+    pub fn editing_label(&self) -> Option<&'static str> {
+        match &self.editor {
+            Some(Editor::Quality(_)) => Some(s::P_QUALITY),
+            Some(Editor::MaxRate(_)) => Some(s::P_MAX_RATE),
+            Some(Editor::Retry(_)) => Some(s::P_RETRY_FAIL),
+            None => None,
+        }
+    }
+
     /// Changed dotted keys for write_one. NEVER emits `ask` (§3.3.2).
     pub fn save_keys(&self) -> Vec<(String, String)> {
         let b = &self.baseline;
@@ -175,12 +185,6 @@ impl PlaybackState {
             out.push(("playback.resume_playback_position".to_string(), a.resume_position.to_string()));
         }
         out
-    }
-
-    pub fn summary(&self) -> String {
-        let q = quality_label(&self.staged.quality);
-        let g = if self.staged.gapless { "gapless on" } else { "gapless off" };
-        format!("{q} · {g}")
     }
 
     // -------------------------- input --------------------------

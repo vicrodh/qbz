@@ -72,6 +72,15 @@ impl QConnectState {
         self.baseline = self.staged.clone();
     }
 
+    /// The breadcrumb's level-2 node when a field editor/picker is active.
+    pub fn editing_label(&self) -> Option<&'static str> {
+        match &self.editor {
+            Some(Editor::Name(_)) => Some(s::QC_DEVICE_NAME),
+            Some(Editor::Volume(_)) => Some(s::QC_VOLUME_MODE),
+            None => None,
+        }
+    }
+
     pub fn save_keys(&self) -> Vec<(String, String)> {
         let b = &self.baseline;
         let a = &self.staged;
@@ -90,12 +99,6 @@ impl QConnectState {
             out.push(("qconnect.volume_mode".to_string(), a.volume_mode.clone()));
         }
         out
-    }
-
-    pub fn summary(&self) -> String {
-        let state = if self.staged.enable { "on" } else { "off" };
-        let name = self.effective_name();
-        format!("{state} · \"{name}\"")
     }
 
     fn effective_name(&self) -> String {

@@ -55,17 +55,14 @@ impl AccountState {
         self.token_input.is_some() || self.confirm_logout
     }
 
-    pub fn summary(&self) -> String {
-        if self.auth.logged_in {
-            match (&self.auth.email, &self.auth.plan) {
-                (Some(e), Some(p)) => format!("logged in as {e} ({p})"),
-                (Some(e), None) => format!("logged in as {e}"),
-                _ => "logged in".to_string(),
-            }
-        } else if self.auth.cred_file_present {
-            "credential present".to_string()
+    /// The breadcrumb's level-2 node when an INLINE field edit is active. The
+    /// logout confirm is a third-level modal (an overlay) — the breadcrumb
+    /// underneath stays `Setup › Account`, so it returns None.
+    pub fn editing_label(&self) -> Option<&'static str> {
+        if self.token_input.is_some() {
+            Some(s::ACCOUNT_PASTE_TOKEN)
         } else {
-            "not logged in".to_string()
+            None
         }
     }
 

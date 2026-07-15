@@ -334,6 +334,28 @@ impl AudioState {
         self.editor.is_some()
     }
 
+    /// The breadcrumb's level-2 node when a field editor/picker is active (the
+    /// DSD guard counts — it is still editing the DSD field).
+    pub fn editing_label(&self) -> Option<&'static str> {
+        match &self.editor {
+            Some(Editor::Backend(_)) => Some(s::A_BACKEND),
+            Some(Editor::Device(_)) => Some(s::A_DEVICE),
+            Some(Editor::AlsaPlugin(_)) => Some(s::A_ALSA_PLUGIN),
+            Some(Editor::Dsd(_)) | Some(Editor::DsdConfirm { .. }) => Some(s::A_DSD),
+            None => None,
+        }
+    }
+
+    /// True when the focused (non-editing) field consumes ←/→ (the Buffer
+    /// slider). The shell asks this before letting ← drop focus back to the nav.
+    pub fn focused_is_buffer(&self) -> bool {
+        if self.editor.is_some() {
+            return false;
+        }
+        let fields = visible_fields(&self.staged);
+        fields.get(self.focus).copied() == Some(AField::Buffer)
+    }
+
     /// Changed dotted `audio.*` keys for the save path (write_one values).
     pub fn save_keys(&self) -> Vec<(String, String)> {
         let b = &self.baseline;
@@ -390,18 +412,6 @@ impl AudioState {
 
     pub fn mark_saved(&mut self) {
         self.baseline = self.staged.clone();
-    }
-
-    pub fn summary(&self) -> String {
-        let backend = backend_label(self.staged.backend);
-        let dev = self
-            .staged
-            .output_device
-            .as_deref()
-            .map(short_device)
-            .unwrap_or_else(|| "system default".to_string());
-        let excl = if self.staged.exclusive_mode { " · excl" } else { "" };
-        format!("{backend} · {dev}{excl}")
     }
 
     // -------------------------- input --------------------------
