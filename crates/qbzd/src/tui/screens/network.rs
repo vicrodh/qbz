@@ -181,8 +181,8 @@ impl NetworkState {
             lines.push(widgets::err_line(s::N_BAD_IP));
         } else if self.bind_is_lan() {
             lines.push(widgets::blank());
-            for l in s::NETWORK_LAN_WARNING.lines() {
-                lines.push(widgets::warn_line(l));
+            for l in s::NETWORK_LAN_POSTURE.lines() {
+                lines.push(widgets::note_line(l));
             }
         }
         if self.port_invalid() {

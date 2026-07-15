@@ -233,8 +233,8 @@ pub const N_PORT: &str = "Port";
 pub const N_TOKEN: &str = "Access token";
 pub const N_TOKEN_HINT: &str = "(empty = open)";
 
-/// LAN-exposure warning shown when bind is non-loopback (§3.5, copy normative).
-pub const NETWORK_LAN_WARNING: &str = "! bound beyond localhost: anyone on your network can control playback\n  (Sonos/Chromecast posture). Plain HTTP — never expose it past your LAN.";
+/// LAN-first posture note shown when bind is non-loopback (§3.5, copy normative).
+pub const NETWORK_LAN_POSTURE: &str = "open LAN control (Sonos/Chromecast posture) — anyone on your network can control playback\n  restrict: bind = \"127.0.0.1\" or set [server] token in qbzd.toml";
 
 /// Restart-required copy on a bind/port/token save (§3.5).
 pub const NETWORK_RESTART: &str =

@@ -228,3 +228,29 @@ pub fn bundle_token_rejected() -> String {
     "error: the Qobuz token in this bundle was rejected — re-export with a fresh desktop login, or run: qbzd login"
         .to_string()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lan_posture_note_renders_the_verbatim_copy() {
+        // FB6 (successor to the old LAN-exposure warning) — one INFO line logged
+        // by the daemon at boot when the control API is NOT loopback-only. This
+        // test pins the exact wording so it cannot drift from the spec.
+        let rendered = lan_posture_note("0.0.0.0:6789");
+        assert!(
+            rendered.contains("control plane listening on 0.0.0.0:6789"),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains("anyone on your network can control playback"),
+            "{rendered}"
+        );
+        assert!(rendered.contains("bind = \"127.0.0.1\""), "{rendered}");
+        assert!(
+            rendered.contains("token in qbzd.toml to restrict"),
+            "{rendered}"
+        );
+    }
+}
