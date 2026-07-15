@@ -84,12 +84,19 @@ pub async fn run(roots: ProfileRoots, cfg: QbzdConfig, warns: Vec<String>) -> Re
     //     (T9/T10) splice after this, reading `booted`.
     let prefs = daemon_prefs::load_at(&roots.data);
     let quality = playback_driver::quality_from_key(&prefs.streaming_quality);
+    // T11: a live-updatable cell, not a value captured once — `settings/reload`
+    // re-reads `daemon_prefs` and writes here so the driver's OWN auto-advance
+    // (gapless prefetch, natural-end advance) picks up a `playback.quality`
+    // change without a restart. Manual play/next/prev already re-read
+    // `daemon_prefs` fresh every call (api/playback.rs::resolve_quality); this
+    // cell is what makes the BACKGROUND driver loop equally live.
+    let quality_cell = Arc::new(std::sync::Mutex::new(quality));
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
     // T10 (§7.2): the driver's `ReportEdge` action pulses this Notify; the
     // QConnect report scheduler (step 12) waits on it. Created BEFORE the driver
     // so `on_edge` can capture it, and shared with `qconnect::start`.
     let report_notify = Arc::new(tokio::sync::Notify::new());
-    let deps = build_driver_deps(quality, booted.shared.clone(), report_notify.clone());
+    let deps = build_driver_deps(quality_cell.clone(), booted.shared.clone(), report_notify.clone());
     let driver = tokio::spawn(playback_driver::run_driver(
         booted.runtime.clone(),
         deps,
@@ -110,6 +117,17 @@ pub async fn run(roots: ProfileRoots, cfg: QbzdConfig, warns: Vec<String>) -> Re
     //     [server] token (None = open). 12. QConnect (T9/T10) splices after this.
     let api_audio = qbz_audio::settings::AudioSettingsStore::new_at(&roots.data)
         .map_err(|e| format!("error: could not open the audio settings store for the API: {e}"))?;
+    // T11: the reload handler's "did a routing-critical field change" diff
+    // needs a starting point — seed it from what's on disk right now (the same
+    // settings the Player was constructed with at step 6/7).
+    let initial_audio_settings = api_audio.get_settings().unwrap_or_default();
+    // T11: the running QConnect service is not constructed until step 12
+    // (AFTER the API starts serving, per the normative boot order, 01 §8.1) —
+    // this cell lets the reload route reach it anyway: empty until `qconnect
+    // ::start` below populates it, harmlessly no-op'd by the reload handler in
+    // the vanishingly small window before that.
+    let qconnect_control: Arc<std::sync::OnceLock<crate::qconnect::QconnectControl>> =
+        Arc::new(std::sync::OnceLock::new());
     let api = crate::api::serve(
         bound,
         crate::api::ApiState {
@@ -121,6 +139,9 @@ pub async fn run(roots: ProfileRoots, cfg: QbzdConfig, warns: Vec<String>) -> Re
             rt: tokio::runtime::Handle::current(),
             audio: api_audio,
             devices: std::sync::Mutex::new(crate::api::DeviceCache::default()),
+            audio_snapshot: std::sync::Mutex::new(initial_audio_settings),
+            quality: quality_cell.clone(),
+            qconnect_control: qconnect_control.clone(),
         },
     );
     log::info!("control API listening on {bind_addr}");
@@ -138,6 +159,10 @@ pub async fn run(roots: ProfileRoots, cfg: QbzdConfig, warns: Vec<String>) -> Re
         &roots,
         report_notify,
     );
+    // T11: publish the reload route's handle onto the running service now that
+    // it exists (`connect`/`disconnect`/device-name refresh — see
+    // `qconnect::QconnectControl`).
+    let _ = qconnect_control.set(qconnect.control());
 
     // 13. park on SIGTERM/SIGINT. NO startup audio "hygiene": both candidate
     //     fns are verified no-ops from a fresh process and re-adding them is the
@@ -239,7 +264,7 @@ async fn boot(roots: &ProfileRoots, cfg: &QbzdConfig, warn_count: usize) -> Resu
             qbz_log::register_secret(token.clone());
             match runtime.core().login_with_token(&token).await {
                 Ok(session) => {
-                    restore_activate(&runtime, &shared, roots, session).await?;
+                    restore_activate(&runtime, &shared, roots, session, &token).await?;
                     // 9½. session restore (queue/position) PAUSED: the daemon's
                     //     session store IS its queue persistence, so a restart
                     //     comes back with the queue armed but not auto-playing.
@@ -278,14 +303,19 @@ async fn boot(roots: &ProfileRoots, cfg: &QbzdConfig, warn_count: usize) -> Resu
 /// pulses the QConnect report `Notify` so the report scheduler reports on the
 /// same transition/periodic edges the driver detects (§7.2).
 fn build_driver_deps(
-    quality: qbz_models::Quality,
+    quality_cell: Arc<std::sync::Mutex<qbz_models::Quality>>,
     shared: Arc<Mutex<DaemonShared>>,
     report_notify: Arc<tokio::sync::Notify>,
 ) -> DriverDeps {
     let latch_shared = shared.clone();
     let tick_shared = shared;
     DriverDeps {
-        quality: Arc::new(move || quality),
+        quality: Arc::new(move || {
+            quality_cell
+                .lock()
+                .map(|q| *q)
+                .unwrap_or(qbz_models::Quality::UltraHiRes)
+        }),
         // T10: signal the report scheduler on every ReportEdge. `notify_one`
         // stores a single permit if the scheduler is mid-report, so no edge is
         // lost and rapid edges coalesce into one report.
@@ -354,11 +384,12 @@ fn spawn_queue_persist(
 /// Activate the per-user session against DAEMON paths (§8.1-9): inject the
 /// session into the core, then `activate_at` the runtime with per-user daemon
 /// data/cache directories — never the desktop `UserDataPaths`.
-async fn restore_activate(
+pub(crate) async fn restore_activate(
     runtime: &Arc<AppRuntime<DaemonAdapter>>,
     shared: &Arc<Mutex<DaemonShared>>,
     roots: &ProfileRoots,
     session: UserSession,
+    token: &str,
 ) -> Result<(), String> {
     runtime
         .core()
@@ -373,6 +404,12 @@ async fn restore_activate(
         )
         .await?;
     set_logged_in(shared, &session);
+    // T11: remember which token this activation applied so a later
+    // `POST /api/settings/reload` can tell "same token" from "new token" and
+    // skip a redundant re-login on every unrelated settings nudge.
+    if let Ok(mut s) = shared.lock() {
+        s.credential_fingerprint = Some(crate::state::token_fingerprint(token));
+    }
     Ok(())
 }
 
@@ -391,17 +428,20 @@ fn new_shared(cfg: &QbzdConfig) -> Arc<Mutex<DaemonShared>> {
         started_at: std::time::Instant::now(),
         startup_warnings: 0,
         qconnect: QconnectStatus::default(),
+        credential_fingerprint: None,
     }))
 }
 
 /// Enter NeedsAuth. `err = None` = no saved credentials at all (the common
 /// first-run case); `Some(e)` = an explicit auth rejection just cleared the
 /// token. Either way the daemon STAYS UP (§6.2) and names the fix.
-fn set_needs_auth(shared: &Arc<Mutex<DaemonShared>>, err: Option<CoreError>) {
+pub(crate) fn set_needs_auth(shared: &Arc<Mutex<DaemonShared>>, err: Option<CoreError>) {
     if let Ok(mut s) = shared.lock() {
         s.auth = AuthState::NeedsAuth;
         s.user_id = None;
         s.subscription = None;
+        // T11: NeedsAuth has no applied token by definition.
+        s.credential_fingerprint = None;
     }
     match err {
         None => log::info!("Not logged in — run 'qbzd setup' (or 'qbzd login')"),
@@ -429,7 +469,7 @@ fn set_logged_in(shared: &Arc<Mutex<DaemonShared>>, session: &UserSession) {
 
 /// Latch an auth error so a `status` call remains diagnosable after the fact
 /// (§9.4 — drain-once channels alone cannot answer "why did the music stop?").
-fn latch_auth_error(shared: &Arc<Mutex<DaemonShared>>, e: &CoreError) {
+pub(crate) fn latch_auth_error(shared: &Arc<Mutex<DaemonShared>>, e: &CoreError) {
     if let Ok(mut s) = shared.lock() {
         s.last_errors.auth = Some(format!("token rejected by Qobuz — cleared ({e})"));
     }
@@ -440,7 +480,7 @@ fn latch_auth_error(shared: &Arc<Mutex<DaemonShared>>, e: &CoreError) {
 /// failures, offline gate, 5xx, rate limiting and parse errors all return false
 /// so the saved token is KEPT (mirrors crates/qbz/src/auth.rs:215-230; the
 /// taxonomy — not the variant list — is the normative part).
-fn is_auth_rejection(error: &CoreError) -> bool {
+pub(crate) fn is_auth_rejection(error: &CoreError) -> bool {
     matches!(
         error,
         CoreError::Api(
@@ -471,7 +511,9 @@ fn spawn_auth_retry(
             log::info!("session restore retry {}/{}", i + 1, SCHEDULE_SECS.len());
             match runtime.core().login_with_token(&token).await {
                 Ok(session) => {
-                    if let Err(e) = restore_activate(&runtime, &shared, &roots, session).await {
+                    if let Err(e) =
+                        restore_activate(&runtime, &shared, &roots, session, &token).await
+                    {
                         log::warn!("session activation after retry failed: {e}");
                     }
                     return;
@@ -577,6 +619,228 @@ async fn wait_for_signal() {
     }
 }
 
+// ============================ T11: settings reload ============================
+// `POST /api/settings/reload` (02-cli-and-api.md §3.3.17; `crate::api::settings
+// ::reload` is the thin HTTP wrapper) re-reads every engine store and applies
+// what changed: audio (routing-critical -> `Player::reinit_device`, the rest ->
+// `Player::reload_settings`), the daemon's own streaming-quality cell (the
+// driver's background auto-advance), the QConnect KV (device-name cache +
+// connect/disconnect reconciliation), and finally the credential file (absent
+// -> NeedsAuth; new -> session restore). Never re-reads `qbzd.toml` (§3.1.2 —
+// process config is boot-only). Response = the post-reload `/api/status` body,
+// composed by the caller — zero new shapes (03-setup-tui.md §4.3: the
+// reinit/reload narrative is composed CLIENT-side from the CLI's own copy of
+// the Apply-ladder classification, never carried on the wire).
+
+/// The single entry point the HTTP route calls. Order matters only at the
+/// margin (independent domains): audio/quality/qconnect-KV first, credentials
+/// last, so a login/logout settles the auth state before QConnect decides
+/// whether to (re)connect against it.
+pub(crate) async fn reload(state: &crate::api::ApiState) {
+    reload_audio(state);
+    reload_quality(state);
+    reload_credentials(
+        &state.runtime,
+        &state.shared,
+        &state.roots,
+        state.qconnect_control.get(),
+    )
+    .await;
+    reload_qconnect(state).await;
+}
+
+/// Re-read `audio_settings.db` and apply it to the live `Player`. A struct
+/// refresh (`reload_settings`) always happens; the output device is ADDITIONALLY
+/// reinitialized only when a routing-critical field actually changed since the
+/// last reload (mirrors the desktop's `Apply::Reinit` — `qbz/src/settings.rs:
+/// 87-94`, per-key classification `:877-967,1134-1290`; 03-setup-tui.md §4.3
+/// lists the same 9 fields).
+pub(crate) fn reload_audio(state: &crate::api::ApiState) {
+    let fresh = match state.audio.get_settings() {
+        Ok(s) => s,
+        Err(e) => {
+            log::warn!("[reload] could not re-read audio settings: {e}");
+            return;
+        }
+    };
+    let player = state.runtime.core().player();
+    if let Err(e) = player.reload_settings(fresh.clone()) {
+        log::warn!("[reload] player.reload_settings failed: {e}");
+    }
+    let needs_reinit = state
+        .audio_snapshot
+        .lock()
+        .map(|old| audio_routing_changed(&old, &fresh))
+        .unwrap_or(false);
+    if needs_reinit {
+        log::info!("[reload] routing-critical audio field changed — reinitializing the output device");
+        if let Err(e) = player.reinit_device(fresh.output_device.clone()) {
+            log::warn!("[reload] player.reinit_device failed: {e}");
+        }
+    }
+    if let Ok(mut snap) = state.audio_snapshot.lock() {
+        *snap = fresh;
+    }
+}
+
+/// The Reinit-class field set (03-setup-tui.md §4.3 / `qbz/src/settings.rs:
+/// 877-967,1134-1290`): backend, device, ALSA plugin, DSD mode, max sample
+/// rate, exclusive mode, DAC passthrough, hardware volume, lock-output
+/// (`skip_sink_switch`). Every other `AudioSettings` field is Reload-class —
+/// `player.reload_settings` above already covers it unconditionally.
+pub(crate) fn audio_routing_changed(
+    old: &qbz_audio::settings::AudioSettings,
+    new: &qbz_audio::settings::AudioSettings,
+) -> bool {
+    old.backend_type != new.backend_type
+        || old.output_device != new.output_device
+        || old.alsa_plugin != new.alsa_plugin
+        || old.alsa_hardware_volume != new.alsa_hardware_volume
+        || old.exclusive_mode != new.exclusive_mode
+        || old.dac_passthrough != new.dac_passthrough
+        || old.skip_sink_switch != new.skip_sink_switch
+        || old.dsd_mode != new.dsd_mode
+        || old.device_max_sample_rate != new.device_max_sample_rate
+}
+
+/// Re-read `daemon_prefs.streaming_quality` into the live cell the driver's
+/// background auto-advance reads (`daemon.rs::run`'s `quality_cell`). Manual
+/// play/next/prev already re-read `daemon_prefs` fresh every call
+/// (`api/playback.rs::resolve_quality`); this is what makes the passive
+/// natural-end-of-track advance equally live.
+pub(crate) fn reload_quality(state: &crate::api::ApiState) {
+    let prefs = daemon_prefs::load_at(&state.roots.data);
+    let fresh = playback_driver::quality_from_key(&prefs.streaming_quality);
+    if let Ok(mut q) = state.quality.lock() {
+        *q = fresh;
+    }
+}
+
+/// Re-cache the QConnect device-name override from the daemon-root KV (so the
+/// NEXT connect uses whatever `qbzd qconnect name` / `settings set
+/// qconnect.device_name` most recently wrote — 03-setup-tui.md §3.4: "applies
+/// on the next connection", never forcing a reconnect just for a rename), then
+/// reconcile the connect/disconnect state against the freshly-read
+/// `startup_mode` (`qbzd qconnect enable|disable` — idempotent either way, see
+/// `qconnect::QconnectControl`). A no-op before step 12 populates the cell.
+pub(crate) async fn reload_qconnect(state: &crate::api::ApiState) {
+    let Some(qc) = state.qconnect_control.get() else {
+        return;
+    };
+    let db = state.roots.data.join("qconnect_settings.db");
+    qc.refresh_device_name(&db).await;
+    let mode = crate::qconnect::transport::load_startup_mode_at(&db);
+    let should_connect = qconnect_app::compute_effective_startup(mode, None, None);
+    if should_connect {
+        if let Err(e) = qc.connect().await {
+            log::info!("[reload] qconnect connect deferred: {e}");
+        }
+    } else if let Err(e) = qc.disconnect().await {
+        log::warn!("[reload] qconnect disconnect failed: {e}");
+    }
+}
+
+/// What the freshly-read credential file implies for the live session — pure
+/// decision, unit-tested with no IO/network; [`reload_credentials`] just
+/// executes whichever variant this returns.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum CredentialAction {
+    /// The file matches what's already applied (or both are absent/NeedsAuth
+    /// already) — no network call, no state churn on an unrelated nudge.
+    NoOp,
+    /// The file is now empty but the daemon thinks it's logged in — tear the
+    /// session down (mirrors what `qbzd logout` does to a running daemon,
+    /// 02 §2.2: "QConnect session torn down, playback stopped").
+    EnterNeedsAuth,
+    /// A token is on disk that is not the one currently applied (fresh login
+    /// out of NeedsAuth, a retry while Restoring, or an account switch) —
+    /// validate and activate it.
+    Apply(String),
+}
+
+pub(crate) fn decide_credential_action(
+    current_auth: AuthState,
+    current_fingerprint: Option<u64>,
+    file_token: Option<String>,
+) -> CredentialAction {
+    match file_token {
+        None => {
+            if current_auth == AuthState::NeedsAuth {
+                CredentialAction::NoOp
+            } else {
+                CredentialAction::EnterNeedsAuth
+            }
+        }
+        Some(token) => {
+            let fp = crate::state::token_fingerprint(&token);
+            if current_auth == AuthState::LoggedIn && current_fingerprint == Some(fp) {
+                CredentialAction::NoOp
+            } else {
+                CredentialAction::Apply(token)
+            }
+        }
+    }
+}
+
+/// Re-read the credential file and reconcile the live session against it (02
+/// §3.3.17: "absent → NeedsAuth transition; new → session restore"; taxonomy
+/// shared with boot, §6.2). `qconnect` is `None` only in the brief boot window
+/// before step 12 populates the cell — the teardown branch just skips the
+/// QConnect disconnect then (there is no session for it to hold yet).
+pub(crate) async fn reload_credentials(
+    runtime: &Arc<AppRuntime<DaemonAdapter>>,
+    shared: &Arc<Mutex<DaemonShared>>,
+    roots: &ProfileRoots,
+    qconnect: Option<&crate::qconnect::QconnectControl>,
+) {
+    let file_token = match qbz_credentials::load_oauth_token_at(&roots.config) {
+        Ok(t) => t,
+        Err(e) => {
+            log::warn!("[reload] could not read the credential file: {e}");
+            return;
+        }
+    };
+    let (current_auth, current_fp) = match shared.lock() {
+        Ok(s) => (s.auth, s.credential_fingerprint),
+        Err(_) => return,
+    };
+
+    match decide_credential_action(current_auth, current_fp, file_token) {
+        CredentialAction::NoOp => {}
+        CredentialAction::EnterNeedsAuth => {
+            log::info!("[reload] credential file cleared — tearing the session down (NeedsAuth)");
+            if let Some(qc) = qconnect {
+                let _ = qc.disconnect().await;
+            }
+            let _ = runtime.core().stop();
+            let _ = runtime.core().logout().await;
+            let _ = runtime.deactivate().await;
+            set_needs_auth(shared, None);
+        }
+        CredentialAction::Apply(token) => {
+            qbz_log::register_secret(token.clone());
+            match runtime.core().login_with_token(&token).await {
+                Ok(session) => {
+                    match restore_activate(runtime, shared, roots, session, &token).await {
+                        Ok(()) => {
+                            playback_driver::restore_session_paused(runtime.as_ref()).await;
+                        }
+                        Err(e) => log::warn!("[reload] session activation failed: {e}"),
+                    }
+                }
+                Err(e) if is_auth_rejection(&e) => {
+                    let _ = qbz_credentials::clear_oauth_token_at(&roots.config);
+                    latch_auth_error(shared, &e);
+                    set_needs_auth(shared, Some(e));
+                }
+                Err(e) => {
+                    log::warn!("[reload] session restore deferred (network-class): {e}");
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -637,5 +901,141 @@ mod tests {
         assert_eq!(s.auth, AuthState::LoggedIn);
         assert_eq!(s.user_id, Some(1234567));
         assert_eq!(s.subscription.as_deref(), Some("studio"));
+    }
+
+    // ======================= T11: settings/reload =======================
+
+    #[test]
+    fn credential_action_noop_when_absent_and_already_needs_auth() {
+        assert_eq!(
+            decide_credential_action(AuthState::NeedsAuth, None, None),
+            CredentialAction::NoOp
+        );
+    }
+
+    #[test]
+    fn credential_action_enters_needs_auth_when_file_cleared_while_logged_in() {
+        // The `qbzd logout` case: file now absent, daemon still thinks it's
+        // LoggedIn (or mid-Restoring) — must tear down.
+        let fp = crate::state::token_fingerprint("old-token");
+        assert_eq!(
+            decide_credential_action(AuthState::LoggedIn, Some(fp), None),
+            CredentialAction::EnterNeedsAuth
+        );
+        assert_eq!(
+            decide_credential_action(AuthState::Restoring, None, None),
+            CredentialAction::EnterNeedsAuth
+        );
+    }
+
+    #[test]
+    fn credential_action_noop_when_token_unchanged_and_logged_in() {
+        let fp = crate::state::token_fingerprint("same-token");
+        assert_eq!(
+            decide_credential_action(AuthState::LoggedIn, Some(fp), Some("same-token".into())),
+            CredentialAction::NoOp
+        );
+    }
+
+    #[test]
+    fn credential_action_applies_new_token_out_of_needs_auth() {
+        assert_eq!(
+            decide_credential_action(AuthState::NeedsAuth, None, Some("fresh-token".into())),
+            CredentialAction::Apply("fresh-token".into())
+        );
+    }
+
+    #[test]
+    fn credential_action_applies_changed_token_while_already_logged_in() {
+        // Account-switch / re-login case: fingerprint differs even though the
+        // daemon is already LoggedIn.
+        let old_fp = crate::state::token_fingerprint("old-token");
+        assert_eq!(
+            decide_credential_action(AuthState::LoggedIn, Some(old_fp), Some("new-token".into())),
+            CredentialAction::Apply("new-token".into())
+        );
+    }
+
+    #[test]
+    fn credential_action_applies_when_fingerprint_missing_even_if_marked_logged_in() {
+        // Defensive: a LoggedIn state with no recorded fingerprint (should not
+        // happen post-T11, but a stale/older state) must not be treated as a
+        // match — never silently skip a real token on disk.
+        assert_eq!(
+            decide_credential_action(AuthState::LoggedIn, None, Some("token".into())),
+            CredentialAction::Apply("token".into())
+        );
+    }
+
+    fn base_audio_settings() -> qbz_audio::settings::AudioSettings {
+        qbz_audio::settings::AudioSettings::default()
+    }
+
+    #[test]
+    fn audio_routing_changed_false_when_nothing_moved() {
+        let a = base_audio_settings();
+        let b = base_audio_settings();
+        assert!(!audio_routing_changed(&a, &b));
+    }
+
+    #[test]
+    fn audio_routing_changed_true_for_each_reinit_class_field() {
+        let base = base_audio_settings();
+
+        let mut backend = base.clone();
+        backend.backend_type = Some(qbz_audio::AudioBackendType::Alsa);
+        assert!(audio_routing_changed(&base, &backend), "backend_type");
+
+        let mut device = base.clone();
+        device.output_device = Some("hw:CARD=D30,DEV=0".into());
+        assert!(audio_routing_changed(&base, &device), "output_device");
+
+        let mut plugin = base.clone();
+        plugin.alsa_plugin = Some(qbz_audio::AlsaPlugin::PlugHw);
+        assert!(audio_routing_changed(&base, &plugin), "alsa_plugin");
+
+        let mut hw_vol = base.clone();
+        hw_vol.alsa_hardware_volume = !base.alsa_hardware_volume;
+        assert!(audio_routing_changed(&base, &hw_vol), "alsa_hardware_volume");
+
+        let mut excl = base.clone();
+        excl.exclusive_mode = !base.exclusive_mode;
+        assert!(audio_routing_changed(&base, &excl), "exclusive_mode");
+
+        let mut pass = base.clone();
+        pass.dac_passthrough = !base.dac_passthrough;
+        assert!(audio_routing_changed(&base, &pass), "dac_passthrough");
+
+        let mut lock_out = base.clone();
+        lock_out.skip_sink_switch = !base.skip_sink_switch;
+        assert!(audio_routing_changed(&base, &lock_out), "skip_sink_switch");
+
+        let mut dsd = base.clone();
+        dsd.dsd_mode = "dop".to_string();
+        assert!(audio_routing_changed(&base, &dsd), "dsd_mode");
+
+        let mut rate = base.clone();
+        rate.device_max_sample_rate = Some(192_000);
+        assert!(audio_routing_changed(&base, &rate), "device_max_sample_rate");
+    }
+
+    #[test]
+    fn audio_routing_changed_false_for_reload_class_fields_only() {
+        // Changing ONLY Reload-class fields must never trip a reinit.
+        let base = base_audio_settings();
+        let mut reload_only = base.clone();
+        reload_only.gapless_enabled = !base.gapless_enabled;
+        reload_only.stream_first_track = !base.stream_first_track;
+        reload_only.stream_buffer_seconds = 7;
+        reload_only.streaming_only = !base.streaming_only;
+        reload_only.limit_quality_to_device = !base.limit_quality_to_device;
+        reload_only.allow_quality_fallback = !base.allow_quality_fallback;
+        reload_only.quality_fallback_behavior = "always_skip".to_string();
+        reload_only.normalization_enabled = !base.normalization_enabled;
+        reload_only.normalization_target_lufs = -18.0;
+        reload_only.pw_force_bitperfect = !base.pw_force_bitperfect;
+        reload_only.reserve_dac_while_running = !base.reserve_dac_while_running;
+        reload_only.sync_audio_on_startup = !base.sync_audio_on_startup;
+        assert!(!audio_routing_changed(&base, &reload_only));
     }
 }

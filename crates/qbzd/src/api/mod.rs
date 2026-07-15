@@ -16,6 +16,7 @@
 // what keeps the 01-architecture.md §8.1 boot order honest.
 pub mod playback;
 pub mod queue;
+pub mod settings;
 pub mod status;
 
 use std::io::Cursor;
@@ -31,10 +32,11 @@ use crate::state::DaemonShared;
 use qbz_app::shell::AppRuntime;
 use qbz_audio::settings::AudioSettingsStore;
 
-/// The counted P0 route table (02 §3.2). A route exists only iff a shipped
-/// client calls it (§3.1.4). T1-T6 landed the first 3; T7 added the 9
-/// playback + now-playing routes (rows 4-12); T8 (this task) adds the 4 queue
-/// routes (rows 13-16); T11 adds `/api/settings/reload` (row 17) — the inline
+/// The counted P0 route table (02 §3.2) — 17, FINAL, this test now guards the
+/// budget forever. A route exists only iff a shipped client calls it (§3.1.4).
+/// T1-T6 landed the first 3; T7 added the 9 playback + now-playing routes
+/// (rows 4-12); T8 added the 4 queue routes (rows 13-16); T11 (this task)
+/// adds `/api/settings/reload` (row 17) — the inline
 /// `route_table_matches_spec_count` test pins the number so the 68-routes
 /// failure shape (a route with no caller) cannot creep back in.
 pub const P0_ROUTES: &[(&str, &str)] = &[
@@ -54,6 +56,7 @@ pub const P0_ROUTES: &[(&str, &str)] = &[
     ("POST", "/api/queue/add"),
     ("POST", "/api/queue/remove"),
     ("POST", "/api/queue/clear"),
+    ("POST", "/api/settings/reload"),
 ];
 
 /// A socket bound at boot step 5, not yet serving. Wraps the tiny_http server
@@ -85,6 +88,20 @@ pub struct ApiState {
     /// Cached device enumeration for `device_present` (refreshed on a TTL so a
     /// `status` poll never re-enumerates CPAL on every call).
     pub devices: Mutex<DeviceCache>,
+    /// T11: the `AudioSettings` last applied to the `Player`, so
+    /// `POST /api/settings/reload` can tell whether a routing-critical field
+    /// changed since the previous reload (`daemon::audio_routing_changed`) —
+    /// reinit only when it did, never on every unrelated nudge.
+    pub audio_snapshot: Mutex<qbz_audio::settings::AudioSettings>,
+    /// T11: the live cell the playback driver's background auto-advance reads
+    /// for streaming quality (`daemon.rs::run`'s `quality_cell`) — reload
+    /// writes a fresh value here after re-reading `daemon_prefs`.
+    pub quality: Arc<Mutex<qbz_models::Quality>>,
+    /// T11: reaches the running QConnect service (`connect`/`disconnect`/
+    /// device-name refresh) once `qconnect::start` (boot step 12, AFTER the
+    /// API starts serving at step 11) publishes it — empty only in the brief
+    /// window between the two, which the reload handler no-ops through.
+    pub qconnect_control: Arc<std::sync::OnceLock<crate::qconnect::QconnectControl>>,
 }
 
 /// TTL-cached output-device names for the `device_present` check.
@@ -249,7 +266,7 @@ fn route(state: &ApiState, req: &mut Request) -> Response<Cursor<Vec<u8>>> {
             let body = read_json_body(req);
             queue::clear(state, &body)
         }
-        // T11: /api/settings/reload.
+        ("POST", "/api/settings/reload") => settings::reload(state),
         _ => err_json(404, "not_found", "unknown route", "see qbzd --help"),
     }
 }
@@ -374,9 +391,10 @@ mod tests {
 
     #[test]
     fn route_table_matches_spec_count() {
-        // 02-cli-and-api.md §3.2 — P0 = exactly 17 routes; grows ONLY with a
-        // shipped client. T1-T6 landed 3; T7 +9 = 12; T8 (this task) +4 = 16; T11 +1 = 17.
-        assert_eq!(P0_ROUTES.len(), 16);
+        // 02-cli-and-api.md §3.2 — P0 = exactly 17 routes, FINAL; grows ONLY
+        // with a shipped client. T1-T6 landed 3; T7 +9 = 12; T8 +4 = 16; T11
+        // (this task) +1 = 17.
+        assert_eq!(P0_ROUTES.len(), 17);
         assert!(P0_ROUTES.contains(&("GET", "/api/ping")));
         assert!(P0_ROUTES.contains(&("GET", "/api/info")));
         assert!(P0_ROUTES.contains(&("GET", "/api/status")));
@@ -393,6 +411,7 @@ mod tests {
         assert!(P0_ROUTES.contains(&("POST", "/api/queue/add")));
         assert!(P0_ROUTES.contains(&("POST", "/api/queue/remove")));
         assert!(P0_ROUTES.contains(&("POST", "/api/queue/clear")));
+        assert!(P0_ROUTES.contains(&("POST", "/api/settings/reload")));
     }
 
     #[test]

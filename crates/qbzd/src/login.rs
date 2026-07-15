@@ -388,7 +388,7 @@ fn finalize(roots: &ProfileRoots, session: &UserSession) -> Result<(), LoginErro
 /// The local daemon's reload address. Credentials are written to the LOCAL
 /// config root, so the daemon to nudge is always local; its port comes from the
 /// same `qbzd.toml` the daemon reads (default 8182).
-fn nudge_host(roots: &ProfileRoots) -> String {
+pub(crate) fn nudge_host(roots: &ProfileRoots) -> String {
     let port = crate::config::QbzdConfig::load(&roots.config.join("qbzd.toml"))
         .map(|(c, _)| c.server.port)
         .unwrap_or(8182);

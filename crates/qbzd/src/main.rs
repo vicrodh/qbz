@@ -242,6 +242,33 @@ async fn main() {
                 }
             }
         }
+        Cmd::Settings { cmd } => {
+            let roots = login_roots();
+            match cmd {
+                SettingsCmd::Show { json } => cli::settings::show(json, &roots),
+                SettingsCmd::Set { key, value } => cli::settings::set(&roots, &key, &value),
+                // Export/import land in T12 (04-settings-portability.md).
+                SettingsCmd::Export { .. } | SettingsCmd::Import { .. } => {
+                    eprintln!("not implemented yet — lands in T12 (04-settings-portability.md)");
+                    1
+                }
+            }
+        }
+        Cmd::Qconnect { cmd } => {
+            let roots = login_roots();
+            match cmd {
+                QconnectCmd::Enable => cli::settings::qconnect_enable(&roots),
+                QconnectCmd::Disable => cli::settings::qconnect_disable(&roots),
+                QconnectCmd::Name { name } => cli::settings::qconnect_name(&roots, &name),
+            }
+        }
+        Cmd::Config { cmd } => {
+            let roots = login_roots();
+            match cmd {
+                ConfigCmd::Path => cli::settings::config_path(&roots),
+                ConfigCmd::Show { json } => cli::settings::config_show(json, &roots),
+            }
+        }
         _ => { eprintln!("not implemented yet"); 1 } // burned down task by task
     };
     std::process::exit(code);

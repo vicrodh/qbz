@@ -298,6 +298,17 @@ impl DaemonQconnectService {
         Ok(())
     }
 
+    /// T11 (`POST /api/settings/reload`): re-cache the device-name override from
+    /// the daemon-root KV so the NEXT `connect()` (whenever that happens) uses
+    /// whatever `qbzd qconnect name` / `settings set qconnect.device_name` most
+    /// recently wrote — 03-setup-tui.md §3.4's "applies on the next connection"
+    /// rule. Does NOT force a reconnect by itself (a rename alone must not
+    /// bounce an active session).
+    async fn refresh_device_name(&self, settings_db: &std::path::Path) {
+        let name = transport::load_device_name_at(settings_db);
+        *self.custom_device_name.write().await = name;
+    }
+
     /// Wait until the daemon is Ready (logged in + API initialized), then attempt
     /// `connect()` with the bounded [2s, 5s, 15s, 30s] retry schedule. Each
     /// `connect()` re-resolves the transport config internally, so a transient
@@ -351,6 +362,33 @@ pub struct QconnectHandle {
     report_task: Option<JoinHandle<()>>,
 }
 
+/// T11: a `Clone`-able, `Send + Sync` handle onto the running
+/// [`DaemonQconnectService`] — what the reload route reaches through
+/// `ApiState.qconnect_control` (`Arc<std::sync::OnceLock<QconnectControl>>`,
+/// populated by `QconnectHandle::control()` right after `start()` returns).
+/// `connect`/`disconnect` are already idempotent on the service (a no-op when
+/// already in the target state), so the reload path can call either
+/// unconditionally without checking current status first.
+#[derive(Clone)]
+pub struct QconnectControl(Arc<DaemonQconnectService>);
+
+impl QconnectControl {
+    pub async fn connect(&self) -> Result<(), String> {
+        self.0.connect().await
+    }
+
+    pub async fn disconnect(&self) -> Result<(), String> {
+        self.0.disconnect().await
+    }
+
+    /// Re-cache the device-name override from the daemon-root KV (§ see
+    /// [`DaemonQconnectService::refresh_device_name`] — applies on the NEXT
+    /// connect, never forces a reconnect for a rename alone).
+    pub async fn refresh_device_name(&self, settings_db: &std::path::Path) {
+        self.0.refresh_device_name(settings_db).await;
+    }
+}
+
 impl QconnectHandle {
     /// Connect on demand (T11 `qbzd qconnect enable`).
     #[allow(dead_code)]
@@ -362,6 +400,16 @@ impl QconnectHandle {
     #[allow(dead_code)]
     pub async fn disconnect(&self) -> Result<(), String> {
         self.service.disconnect().await
+    }
+
+    /// A cheap, `Clone`-able handle onto the running service — what
+    /// `daemon.rs`'s `POST /api/settings/reload` route holds (via an
+    /// `Arc<OnceLock<QconnectControl>>` populated right after `start()`
+    /// returns, since QConnect boots AFTER the HTTP server per the normative
+    /// order, 01-architecture.md §8.1 steps 11/12). Carries none of the
+    /// `JoinHandle`s `QconnectHandle` owns — those stay daemon-shutdown-only.
+    pub fn control(&self) -> QconnectControl {
+        QconnectControl(Arc::clone(&self.service))
     }
 
     /// §8.2-1: stop the auto-connect watcher and disconnect the session BEFORE

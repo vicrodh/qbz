@@ -30,6 +30,24 @@ pub struct DaemonShared {
     pub started_at: std::time::Instant,
     pub startup_warnings: u32,
     pub qconnect: QconnectStatus,
+    /// T11 (`POST /api/settings/reload`, 02 §3.3.17): a fingerprint of the
+    /// credential-file token currently applied to the live session, so reload
+    /// can tell "new token on disk" (re-login) from "same token, unrelated
+    /// nudge" (no-op) without keeping a second copy of the secret in memory.
+    /// `None` whenever the daemon is not LoggedIn against a known token
+    /// (cleared alongside every `set_needs_auth`).
+    pub credential_fingerprint: Option<u64>,
+}
+
+/// A non-reversible-in-practice fingerprint of a credential token (SipHash via
+/// the stdlib default hasher) — used ONLY to detect "the file changed", never
+/// to reconstruct the token. Keeps `DaemonShared` from holding a second live
+/// copy of the secret alongside the credential file + the Qobuz client.
+pub fn token_fingerprint(token: &str) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    token.hash(&mut hasher);
+    hasher.finish()
 }
 
 #[derive(Debug, Default, Clone, serde::Serialize)]
@@ -96,8 +114,18 @@ mod tests {
             started_at: std::time::Instant::now(),
             startup_warnings: 0,
             qconnect: QconnectStatus::default(),
+            credential_fingerprint: None,
         };
         assert_eq!(shared.auth, AuthState::LoggedIn);
         assert_eq!(shared.user_id, Some(1234567));
+    }
+
+    #[test]
+    fn token_fingerprint_is_stable_and_distinguishes_tokens() {
+        let a = token_fingerprint("token-a");
+        let a_again = token_fingerprint("token-a");
+        let b = token_fingerprint("token-b");
+        assert_eq!(a, a_again);
+        assert_ne!(a, b);
     }
 }
