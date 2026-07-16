@@ -80,7 +80,7 @@ chrono = "0.4"
 regex = "1"
 
 # Audio
-symphonia = { version = "0.5", features = ["all"] }
+symphonia = { version = "0.6", features = ["all"] }
 
 # Random number generation (shuffle / DJ-mix) — mirrors src-tauri pin
 rand = "0.10"
