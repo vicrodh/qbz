@@ -194,7 +194,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Download binary
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: qbz-linux-aarch64
 
@@ -202,7 +202,7 @@ jobs:
       # release-linux.yml's matching step for the full rationale (one
       # artifact feeds nfpm, the main tarball, and the standalone tarball).
       - name: Download qbzd binary
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: qbzd-linux-aarch64
 
