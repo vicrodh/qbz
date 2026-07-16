@@ -188,11 +188,12 @@ export component AppearanceSettings inherits VerticalLayout {
                 border-color: Theme.border-subtle;
                 background: filter-ta.has-hover ? Theme.surface-hover : Theme.surface-elevated;
                 QbzIcon {
+                    // 0 = All, 1 = Dark, 2 = Light (SunMoon / Moon / Sun).
                     source: AppearanceState.theme-filter == 1
-                        ? @image-url("../assets/icons/disc.svg")
+                        ? @image-url("../assets/icons/moon.svg")
                         : AppearanceState.theme-filter == 2
-                        ? @image-url("../assets/icons/disc.svg")
-                        : @image-url("../assets/icons/disc.svg");
+                        ? @image-url("../assets/icons/sun.svg")
+                        : @image-url("../assets/icons/sun-moon.svg");
                     width: 16px;
                     height: 16px;
                     tint: Theme.text-secondary;
@@ -206,7 +207,12 @@ export component AppearanceSettings inherits VerticalLayout {
                 }
             }
             QbzSelect {
-                menu-width: 200px;
+                menu-width: 220px;
+                // 36 registered themes — a name filter (Tauri parity). The search
+                // box hides non-matching rows but preserves model order, so
+                // `selected(i)` stays the index into the (polarity-filtered)
+                // `themes` model that the Rust "theme" handler maps.
+                searchable: true;
                 options: AppearanceState.themes;
                 current-index: AppearanceState.theme-index;
                 selected(i) => {

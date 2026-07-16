@@ -1839,13 +1839,13 @@ mod a11y_contrast_tests {
         // Count: the registry holds every ThemeId variant. The plan's prose
         // says "32 themes" but counts inconsistently (it variously treats the
         // System meta-entry as in/out). The enum is the source of truth: 4 Core
-        // + 17 Dark + 7 Light + 5 Accessibility = 33 rows. Assert the concrete
+        // + 19 Dark + 8 Light + 5 Accessibility = 36 rows. Assert the concrete
         // breakdown so a future add/remove can't silently drop a row.
         let n_a11y = ALL
             .iter()
             .filter(|id| id.category() == crate::id::ThemeCategory::Accessibility)
             .count();
         assert_eq!(n_a11y, 5, "exactly 5 accessibility themes (P3)");
-        assert_eq!(ALL.len(), 33, "registry must hold every ThemeId row");
+        assert_eq!(ALL.len(), 36, "registry must hold every ThemeId row");
     }
 }
