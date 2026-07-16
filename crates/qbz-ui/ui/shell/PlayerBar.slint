@@ -242,9 +242,9 @@ export component PlayerBar inherits Rectangle {
                     // row itself is NOT inset (PLAY stays window-centred), so only
                     // this card's content moves. New mode 0 keeps x:0/full width
                     // (identical to the previous fill default).
-                    x: ShellState.large-active ? (ShellState.sidebar-rendered-width - 6px) : 0px;
+                    x: ShellState.large-active ? (ShellState.sidebar-rendered-width + 8px) : 0px;
                     width: ShellState.large-active
-                        ? (parent.width - (ShellState.sidebar-rendered-width - 6px))
+                        ? (parent.width - (ShellState.sidebar-rendered-width + 8px))
                         : parent.width;
                     // Homologate the stamp with classic: full-size badge + LEDs,
                     // not the compact variant.

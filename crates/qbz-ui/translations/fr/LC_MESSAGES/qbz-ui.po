@@ -521,6 +521,20 @@ msgstr "Vos artistes favoris"
 msgid "Artists to Follow"
 msgstr "Artistes à suivre"
 
+msgid "Pinned"
+msgstr "Épinglés"
+
+msgid "Pin"
+msgstr "Épingler"
+
+msgid "Unpin"
+msgstr "Désépingler"
+
+msgid "Showing {} of {} track."
+msgid_plural "Showing {} of {} tracks."
+msgstr[0] "Affichage de {} sur {} piste."
+msgstr[1] "Affichage de {} sur {} pistes."
+
 msgid "Spotlight"
 msgstr "Sous les projecteurs"
 

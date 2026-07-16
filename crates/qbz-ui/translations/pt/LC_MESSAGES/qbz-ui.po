@@ -521,6 +521,20 @@ msgstr "Seus Artistas Mais Ouvidos"
 msgid "Artists to Follow"
 msgstr "Artistas para Seguir"
 
+msgid "Pinned"
+msgstr "Fixados"
+
+msgid "Pin"
+msgstr "Fixar"
+
+msgid "Unpin"
+msgstr "Desafixar"
+
+msgid "Showing {} of {} track."
+msgid_plural "Showing {} of {} tracks."
+msgstr[0] "Mostrando {} de {} faixa."
+msgstr[1] "Mostrando {} de {} faixas."
+
 msgid "Spotlight"
 msgstr "Em Destaque"
 

@@ -320,6 +320,9 @@ export component AwardView inherits Rectangle {
             if AwardState.other-awards.length > 0: ArtistCarousel {
                 title: @tr("Other awards");
                 artists: AwardState.other-awards;
+                // Awards, not artists — keep the generic legacy card (the grid
+                // card's play / "Open artist" actions don't apply here).
+                grid-cards: false;
                 card-follow-mode: "none";
                 artist-clicked(id) => {
                     AwardActions.open-award(id, "");

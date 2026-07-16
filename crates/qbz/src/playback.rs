@@ -125,6 +125,27 @@ async fn kick_prefetch(runtime: &Runtime) {
     if crate::offline_mode::engine().is_offline() {
         return;
     }
+    // Adaptive throttle (#591): when the live stream is starving — panic mode
+    // after a decoder underrun, or bandwidth headroom below the surviving
+    // ratio — prefetch must get out of the pipe entirely. Cap 0 means "no
+    // prefetch right now"; the semaphore still bounds concurrency otherwise.
+    {
+        use qbz_audio::network_throttle::{self, PlaybackQualityTag};
+        let tag = match playback_quality() {
+            Quality::UltraHiRes => PlaybackQualityTag::UltraHiRes,
+            Quality::HiRes => PlaybackQualityTag::HiRes,
+            Quality::Lossless => PlaybackQualityTag::Lossless,
+            Quality::Mp3 => PlaybackQualityTag::Lossy,
+        };
+        let cap = network_throttle::state().current_prefetch_cap(
+            network_throttle::playback_mbps_for_quality(tag),
+            MAX_CONCURRENT_PREFETCH,
+        );
+        if cap == 0 {
+            log::debug!("[qbz-slint] prefetch: skipped (network throttle cap 0)");
+            return;
+        }
+    }
     let upcoming = runtime.core().peek_upcoming(PREFETCH_LOOKAHEAD).await;
     if upcoming.is_empty() {
         return;

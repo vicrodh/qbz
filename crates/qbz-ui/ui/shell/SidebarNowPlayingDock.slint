@@ -80,13 +80,14 @@ export component SidebarNowPlayingDock inherits Rectangle {
 
     // Square cover = the dock's (sidebar content) width. Compact spectrum above.
     property <length> art-size: root.width;
-    property <length> spectrum-h: 46px;   // half the original 92px (owner: shorter band)
+    property <length> spectrum-h: 42px;   // 46 - 4: trimmed 2px top + 2px bottom (owner: free space for the art's bottom gap)
     // Reserve cover + (when ON) the spectrum band + gap, plus the top hairline
-    // pad. MUST equal ShellState.large-dock-height in BOTH toggle states so the
-    // AppShell overlay (y = root.height - large-dock-height) keeps the cover flush.
+    // pad and the 4px bottom gap. MUST equal ShellState.large-dock-height in BOTH
+    // toggle states so the AppShell overlay (y = root.height - large-dock-height)
+    // keeps the cover in place. ON = 9 + 42 + 10 + art + 4 = art+65; OFF = 9 + art + 4.
     height: ShellState.large-visualizer-on
-        ? (root.spectrum-h + 10px + root.art-size + 9px)
-        : (root.art-size + 9px);
+        ? (root.spectrum-h + 10px + root.art-size + 13px)
+        : (root.art-size + 13px);
 
     // Bars: 28 MIRRORED columns = 14 active source bins x2 (the 16-bin FFT
     // excludes {1,15}; SpectrumPanel parity). More bars than the old straight 14.
@@ -110,13 +111,12 @@ export component SidebarNowPlayingDock inherits Rectangle {
 
     VerticalLayout {
         padding-top: 9px;
-        // Lift the cover 2px off the window bottom (it was flush) and take those
-        // 2px out of the cover<->spectrum gap (10 -> 8), so the dock height is
-        // unchanged (9 + spectrum + 8 + art + 2 == 9 + spectrum + 10 + art). The
-        // bottom pad applies only while the spectrum is shown — otherwise the
-        // off-state height would no longer match ShellState.large-dock-height.
-        spacing: 8px;
-        padding-bottom: ShellState.large-visualizer-on ? 2px : 0px;
+        // 4px gap below the cover vs the window bottom (both toggle states); the
+        // 4px was reclaimed by trimming the FFT band (46 -> 42). The FFT<->cover
+        // gap is the original 10px. Height stays in lockstep with
+        // ShellState.large-dock-height (state.slint) in both states.
+        spacing: 10px;
+        padding-bottom: 4px;
 
         // ---- Spectrum band (only while the visualizer is ON) --------------
         if ShellState.large-visualizer-on: spectrum := Rectangle {

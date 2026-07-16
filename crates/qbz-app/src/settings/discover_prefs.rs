@@ -58,8 +58,10 @@ impl DiscoveryTab {
 // Section ids
 // ---------------------------------------------------------------------------
 
-/// The 19-member `DiscoverySectionId` union (`sectionPrefs.ts`). `editorPicks`
-/// is BOTH a tab and a section id (the "Albums of the Week" section).
+/// The `DiscoverySectionId` union: the 19 Tauri members (`sectionPrefs.ts`)
+/// plus the Slint-era `Pinned` (user-pinned albums/artists/playlists — no
+/// Tauri counterpart). `editorPicks` is BOTH a tab and a section id (the
+/// "Albums of the Week" section).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DiscoverySectionId {
     NewReleases,
@@ -81,6 +83,7 @@ pub enum DiscoverySectionId {
     EssentialsByGenre,
     ArtistsToFollow,
     ArtistSpotlight,
+    Pinned,
 }
 
 impl DiscoverySectionId {
@@ -106,6 +109,7 @@ impl DiscoverySectionId {
             EssentialsByGenre => "essentialsByGenre",
             ArtistsToFollow => "artistsToFollow",
             ArtistSpotlight => "artistSpotlight",
+            Pinned => "pinned",
         }
     }
 
@@ -131,6 +135,7 @@ impl DiscoverySectionId {
             "essentialsByGenre" => EssentialsByGenre,
             "artistsToFollow" => ArtistsToFollow,
             "artistSpotlight" => ArtistSpotlight,
+            "pinned" => Pinned,
             _ => return None,
         })
     }
@@ -169,10 +174,12 @@ pub struct DiscoverPrefs {
 pub fn default_prefs() -> DiscoverPrefs {
     use DiscoverySectionId::*;
     DiscoverPrefs {
-        // home: first 7 ON, last 6 OFF (1:1 with Tauri sectionPrefs.ts:63-77).
-        // All 13 ids render on Home since #566 completed the port: qobuzMixes
-        // / releaseWatch / topArtists / favoriteAlbums were genuine Tauri-Home
-        // sections whose Slint render arms + data pipelines were missing.
+        // home: first 8 ON, last 6 OFF (the Tauri sectionPrefs.ts:63-77 list
+        // plus the Slint-era `pinned` — enabled by default; its arm self-hides
+        // while the user has no pins). All 13 Tauri ids render on Home since
+        // #566 completed the port: qobuzMixes / releaseWatch / topArtists /
+        // favoriteAlbums were genuine Tauri-Home sections whose Slint render
+        // arms + data pipelines were missing.
         home: vec![
             pref(NewReleases, true),
             pref(PressAwards, true),
@@ -181,6 +188,7 @@ pub fn default_prefs() -> DiscoverPrefs {
             pref(ContinueListening, true),
             pref(IdealDiscography, true),
             pref(MostStreamed, true),
+            pref(Pinned, true),
             pref(QobuzMixes, false),
             pref(ReleaseWatch, false),
             pref(EditorPicks, false),
@@ -198,9 +206,11 @@ pub fn default_prefs() -> DiscoverPrefs {
             pref(IdealDiscography, true),
             pref(QobuzPlaylists, true),
         ],
-        // forYou: all ON, qobuzMixes first.
+        // forYou: all ON, qobuzMixes first, pinned right after (near the top —
+        // it is the user's own curation; self-hides while empty).
         for_you: vec![
             pref(QobuzMixes, true),
+            pref(Pinned, true),
             pref(ReleaseWatch, true),
             pref(RadioStations, true),
             pref(ContinueListening, true),
@@ -506,16 +516,17 @@ mod tests {
     #[test]
     fn defaults_match_spec_exactly() {
         let d = default_prefs();
-        // home: 13 entries, first 7 ON (1:1 Tauri sectionPrefs.ts).
+        // home: 14 entries, first 8 ON (Tauri sectionPrefs.ts + Slint `pinned`).
         assert_eq!(
             ids(&d.home),
             vec![
                 NewReleases, PressAwards, QobuzPlaylists, RecentlyPlayedAlbums,
-                ContinueListening, IdealDiscography, MostStreamed, QobuzMixes,
-                ReleaseWatch, EditorPicks, Qobuzissimes, TopArtists, FavoriteAlbums,
+                ContinueListening, IdealDiscography, MostStreamed, Pinned,
+                QobuzMixes, ReleaseWatch, EditorPicks, Qobuzissimes, TopArtists,
+                FavoriteAlbums,
             ]
         );
-        assert_eq!(d.enabled_count(DiscoveryTab::Home), 7);
+        assert_eq!(d.enabled_count(DiscoveryTab::Home), 8);
         assert!(d.is_enabled(DiscoveryTab::Home, MostStreamed));
         assert!(!d.is_enabled(DiscoveryTab::Home, Qobuzissimes));
         // editorPicks: 7 entries, all ON.
@@ -524,10 +535,11 @@ mod tests {
             vec![NewReleases, EditorPicks, Qobuzissimes, PressAwards, MostStreamed, IdealDiscography, QobuzPlaylists]
         );
         assert_eq!(d.enabled_count(DiscoveryTab::EditorPicks), 7);
-        // forYou: 12 entries, all ON, qobuzMixes first.
-        assert_eq!(d.for_you.len(), 12);
+        // forYou: 13 entries, all ON, qobuzMixes first, pinned second.
+        assert_eq!(d.for_you.len(), 13);
         assert_eq!(d.for_you[0].id, QobuzMixes);
-        assert_eq!(d.enabled_count(DiscoveryTab::ForYou), 12);
+        assert_eq!(d.for_you[1].id, Pinned);
+        assert_eq!(d.enabled_count(DiscoveryTab::ForYou), 13);
     }
 
     // --- Group 2: reconcile_list ---

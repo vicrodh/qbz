@@ -617,6 +617,7 @@ export component AlbumPageView inherits Rectangle {
                                     album-id: AlbumState.id;
                                     fully-cached: AlbumState.album-fully-cached;
                                     is-blocked: AlbumState.is-album-blocked;
+                                    is-pinned: AlbumState.pinned;
                                     media-action(k, i, a) => {
                                         root.media-action(k, i, a);
                                     }

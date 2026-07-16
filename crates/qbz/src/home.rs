@@ -208,6 +208,12 @@ where
         }
     }
 
+    // Genre filtering is server-side: the selected genre ids (parent OR
+    // sub-genre, raw) were passed to get_discover_index, which honors sub-genre
+    // ids in `genre_ids`. No client-side narrowing — 1:1 with Tauri
+    // discovery-v2, which rendered the faceted response as-is (narrowing here
+    // wrongly dropped albums tagged only at top level).
+
     // Editorial-only set for the Editor's Picks tab — built first
     // (by cloning the containers) so the same data can also feed the
     // Home set and the most-streamed slim grid below. Order mirrors
@@ -488,7 +494,7 @@ pub(crate) fn map_album(album: DiscoverAlbum) -> CardData {
 /// landscape `rectangle`, falling back to the first square `cover`. Owner,
 /// duration and tracks_count are intentionally dropped (1:1 with Tauri's
 /// PlaylistCardLite, which shows the name only).
-fn map_playlist(p: DiscoverPlaylist) -> PlaylistCardData {
+pub(crate) fn map_playlist(p: DiscoverPlaylist) -> PlaylistCardData {
     let artwork_url = p
         .image
         .rectangle
@@ -640,6 +646,9 @@ pub(crate) fn slim_to_item(slim: SlimData) -> SlimItem {
         artwork_url: slim.artwork_url.into(),
         artwork: slint::Image::default(),
         following: false,
+        // Slim rails (popular / recently played) render pin-less slim rows,
+        // not the grid card — nothing here is pinnable.
+        is_pinned: false,
     }
 }
 
@@ -662,6 +671,9 @@ pub(crate) fn card_to_item(card: CardData) -> AlbumCardItem {
         // Favorite heart state from the login-seeded cache (kept live by
         // main::set_album_row_favorite when a favorite toggles anywhere).
         is_favorite: crate::fav_cache::is_album_favorite(&card.id),
+        // Pin badge state from the per-user pinned store (kept live by
+        // main::set_album_row_pinned when a pin toggles anywhere).
+        is_pinned: crate::pinned::is_pinned("album", &card.id),
         id: card.id.into(),
         title: card.title.into(),
         artist: card.artist.into(),
@@ -693,6 +705,9 @@ pub(crate) fn playlist_to_item(p: &PlaylistCardData) -> SearchPlaylistItem {
         id: p.id.clone().into(),
         title: p.title.clone().into(),
         subtitle: "".into(),
+        // Pin badge state from the per-user pinned store (kept live by
+        // main::set_playlist_row_pinned when a pin toggles anywhere).
+        is_pinned: crate::pinned::is_pinned("playlist", &p.id),
         cover_count: if p.artwork_url.is_empty() { 0 } else { 1 },
         url1: p.artwork_url.clone().into(),
         url2: "".into(),
@@ -778,6 +793,7 @@ const HOME_RENDERABLE: &[DiscoverySectionId] = &[
     DiscoverySectionId::QobuzMixes,
     DiscoverySectionId::ReleaseWatch,
     DiscoverySectionId::TopArtists,
+    DiscoverySectionId::Pinned,
 ];
 
 /// Build one tab's ordered ENABLED descriptor list from `prefs` + the cached

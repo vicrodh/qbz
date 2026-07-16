@@ -47,7 +47,7 @@ import { SeekBar } from "SeekBar.slint";
 import { SongCard } from "SongCard.slint";
 import { TransportControls } from "TransportControls.slint";
 import { AudioStamp } from "AudioStamp.slint";
-import { NowPlayingState, ShellState, SettingsState, QconnectDevState, CastState, CastActions } from "../state.slint";
+import { NowPlayingState, ShellState, SettingsState, QconnectDevState, CastState, CastActions, AppearanceState } from "../state.slint";
 
 // Qobuz Connect button — monitor-speaker glyph; golden over a soft golden tint
 // when a Qobuz Connect session owns playback. A local copy of PlayerBar's
@@ -210,8 +210,11 @@ export component PlayerBarSmall inherits Rectangle {
                     spacing: 0px;
                     // No left inset: the album art is FLUSH to the window's left
                     // edge; its 2px border provides the visual edge instead of a
-                    // margin.
-                    padding-left: 0px;
+                    // margin. On macOS the native window's rounded bottom-left
+                    // corner (~10pt since Big Sur) masks content at the very
+                    // corner, so inset the flush-left art there to clear the
+                    // curve; Linux no-frame corners are square (keep 0).
+                    padding-left: AppearanceState.is-macos ? 8px : 0px;
 
                     // Art (37px, fits the ~39px controls row + leaves a hair of
                     // breathing room) + 2-line title/artist via SongCard. The art

@@ -26,6 +26,7 @@
 import { Theme } from "../foundation/semantic-colors.slint";
 import { ContextMenu } from "ContextMenu.slint";
 import { ContextMenuItem } from "ContextMenuItem.slint";
+import { AlbumState, PinnedActions } from "../state.slint";
 
 export component AlbumContextMenu inherits PopupWindow {
     in property <string> album-id;
@@ -33,13 +34,16 @@ export component AlbumContextMenu inherits PopupWindow {
     in property <bool> fully-cached: false;
     // Whether THIS album is on the album blacklist (drives the block toggle).
     in property <bool> is-blocked: false;
+    // Whether THIS album is pinned to Home (drives the Pin/Unpin toggle).
+    in property <bool> is-pinned: false;
     callback media-action(string, string, string);
 
     width: 224px;
-    // 8 rows x 33px + 4 separators x 1px + ContextMenu's 5/5 padding. The
+    // 9 rows x 33px + 4 separators x 1px + ContextMenu's 5/5 padding. The
     // offline row swaps label/action on `fully-cached` (count constant); the
-    // block row swaps label/action on `is-blocked` (count constant).
-    height: 8 * 33px + 4 * 1px + 10px;
+    // block row swaps label/action on `is-blocked` (count constant); the pin
+    // row swaps label/action on `is-pinned` (count constant).
+    height: 9 * 33px + 4 * 1px + 10px;
     // Default close-policy is close-on-click, which races the row's TouchArea:
     // the popup can dismiss on the press before the item's `clicked` fires, so
     // some rows (e.g. Share Qobuz link) needed a second open+click to register.
@@ -61,6 +65,26 @@ export component AlbumContextMenu inherits PopupWindow {
             label: @tr("Add to queue");
             clicked => {
                 root.media-action("album", root.album-id, "queue");
+                root.close();
+            }
+        }
+        // Pin to Home toggle. The display snapshot (title/artist/artwork)
+        // comes from AlbumState — this menu only opens on the open album.
+        if !root.is-pinned: ContextMenuItem {
+            icon: @image-url("../assets/icons/pin.svg");
+            label: @tr("Pin");
+            clicked => {
+                PinnedActions.toggle-pin("album", root.album-id,
+                    AlbumState.title, AlbumState.artist, AlbumState.artwork-url);
+                root.close();
+            }
+        }
+        if root.is-pinned: ContextMenuItem {
+            icon: @image-url("../assets/icons/pin-filled.svg");
+            label: @tr("Unpin");
+            clicked => {
+                PinnedActions.toggle-pin("album", root.album-id,
+                    AlbumState.title, AlbumState.artist, AlbumState.artwork-url);
                 root.close();
             }
         }

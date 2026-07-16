@@ -911,6 +911,9 @@ fn playlist_to_item(p: &PlaylistSlim) -> SearchPlaylistItem {
         id: p.id.clone().into(),
         title: p.title.clone().into(),
         subtitle: p.subtitle.clone().into(),
+        // Pin badge state from the per-user pinned store (kept live by
+        // main::set_playlist_row_pinned when a pin toggles anywhere).
+        is_pinned: crate::pinned::is_pinned("playlist", &p.id),
         cover_count: if p.image_url.is_empty() { 0 } else { 1 },
         url1: p.image_url.clone().into(),
         url2: "".into(),
@@ -938,6 +941,9 @@ fn artist_to_item(a: &ArtistSlim) -> SlimItem {
         artwork_url: a.image_url.clone().into(),
         artwork: slint::Image::default(),
         following: false,
+        // Pin badge state from the per-user pinned store (kept live by
+        // main::set_artist_row_pinned when a pin toggles anywhere).
+        is_pinned: crate::pinned::is_pinned("artist", &a.id),
     }
 }
 
@@ -950,6 +956,9 @@ fn label_to_item(l: &LabelSlim) -> SlimItem {
         artwork_url: l.image_url.clone().into(),
         artwork: slint::Image::default(),
         following: l.following,
+        // Labels are not a pinnable kind (the pinned store admits
+        // album/artist/playlist only) — never mark them pinned.
+        is_pinned: false,
     }
 }
 

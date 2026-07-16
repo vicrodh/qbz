@@ -205,8 +205,29 @@ pub fn exit() {
                 }
             });
             let _ = m.show();
+            // enter() hid the main window — on Wayland that destroyed the
+            // toplevel, and the recreated one comes back at the .slint
+            // preferred size unless the persisted geometry is re-applied
+            // before the surface maps (#618).
+            crate::restore_main_window_geometry(&m);
         }
     }
+}
+
+/// Raise/focus the mini window in place — activation path (MPRIS `Raise` /
+/// single-instance `Present()`) while the miniplayer is open. Event-loop
+/// thread only: MINI_STRONG is thread_local. Must NOT set CREATING_MINI —
+/// show() on the live window is a no-op/re-realization, and the borderless
+/// attributes hook must only fire for the original construction.
+pub fn present_mini() {
+    MINI_STRONG.with(|s| {
+        if let Some(mini) = s.borrow().as_ref() {
+            let _ = mini.show();
+            mini.window().with_winit_window(|win| {
+                win.focus_window();
+            });
+        }
+    });
 }
 
 /// Close the whole app from the mini — hide mini, show main, route to the
@@ -221,6 +242,9 @@ fn close_app() {
     if let Some(ctx) = CTX.get() {
         if let Some(m) = ctx.main.upgrade() {
             let _ = m.show();
+            // The window becomes user-visible when close-to-tray keeps the
+            // app alive — same recreated-surface geometry rules as exit().
+            crate::restore_main_window_geometry(&m);
             m.invoke_close_app();
         }
     }

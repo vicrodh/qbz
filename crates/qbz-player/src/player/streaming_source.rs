@@ -580,6 +580,11 @@ pub struct IncrementalStreamingSource {
     finished: bool,
     /// Number of packets decoded (for stats)
     packets_decoded: u64,
+    /// True while inside a WouldBlock stall episode (playback caught up
+    /// with the download). Set on the first WouldBlock after at least one
+    /// decoded packet, cleared on the next successful decode — so each
+    /// episode records exactly one underrun with the network throttle.
+    stalled: bool,
     /// Reference to the buffered source (for cache retrieval after playback)
     buffered_source: Arc<BufferedMediaSource>,
 }
@@ -643,6 +648,7 @@ impl IncrementalStreamingSource {
             track_id,
             finished: false,
             packets_decoded: 0,
+            stalled: false,
             buffered_source,
         })
     }
@@ -708,6 +714,13 @@ impl IncrementalStreamingSource {
                 {
                     // Not enough data buffered yet - wait briefly and retry
                     // This happens when playback catches up with download
+                    if !self.stalled && self.packets_decoded > 0 {
+                        // Mid-playback stall, not initial buffering (≥1 packet
+                        // already decoded): put the prefetch throttle in panic
+                        // mode so the live stream gets the pipe to itself (#591).
+                        self.stalled = true;
+                        qbz_audio::network_throttle::state().record_underrun();
+                    }
                     std::thread::sleep(Duration::from_millis(5));
                     continue;
                 }
@@ -741,6 +754,9 @@ impl IncrementalStreamingSource {
                     self.sample_queue
                         .extend(sample_buf.samples().iter().copied());
                     self.packets_decoded += 1;
+                    // Successful decode ends any stall episode; the next
+                    // WouldBlock streak records a fresh underrun.
+                    self.stalled = false;
                 }
                 Err(SymphoniaError::DecodeError(e)) => {
                     log::warn!("Decode error (skipping packet): {}", e);

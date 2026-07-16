@@ -669,6 +669,8 @@ pub fn apply_album(window: &AppWindow, data: AlbumData) {
     // the server at login + on every toggle).
     state.set_is_favorite(crate::fav_cache::is_album_favorite(album_id.as_str()));
     state.set_is_album_blocked(crate::artist_blacklist::is_album_blacklisted(album_id.as_str()));
+    // Seed the pin state from the pinned store (Home "Pinned" section).
+    state.set_pinned(crate::pinned::is_pinned("album", album_id.as_str()));
     state.set_favorite_loading(false);
 
     // Keep the unfiltered list for the track search + the raw tracks for the
@@ -917,6 +919,7 @@ pub fn reset_album(window: &AppWindow) {
     state.set_musicbrainz_url("".into());
     state.set_album_fully_cached(false);
     state.set_is_favorite(false);
+    state.set_pinned(false);
     state.set_favorite_loading(false);
     // Default to a Qobuz album; the local-album loader opts in.
     state.set_is_local(false);

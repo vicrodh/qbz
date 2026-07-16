@@ -710,6 +710,7 @@ pub fn reset(window: &AppWindow) {
     state.set_is_owner(false);
     state.set_is_following(false);
     state.set_is_copied(false);
+    state.set_pinned(false);
     state.set_loading(true);
 }
 
@@ -754,6 +755,9 @@ pub fn apply(window: &AppWindow, data: PlaylistData) {
         .filter(|p| std::path::Path::new(p).exists())
         .and_then(|p| crate::artwork::load_local_cover(p, 264));
     let state = window.global::<PlaylistState>();
+    // Seed the pin state from the pinned store (Home "Pinned" section) —
+    // before set_id, which moves data.id.
+    state.set_pinned(crate::pinned::is_pinned("playlist", &data.id));
     state.set_id(data.id.into());
     state.set_name(data.name.into());
     state.set_owner(data.owner.into());

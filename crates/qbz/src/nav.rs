@@ -55,6 +55,10 @@ pub enum NavEntry {
     /// store (crate::recently), reloaded on every navigation, so the entry
     /// carries no payload.
     RecentAlbums,
+    /// PlaylistBrowseView — the Qobuz Playlists "View all" full-list page
+    /// reached from the Home / Editor's Picks rail. Tag / search / view-mode
+    /// are session state in PlaylistBrowseState, so no payload.
+    PlaylistBrowse,
     /// A Qobuz mix detail page ("daily" | "weekly" | "fav" | "top").
     Mix {
         kind: String,

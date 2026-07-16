@@ -589,8 +589,13 @@ pub fn list_track_ids(window: &AppWindow, section: &str) -> Vec<u64> {
 }
 
 fn slim_from_artist(a: &ArtistReco) -> SlimItem {
+    let id = a.qobuz_artist_id.to_string();
     SlimItem {
-        id: a.qobuz_artist_id.to_string().into(),
+        // Pin badge state from the per-user pinned store (kept live by
+        // main::set_artist_row_pinned when a pin toggles anywhere). First:
+        // it must borrow `id` before the `id:` initializer moves it.
+        is_pinned: crate::pinned::is_pinned("artist", &id),
+        id: id.into(),
         title: a.name.clone().into(),
         subtitle: a.subtitle.clone().into(),
         rank: "".into(),
@@ -608,6 +613,8 @@ fn slim_from_track(t: &TrackReco) -> SlimItem {
         artwork_url: t.artwork_url.clone().into(),
         artwork: slint::Image::default(),
         following: false,
+        // Track slims render pin-less rows — tracks are not pinnable.
+        is_pinned: false,
     }
 }
 pub(crate) fn album_card(a: &AlbumReco) -> AlbumCardItem {
@@ -615,6 +622,9 @@ pub(crate) fn album_card(a: &AlbumReco) -> AlbumCardItem {
         // Favorite heart state from the login-seeded cache (kept live by
         // main::set_album_row_favorite when a favorite toggles anywhere).
         is_favorite: crate::fav_cache::is_album_favorite(&a.qobuz_album_id),
+        // Pin badge state from the per-user pinned store (kept live by
+        // main::set_album_row_pinned when a pin toggles anywhere).
+        is_pinned: crate::pinned::is_pinned("album", &a.qobuz_album_id),
         id: a.qobuz_album_id.clone().into(),
         title: a.title.clone().into(),
         artist: a.artist.clone().into(),

@@ -83,6 +83,11 @@ pub enum ArtworkTarget {
     /// A single playlist cover of `HomeState.playlists[idx]` (single cover →
     /// slot 0, unlike the 4-slot SearchPlaylistCover/FavPlaylistCover).
     HomePlaylistCover { idx: usize },
+    /// A single playlist cover of `PlaylistBrowseState.playlists[idx]` — the
+    /// Qobuz Playlists "View all" page. `visible` shares the same model
+    /// while no search is active, so the rendered grid updates too (same
+    /// contract as DiscoverBrowseAlbum).
+    PlaylistBrowseCover { idx: usize },
     /// A row in `SearchState.albums[idx]`.
     SearchAlbum { idx: usize },
     /// A row in `SearchState.tracks[idx]`.
@@ -268,6 +273,13 @@ pub enum ArtworkTarget {
     /// The 224×224 header cover of the PurchaseDetailView (single image written
     /// to `PurchaseDetailState.artwork`).
     PurchaseDetailCover,
+    /// A card in `PinnedState.items[idx]` — the mixed Pinned carousel (Home
+    /// and For You share the ONE model). Kinds are mixed; the apply arm reads
+    /// the row's `kind` to pick the field to write (album / artist `artwork`
+    /// vs playlist `cover1` + dominant colour). Index-keyed, so jobs are only
+    /// ever dispatched by `pinned_section::rebuild_pinned` right after it
+    /// replaced the model — never from a stale row set.
+    PinnedCard { idx: usize },
 }
 
 impl ArtworkTarget {
@@ -304,6 +316,29 @@ impl ArtworkTarget {
 pub struct ArtworkJob {
     pub target: ArtworkTarget,
     pub url: String,
+}
+
+/// Artwork jobs for the mixed Pinned carousel (`PinnedState.items`). One job
+/// per row with art, reading the URL from the sub-struct the row's `kind`
+/// selects (album / artist `artwork-url`; playlist single-cover `url1` —
+/// SearchPlaylistItem has no artwork-url field). Rows without art are
+/// skipped. Build ONLY from the freshly-pushed row set (see `PinnedCard`).
+pub fn pinned_artwork_jobs(rows: &[crate::PinnedItem]) -> Vec<ArtworkJob> {
+    rows.iter()
+        .enumerate()
+        .filter_map(|(idx, row)| {
+            let url = match row.kind.as_str() {
+                "album" => row.album.artwork_url.as_str(),
+                "artist" => row.artist.artwork_url.as_str(),
+                "playlist" => row.playlist.url1.as_str(),
+                _ => "",
+            };
+            (!url.is_empty()).then(|| ArtworkJob {
+                target: ArtworkTarget::PinnedCard { idx },
+                url: url.to_string(),
+            })
+        })
+        .collect()
 }
 
 /// Open the shared QBZ image cache.
@@ -977,6 +1012,17 @@ fn apply_artwork(
                 model.set_row_data(idx, item);
             }
         }
+        ArtworkTarget::PlaylistBrowseCover { idx } => {
+            let model = window.global::<crate::PlaylistBrowseState>().get_playlists();
+            if let Some(mut item) = model.row_data(idx) {
+                item.cover1 = image; // single cover → slot 0
+                // Same dominant-colour letterbox as HomePlaylistCover — the
+                // browse grid renders the same single-cover Discover card.
+                item.dominant_color =
+                    crate::immersive::dominant_cover_color(pixels, width, height);
+                model.set_row_data(idx, item);
+            }
+        }
         ArtworkTarget::SearchAlbum { idx } => {
             let model = window.global::<SearchState>().get_albums();
             if let Some(mut item) = model.row_data(idx) {
@@ -1643,6 +1689,24 @@ fn apply_artwork(
                 .get_rows();
             if let Some(mut item) = model.row_data(idx) {
                 item.artwork = image;
+                model.set_row_data(idx, item);
+            }
+        }
+        ArtworkTarget::PinnedCard { idx } => {
+            let model = window.global::<crate::PinnedState>().get_items();
+            if let Some(mut item) = model.row_data(idx) {
+                match item.kind.as_str() {
+                    "album" => item.album.artwork = image,
+                    "artist" => item.artist.artwork = image,
+                    "playlist" => {
+                        item.playlist.cover1 = image; // single cover → slot 0
+                        // Same dominant-colour letterbox as HomePlaylistCover —
+                        // the pinned card renders the single-cover Discover card.
+                        item.playlist.dominant_color =
+                            crate::immersive::dominant_cover_color(pixels, width, height);
+                    }
+                    _ => return,
+                }
                 model.set_row_data(idx, item);
             }
         }

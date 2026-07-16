@@ -322,6 +322,9 @@ fn other_to_item(o: &OtherAward) -> SlimItem {
         artwork_url: o.image_url.clone().into(),
         artwork: slint::Image::default(),
         following: false,
+        // Awards are not a pinnable kind (the pinned store admits
+        // album/artist/playlist only) — never mark them pinned.
+        is_pinned: false,
     }
 }
 

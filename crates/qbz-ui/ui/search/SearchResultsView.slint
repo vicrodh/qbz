@@ -17,6 +17,7 @@ import { ArtistCarousel } from "../discover/ArtistCarousel.slint";
 import { PlaylistCarousel } from "../discover/PlaylistCarousel.slint";
 import { AlbumCard } from "../discover/AlbumCard.slint";
 import { ArtistCard } from "../discover/ArtistCard.slint";
+import { ArtistGridCard } from "../discover/ArtistGridCard.slint";
 import { PlaylistCard } from "../discover/PlaylistCard.slint";
 import { TrackRow } from "../primitives/TrackRow.slint";
 import { SearchTrackHero } from "../primitives/SearchTrackHero.slint";
@@ -594,7 +595,7 @@ export component SearchResultsView inherits Rectangle {
                         }
                         HorizontalLayout {
                             alignment: center;
-                            if SearchState.most-popular-kind == "artist": ArtistCard {
+                            if SearchState.most-popular-kind == "artist": ArtistGridCard {
                                 artist: SearchState.most-popular-artist;
                                 clicked(id) => { root.open-artist(id); }
                                 media-action(k, i, a) => { root.media-action(k, i, a); }

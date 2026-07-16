@@ -26,6 +26,7 @@ export struct AlbumCardItem {
     artwork-url: string,
     artwork: image,        // empty until the artwork pipeline resolves it
     is-favorite: bool,     // filled accent heart on the card when favorited
+    is-pinned: bool,       // filled accent pin badge (Home/For You Pinned section)
     removing: bool,        // fading out (un-favorited in the favorites view)
     selected: bool,        // checkbox state in a multi-select grid (LocalLibrary)
     // --- List-row extras (AlbumListRow; ignored by the grid AlbumCard) ----
@@ -85,6 +86,9 @@ export struct SlimItem {
     artwork: image,
     // Artist follow state — drives the ArtistCard Follow button.
     following: bool,
+    // Pinned state — drives the ArtistGridCard pin badge (artist rows only;
+    // track/label/award slims are not pinnable and stay false).
+    is-pinned: bool,
 }
 
 // One editorial award on an album — the sidebar AWARDS list. Carries the
@@ -104,6 +108,7 @@ export struct SearchPlaylistItem {
     id: string,
     title: string,
     subtitle: string,      // owner name + track count
+    is-pinned: bool,       // filled accent pin badge (Home/For You Pinned section)
     cover-count: int,      // number of cover images, 0-4
     url1: string,
     url2: string,
@@ -120,6 +125,34 @@ export struct SearchPlaylistItem {
     // on Discover playlist cards (default neutral dark; replaced once the
     // cover decodes). Mosaic cards ignore it.
     dominant-color: color,
+}
+
+// One entry in the mixed Pinned carousel (Home / For You). `kind` selects
+// which sub-struct is populated; the other two stay at their defaults
+// (Slint has no unions). Declared after AlbumCardItem / SlimItem /
+// SearchPlaylistItem — Slint structs must be declared before first use.
+export struct PinnedItem {
+    kind: string,                  // "album" | "artist" | "playlist"
+    album: AlbumCardItem,          // kind == "album"
+    artist: SlimItem,              // kind == "artist"
+    playlist: SearchPlaylistItem,  // kind == "playlist"
+}
+
+// The user's pinned items, newest pin first. ONE shared global feeds both
+// the Home and For You "pinned" section arms (a single per-user list,
+// mutated only by pin/unpin — no per-tab fetch lifecycle). Rust rebuilds
+// it from the pinned store at session seed and after every toggle.
+export global PinnedState {
+    in property <[PinnedItem]> items: [];
+}
+
+// Pin/unpin from the card pin glyph. The callback carries the full display
+// snapshot (mirroring BlacklistActions.block-album) so Rust can persist a
+// denormalized row without re-fetching: kind, id, title, subtitle,
+// artwork-url. Wired in main.rs to the pinned store.
+export global PinnedActions {
+    callback toggle-pin(/* kind */ string, /* id */ string, /* title */ string,
+        /* subtitle */ string, /* artwork-url */ string);
 }
 
 // One selectable category tag for the Qobuz Playlists multi-select filter.
@@ -208,6 +241,9 @@ export global HomeActions {
     // "View all" on the Recently Played Albums rail -> the full-page listing
     // (RecentAlbumsView), fed from the local play-history store.
     callback open-recent-albums();
+    // "View all" on the Qobuz Playlists rail -> the full-page playlist
+    // browse (PlaylistBrowseView); a fresh open resets its tag to All.
+    callback open-playlist-browse();
     // Fired by HomeView's init on every (re)mount. Rust re-reads the LOCAL
     // recently-played store into the two rails IF a play was recorded while
     // Home was off-screen (dirty-flag gated in Rust — a no-op otherwise, so
@@ -322,6 +358,46 @@ export global DiscoverBrowseActions {
     callback load-more();
     // Re-filter `visible` after `search-query` changed (UI thread).
     callback search-changed();
+}
+
+// Qobuz Playlists "View all" full-list page — the playlist twin of
+// DiscoverBrowseState (opened from the Home / Editor's Picks rail).
+// Paginated server-side by category tag + the shared genre selection;
+// searched client-side over the loaded set.
+export global PlaylistBrowseState {
+    // Localized page heading, pushed from Rust on every navigate (a @tr
+    // property default would not react to a language switch).
+    in-out property <string> title;
+    // Single-select category tag bar: the /playlist/getTags set, names
+    // pre-localized by the API. `selected` flags mirror selected-tag.
+    in-out property <[PlaylistTagItem]> tags;
+    // Active tag slug; "" = All. Changing it re-fetches from offset 0.
+    in-out property <string> selected-tag;
+    // Full loaded page set. The view renders `visible` below — equal to
+    // `playlists` with no search, or a filtered subset while the search
+    // box is non-empty (Rust rebuilds it on search-changed).
+    in-out property <[SearchPlaylistItem]> playlists;
+    in-out property <[SearchPlaylistItem]> visible;
+    in-out property <bool> loading;
+    in-out property <bool> loading-more;
+    in-out property <bool> has-more;
+    // Rust-managed: the next page offset for load-more.
+    in-out property <int> next-offset;
+    // Client-side search over the loaded playlists; while non-empty,
+    // infinite-scroll load-more is disabled (Tauri does the same).
+    in-out property <string> search-query;
+    // "grid" | "list" — persists across navigations like DiscoverBrowse.
+    in-out property <string> view-mode: "grid";
+}
+
+export global PlaylistBrowseActions {
+    // Fetch the next page (offset = PlaylistBrowseState.next-offset).
+    callback load-more();
+    // Re-filter `visible` after `search-query` changed (UI thread).
+    callback search-changed();
+    // Select a category tag (slug; "" = All) — server-side re-fetch from
+    // offset 0 keeping the shared genre selection.
+    callback select-tag(string);
 }
 
 // Discover > For You state. The For You tab has heterogeneous,
@@ -618,6 +694,9 @@ export global AlbumState {
     // Whether THIS album is blocked (album blacklist). Drives the header menu
     // toggle ("Block this album" / "Unblock album"). Seeded on open.
     in property <bool> is-album-blocked: false;
+    // Whether THIS album is pinned to Home; seeded on open, flipped by
+    // toggle-pin when ids match.
+    in property <bool> pinned: false;
     // Multi-select (track selection) mode for the track list. in-out: the
     // toolbar toggle flips it from the UI; Rust resets it on album change.
     in-out property <bool> multi-select: false;
@@ -994,7 +1073,7 @@ export global DragActions {
 }
 
 // Which content view the shell shows.
-export enum ContentView { home, album, artist, artist-releases, settings, search, musician, label, label-releases, award, award-albums, location, favorites, mix, playlist, discover-browse, recent-albums, playlist-manager, offline-manager, blacklist-manager, local-library, local-album, mixtapes, collections, mixtape-detail, discography-builder, purchases, purchase-album, now-playing }
+export enum ContentView { home, album, artist, artist-releases, settings, search, musician, label, label-releases, award, award-albums, location, favorites, mix, playlist, discover-browse, playlist-browse, recent-albums, playlist-manager, offline-manager, blacklist-manager, local-library, local-album, mixtapes, collections, mixtape-detail, discography-builder, purchases, purchase-album, now-playing }
 
 // In-app toast (transient notification). Mirrors Tauri's toastStore:
 // a single toast at a time (a new one replaces the current), auto-hidden
@@ -1998,6 +2077,9 @@ export global PlaylistState {
     // track-cover collage).
     in property <bool> has-custom: false;
     in property <bool> is-favorite: false;
+    // Whether THIS playlist is pinned to Home; seeded on open, flipped by
+    // toggle-pin when ids match.
+    in property <bool> pinned: false;
     // True when the playlist is one of the user's own (editable).
     in property <bool> is-owner: false;
     // Followed (subscribed) on Qobuz — an account-level follow that syncs
@@ -3355,6 +3437,9 @@ export global ArtistState {
     // (which auto-gates on the enabled flag — reads false when the
     // feature is disabled, which is acceptable here).
     in-out property <bool> is-blacklisted: false;
+    // Whether THIS artist is pinned to Home; seeded on open, flipped by
+    // toggle-pin when ids match.
+    in property <bool> pinned: false;
 }
 
 // Artwork right-click actions — shared by ArtistPageView and
@@ -3855,19 +3940,20 @@ export global ShellState {
     // cover + spectrum dock lives at the bottom of the open sidebar. Views read
     // this to mount the dock and to drive the FFT visualizer tap.
     out property <bool> large-active: root.npb-mode == 3 && root.sidebar-state == 0;
-    // Large dock column = open sidebar (240) minus its VL 16px*2 padding => 208px.
-    // Equal L/R gutters fall out: 16 + 208 + 16 = 240. (16px == Spacing.md; kept a
-    // literal here so state.slint stays free of a foundation import — if Spacing.md
-    // or the 240 open width ever change, update this and AppShell's `x: 16px`.)
-    out property <length> large-dock-width: root.sidebar-rendered-width - 2 * 16px;
+    // Large dock column: open sidebar (240) − 16px left gutter − the content
+    // panel's 8px left padding, so the cover's RIGHT edge lands 16px from the
+    // VISIBLE content bezel — matching the 16px left window gutter (owner: equal
+    // side margins). 240 + 8 − 2*16 = 216. (16px == Spacing.md; literal kept so
+    // state.slint needs no foundation import.)
+    out property <length> large-dock-width: root.sidebar-rendered-width + 8px - 2 * 16px;
     // Total bottom band the dock occupies — MUST byte-for-byte equal
     // SidebarNowPlayingDock's self-derived `height` in BOTH visualizer states
     // (AppShell pins the overlay via `y: root.height - large-dock-height`, so a
-    // mismatch un-flushes the cover). ON = spectrum 46 + 10 gap + square cover +
-    // 9 top pad; OFF = cover + 9 (spectrum band reclaimed by the sidebar list).
+    // mismatch un-flushes the cover). ON = spectrum 42 + 10 gap + square cover +
+    // 13 (9 top + 4 bottom) pad; OFF = cover + 13 (spectrum reclaimed by the list).
     out property <length> large-dock-height: root.large-visualizer-on
-        ? (46px + 10px + root.large-dock-width + 9px)
-        : (root.large-dock-width + 9px);
+        ? (42px + 10px + root.large-dock-width + 13px)
+        : (root.large-dock-width + 13px);
     // Large dock spectrum visualization (the click-cycle is now 3-way; the old
     // "Off" state is handled by the toggle below): 0 = Bars (mirrored), 1 =
     // Waveform, 2 = Energy blocks. PERSISTED in ui_prefs (`large_spectrum_mode`)

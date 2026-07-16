@@ -520,6 +520,21 @@ msgstr "Ваши топ-исполнители"
 msgid "Artists to Follow"
 msgstr "Исполнители для подписки"
 
+msgid "Pinned"
+msgstr "Закреплённые"
+
+msgid "Pin"
+msgstr "Закрепить"
+
+msgid "Unpin"
+msgstr "Открепить"
+
+msgid "Showing {} of {} track."
+msgid_plural "Showing {} of {} tracks."
+msgstr[0] "Показано {} из {} трека."
+msgstr[1] "Показано {} из {} треков."
+msgstr[2] "Показано {} из {} треков."
+
 msgid "Spotlight"
 msgstr "В центре внимания"
 

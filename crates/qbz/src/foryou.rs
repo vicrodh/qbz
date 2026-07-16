@@ -546,6 +546,9 @@ fn album_items(cards: &[AlbumCard]) -> Vec<AlbumCardItem> {
             // Favorite heart state from the login-seeded cache (kept live by
             // main::set_album_row_favorite when a favorite toggles anywhere).
             is_favorite: crate::fav_cache::is_album_favorite(&c.id),
+            // Pin badge state from the per-user pinned store (kept live by
+            // main::set_album_row_pinned when a pin toggles anywhere).
+            is_pinned: crate::pinned::is_pinned("album", &c.id),
             id: c.id.clone().into(),
             title: c.title.clone().into(),
             artist: c.artist.clone().into(),
@@ -576,6 +579,9 @@ pub(crate) fn artist_items(artists: &[ArtistSlim]) -> Vec<SlimItem> {
             artwork_url: a.artwork_url.clone().into(),
             artwork: slint::Image::default(),
             following: a.following,
+            // Pin badge state from the per-user pinned store (kept live by
+            // main::set_artist_row_pinned when a pin toggles anywhere).
+            is_pinned: crate::pinned::is_pinned("artist", &a.id),
         })
         .collect()
 }
@@ -694,6 +700,8 @@ fn apply_recent(
                 artwork_url: t.artwork_url.clone().into(),
                 artwork: slint::Image::default(),
                 following: false,
+                // Track slims render pin-less rows — tracks are not pinnable.
+                is_pinned: false,
             })
             .collect();
         state.set_recent_tracks(ModelRc::new(VecModel::from(slim)));

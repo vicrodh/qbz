@@ -12,6 +12,7 @@ import {
     ArtistState,
     ArtistActions,
     ArtworkActions,
+    PinnedActions,
     StoryItem,
     TrackItem,
     NavState,
@@ -482,7 +483,7 @@ export component ArtistPageView inherits Rectangle {
                                 x: 0px;
                                 y: 38px;
                                 width: 224px;
-                                height: 4 * 33px + 1px + 10px;
+                                height: 5 * 33px + 1px + 10px;
                                 close-policy: close-on-click;
                                 ContextMenu {
                                     // Item 1 — Create Artist Collection.
@@ -522,12 +523,30 @@ export component ArtistPageView inherits Rectangle {
                                                 "artist", ArtistState.id, "share");
                                         }
                                     }
+                                    // Item 4 — Pin / Unpin to Home. Label and
+                                    // icon flip with ArtistState.pinned. The
+                                    // subtitle slot is empty (artists carry
+                                    // no secondary line on the Pinned card).
+                                    ContextMenuItem {
+                                        icon: ArtistState.pinned
+                                            ? @image-url("../assets/icons/pin-filled.svg")
+                                            : @image-url("../assets/icons/pin.svg");
+                                        label: ArtistState.pinned
+                                            ? @tr("Unpin")
+                                            : @tr("Pin");
+                                        clicked => {
+                                            PinnedActions.toggle-pin(
+                                                "artist", ArtistState.id,
+                                                ArtistState.name, "",
+                                                ArtistState.artwork-url);
+                                        }
+                                    }
                                     // Visible separator.
                                     Rectangle {
                                         height: 1px;
                                         background: Theme.border-subtle;
                                     }
-                                    // Item 4 — Blacklist / Show artist.
+                                    // Item 5 — Blacklist / Show artist.
                                     // Label flips with ArtistState.is-blacklisted.
                                     ContextMenuItem {
                                         icon: @image-url("../assets/icons/blind-eye.svg");

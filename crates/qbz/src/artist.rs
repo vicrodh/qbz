@@ -601,6 +601,9 @@ pub(crate) fn card_to_item(card: CardData) -> AlbumCardItem {
         // Favorite heart state from the login-seeded cache (kept live by
         // main::set_album_row_favorite when a favorite toggles anywhere).
         is_favorite: crate::fav_cache::is_album_favorite(&card.id),
+        // Pin badge state from the per-user pinned store (kept live by
+        // main::set_album_row_pinned when a pin toggles anywhere).
+        is_pinned: crate::pinned::is_pinned("album", &card.id),
         id: card.id.into(),
         title: card.title.into(),
         artist: card.year.clone().into(),
@@ -984,6 +987,42 @@ pub fn set_release_card_favorite(window: &AppWindow, album_id: &str, favorite: b
     }
     // The FULL cache shares the visible sections' ModelRc while no filter is
     // active (the `!= favorite` guard makes the second pass a no-op then);
+    // under a filter it is a separate copy that must be flipped too.
+    FULL_RELEASE_SECTIONS.with(|cell| {
+        for section in cell.borrow().iter() {
+            flip(&section.albums);
+        }
+    });
+}
+
+/// Pin twin of [`set_release_card_favorite`]: flip the `is-pinned` badge on
+/// every artist-page release card matching `album_id` (sections +
+/// last-release + the in-page-search FULL cache).
+pub fn set_release_card_pinned(window: &AppWindow, album_id: &str, pinned: bool) {
+    let flip = |model: &ModelRc<AlbumCardItem>| {
+        for i in 0..model.row_count() {
+            if let Some(mut item) = model.row_data(i) {
+                if item.id == album_id && item.is_pinned != pinned {
+                    item.is_pinned = pinned;
+                    model.set_row_data(i, item);
+                }
+            }
+        }
+    };
+    let state = window.global::<ArtistState>();
+    let sections = state.get_release_sections();
+    for s in 0..sections.row_count() {
+        if let Some(section) = sections.row_data(s) {
+            flip(&section.albums);
+        }
+    }
+    let mut last = state.get_last_release();
+    if last.id == album_id && last.is_pinned != pinned {
+        last.is_pinned = pinned;
+        state.set_last_release(last);
+    }
+    // The FULL cache shares the visible sections' ModelRc while no filter is
+    // active (the `!= pinned` guard makes the second pass a no-op then);
     // under a filter it is a separate copy that must be flipped too.
     FULL_RELEASE_SECTIONS.with(|cell| {
         for section in cell.borrow().iter() {

@@ -766,6 +766,10 @@ pub struct LabelGetListResponse {
 pub struct Genre {
     pub id: u64,
     pub name: String,
+    /// Full ancestor id chain (top-level first, self last) as sent by the
+    /// discover endpoints. Absent on older cached payloads → None.
+    #[serde(default)]
+    pub path: Option<Vec<u64>>,
 }
 
 /// Genre info with full details

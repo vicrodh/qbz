@@ -17,13 +17,14 @@
 
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
-import { ForYouState, RadioStationItem, DiscoverState } from "../state.slint";
+import { ForYouState, RadioStationItem, DiscoverState, PinnedState } from "../state.slint";
 import { Carousel } from "Carousel.slint";
 import { SlimCarousel } from "SlimCarousel.slint";
 import { ArtistCarousel } from "ArtistCarousel.slint";
 import { Spotlight } from "Spotlight.slint";
 import { QobuzMixesRow } from "QobuzMixesRow.slint";
 import { RadioCarousel } from "RadioCarousel.slint";
+import { PinnedCarousel } from "PinnedCarousel.slint";
 import { HomeSkeleton } from "HomeSkeleton.slint";
 
 export component ForYouView inherits VerticalLayout {
@@ -63,6 +64,23 @@ export component ForYouView inherits VerticalLayout {
         if desc.id == "qobuzMixes": QobuzMixesRow {
             open-mix(which) => {
                 root.open-mix(which);
+            }
+        }
+
+        // pinned — the user's mixed pinned albums/artists/playlists carousel;
+        // data lives in the shared PinnedState global (the Home arm reads the
+        // same list). Self-hides while nothing is pinned.
+        if desc.id == "pinned" && PinnedState.items.length > 0: PinnedCarousel {
+            title: @tr("Pinned");
+            items: PinnedState.items;
+            album-clicked(id) => {
+                root.open-album(id);
+            }
+            artist-clicked(id) => {
+                root.open-artist(id);
+            }
+            media-action(kind, id, action) => {
+                root.media-action(kind, id, action);
             }
         }
 
@@ -155,6 +173,9 @@ export component ForYouView inherits VerticalLayout {
         if desc.id == "artistsToFollow" && ForYouState.artists-to-follow.length > 0: ArtistCarousel {
             title: @tr("Artists to Follow");
             artists: ForYouState.artists-to-follow;
+            // New 200x246 grid card with follow/play/more overlay (preview).
+            grid-cards: true;
+            card-follow-mode: "toggle";
             artist-clicked(id) => {
                 root.open-artist(id);
             }

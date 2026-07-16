@@ -6,7 +6,7 @@
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
 import { Radius } from "../foundation/radius.slint";
-import { PlaylistState, PlaylistActions, DragState, NavState, OfflineState, BulkAction, SettingsState } from "../state.slint";
+import { PlaylistState, PlaylistActions, PinnedActions, DragState, NavState, OfflineState, BulkAction, SettingsState } from "../state.slint";
 import { PlaylistSuggestionsState, PlaylistSuggestionsActions, PlaylistSuggestionRow, TooltipState } from "../state.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { CircleAction } from "../primitives/CircleAction.slint";
@@ -675,6 +675,25 @@ export component PlaylistView inherits Rectangle {
                                 on-surface: true;
                                 clicked => {
                                     root.toggle-favorite();
+                                }
+                            }
+                        }
+                        // Pin to Home — hidden for LOCAL playlists (the
+                        // pinned store keys Qobuz catalog ids).
+                        if !PlaylistState.is-local: VerticalLayout {
+                            horizontal-stretch: 0;
+                            alignment: center;
+                            CircleAction {
+                                icon: PlaylistState.pinned
+                                    ? @image-url("../assets/icons/pin-filled.svg")
+                                    : @image-url("../assets/icons/pin.svg");
+                                active: PlaylistState.pinned;
+                                on-surface: true;
+                                tooltip: PlaylistState.pinned ? @tr("Unpin") : @tr("Pin");
+                                clicked => {
+                                    PinnedActions.toggle-pin("playlist", PlaylistState.id,
+                                        PlaylistState.name, PlaylistState.owner,
+                                        PlaylistState.cover-url);
                                 }
                             }
                         }

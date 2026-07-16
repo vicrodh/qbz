@@ -8,12 +8,13 @@
 
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
-import { HomeState, HomeActions, DiscoverState, DiscoverActions, GenreFilterState, GenreFilterActions, NavState, ContentView, ShellState, SettingsState, TooltipState } from "../state.slint";
+import { HomeState, HomeActions, DiscoverState, DiscoverActions, PinnedState, GenreFilterState, GenreFilterActions, NavState, ContentView, ShellState, SettingsState, TooltipState } from "../state.slint";
 import { Carousel } from "Carousel.slint";
 import { SlimCarousel } from "SlimCarousel.slint";
 import { ArtistCarousel } from "ArtistCarousel.slint";
 import { QobuzMixesRow } from "QobuzMixesRow.slint";
 import { PlaylistCarousel } from "PlaylistCarousel.slint";
+import { PinnedCarousel } from "PinnedCarousel.slint";
 import { PlaylistTagFilter } from "PlaylistTagFilter.slint";
 import { HomeSkeleton } from "HomeSkeleton.slint";
 import { ForYouView } from "ForYouView.slint";
@@ -377,7 +378,13 @@ export component HomeView inherits Rectangle {
                             title: "";
                             playlists: HomeState.playlists;
                             body-opens: true;
-                            show-view-all: false;
+                            // "View all" -> the full PlaylistBrowseView page
+                            // (server-side tag + genre filtering; a fresh
+                            // open resets its category tab to All).
+                            show-view-all: true;
+                            view-all-clicked => {
+                                HomeActions.open-playlist-browse();
+                            }
                             media-action(kind, id, action) => {
                                 root.media-action(kind, id, action);
                             }
@@ -449,6 +456,15 @@ export component HomeView inherits Rectangle {
                         && HomeState.popular.length > 0: SlimCarousel {
                         title: @tr("Popular albums");
                         items: HomeState.popular;
+                        // "View all" -> the mostStreamed DiscoverBrowse page
+                        // (Tauri parity: the Home slim grid's see-all landed
+                        // on the Most Streamed full listing). The slimGrid
+                        // descriptor carries no section payload, so the
+                        // endpoint + localized title are supplied here.
+                        show-view-all: true;
+                        view-all-clicked => {
+                            root.discover-view-all("/discover/mostStreamed", @tr("Most Streamed"));
+                        }
                         item-clicked(id) => {
                             root.album-clicked(id);
                         }
@@ -513,6 +529,25 @@ export component HomeView inherits Rectangle {
                         && HomeState.top-artists.length > 0: ArtistCarousel {
                         title: @tr("Your Top Artists");
                         artists: HomeState.top-artists;
+                        artist-clicked(id) => {
+                            root.open-artist(id);
+                        }
+                        media-action(kind, id, action) => {
+                            root.media-action(kind, id, action);
+                        }
+                    }
+
+                    // Pinned — the user's mixed pinned albums/artists/
+                    // playlists carousel; data lives in the shared
+                    // PinnedState global (the For You arm reads the same
+                    // list). Self-hides while nothing is pinned.
+                    if desc.id == "pinned"
+                        && PinnedState.items.length > 0: PinnedCarousel {
+                        title: @tr("Pinned");
+                        items: PinnedState.items;
+                        album-clicked(id) => {
+                            root.album-clicked(id);
+                        }
                         artist-clicked(id) => {
                             root.open-artist(id);
                         }

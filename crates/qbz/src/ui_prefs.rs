@@ -515,6 +515,11 @@ pub struct UiPrefs {
     pub window_x: i32,
     #[serde(default = "default_window_pos")]
     pub window_y: i32,
+    /// Last main-window maximized state (restored at startup and on every
+    /// tray / miniplayer re-show — #618). While true, `window_width/height`
+    /// keep the FLOATING size (the Resized handler skips persistence).
+    #[serde(default)]
+    pub window_maximized: bool,
     /// Renderer tier override: `"auto"` (heuristic picks the best tier) |
     /// `"wgpu"` | `"gl"` | `"software"`. Linux-only surface; read BEFORE the
     /// window exists (`select_slint_backend`), so changes apply on restart.
@@ -734,6 +739,7 @@ impl Default for UiPrefs {
             window_height: 0.0,
             window_x: default_window_pos(),
             window_y: default_window_pos(),
+            window_maximized: false,
             renderer: default_renderer(),
             renderer_auto_degraded: String::new(),
             renderer_wgpu_alt: String::new(),

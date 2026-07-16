@@ -1,0 +1,319 @@
+// Artist card sized to match AlbumCard / PlaylistCard (200x246) so albums,
+// playlists and artists can share one mixed carousel row. A rounded-square
+// art zone (surface fill, AlbumCard parity) frames a 190px round portrait —
+// the small surround reads like an album tile while keeping the round photo.
+// A hover overlay carries follow / play / more (same three-button pattern as
+// AlbumCard) over a centered, wrap-capable name.
+//
+// Reuses the SlimItem model and the media-action(kind, id, action) contract,
+// so a mixed carousel drives it exactly like an AlbumCard/PlaylistCard.
+//
+// This is ADDITIVE — the legacy 160x220 ArtistCard is untouched.
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Typography } from "../foundation/typography.slint";
+import { Radius } from "../foundation/radius.slint";
+import { Spacing } from "../foundation/spacing.slint";
+import { SlimItem, NavState, PinnedActions } from "../state.slint";
+import { QbzIcon } from "../primitives/QbzIcon.slint";
+import { ContextMenu } from "../primitives/ContextMenu.slint";
+import { ContextMenuItem } from "../primitives/ContextMenuItem.slint";
+
+// Circular hover-overlay action button — solid (semi-transparent) fill so the
+// whole circle is a stable hit/hover surface. Copied from AlbumCard (the card
+// files each carry their own; there is no shared primitive to import).
+component OverlayButton inherits Rectangle {
+    in property <image> icon;
+    in property <bool> primary: false;
+    in property <length> diameter: 36px;
+    in property <length> icon-size: 16px;
+    in property <bool> active: false;
+    out property <bool> hovered: ta.has-hover;
+    callback clicked();
+
+    width: root.diameter;
+    height: root.diameter;
+    border-radius: root.diameter / 2;
+    background: root.primary
+        ? (ta.has-hover ? #ffffffd6 : #ffffff)
+        : (ta.has-hover ? #ffffff3d : #ffffff24);
+    border-width: root.primary ? 0px : 1.5px;
+    border-color: #ffffffcc;
+
+    QbzIcon {
+        source: root.icon;
+        width: root.icon-size;
+        height: root.icon-size;
+        x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+        y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+        tint: root.active
+            ? Theme.accent
+            : (root.primary ? #000000 : #ffffff);
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked();
+        }
+        // Forward mouse back/forward to history nav (a TouchArea swallows them).
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.down && e.button == PointerEventButton.back) {
+                NavState.request-back();
+            }
+            if (e.kind == PointerEventKind.down && e.button == PointerEventButton.forward) {
+                NavState.request-forward();
+            }
+        }
+    }
+}
+
+export component ArtistGridCard inherits Rectangle {
+    in property <SlimItem> artist;
+    // Follow button visibility: "toggle"/"auto" show it (always visible in the
+    // overlay so the 3-button row never gains a gap; label reflects state),
+    // "none" hides it (label-artist carousels have no follow affordance).
+    in property <string> follow-mode: "toggle";
+    // kind passed in the follow media-action ("artist" | "label").
+    in property <string> follow-kind: "artist";
+    callback clicked(string);
+    // kind ("artist" | "label"), id, action ("follow" | "play").
+    callback media-action(string, string, string);
+
+    // Deterministic height: 200 photo zone + 6 spacer + 40 meta = 246
+    // (AlbumCard parity). The 40px meta reserves room for a 2-line name.
+    in property <length> card-height: 246px;
+    width: 200px;
+    height: root.card-height;
+
+    property <bool> show-follow: root.follow-mode != "none";
+    // Overlay stays up while the pointer is over the photo OR any of its
+    // buttons (a child button steals has-hover from the photo detector).
+    property <bool> overlay-on: hover.has-hover
+        || follow-btn.hovered || play-btn.hovered || more-btn.hovered
+        || pin-ta.has-hover;
+
+    VerticalLayout {
+        alignment: start;
+        spacing: 0px;
+
+        // --- Framed photo zone + hover overlay ---------------------------
+        Rectangle {
+            width: 200px;
+            height: 200px;
+            border-radius: Radius.sm;
+            background: Theme.surface-card;
+
+            // 190px round portrait, centered (5px surround = the album-tile
+            // frame). All overlay content lives inside so it clips to the circle.
+            Rectangle {
+                width: 190px;
+                height: 190px;
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                border-radius: 95px;
+                clip: true;
+                background: @linear-gradient(
+                    135deg,
+                    Theme.surface-elevated 0%,
+                    Theme.surface-card 100%);
+
+                // Placeholder glyph, shown until the artwork resolves on top.
+                QbzIcon {
+                    source: @image-url("../assets/icons/user.svg");
+                    width: 54px;
+                    height: 54px;
+                    x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                    y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                    tint: Theme.text-muted;
+                }
+                Image {
+                    width: 100%;
+                    height: 100%;
+                    source: root.artist.artwork;
+                    image-fit: cover;
+                }
+
+                // Hover scrim (clipped to the circle by the parent's clip).
+                Rectangle {
+                    width: 100%;
+                    height: 100%;
+                    background: #000000;
+                    opacity: root.overlay-on ? 0.55 : 0.0;
+                    animate opacity { duration: 150ms; }
+                }
+
+                // Card-open + hover detector. Declared before the buttons so
+                // those win the pointer when interactive.
+                hover := TouchArea {
+                    width: 100%;
+                    height: 100%;
+                    mouse-cursor: pointer;
+                    clicked => {
+                        root.clicked(root.artist.id);
+                    }
+                }
+
+                // Hover action buttons — follow / play / more.
+                HorizontalLayout {
+                    x: 0px;
+                    y: 113px;
+                    width: 190px;
+                    height: 44px;
+                    alignment: center;
+                    spacing: 12px;
+                    opacity: root.overlay-on ? 1.0 : 0.0;
+                    animate opacity { duration: 150ms; }
+
+                    VerticalLayout {
+                        alignment: center;
+                        follow-btn := OverlayButton {
+                            visible: root.show-follow;
+                            icon: root.artist.following
+                                ? @image-url("../assets/icons/check.svg")
+                                : @image-url("../assets/icons/user-plus.svg");
+                            active: root.artist.following;
+                            clicked => {
+                                root.media-action(root.follow-kind, root.artist.id, "follow");
+                            }
+                        }
+                    }
+                    play-btn := OverlayButton {
+                        icon: @image-url("../assets/icons/play-fill.svg");
+                        primary: true;
+                        diameter: 44px;
+                        icon-size: 18px;
+                        clicked => {
+                            root.media-action("artist", root.artist.id, "play");
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        more-btn := OverlayButton {
+                            icon: @image-url("../assets/icons/ellipsis.svg");
+                            clicked => {
+                                artist-menu.show();
+                            }
+                        }
+                    }
+                }
+
+                // Context menu for the "more" button.
+                artist-menu := PopupWindow {
+                    x: 21px;
+                    y: 143px;
+                    width: 196px;
+                    height: 3 * 33px + 10px;
+                    ContextMenu {
+                        ContextMenuItem {
+                            icon: @image-url("../assets/icons/user.svg");
+                            label: @tr("Open artist");
+                            clicked => {
+                                root.clicked(root.artist.id);
+                            }
+                        }
+                        ContextMenuItem {
+                            icon: @image-url("../assets/icons/play.svg");
+                            label: @tr("Play");
+                            clicked => {
+                                root.media-action("artist", root.artist.id, "play");
+                            }
+                        }
+                        if root.show-follow: ContextMenuItem {
+                            icon: root.artist.following
+                                ? @image-url("../assets/icons/check.svg")
+                                : @image-url("../assets/icons/user-plus.svg");
+                            label: root.artist.following ? @tr("Following") : @tr("Follow");
+                            clicked => {
+                                root.media-action(root.follow-kind, root.artist.id, "follow");
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Pin glyph — top-right of the tile frame, kissing the circle's
+            // arc (AlbumCard corner parity). Lives on the OUTER 200px rect as
+            // a sibling AFTER the circle so the circle's clip cannot cut it.
+            // Filled accent pin always visible when pinned; outline pin
+            // hover-revealed otherwise. Always-mounted (opacity, not `if`)
+            // so its TouchArea's has-hover can join `overlay-on` above.
+            pin-badge := Rectangle {
+                x: parent.width - self.width - 8px;
+                y: 8px;
+                width: 26px;
+                height: 26px;
+                border-radius: 13px;
+                background: pin-ta.has-hover ? #000000cc : #00000099;
+                opacity: root.overlay-on ? 1.0 : 0.0;
+                animate opacity { duration: 150ms; }
+                QbzIcon {
+                    source: root.artist.is-pinned
+                        ? @image-url("../assets/icons/pin-filled.svg")
+                        : @image-url("../assets/icons/pin.svg");
+                    width: 14px;
+                    height: 14px;
+                    x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                    y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                    tint: root.artist.is-pinned ? Theme.accent : #ffffff;
+                }
+                pin-ta := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        // Kind is hardcoded "artist" (like the play button) —
+                        // NOT follow-kind: the pinned store has no label kind.
+                        PinnedActions.toggle-pin("artist", root.artist.id,
+                            root.artist.title, root.artist.subtitle,
+                            root.artist.artwork-url);
+                    }
+                }
+            }
+        }
+
+        Rectangle { height: 6px; }
+
+        // --- Name (+ optional subtitle), centered ------------------------
+        // The 40px meta is shared: with a subtitle (reco "Similar to…") the
+        // name stays one line and the subtitle takes the second; WITHOUT one
+        // the name wraps into both lines. Either way the card height is fixed.
+        HorizontalLayout {
+            height: 40px;
+            padding-left: Spacing.sm;
+            padding-right: Spacing.sm;
+            VerticalLayout {
+                alignment: center;
+                spacing: 2px;
+
+                name-area := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        root.clicked(root.artist.id);
+                    }
+                    Text {
+                        width: 100%;
+                        text: root.artist.title;
+                        color: name-area.has-hover ? Theme.accent : Theme.text-primary;
+                        font-size: Typography.body - 2px;
+                        font-weight: Typography.medium;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        // One line when a subtitle claims the second row; wrap
+                        // into two lines when the name is on its own.
+                        wrap: root.artist.subtitle != "" ? no-wrap : word-wrap;
+                        overflow: elide;
+                    }
+                }
+                // Reco "Similar to…" subtitle — shown only when provided.
+                if root.artist.subtitle != "": Text {
+                    width: 100%;
+                    text: root.artist.subtitle;
+                    color: Theme.text-muted;
+                    font-size: Typography.link - 1px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+            }
+        }
+    }
+}

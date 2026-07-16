@@ -10,140 +10,13 @@
 
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
-import { DiscoverBrowseState, DiscoverBrowseActions, GenreFilterState, GenreFilterActions, NavState, ShellState, UiFocusState } from "../state.slint";
+import { DiscoverBrowseState, DiscoverBrowseActions, GenreFilterState, GenreFilterActions, NavState, ShellState } from "../state.slint";
 import { AlbumCollectionView } from "AlbumCollectionView.slint";
+import { BrowseSearch, GenreButton, ViewModeToggle } from "BrowseHeaderTools.slint";
 import { GenreFilterPopup } from "GenreFilterPopup.slint";
 import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
 import { ListScrollbar } from "../primitives/ListScrollbar.slint";
 import { NavButtons } from "../shell/NavButtons.slint";
-import { QbzIcon } from "../primitives/QbzIcon.slint";
-import { ToggleButton } from "../primitives/ToggleButton.slint";
-
-// Search field — a leading magnifier, the input, and a trailing X that
-// clears (mirrors Tauri's .search-wrapper).
-component BrowseSearch inherits Rectangle {
-    height: 34px;
-    width: 200px;
-    border-radius: 6px;
-    background: Theme.surface-elevated;
-    border-width: 1px;
-    border-color: input.has-focus ? Theme.accent : Theme.border-subtle;
-
-    HorizontalLayout {
-        padding-left: 10px;
-        padding-right: 6px;
-        spacing: 8px;
-        VerticalLayout {
-            alignment: center;
-            QbzIcon {
-                source: @image-url("../assets/icons/search.svg");
-                width: 15px;
-                height: 15px;
-                tint: Theme.text-muted;
-            }
-        }
-        Rectangle {
-            horizontal-stretch: 1;
-            clip: true;
-            input := TextInput {
-                width: 100%;
-                height: 100%;
-                color: Theme.text-primary;
-                font-size: 13px;
-                vertical-alignment: center;
-                single-line: true;
-                text <=> DiscoverBrowseState.search-query;
-                changed has-focus => { UiFocusState.text-input-focused = self.has-focus; }
-                edited => {
-                    DiscoverBrowseActions.search-changed();
-                }
-            }
-            Text {
-                visible: input.text == "";
-                width: 100%;
-                height: 100%;
-                text: @tr("Search…");
-                color: Theme.text-muted;
-                font-size: 13px;
-                vertical-alignment: center;
-                overflow: elide;
-            }
-        }
-        // Trailing X — clears the query.
-        VerticalLayout {
-            alignment: center;
-            Rectangle {
-                visible: DiscoverBrowseState.search-query != "";
-                width: 22px;
-                height: 22px;
-                border-radius: 4px;
-                background: clear-ta.has-hover ? Theme.surface-hover : transparent;
-                QbzIcon {
-                    source: @image-url("../assets/icons/x.svg");
-                    width: 12px;
-                    height: 12px;
-                    x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
-                    y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
-                    tint: clear-ta.has-hover ? Theme.text-primary : Theme.text-muted;
-                }
-                clear-ta := TouchArea {
-                    mouse-cursor: pointer;
-                    clicked => {
-                        DiscoverBrowseState.search-query = "";
-                        DiscoverBrowseActions.search-changed();
-                    }
-                }
-            }
-        }
-    }
-}
-
-// Genre-filter trigger — same visual as HomeView's GenreButton: accent
-// fill + "N genres" when a selection is active.
-component GenreButton inherits Rectangle {
-    callback clicked();
-    property <bool> active: GenreFilterState.selected-count > 0;
-
-    width: genre-row.preferred-width;
-    height: 34px;
-    border-radius: 6px;
-    background: root.active
-        ? Theme.accent
-        : (ta.has-hover ? Theme.surface-hover : Theme.surface-elevated);
-
-    genre-row := HorizontalLayout {
-        padding-left: 12px;
-        padding-right: 14px;
-        spacing: 7px;
-        VerticalLayout {
-            alignment: center;
-            QbzIcon {
-                source: @image-url("../assets/icons/list-filter.svg");
-                width: 14px;
-                height: 14px;
-                tint: root.active ? #ffffff : Theme.text-secondary;
-            }
-        }
-        Text {
-            text: root.active
-                ? (GenreFilterState.selected-count == 1
-                    ? @tr("1 genre")
-                    : @tr("{} genres", GenreFilterState.selected-count))
-                : @tr("Filter by genre");
-            color: root.active ? #ffffff : Theme.text-secondary;
-            font-size: 13px;
-            font-weight: root.active ? Typography.medium : Typography.regular;
-            vertical-alignment: center;
-        }
-    }
-
-    ta := TouchArea {
-        mouse-cursor: pointer;
-        clicked => {
-            root.clicked();
-        }
-    }
-}
 
 export component DiscoverBrowseView inherits Rectangle {
     callback open-album(string);
@@ -204,7 +77,12 @@ export component DiscoverBrowseView inherits Rectangle {
                 spacing: 8px;
                 VerticalLayout {
                     alignment: center;
-                    BrowseSearch { }
+                    BrowseSearch {
+                        text <=> DiscoverBrowseState.search-query;
+                        edited => {
+                            DiscoverBrowseActions.search-changed();
+                        }
+                    }
                 }
                 VerticalLayout {
                     alignment: center;
@@ -217,28 +95,8 @@ export component DiscoverBrowseView inherits Rectangle {
                 }
                 VerticalLayout {
                     alignment: center;
-                    Rectangle {
-                        width: 68px;
-                        height: 34px;
-                        border-radius: 6px;
-                        background: Theme.surface-elevated;
-                        clip: true;
-                        HorizontalLayout {
-                            ToggleButton {
-                                icon: @image-url("../assets/icons/layout-grid.svg");
-                                active: DiscoverBrowseState.view-mode == "grid";
-                                clicked => {
-                                    DiscoverBrowseState.view-mode = "grid";
-                                }
-                            }
-                            ToggleButton {
-                                icon: @image-url("../assets/icons/list.svg");
-                                active: DiscoverBrowseState.view-mode == "list";
-                                clicked => {
-                                    DiscoverBrowseState.view-mode = "list";
-                                }
-                            }
-                        }
+                    ViewModeToggle {
+                        mode <=> DiscoverBrowseState.view-mode;
                     }
                 }
             }

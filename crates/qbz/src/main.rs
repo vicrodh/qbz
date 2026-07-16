@@ -71,6 +71,8 @@ mod myqbz_play;
 mod myqbz_prefs;
 mod myqbz_view_prefs;
 mod nav;
+mod pinned;
+mod pinned_section;
 mod play_history;
 mod playback;
 mod qconnect_engine;
@@ -101,6 +103,7 @@ mod visualizer;
 mod offline_manager;
 mod offline_mode;
 mod playlist;
+mod playlist_browse;
 mod playlist_import;
 mod playlist_manager;
 mod playlist_snapshot;
@@ -343,12 +346,20 @@ async fn enter_shell(
         login_state.set_phase(0);
         login_state.set_error("".into());
         seed_tray_appearance(&w, &tray);
+        // Seed the Local Library header Sync button (#573): must run AFTER
+        // init_shell_for_user bound the per-user plex_settings store —
+        // pre-login is_configured() always reads the empty defaults (false).
+        w.global::<LocalLibraryState>()
+            .set_plex_available(plex_auth::is_configured());
         // Seed the My QBZ branding (label + icon) from the per-user store so
         // the sidebar row + Settings row paint the custom values immediately.
         myqbz_prefs::seed(&w);
         // Seed the Discover configurator descriptor lists so the prefs-driven
         // render loop has order/visibility data before the first apply_home.
         discover_prefs::seed(&w);
+        // Seed the Pinned section (Home / For You) from the per-user pinned
+        // store — bound by perform_login / restore before this closure runs.
+        pinned_section::rebuild_pinned(&w);
         w.global::<HomeState>().set_loading(true);
         w.set_screen(resolved_shell_screen());
     });
@@ -611,6 +622,8 @@ async fn enter_shell_offline(
         // D-FIX-a: bind the blacklist offline too — Tauri never initialized it
         // in offline mode, so blacklisted artists leaked into offline surfaces.
         crate::artist_blacklist::init_for_user(&dir);
+        // Pinned items are local-only and must render offline too.
+        crate::pinned::init_for_user(&dir);
         // Intelligent Search (cache + ranking), seeded from the persisted pref.
         // Cached results stay searchable offline; live revalidation no-ops.
         crate::search_service::init(&dir, crate::ui_prefs::load().intelligent_search);
@@ -627,10 +640,18 @@ async fn enter_shell_offline(
         let weak = weak.clone();
         let _ = weak.clone().upgrade_in_event_loop(move |w| {
             seed_tray_appearance(&w, &tray);
+            // Seed the Local Library header Sync button (#573) — the store is
+            // bound (init_shell_for_user above), and Plex is a LAN server, so
+            // it stays usable in a Qobuz-offline session.
+            w.global::<LocalLibraryState>()
+                .set_plex_available(plex_auth::is_configured());
             myqbz_prefs::seed(&w);
             // Seed the Discover configurator descriptor lists (works offline —
             // the prefs store is per-user and bound at session activation).
             discover_prefs::seed(&w);
+            // Seed the Pinned section — pinned items are local-only and must
+            // render offline; disk-cached covers still resolve.
+            pinned_section::rebuild_pinned(&w);
             // No HomeState loading spinner: the discover load is skipped offline
             // (the gating slice adds the placeholder views).
             w.set_screen(resolved_shell_screen());
@@ -674,11 +695,16 @@ async fn enter_shell_offline(
     Ok(())
 }
 
-/// The shared genre-filter selection expanded to descendant ids, as the
-/// `Option<Vec<u64>>` the discover endpoints take (None = no filter).
-/// Shared by the home re-fetch and the DiscoverBrowse "View all" page.
+/// The shared genre-filter selection as the `Option<Vec<u64>>` the discover
+/// endpoints take (None = no filter). Shared by the home re-fetch and the
+/// DiscoverBrowse "View all" page.
 fn current_genre_filter() -> Option<Vec<u64>> {
-    let ids = genre_filter::filter_ids("discover");
+    // The RAW selection (parent or sub-genre id, exactly as toggled). Qobuz's
+    // /discover/index honors sub-genre ids server-side — 1:1 with Tauri
+    // discovery-v2, which sent getSelectedGenreIds() straight through and did
+    // NOT narrow client-side. Sending a top-level ancestor instead silently
+    // widened sub-genre selections back to their parent (#618-batch regression).
+    let ids = genre_filter::selected_ids_for("discover");
     (!ids.is_empty()).then_some(ids)
 }
 
@@ -692,10 +718,9 @@ async fn reload_home(
     image_cache: &artwork::ImageCache,
     active_tab: String,
 ) {
-    // Expand the selection to descendants so a parent selection
-    // covers its child genres (the child-genre filtering recovery).
-    let genre_ids = genre_filter::filter_ids("discover");
-    let genre_ids = (!genre_ids.is_empty()).then_some(genre_ids);
+    // The raw genre selection (parent or sub-genre ids) goes straight to
+    // /discover/index — Qobuz facets sub-genre ids server-side (Tauri parity).
+    let genre_ids = current_genre_filter();
 
     match home::load_home(runtime, genre_ids).await {
         Ok(data) => {
@@ -825,6 +850,13 @@ fn current_browse_target(window: &AppWindow) -> Option<(String, String)> {
         return None;
     }
     Some((endpoint, state.get_title().to_string()))
+}
+
+/// Whether the Qobuz Playlists "View all" page is the active view, so a
+/// genre-filter change re-navigates it (preserving its selected tag)
+/// instead of reloading the Discover home index. UI thread only.
+fn current_playlist_browse_showing(window: &AppWindow) -> bool {
+    window.global::<NavState>().get_view() == ContentView::PlaylistBrowse
 }
 
 /// Push the navigation history flags onto `NavState`. UI thread only.
@@ -1237,31 +1269,53 @@ fn install_browser_mouse_nav(window: &AppWindow) {
                 // through our toggle, so sync the flag from the window state on
                 // every resize (cheap — a property set with a change guard
                 // inside Slint).
-                if let Some(w) = weak.upgrade() {
-                    w.global::<WindowControlActions>()
-                        .set_is_maximized(w.window().is_maximized());
-                }
+                let (maximized, fullscreen) = if let Some(w) = weak.upgrade() {
+                    let maximized = w.window().is_maximized();
+                    w.global::<WindowControlActions>().set_is_maximized(maximized);
+                    (maximized, w.window().is_fullscreen())
+                } else {
+                    (false, false)
+                };
                 let scale = slint_window.scale_factor().max(0.01) as f64;
                 let lw = (size.width as f64 / scale) as f32;
                 let lh = (size.height as f64 / scale) as f32;
-                if lw >= 940.0 / active_ui_scale() && lh >= 600.0 / active_ui_scale() {
-                    let mut prefs = crate::ui_prefs::load();
-                    if (prefs.window_width - lw).abs() > 0.5
-                        || (prefs.window_height - lh).abs() > 0.5
-                    {
-                        prefs.window_width = lw;
-                        prefs.window_height = lh;
-                        crate::ui_prefs::save(&prefs);
-                    }
+                let mut prefs = crate::ui_prefs::load();
+                let mut dirty = prefs.window_maximized != maximized;
+                prefs.window_maximized = maximized;
+                // window_width/height hold the FLOATING size only: a
+                // maximized/fullscreen frame must never overwrite it, or the
+                // restore paths (startup + tray/mini re-show, #618) would
+                // reproduce the maximized footprint as a floating window.
+                if !maximized
+                    && !fullscreen
+                    && lw >= 940.0 / active_ui_scale()
+                    && lh >= 600.0 / active_ui_scale()
+                    && ((prefs.window_width - lw).abs() > 0.5
+                        || (prefs.window_height - lh).abs() > 0.5)
+                {
+                    prefs.window_width = lw;
+                    prefs.window_height = lh;
+                    dirty = true;
+                }
+                if dirty {
+                    crate::ui_prefs::save(&prefs);
                 }
                 EventResult::Propagate
             }
             WindowEvent::Moved(pos) => {
-                let mut prefs = crate::ui_prefs::load();
-                if prefs.window_x != pos.x || prefs.window_y != pos.y {
-                    prefs.window_x = pos.x;
-                    prefs.window_y = pos.y;
-                    crate::ui_prefs::save(&prefs);
+                // Same floating-only rule as the size: the maximized origin
+                // (often 0,0) must not overwrite the floating position.
+                let floating = weak
+                    .upgrade()
+                    .map(|w| !w.window().is_maximized() && !w.window().is_fullscreen())
+                    .unwrap_or(false);
+                if floating {
+                    let mut prefs = crate::ui_prefs::load();
+                    if prefs.window_x != pos.x || prefs.window_y != pos.y {
+                        prefs.window_x = pos.x;
+                        prefs.window_y = pos.y;
+                        crate::ui_prefs::save(&prefs);
+                    }
                 }
                 EventResult::Propagate
             }
@@ -1366,6 +1420,7 @@ fn is_offline_blocked_view(window: &AppWindow) -> bool {
     match window.global::<NavState>().get_view() {
         ContentView::Home
         | ContentView::DiscoverBrowse
+        | ContentView::PlaylistBrowse
         | ContentView::Search
         | ContentView::Favorites
         | ContentView::Album
@@ -1556,6 +1611,172 @@ fn set_album_row_favorite(window: &AppWindow, album_id: &str, favorite: bool) {
     if album_state.get_id() == album_id {
         album_state.set_is_favorite(favorite);
     }
+}
+
+/// Pin twin of [`set_album_row_favorite`]: flip the `is-pinned` badge on every
+/// visible album CARD matching `album_id`, across all card surfaces. Cards
+/// read `crate::pinned` when they are (re)built; this keeps the ones already
+/// on screen in sync the instant a pin toggles anywhere. The Pinned section's
+/// own model is NOT walked — `pinned_section::rebuild_pinned` replaces it
+/// wholesale right after. Unlike the favorite twin this also walks the Local
+/// Library models: LL cards hide the heart but do show the pin glyph.
+fn set_album_row_pinned(window: &AppWindow, album_id: &str, pinned: bool) {
+    let flip = |model: &slint::ModelRc<AlbumCardItem>| {
+        for i in 0..model.row_count() {
+            if let Some(mut item) = model.row_data(i) {
+                if item.id == album_id && item.is_pinned != pinned {
+                    item.is_pinned = pinned;
+                    model.set_row_data(i, item);
+                }
+            }
+        }
+    };
+    let flip_section = |section: &DiscoverSection| flip(&section.albums);
+    let flip_sections = |model: &slint::ModelRc<DiscoverSection>| {
+        for s in 0..model.row_count() {
+            if let Some(section) = model.row_data(s) {
+                flip(&section.albums);
+            }
+        }
+    };
+
+    // Artist page — release sections + last-release + the in-page-search
+    // FULL cache (owned by artist.rs).
+    artist::set_release_card_pinned(window, album_id, pinned);
+    // Dedicated discography page (View all).
+    flip(&window.global::<ArtistReleasesState>().get_albums());
+    // Album detail carousels — From the same artist / Listening suggestions.
+    let album = window.global::<AlbumState>();
+    flip_section(&album.get_more_from_artist());
+    flip_section(&album.get_suggestions_section());
+    flip_section(&album.get_lastfm_suggestions_section());
+    // Search results + the most-popular album hero.
+    let search = window.global::<SearchState>();
+    flip(&search.get_albums());
+    let mut hero = search.get_most_popular_album();
+    if hero.id == album_id && hero.is_pinned != pinned {
+        hero.is_pinned = pinned;
+        search.set_most_popular_album(hero);
+    }
+    // Home / Editor's Picks — the descriptor-driven carousels render the
+    // page; HomeState.sections + recent-albums back the fixed-data arms.
+    let home = window.global::<HomeState>();
+    flip_sections(&home.get_sections());
+    flip(&home.get_recent_albums());
+    let discover = window.global::<DiscoverState>();
+    for model in [
+        discover.get_home_sections(),
+        discover.get_editor_sections(),
+        discover.get_foryou_sections(),
+    ] {
+        for s in 0..model.row_count() {
+            if let Some(desc) = model.row_data(s) {
+                flip(&desc.section.albums);
+            }
+        }
+    }
+    // Discover "View all" page.
+    let browse = window.global::<DiscoverBrowseState>();
+    flip(&browse.get_albums());
+    flip(&browse.get_visible());
+    // For You.
+    let foryou = window.global::<ForYouState>();
+    flip_section(&foryou.get_release_watch());
+    flip_section(&foryou.get_recent_albums());
+    flip_section(&foryou.get_favorite_albums());
+    flip_section(&foryou.get_more_from_library());
+    flip_section(&foryou.get_rediscover());
+    flip(&foryou.get_spotlight_albums());
+    // Recommendations (external reco).
+    let reco = window.global::<ExternalRecoState>();
+    flip_section(&reco.get_rec_albums());
+    flip_section(&reco.get_fresh_releases());
+    flip_section(&reco.get_deep_cut_albums());
+    flip_section(&reco.get_top_albums());
+    // Label pages (landing carousels + releases grid).
+    let label = window.global::<LabelState>();
+    flip(&label.get_albums());
+    flip(&label.get_visible());
+    flip_sections(&label.get_grouped());
+    flip_section(&label.get_releases_section());
+    flip_section(&label.get_critics_section());
+    // Awards listing.
+    let award = window.global::<AwardState>();
+    flip(&award.get_albums());
+    flip(&award.get_visible());
+    // Favorites — albums tab (flat + grouped) and the artists sidepanel.
+    let favs = window.global::<FavoritesState>();
+    flip(&favs.get_albums());
+    flip(&favs.get_albums_visible());
+    flip_sections(&favs.get_albums_grouped());
+    flip_sections(&favs.get_selected_artist_sections());
+    // Local Library — albums + folders tabs (flat, visible and grouped) and
+    // the artists tab's selected-artist grid. The pin glyph is live here even
+    // though the favorite heart is hidden.
+    let ll = window.global::<LocalLibraryState>();
+    flip(&ll.get_albums());
+    flip(&ll.get_albums_visible());
+    flip_sections(&ll.get_albums_grouped());
+    flip(&ll.get_folders());
+    flip(&ll.get_folders_visible());
+    flip_sections(&ll.get_folders_grouped());
+    flip(&ll.get_artists_selected_albums());
+}
+
+/// Playlist counterpart of [`set_album_row_pinned`]: flip the `is-pinned`
+/// badge on every visible playlist card matching `playlist_id` (Home rail,
+/// Qobuz Playlists browse, Search, Favorites, label landings).
+fn set_playlist_row_pinned(window: &AppWindow, playlist_id: &str, pinned: bool) {
+    let flip = |model: &slint::ModelRc<SearchPlaylistItem>| {
+        for i in 0..model.row_count() {
+            if let Some(mut item) = model.row_data(i) {
+                if item.id == playlist_id && item.is_pinned != pinned {
+                    item.is_pinned = pinned;
+                    model.set_row_data(i, item);
+                }
+            }
+        }
+    };
+    flip(&window.global::<HomeState>().get_playlists());
+    flip(&window.global::<SearchState>().get_playlists());
+    let browse = window.global::<PlaylistBrowseState>();
+    flip(&browse.get_playlists());
+    flip(&browse.get_visible());
+    let favs = window.global::<FavoritesState>();
+    flip(&favs.get_playlists_favorites());
+    flip(&favs.get_playlists_following());
+    flip(&favs.get_playlists_visible());
+    flip(&window.global::<LabelState>().get_playlists());
+}
+
+/// Artist counterpart of [`set_album_row_pinned`]: flip the `is-pinned` badge
+/// on every visible ARTIST slim-card row matching `artist_id`. Only true
+/// artist models are walked — track/label/award slims share `SlimItem` but
+/// are not pinnable, and their ids live in other id spaces (flipping them on
+/// a numeric collision would lie).
+fn set_artist_row_pinned(window: &AppWindow, artist_id: &str, pinned: bool) {
+    let flip = |model: &slint::ModelRc<SlimItem>| {
+        for i in 0..model.row_count() {
+            if let Some(mut item) = model.row_data(i) {
+                if item.id == artist_id && item.is_pinned != pinned {
+                    item.is_pinned = pinned;
+                    model.set_row_data(i, item);
+                }
+            }
+        }
+    };
+    let search = window.global::<SearchState>();
+    flip(&search.get_artists());
+    flip(&search.get_artists_carousel());
+    flip(&window.global::<HomeState>().get_top_artists());
+    let foryou = window.global::<ForYouState>();
+    flip(&foryou.get_top_artists());
+    flip(&foryou.get_artists_to_follow());
+    let reco = window.global::<ExternalRecoState>();
+    flip(&reco.get_rec_artists_common());
+    flip(&reco.get_rec_artists_recent());
+    flip(&reco.get_top_artists());
+    flip(&window.global::<LabelState>().get_artists());
 }
 
 /// Feed Capa B (intelligent-search ranking) from a RESULTS-PAGE click, but only
@@ -1951,6 +2172,9 @@ fn navigate_artist(
             // false when the feature is disabled, which is acceptable here).
             let is_bl = crate::artist_blacklist::is_blacklisted_id_str(&id_for_apply);
             let st = w.global::<ArtistState>();
+            // Seed the pin state from the pinned store (Home "Pinned"
+            // section) — before set_id, which moves id_for_apply.
+            st.set_pinned(crate::pinned::is_pinned("artist", &id_for_apply));
             st.set_id(id_for_apply.into());
             st.set_is_blacklisted(is_bl);
             w.global::<NavState>().set_view(ContentView::Artist);
@@ -2338,6 +2562,7 @@ fn scope_for(entry: &nav::NavEntry) -> String {
         nav::NavEntry::Favorites { tab } => format!("fav:{tab}"),
         nav::NavEntry::LocalLibrary { tab } => format!("ll:{tab}"),
         nav::NavEntry::DiscoverBrowse { .. } => "discover-browse".into(),
+        nav::NavEntry::PlaylistBrowse => "playlist-browse".into(),
         nav::NavEntry::RecentAlbums => "recent-albums".into(),
         nav::NavEntry::Mix { .. } => "mix".into(),
         nav::NavEntry::Playlist(_) => "playlist".into(),
@@ -2518,6 +2743,18 @@ fn apply_entry(
                 endpoint,
                 title,
                 current_genre_filter(),
+            );
+        }
+        nav::NavEntry::PlaylistBrowse => {
+            // History re-entry keeps the session tag (reset_tag = false);
+            // only a fresh open from the rail resets it to All.
+            playlist_browse::navigate(
+                runtime.clone(),
+                weak.clone(),
+                handle,
+                image_cache.clone(),
+                current_genre_filter(),
+                false,
             );
         }
         nav::NavEntry::RecentAlbums => {
@@ -6673,6 +6910,83 @@ fn active_ui_scale() -> f32 {
     ACTIVE_UI_SCALE.get().copied().unwrap_or(1.0)
 }
 
+/// Re-apply the persisted main-window geometry: LOGICAL size + (best-effort)
+/// position, each clamped to the current monitor so a smaller / disconnected
+/// display never opens an oversized or stranded window, plus the maximized
+/// state. Shared by the startup path and every re-show (tray restore,
+/// miniplayer exit): on Wayland a hide DESTROYS the toplevel and the
+/// recreated one would otherwise come back at the .slint preferred size
+/// (#618). 0 size = never saved → keep the `.slint` preferred size, EXCEPT
+/// under a >1 interface-size preset, where even the preferred size may exceed
+/// a small monitor once the preset multiplies it — clamp it exactly like a
+/// restored one. Monitor sizes are divided by the SLINT scale factor (the
+/// effective, preset-baked one); winit's own factor is the raw compositor DPR
+/// and under-clamps when a preset is active. The minimum is physically
+/// constant across presets (mirrors the `/ UiScale.factor` bindings in
+/// app.slint). The monitor query is best-effort (`with_winit_window` returns
+/// None before the surface exists — the WM's own clamping is the fallback,
+/// and the Resized handler re-saves the result). Position only takes effect
+/// on X11/macOS: winit's Wayland `set_outer_position` is a no-op, the
+/// compositor places the surface.
+pub(crate) fn restore_main_window_geometry(window: &AppWindow) {
+    let prefs = crate::ui_prefs::load();
+    let ui_scale_factor = active_ui_scale();
+    let min_logical_w = 940.0 / ui_scale_factor;
+    let min_logical_h = 600.0 / ui_scale_factor;
+    // Plausibility gate for the persisted size: at least the scaled minimum,
+    // but never stricter than the historical 940x600 (so sizes saved under a
+    // previous, less-scaled preset still restore — the .slint mins clamp them
+    // up if the current preset needs more).
+    let has_saved_size = prefs.window_width >= min_logical_w.min(940.0)
+        && prefs.window_height >= min_logical_h.min(600.0);
+    if has_saved_size || ui_scale_factor > 1.0 {
+        let mut w = if has_saved_size { prefs.window_width } else { 1180.0 };
+        let mut h = if has_saved_size { prefs.window_height } else { 760.0 };
+        let slint_scale = (window.window().scale_factor() as f64).max(0.01);
+        window.window().with_winit_window(|win| {
+            if let Some(mon) = win.current_monitor() {
+                let avail_w = (mon.size().width as f64 / slint_scale) as f32;
+                let avail_h = (mon.size().height as f64 / slint_scale) as f32;
+                if avail_w >= min_logical_w {
+                    w = w.min(avail_w);
+                }
+                if avail_h >= min_logical_h {
+                    h = h.min(avail_h);
+                }
+            }
+        });
+        window.window().set_size(slint::LogicalSize::new(w, h));
+    }
+    if prefs.window_x != i32::MIN && prefs.window_y != i32::MIN {
+        let mut px = prefs.window_x;
+        let mut py = prefs.window_y;
+        window.window().with_winit_window(|win| {
+            if let Some(mon) = win.current_monitor() {
+                let m = mon.size();
+                let mp = mon.position();
+                // Keep the top-left inside the monitor rect, leaving ~100px so a
+                // sliver stays grabbable even if the saved spot is near an edge.
+                let max_x = (mp.x + m.width as i32 - 100).max(mp.x);
+                let max_y = (mp.y + m.height as i32 - 100).max(mp.y);
+                px = px.clamp(mp.x, max_x);
+                py = py.clamp(mp.y, max_y);
+            }
+        });
+        window
+            .window()
+            .set_position(slint::PhysicalPosition::new(px, py));
+    }
+    // Maximized wins over the floating size just applied (which stays the
+    // restore target for the eventual un-maximize). Only ever set — never
+    // force false, so a freshly created window keeps its natural state.
+    if prefs.window_maximized {
+        window.window().set_maximized(true);
+        window
+            .global::<WindowControlActions>()
+            .set_is_maximized(true);
+    }
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // UI SCALE PRESET — must run FIRST: SLINT_SCALE_FACTOR has to be in the
     // environment before the backend/window exist (winit reads it at window
@@ -6760,6 +7074,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // forces wgpu; unset / "auto" auto-detects.
     let use_gpu_renderer = select_slint_backend()?;
 
+    // Wayland/X11 app identity that SURVIVES surface recreation: the winit
+    // attributes hook (select_slint_backend) only runs once per window
+    // adapter, and Slint's Wayland hide() destroys the toplevel and rebuilds
+    // it from DEFAULT attributes (suspend(), i-slint-backend-winit).
+    // ensure_window() re-applies the context xdg_app_id on EVERY creation, so
+    // this is the only way a re-shown window keeps grouping under
+    // com.blitzfc.qbz.desktop (#618). Must run after the backend is selected
+    // (needs the global context) and before any window is created.
+    if let Err(e) = slint::set_xdg_app_id("com.blitzfc.qbz") {
+        log::warn!("[qbz-slint] set_xdg_app_id failed: {e}");
+    }
+
     // UI language: resolve the persisted language BEFORE the first window is
     // created, and set the Rust-side language now so `t()`/date helpers are
     // correct from the first call. The persisted key may be "auto" (follow the
@@ -6785,6 +7111,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let window = AppWindow::new()?;
+    // Publish the window to the single-instance Present() handler (exported
+    // since acquire_or_raise above) — a second launch can now raise even the
+    // login screen, no MPRIS needed. Also drains a Present that raced in
+    // between the guard and this point.
+    #[cfg(target_os = "linux")]
+    single_instance::bind_window(window.as_weak());
     // Renderer auto-revert sentinel: disarmed on the FIRST real user input
     // (or window close request) via the winit event filter — proof the app
     // reached a usable state — with a 30s fallback for no-touch sessions.
@@ -6977,64 +7309,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &restored_prefs.large_spectrum_mode,
         ));
     }
-    // Main window geometry: restore the persisted LOGICAL size + (best-effort)
-    // position, each clamped to the current monitor so a smaller / disconnected
-    // display never opens an oversized or stranded window. 0 size = never saved
-    // → keep the `.slint` preferred size, EXCEPT under a >1 interface-size
-    // preset, where even the preferred size may exceed a small monitor once the
-    // preset multiplies it — clamp it exactly like a restored one. Monitor
-    // sizes are divided by the SLINT scale factor (the effective, preset-baked
-    // one); winit's own factor is the raw compositor DPR and under-clamps when
-    // a preset is active. The minimum is physically constant across presets
-    // (mirrors the `/ UiScale.factor` bindings in app.slint). The monitor query
-    // is best-effort (`with_winit_window` returns None before the surface
-    // exists → the WM's own clamping is the fallback, and the Resized handler
-    // re-saves the result).
-    let min_logical_w = 940.0 / ui_scale_factor;
-    let min_logical_h = 600.0 / ui_scale_factor;
-    // Plausibility gate for the persisted size: at least the scaled minimum,
-    // but never stricter than the historical 940x600 (so sizes saved under a
-    // previous, less-scaled preset still restore — the .slint mins clamp them
-    // up if the current preset needs more).
-    let has_saved_size = restored_prefs.window_width >= min_logical_w.min(940.0)
-        && restored_prefs.window_height >= min_logical_h.min(600.0);
-    if has_saved_size || ui_scale_factor > 1.0 {
-        let mut w = if has_saved_size { restored_prefs.window_width } else { 1180.0 };
-        let mut h = if has_saved_size { restored_prefs.window_height } else { 760.0 };
-        let slint_scale = (window.window().scale_factor() as f64).max(0.01);
-        window.window().with_winit_window(|win| {
-            if let Some(mon) = win.current_monitor() {
-                let avail_w = (mon.size().width as f64 / slint_scale) as f32;
-                let avail_h = (mon.size().height as f64 / slint_scale) as f32;
-                if avail_w >= min_logical_w {
-                    w = w.min(avail_w);
-                }
-                if avail_h >= min_logical_h {
-                    h = h.min(avail_h);
-                }
-            }
-        });
-        window.window().set_size(slint::LogicalSize::new(w, h));
-    }
-    if restored_prefs.window_x != i32::MIN && restored_prefs.window_y != i32::MIN {
-        let mut px = restored_prefs.window_x;
-        let mut py = restored_prefs.window_y;
-        window.window().with_winit_window(|win| {
-            if let Some(mon) = win.current_monitor() {
-                let m = mon.size();
-                let mp = mon.position();
-                // Keep the top-left inside the monitor rect, leaving ~100px so a
-                // sliver stays grabbable even if the saved spot is near an edge.
-                let max_x = (mp.x + m.width as i32 - 100).max(mp.x);
-                let max_y = (mp.y + m.height as i32 - 100).max(mp.y);
-                px = px.clamp(mp.x, max_x);
-                py = py.clamp(mp.y, max_y);
-            }
-        });
-        window
-            .window()
-            .set_position(slint::PhysicalPosition::new(px, py));
-    }
+    // Main window geometry: restore the persisted size/position/maximized
+    // state. Shared with the tray/miniplayer re-show paths (#618) — the
+    // clamping and plausibility rules live in the helper's doc.
+    restore_main_window_geometry(&window);
     // NOTE: the FFT tap is primed AFTER visualizer::install() (further below) — not
     // here — because install() registers the `on_set_enabled` handler this call
     // depends on.
@@ -9757,6 +10035,85 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 myqbz_prefs::seed(&w);
             }
         });
+    }
+
+    // Pin / unpin from the card pin glyphs. The callback carries the full
+    // display snapshot (kind, id, title, subtitle, artwork url) so the store
+    // persists a denormalized row without re-fetching (the
+    // BlacklistActions.block-album pattern). The mutation is local SQLite
+    // (synchronous): mutate first, then — only on success — flip the
+    // `is-pinned` badge across every visible card model and rebuild the
+    // Pinned section from the store (the ONE rebuild path: model first,
+    // then a fresh index-keyed artwork job batch).
+    {
+        let weak = window.as_weak();
+        window
+            .global::<PinnedActions>()
+            .on_toggle_pin(move |kind, id, title, subtitle, artwork| {
+                if let Some(w) = weak.upgrade() {
+                    let kind = kind.to_string();
+                    let id = id.to_string();
+                    // The cards hardcode these kinds and the store's CHECK
+                    // constraint admits nothing else — anything different is
+                    // a wiring bug.
+                    if !matches!(kind.as_str(), "album" | "artist" | "playlist") {
+                        log::warn!("[qbz-slint] toggle-pin: unsupported kind {kind}");
+                        return;
+                    }
+                    let was_pinned = crate::pinned::is_pinned(&kind, &id);
+                    let res = if was_pinned {
+                        crate::pinned::unpin(&kind, &id)
+                    } else {
+                        crate::pinned::pin(&crate::pinned::PinnedItem {
+                            kind: kind.clone(),
+                            id: id.clone(),
+                            title: title.to_string(),
+                            subtitle: subtitle.to_string(),
+                            artwork_url: artwork.to_string(),
+                            pinned_at: 0, // ignored on write; the service stamps now
+                        })
+                    };
+                    match res {
+                        Ok(()) => {
+                            let pinned = !was_pinned;
+                            // Flip the card badges AND the open detail view's
+                            // header pin (when it is showing this same id).
+                            match kind.as_str() {
+                                "album" => {
+                                    set_album_row_pinned(&w, &id, pinned);
+                                    let st = w.global::<AlbumState>();
+                                    if st.get_id().as_str() == id {
+                                        st.set_pinned(pinned);
+                                    }
+                                }
+                                "artist" => {
+                                    set_artist_row_pinned(&w, &id, pinned);
+                                    let st = w.global::<ArtistState>();
+                                    if st.get_id().as_str() == id {
+                                        st.set_pinned(pinned);
+                                    }
+                                }
+                                "playlist" => {
+                                    set_playlist_row_pinned(&w, &id, pinned);
+                                    let st = w.global::<PlaylistState>();
+                                    if st.get_id().as_str() == id {
+                                        st.set_pinned(pinned);
+                                    }
+                                }
+                                _ => {}
+                            }
+                            crate::pinned_section::rebuild_pinned(&w);
+                        }
+                        Err(e) => {
+                            // Local store mutation failed (no session / DB
+                            // error): nothing was flipped, so there is nothing
+                            // to revert — surface the sibling stores' message.
+                            log::error!("[qbz-slint] toggle-pin {kind} {id} failed: {e}");
+                            crate::toast::error(&w, e);
+                        }
+                    }
+                }
+            });
     }
 
     // Context-menu / overlay media actions — route play / queue actions
@@ -15287,6 +15644,33 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             });
     }
 
+    // Qobuz Playlists rail "View all" -> the full-page playlist browse
+    // (server-side tag + genre filtering). A fresh open resets the
+    // category tab to All (Tauri parity); genre-filter and history
+    // re-navigations preserve it.
+    {
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        let image_cache = image_cache.clone();
+        window
+            .global::<HomeActions>()
+            .on_open_playlist_browse(move || {
+                nav::record(nav::NavEntry::PlaylistBrowse);
+                if let Some(w) = weak.upgrade() {
+                    update_nav_flags(&w);
+                }
+                playlist_browse::navigate(
+                    runtime.clone(),
+                    weak.clone(),
+                    &handle,
+                    image_cache.clone(),
+                    current_genre_filter(),
+                    true,
+                );
+            });
+    }
+
     // Recently-played rails refresh. `home-mounted` fires on every HomeView
     // (re)mount: re-read the LOCAL store into the rails IF a play was recorded
     // while Home was off-screen (dirty flag — a no-op otherwise, so mounting
@@ -15496,11 +15880,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     });
                     return;
                 }
-                // When the DiscoverBrowse "View all" page is showing, the
-                // genre change re-fetches THAT page; otherwise it reloads
-                // the Discover home index.
+                // When a "View all" browse page is showing (albums OR the
+                // Qobuz Playlists page), the genre change re-fetches THAT
+                // page; otherwise it reloads the Discover home index.
                 let browse_target = current_browse_target(&w);
-                if browse_target.is_none() {
+                let playlist_browse_showing = current_playlist_browse_showing(&w);
+                if browse_target.is_none() && !playlist_browse_showing {
                     w.global::<HomeState>().set_loading(true);
                 }
                 let active = w.global::<HomeState>().get_active_tab().to_string();
@@ -15511,7 +15896,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let handle2 = handle.clone();
                 handle.spawn(async move {
                     // On a newly-selected genre, eager-load its descendants
-                    // so filter_ids covers the child genres.
+                    // so selected_names covers the child genres (favorites)
+                    // and the tree shows counts.
                     if !was_selected {
                         if let Ok(gid) = id.parse::<u64>() {
                             genre_filter::load_descendants(&runtime, gid).await;
@@ -15529,6 +15915,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             endpoint,
                             title,
                             current_genre_filter(),
+                        );
+                    } else if playlist_browse_showing {
+                        // Re-navigation preserves the page's selected tag
+                        // (reset_tag = false).
+                        playlist_browse::navigate(
+                            runtime.clone(),
+                            weak.clone(),
+                            &handle2,
+                            image_cache.clone(),
+                            current_genre_filter(),
+                            false,
                         );
                     } else {
                         reload_home(&runtime, &weak, &image_cache, active).await;
@@ -15598,7 +15995,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     return;
                 }
                 let browse_target = current_browse_target(&w);
-                if browse_target.is_none() {
+                let playlist_browse_showing = current_playlist_browse_showing(&w);
+                if browse_target.is_none() && !playlist_browse_showing {
                     w.global::<HomeState>().set_loading(true);
                 }
                 let active = w.global::<HomeState>().get_active_tab().to_string();
@@ -15616,6 +16014,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             endpoint,
                             title,
                             current_genre_filter(),
+                        );
+                    } else if playlist_browse_showing {
+                        // Re-navigation preserves the page's selected tag
+                        // (reset_tag = false).
+                        playlist_browse::navigate(
+                            runtime.clone(),
+                            weak.clone(),
+                            &handle2,
+                            image_cache.clone(),
+                            current_genre_filter(),
+                            false,
                         );
                     } else {
                         reload_home(&runtime, &weak, &image_cache, active).await;
@@ -15855,12 +16264,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 });
             });
     }
-    // Seed the Sync button's visibility from the persisted Plex store (the
-    // Settings panel may never be opened this session; plex_auth's
-    // refresh_gates keeps the flag fresh once it is).
-    window
-        .global::<LocalLibraryState>()
-        .set_plex_available(plex_auth::is_configured());
+    // The Sync button's visibility (plex-available) is seeded at SHELL ENTRY
+    // (enter_shell + the offline entry), after plex_settings::init_for_user
+    // has bound the per-user store — seeding here (pre-login callback wiring)
+    // always reads the session-less defaults and computes false. plex_auth's
+    // refresh_gates keeps the flag fresh once the Settings panel is opened.
 
     // Settings > Local Library — folder management + maintenance + danger.
     // (Scan callbacks scan-all/scan-folder/stop-scan are wired with Slice B.)
@@ -17518,6 +17926,54 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if let Some(w) = weak.upgrade() {
                     discover_browse::apply_filter(&w);
                 }
+            });
+    }
+
+    // Qobuz Playlists "View all" — pagination, client-side search and the
+    // single-select category tag bar (server-side re-fetch from offset 0).
+    {
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        let image_cache = image_cache.clone();
+        window
+            .global::<PlaylistBrowseActions>()
+            .on_load_more(move || {
+                playlist_browse::load_more(
+                    runtime.clone(),
+                    weak.clone(),
+                    &handle,
+                    image_cache.clone(),
+                    current_genre_filter(),
+                );
+            });
+    }
+    {
+        let weak = window.as_weak();
+        window
+            .global::<PlaylistBrowseActions>()
+            .on_search_changed(move || {
+                if let Some(w) = weak.upgrade() {
+                    playlist_browse::apply_filter(&w);
+                }
+            });
+    }
+    {
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        let image_cache = image_cache.clone();
+        window
+            .global::<PlaylistBrowseActions>()
+            .on_select_tag(move |slug| {
+                playlist_browse::select_tag(
+                    runtime.clone(),
+                    weak.clone(),
+                    &handle,
+                    image_cache.clone(),
+                    slug.to_string(),
+                    current_genre_filter(),
+                );
             });
     }
 

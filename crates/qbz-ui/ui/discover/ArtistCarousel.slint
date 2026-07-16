@@ -6,6 +6,7 @@ import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
 import { SlimItem } from "../state.slint";
 import { ArtistCard } from "ArtistCard.slint";
+import { ArtistGridCard } from "ArtistGridCard.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 
 component NavButton inherits Rectangle {
@@ -69,14 +70,21 @@ export component ArtistCarousel inherits VerticalLayout {
     // Defaults keep the artist-search usage unchanged.
     in property <string> card-follow-mode: "auto";
     in property <string> card-follow-kind: "artist";
+    // Render the 200x246 ArtistGridCard (album/playlist parity, hover overlay
+    // with follow/play/more) — the default across the app. Set false to keep
+    // the legacy 160x220 ArtistCard, used by non-artist carousels whose items
+    // are labels/awards (the artist-specific play/open actions don't apply).
+    in property <bool> grid-cards: true;
     callback artist-clicked(string);
     callback media-action(string, string, string);
     callback view-all-clicked();
 
-    property <length> card-width: 160px;
+    // Grid cards are wider (200) and taller (246); the legacy card stays 160.
+    property <length> card-width: root.grid-cards ? 200px : 160px;
     // Overridable so a host view (Discover Recommendations, whose cards carry a
     // "Similar to…" subtitle) can give the row a taller viewport + card.
     in property <length> card-height: 220px;
+    property <length> eff-height: root.grid-cards ? 246px : root.card-height;
     property <length> gap: 16px;
 
     property <int> count: root.artists.length;
@@ -133,28 +141,45 @@ export component ArtistCarousel inherits VerticalLayout {
     }
 
     viewport := Rectangle {
-        height: root.card-height;
+        height: root.eff-height;
         clip: true;
 
         Rectangle {
             x: -root.current-page * root.step;
             y: 0px;
             width: root.content-width;
-            height: root.card-height;
+            height: root.eff-height;
             animate x { duration: 220ms; easing: ease-in-out; }
 
             HorizontalLayout {
                 spacing: root.gap;
-                for artist in root.artists: ArtistCard {
-                    artist: artist;
-                    card-height: root.card-height;
-                    follow-mode: root.card-follow-mode;
-                    follow-kind: root.card-follow-kind;
-                    clicked(id) => {
-                        root.artist-clicked(id);
+                // One fixed-width slot per artist; the slot hosts the grid card
+                // OR the legacy card (each sets its own width to match).
+                for artist in root.artists: Rectangle {
+                    width: root.card-width;
+                    height: root.eff-height;
+                    if root.grid-cards: ArtistGridCard {
+                        artist: artist;
+                        follow-mode: root.card-follow-mode;
+                        follow-kind: root.card-follow-kind;
+                        clicked(id) => {
+                            root.artist-clicked(id);
+                        }
+                        media-action(k, i, a) => {
+                            root.media-action(k, i, a);
+                        }
                     }
-                    media-action(k, i, a) => {
-                        root.media-action(k, i, a);
+                    if !root.grid-cards: ArtistCard {
+                        artist: artist;
+                        card-height: root.card-height;
+                        follow-mode: root.card-follow-mode;
+                        follow-kind: root.card-follow-kind;
+                        clicked(id) => {
+                            root.artist-clicked(id);
+                        }
+                        media-action(k, i, a) => {
+                            root.media-action(k, i, a);
+                        }
                     }
                 }
             }

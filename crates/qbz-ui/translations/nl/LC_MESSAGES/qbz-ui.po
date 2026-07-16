@@ -521,6 +521,20 @@ msgstr "Jouw topartiesten"
 msgid "Artists to Follow"
 msgstr "Artiesten om te volgen"
 
+msgid "Pinned"
+msgstr "Vastgezet"
+
+msgid "Pin"
+msgstr "Vastzetten"
+
+msgid "Unpin"
+msgstr "Losmaken"
+
+msgid "Showing {} of {} track."
+msgid_plural "Showing {} of {} tracks."
+msgstr[0] "Toont {} van {} nummer."
+msgstr[1] "Toont {} van {} nummers."
+
 msgid "Spotlight"
 msgstr "In de schijnwerpers"
 

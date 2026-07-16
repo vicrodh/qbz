@@ -1,0 +1,338 @@
+// Qobuz Playlists "View all" full-list page — the playlist twin of
+// DiscoverBrowseView (same fixed 56px header with the shared browse
+// tools, genre overlay, infinite scroll and scrollbar), plus a
+// single-select category tag bar under the header (1:1 with Tauri's
+// DiscoverPlaylistsBrowseView radio row; ADR-008: radio dots, no pills).
+// The tag and the shared genre selection filter SERVER-side (re-fetch
+// from offset 0); the search box filters the loaded set client-side and
+// disables load-more while active (Tauri does the same).
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Typography } from "../foundation/typography.slint";
+import { PlaylistBrowseState, PlaylistBrowseActions, GenreFilterState, GenreFilterActions, NavState, ShellState } from "../state.slint";
+import { BrowseSearch, GenreButton, ViewModeToggle } from "BrowseHeaderTools.slint";
+import { GenreFilterPopup } from "GenreFilterPopup.slint";
+import { PlaylistCard } from "PlaylistCard.slint";
+import { PlaylistListRow } from "../primitives/PlaylistListRow.slint";
+import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
+import { ListScrollbar } from "../primitives/ListScrollbar.slint";
+import { NavButtons } from "../shell/NavButtons.slint";
+
+// A single-select category option — a ring with an accent dot when
+// selected, and a label (the SearchResultsView FilterRadio style;
+// ADR-008 allows native-style radio dots for option selection).
+component FilterRadio inherits Rectangle {
+    in property <string> label;
+    in property <bool> selected;
+    callback clicked();
+
+    height: 22px;
+    width: radio-row.preferred-width;
+
+    radio-row := HorizontalLayout {
+        spacing: 6px;
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 14px;
+                height: 14px;
+                border-radius: 7px;
+                border-width: 1.5px;
+                border-color: root.selected ? Theme.accent : Theme.text-muted;
+                Rectangle {
+                    width: 8px;
+                    height: 8px;
+                    border-radius: 4px;
+                    background: root.selected ? Theme.accent : transparent;
+                    x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                    y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                }
+            }
+        }
+        Text {
+            text: root.label;
+            color: (root.selected || ta.has-hover)
+                ? Theme.text-primary
+                : Theme.text-secondary;
+            font-size: 12px;
+            vertical-alignment: center;
+        }
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+export component PlaylistBrowseView inherits Rectangle {
+    // kind ("playlist"), playlist id, action — the shell's media-action
+    // funnel handles "open" / "play" / "play-next" / "queue" / "favorite".
+    callback media-action(string, string, string);
+
+    property <length> pl-w: 200px;
+    property <length> pl-h: 246px;
+    property <length> gap: 24px;
+    // Fixed chrome above the scrolling list: the 56px header plus the
+    // 36px tag bar when the tag set is non-empty.
+    property <length> header-h: PlaylistBrowseState.tags.length > 0 ? 92px : 56px;
+
+    background: Theme.surface-main;
+
+    VerticalLayout {
+        spacing: 0px;
+
+        // --- Fixed header (always visible) -------------------------------
+        // Identical geometry to DiscoverBrowseView: NavButtons + title on
+        // the LEFT; search / genre / grid-list tools as one group anchored
+        // RIGHT at the 32px gutter. Only the list below scrolls.
+        Rectangle {
+            height: 56px;
+            background: Theme.surface-main;
+
+            // Left cluster — nav buttons then the title, inline.
+            HorizontalLayout {
+                x: 32px;
+                y: 25px - self.height / 2;
+                width: self.preferred-width;
+                height: self.preferred-height;
+                spacing: 16px;
+                VerticalLayout {
+                    alignment: center;
+                    NavButtons { }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    Text {
+                        text: PlaylistBrowseState.title;
+                        color: Theme.text-primary;
+                        font-size: Typography.section;
+                        font-weight: Typography.bold;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+
+            // Right cluster — the header tools as one group, anchored right.
+            HorizontalLayout {
+                x: parent.width - self.preferred-width - 32px;
+                y: 25px - self.height / 2;
+                width: self.preferred-width;
+                height: self.preferred-height;
+                spacing: 8px;
+                VerticalLayout {
+                    alignment: center;
+                    BrowseSearch {
+                        text <=> PlaylistBrowseState.search-query;
+                        edited => {
+                            PlaylistBrowseActions.search-changed();
+                        }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    GenreButton {
+                        clicked => {
+                            GenreFilterActions.set-context("discover");
+                            GenreFilterState.open = !GenreFilterState.open;
+                        }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    ViewModeToggle {
+                        mode <=> PlaylistBrowseState.view-mode;
+                    }
+                }
+            }
+        }
+
+        // --- Category tag bar (single-select, server-side) ---------------
+        // "All" + the localized /playlist/getTags categories as a radio
+        // row; overflow scrolls horizontally inside its own Flickable.
+        if PlaylistBrowseState.tags.length > 0: Rectangle {
+            height: 36px;
+            background: Theme.surface-main;
+            Flickable {
+                x: 32px;
+                width: parent.width - 64px;
+                height: parent.height;
+                viewport-width: tag-row.preferred-width;
+                viewport-height: self.height;
+                tag-row := HorizontalLayout {
+                    spacing: 16px;
+                    padding-top: 7px;
+                    alignment: start;
+                    FilterRadio {
+                        label: @tr("All");
+                        selected: PlaylistBrowseState.selected-tag == "";
+                        clicked => {
+                            PlaylistBrowseActions.select-tag("");
+                        }
+                    }
+                    for tag in PlaylistBrowseState.tags: FilterRadio {
+                        // Tag names arrive pre-localized from the API.
+                        label: tag.name;
+                        selected: tag.selected;
+                        clicked => {
+                            PlaylistBrowseActions.select-tag(tag.slug);
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- Scrolling list (only the listing scrolls) ------------------
+        flick := Flickable {
+            vertical-stretch: 1;
+            viewport-width: self.width;
+            viewport-height: page.preferred-height;
+            // Scroll-position restore on back/forward (see nav::scope_for).
+            property <string> sr-armed: NavState.restore-scope;
+            function sr-restore() {
+                if (NavState.restore-scope == "playlist-browse" && self.viewport-height > self.height) {
+                    self.viewport-y = NavState.scroll-restore;
+                    NavState.restore-scope = "";
+                }
+            }
+            init => { self.sr-restore(); }
+            changed sr-armed => { self.sr-restore(); }
+            changed viewport-height => { self.sr-restore(); }
+
+            // Infinite scroll — when the viewport nears the bottom of the
+            // content (within 600px), pull the next page. Guarded by
+            // has-more + the loading flags AND an empty search query, so a
+            // client-side search filter does not keep paging in the catalog.
+            changed viewport-y => {
+                NavState.report-scroll(self.viewport-y);
+                if (-self.viewport-y + self.height >= self.viewport-height - 600px
+                    && PlaylistBrowseState.has-more
+                    && !PlaylistBrowseState.loading-more
+                    && !PlaylistBrowseState.loading
+                    && PlaylistBrowseState.search-query == "") {
+                    PlaylistBrowseActions.load-more();
+                }
+            }
+
+            page := VerticalLayout {
+                width: parent.width;
+                padding-left: 32px;
+                padding-right: 32px;
+                padding-top: 8px;
+                padding-bottom: 100px;
+                spacing: 0px;
+                alignment: start;
+
+                if PlaylistBrowseState.loading: HorizontalLayout {
+                    alignment: center;
+                    LoadingSpinner { size: 36px; }
+                }
+
+                // Empty-state when a search filters everything out.
+                if !PlaylistBrowseState.loading
+                    && PlaylistBrowseState.visible.length == 0
+                    && PlaylistBrowseState.search-query != "": HorizontalLayout {
+                    alignment: center;
+                    Text {
+                        text: @tr("No results found.");
+                        color: Theme.text-muted;
+                        font-size: 14px;
+                    }
+                }
+
+                // Empty-state when the tag/genre selection returns nothing.
+                if !PlaylistBrowseState.loading
+                    && PlaylistBrowseState.visible.length == 0
+                    && PlaylistBrowseState.search-query == "": HorizontalLayout {
+                    alignment: center;
+                    Text {
+                        text: @tr("No playlists match the selected categories.");
+                        color: Theme.text-muted;
+                        font-size: 14px;
+                    }
+                }
+
+                // --- Playlist collection (grid / list) --------------------
+                // Grid math cloned from FavoritesView's playlists grid: the
+                // abs-positioned cards measure against this EXACT Rectangle
+                // (abs-pos inside Flickable rule), whose height is derived
+                // from the column count — no sibling-height binding loops.
+                if !PlaylistBrowseState.loading
+                    && PlaylistBrowseState.view-mode != "list": playlists-grid := Rectangle {
+                    property <int> columns: Math.max(
+                        1,
+                        Math.floor((self.width + root.gap) / (root.pl-w + root.gap)));
+                    property <int> rows: Math.ceil(PlaylistBrowseState.visible.length / self.columns);
+                    height: self.rows > 0
+                        ? self.rows * root.pl-h + Math.max(0, self.rows - 1) * root.gap
+                        : 0px;
+                    for pl[i] in PlaylistBrowseState.visible: PlaylistCard {
+                        x: Math.mod(i, playlists-grid.columns) * (root.pl-w + root.gap);
+                        y: Math.floor(i / playlists-grid.columns) * (root.pl-h + root.gap);
+                        playlist: pl;
+                        body-opens: true;
+                        media-action(k, id, a) => {
+                            root.media-action(k, id, a);
+                        }
+                    }
+                }
+                if !PlaylistBrowseState.loading
+                    && PlaylistBrowseState.view-mode == "list": VerticalLayout {
+                    spacing: 2px;
+                    for pl[i] in PlaylistBrowseState.visible: PlaylistListRow {
+                        playlist: pl;
+                        index: i;
+                        media-action(k, id, a) => {
+                            root.media-action(k, id, a);
+                        }
+                    }
+                }
+
+                // Bottom load-more spinner while the next page is in flight.
+                if PlaylistBrowseState.loading-more: HorizontalLayout {
+                    alignment: center;
+                    Rectangle { height: 24px; }
+                    LoadingSpinner { size: 28px; }
+                }
+            }
+        }
+    }
+
+    // Shared scrollbar in the right gutter (homologated cross-view). Sits
+    // below the fixed header (+ tag bar) so it tracks only the list.
+    ListScrollbar {
+        x: parent.width - self.width - 4px;
+        y: root.header-h;
+        width: 14px;
+        height: parent.height - root.header-h;
+        viewport-height: flick.viewport-height;
+        visible-height: flick.height;
+        viewport-y <=> flick.viewport-y;
+        auto-hide: true;
+        hover-active: ShellState.pointer-in-window
+            && ShellState.pointer-x >= flick.absolute-position.x
+            && ShellState.pointer-x <= flick.absolute-position.x + flick.width
+            && ShellState.pointer-y >= flick.absolute-position.y
+            && ShellState.pointer-y <= flick.absolute-position.y + flick.height;
+    }
+
+    // --- Genre filter overlay --------------------------------------------
+    // Backdrop closes the popup on outside click; the panel anchors to
+    // the top-right under the Filter-by-genre button (mirrors
+    // DiscoverBrowseView).
+    if GenreFilterState.open: Rectangle {
+        width: 100%;
+        height: 100%;
+        TouchArea {
+            clicked => {
+                GenreFilterState.open = false;
+            }
+        }
+    }
+    if GenreFilterState.open: GenreFilterPopup {
+        x: root.width - self.width - 32px;
+        y: 56px;
+    }
+}

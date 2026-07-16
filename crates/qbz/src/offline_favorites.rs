@@ -205,6 +205,9 @@ pub fn load(weak: slint::Weak<AppWindow>, handle: tokio::runtime::Handle) {
                         .map(|(px, pw, ph)| crate::artwork::pixels_to_image(&px, pw, ph))
                         .unwrap_or_default(),
                     following: false,
+                    // Track slims render pin-less rows — tracks are not
+                    // pinnable.
+                    is_pinned: false,
                 })
                 .collect();
             w.global::<OfflineFavoritesState>()

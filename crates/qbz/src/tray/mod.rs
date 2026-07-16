@@ -215,6 +215,12 @@ pub(crate) fn show_window(weak: &slint::Weak<AppWindow>) {
         if let Err(e) = w.show() {
             log::error!("[tray] window show failed: {e}");
         }
+        // On Wayland the hide destroyed the toplevel and this show recreates
+        // it from default attributes — re-apply the persisted size/position/
+        // maximized state before the surface maps, or it comes back at the
+        // .slint preferred size and the Resized handler persists the loss
+        // (#618). Same helper as the startup restore.
+        crate::restore_main_window_geometry(&w);
         // Best-effort raise/focus the re-created window (the compositor has
         // the final say on Wayland).
         use i_slint_backend_winit::WinitWindowAccessor;
@@ -224,6 +230,23 @@ pub(crate) fn show_window(weak: &slint::Weak<AppWindow>) {
         // Restore the Dock icon when coming back from the menu bar.
         #[cfg(target_os = "macos")]
         macos::set_dock_icon_hidden(false);
+    });
+}
+
+/// Raise whichever window is CURRENT: the miniplayer when it is open, else
+/// the main window. Activation entry point for MPRIS `Raise` and the
+/// single-instance `Present()` — `show_window` would force the MAIN window
+/// up next to a live mini (visually a "second instance", #559/#618). The
+/// mini/main decision reads thread_local miniplayer state, so it must run on
+/// the event loop; callers may be on any thread.
+pub(crate) fn present(weak: &slint::Weak<AppWindow>) {
+    let weak = weak.clone();
+    let _ = slint::invoke_from_event_loop(move || {
+        if crate::miniplayer::is_open() {
+            crate::miniplayer::present_mini();
+        } else {
+            show_window(&weak);
+        }
     });
 }
 

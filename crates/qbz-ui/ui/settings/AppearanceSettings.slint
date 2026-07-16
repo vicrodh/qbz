@@ -207,7 +207,12 @@ export component AppearanceSettings inherits VerticalLayout {
                 }
             }
             QbzSelect {
-                menu-width: 200px;
+                menu-width: 220px;
+                // 36 registered themes — a name filter (Tauri parity). The search
+                // box hides non-matching rows but preserves model order, so
+                // `selected(i)` stays the index into the (polarity-filtered)
+                // `themes` model that the Rust "theme" handler maps.
+                searchable: true;
                 options: AppearanceState.themes;
                 current-index: AppearanceState.theme-index;
                 selected(i) => {

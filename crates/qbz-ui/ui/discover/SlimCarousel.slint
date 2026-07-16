@@ -43,10 +43,38 @@ component NavButton inherits Rectangle {
     }
 }
 
+// "View all" header link — same affordance as PlaylistCarousel/Carousel.
+component ViewAllLink inherits Rectangle {
+    callback clicked();
+    width: link-text.preferred-width + 16px;
+    height: 26px;
+    border-radius: 4px;
+    background: ta.has-hover ? Theme.surface-hover : transparent;
+    link-text := Text {
+        text: @tr("View all");
+        color: Theme.accent;
+        font-size: 14px;
+        font-weight: Typography.medium;
+        x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+        y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+    }
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
 export component SlimCarousel inherits VerticalLayout {
     in property <string> title;
     in property <[SlimItem]> items;
     callback item-clicked(string);
+    // Optional "View all" link at the end of the header row (only the
+    // Home "Popular albums" grid opts in — it lands on the mostStreamed
+    // DiscoverBrowse page, Tauri parity).
+    in property <bool> show-view-all: false;
+    callback view-all-clicked();
     // P7: optional title-adjacent list actions ("add to queue" / "create
     // playlist from this list"). Off by default so the shared SlimCarousel rows
     // (recent, popular) are unchanged; only the Weekly rows opt in.
@@ -136,6 +164,14 @@ export component SlimCarousel inherits VerticalLayout {
                     clicked => {
                         flick.viewport-x = Math.max(-root.max-scroll, flick.viewport-x - flick.width);
                     }
+                }
+            }
+        }
+        if root.show-view-all: VerticalLayout {
+            alignment: center;
+            ViewAllLink {
+                clicked => {
+                    root.view-all-clicked();
                 }
             }
         }

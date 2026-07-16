@@ -201,6 +201,9 @@ pub fn to_item(card: AlbumCard) -> AlbumCardItem {
         // Local Library ids never match a Qobuz favorite id (and LL hides
         // the heart), so the lookup is harmless there.
         is_favorite: crate::fav_cache::is_album_favorite(&card.id),
+        // Pin badge state from the per-user pinned store (kept live by
+        // main::set_album_row_pinned when a pin toggles anywhere).
+        is_pinned: crate::pinned::is_pinned("album", &card.id),
         id: card.id.into(),
         title: card.title.into(),
         artist: card.artist.into(),

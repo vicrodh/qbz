@@ -1180,6 +1180,9 @@ fn album_item(row: AlbumRow) -> AlbumCardItem {
         // Favorite heart state from the login-seeded cache (kept live by
         // main::set_album_row_favorite when a favorite toggles anywhere).
         is_favorite: crate::fav_cache::is_album_favorite(&row.id),
+        // Pin badge state from the per-user pinned store (kept live by
+        // main::set_album_row_pinned when a pin toggles anywhere).
+        is_pinned: crate::pinned::is_pinned("album", &row.id),
         id: row.id.into(),
         title: row.title.into(),
         artist: row.artist.into(),
@@ -1234,6 +1237,10 @@ fn track_item(row: TrackRowData) -> TrackItem {
 
 fn artist_item(row: ArtistRow) -> SlimItem {
     SlimItem {
+        // Pin badge state from the per-user pinned store (kept live by
+        // main::set_artist_row_pinned when a pin toggles anywhere). First:
+        // it must borrow `row.id` before the `id:` initializer moves it.
+        is_pinned: crate::pinned::is_pinned("artist", &row.id),
         id: row.id.into(),
         title: row.name.into(),
         subtitle: row.subtitle.into(),
@@ -1249,6 +1256,10 @@ pub(crate) fn playlist_item(row: PlaylistRow) -> SearchPlaylistItem {
         row.cover_urls.get(i).cloned().unwrap_or_default().into()
     };
     SearchPlaylistItem {
+        // Pin badge state from the per-user pinned store (kept live by
+        // main::set_playlist_row_pinned when a pin toggles anywhere). First:
+        // it must borrow `row.id` before the `id:` initializer moves it.
+        is_pinned: crate::pinned::is_pinned("playlist", &row.id),
         id: row.id.into(),
         title: row.title.into(),
         subtitle: row.subtitle.into(),

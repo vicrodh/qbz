@@ -1,0 +1,173 @@
+// Shared "View all" header tools — the search box, the genre-filter
+// trigger and the grid/list toggle used by the browse pages
+// (DiscoverBrowseView, PlaylistBrowseView). Extracted from
+// DiscoverBrowseView so every browse page renders the identical tool
+// cluster (ui-control-alignment-standard: 34px controls, Radius.sm).
+// Each page binds its own state: the search text and the view mode are
+// two-way properties; GenreButton reads the SHARED GenreFilterState.
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Typography } from "../foundation/typography.slint";
+import { GenreFilterState, UiFocusState } from "../state.slint";
+import { QbzIcon } from "../primitives/QbzIcon.slint";
+import { ToggleButton } from "../primitives/ToggleButton.slint";
+
+// Search field — a leading magnifier, the input, and a trailing X that
+// clears (mirrors Tauri's .search-wrapper). `text` two-way-binds to the
+// caller's state global; `edited()` fires on every change, including the
+// clear-X.
+export component BrowseSearch inherits Rectangle {
+    in-out property <string> text;
+    callback edited();
+
+    height: 34px;
+    width: 200px;
+    border-radius: 6px;
+    background: Theme.surface-elevated;
+    border-width: 1px;
+    border-color: input.has-focus ? Theme.accent : Theme.border-subtle;
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 6px;
+        spacing: 8px;
+        VerticalLayout {
+            alignment: center;
+            QbzIcon {
+                source: @image-url("../assets/icons/search.svg");
+                width: 15px;
+                height: 15px;
+                tint: Theme.text-muted;
+            }
+        }
+        Rectangle {
+            horizontal-stretch: 1;
+            clip: true;
+            input := TextInput {
+                width: 100%;
+                height: 100%;
+                color: Theme.text-primary;
+                font-size: 13px;
+                vertical-alignment: center;
+                single-line: true;
+                text <=> root.text;
+                changed has-focus => { UiFocusState.text-input-focused = self.has-focus; }
+                edited => {
+                    root.edited();
+                }
+            }
+            Text {
+                visible: input.text == "";
+                width: 100%;
+                height: 100%;
+                text: @tr("Search…");
+                color: Theme.text-muted;
+                font-size: 13px;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+        }
+        // Trailing X — clears the query.
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                visible: root.text != "";
+                width: 22px;
+                height: 22px;
+                border-radius: 4px;
+                background: clear-ta.has-hover ? Theme.surface-hover : transparent;
+                QbzIcon {
+                    source: @image-url("../assets/icons/x.svg");
+                    width: 12px;
+                    height: 12px;
+                    x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                    y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                    tint: clear-ta.has-hover ? Theme.text-primary : Theme.text-muted;
+                }
+                clear-ta := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        root.text = "";
+                        root.edited();
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Genre-filter trigger — same visual as HomeView's GenreButton: accent
+// fill + "N genres" when a selection is active. Reads the SHARED
+// GenreFilterState; the caller decides which context the click opens.
+export component GenreButton inherits Rectangle {
+    callback clicked();
+    property <bool> active: GenreFilterState.selected-count > 0;
+
+    width: genre-row.preferred-width;
+    height: 34px;
+    border-radius: 6px;
+    background: root.active
+        ? Theme.accent
+        : (ta.has-hover ? Theme.surface-hover : Theme.surface-elevated);
+
+    genre-row := HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 14px;
+        spacing: 7px;
+        VerticalLayout {
+            alignment: center;
+            QbzIcon {
+                source: @image-url("../assets/icons/list-filter.svg");
+                width: 14px;
+                height: 14px;
+                tint: root.active ? #ffffff : Theme.text-secondary;
+            }
+        }
+        Text {
+            text: root.active
+                ? (GenreFilterState.selected-count == 1
+                    ? @tr("1 genre")
+                    : @tr("{} genres", GenreFilterState.selected-count))
+                : @tr("Filter by genre");
+            color: root.active ? #ffffff : Theme.text-secondary;
+            font-size: 13px;
+            font-weight: root.active ? Typography.medium : Typography.regular;
+            vertical-alignment: center;
+        }
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+// Grid/list view toggle — the 68x34 two-button pair. `mode` two-way-binds
+// to the caller's view-mode state ("grid" | "list").
+export component ViewModeToggle inherits Rectangle {
+    in-out property <string> mode;
+
+    width: 68px;
+    height: 34px;
+    border-radius: 6px;
+    background: Theme.surface-elevated;
+    clip: true;
+    HorizontalLayout {
+        ToggleButton {
+            icon: @image-url("../assets/icons/layout-grid.svg");
+            active: root.mode == "grid";
+            clicked => {
+                root.mode = "grid";
+            }
+        }
+        ToggleButton {
+            icon: @image-url("../assets/icons/list.svg");
+            active: root.mode == "list";
+            clicked => {
+                root.mode = "list";
+            }
+        }
+    }
+}

@@ -2150,6 +2150,14 @@ impl Player {
                             *current_audio_data = None; // Clear regular audio data
                             thread_state.set_loaded_audio(true);
 
+                            // Track metadata is known-good at command time. Store the
+                            // duration NOW — current_position() clamps to it, so leaving
+                            // it 0 until after the buffer wait freezes the bar at 0:00,
+                            // and a Resume that recovers this source after a failed setup
+                            // would pin the bar at 0:00 forever (#508 follow-up, 2.0.1
+                            // Flatpak report 2026-07-15).
+                            thread_state.duration.store(duration_secs, Ordering::SeqCst);
+
                             let StreamRecreateDecision {
                                 needs_new_stream,
                                 format_changed,
@@ -2297,7 +2305,17 @@ impl Player {
                                         log::error!(
                                             "No audio output device available for streaming"
                                         );
-                                        thread_state.set_stream_error(true);
+                                        // Same cleanup as the failure arms below: the
+                                        // streaming source was already stored at
+                                        // command-accept, and a Resume that finds it
+                                        // would replay a track that never started.
+                                        *current_streaming_source = None;
+                                        *current_audio_data = None;
+                                        thread_state.set_loaded_audio(false);
+                                        thread_state.is_playing.store(false, Ordering::SeqCst);
+                                        thread_state.record_stream_error(
+                                            "No audio output device available for streaming",
+                                        );
                                         return;
                                     };
                                     create_output_stream_with_config(
@@ -2325,7 +2343,18 @@ impl Player {
                                             sample_rate,
                                             e
                                         );
-                                        thread_state.set_stream_error(true);
+                                        // Backend AND legacy CPAL both failed — a real
+                                        // error the user must see. Clear the zombie
+                                        // streaming state (same cleanup as the sibling
+                                        // failure arms below); leaving it set lets a
+                                        // later Resume replay the completed download
+                                        // with duration still 0, pinning the bar at
+                                        // 0:00 forever (#508/#592).
+                                        *current_streaming_source = None;
+                                        *current_audio_data = None;
+                                        thread_state.set_loaded_audio(false);
+                                        thread_state.is_playing.store(false, Ordering::SeqCst);
+                                        thread_state.record_stream_error(e);
                                         return;
                                     }
                                 }
@@ -3091,6 +3120,21 @@ impl Player {
                                         return;
                                     }
                                 };
+
+                                // A Resume that rebuilds from completed streaming data
+                                // can run after a PlayStreaming that failed BEFORE
+                                // storing the duration. Backfill from the decoded
+                                // source so the position clamp (current_position)
+                                // doesn't pin the bar at 0:00 (#508). Same derivation
+                                // the Play handler uses. Must read total_duration()
+                                // BEFORE skip_duration consumes `source` below.
+                                if thread_state.duration.load(Ordering::SeqCst) == 0 {
+                                    if let Some(d) = source.total_duration() {
+                                        thread_state
+                                            .duration
+                                            .store(d.as_secs(), Ordering::SeqCst);
+                                    }
+                                }
 
                                 let resume_pos = thread_state.position.load(Ordering::SeqCst);
                                 let skipped_source: Box<dyn Source<Item = f32> + Send> =
@@ -4590,16 +4634,21 @@ impl Player {
             // Progress logging every 5 segments or on the last segment.
             if seg_idx % 5 == 0 || seg_idx == n_segments {
                 let elapsed = start.elapsed().as_secs_f64();
+                let mbps = if elapsed > 0.0 {
+                    total_written as f64 / (1024.0 * 1024.0) / elapsed
+                } else {
+                    0.0
+                };
+                // Feed the adaptive prefetch throttle with the cumulative MB/s
+                // the log already reports; also the offline detector's
+                // positive liveness signal (#467, #591).
+                qbz_audio::network_throttle::state().record_segment_bandwidth(mbps);
                 log::info!(
                     "[CMAF-STREAM] Segment {}/{} ({:.1} MB, {:.1} MB/s)",
                     seg_idx,
                     n_segments - 1,
                     total_written as f64 / (1024.0 * 1024.0),
-                    if elapsed > 0.0 {
-                        total_written as f64 / (1024.0 * 1024.0) / elapsed
-                    } else {
-                        0.0
-                    }
+                    mbps
                 );
             }
         }
@@ -5028,7 +5077,36 @@ impl Player {
         self.state.set_stream_quality(sample_rate, bit_depth);
 
         // Use StreamingConfig::from_speed_mbps for dynamic buffer sizing
-        let config = StreamingConfig::from_speed_mbps(speed_mbps);
+        let mut config = StreamingConfig::from_speed_mbps(speed_mbps);
+
+        // Floor the initial buffer at the user's `stream_buffer_seconds` worth
+        // of REAL audio bytes (#591). content_length / duration is the track's
+        // true average byterate (both derive from the CMAF segment table),
+        // unlike `speed_mbps`, which is estimated from the tiny init fetch and
+        // is latency-dominated — it lands on the slowest ladder rung for every
+        // connection. Clamped to 256KB (format-detection minimum) .. 8MB (the
+        // process-wide ladder cap has no desktop caller, so this is the
+        // effective ceiling protecting low-memory hosts).
+        let user_secs = self
+            .audio_settings
+            .lock()
+            .map(|s| s.stream_buffer_seconds)
+            .unwrap_or(2);
+        let bps = content_length / duration_secs.max(1);
+        let floor = (user_secs as u64).saturating_mul(bps) as usize;
+        let ladder_bytes = config.initial_buffer_bytes;
+        config.initial_buffer_bytes = ladder_bytes
+            .max(floor)
+            .clamp(256 * 1024, 8 * 1024 * 1024);
+        if config.initial_buffer_bytes != ladder_bytes {
+            log::info!(
+                "Dynamic buffer: user floor {}s x {} B/s → {}KB initial buffer (ladder gave {}KB)",
+                user_secs,
+                bps,
+                config.initial_buffer_bytes / 1024,
+                ladder_bytes / 1024
+            );
+        }
 
         let (source, writer) = BufferedMediaSource::new(config, Some(content_length));
         let source = Arc::new(source);

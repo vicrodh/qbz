@@ -377,6 +377,9 @@ export component LabelPageView inherits Rectangle {
             if LabelState.more-labels.length > 0: ArtistCarousel {
                 title: @tr("More labels");
                 artists: LabelState.more-labels;
+                // Labels, not artists — keep the generic legacy card (the grid
+                // card's artist play / "Open artist" actions don't apply).
+                grid-cards: false;
                 // Round cards with a Follow/Following toggle, kind = label.
                 card-follow-mode: "toggle";
                 card-follow-kind: "label";

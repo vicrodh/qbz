@@ -33,6 +33,12 @@ finish-args:
   # includes --device=dri (GPU), so the separate dri entry is dropped.
   - --device=all
 
+  # org.freedesktop.ReserveDevice1 device-reservation names: lets QBZ ask
+  # WirePlumber/PipeWire to release the sound card cleanly before opening
+  # it exclusively (freedesktop audio-device reservation protocol). Owning
+  # a name implies talking to its current holder (same well-known name). #508
+  - --own-name=org.freedesktop.ReserveDevice1.*
+
   # Native PipeWire access
   - --filesystem=xdg-run/pipewire-0:ro
 

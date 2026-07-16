@@ -59,7 +59,9 @@ fn dispatch(ev: MediaEvent, rt: Runtime, weak: slint::Weak<AppWindow>, h: tokio:
                 }
             });
         }
-        MediaEvent::Raise => crate::tray::show_window(&weak),
+        // Present, not show_window: with the miniplayer open a forced main-
+        // window show reads as a duplicate instance (#559) — raise the mini.
+        MediaEvent::Raise => crate::tray::present(&weak),
         MediaEvent::Quit => crate::tray::quit(),
         MediaEvent::SetVolume(v) => crate::playback::set_volume(rt, weak, h, v as f32),
         MediaEvent::SetPosition(micros) => seek_to_micros(rt, h, micros),

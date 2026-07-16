@@ -1113,7 +1113,11 @@ impl QobuzClient {
         let http_response = self
             .signed_get_auth(&url, "discoverindex", &query.iter().map(|(k, v)| (*k, v.clone())).collect::<Vec<_>>())
             .await?;
-        log::info!("[API] get_discover_index status={}", http_response.status());
+        log::info!(
+            "[API] get_discover_index genre_ids={:?} status={}",
+            query,
+            http_response.status()
+        );
         let response: Value = http_response.json().await?;
 
         // Debug: log the response structure
@@ -1164,8 +1168,9 @@ impl QobuzClient {
             .signed_get_auth(&url, &method_name, &query.iter().map(|(k, v)| (*k, v.clone())).collect::<Vec<_>>())
             .await?;
         log::info!(
-            "[API] get_discover_albums({}) status={}",
+            "[API] get_discover_albums({}) query={:?} status={}",
             endpoint,
+            query,
             http_response.status()
         );
         let response: serde_json::Value = http_response.json().await?;

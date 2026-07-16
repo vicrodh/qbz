@@ -13,7 +13,7 @@ import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
 import { Radius } from "../foundation/radius.slint";
 import { Spacing } from "../foundation/spacing.slint";
-import { AlbumCardItem, NavState, TooltipState, BlacklistActions } from "../state.slint";
+import { AlbumCardItem, NavState, TooltipState, BlacklistActions, PinnedActions } from "../state.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { QualityBadge } from "../primitives/QualityBadge.slint";
 import { ContextMenu } from "../primitives/ContextMenu.slint";
@@ -100,7 +100,8 @@ export component AlbumCard inherits Rectangle {
     // OR over one of its buttons. A child button steals `has-hover` from
     // the artwork detector, so the states are OR-combined.
     property <bool> overlay-on: hover.has-hover
-        || fav-btn.hovered || play-btn.hovered || more-btn.hovered;
+        || fav-btn.hovered || play-btn.hovered || more-btn.hovered
+        || pin-ta.has-hover;
 
     VerticalLayout {
         alignment: start;
@@ -193,6 +194,42 @@ export component AlbumCard inherits Rectangle {
                     x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
                     y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
                     tint: #ffffff;
+                }
+            }
+
+            // Pin glyph — top-right of the art. Filled accent pin always
+            // visible when pinned (state indicator, like the source badge);
+            // outline pin hover-revealed otherwise (action affordance, like
+            // the overlay buttons). Hidden in select-mode (the checkbox owns
+            // this corner). Always-mounted (opacity, not `if`) so its
+            // TouchArea's has-hover can join `overlay-on` above.
+            pin-badge := Rectangle {
+                visible: !root.select-mode;
+                x: parent.width - self.width - 8px;
+                y: 8px;
+                width: 26px;
+                height: 26px;
+                border-radius: 13px;
+                background: pin-ta.has-hover ? #000000cc : #00000099;
+                opacity: root.overlay-on ? 1.0 : 0.0;
+                animate opacity { duration: 150ms; }
+                QbzIcon {
+                    source: root.album.is-pinned
+                        ? @image-url("../assets/icons/pin-filled.svg")
+                        : @image-url("../assets/icons/pin.svg");
+                    width: 14px;
+                    height: 14px;
+                    x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                    y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                    tint: root.album.is-pinned ? Theme.accent : #ffffff;
+                }
+                pin-ta := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        PinnedActions.toggle-pin("album", root.album.id,
+                            root.album.title, root.album.artist,
+                            root.album.artwork-url);
+                    }
                 }
             }
 

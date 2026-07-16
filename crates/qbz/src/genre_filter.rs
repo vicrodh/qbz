@@ -147,21 +147,16 @@ pub fn selected_ids() -> Vec<u64> {
         .unwrap_or_default()
 }
 
-/// The ids to filter by for `ctx`: its selection plus every loaded
-/// descendant of each selected genre (selecting a parent covers its
-/// children). Server-side genre filter for Discover.
-pub fn filter_ids(ctx: &str) -> Vec<u64> {
-    let Ok(s) = STATE.lock() else {
-        return Vec::new();
-    };
-    let mut out: HashSet<u64> = HashSet::new();
-    if let Some(sel) = s.selected.get(ctx) {
-        for id in sel {
-            out.insert(*id);
-            collect_descendants(&s.children, *id, &mut out);
-        }
-    }
-    out.into_iter().collect()
+/// The RAW genre selection for `ctx` (no expansion, no ancestor mapping):
+/// the exact ids the user toggled, parent or sub-genre. This is what gets
+/// sent to /discover/* in `genre_ids` — Qobuz honors sub-genre ids
+/// server-side (1:1 with Tauri discovery-v2, which sent the raw selection
+/// straight through and did no client-side narrowing).
+pub fn selected_ids_for(ctx: &str) -> Vec<u64> {
+    STATE
+        .lock()
+        .map(|s| s.selected.get(ctx).cloned().unwrap_or_default())
+        .unwrap_or_default()
 }
 
 /// Selected genre NAMES (+ descendant names) for `ctx` — for the
@@ -268,7 +263,10 @@ where
     let kids: Vec<GenreItem> = match runtime.core().get_genres(Some(parent_id)).await {
         Ok(list) => list
             .into_iter()
-            .map(|g| GenreItem { id: g.id, name: g.name })
+            .map(|g| GenreItem {
+                id: g.id,
+                name: g.name,
+            })
             .collect(),
         Err(e) => {
             log::warn!("[qbz-slint] genre filter: get_genres({parent_id}) failed: {e}");
@@ -302,7 +300,8 @@ where
 }
 
 /// Eager-load a genre's full descendant subtree (children + grandchildren),
-/// so a selection expands correctly in filter_ids / selected_names.
+/// so a selection expands correctly in selected_names (favorites) and the
+/// tree shows counts.
 pub async fn load_descendants<A>(runtime: &AppRuntime<A>, id: u64)
 where
     A: FrontendAdapter + Send + Sync + 'static,
@@ -394,16 +393,24 @@ fn build_tree_rows(s: &State) -> Vec<GenreTreeRow> {
     let mut rows: Vec<GenreTreeRow> = Vec::new();
 
     if !query.is_empty() {
+        // Search rows are a flat list that ignores expansion — never show
+        // an expand chevron (level 0 would otherwise force has_children on
+        // child matches).
         let matches = |g: &GenreItem| g.name.to_lowercase().contains(&query);
+        let flat_row = |g: &GenreItem| {
+            let mut row = tree_row(g, 0, s);
+            row.has_children = false;
+            row
+        };
         for p in &s.parents {
             if matches(p) {
-                rows.push(tree_row(p, 0, s));
+                rows.push(flat_row(p));
             }
         }
         for kids in s.children.values() {
             for k in kids {
                 if matches(k) {
-                    rows.push(tree_row(k, 0, s));
+                    rows.push(flat_row(k));
                 }
             }
         }

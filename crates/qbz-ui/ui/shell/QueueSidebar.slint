@@ -586,12 +586,9 @@ export component QueueSidebar inherits Rectangle {
                     // UP NEXT section.
                     if QueueState.upcoming-total > 0: VerticalLayout {
                         spacing: 8px;
-                        // Counter — "UP NEXT (20 of 40, 38 left)".
+                        // Section header — the count lives in the fixed footer.
                         Text {
-                            text: @tr("UP NEXT ({} of {}, {} left)",
-                                QueueState.page-end,
-                                QueueState.upcoming-total,
-                                QueueState.upcoming-remaining);
+                            text: @tr("UP NEXT");
                             color: Theme.text-muted;
                             font-size: 11px;
                             font-weight: Typography.semibold;
@@ -763,10 +760,25 @@ export component QueueSidebar inherits Rectangle {
             }
         }
 
-        // --- Footer: four actions + inline search (Queue tab only) ------
+        // --- Footer: fixed count + four actions + inline search (Queue tab) ---
         if QueueState.tab == 0 && !root.queue-empty: Rectangle {
             height: 1px;
             background: Theme.border-subtle;
+        }
+        // Fixed count — "Showing 40 of 109 tracks." Above the toolbar so it
+        // never scrolls with the list; total reflects the active queue search.
+        if QueueState.tab == 0 && !root.queue-empty && QueueState.upcoming-total > 0: HorizontalLayout {
+            padding-left: Spacing.md;
+            padding-right: Spacing.md;
+            padding-top: 8px;
+            alignment: center;
+            Text {
+                text: @tr("Showing {} of {} track." | "Showing {} of {} tracks." % QueueState.upcoming-total,
+                    QueueState.page-end,
+                    QueueState.upcoming-total);
+                color: Theme.text-muted;
+                font-size: 11px;
+            }
         }
         if QueueState.tab == 0 && !root.queue-empty: HorizontalLayout {
             padding-left: Spacing.md;

@@ -1,10 +1,15 @@
-// Playlist carousel — title, "View all" link, prev/next page controls,
-// and a clipped sliding track of playlist cards. Same paging mechanism as
-// Carousel. Used by the search results All tab.
+// Pinned carousel — title, prev/next page controls, and a clipped sliding
+// track of MIXED cards (albums / artists / playlists), dispatched per-item
+// on `PinnedItem.kind`. Same simple paging mechanism as PlaylistCarousel;
+// one fixed 200x246 slot per item (the ArtistCarousel slot pattern) so the
+// three card types share one row. Used by the Home / For You "pinned"
+// section arms, fed from the shared PinnedState global.
 
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
-import { SearchPlaylistItem } from "../state.slint";
+import { PinnedItem } from "../state.slint";
+import { AlbumCard } from "AlbumCard.slint";
+import { ArtistGridCard } from "ArtistGridCard.slint";
 import { PlaylistCard } from "PlaylistCard.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 
@@ -39,45 +44,21 @@ component NavButton inherits Rectangle {
     }
 }
 
-component ViewAllLink inherits Rectangle {
-    callback clicked();
-    width: link-text.preferred-width + 16px;
-    height: 26px;
-    border-radius: 4px;
-    background: ta.has-hover ? Theme.surface-hover : transparent;
-    link-text := Text {
-        // Muted with the trailing arrow — 1:1 with the standard Carousel's
-        // "View all →" (not the theme accent) so every Home row's link matches.
-        text: @tr("View all →");
-        color: ta.has-hover ? Theme.text-primary : Theme.text-secondary;
-        font-size: 14px;
-        font-weight: Typography.medium;
-        x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
-        y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
-    }
-    ta := TouchArea {
-        mouse-cursor: pointer;
-        clicked => {
-            root.clicked();
-        }
-    }
-}
-
-export component PlaylistCarousel inherits VerticalLayout {
+export component PinnedCarousel inherits VerticalLayout {
     in property <string> title;
-    in property <[SearchPlaylistItem]> playlists;
-    in property <bool> show-view-all: false;
-    // When true, a card body click opens the playlist and the overlay button
-    // plays it (1:1 with Tauri Discover). Default false (body=play).
-    in property <bool> body-opens: false;
-    callback view-all-clicked();
+    in property <[PinnedItem]> items;
+    callback album-clicked(string);
+    callback artist-clicked(string);
+    // Playlist open/play rides media-action ("playlist", id, "open"/"play")
+    // — PlaylistCard has no clicked callback (body-opens: true, Home
+    // convention).
     callback media-action(string, string, string);
 
     property <length> card-width: 200px;
     property <length> card-height: 246px;
     property <length> gap: 32px;
 
-    property <int> count: root.playlists.length;
+    property <int> count: root.items.length;
     property <int> per-page: Math.max(
         1,
         Math.floor((viewport.width + root.gap) / (root.card-width + root.gap)));
@@ -100,18 +81,8 @@ export component PlaylistCarousel inherits VerticalLayout {
             vertical-alignment: center;
             horizontal-stretch: 1;
         }
-        // "View all →" sits to the LEFT of the page chevrons, 4px control
-        // grouping — identical to the standard Carousel header.
         HorizontalLayout {
             spacing: 4px;
-            if root.show-view-all: VerticalLayout {
-                alignment: center;
-                ViewAllLink {
-                    clicked => {
-                        root.view-all-clicked();
-                    }
-                }
-            }
             VerticalLayout {
                 alignment: center;
                 NavButton {
@@ -148,11 +119,35 @@ export component PlaylistCarousel inherits VerticalLayout {
 
             HorizontalLayout {
                 spacing: root.gap;
-                for playlist in root.playlists: PlaylistCard {
-                    playlist: playlist;
-                    body-opens: root.body-opens;
-                    media-action(k, i, a) => {
-                        root.media-action(k, i, a);
+                // One fixed-width slot per item; the slot hosts exactly one
+                // card, selected by the item's kind.
+                for item in root.items: Rectangle {
+                    width: root.card-width;
+                    height: root.card-height;
+                    if item.kind == "album": AlbumCard {
+                        album: item.album;
+                        clicked(id) => {
+                            root.album-clicked(id);
+                        }
+                        media-action(k, i, a) => {
+                            root.media-action(k, i, a);
+                        }
+                    }
+                    if item.kind == "artist": ArtistGridCard {
+                        artist: item.artist;
+                        clicked(id) => {
+                            root.artist-clicked(id);
+                        }
+                        media-action(k, i, a) => {
+                            root.media-action(k, i, a);
+                        }
+                    }
+                    if item.kind == "playlist": PlaylistCard {
+                        playlist: item.playlist;
+                        body-opens: true;
+                        media-action(k, i, a) => {
+                            root.media-action(k, i, a);
+                        }
                     }
                 }
             }
