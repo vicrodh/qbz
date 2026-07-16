@@ -100,7 +100,7 @@ jobs:
           ls -lh crates/target/release/qbz
 
       - name: Upload binary artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: qbz-bin-amd64
           path: crates/target/release/qbz
@@ -169,7 +169,7 @@ jobs:
           ls -lh crates/target/release/qbz
 
       - name: Upload binary artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: qbz-bin-arm64
           path: crates/target/release/qbz
@@ -224,7 +224,7 @@ jobs:
         uses: snapcore/action-build@v1
 
       - name: Upload .snap artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: qbz-snap-amd64
           path: ${{ steps.build.outputs.snap }}
@@ -278,7 +278,7 @@ jobs:
         uses: snapcore/action-build@v1
 
       - name: Upload .snap artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: qbz-snap-arm64
           path: ${{ steps.build.outputs.snap }}

@@ -128,14 +128,14 @@ jobs:
           ls -la qbz qbz-unstripped
 
       - name: Upload binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: qbz-linux-aarch64
           path: qbz
           if-no-files-found: error
 
       - name: Upload unstripped binary (symbolication)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: qbz-linux-aarch64-unstripped
           path: qbz-unstripped
@@ -179,7 +179,7 @@ jobs:
       # branch) wired the package job's Download-qbzd step below to expect
       # `qbzd-linux-aarch64` — matching what already landed wins over the
       # brief text (see task-15-report.md for the full note).
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with: { name: qbzd-linux-aarch64, path: crates/target/release/qbzd }
 
   package:
@@ -299,7 +299,7 @@ jobs:
           ls -la dist
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: qbz-linux-aarch64-packages
           path: dist/*
