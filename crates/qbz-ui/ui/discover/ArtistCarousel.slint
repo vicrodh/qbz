@@ -4,7 +4,7 @@
 
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
-import { SlimItem } from "../state.slint";
+import { SlimItem, ShellState } from "../state.slint";
 import { ArtistCard } from "ArtistCard.slint";
 import { ArtistGridCard } from "ArtistGridCard.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
@@ -190,6 +190,7 @@ export component ArtistCarousel inherits VerticalLayout {
             width: 56px;
             background: @linear-gradient(90deg, Theme.surface-main 0%, transparent 100%);
             opacity: root.current-page > 0 ? 1.0 : 0.0;
+            visible: !ShellState.app-background-active;
             animate opacity { duration: 150ms; }
         }
         Rectangle {
@@ -197,6 +198,7 @@ export component ArtistCarousel inherits VerticalLayout {
             width: 56px;
             background: @linear-gradient(90deg, transparent 0%, Theme.surface-main 100%);
             opacity: root.current-page < root.page-count - 1 ? 1.0 : 0.0;
+            visible: !ShellState.app-background-active;
             animate opacity { duration: 150ms; }
         }
     }

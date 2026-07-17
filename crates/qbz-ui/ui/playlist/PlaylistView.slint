@@ -7,7 +7,7 @@ import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
 import { Radius } from "../foundation/radius.slint";
 import { PlaylistState, PlaylistActions, PinnedActions, DragState, NavState, OfflineState, BulkAction, SettingsState } from "../state.slint";
-import { PlaylistSuggestionsState, PlaylistSuggestionsActions, PlaylistSuggestionRow, TooltipState, ShellState } from "../state.slint";
+import { PlaylistSuggestionsState, PlaylistSuggestionsActions, PlaylistSuggestionRow, TooltipState, ShellState, AppearanceState } from "../state.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { CircleAction } from "../primitives/CircleAction.slint";
 import { TrackRow } from "../primitives/TrackRow.slint";
@@ -840,7 +840,11 @@ export component PlaylistView inherits Rectangle {
                                 height: 34px;
                                 width: 132px;
                                 border-radius: 6px;
-                                background: sort-ta.has-hover ? Theme.surface-hover : Theme.surface-elevated;
+                                background: sort-ta.has-hover
+                                    ? Theme.surface-hover
+                                    : (ShellState.app-background-active
+                                        ? Theme.surface-elevated.with-alpha(AppearanceState.app-background-surface-alpha)
+                                        : Theme.surface-elevated);
                                 border-width: 1px;
                                 border-color: Theme.border-subtle;
                                 sort-row := HorizontalLayout {

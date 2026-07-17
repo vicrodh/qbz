@@ -8,7 +8,7 @@
 
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
-import { HomeState, HomeActions, DiscoverState, DiscoverActions, PinnedState, GenreFilterState, GenreFilterActions, NavState, ContentView, ShellState, SettingsState, TooltipState } from "../state.slint";
+import { HomeState, HomeActions, DiscoverState, DiscoverActions, PinnedState, GenreFilterState, GenreFilterActions, NavState, ContentView, ShellState, AppearanceState, SettingsState, TooltipState } from "../state.slint";
 import { Carousel } from "Carousel.slint";
 import { SlimCarousel } from "SlimCarousel.slint";
 import { ArtistCarousel } from "ArtistCarousel.slint";
@@ -179,7 +179,7 @@ export component HomeView inherits Rectangle {
         // true horizontal center regardless of the side controls' widths.
         Rectangle {
             height: 56px;
-            background: Theme.surface-main;
+            background: ShellState.app-background-active ? Theme.surface-main.with-alpha(AppearanceState.app-background-bar-alpha) : Theme.surface-main;
 
             // History pair + the three-tab nav bar, grouped at the left
             // with a gap delimiting the two clusters. Explicit width
@@ -206,7 +206,7 @@ export component HomeView inherits Rectangle {
                 tab-pill := Rectangle {
                     width: tab-row.preferred-width;
                     height: tab-row.preferred-height;
-                    background: Theme.surface-elevated;
+                    background: ShellState.app-background-active ? Theme.surface-elevated.with-alpha(AppearanceState.app-background-surface-alpha) : Theme.surface-elevated;
                     border-radius: 6px;
                     tab-row := HorizontalLayout {
                         padding: 3px;

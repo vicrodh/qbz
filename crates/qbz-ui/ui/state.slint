@@ -3254,6 +3254,10 @@ export global AppearanceState {
     // of the shell chrome when the background is active.
     in-out property <float> app-background-dim: 0.35;
     in-out property <float> app-background-surface-alpha: 0.5;
+    // Thin BARS (jump-nav, discover toolbar, network tab row, playlist action
+    // bar) go MORE transparent than the panels — they read as chrome strips over
+    // the frosted content panel, not solid bars. Env QBZ_BG_BAR_ALPHA.
+    in-out property <float> app-background-bar-alpha: 0.3;
 
     // Callbacks. Unwired in this replica — the Rust side may bind them
     // later. Kept generic (key + value) so the controller can dispatch.

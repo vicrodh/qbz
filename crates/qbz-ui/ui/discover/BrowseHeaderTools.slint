@@ -8,7 +8,7 @@
 
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
-import { GenreFilterState, UiFocusState } from "../state.slint";
+import { GenreFilterState, UiFocusState, ShellState, AppearanceState } from "../state.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { ToggleButton } from "../primitives/ToggleButton.slint";
 
@@ -23,7 +23,7 @@ export component BrowseSearch inherits Rectangle {
     height: 34px;
     width: 200px;
     border-radius: 6px;
-    background: Theme.surface-elevated;
+    background: ShellState.app-background-active ? Theme.surface-elevated.with-alpha(AppearanceState.app-background-surface-alpha) : Theme.surface-elevated;
     border-width: 1px;
     border-color: input.has-focus ? Theme.accent : Theme.border-subtle;
 
@@ -152,7 +152,7 @@ export component ViewModeToggle inherits Rectangle {
     width: 68px;
     height: 34px;
     border-radius: 6px;
-    background: Theme.surface-elevated;
+    background: ShellState.app-background-active ? Theme.surface-elevated.with-alpha(AppearanceState.app-background-surface-alpha) : Theme.surface-elevated;
     clip: true;
     HorizontalLayout {
         ToggleButton {

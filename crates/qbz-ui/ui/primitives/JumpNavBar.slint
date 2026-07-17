@@ -32,6 +32,10 @@ export struct JumpNavTab {
 export component JumpNavBar inherits Rectangle {
     in property <[JumpNavTab]> tabs;
     in property <string> active-tab-id;
+    // Bar background — passed in so the parent can make it translucent under the
+    // app-wide dynamic background (JumpNavBar can't import ShellState: state.slint
+    // imports JumpNavTab from here, so the reverse import would cycle).
+    in property <brush> bar-bg: Theme.surface-main;
     // Whether the inline page-search affordance is offered. Artist pages
     // have it; the label page does not (Tauri's label jump-nav has no
     // search), so the label view passes show-search: false.
@@ -53,7 +57,7 @@ export component JumpNavBar inherits Rectangle {
     callback search-text-edited(string);
 
     height: 44px;
-    background: Theme.surface-main;
+    background: root.bar-bg;
     border-width: 0px;
 
     // Bottom border so the bar reads as a separate strip when

@@ -120,15 +120,19 @@ export component ArtistPageView inherits Rectangle {
     // theme (light themes' Theme.text-* are dark and vanish on the
     // atmosphere). With the gradient OFF the header sits on
     // Theme.surface-main and keeps the normal theme colors.
-    property <color> hdr-strong: AppearanceState.album-header-gradient
+    // Header sits on a DARK backdrop when the gradient atmosphere is on OR the
+    // app-wide dynamic background is active → light text either way. The album's
+    // own atmosphere is suppressed under the dynamic background (they clash).
+    property <bool> header-light: AppearanceState.album-header-gradient || ShellState.app-background-active;
+    property <bool> header-atmo-on: AppearanceState.album-header-gradient && !ShellState.app-background-active;
+    property <color> hdr-strong: header-light
         ? #ffffff : Theme.text-primary;
-    property <color> hdr-body: AppearanceState.album-header-gradient
+    property <color> hdr-body: header-light
         ? #ffffff.with-alpha(0.88) : Theme.text-secondary;
 
-    // With the gradient OFF the header's CircleActions sit on the plain
-    // theme surface — switch them to the theme-aware on-surface variant so
-    // they stay visible on light themes.
-    property <bool> hdr-on-surface: !AppearanceState.album-header-gradient;
+    // With no dark header backdrop the CircleActions sit on the plain theme
+    // surface — switch them to the theme-aware on-surface variant.
+    property <bool> hdr-on-surface: !header-light;
 
     // Atmosphere/gradient extent: end EXACTLY at the header/content
     // boundary — `body-row.y` is where the body content starts within
@@ -203,7 +207,7 @@ export component ArtistPageView inherits Rectangle {
 
         // Static Immersive-style blurred artwork field behind the header;
         // scrolls with content when the appearance setting is enabled.
-        if AppearanceState.album-header-gradient && ArtistState.header-atmosphere.width > 0: ImmersiveAtmosphere {
+        if root.header-atmo-on && ArtistState.header-atmosphere.width > 0: ImmersiveAtmosphere {
             x: 0;
             y: 0;
             width: parent.width;
@@ -215,7 +219,7 @@ export component ArtistPageView inherits Rectangle {
             base-opacity: 0.92;
             warp-opacity: 0.38;
         }
-        if AppearanceState.album-header-gradient && ArtistState.header-atmosphere.width <= 0: Rectangle {
+        if root.header-atmo-on && ArtistState.header-atmosphere.width <= 0: Rectangle {
             x: 0;
             y: 0;
             width: parent.width;
@@ -225,7 +229,7 @@ export component ArtistPageView inherits Rectangle {
                 ArtistState.header-color 16%,
                 transparent 100%);
         }
-        if AppearanceState.album-header-gradient: Rectangle {
+        if root.header-atmo-on: Rectangle {
             x: 0;
             y: 0;
             width: parent.width;
@@ -1022,6 +1026,9 @@ export component ArtistPageView inherits Rectangle {
     // y is the row just below the artist header in the page layout
     // (NavButtons + spacer + artist header + small gap, ~290px).
     jump-nav := JumpNavBar {
+        bar-bg: ShellState.app-background-active
+            ? Theme.surface-main.with-alpha(AppearanceState.app-background-bar-alpha)
+            : Theme.surface-main;
         // body-row.absolute-position.y already moves up with scroll
         // (it's a window-coord lookup), so `natural-top` here is
         // the LIVE viewport-relative y the bar wants to occupy at
@@ -1101,7 +1108,9 @@ export component ArtistPageView inherits Rectangle {
             y: max(self.natural-top, self.sticky-top);
             width: 300px;
             height: root.height - self.y;
-            background: Theme.surface-card;
+            background: ShellState.app-background-active
+                ? Theme.surface-card.with-alpha(AppearanceState.app-background-surface-alpha)
+                : Theme.surface-card;
 
             // Left border line — 1px Theme.border-subtle, matching the
             // Tauri `.network-sidebar-column { border-left: 1px solid
@@ -1121,7 +1130,12 @@ export component ArtistPageView inherits Rectangle {
                 // on the right.
                 Rectangle {
                     height: 44px;
-                    background: Theme.surface-main;
+                    // Transparent under the dynamic background: it sits ON the
+                    // already-translucent panel body, so a second translucent
+                    // layer would compound to near-opaque. Let the body show.
+                    background: ShellState.app-background-active
+                        ? transparent
+                        : Theme.surface-main;
 
                     HorizontalLayout {
                         padding-left: 12px;

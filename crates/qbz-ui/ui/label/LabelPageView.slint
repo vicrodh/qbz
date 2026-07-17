@@ -12,7 +12,7 @@
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
 import { Radius } from "../foundation/radius.slint";
-import { LabelState, LabelActions, TrackItem, DragState, NavState, BulkAction, ShellState } from "../state.slint";
+import { LabelState, LabelActions, TrackItem, DragState, NavState, BulkAction, ShellState, AppearanceState } from "../state.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { TrackRow } from "../primitives/TrackRow.slint";
 import { CircleAction } from "../primitives/CircleAction.slint";
@@ -398,6 +398,9 @@ export component LabelPageView inherits Rectangle {
     // header scrolls away, then pins to y = 0. No inline search (Tauri's
     // label jump-nav has none).
     if LabelState.jump-tabs.length > 1: JumpNavBar {
+        bar-bg: ShellState.app-background-active
+            ? Theme.surface-main.with-alpha(AppearanceState.app-background-bar-alpha)
+            : Theme.surface-main;
         property <length> natural-top:
             jump-anchor.absolute-position.y - page-flickable.absolute-position.y;
         x: 0;

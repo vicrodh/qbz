@@ -325,14 +325,20 @@ export component AppShell inherits Rectangle {
                             - (ShellState.npb-mode == 2 ? Layout.header-height : Layout.player-bar-height)
                             - 8px;
                         vertical-stretch: 1;
-                        // Fully transparent when the background is active so the
-                        // dynamic background shows through the content area (the
-                        // views inside also go transparent); the root scrim keeps
-                        // text legible. Opaque theme surface otherwise.
+                        // When the background is active the content area reads as a
+                        // distinct frosted-glass PANEL: a faint tint (so it's set
+                        // apart from the sharper sidebar/background) plus a 1px
+                        // hairline border framing it — the Cider content-area look.
+                        // (True backdrop blur isn't a Slint primitive; the tint +
+                        // border approximate the "frosted, bordered panel" read.)
                         background: ShellState.app-background-active
-                            ? transparent
+                            ? Theme.surface-main.with-alpha(0.22)
                             : Theme.surface-main;
                             border-radius: Radius.md;
+                            border-width: ShellState.app-background-active ? 1px : 0px;
+                            border-color: ShellState.app-background-active
+                                ? #ffffff.with-alpha(0.10)
+                                : transparent;
                             clip: true;
 
                 // Offline: every Qobuz-only view below mounts only while

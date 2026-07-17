@@ -8,7 +8,7 @@
 // per-type tabs show the full loaded set as a card grid or row list with
 // a load-more button.
 
-import { SearchState, SearchActions, TrackItem, SearchPlaylistItem, AlbumCardItem, SlimItem, DragState, NavState } from "../state.slint";
+import { SearchState, SearchActions, TrackItem, SearchPlaylistItem, AlbumCardItem, SlimItem, DragState, NavState, ShellState, AppearanceState } from "../state.slint";
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
 import { Radius } from "../foundation/radius.slint";
@@ -371,7 +371,7 @@ export component SearchResultsView inherits Rectangle {
         || SearchState.artists.length > 0
         || SearchState.playlists.length > 0;
 
-    background: Theme.surface-main;
+    background: ShellState.app-background-active ? transparent : Theme.surface-main;
 
     VerticalLayout {
         spacing: 0px;
@@ -383,7 +383,9 @@ export component SearchResultsView inherits Rectangle {
         // inline right after the nav pair.
         Rectangle {
             height: 56px;
-            background: Theme.surface-main;
+            background: ShellState.app-background-active
+                ? Theme.surface-main.with-alpha(AppearanceState.app-background-bar-alpha)
+                : Theme.surface-main;
 
             // Left cluster — nav buttons then the title, inline.
             HorizontalLayout {

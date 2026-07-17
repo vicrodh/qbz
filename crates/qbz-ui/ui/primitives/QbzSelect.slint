@@ -21,7 +21,7 @@ import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
 import { Radius } from "../foundation/radius.slint";
 import { QbzIcon } from "QbzIcon.slint";
-import { TextUtil, UiFocusState } from "../state.slint";
+import { TextUtil, UiFocusState, ShellState, AppearanceState } from "../state.slint";
 
 // "BP" marker for bit-perfect-capable options. Plain accent text, no
 // background — the QBZ UI never uses pill-style chips.
@@ -105,7 +105,13 @@ export component QbzSelect inherits Rectangle {
     border-radius: root.sm ? 6px : Radius.sm;
     border-width: root.sm ? 0px : 1px;
     border-color: Theme.border-subtle;
-    background: ta.has-hover && root.enabled ? Theme.surface-hover : Theme.surface-elevated;
+    // Glass look when the app-wide dynamic background is active: the resting
+    // fill goes translucent so the moving background shows through the control.
+    background: ta.has-hover && root.enabled
+        ? Theme.surface-hover
+        : (ShellState.app-background-active
+            ? Theme.surface-elevated.with-alpha(AppearanceState.app-background-surface-alpha)
+            : Theme.surface-elevated);
     opacity: root.enabled ? 1.0 : 0.4;
 
     HorizontalLayout {

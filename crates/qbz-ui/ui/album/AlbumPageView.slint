@@ -158,23 +158,25 @@ export component AlbumPageView inherits Rectangle {
             ? AlbumState.description-shorter
             : AlbumState.description-short;
 
-    // Header text colors: the ImmersiveAtmosphere behind the header is
-    // always dark, so when the gradient setting is ON the header text must
-    // be light regardless of theme (light themes' Theme.text-* are dark and
-    // vanish on the atmosphere). With the gradient OFF the header sits on
-    // Theme.surface-main and keeps the normal theme colors.
-    property <color> hdr-strong: AppearanceState.album-header-gradient
+    // Header text colors: the header sits on a DARK backdrop when either the
+    // album-header-gradient atmosphere is on OR the app-wide dynamic background
+    // is active — in both cases the text must be light regardless of theme.
+    // `header-atmo-on` gates the album's OWN blurred atmosphere: it is suppressed
+    // under the dynamic background (they clash — owner 2026-07-17), so the header
+    // shows the dynamic background instead.
+    property <bool> header-light: AppearanceState.album-header-gradient || ShellState.app-background-active;
+    property <bool> header-atmo-on: AppearanceState.album-header-gradient && !ShellState.app-background-active;
+    property <color> hdr-strong: header-light
         ? #ffffff : Theme.text-primary;
-    property <color> hdr-body: AppearanceState.album-header-gradient
+    property <color> hdr-body: header-light
         ? #ffffff.with-alpha(0.88) : Theme.text-secondary;
-    property <color> hdr-muted: AppearanceState.album-header-gradient
+    property <color> hdr-muted: header-light
         ? #ffffff.with-alpha(0.62) : Theme.text-muted;
 
-    // With the gradient OFF the header's CircleActions sit on the plain
-    // theme surface — switch them to the theme-aware on-surface variant so
-    // they stay visible on light themes (their default palette is white-on-
-    // dark, tuned for the atmosphere).
-    property <bool> hdr-on-surface: !AppearanceState.album-header-gradient;
+    // With no dark header backdrop the CircleActions sit on the plain theme
+    // surface — switch them to the theme-aware on-surface variant so they stay
+    // visible on light themes (their default palette is white-on-dark).
+    property <bool> hdr-on-surface: !header-light;
 
     // Atmosphere/gradient extent: the background blocks must end EXACTLY at
     // the header/track-list divider — the header height varies (long
@@ -218,7 +220,7 @@ export component AlbumPageView inherits Rectangle {
 
         // Static Immersive-style blurred artwork field behind the header;
         // scrolls with content when the appearance setting is enabled.
-        if AppearanceState.album-header-gradient && AlbumState.header-atmosphere.width > 0: ImmersiveAtmosphere {
+        if root.header-atmo-on && AlbumState.header-atmosphere.width > 0: ImmersiveAtmosphere {
             x: 0;
             y: 0;
             width: parent.width;
@@ -230,7 +232,7 @@ export component AlbumPageView inherits Rectangle {
             base-opacity: 0.92;
             warp-opacity: 0.38;
         }
-        if AppearanceState.album-header-gradient && AlbumState.header-atmosphere.width <= 0: Rectangle {
+        if root.header-atmo-on && AlbumState.header-atmosphere.width <= 0: Rectangle {
             x: 0;
             y: 0;
             width: parent.width;
@@ -240,7 +242,7 @@ export component AlbumPageView inherits Rectangle {
                 AlbumState.header-color 16%,
                 transparent 100%);
         }
-        if AppearanceState.album-header-gradient: Rectangle {
+        if root.header-atmo-on: Rectangle {
             x: 0;
             y: 0;
             width: parent.width;

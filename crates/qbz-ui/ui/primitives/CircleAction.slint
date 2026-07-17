@@ -7,7 +7,7 @@
 import { Theme } from "../foundation/semantic-colors.slint";
 import { QbzIcon } from "QbzIcon.slint";
 import { LoadingSpinner } from "LoadingSpinner.slint";
-import { TooltipState } from "../state.slint";
+import { TooltipState, ShellState, AppearanceState } from "../state.slint";
 
 export component CircleAction inherits Rectangle {
     in property <image> icon;
@@ -48,7 +48,11 @@ export component CircleAction inherits Rectangle {
     background: root.on-surface
         ? (root.primary
             ? (ta.has-hover ? Theme.accent-hover : Theme.accent)
-            : ((ta.has-hover || root.active) ? Theme.surface-hover : Theme.surface-elevated))
+            : ((ta.has-hover || root.active)
+                ? Theme.surface-hover
+                : (ShellState.app-background-active
+                    ? Theme.surface-elevated.with-alpha(AppearanceState.app-background-surface-alpha)
+                    : Theme.surface-elevated)))
         : (root.primary
             ? (ta.has-hover ? #ffffffd6 : #ffffff)
             : ((ta.has-hover || root.active) ? #ffffff3d : #ffffff24));

@@ -10,7 +10,7 @@
 
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
-import { DiscoverBrowseState, DiscoverBrowseActions, GenreFilterState, GenreFilterActions, NavState, ShellState } from "../state.slint";
+import { DiscoverBrowseState, DiscoverBrowseActions, GenreFilterState, GenreFilterActions, NavState, ShellState, AppearanceState } from "../state.slint";
 import { AlbumCollectionView } from "AlbumCollectionView.slint";
 import { BrowseSearch, GenreButton, ViewModeToggle } from "BrowseHeaderTools.slint";
 import { GenreFilterPopup } from "GenreFilterPopup.slint";
@@ -43,7 +43,7 @@ export component DiscoverBrowseView inherits Rectangle {
         // below scrolls.
         Rectangle {
             height: 56px;
-            background: Theme.surface-main;
+            background: ShellState.app-background-active ? Theme.surface-main.with-alpha(AppearanceState.app-background-bar-alpha) : Theme.surface-main;
 
             // Left cluster — nav buttons then the title, inline.
             HorizontalLayout {

@@ -84,6 +84,14 @@ fn blob(uv: vec2<f32>, c: vec2<f32>, r: f32) -> f32 {
     return exp(-(d * d) / (r * r));
 }
 
+// Metaball potential (r²/d²): summed over several movers, the iso-surface merges
+// and splits organically — the "amoeba / lava-lamp" morph. Unlike a gaussian
+// blob this has a long tail, so nearby balls fuse into stretched shapes.
+fn mball(uv: vec2<f32>, c: vec2<f32>, r: f32) -> f32 {
+    let d = uv - c;
+    return (r * r) / (dot(d, d) + 0.0009);
+}
+
 @fragment
 fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     // Aspect-correct so the drift looks even on wide windows.
@@ -94,47 +102,60 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     // Clock. FAST enough that the flow is clearly visible in seconds (blob
     // orbits are ~10-18s) — a subtle drift reads as "not moving". `level_smooth`
     // adds a gentle breathe on top when audio is flowing.
-    let t = u.time * 0.5;
-    let breathe = 1.0 + 0.10 * u.level_smooth;
+    let t = u.time * 0.75;
+    let breathe = 1.0 + 0.12 * u.level_smooth;
 
-    // Stronger domain warp so the blobs flow like fluid, not on rigid circles.
-    let warp = vec2<f32>(
-        fbm(uv * 1.8 + vec2<f32>(t * 0.6, t * 0.2)),
-        fbm(uv * 1.8 + vec2<f32>(-t * 0.25, t * 0.55)),
+    // Two-octave domain warp — heavy, so the metaball field distorts organically
+    // (amoeba edges, not circles) and churns as it flows.
+    let w1 = vec2<f32>(
+        fbm(uv * 1.4 + vec2<f32>(t * 0.5, t * 0.2)),
+        fbm(uv * 1.4 + vec2<f32>(-t * 0.3, t * 0.45)),
     );
-    let p = uv + (warp - 0.5) * 0.55;
+    let w2 = vec2<f32>(
+        fbm(uv * 3.1 + vec2<f32>(-t * 0.7, t * 0.5)),
+        fbm(uv * 3.1 + vec2<f32>(t * 0.6, -t * 0.4)),
+    );
+    let p = uv + (w1 - 0.5) * 0.80 + (w2 - 0.5) * 0.30;
 
-    // Three album-colored blobs sweeping across most of the screen (big travel
-    // so the motion is obvious), each on its own period so they never lock.
-    let cA = vec2<f32>((0.35 + 0.34 * sin(t * 0.41)) * aspect,
-                       0.42 + 0.30 * cos(t * 0.33));
-    let cB = vec2<f32>((0.66 + 0.32 * sin(t * 0.37 + 2.1)) * aspect,
-                       0.58 + 0.34 * cos(t * 0.29 + 1.3));
-    let cC = vec2<f32>((0.50 + 0.36 * cos(t * 0.31 + 4.0)) * aspect,
-                       0.34 + 0.30 * sin(t * 0.44 + 3.2));
+    // Four album-colored METABALLS on big wandering orbits. Their r²/d² fields
+    // sum, so where two get close they FUSE into a stretched amoeba lobe, and
+    // pull apart as they separate — the morphing Cider/lava-lamp motion.
+    let c4 = mix(u.primary.rgb, u.accent.rgb, 0.5);
+    let cA = vec2<f32>((0.32 + 0.30 * sin(t * 0.40)) * aspect,       0.42 + 0.30 * cos(t * 0.33));
+    let cB = vec2<f32>((0.66 + 0.30 * sin(t * 0.35 + 2.1)) * aspect, 0.56 + 0.32 * cos(t * 0.29 + 1.3));
+    let cC = vec2<f32>((0.50 + 0.34 * cos(t * 0.31 + 4.0)) * aspect, 0.36 + 0.30 * sin(t * 0.45 + 3.2));
+    let cD = vec2<f32>((0.46 + 0.32 * sin(t * 0.27 + 5.3)) * aspect, 0.64 + 0.28 * cos(t * 0.49 + 0.7));
 
-    let r = 0.62 * breathe;
-    let wA = blob(p, cA, r);
-    let wB = blob(p, cB, r * 0.92);
-    let wC = blob(p, cC, r * 0.85);
-    let wSum = wA + wB + wC + 0.0001;
+    let rr = 0.34 * breathe;
+    let fA = mball(p, cA, rr);
+    let fB = mball(p, cB, rr * 0.95);
+    let fC = mball(p, cC, rr * 0.88);
+    let fD = mball(p, cD, rr * 0.82);
+    let field = fA + fB + fC + fD;
 
-    var col = (u.primary.rgb * wA + u.secondary.rgb * wB + u.accent.rgb * wC) / wSum;
+    // Metaball-weighted album color (which lobe dominates here).
+    var col = (u.primary.rgb * fA + u.secondary.rgb * fB + u.accent.rgb * fC + c4 * fD)
+        / (field + 0.0001);
 
-    // Push saturation/contrast a touch so the album hues read as a living
-    // gradient rather than a muddy average.
+    // The AMOEBA structure: the iso-surface. `shape` ~1 inside the fused lobes,
+    // ~0 in the gaps between them → bright morphing shapes over a darker base, so
+    // the motion is obvious instead of a flat smear.
+    let shape = smoothstep(0.85, 2.6, field);
+    col = col * mix(0.32, 1.18, shape);
+
+    // Push saturation/contrast so the lobes read as vivid amoebas, not a muddy
+    // average.
     let luma = dot(col, vec3<f32>(0.299, 0.587, 0.114));
-    col = mix(vec3<f32>(luma), col, 1.25);
+    col = mix(vec3<f32>(luma), col, 1.4);
 
     // Vertical falloff → a touch darker at the very top/bottom edges so chrome
     // (titlebar, player bar) sits on calmer color. Kept subtle.
     let vshade = 1.0 - 0.16 * pow(abs(in.uv.y - 0.5) * 2.0, 2.0);
     col = col * vshade;
 
-    // Overall brightness: brighter than before — the content area now shows the
-    // full background, and the Slint scrim (QBZ_BG_DIM) provides the legibility
-    // dim, so the base can stay vivid without glaring.
-    col = clamp(col, vec3<f32>(0.0), vec3<f32>(1.0)) * 0.82;
+    // Overall brightness — vivid; the Slint scrim (QBZ_BG_DIM) provides the
+    // legibility dim, so the base can stay bright without glaring.
+    col = clamp(col, vec3<f32>(0.0), vec3<f32>(1.0)) * 0.92;
 
     // A whisper of grain to avoid banding on the smooth gradient.
     let grain = (vnoise(in.uv * u.resolution * 0.5) - 0.5) * 0.015;

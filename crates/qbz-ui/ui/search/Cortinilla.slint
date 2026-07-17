@@ -27,7 +27,7 @@ import { Theme } from "../foundation/semantic-colors.slint";
 import { Radius } from "../foundation/radius.slint";
 import { Layout } from "../foundation/layout.slint";
 import { Typography } from "../foundation/typography.slint";
-import { SearchState, SearchActions, CortinillaRow, CortinillaSection, ShellState, AppearanceState } from "../state.slint";
+import { SearchState, SearchActions, CortinillaRow, CortinillaSection, ShellState } from "../state.slint";
 import { ListScrollbar } from "../primitives/ListScrollbar.slint";
 
 // A single SlimCard-style result row inside the cortinilla — 40x40 thumbnail
@@ -307,9 +307,7 @@ export component Cortinilla inherits Rectangle {
         hover-ta := TouchArea {
             changed has-hover => { root.panel-hovered = self.has-hover; }
             panel-box := Rectangle {
-                background: ShellState.app-background-active
-                    ? Theme.surface-main.with-alpha(AppearanceState.app-background-surface-alpha)
-                    : Theme.surface-main;
+                background: Theme.surface-main;
                 border-radius: Radius.sm;
                 border-width: 1px;
                 border-color: Theme.border-muted;

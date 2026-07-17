@@ -7196,6 +7196,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         {
             ap.set_app_background_surface_alpha(f.clamp(0.0, 1.0));
         }
+        if let Some(f) = std::env::var("QBZ_BG_BAR_ALPHA")
+            .ok()
+            .and_then(|v| v.trim().parse::<f32>().ok())
+        {
+            ap.set_app_background_bar_alpha(f.clamp(0.0, 1.0));
+        }
     }
     // Kiosk profile (2.0.2 frente #3, axis A): QBZ_PROFILE=kiosk (env wins,
     // else the persisted ui_prefs.profile key). The small-panel touch appliance

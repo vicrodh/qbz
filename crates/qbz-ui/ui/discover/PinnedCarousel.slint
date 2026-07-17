@@ -7,7 +7,7 @@
 
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
-import { PinnedItem } from "../state.slint";
+import { PinnedItem, ShellState } from "../state.slint";
 import { AlbumCard } from "AlbumCard.slint";
 import { ArtistGridCard } from "ArtistGridCard.slint";
 import { PlaylistCard } from "PlaylistCard.slint";
@@ -158,6 +158,7 @@ export component PinnedCarousel inherits VerticalLayout {
             width: 56px;
             background: @linear-gradient(90deg, Theme.surface-main 0%, transparent 100%);
             opacity: root.current-page > 0 ? 1.0 : 0.0;
+            visible: !ShellState.app-background-active;
             animate opacity { duration: 150ms; }
         }
         Rectangle {
@@ -165,6 +166,7 @@ export component PinnedCarousel inherits VerticalLayout {
             width: 56px;
             background: @linear-gradient(90deg, transparent 0%, Theme.surface-main 100%);
             opacity: root.current-page < root.page-count - 1 ? 1.0 : 0.0;
+            visible: !ShellState.app-background-active;
             animate opacity { duration: 150ms; }
         }
     }

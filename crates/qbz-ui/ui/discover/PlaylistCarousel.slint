@@ -4,7 +4,7 @@
 
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
-import { SearchPlaylistItem } from "../state.slint";
+import { SearchPlaylistItem, ShellState } from "../state.slint";
 import { PlaylistCard } from "PlaylistCard.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 
@@ -163,6 +163,7 @@ export component PlaylistCarousel inherits VerticalLayout {
             width: 56px;
             background: @linear-gradient(90deg, Theme.surface-main 0%, transparent 100%);
             opacity: root.current-page > 0 ? 1.0 : 0.0;
+            visible: !ShellState.app-background-active;
             animate opacity { duration: 150ms; }
         }
         Rectangle {
@@ -170,6 +171,7 @@ export component PlaylistCarousel inherits VerticalLayout {
             width: 56px;
             background: @linear-gradient(90deg, transparent 0%, Theme.surface-main 100%);
             opacity: root.current-page < root.page-count - 1 ? 1.0 : 0.0;
+            visible: !ShellState.app-background-active;
             animate opacity { duration: 150ms; }
         }
     }
