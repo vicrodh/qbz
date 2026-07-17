@@ -4556,3 +4556,16 @@ msgstr "バンドルを保存しました。デーモンのマシンで:"
 msgid "Could not export settings"
 msgstr "設定をエクスポートできませんでした"
 
+
+# Share menu Song.link/Album.link toasts (#514)
+msgid "Fetching Song.link..."
+msgstr "Song.linkを取得中..."
+
+msgid "Fetching Album.link..."
+msgstr "Album.linkを取得中..."
+
+msgid "Link copied"
+msgstr "リンクをコピーしました"
+
+msgid "Failed to copy link"
+msgstr "リンクをコピーできませんでした"

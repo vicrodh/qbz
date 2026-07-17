@@ -4582,3 +4582,16 @@ msgstr "Набор сохранён. На машине демона:"
 msgid "Could not export settings"
 msgstr "Не удалось экспортировать настройки"
 
+
+# Share menu Song.link/Album.link toasts (#514)
+msgid "Fetching Song.link..."
+msgstr "Получение Song.link..."
+
+msgid "Fetching Album.link..."
+msgstr "Получение Album.link..."
+
+msgid "Link copied"
+msgstr "Ссылка скопирована"
+
+msgid "Failed to copy link"
+msgstr "Не удалось скопировать ссылку"

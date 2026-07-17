@@ -4580,3 +4580,16 @@ msgstr "Bundel opgeslagen. Op de daemon-machine:"
 msgid "Could not export settings"
 msgstr "Kan instellingen niet exporteren"
 
+
+# Share menu Song.link/Album.link toasts (#514)
+msgid "Fetching Song.link..."
+msgstr "Song.link ophalen..."
+
+msgid "Fetching Album.link..."
+msgstr "Album.link ophalen..."
+
+msgid "Link copied"
+msgstr "Link gekopieerd"
+
+msgid "Failed to copy link"
+msgstr "Kopiëren van link mislukt"

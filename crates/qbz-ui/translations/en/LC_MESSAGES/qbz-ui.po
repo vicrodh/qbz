@@ -343,3 +343,16 @@ msgid_plural "Showing {} of {} tracks."
 msgstr[0] "Showing {} of {} track."
 msgstr[1] "Showing {} of {} tracks."
 
+
+# Share menu Song.link/Album.link toasts (#514)
+msgid "Fetching Song.link..."
+msgstr "Fetching Song.link..."
+
+msgid "Fetching Album.link..."
+msgstr "Fetching Album.link..."
+
+msgid "Link copied"
+msgstr "Link copied"
+
+msgid "Failed to copy link"
+msgstr "Failed to copy link"

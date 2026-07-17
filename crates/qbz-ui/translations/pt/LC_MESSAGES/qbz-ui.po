@@ -4568,3 +4568,16 @@ msgstr "Pacote guardado. Na máquina do daemon:"
 msgid "Could not export settings"
 msgstr "Não foi possível exportar as definições"
 
+
+# Share menu Song.link/Album.link toasts (#514)
+msgid "Fetching Song.link..."
+msgstr "Obtendo Song.link..."
+
+msgid "Fetching Album.link..."
+msgstr "Obtendo Album.link..."
+
+msgid "Link copied"
+msgstr "Link copiado"
+
+msgid "Failed to copy link"
+msgstr "Falha ao copiar o link"

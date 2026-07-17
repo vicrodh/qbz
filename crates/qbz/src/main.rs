@@ -10717,16 +10717,33 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     log::info!("[qbz-slint] copied Qobuz link for album {id}");
                 }
                 ("album", "share-songlink") => {
-                    let source = share::qobuz_album_url(&id);
+                    // Tauri-parity resolution (#514): fetch the album to get
+                    // its UPC, then UPC -> Deezer -> album.link. The old
+                    // URL-only Odesli call never worked for Qobuz input
+                    // (could_not_resolve_entity) — see share.rs.
                     let album = id.clone();
+                    let runtime = runtime.clone();
+                    let weak = weak.clone();
+                    crate::toast::info_weak(&weak, qbz_i18n::t("Fetching Album.link..."));
                     handle.spawn(async move {
-                        match share::songlink_url(&source).await {
+                        let upc = runtime
+                            .core()
+                            .get_album(&album)
+                            .await
+                            .ok()
+                            .and_then(|a| a.upc);
+                        match share::albumlink_for_album(&album, upc.as_deref()).await {
                             Some(url) => {
                                 share::copy_to_clipboard(url);
                                 log::info!("[qbz-slint] copied Album.link for album {album}");
+                                crate::toast::success_weak(&weak, qbz_i18n::t("Link copied"));
                             }
                             None => {
-                                log::warn!("[qbz-slint] Album.link resolution failed for {album}")
+                                log::warn!("[qbz-slint] Album.link resolution failed for {album}");
+                                crate::toast::error_weak(
+                                    &weak,
+                                    qbz_i18n::t("Failed to copy link"),
+                                );
                             }
                         }
                     });
@@ -11003,15 +11020,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     log::info!("[qbz-slint] copied Qobuz link for track {id}");
                 }
                 ("track", "share-songlink") => {
-                    let source = share::qobuz_track_url(&id);
+                    // Tauri-parity resolution (#514): fetch the track to get
+                    // its ISRC, then ISRC -> Deezer -> song.link. The old
+                    // URL-only Odesli call never worked for Qobuz input
+                    // (could_not_resolve_entity) — see share.rs.
                     let track = id.clone();
+                    let runtime = runtime.clone();
+                    let weak = weak.clone();
+                    crate::toast::info_weak(&weak, qbz_i18n::t("Fetching Song.link..."));
                     handle.spawn(async move {
-                        match share::songlink_url(&source).await {
+                        let isrc = match track.parse::<u64>() {
+                            Ok(tid) => runtime
+                                .core()
+                                .get_track(tid)
+                                .await
+                                .ok()
+                                .and_then(|t| t.isrc),
+                            Err(_) => None,
+                        };
+                        match share::songlink_for_track(&track, isrc.as_deref()).await {
                             Some(url) => {
                                 share::copy_to_clipboard(url);
                                 log::info!("[qbz-slint] copied Song.link for track {track}");
+                                crate::toast::success_weak(&weak, qbz_i18n::t("Link copied"));
                             }
-                            None => log::warn!("[qbz-slint] Song.link resolution failed for {track}"),
+                            None => {
+                                log::warn!("[qbz-slint] Song.link resolution failed for {track}");
+                                crate::toast::error_weak(
+                                    &weak,
+                                    qbz_i18n::t("Failed to copy link"),
+                                );
+                            }
                         }
                     });
                 }
@@ -11160,7 +11199,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if !artist_id.is_empty() {
                         share::copy_to_clipboard(share::qobuz_artist_url(&artist_id));
                         if let Some(w) = weak.upgrade() {
-                            crate::toast::success(&w, "Link copied");
+                            crate::toast::success(&w, qbz_i18n::t("Link copied"));
                         }
                     }
                 }

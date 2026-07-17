@@ -4568,3 +4568,16 @@ msgstr "Ensemble enregistré. Sur la machine du démon :"
 msgid "Could not export settings"
 msgstr "Impossible d'exporter les réglages"
 
+
+# Share menu Song.link/Album.link toasts (#514)
+msgid "Fetching Song.link..."
+msgstr "Récupération du Song.link..."
+
+msgid "Fetching Album.link..."
+msgstr "Récupération de l'Album.link..."
+
+msgid "Link copied"
+msgstr "Lien copié"
+
+msgid "Failed to copy link"
+msgstr "Échec de la copie du lien"

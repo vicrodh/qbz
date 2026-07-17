@@ -4568,3 +4568,16 @@ msgstr "Bündel gespeichert. Auf dem Daemon-Rechner:"
 msgid "Could not export settings"
 msgstr "Einstellungen konnten nicht exportiert werden"
 
+
+# Share menu Song.link/Album.link toasts (#514)
+msgid "Fetching Song.link..."
+msgstr "Song.link wird abgerufen..."
+
+msgid "Fetching Album.link..."
+msgstr "Album.link wird abgerufen..."
+
+msgid "Link copied"
+msgstr "Link kopiert"
+
+msgid "Failed to copy link"
+msgstr "Link konnte nicht kopiert werden"
