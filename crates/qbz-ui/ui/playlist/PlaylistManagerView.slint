@@ -823,7 +823,11 @@ component PmListRow inherits Rectangle {
                         height: 28px;
                         width: parent.width;
                         placeholder-text: @tr("Search folders");
-                        changed has-focus => { UiFocusState.text-input-focused = self.has-focus; }
+                        // Hotkey-guard probe: a use-site `changed has-focus` on a std-widgets
+                        // input never fires (has-focus is an alias into the inner TextInput),
+                        // so observe it through a local property instead (#619).
+                        property <bool> guard-focused: self.has-focus;
+                        changed guard-focused => { UiFocusState.text-input-focused = self.guard-focused; }
                         text <=> root.folder-query;
                         edited => {
                             PlaylistManagerActions.search-folders(self.text);

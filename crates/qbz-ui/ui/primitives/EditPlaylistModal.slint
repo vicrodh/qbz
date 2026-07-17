@@ -65,7 +65,11 @@ export component EditPlaylistModal inherits Rectangle {
 
                 name-input := LineEdit {
                     placeholder-text: @tr("Playlist name");
-                    changed has-focus => { UiFocusState.text-input-focused = self.has-focus; }
+                    // Hotkey-guard probe: a use-site `changed has-focus` on a std-widgets
+                    // input never fires (has-focus is an alias into the inner TextInput),
+                    // so observe it through a local property instead (#619).
+                    property <bool> guard-focused: self.has-focus;
+                    changed guard-focused => { UiFocusState.text-input-focused = self.guard-focused; }
                     text <=> EditPlaylistState.name;
                     accepted => {
                         EditPlaylistActions.save();
@@ -81,7 +85,11 @@ export component EditPlaylistModal inherits Rectangle {
                     height: 90px;
                     wrap: word-wrap;
                     text <=> EditPlaylistState.description;
-                    changed has-focus => { UiFocusState.text-input-focused = self.has-focus; }
+                    // Hotkey-guard probe: a use-site `changed has-focus` on a std-widgets
+                    // input never fires (has-focus is an alias into the inner TextInput),
+                    // so observe it through a local property instead (#619).
+                    property <bool> guard-focused: self.has-focus;
+                    changed guard-focused => { UiFocusState.text-input-focused = self.guard-focused; }
                 }
 
                 // Offline-only toggle (D8) — LOCAL playlists only. Unmark it

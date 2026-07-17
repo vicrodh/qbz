@@ -538,7 +538,11 @@ export component LocalLibrarySettings inherits VerticalLayout {
                     LineEdit {
                         text: PlexSettingsState.server-url;
                         placeholder-text: @tr("http://127.0.0.1:32400");
-                        changed has-focus => { UiFocusState.text-input-focused = self.has-focus; }
+                        // Hotkey-guard probe: a use-site `changed has-focus` on a std-widgets
+                        // input never fires (has-focus is an alias into the inner TextInput),
+                        // so observe it through a local property instead (#619).
+                        property <bool> guard-focused: self.has-focus;
+                        changed guard-focused => { UiFocusState.text-input-focused = self.guard-focused; }
                         edited(s) => {
                             PlexSettingsState.server-url = s;
                         }
@@ -641,7 +645,11 @@ export component LocalLibrarySettings inherits VerticalLayout {
                     LineEdit {
                         text: PlexSettingsState.token-input;
                         placeholder-text: @tr("X-Plex-Token");
-                        changed has-focus => { UiFocusState.text-input-focused = self.has-focus; }
+                        // Hotkey-guard probe: a use-site `changed has-focus` on a std-widgets
+                        // input never fires (has-focus is an alias into the inner TextInput),
+                        // so observe it through a local property instead (#619).
+                        property <bool> guard-focused: self.has-focus;
+                        changed guard-focused => { UiFocusState.text-input-focused = self.guard-focused; }
                         input-type: password;
                         edited(s) => {
                             PlexSettingsState.token-input = s;

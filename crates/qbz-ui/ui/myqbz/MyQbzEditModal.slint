@@ -74,7 +74,11 @@ export component MyQbzEditModal inherits Rectangle {
                 // --- Body: rename (name input) ---------------------------
                 if root.is-rename: rename-input := LineEdit {
                     text <=> MyQbzEditState.draft-name;
-                    changed has-focus => { UiFocusState.text-input-focused = self.has-focus; }
+                    // Hotkey-guard probe: a use-site `changed has-focus` on a std-widgets
+                    // input never fires (has-focus is an alias into the inner TextInput),
+                    // so observe it through a local property instead (#619).
+                    property <bool> guard-focused: self.has-focus;
+                    changed guard-focused => { UiFocusState.text-input-focused = self.guard-focused; }
                     accepted => {
                         if (root.can-submit) {
                             MyQbzEditActions.submit-rename();
@@ -87,7 +91,11 @@ export component MyQbzEditModal inherits Rectangle {
                     height: 96px;
                     wrap: word-wrap;
                     text <=> MyQbzEditState.draft-description;
-                    changed has-focus => { UiFocusState.text-input-focused = self.has-focus; }
+                    // Hotkey-guard probe: a use-site `changed has-focus` on a std-widgets
+                    // input never fires (has-focus is an alias into the inner TextInput),
+                    // so observe it through a local property instead (#619).
+                    property <bool> guard-focused: self.has-focus;
+                    changed guard-focused => { UiFocusState.text-input-focused = self.guard-focused; }
                 }
 
                 // --- Body: delete-confirm (prompt) -----------------------

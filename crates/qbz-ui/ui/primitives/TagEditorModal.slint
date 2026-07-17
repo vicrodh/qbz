@@ -96,7 +96,11 @@ export component TagEditorModal inherits Rectangle {
                         horizontal-stretch: 1;
                         LineEdit {
                             placeholder-text: @tr("Album title");
-                            changed has-focus => { UiFocusState.text-input-focused = self.has-focus; }
+                            // Hotkey-guard probe: a use-site `changed has-focus` on a std-widgets
+                            // input never fires (has-focus is an alias into the inner TextInput),
+                            // so observe it through a local property instead (#619).
+                            property <bool> guard-focused: self.has-focus;
+                            changed guard-focused => { UiFocusState.text-input-focused = self.guard-focused; }
                             text <=> TagEditorState.album_title;
                         }
                     }
@@ -105,7 +109,11 @@ export component TagEditorModal inherits Rectangle {
                         horizontal-stretch: 1;
                         LineEdit {
                             placeholder-text: @tr("Album artist");
-                            changed has-focus => { UiFocusState.text-input-focused = self.has-focus; }
+                            // Hotkey-guard probe: a use-site `changed has-focus` on a std-widgets
+                            // input never fires (has-focus is an alias into the inner TextInput),
+                            // so observe it through a local property instead (#619).
+                            property <bool> guard-focused: self.has-focus;
+                            changed guard-focused => { UiFocusState.text-input-focused = self.guard-focused; }
                             text <=> TagEditorState.album_artist;
                         }
                     }
@@ -119,7 +127,11 @@ export component TagEditorModal inherits Rectangle {
                         width: 120px;
                         LineEdit {
                             placeholder-text: "—";
-                            changed has-focus => { UiFocusState.text-input-focused = self.has-focus; }
+                            // Hotkey-guard probe: a use-site `changed has-focus` on a std-widgets
+                            // input never fires (has-focus is an alias into the inner TextInput),
+                            // so observe it through a local property instead (#619).
+                            property <bool> guard-focused: self.has-focus;
+                            changed guard-focused => { UiFocusState.text-input-focused = self.guard-focused; }
                             text <=> TagEditorState.year_input;
                         }
                     }
@@ -128,7 +140,11 @@ export component TagEditorModal inherits Rectangle {
                         horizontal-stretch: 1;
                         LineEdit {
                             placeholder-text: @tr("Genre");
-                            changed has-focus => { UiFocusState.text-input-focused = self.has-focus; }
+                            // Hotkey-guard probe: a use-site `changed has-focus` on a std-widgets
+                            // input never fires (has-focus is an alias into the inner TextInput),
+                            // so observe it through a local property instead (#619).
+                            property <bool> guard-focused: self.has-focus;
+                            changed guard-focused => { UiFocusState.text-input-focused = self.guard-focused; }
                             text <=> TagEditorState.genre;
                         }
                     }
@@ -137,7 +153,11 @@ export component TagEditorModal inherits Rectangle {
                         horizontal-stretch: 1;
                         LineEdit {
                             placeholder-text: "—";
-                            changed has-focus => { UiFocusState.text-input-focused = self.has-focus; }
+                            // Hotkey-guard probe: a use-site `changed has-focus` on a std-widgets
+                            // input never fires (has-focus is an alias into the inner TextInput),
+                            // so observe it through a local property instead (#619).
+                            property <bool> guard-focused: self.has-focus;
+                            changed guard-focused => { UiFocusState.text-input-focused = self.guard-focused; }
                             text <=> TagEditorState.catalog_number;
                         }
                     }
@@ -367,7 +387,11 @@ export component TagEditorModal inherits Rectangle {
                                 LineEdit {
                                     width: 52px;
                                     placeholder-text: "#";
-                                    changed has-focus => { UiFocusState.text-input-focused = self.has-focus; }
+                                    // Hotkey-guard probe: a use-site `changed has-focus` on a std-widgets
+                                    // input never fires (has-focus is an alias into the inner TextInput),
+                                    // so observe it through a local property instead (#619).
+                                    property <bool> guard-focused: self.has-focus;
+                                    changed guard-focused => { UiFocusState.text-input-focused = self.guard-focused; }
                                     text: row.track_number;
                                     edited(t) => {
                                         TagEditorState.tracks[i].track_number = t;
@@ -377,7 +401,11 @@ export component TagEditorModal inherits Rectangle {
                                 LineEdit {
                                     horizontal-stretch: 1;
                                     placeholder-text: @tr("Title");
-                                    changed has-focus => { UiFocusState.text-input-focused = self.has-focus; }
+                                    // Hotkey-guard probe: a use-site `changed has-focus` on a std-widgets
+                                    // input never fires (has-focus is an alias into the inner TextInput),
+                                    // so observe it through a local property instead (#619).
+                                    property <bool> guard-focused: self.has-focus;
+                                    changed guard-focused => { UiFocusState.text-input-focused = self.guard-focused; }
                                     text: row.title;
                                     edited(t) => {
                                         TagEditorState.tracks[i].title = t;
@@ -387,7 +415,11 @@ export component TagEditorModal inherits Rectangle {
                                 LineEdit {
                                     width: 52px;
                                     placeholder-text: @tr("Disc");
-                                    changed has-focus => { UiFocusState.text-input-focused = self.has-focus; }
+                                    // Hotkey-guard probe: a use-site `changed has-focus` on a std-widgets
+                                    // input never fires (has-focus is an alias into the inner TextInput),
+                                    // so observe it through a local property instead (#619).
+                                    property <bool> guard-focused: self.has-focus;
+                                    changed guard-focused => { UiFocusState.text-input-focused = self.guard-focused; }
                                     text: row.disc_number;
                                     edited(t) => {
                                         TagEditorState.tracks[i].disc_number = t;

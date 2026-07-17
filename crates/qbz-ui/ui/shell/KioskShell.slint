@@ -166,8 +166,12 @@ export component KioskShell inherits Rectangle {
                     // Suppress the global single-key hotkeys while typing (the
                     // desktop search box drives the same guard); without this,
                     // letters fire hotkeys instead of reaching the field.
-                    changed has-focus => {
-                        UiFocusState.text-input-focused = self.has-focus;
+                    // Probe property because a use-site `changed has-focus` on a
+                    // std-widgets input never fires (has-focus is an alias into
+                    // the inner TextInput) — #619.
+                    property <bool> guard-focused: self.has-focus;
+                    changed guard-focused => {
+                        UiFocusState.text-input-focused = self.guard-focused;
                     }
                     accepted(text) => {
                         SearchActions.submit(text);

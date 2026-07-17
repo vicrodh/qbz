@@ -129,9 +129,13 @@ export component PlaybackSettings inherits VerticalLayout {
                     placeholder-text: SettingsState.qconnect-device-name-default;
                     // Commit on focus loss too (mirrors the Tauri onchange
                     // semantics: blur or Enter), not only on Enter.
-                    changed has-focus => {
-                        UiFocusState.text-input-focused = self.has-focus;
-                        if (!self.has-focus) {
+                    // Probe property because a use-site `changed has-focus` on a
+                    // std-widgets input never fires (has-focus is an alias into
+                    // the inner TextInput) — #619.
+                    property <bool> guard-focused: self.has-focus;
+                    changed guard-focused => {
+                        UiFocusState.text-input-focused = self.guard-focused;
+                        if (!self.guard-focused) {
                             root.settings-string("qconnect-device-name", self.text);
                         }
                     }

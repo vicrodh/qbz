@@ -541,7 +541,11 @@ export component AppearanceSettings inherits VerticalLayout {
                 name-edit := LineEdit {
                     text: MyQbzBrandingState.label;
                     placeholder-text: @tr("My QBZ");
-                    changed has-focus => { UiFocusState.text-input-focused = self.has-focus; }
+                    // Hotkey-guard probe: a use-site `changed has-focus` on a std-widgets
+                    // input never fires (has-focus is an alias into the inner TextInput),
+                    // so observe it through a local property instead (#619).
+                    property <bool> guard-focused: self.has-focus;
+                    changed guard-focused => { UiFocusState.text-input-focused = self.guard-focused; }
                     edited(s) => {
                         MyQbzBrandingState.set-label(s);
                     }
@@ -665,7 +669,11 @@ export component AppearanceSettings inherits VerticalLayout {
                 LineEdit {
                     text: AppearanceState.window-title-template;
                     placeholder-text: "{artist} - {track}";
-                    changed has-focus => { UiFocusState.text-input-focused = self.has-focus; }
+                    // Hotkey-guard probe: a use-site `changed has-focus` on a std-widgets
+                    // input never fires (has-focus is an alias into the inner TextInput),
+                    // so observe it through a local property instead (#619).
+                    property <bool> guard-focused: self.has-focus;
+                    changed guard-focused => { UiFocusState.text-input-focused = self.guard-focused; }
                     edited(s) => {
                         AppearanceState.window-title-template = s;
                         AppearanceState.appearance-text("window-title-template", s);

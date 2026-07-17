@@ -79,7 +79,11 @@ export component CreatePlaylistModal inherits Rectangle {
                     }
                     name-input := LineEdit {
                         placeholder-text: @tr("My Playlist");
-                        changed has-focus => { UiFocusState.text-input-focused = self.has-focus; }
+                        // Hotkey-guard probe: a use-site `changed has-focus` on a std-widgets
+                        // input never fires (has-focus is an alias into the inner TextInput),
+                        // so observe it through a local property instead (#619).
+                        property <bool> guard-focused: self.has-focus;
+                        changed guard-focused => { UiFocusState.text-input-focused = self.guard-focused; }
                         text <=> CreatePlaylistState.name;
                         accepted => {
                             CreatePlaylistActions.submit();
@@ -100,7 +104,11 @@ export component CreatePlaylistModal inherits Rectangle {
                         height: 80px;
                         wrap: word-wrap;
                         text <=> CreatePlaylistState.description;
-                        changed has-focus => { UiFocusState.text-input-focused = self.has-focus; }
+                        // Hotkey-guard probe: a use-site `changed has-focus` on a std-widgets
+                        // input never fires (has-focus is an alias into the inner TextInput),
+                        // so observe it through a local property instead (#619).
+                        property <bool> guard-focused: self.has-focus;
+                        changed guard-focused => { UiFocusState.text-input-focused = self.guard-focused; }
                     }
                 }
 

@@ -485,7 +485,11 @@ component SidebarRow inherits Rectangle {
                 LineEdit {
                     height: 26px;
                     placeholder-text: @tr("Search folders");
-                    changed has-focus => { UiFocusState.text-input-focused = self.has-focus; }
+                    // Hotkey-guard probe: a use-site `changed has-focus` on a std-widgets
+                    // input never fires (has-focus is an alias into the inner TextInput),
+                    // so observe it through a local property instead (#619).
+                    property <bool> guard-focused: self.has-focus;
+                    changed guard-focused => { UiFocusState.text-input-focused = self.guard-focused; }
                     text <=> root.folder-query;
                     edited => {
                         SidebarActions.search-folders(self.text);
@@ -829,7 +833,11 @@ export component Sidebar inherits Rectangle {
                     width: 100%;
                     height: 22px;
                     placeholder-text: @tr("Search playlists");
-                    changed has-focus => { UiFocusState.text-input-focused = self.has-focus; }
+                    // Hotkey-guard probe: a use-site `changed has-focus` on a std-widgets
+                    // input never fires (has-focus is an alias into the inner TextInput),
+                    // so observe it through a local property instead (#619).
+                    property <bool> guard-focused: self.has-focus;
+                    changed guard-focused => { UiFocusState.text-input-focused = self.guard-focused; }
                     text <=> SidebarState.search-query;
                     edited => {
                         SidebarActions.search-changed(self.text);
