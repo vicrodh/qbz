@@ -807,10 +807,11 @@ export component ArtistPageView inherits Rectangle {
                 height: self.visible ? 50px : 0px;
                 track: track;
                 index: index;
-                // Artist Popular Tracks: show the album cover thumbnail so you
-                // can tell which album/EP a track is from (discussion #631). The
-                // artwork URL is threaded from Rust (artist.rs top-tracks).
+                // Artist Popular Tracks: show the album cover thumbnail + the
+                // album-title column so you can tell which album/EP a track is
+                // from (discussion #631). Both threaded from Rust (artist.rs).
                 show-artwork: true;
+                show-album: true;
                 multi-select-mode: ArtistState.top-tracks-multi-select;
                 media-action(kind, id, action) => {
                     root.media-action(kind, id, action);

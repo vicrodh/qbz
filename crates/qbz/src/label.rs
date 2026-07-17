@@ -345,6 +345,7 @@ pub struct TopTrack {
     pub artist: String,
     pub artist_id: String,
     pub album_id: String,
+    pub album: String,
     pub artwork_url: String,
     pub duration: String,
     pub quality_tier: String,
@@ -637,29 +638,40 @@ fn parse_top_track(raw: &Value) -> TopTrack {
         .and_then(|a| a.get("id"))
         .map(value_to_string)
         .unwrap_or_default();
+    let album_title = album
+        .and_then(|a| a.get("title"))
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string();
     let artwork_url = album
         .and_then(|a| a.get("image"))
         .map(parse_image_value)
         .unwrap_or_default();
-    // performer OR artist (the page uses either). The label /page top_tracks
-    // sometimes omit a per-track performer, which left rows nameless
-    // (discussion #631) — fall back to the album's main artist so the name (and
-    // its clickable id) is populated.
-    let perf = raw
-        .get("performer")
-        .or_else(|| raw.get("artist"))
-        .filter(|p| {
-            p.get("name")
-                .and_then(|v| v.as_str())
-                .map(|s| !s.trim().is_empty())
-                .unwrap_or(false)
+    // Artist: the label /page top_tracks carry the main artist in a track-level
+    // `artists` array (roles = "main-artist"), NOT `performer`/`artist` (those
+    // are null here) — discussion #631. Prefer the main-artist entry, then the
+    // first artist, then the legacy performer/artist/album-artist shapes.
+    let main_artist = raw
+        .get("artists")
+        .and_then(|v| v.as_array())
+        .and_then(|arr| {
+            arr.iter()
+                .find(|a| {
+                    a.get("roles")
+                        .and_then(|r| r.as_array())
+                        .map(|roles| roles.iter().any(|x| x.as_str() == Some("main-artist")))
+                        .unwrap_or(false)
+                })
+                .or_else(|| arr.first())
         })
+        .or_else(|| raw.get("performer"))
+        .or_else(|| raw.get("artist"))
         .or_else(|| album.and_then(|a| a.get("artist")));
-    let artist = perf
+    let artist = main_artist
         .and_then(|p| p.get("name"))
         .map(name_display)
         .unwrap_or_default();
-    let artist_id = perf
+    let artist_id = main_artist
         .and_then(|p| p.get("id"))
         .map(value_to_string)
         .unwrap_or_default();
@@ -680,6 +692,7 @@ fn parse_top_track(raw: &Value) -> TopTrack {
         artist,
         artist_id,
         album_id,
+        album: album_title,
         artwork_url,
         duration: mmss(duration as u32),
         quality_tier: tier(bit_depth).to_string(),
@@ -893,7 +906,7 @@ fn top_track_to_item(t: &TopTrack) -> TrackItem {
         number: "".into(),
         title: t.title.clone().into(),
         artist: t.artist.clone().into(),
-        album: "".into(),
+        album: t.album.clone().into(),
         duration: t.duration.clone().into(),
         quality_tier: t.quality_tier.clone().into(),
         quality_detail: t.quality_detail.clone().into(),

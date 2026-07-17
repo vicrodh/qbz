@@ -272,8 +272,10 @@ export component LabelPageView inherits Rectangle {
                 height: self.visible ? 50px : 0px;
                 track: track;
                 index: index;
-                // Label tracks carry the album thumbnail (Tauri shows it).
+                // Label tracks carry the album thumbnail (Tauri shows it) + the
+                // album-title column (discussion #631; threaded in label.rs).
                 show-artwork: true;
+                show-album: true;
                 multi-select-mode: LabelState.multi-select;
                 media-action(kind, id, action) => {
                     root.media-action(kind, id, action);
