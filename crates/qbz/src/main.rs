@@ -301,6 +301,14 @@ fn seed_tray_appearance(w: &AppWindow, tray: &tray_settings::TraySettings) {
     appearance.set_renderer_index(crate::ui_prefs::renderer_index(
         &crate::ui_prefs::load().renderer,
     ));
+    // Preferred GPU row (Linux only, shares the renderer-row visibility) —
+    // options built from the real detected GPUs; index resolved from the
+    // persisted device name / legacy key.
+    appearance
+        .set_gpu_power_modes(slint::ModelRc::new(slint::VecModel::from(gpu_power_options())));
+    appearance.set_gpu_power_index(gpu_power_seed_index(
+        &crate::ui_prefs::load().gpu_power,
+    ));
     // Interface-size row (all platforms). Same choke point as the renderer
     // row so the dropdown always reflects the persisted value.
     appearance.set_ui_scale_index(crate::ui_prefs::ui_scale_index(
@@ -4129,6 +4137,9 @@ fn reseed_i18n_labels(window: &AppWindow) {
         t("Ambient"),
         t("Blurred art"),
     ])));
+    // Preferred-GPU labels ("Auto…" + the (discrete)/(integrated) tags) are
+    // translated; the device names are not. Rebuild from the cached adapters.
+    state.set_gpu_power_modes(ModelRc::new(VecModel::from(gpu_power_options())));
     state.set_wc_positions(ModelRc::new(VecModel::from(vec![t("Left"), t("Right")])));
     state.set_wc_styles(ModelRc::new(VecModel::from(vec![
         t("Rectangular"),
@@ -6352,6 +6363,94 @@ fn probe_gpu_topology() -> GpuTopology {
     topo
 }
 
+/// A real (non-CPU) GPU adapter, for the "Preferred GPU" Settings dropdown.
+#[derive(Clone)]
+struct GpuAdapterInfo {
+    name: String,
+    discrete: bool,
+}
+static GPU_ADAPTERS: std::sync::OnceLock<Vec<GpuAdapterInfo>> = std::sync::OnceLock::new();
+
+/// Enumerate the machine's real GPUs (integrated + discrete), deduped by name
+/// (enumerate_adapters returns one per backend, so a single physical GPU shows
+/// up under Vulkan AND GL). Cached — the wgpu instance is created once.
+fn gpu_adapters() -> &'static Vec<GpuAdapterInfo> {
+    GPU_ADAPTERS.get_or_init(|| {
+        use slint::wgpu_28::wgpu;
+        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::all(),
+            ..Default::default()
+        });
+        let adapters =
+            poll_ready(instance.enumerate_adapters(wgpu::Backends::all())).unwrap_or_default();
+        let mut out: Vec<GpuAdapterInfo> = Vec::new();
+        for adapter in &adapters {
+            let info = adapter.get_info();
+            let discrete = match info.device_type {
+                wgpu::DeviceType::DiscreteGpu => true,
+                wgpu::DeviceType::IntegratedGpu => false,
+                _ => continue, // skip CPU / virtual / other
+            };
+            if !out.iter().any(|a| a.name == info.name) {
+                out.push(GpuAdapterInfo {
+                    name: info.name.clone(),
+                    discrete,
+                });
+            }
+        }
+        out
+    })
+}
+
+/// Dropdown labels for the "Preferred GPU" setting: "Auto" + one per detected
+/// GPU, tagged (discrete)/(integrated). Built in Rust so it reflects the real
+/// hardware; index 0 = Auto, index i>0 = `gpu_adapters()[i-1]`.
+fn gpu_power_options() -> Vec<slint::SharedString> {
+    let mut opts: Vec<slint::SharedString> = vec![qbz_i18n::t("Auto (recommended)").into()];
+    for a in gpu_adapters() {
+        let tag = if a.discrete {
+            qbz_i18n::t("discrete")
+        } else {
+            qbz_i18n::t("integrated")
+        };
+        opts.push(format!("{} ({})", a.name, tag).into());
+    }
+    opts
+}
+
+/// Persisted `gpu_power` -> the dropdown index in the CURRENT enumeration.
+/// Accepts a device name, the legacy type keys ("integrated"/"discrete"), or
+/// "auto". Falls back to 0 (Auto) when the stored device is no longer present.
+fn gpu_power_seed_index(persisted: &str) -> i32 {
+    let adapters = gpu_adapters();
+    match persisted {
+        "" | "auto" => 0,
+        "integrated" => adapters
+            .iter()
+            .position(|a| !a.discrete)
+            .map_or(0, |i| i as i32 + 1),
+        "discrete" => adapters
+            .iter()
+            .position(|a| a.discrete)
+            .map_or(0, |i| i as i32 + 1),
+        name => adapters
+            .iter()
+            .position(|a| a.name == name)
+            .map_or(0, |i| i as i32 + 1),
+    }
+}
+
+/// Dropdown index -> the value to persist in `gpu_power` (0 = "auto", else the
+/// selected adapter's name).
+fn gpu_power_value_for_index(index: i32) -> String {
+    if index <= 0 {
+        return "auto".to_string();
+    }
+    gpu_adapters()
+        .get((index - 1) as usize)
+        .map_or_else(|| "auto".to_string(), |a| a.name.clone())
+}
+
 /// True when /sys/class/power_supply exposes a SYSTEM battery. Peripheral
 /// batteries (wireless mice etc.) report `scope=Device` — exclude them, or
 /// every desktop with a wireless mouse would classify as a laptop.
@@ -6398,6 +6497,33 @@ fn default_wgpu_power_preference() -> slint::wgpu_28::wgpu::PowerPreference {
         PowerPreference::HighPerformance
     } else {
         PowerPreference::LowPower
+    }
+}
+
+/// Persisted "Preferred GPU" setting -> wgpu adapter PowerPreference override.
+/// `None` = "auto" (fall through to `default_wgpu_power_preference`). The
+/// WGPU_POWER_PREF env still wins over this (it is checked first in the caller).
+/// On a hybrid laptop "discrete" (HighPerformance) moves the render off the
+/// integrated GPU — the fix for the iGPU running hot under the shader background.
+fn gpu_power_from_prefs() -> Option<slint::wgpu_28::wgpu::PowerPreference> {
+    use slint::wgpu_28::wgpu::PowerPreference;
+    let pref = crate::ui_prefs::load().gpu_power;
+    match pref.as_str() {
+        "" | "auto" => None,
+        // Legacy type keys.
+        "integrated" => Some(PowerPreference::LowPower),
+        "discrete" => Some(PowerPreference::HighPerformance),
+        // A specific device name: pick the power preference that steers wgpu to
+        // that adapter's class (exact on the usual 1 iGPU + 1 dGPU laptop; a
+        // same-class tie resolves to whichever wgpu prefers). Unknown name (GPU
+        // removed) → None = auto.
+        name => gpu_adapters().iter().find(|a| a.name == name).map(|a| {
+            if a.discrete {
+                PowerPreference::HighPerformance
+            } else {
+                PowerPreference::LowPower
+            }
+        }),
     }
 }
 
@@ -6484,7 +6610,10 @@ fn select_slint_backend() -> Result<bool, slint::PlatformError> {
             // default_wgpu_power_preference). WGPU_POWER_PREF still wins if
             // set (same as WGPUSettings::default()).
             let mut wgpu_settings = slint::wgpu_28::WGPUSettings::default();
+            // Resolution order: WGPU_POWER_PREF env (debug) > persisted
+            // "Preferred GPU" setting (Settings > Renderer) > auto default.
             wgpu_settings.power_preference = slint::wgpu_28::wgpu::PowerPreference::from_env()
+                .or_else(gpu_power_from_prefs)
                 .unwrap_or_else(default_wgpu_power_preference);
             // Alternate-adapter rung: the previous start died on the adapter
             // this preference picks, so flip it (even over WGPU_POWER_PREF —
@@ -9880,6 +10009,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 crate::toast::info_weak(
                     &theme_weak,
                     qbz_i18n::t("Renderer changed — restart QBZ to apply"),
+                );
+            }
+            "gpu-power" => {
+                // 0 = Auto, i>0 = a specific detected GPU (by name). Applied at
+                // startup by gpu_power_from_prefs (wgpu adapter power preference),
+                // so it takes effect on the next launch.
+                let mut prefs = crate::ui_prefs::load();
+                prefs.gpu_power = gpu_power_value_for_index(index);
+                crate::ui_prefs::save(&prefs);
+                crate::toast::info_weak(
+                    &theme_weak,
+                    qbz_i18n::t("Preferred GPU changed — restart QBZ to apply"),
                 );
             }
             "ui-scale" => {

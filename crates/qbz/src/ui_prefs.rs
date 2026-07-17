@@ -560,6 +560,12 @@ pub struct UiPrefs {
     /// window comes up, the next start reverts this to "auto".
     #[serde(default = "default_renderer")]
     pub renderer: String,
+    /// Preferred GPU adapter: "auto" | "integrated" | "discrete". Drives the
+    /// wgpu PowerPreference at startup (WGPU_POWER_PREF env still wins). On a
+    /// hybrid laptop "discrete" moves the render off the integrated GPU
+    /// (thermals); requires restart. See main.rs `gpu_power_from_prefs`.
+    #[serde(default = "default_gpu_power")]
+    pub gpu_power: String,
     /// App version that AUTO-degraded `renderer` (the ladder persisted "gl"
     /// or "software" after failed starts). Empty = `renderer` is the user's
     /// own choice. A NEW build re-probes "auto" once (vendored renderer
@@ -615,6 +621,10 @@ fn default_show_window_controls() -> bool {
 
 fn default_wc_position() -> String {
     "right".to_string()
+}
+
+fn default_gpu_power() -> String {
+    "auto".to_string()
 }
 
 fn default_renderer() -> String {
@@ -778,6 +788,7 @@ impl Default for UiPrefs {
             window_y: default_window_pos(),
             window_maximized: false,
             renderer: default_renderer(),
+            gpu_power: default_gpu_power(),
             renderer_auto_degraded: String::new(),
             renderer_wgpu_alt: String::new(),
             ui_scale: default_ui_scale(),

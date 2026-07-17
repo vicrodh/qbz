@@ -86,7 +86,7 @@ component GenreButton inherits Rectangle {
     border-radius: 6px;
     background: root.active
         ? Theme.accent
-        : (ta.has-hover ? Theme.surface-hover : Theme.surface-elevated);
+        : (ta.has-hover ? Theme.surface-hover : (ShellState.app-background-active ? Theme.surface-elevated.with-alpha(AppearanceState.app-background-surface-alpha) : Theme.surface-elevated));
 
     genre-row := HorizontalLayout {
         padding-left: 12px;

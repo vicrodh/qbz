@@ -671,6 +671,19 @@ component ImmersiveViewMenuPopup inherits PopupWindow {
                     root.picked();
                 }
             }
+            // Ambient metaball (mode 7) — the same album-colored amoeba as the
+            // app-wide dynamic background, offered here as an opt-in immersive
+            // scene for strong GPUs; the non-shader atmosphere stays the default
+            // fallback for the GL/software tiers (shader-scenes-available gates it).
+            if ImmersiveState.shader-scenes-available: ImmersiveMenuRow {
+                icon: @image-url("../assets/icons/audio-lines.svg");
+                label: @tr("Ambient");
+                active: root.is-focus && root.sh == 7;
+                clicked => {
+                    ImmersiveState.view-mode = 0; ImmersiveState.shader-mode = 7;
+                    root.picked();
+                }
+            }
             if ImmersiveState.shader-scenes-available: ImmersiveMenuRow {
                 icon: @image-url("../assets/icons/chart-no-axes-column.svg");
                 label: @tr("Spectral Ribbon");

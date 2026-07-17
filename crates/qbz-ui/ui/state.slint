@@ -3215,6 +3215,10 @@ export global AppearanceState {
     in-out property <bool> renderer-setting-visible: false;
     in-out property <[string]> renderer-options: [@tr("Auto (recommended)"), @tr("GPU"), @tr("GPU (compatibility)"), @tr("Software")];
     in-out property <int> renderer-index: 0;
+    // Preferred GPU: options built in Rust from the detected adapters
+    // ("Auto" + each GPU by name); index 0 = Auto.
+    in-out property <[string]> gpu-power-modes: [@tr("Auto (recommended)")];
+    in-out property <int> gpu-power-index: 0;
 
     // --- INTERFACE SIZE ----------------------------------------------------
     // Window scale-factor preset (XS 0.8 / Small 0.9 / Default 1.0 /

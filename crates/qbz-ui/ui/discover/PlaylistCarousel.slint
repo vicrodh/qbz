@@ -4,7 +4,7 @@
 
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
-import { SearchPlaylistItem, ShellState } from "../state.slint";
+import { SearchPlaylistItem, ShellState, AppearanceState } from "../state.slint";
 import { PlaylistCard } from "PlaylistCard.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 
@@ -19,7 +19,9 @@ component NavButton inherits Rectangle {
     opacity: root.enabled ? 1.0 : 0.4;
     background: ta.has-hover && root.enabled
         ? Theme.surface-hover
-        : Theme.surface-elevated;
+        : (ShellState.app-background-active
+            ? Theme.surface-elevated.with-alpha(AppearanceState.app-background-surface-alpha)
+            : Theme.surface-elevated);
 
     QbzIcon {
         source: root.icon;

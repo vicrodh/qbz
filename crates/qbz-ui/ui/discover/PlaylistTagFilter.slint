@@ -9,7 +9,7 @@
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
 import { Radius } from "../foundation/radius.slint";
-import { HomeState, HomeActions, PlaylistTagItem } from "../state.slint";
+import { HomeState, HomeActions, PlaylistTagItem, ShellState, AppearanceState } from "../state.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 
 // One checkbox row in the open list: a square check + the localized tag name.
@@ -74,7 +74,7 @@ export component PlaylistTagFilter inherits Rectangle {
     height: 30px;
     border-radius: 6px;
     border-width: 0px;
-    background: ta.has-hover ? Theme.surface-hover : Theme.surface-elevated;
+    background: ta.has-hover ? Theme.surface-hover : (ShellState.app-background-active ? Theme.surface-elevated.with-alpha(AppearanceState.app-background-surface-alpha) : Theme.surface-elevated);
 
     HorizontalLayout {
         padding-left: 10px;

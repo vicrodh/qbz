@@ -4594,3 +4594,19 @@ msgstr "Fundo dinâmico"
 
 msgid "Animated album-art background behind the whole app. High resource use — GPU accelerated."
 msgstr "Fundo animado com a capa do álbum atrás de toda a aplicação. Uso elevado de recursos — acelerado por GPU."
+
+# Preferred GPU (Renderer settings)
+msgid "Preferred GPU"
+msgstr "GPU preferida"
+
+msgid "Which GPU renders the app. On a hybrid laptop, picking the discrete GPU moves the dynamic-background load off the integrated one (cooler, but more power). Auto is recommended (requires restart)"
+msgstr "Qual GPU renderiza o app. Em um laptop híbrido, escolher a GPU dedicada transfere a carga do fundo dinâmico para fora da integrada (mais fria, mas com maior consumo). Auto é recomendado (requer reinicialização)"
+
+msgid "discrete"
+msgstr "dedicada"
+
+msgid "integrated"
+msgstr "integrada"
+
+msgid "Preferred GPU changed — restart QBZ to apply"
+msgstr "GPU preferida alterada — reinicie o QBZ para aplicar"

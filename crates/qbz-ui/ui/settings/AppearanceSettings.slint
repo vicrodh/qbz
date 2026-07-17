@@ -1007,6 +1007,19 @@ export component AppearanceSettings inherits VerticalLayout {
             }
         }
     }
+    if AppearanceState.renderer-setting-visible: SettingRow {
+        label: @tr("Preferred GPU");
+        description: @tr("Which GPU renders the app. On a hybrid laptop, picking the discrete GPU moves the dynamic-background load off the integrated one (cooler, but more power). Auto is recommended (requires restart)");
+        QbzSelect {
+            menu-width: 260px;
+            options: AppearanceState.gpu-power-modes;
+            current-index: AppearanceState.gpu-power-index;
+            selected(i) => {
+                AppearanceState.gpu-power-index = i;
+                AppearanceState.appearance-select("gpu-power", i);
+            }
+        }
+    }
 
     Rectangle { height: 40px; }
 }

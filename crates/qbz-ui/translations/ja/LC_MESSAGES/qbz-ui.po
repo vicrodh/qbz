@@ -4582,3 +4582,19 @@ msgstr "ダイナミック背景"
 
 msgid "Animated album-art background behind the whole app. High resource use — GPU accelerated."
 msgstr "アプリ全体の背後にアルバムアートワークのアニメーション背景を表示します。リソース使用量が高く、GPUアクセラレーションを使用します。"
+
+# Preferred GPU (Renderer settings)
+msgid "Preferred GPU"
+msgstr "優先GPU"
+
+msgid "Which GPU renders the app. On a hybrid laptop, picking the discrete GPU moves the dynamic-background load off the integrated one (cooler, but more power). Auto is recommended (requires restart)"
+msgstr "どのGPUでアプリをレンダリングするかを選びます。ハイブリッド構成のノートPCでは、ディスクリートGPUを選ぶとダイナミック背景の負荷を内蔵GPUから移せます（温度は下がりますが消費電力は増えます）。自動を推奨します（再起動が必要）"
+
+msgid "discrete"
+msgstr "ディスクリート"
+
+msgid "integrated"
+msgstr "内蔵"
+
+msgid "Preferred GPU changed — restart QBZ to apply"
+msgstr "優先GPUを変更しました — 適用するには QBZ を再起動してください"
