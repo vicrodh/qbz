@@ -199,6 +199,14 @@ pub async fn extract_and_cache_bundle_tokens(client: &Client) -> Result<BundleTo
                     e
                 );
                 last_err = Some(e);
+                // Back off before the next attempt. The attempts used to fire
+                // back-to-back, so a brief network hiccup (DNS blip, dropped
+                // connection, captive-portal redirect) failed all of them in a
+                // few ms — the retries were effectively useless. A short growing
+                // delay gives a transient failure time to clear.
+                if attempt < attempts {
+                    tokio::time::sleep(Duration::from_millis(600 * attempt as u64)).await;
+                }
             }
         }
     }
