@@ -144,7 +144,7 @@ mod whats_new;
 use std::sync::Arc;
 
 use i_slint_backend_winit::{
-    winit::event::{ElementState, MouseButton, WindowEvent},
+    winit::event::{ElementState, MouseButton, TouchPhase, WindowEvent},
     winit::keyboard::{Key, NamedKey},
     EventResult, WinitWindowAccessor,
 };
@@ -1340,6 +1340,36 @@ fn install_browser_mouse_nav(window: &AppWindow) {
                         prefs.window_x = pos.x;
                         prefs.window_y = pos.y;
                         crate::ui_prefs::save(&prefs);
+                    }
+                }
+                EventResult::Propagate
+            }
+            WindowEvent::Touch(t) => {
+                // Diagnostic: confirm the compositor actually delivers NATIVE
+                // touch. RaspiOS/labwc defaults to touchscreen mouse-emulation,
+                // which never sends wl_touch to clients — taps survive as
+                // emulated clicks but the motion stream Slint's Flickable needs
+                // for swipe/drag never arrives. If this line never logs after
+                // tapping on the Pi, mouse-emulation is on (fix compositor-side).
+                static TOUCH_SEEN: std::sync::Once = std::sync::Once::new();
+                TOUCH_SEEN.call_once(|| {
+                    log::info!(
+                        "[input] native touch delivered by compositor (id={}, phase={:?})",
+                        t.id,
+                        t.phase
+                    );
+                });
+                // Mirror the touch point to ShellState so hover-revealed chrome
+                // (scrollbars, row actions) reacts under native touch, where
+                // there is no CursorMoved stream.
+                if matches!(t.phase, TouchPhase::Started | TouchPhase::Moved) {
+                    if let Some(window) = weak.upgrade() {
+                        let position =
+                            t.location.to_logical::<f64>(slint_window.scale_factor() as f64);
+                        let state = window.global::<ShellState>();
+                        state.set_pointer_x(position.x as f32);
+                        state.set_pointer_y(position.y as f32);
+                        state.set_pointer_in_window(true);
                     }
                 }
                 EventResult::Propagate
@@ -7591,21 +7621,48 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         let weak = window.as_weak();
         let was_open = std::cell::Cell::new(false);
+        // Captured on the immersive-OPEN edge so exit returns the user to the
+        // shell (and fullscreen) they came from. The kiosk profile boots
+        // fullscreen OUTSIDE immersive, so a blanket "drop fullscreen + go
+        // desktop" on exit dumped the kiosk appliance back to the windowed
+        // desktop shell.
+        let was_fullscreen = std::cell::Cell::new(false);
+        let pre_kiosk = std::cell::Cell::new(false);
         _immersive_fullscreen_guard.start(
             slint::TimerMode::Repeated,
             std::time::Duration::from_millis(150),
             move || {
                 let Some(w) = weak.upgrade() else { return };
                 let open = w.global::<ImmersiveState>().get_open();
-                if was_open.get() && !open && w.window().is_fullscreen() {
-                    // Same route as wire_window_controls: slint's Window API,
-                    // never a direct winit call (the adapter reconciliation
-                    // would undo it on the next frame).
-                    w.window().set_fullscreen(false);
-                    w.global::<WindowControlActions>().set_is_fullscreen(false);
-                    log::info!(
-                        "[qbz-slint] immersive closed while fullscreen — dropping fullscreen"
-                    );
+                if !was_open.get() && open {
+                    was_fullscreen.set(w.window().is_fullscreen());
+                    pre_kiosk.set(w.get_screen() == AppScreen::Kiosk);
+                }
+                if was_open.get() && !open {
+                    // Drop fullscreen ONLY if it was not fullscreen before opening
+                    // (desktop entered fullscreen inside immersive → drop; kiosk
+                    // was already fullscreen at boot → keep). Slint's Window API,
+                    // never a direct winit call (adapter reconciliation would undo
+                    // it on the next frame).
+                    if w.window().is_fullscreen() && !was_fullscreen.get() {
+                        w.window().set_fullscreen(false);
+                        w.global::<WindowControlActions>().set_is_fullscreen(false);
+                        log::info!(
+                            "[qbz-slint] immersive closed while fullscreen — dropping fullscreen"
+                        );
+                    }
+                    // Return to the pre-immersive shell (kiosk or desktop),
+                    // guarded so it never overrides Login/Splash.
+                    let want = if pre_kiosk.get() {
+                        AppScreen::Kiosk
+                    } else {
+                        AppScreen::Shell
+                    };
+                    let cur = w.get_screen();
+                    if (cur == AppScreen::Shell || cur == AppScreen::Kiosk) && cur != want {
+                        w.set_screen(want);
+                        w.global::<ShellState>().set_kiosk_profile(pre_kiosk.get());
+                    }
                 }
                 was_open.set(open);
             },
