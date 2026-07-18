@@ -54,7 +54,7 @@ jobs:
           strip qbz-linux-x86_64 || true
           echo "stripped:"; ls -lh qbz-linux-x86_64 | awk '{print $5}'
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: qbz-linux-x86_64
           path: qbz-linux-x86_64
