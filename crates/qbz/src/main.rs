@@ -7901,7 +7901,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // mode there is no WGPU28 GraphicsAPI to hook, so registering it would be a no-op
     // at best — skip it so software mode carries zero wgpu machinery.
     if use_gpu_renderer {
-        let weak_for_underlay = window.as_weak();
         if let Err(e) = window
             .window()
             .set_rendering_notifier(move |state, graphics_api| {
@@ -7913,23 +7912,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                     slint::RenderingState::RenderingTeardown => {
                         crate::shader_underlay::teardown();
-                        // The Image in ImmersiveState.shader-texture wraps a wgpu
-                        // texture from the instance/device being destroyed. The
-                        // property survives a Wayland hide (tray); the first frame
-                        // after the next RenderingSetup would hand that stale
-                        // texture to the NEW femtovg canvas — a cross-instance id
-                        // lookup that panics in wgpu-core ("TextureView … is no
-                        // longer alive"). Clear it — but DEFERRED via
-                        // upgrade_in_event_loop, NOT synchronously here: the
-                        // notifier runs while the winit window adapter holds its
-                        // RefCell borrowed, and setting a property re-borrows it
-                        // ("RefCell already mutably borrowed" panic on close-to-
-                        // tray). The queued closure runs on the next loop tick,
-                        // after the borrow is released and long before restore.
-                        let _ = weak_for_underlay.upgrade_in_event_loop(|w| {
-                            w.global::<ImmersiveState>()
-                                .set_shader_texture(slint::Image::default());
-                        });
+                        // The stale ImmersiveState.shader-texture (a wgpu texture
+                        // from the surface being destroyed) is cleared in
+                        // tray::hide_window BEFORE the surface teardown — NOT here:
+                        // setting a property inside this notifier re-borrows the
+                        // winit adapter's RefCell (panic on close-to-tray).
                     }
                     _ => {}
                 }

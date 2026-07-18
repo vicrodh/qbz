@@ -112,117 +112,8 @@ component PlaylistSubTab inherits Rectangle {
     }
 }
 
-// One label tile in the Favorites > Labels grid — a circular cover (or
-// an indigo->violet gradient + disc placeholder), name, and album count.
-// Mirrors FavArtistCard; the gradient placeholder is the 1:1 match with
-// Tauri's label card.
-component FavLabelCard inherits Rectangle {
-    in property <FavoriteLabelItem> item;
-    callback clicked(string, string);
-
-    width: 160px;
-    height: 200px;
-
-    VerticalLayout {
-        spacing: 10px;
-        Rectangle {
-            width: 140px;
-            height: 140px;
-            x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
-            border-radius: 70px;
-            background: root.item.image-url == ""
-                ? @linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)
-                : Theme.surface-elevated;
-            clip: true;
-            Image {
-                width: 100%;
-                height: 100%;
-                source: root.item.image;
-                image-fit: cover;
-            }
-            if root.item.image-url == "": QbzIcon {
-                source: @image-url("../assets/icons/disc-3.svg");
-                width: 44px;
-                height: 44px;
-                x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
-                y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
-                tint: #ffffff;
-            }
-            ta := TouchArea {
-                mouse-cursor: pointer;
-                clicked => {
-                    root.clicked(root.item.id, root.item.name);
-                }
-            }
-        }
-        Text {
-            text: root.item.name;
-            color: Theme.text-primary;
-            font-size: Typography.body;
-            font-weight: Typography.medium;
-            horizontal-alignment: center;
-            overflow: elide;
-            width: 160px;
-        }
-        if root.item.albums-line != "": Text {
-            text: root.item.albums-line;
-            color: Theme.text-muted;
-            font-size: Typography.legal;
-            horizontal-alignment: center;
-            width: 160px;
-        }
-    }
-}
-
-component FavArtistCard inherits Rectangle {
-    in property <FavoriteArtistItem> item;
-    callback clicked(string);
-
-    width: 160px;
-    height: 200px;
-
-    VerticalLayout {
-        spacing: 10px;
-        Rectangle {
-            width: 120px;
-            height: 120px;
-            x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
-            border-radius: 60px;
-            background: Theme.surface-elevated;
-            clip: true;
-            Image {
-                width: 100%;
-                height: 100%;
-                source: root.item.image;
-                image-fit: cover;
-            }
-            if root.item.image-url == "": QbzIcon {
-                source: @image-url("../assets/icons/user.svg");
-                width: 44px;
-                height: 44px;
-                x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
-                y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
-                tint: Theme.text-muted;
-            }
-            ta := TouchArea {
-                mouse-cursor: pointer;
-                clicked => {
-                    root.clicked(root.item.id);
-                }
-            }
-        }
-        // albums_count line intentionally omitted (Tauri #169).
-        Text {
-            text: root.item.name;
-            color: Theme.text-primary;
-            font-size: Typography.body;
-            font-weight: Typography.medium;
-            horizontal-alignment: center;
-            overflow: elide;
-            width: 160px;
-        }
-    }
-}
+// (FavLabelCard + FavArtistCard removed — the Favorites Labels + Artists grids
+// now use the card-sized LabelCard / ArtistGridCard, matching the mixed feed.)
 
 // One row in the Favorites Artists sidepanel left list — a 40px round thumb
 // + name; the selected row is highlighted.
@@ -961,7 +852,7 @@ export component FavoritesView inherits Rectangle {
                             height: all-grid.ch;
 
                             if item.kind == "track": TrackCard {
-                                show-source-badge: true;
+                                show-source-badge: LibraryAllState.show-local;
                                 track: {
                                     id: item.id,
                                     title: item.title,
@@ -986,7 +877,7 @@ export component FavoritesView inherits Rectangle {
                                 }
                             }
                             if item.kind == "album": AlbumCard {
-                                show-source-badge: true;
+                                show-source-badge: LibraryAllState.show-local;
                                 album: {
                                     id: item.id,
                                     title: item.title,
@@ -1054,14 +945,20 @@ export component FavoritesView inherits Rectangle {
                         y: 16px;
                         width: parent.width - 64px;
                         spacing: 2px;
-                        for item[i] in LibraryAllState.items-visible: Rectangle {
+                        for item[i] in LibraryAllState.items-visible: row-rect := Rectangle {
                             height: 56px;
                             border-radius: 6px;
                             background: row-ta.has-hover || menu-btn-ta.has-hover
                                 ? Theme.surface-hover : transparent;
-                            // Row body — click plays/opens by kind; right-click
-                            // opens the context menu. Declared FIRST so the action
-                            // controls on the right win the pointer over it.
+                            // Context-menu opener position (row-local px). Defaults
+                            // by the ⋯ button; a right-click anywhere on the row
+                            // overrides it to the cursor (window pointer minus the
+                            // row's absolute position). Every cell TouchArea repeats
+                            // the right-click handler so the whole row is sensitive.
+                            property <length> menu-x: row-rect.width - 206px;
+                            property <length> menu-y: 48px;
+                            // Row body — click plays/opens by kind; right-click opens
+                            // the menu at the cursor. Behind the cell TouchAreas.
                             row-ta := TouchArea {
                                 mouse-cursor: pointer;
                                 clicked => {
@@ -1080,6 +977,8 @@ export component FavoritesView inherits Rectangle {
                                 pointer-event(e) => {
                                     if (e.kind == PointerEventKind.down
                                         && e.button == PointerEventButton.right) {
+                                        row-rect.menu-x = ShellState.pointer-x - row-rect.absolute-position.x;
+                                        row-rect.menu-y = ShellState.pointer-y - row-rect.absolute-position.y;
                                         row-menu.show();
                                     }
                                 }
@@ -1124,6 +1023,13 @@ export component FavoritesView inherits Rectangle {
                                                     else if (item.kind == "album") { FavoritesActions.album-action(item.id, "play"); }
                                                     else { FavoritesActions.playlist-action(item.id, "play"); }
                                                 }
+                                                pointer-event(e) => {
+                                                    if (e.kind == PointerEventKind.down && e.button == PointerEventButton.right) {
+                                                        row-rect.menu-x = ShellState.pointer-x - row-rect.absolute-position.x;
+                                                        row-rect.menu-y = ShellState.pointer-y - row-rect.absolute-position.y;
+                                                        row-menu.show();
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -1143,6 +1049,13 @@ export component FavoritesView inherits Rectangle {
                                             else if (item.kind == "playlist") { FavoritesActions.open-playlist(item.id); }
                                             else { FavoritesActions.open-label(item.id, item.title); }
                                         }
+                                        pointer-event(e) => {
+                                            if (e.kind == PointerEventKind.down && e.button == PointerEventButton.right) {
+                                                row-rect.menu-x = ShellState.pointer-x - row-rect.absolute-position.x;
+                                                row-rect.menu-y = ShellState.pointer-y - row-rect.absolute-position.y;
+                                                row-menu.show();
+                                            }
+                                        }
                                         Text {
                                             width: 100%;
                                             text: item.title;
@@ -1159,6 +1072,13 @@ export component FavoritesView inherits Rectangle {
                                         clicked => {
                                             if (item.artist-id != "" && (item.kind == "track" || item.kind == "album")) {
                                                 FavoritesActions.open-artist(item.artist-id);
+                                            }
+                                        }
+                                        pointer-event(e) => {
+                                            if (e.kind == PointerEventKind.down && e.button == PointerEventButton.right) {
+                                                row-rect.menu-x = ShellState.pointer-x - row-rect.absolute-position.x;
+                                                row-rect.menu-y = ShellState.pointer-y - row-rect.absolute-position.y;
+                                                row-menu.show();
                                             }
                                         }
                                         Text {
@@ -1205,10 +1125,13 @@ export component FavoritesView inherits Rectangle {
                                         }
                                     }
                                 }
-                                // Col — source glyph (its own column).
-                                Rectangle {
+                                // Col — source glyph. Only when local/Plex can
+                                // appear (show-local on); otherwise the whole feed
+                                // is Qobuz, so the column is hidden rather than
+                                // painting the Qobuz mark on every row.
+                                if LibraryAllState.show-local: Rectangle {
                                     width: 44px;
-                                    if item.source != "": SourceGlyph {
+                                    SourceGlyph {
                                         kind: item.source;
                                         x: 0;
                                         y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
@@ -1256,15 +1179,22 @@ export component FavoritesView inherits Rectangle {
                                         }
                                         menu-btn-ta := TouchArea {
                                             mouse-cursor: pointer;
-                                            clicked => { row-menu.show(); }
+                                            clicked => {
+                                                // The ⋯ opener: anchor the menu by
+                                                // the button (right-click uses the
+                                                // cursor instead).
+                                                row-rect.menu-x = row-rect.width - 206px;
+                                                row-rect.menu-y = 48px;
+                                                row-menu.show();
+                                            }
                                         }
                                     }
                                 }
                             }
                             // Per-kind context menu (⋯ button + right-click).
                             row-menu := PopupWindow {
-                                x: parent.width - 206px;
-                                y: 48px;
+                                x: row-rect.menu-x;
+                                y: row-rect.menu-y;
                                 width: 196px;
                                 height: (item.kind == "track" ? 6
                                     : item.kind == "album" ? 6

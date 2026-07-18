@@ -255,6 +255,15 @@ pub(crate) fn present(weak: &slint::Weak<AppWindow>) {
 pub(crate) fn hide_window(weak: &slint::Weak<AppWindow>) {
     WINDOW_SHOWN.store(false, Ordering::Relaxed);
     let _ = weak.upgrade_in_event_loop(|w| {
+        // Suppress the dynamic-background shader texture BEFORE the surface is
+        // destroyed. It wraps a wgpu texture from THIS surface's instance;
+        // drawing it on the NEW instance's first frame after restore is a
+        // cross-instance stale-texture use — RefCell panic in debug, SEGFAULT in
+        // release. Clearing here (UI thread, no rendering-notifier borrow held)
+        // is safe, unlike setting it inside the RenderingTeardown notifier; the
+        // 30 fps drain repopulates it on the new instance after restore.
+        w.global::<crate::ImmersiveState>()
+            .set_shader_texture(slint::Image::default());
         if let Err(e) = w.hide() {
             log::error!("[tray] window hide failed: {e}");
         }
