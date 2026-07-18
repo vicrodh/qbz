@@ -30,6 +30,7 @@ import { AlbumCard } from "../discover/AlbumCard.slint";
 import { TrackCard } from "../discover/TrackCard.slint";
 import { ArtistGridCard } from "../discover/ArtistGridCard.slint";
 import { PlaylistCard } from "../discover/PlaylistCard.slint";
+import { LabelCard } from "../discover/LabelCard.slint";
 import { GenreFilterPopup } from "../discover/GenreFilterPopup.slint";
 import { TrackRow } from "../primitives/TrackRow.slint";
 import { ExpandableSearch } from "../primitives/ExpandableSearch.slint";
@@ -38,6 +39,9 @@ import { MultiSelectBar } from "../primitives/MultiSelectBar.slint";
 import { ToggleButton } from "../primitives/ToggleButton.slint";
 import { QbzSelect } from "../primitives/QbzSelect.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
+import { QualityBadge } from "../primitives/QualityBadge.slint";
+import { ContextMenu } from "../primitives/ContextMenu.slint";
+import { ContextMenuItem } from "../primitives/ContextMenuItem.slint";
 import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
 import { ListScrollbar } from "../primitives/ListScrollbar.slint";
 import { PlaylistListRow } from "../primitives/PlaylistListRow.slint";
@@ -955,6 +959,7 @@ export component FavoritesView inherits Rectangle {
                             height: all-grid.ch;
 
                             if item.kind == "track": TrackCard {
+                                show-source-badge: true;
                                 track: {
                                     id: item.id,
                                     title: item.title,
@@ -976,6 +981,7 @@ export component FavoritesView inherits Rectangle {
                                 }
                             }
                             if item.kind == "album": AlbumCard {
+                                show-source-badge: true;
                                 album: {
                                     id: item.id,
                                     title: item.title,
@@ -984,6 +990,7 @@ export component FavoritesView inherits Rectangle {
                                     artwork: item.image,
                                     quality-tier: item.quality-tier,
                                     quality-label: item.quality-detail,
+                                    source: item.source,
                                 };
                                 clicked(id) => { FavoritesActions.open-album(id); }
                                 media-action(kind, id, action) => {
@@ -1021,8 +1028,8 @@ export component FavoritesView inherits Rectangle {
                                     }
                                 }
                             }
-                            if item.kind == "label": FavLabelCard {
-                                item: {
+                            if item.kind == "label": LabelCard {
+                                label: {
                                     id: item.id,
                                     name: item.title,
                                     image: item.image,
@@ -1043,47 +1050,13 @@ export component FavoritesView inherits Rectangle {
                         width: parent.width - 64px;
                         spacing: 2px;
                         for item[i] in LibraryAllState.items-visible: Rectangle {
-                            height: 52px;
+                            height: 56px;
                             border-radius: 6px;
-                            background: row-ta.has-hover ? Theme.surface-hover : transparent;
-                            HorizontalLayout {
-                                padding-left: 8px;
-                                padding-right: 8px;
-                                spacing: 12px;
-                                VerticalLayout {
-                                    alignment: center;
-                                    Rectangle {
-                                        width: 40px;
-                                        height: 40px;
-                                        border-radius: item.kind == "artist" ? 20px : 4px;
-                                        background: Theme.surface-elevated;
-                                        clip: true;
-                                        Image {
-                                            width: 100%;
-                                            height: 100%;
-                                            source: item.image;
-                                            image-fit: cover;
-                                        }
-                                    }
-                                }
-                                VerticalLayout {
-                                    alignment: center;
-                                    horizontal-stretch: 1;
-                                    Text {
-                                        text: item.title;
-                                        color: Theme.text-primary;
-                                        font-size: Typography.body;
-                                        font-weight: Typography.medium;
-                                        overflow: elide;
-                                    }
-                                    Text {
-                                        text: item.subtitle;
-                                        color: Theme.text-muted;
-                                        font-size: Typography.legal;
-                                        overflow: elide;
-                                    }
-                                }
-                            }
+                            background: row-ta.has-hover || menu-btn-ta.has-hover
+                                ? Theme.surface-hover : transparent;
+                            // Row body — click plays/opens by kind; right-click
+                            // opens the context menu. Declared FIRST so the action
+                            // controls on the right win the pointer over it.
                             row-ta := TouchArea {
                                 mouse-cursor: pointer;
                                 clicked => {
@@ -1097,6 +1070,200 @@ export component FavoritesView inherits Rectangle {
                                         FavoritesActions.open-playlist(item.id);
                                     } else if (item.kind == "label") {
                                         FavoritesActions.open-label(item.id, item.title);
+                                    }
+                                }
+                                pointer-event(e) => {
+                                    if (e.kind == PointerEventKind.down
+                                        && e.button == PointerEventButton.right) {
+                                        row-menu.show();
+                                    }
+                                }
+                            }
+                            HorizontalLayout {
+                                padding-left: 8px;
+                                padding-right: 8px;
+                                spacing: 12px;
+                                // Cover (round for artists, square otherwise).
+                                VerticalLayout {
+                                    alignment: center;
+                                    Rectangle {
+                                        width: 44px;
+                                        height: 44px;
+                                        border-radius: item.kind == "artist" ? 22px : 6px;
+                                        background: Theme.surface-elevated;
+                                        clip: true;
+                                        Image {
+                                            width: 100%;
+                                            height: 100%;
+                                            source: item.image;
+                                            image-fit: item.kind == "label" ? contain : cover;
+                                        }
+                                    }
+                                }
+                                // Title + type-aware subtitle.
+                                VerticalLayout {
+                                    alignment: center;
+                                    horizontal-stretch: 1;
+                                    spacing: 2px;
+                                    Text {
+                                        text: item.title;
+                                        color: Theme.text-primary;
+                                        font-size: Typography.body;
+                                        font-weight: Typography.medium;
+                                        overflow: elide;
+                                    }
+                                    Text {
+                                        text: item.kind == "artist" ? @tr("Artist")
+                                            : item.kind == "album"
+                                                ? (item.artist != "" ? @tr("Album") + " • " + item.artist : @tr("Album"))
+                                            : item.kind == "track"
+                                                ? (item.artist != "" ? @tr("Track") + " • " + item.artist : @tr("Track"))
+                                            : item.kind == "playlist"
+                                                ? (item.subtitle != "" ? @tr("Playlist") + " • " + item.subtitle : @tr("Playlist"))
+                                            : (item.subtitle != "" ? @tr("Label") + " • " + item.subtitle : @tr("Label"));
+                                        color: Theme.text-muted;
+                                        font-size: Typography.legal;
+                                        overflow: elide;
+                                    }
+                                }
+                                // Quality badge (albums + tracks).
+                                if item.kind == "album" || item.kind == "track": VerticalLayout {
+                                    alignment: center;
+                                    QualityBadge {
+                                        tier: item.quality-tier;
+                                        label: item.quality-detail;
+                                        detail: item.quality-detail;
+                                    }
+                                }
+                                // Source badge (local / Plex).
+                                if item.source == "local" || item.source == "plex": VerticalLayout {
+                                    alignment: center;
+                                    Rectangle {
+                                        width: 24px;
+                                        height: 24px;
+                                        border-radius: 4px;
+                                        background: #000000b3;
+                                        Image {
+                                            source: item.source == "plex"
+                                                ? @image-url("../assets/icons/plex-logo.svg")
+                                                : @image-url("../assets/icons/hard-drive.svg");
+                                            colorize: item.source == "local" ? #ffffff : transparent;
+                                            width: item.source == "plex" ? 15px : 14px;
+                                            height: self.width;
+                                            x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                                            y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                                            image-fit: contain;
+                                        }
+                                    }
+                                }
+                                // Favorite (heart) / follow (check) indicator.
+                                VerticalLayout {
+                                    alignment: center;
+                                    QbzIcon {
+                                        source: item.kind == "artist"
+                                            ? @image-url("../assets/icons/user-plus.svg")
+                                            : (item.is-favorite
+                                                ? @image-url("../assets/icons/heart-filled.svg")
+                                                : @image-url("../assets/icons/heart.svg"));
+                                        width: 18px;
+                                        height: 18px;
+                                        tint: Theme.accent;
+                                    }
+                                }
+                                // Context-menu button.
+                                VerticalLayout {
+                                    alignment: center;
+                                    menu-btn := Rectangle {
+                                        width: 30px;
+                                        height: 30px;
+                                        border-radius: 6px;
+                                        background: menu-btn-ta.has-hover ? Theme.surface-elevated : transparent;
+                                        QbzIcon {
+                                            source: @image-url("../assets/icons/ellipsis.svg");
+                                            width: 16px;
+                                            height: 16px;
+                                            x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                                            y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                                            tint: Theme.text-secondary;
+                                        }
+                                        menu-btn-ta := TouchArea {
+                                            mouse-cursor: pointer;
+                                            clicked => { row-menu.show(); }
+                                        }
+                                    }
+                                }
+                            }
+                            // Per-kind context menu (⋯ button + right-click).
+                            row-menu := PopupWindow {
+                                x: parent.width - 206px;
+                                y: 48px;
+                                width: 196px;
+                                height: (item.kind == "track" ? 6
+                                    : item.kind == "album" ? 6
+                                    : item.kind == "playlist" ? 4
+                                    : 1) * 33px + 10px;
+                                ContextMenu {
+                                    if item.kind == "track" || item.kind == "album" || item.kind == "playlist": ContextMenuItem {
+                                        icon: @image-url("../assets/icons/play.svg");
+                                        label: @tr("Play");
+                                        clicked => {
+                                            if (item.kind == "track") { FavoritesActions.track-action(item.id, "play"); }
+                                            else if (item.kind == "album") { FavoritesActions.album-action(item.id, "play"); }
+                                            else { FavoritesActions.playlist-action(item.id, "play"); }
+                                        }
+                                    }
+                                    if item.kind == "track" || item.kind == "album" || item.kind == "playlist": ContextMenuItem {
+                                        icon: @image-url("../assets/icons/list-plus.svg");
+                                        label: @tr("Play next");
+                                        clicked => {
+                                            if (item.kind == "track") { FavoritesActions.track-action(item.id, "play-next"); }
+                                            else if (item.kind == "album") { FavoritesActions.album-action(item.id, "play-next"); }
+                                            else { FavoritesActions.playlist-action(item.id, "play-next"); }
+                                        }
+                                    }
+                                    if item.kind == "track" || item.kind == "album" || item.kind == "playlist": ContextMenuItem {
+                                        icon: @image-url("../assets/icons/list-end.svg");
+                                        label: @tr("Add to queue");
+                                        clicked => {
+                                            if (item.kind == "track") { FavoritesActions.track-action(item.id, "queue"); }
+                                            else if (item.kind == "album") { FavoritesActions.album-action(item.id, "queue"); }
+                                            else { FavoritesActions.playlist-action(item.id, "queue"); }
+                                        }
+                                    }
+                                    if item.kind == "album": ContextMenuItem {
+                                        icon: @image-url("../assets/icons/library-big.svg");
+                                        label: @tr("Open album");
+                                        clicked => { FavoritesActions.open-album(item.id); }
+                                    }
+                                    if item.kind == "playlist": ContextMenuItem {
+                                        icon: @image-url("../assets/icons/library-big.svg");
+                                        label: @tr("Open playlist");
+                                        clicked => { FavoritesActions.open-playlist(item.id); }
+                                    }
+                                    if (item.kind == "track" || item.kind == "album") && item.artist-id != "": ContextMenuItem {
+                                        icon: @image-url("../assets/icons/user.svg");
+                                        label: @tr("Go to artist");
+                                        clicked => { FavoritesActions.open-artist(item.artist-id); }
+                                    }
+                                    if item.kind == "artist": ContextMenuItem {
+                                        icon: @image-url("../assets/icons/user.svg");
+                                        label: @tr("Go to artist");
+                                        clicked => { FavoritesActions.open-artist(item.id); }
+                                    }
+                                    if item.kind == "label": ContextMenuItem {
+                                        icon: @image-url("../assets/icons/disc-3.svg");
+                                        label: @tr("Go to label");
+                                        clicked => { FavoritesActions.open-label(item.id, item.title); }
+                                    }
+                                    if item.kind == "track" || item.kind == "album": ContextMenuItem {
+                                        icon: item.is-favorite
+                                            ? @image-url("../assets/icons/heart-filled.svg")
+                                            : @image-url("../assets/icons/heart.svg");
+                                        label: item.is-favorite ? @tr("Remove from Library") : @tr("Add to Library");
+                                        clicked => {
+                                            if (item.kind == "track") { FavoritesActions.track-action(item.id, "favorite"); }
+                                            else { FavoritesActions.album-action(item.id, "favorite"); }
+                                        }
                                     }
                                 }
                             }
@@ -1354,6 +1521,7 @@ export component FavoritesView inherits Rectangle {
                                         artwork-url: artist.image-url,
                                         artwork: artist.image,
                                         following: true,
+                                        is-pinned: artist.is-pinned,
                                     };
                                     follow-mode: "none";
                                     clicked(id) => { root.open-artist(id); }
@@ -1387,6 +1555,7 @@ export component FavoritesView inherits Rectangle {
                                                 artwork-url: artist.image-url,
                                                 artwork: artist.image,
                                                 following: true,
+                                                is-pinned: artist.is-pinned,
                                             };
                                             follow-mode: "none";
                                             clicked(id) => { root.open-artist(id); }
@@ -1478,10 +1647,10 @@ export component FavoritesView inherits Rectangle {
                         if FavoritesState.active-tab == "labels": labels-grid := Rectangle {
                             property <int> columns: Math.max(
                                 1,
-                                Math.floor((self.width + root.gap) / (root.artist-w + root.gap)));
+                                Math.floor((self.width + root.gap) / (root.artist-card-w + root.gap)));
                             property <int> rows: Math.ceil(FavoritesState.labels-visible.length / self.columns);
                             height: self.rows > 0
-                                ? self.rows * root.artist-h + Math.max(0, self.rows - 1) * root.gap
+                                ? self.rows * root.artist-card-h + Math.max(0, self.rows - 1) * root.gap
                                 : 0px;
                             if FavoritesState.labels.length == 0: Text {
                                 text: @tr("No labels in your Library yet.");
@@ -1494,10 +1663,10 @@ export component FavoritesView inherits Rectangle {
                                 color: Theme.text-muted;
                                 font-size: Typography.body;
                             }
-                            for label[i] in FavoritesState.labels-visible: FavLabelCard {
-                                x: Math.mod(i, labels-grid.columns) * (root.artist-w + root.gap);
-                                y: Math.floor(i / labels-grid.columns) * (root.artist-h + root.gap);
-                                item: label;
+                            for lbl[i] in FavoritesState.labels-visible: LabelCard {
+                                x: Math.mod(i, labels-grid.columns) * (root.artist-card-w + root.gap);
+                                y: Math.floor(i / labels-grid.columns) * (root.artist-card-h + root.gap);
+                                label: lbl;
                                 clicked(id, name) => { FavoritesActions.open-label(id, name); }
                             }
                         }

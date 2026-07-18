@@ -4830,6 +4830,9 @@ export struct FavoriteArtistItem {
     name: string,
     image-url: string,
     image: image,
+    // Pin badge state — kept live by main::set_artist_row_pinned when a pin
+    // toggles anywhere (mirrors SlimItem.is-pinned).
+    is-pinned: bool,
 }
 
 // An A-Z section of favorite artists (grid grouped mode + sidepanel left

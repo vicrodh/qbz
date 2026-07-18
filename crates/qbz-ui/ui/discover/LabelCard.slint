@@ -1,0 +1,107 @@
+// Label card — the album card's twin for record labels: a 200x200 square
+// cover (the label logo, contain-fit over an elevated placeholder, or an
+// indigo→violet gradient + disc glyph when no logo), then a title / album-count
+// stack. No hover overlay buttons (a label is opened, not played). Matches the
+// 200x246 footprint of AlbumCard / PlaylistCard so a mixed grid stays aligned.
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Typography } from "../foundation/typography.slint";
+import { Radius } from "../foundation/radius.slint";
+import { Spacing } from "../foundation/spacing.slint";
+import { FavoriteLabelItem } from "../state.slint";
+import { QbzIcon } from "../primitives/QbzIcon.slint";
+
+export component LabelCard inherits Rectangle {
+    in property <FavoriteLabelItem> label;
+    // (id, name) — opens the label landing page.
+    callback clicked(string, string);
+
+    in property <length> card-height: 246px;
+    width: 200px;
+    height: root.card-height;
+
+    VerticalLayout {
+        alignment: start;
+        spacing: 0px;
+
+        // --- Logo -------------------------------------------------------
+        Rectangle {
+            width: 200px;
+            height: 200px;
+            border-radius: Radius.sm;
+            background: root.label.image-url == ""
+                ? @linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)
+                : Theme.surface-elevated;
+            clip: true;
+
+            // Logos have varied/transparent backgrounds — contain-fit so they
+            // are never cropped (unlike album art, which is cover-fit).
+            Image {
+                width: 100%;
+                height: 100%;
+                source: root.label.image;
+                image-fit: contain;
+            }
+            if root.label.image-url == "": QbzIcon {
+                source: @image-url("../assets/icons/disc-3.svg");
+                width: 56px;
+                height: 56px;
+                x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
+                y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
+                tint: #ffffff;
+            }
+
+            // Hover scrim (subtle — signals the card is clickable).
+            Rectangle {
+                width: 100%;
+                height: 100%;
+                background: #000000;
+                opacity: ta.has-hover ? 0.25 : 0.0;
+                animate opacity { duration: 150ms; }
+            }
+            ta := TouchArea {
+                mouse-cursor: pointer;
+                clicked => {
+                    root.clicked(root.label.id, root.label.name);
+                }
+            }
+        }
+
+        Rectangle { height: 6px; }
+
+        // --- Name / album count -----------------------------------------
+        HorizontalLayout {
+            height: 40px;
+            VerticalLayout {
+                alignment: center;
+                spacing: 2px;
+                horizontal-stretch: 1;
+
+                title-area := TouchArea {
+                    height: 20px;
+                    mouse-cursor: pointer;
+                    clicked => {
+                        root.clicked(root.label.id, root.label.name);
+                    }
+                    Text {
+                        width: 100%;
+                        text: root.label.name;
+                        color: title-area.has-hover ? Theme.accent : Theme.text-primary;
+                        font-size: Typography.body - 2px;
+                        font-weight: Typography.medium;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                }
+                if root.label.albums-line != "": Text {
+                    width: 100%;
+                    text: root.label.albums-line;
+                    color: Theme.text-muted;
+                    font-size: Typography.link - 1px;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+            }
+        }
+    }
+}

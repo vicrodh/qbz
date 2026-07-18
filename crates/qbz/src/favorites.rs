@@ -577,6 +577,7 @@ pub fn apply_favorites(window: &AppWindow, data: FavData) {
             let cards: Vec<FavoriteArtistItem> = items
                 .into_iter()
                 .map(|a| FavoriteArtistItem {
+                    is_pinned: crate::pinned::is_pinned("artist", &a.id),
                     id: a.id.into(),
                     name: a.name.into(),
                     image_url: a.image_url.into(),

@@ -339,14 +339,14 @@ export component AlbumCard inherits Rectangle {
                 Image {
                     source: root.album.source == "plex"
                         ? @image-url("../assets/icons/plex-logo.svg")
-                        : (root.album.source == "qobuz_download" || root.album.source == "qobuz_purchase"
+                        : (root.album.source == "qobuz_download" || root.album.source == "qobuz_purchase" || root.album.source == "qobuz"
                             ? @image-url("../assets/icons/qobuz-logo-filled.svg")
                             : @image-url("../assets/icons/hard-drive.svg"));
                     colorize: root.album.source == "qobuz_purchase" ? #eab308
                         : (root.album.source == "local" ? #ffffff : transparent);
                     width: root.album.source == "plex" ? 16px
                         : (root.album.source == "qobuz_download" ? 22px
-                            : (root.album.source == "qobuz_purchase" ? 18px : 14px));
+                            : (root.album.source == "qobuz_purchase" || root.album.source == "qobuz" ? 18px : 14px));
                     height: self.width;
                     x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
                     y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;

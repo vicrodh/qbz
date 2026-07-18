@@ -1802,6 +1802,27 @@ fn set_artist_row_pinned(window: &AppWindow, artist_id: &str, pinned: bool) {
     flip(&reco.get_rec_artists_recent());
     flip(&reco.get_top_artists());
     flip(&window.global::<LabelState>().get_artists());
+    // Library > Favorites artists grid uses FavoriteArtistItem (not SlimItem);
+    // flip it too so the pin badge updates live there (grid + A-Z sections).
+    let flip_fav = |model: &slint::ModelRc<FavoriteArtistItem>| {
+        for i in 0..model.row_count() {
+            if let Some(mut item) = model.row_data(i) {
+                if item.id == artist_id && item.is_pinned != pinned {
+                    item.is_pinned = pinned;
+                    model.set_row_data(i, item);
+                }
+            }
+        }
+    };
+    let favs = window.global::<FavoritesState>();
+    flip_fav(&favs.get_artists());
+    flip_fav(&favs.get_artists_visible());
+    let grouped = favs.get_artists_grouped();
+    for gi in 0..grouped.row_count() {
+        if let Some(sec) = grouped.row_data(gi) {
+            flip_fav(&sec.artists);
+        }
+    }
 }
 
 /// Feed Capa B (intelligent-search ranking) from a RESULTS-PAGE click, but only
@@ -3691,7 +3712,10 @@ fn navigate_library_all(
                 let _ = weak.upgrade_in_event_loop(move |w| {
                     library_all::apply_library_all(&w, feed);
                     let jobs = library_all::artwork_jobs(&w);
-                    artwork::spawn_loads(jobs, weak_j.clone(), ic.clone());
+                    // Mixed payload (Qobuz http / local fs / Plex /library/) —
+                    // route each cover by scheme so local/Plex covers decode.
+                    let plex = crate::plex_settings::get();
+                    artwork::spawn_search_loads(jobs, plex.base_url, plex.token, weak_j.clone(), ic.clone());
                 });
             }
             Err(e) => {
@@ -7820,6 +7844,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // mode there is no WGPU28 GraphicsAPI to hook, so registering it would be a no-op
     // at best — skip it so software mode carries zero wgpu machinery.
     if use_gpu_renderer {
+        let weak_for_underlay = window.as_weak();
         if let Err(e) = window
             .window()
             .set_rendering_notifier(move |state, graphics_api| {
@@ -7831,6 +7856,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                     slint::RenderingState::RenderingTeardown => {
                         crate::shader_underlay::teardown();
+                        // The Image in ImmersiveState.shader-texture wraps a wgpu
+                        // texture from the instance/device being destroyed. The
+                        // property survives a Wayland hide (tray restore); the
+                        // first frame after the next RenderingSetup would hand that
+                        // stale texture to the NEW femtovg canvas — a cross-instance
+                        // id lookup that panics in wgpu-core ("TextureView … is no
+                        // longer alive"). Clear it now; the 30 fps drain repopulates
+                        // it on the new device within a tick.
+                        if let Some(w) = weak_for_underlay.upgrade() {
+                            w.global::<ImmersiveState>()
+                                .set_shader_texture(slint::Image::default());
+                        }
                     }
                     _ => {}
                 }
@@ -20747,7 +20784,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 w.global::<LibraryAllState>().set_search(q);
                 library_all::derive(&w);
                 let jobs = library_all::artwork_jobs(&w);
-                artwork::spawn_loads(jobs, weak.clone(), image_cache.clone());
+                let plex = crate::plex_settings::get();
+                artwork::spawn_search_loads(jobs, plex.base_url, plex.token, weak.clone(), image_cache.clone());
             }
         });
     }
@@ -20759,7 +20797,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 w.global::<LibraryAllState>().set_sort_by(key);
                 library_all::derive(&w);
                 let jobs = library_all::artwork_jobs(&w);
-                artwork::spawn_loads(jobs, weak.clone(), image_cache.clone());
+                let plex = crate::plex_settings::get();
+                artwork::spawn_search_loads(jobs, plex.base_url, plex.token, weak.clone(), image_cache.clone());
             }
         });
     }
@@ -20788,7 +20827,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                     library_all::derive(&w);
                     let jobs = library_all::artwork_jobs(&w);
-                    artwork::spawn_loads(jobs, weak.clone(), image_cache.clone());
+                    let plex = crate::plex_settings::get();
+                    artwork::spawn_search_loads(jobs, plex.base_url, plex.token, weak.clone(), image_cache.clone());
                 }
             });
     }
