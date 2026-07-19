@@ -125,6 +125,16 @@ export struct SearchPlaylistItem {
     // on Discover playlist cards (default neutral dark; replaced once the
     // cover decodes). Mosaic cards ignore it.
     dominant-color: color,
+    // Ownership signals driving the card's overlay/menu affordances:
+    //   is-owned     — the user is the Qobuz owner → favorite (heart) only.
+    //   is-following — the user follows this NON-owned Qobuz playlist → the
+    //                  overlay shows "unfollow" (check) instead of "follow".
+    //   is-copied    — already copied into the user's own playlists → the
+    //                  context-menu "Copy to your library" item is hidden.
+    // Editorial/foreign playlists default is-owned=false (follow + copy).
+    is-owned: bool,
+    is-following: bool,
+    is-copied: bool,
 }
 
 // One entry in the mixed Pinned carousel (Home / For You). `kind` selects
@@ -4943,7 +4953,7 @@ export global FavoritesActions {
     callback labels-random();
     callback search-playlists(string /* query */);
     callback playlists-set-view(string /* grid | list */);
-    callback playlist-action(string /* playlist id */, string /* play | play-next | queue | share | favorite */);
+    callback playlist-action(string /* playlist id */, string /* play | play-next | queue | share | favorite | follow | unfollow | copy */);
     callback search-artists(string /* query */);
     callback artists-set-view(string /* grid | sidepanel */);
     callback artists-set-group(string /* off | alpha */);
@@ -4987,6 +4997,15 @@ export struct LibraryFeedItem {
     removing: bool,
     sort-title: string,    // lowercased title for the A-Z sort
     sort-artist: string,   // lowercased artist for the artist sort
+    // Lowercased genre name for the client-side genre filter (albums + tracks
+    // carry it; artists/labels/playlists are ""). "" is excluded when a genre
+    // is selected.
+    genre: string,
+    // Playlist ownership (mirrors SearchPlaylistItem) so the mixed-feed
+    // PlaylistCard shows favorite (owned) vs follow/copy (foreign).
+    playlist-owned: bool,
+    playlist-following: bool,
+    playlist-copied: bool,
 }
 
 export global LibraryAllState {
@@ -4994,6 +5013,10 @@ export global LibraryAllState {
     in property <[LibraryFeedItem]> items-visible: []; // after search + source + sort
     in-out property <string> search: "";
     in-out property <string> sort-by: "date";          // "date" | "title" | "artist"
+    // Sort direction, PlaylistView-style (re-selecting the active field
+    // toggles it). For "date": false = newest-first (default), true = oldest;
+    // for "title"/"artist": true = A→Z (default), false = Z→A.
+    in-out property <bool> sort-asc: false;
     in-out property <string> view-mode: "grid";        // "grid" | "list"
     // Source-switch filters — the three webplayer toggles. All on = show all.
     in-out property <bool> show-purchases: true;
@@ -5009,6 +5032,7 @@ export global LibraryAllState {
 
 export global LibraryAllActions {
     callback search(string /* query */);
+    // Re-selecting the active field toggles direction (PlaylistView pattern).
     callback set-sort(string /* date | title | artist */);
     callback set-view(string /* grid | list */);
     callback toggle-source(string /* purchases | favorites | following | local */);

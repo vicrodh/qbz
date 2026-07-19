@@ -20,7 +20,7 @@ use crate::{AppWindow, LibraryAllState, LibraryFeedItem};
 type Runtime = Arc<AppRuntime<SlintAdapter>>;
 
 /// Plain, `Send` feed item produced on the worker thread.
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct Feed {
     pub kind: String,   // track | album | artist | playlist | label
     pub group: String,  // favorites | following | purchases
@@ -36,6 +36,14 @@ pub struct Feed {
     pub quality_tier: String,
     pub quality_detail: String,
     pub is_favorite: bool,
+    /// Genre name (albums + tracks carry one; artists/labels/playlists ""). Feeds
+    /// the client-side genre filter — "" is excluded when a genre is selected.
+    pub genre: String,
+    /// Playlist ownership (only meaningful for kind == "playlist"): owned →
+    /// favorite affordance; foreign Qobuz → follow + copy.
+    pub playlist_owned: bool,
+    pub playlist_following: bool,
+    pub playlist_copied: bool,
     /// Recency proxy in [0.0, 1.0]; 0.0 = most-recently added. Each source list
     /// comes back date-desc, so `index / len` interleaves the sources by recency
     /// without needing exact per-item timestamps.
@@ -75,9 +83,11 @@ pub async fn load_library_all(runtime: &Runtime) -> Result<Vec<Feed>, String> {
                 quality_tier: t.quality_tier,
                 quality_detail: t.quality_detail,
                 is_favorite: true,
+                genre: t.genre,
                 added_rank: rank(i, n),
                 id: t.id,
                 title: t.title,
+                ..Default::default()
             });
         }
     }
@@ -99,9 +109,11 @@ pub async fn load_library_all(runtime: &Runtime) -> Result<Vec<Feed>, String> {
                 quality_tier: a.quality_tier,
                 quality_detail: a.quality_detail,
                 is_favorite: true,
+                genre: a.genre,
                 added_rank: rank(i, n),
                 id: a.id,
                 title: a.title,
+                ..Default::default()
             });
         }
     }
@@ -128,6 +140,7 @@ pub async fn load_library_all(runtime: &Runtime) -> Result<Vec<Feed>, String> {
                 added_rank: rank(i, n),
                 id: ar.id,
                 title: ar.name,
+                ..Default::default()
             });
         }
     }
@@ -152,6 +165,7 @@ pub async fn load_library_all(runtime: &Runtime) -> Result<Vec<Feed>, String> {
                 added_rank: rank(i, n),
                 id: l.id,
                 title: l.name,
+                ..Default::default()
             });
         }
     }
@@ -164,7 +178,7 @@ pub async fn load_library_all(runtime: &Runtime) -> Result<Vec<Feed>, String> {
     {
         let n = fav_pl.len();
         for (i, p) in fav_pl.into_iter().enumerate() {
-            let image_url = p.cover_urls.into_iter().next().unwrap_or_default();
+            let image_url = p.cover_urls.iter().next().cloned().unwrap_or_default();
             feed.push(Feed {
                 kind: "playlist".into(),
                 group: "favorites".into(),
@@ -178,14 +192,18 @@ pub async fn load_library_all(runtime: &Runtime) -> Result<Vec<Feed>, String> {
                 quality_tier: String::new(),
                 quality_detail: String::new(),
                 is_favorite: true,
+                playlist_owned: p.is_owned,
+                playlist_following: p.is_following,
+                playlist_copied: p.is_copied,
                 added_rank: rank(i, n),
                 id: p.id,
                 title: p.title,
+                ..Default::default()
             });
         }
         let n = fol_pl.len();
         for (i, p) in fol_pl.into_iter().enumerate() {
-            let image_url = p.cover_urls.into_iter().next().unwrap_or_default();
+            let image_url = p.cover_urls.iter().next().cloned().unwrap_or_default();
             feed.push(Feed {
                 kind: "playlist".into(),
                 group: "following".into(),
@@ -199,9 +217,13 @@ pub async fn load_library_all(runtime: &Runtime) -> Result<Vec<Feed>, String> {
                 quality_tier: String::new(),
                 quality_detail: String::new(),
                 is_favorite: false,
+                playlist_owned: p.is_owned,
+                playlist_following: p.is_following,
+                playlist_copied: p.is_copied,
                 added_rank: rank(i, n),
                 id: p.id,
                 title: p.title,
+                ..Default::default()
             });
         }
     }
@@ -213,6 +235,7 @@ pub async fn load_library_all(runtime: &Runtime) -> Result<Vec<Feed>, String> {
         for (i, a) in albums.into_iter().enumerate() {
             let image_url = a.image.best().cloned().unwrap_or_default();
             let tier = if a.hires { "hires" } else { "cd" };
+            let genre = a.genre.as_ref().map(|g| g.name.clone()).unwrap_or_default();
             feed.push(Feed {
                 kind: "album".into(),
                 group: "purchases".into(),
@@ -226,9 +249,11 @@ pub async fn load_library_all(runtime: &Runtime) -> Result<Vec<Feed>, String> {
                 quality_tier: tier.into(),
                 quality_detail: String::new(),
                 is_favorite: false,
+                genre,
                 added_rank: rank(i, n),
                 id: a.id,
                 title: a.title,
+                ..Default::default()
             });
         }
         let n = tracks.len();
@@ -265,6 +290,7 @@ pub async fn load_library_all(runtime: &Runtime) -> Result<Vec<Feed>, String> {
                 added_rank: rank(i, n),
                 id: t.id.to_string(),
                 title: t.title,
+                ..Default::default()
             });
         }
     }
@@ -291,6 +317,7 @@ pub async fn load_library_all(runtime: &Runtime) -> Result<Vec<Feed>, String> {
                 added_rank: rank(i, n),
                 id: lf.id,
                 title: lf.title,
+                ..Default::default()
             });
         }
     }
@@ -324,6 +351,10 @@ fn to_item(f: &Feed) -> LibraryFeedItem {
         removing: false,
         sort_title: f.title.to_lowercase().into(),
         sort_artist: f.artist.to_lowercase().into(),
+        genre: f.genre.to_lowercase().into(),
+        playlist_owned: f.playlist_owned,
+        playlist_following: f.playlist_following,
+        playlist_copied: f.playlist_copied,
     }
 }
 
@@ -339,8 +370,25 @@ pub fn apply_library_all(window: &AppWindow, feed: Vec<Feed>) {
     derive(window);
 }
 
-/// Apply search + source-switch + sort over the full model into `items-visible`.
-/// Runs on the Slint event loop; Slint never sorts/filters.
+/// PlaylistView-style sort toggle: re-selecting the active field flips its
+/// direction; a new field resets to that field's natural default ("date"
+/// newest-first, "title"/"artist" A→Z). Then re-derive.
+pub fn set_sort(window: &AppWindow, field: &str) {
+    let st = window.global::<LibraryAllState>();
+    let cur_field = st.get_sort_by().to_string();
+    let new_asc = if cur_field == field {
+        !st.get_sort_asc()
+    } else {
+        // "date" starts descending (newest first); the others start ascending.
+        field != "date"
+    };
+    st.set_sort_by(field.into());
+    st.set_sort_asc(new_asc);
+    derive(window);
+}
+
+/// Apply search + source-switch + genre + sort over the full model into
+/// `items-visible`. Runs on the Slint event loop; Slint never sorts/filters.
 pub fn derive(window: &AppWindow) {
     let st = window.global::<LibraryAllState>();
     let needle = st.get_search().to_lowercase();
@@ -349,6 +397,15 @@ pub fn derive(window: &AppWindow) {
     let show_following = st.get_show_following();
     let show_local = st.get_show_local();
     let sort_by = st.get_sort_by();
+    let sort_asc = st.get_sort_asc();
+    // Shared genre filter (its own "library-all" context). Empty = no filter;
+    // otherwise an item shows only when its (lowercased) genre matches one of
+    // the selected genre names — kinds with no genre (artist/label/playlist)
+    // are excluded, so the feed narrows to the chosen genre's albums + tracks.
+    let genre_names: Vec<String> = crate::genre_filter::selected_names("library-all")
+        .into_iter()
+        .map(|g| g.to_lowercase())
+        .collect();
 
     let full = st.get_items();
     let mut out: Vec<LibraryFeedItem> = Vec::new();
@@ -385,14 +442,38 @@ pub fn derive(window: &AppWindow) {
                 continue;
             }
         }
+        if !genre_names.is_empty() {
+            let g = item.genre.as_str();
+            if g.is_empty() || !genre_names.iter().any(|n| g.contains(n.as_str())) {
+                continue;
+            }
+        }
         out.push(item);
     }
 
+    // Canonical ascending order per field, then reverse for the other
+    // direction. "date" has no key on the item (the model is stored
+    // newest-first from load), so it uses the inherent order: asc(false) =
+    // newest-first (default), asc(true) = oldest-first (reversed).
     match sort_by.as_str() {
-        "title" => out.sort_by(|a, b| a.sort_title.as_str().cmp(b.sort_title.as_str())),
-        "artist" => out.sort_by(|a, b| a.sort_artist.as_str().cmp(b.sort_artist.as_str())),
-        // "date" keeps the merged recency order from load.
-        _ => {}
+        "title" => {
+            out.sort_by(|a, b| a.sort_title.as_str().cmp(b.sort_title.as_str()));
+            if !sort_asc {
+                out.reverse();
+            }
+        }
+        "artist" => {
+            out.sort_by(|a, b| a.sort_artist.as_str().cmp(b.sort_artist.as_str()));
+            if !sort_asc {
+                out.reverse();
+            }
+        }
+        // "date": model order is newest-first; reverse only for oldest-first.
+        _ => {
+            if sort_asc {
+                out.reverse();
+            }
+        }
     }
 
     st.set_items_visible(ModelRc::new(VecModel::from(out)));

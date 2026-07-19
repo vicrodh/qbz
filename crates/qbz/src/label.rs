@@ -954,6 +954,10 @@ fn playlist_to_item(p: &PlaylistSlim) -> SearchPlaylistItem {
         // colour treatment is Discover-only).
         category: "".into(),
         dominant_color: slint::Color::from_argb_u8(0, 0, 0, 0),
+        // Label-landing playlists are foreign Qobuz playlists → follow + copy.
+        is_owned: false,
+        is_following: false,
+        is_copied: false,
     }
 }
 

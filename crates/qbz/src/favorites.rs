@@ -225,12 +225,18 @@ where
             .await
             .map_err(|e| e.to_string())?;
         let uid = crate::library_db::current_user_id();
+        // Following = non-owned playlists present in get_user_playlists →
+        // subscribed by definition, so stamp is_following for the card overlay.
         let following: Vec<PlaylistRow> = match uid {
             Some(uid) => all
                 .iter()
                 .filter(|p| p.owner.id != uid)
                 .cloned()
-                .map(search::map_playlist)
+                .map(|p| {
+                    let mut r = search::map_playlist(p);
+                    r.is_following = true;
+                    r
+                })
                 .collect(),
             None => Vec::new(),
         };
@@ -255,8 +261,15 @@ where
                 continue;
             }
             if let Some(p) = by_id.get(&fid) {
-                favorites.push(search::map_playlist((**p).clone()));
+                // Hearted AND in the user's playlists: owned ones were already
+                // seeded above, so a non-owned one here is a followed playlist.
+                let mut r = search::map_playlist((**p).clone());
+                if !r.is_owned {
+                    r.is_following = true;
+                }
+                favorites.push(r);
             } else if let Ok(p) = runtime.core().get_playlist(fid).await {
+                // Hearted but NOT in the user's playlists → not subscribed.
                 favorites.push(search::map_playlist(p));
             }
         }

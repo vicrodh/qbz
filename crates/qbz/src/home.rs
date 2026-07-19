@@ -722,6 +722,10 @@ pub(crate) fn playlist_to_item(p: &PlaylistCardData) -> SearchPlaylistItem {
         // pipeline writes the real dominant colour (mirrors immersive::
         // dominant_cover_color's own fallback).
         dominant_color: slint::Color::from_rgb_u8(30, 30, 34),
+        // Discover playlists are editorial (foreign Qobuz) → follow + copy.
+        is_owned: false,
+        is_following: false,
+        is_copied: false,
     }
 }
 

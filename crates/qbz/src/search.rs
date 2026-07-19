@@ -16,8 +16,8 @@ use slint::{ComponentHandle, Model, ModelRc, VecModel};
 use crate::artwork::{ArtworkJob, ArtworkTarget};
 use crate::{
     AlbumCardItem, AppWindow, CortinillaRow as CortinillaRowItem,
-    CortinillaSection as CortinillaSectionItem, ExternalRecoState, ForYouState, SearchPlaylistItem,
-    SearchState, SlimItem, TrackItem,
+    CortinillaSection as CortinillaSectionItem, ExternalRecoState, ForYouState, HomeState,
+    LabelState, SearchPlaylistItem, SearchState, SlimItem, TrackItem,
 };
 
 thread_local! {
@@ -139,6 +139,14 @@ pub struct PlaylistRow {
     pub subtitle: String,
     /// Up to four distinct cover URLs for the collage.
     pub cover_urls: Vec<String>,
+    /// Ownership signals for the card overlay/menu (owned → favorite; foreign
+    /// Qobuz → follow + copy). `is_owned` is authoritative (owner.id ==
+    /// current user); `is_following`/`is_copied` are best-effort per source
+    /// (favorites seeds `is_following` from the followed split; other list
+    /// surfaces leave them false — the action still works id-scoped).
+    pub is_owned: bool,
+    pub is_following: bool,
+    pub is_copied: bool,
 }
 
 /// The most-popular hero entry.
@@ -356,11 +364,17 @@ pub fn map_playlist(playlist: Playlist) -> PlaylistRow {
             subtitle = format!("{}   •   {}", subtitle, tracks_label);
         }
     }
+    let is_owned = crate::library_db::current_user_id()
+        .map(|uid| uid == playlist.owner.id)
+        .unwrap_or(false);
     PlaylistRow {
         id: playlist.id.to_string(),
         title: playlist.name,
         subtitle,
         cover_urls,
+        is_owned,
+        is_following: false,
+        is_copied: false,
     }
 }
 
@@ -1278,6 +1292,9 @@ pub(crate) fn playlist_item(row: PlaylistRow) -> SearchPlaylistItem {
         // only).
         category: "".into(),
         dominant_color: slint::Color::from_argb_u8(0, 0, 0, 0),
+        is_owned: row.is_owned,
+        is_following: row.is_following,
+        is_copied: row.is_copied,
     }
 }
 
@@ -1498,6 +1515,12 @@ pub fn mark_artist_followed(window: &AppWindow, artist_id: &str, following: bool
     set_slim_following(&reco.get_rec_artists_common(), artist_id, following);
     set_slim_following(&reco.get_rec_artists_recent(), artist_id, following);
     set_slim_following(&reco.get_top_artists(), artist_id, following);
+    // Home "Top artists" carousel + label-page related artists — walked by the
+    // pin twin (`set_artist_row_pinned`) but historically missed here.
+    set_slim_following(&window.global::<HomeState>().get_top_artists(), artist_id, following);
+    set_slim_following(&window.global::<LabelState>().get_artists(), artist_id, following);
+    // Pinned mixed carousel (Home / For You) — nested artist SlimItem.
+    crate::set_pinned_artist_following(window, artist_id, following);
 }
 
 /// Flip `following` on the row matching `artist_id` in a `[SlimItem]` model.

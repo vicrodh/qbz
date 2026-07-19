@@ -1649,6 +1649,11 @@ fn set_album_row_favorite(window: &AppWindow, album_id: &str, favorite: bool) {
     flip(&favs.get_albums_visible());
     flip_sections(&favs.get_albums_grouped());
     flip_sections(&favs.get_selected_artist_sections());
+    // Dedicated "Recently played — view all" page.
+    flip(&window.global::<RecentAlbumsState>().get_albums());
+    // Pinned mixed carousel (Home / For You) — the album lives NESTED inside a
+    // PinnedItem, so the generic `flip` can't reach it.
+    set_pinned_album_favorite(window, album_id, favorite);
     // Now-playing bar "+" flyout — its add/remove-album-to-collection entry
     // reads NowPlayingState.album-favorite; flip it when the toggled album is
     // the one playing so the label stays honest without a track change.
@@ -1776,6 +1781,9 @@ fn set_album_row_pinned(window: &AppWindow, album_id: &str, pinned: bool) {
     flip(&ll.get_folders_visible());
     flip_sections(&ll.get_folders_grouped());
     flip(&ll.get_artists_selected_albums());
+    // Dedicated "Recently played — view all" page (the Pinned carousel itself is
+    // rebuilt wholesale by pinned_section::rebuild_pinned right after a pin).
+    flip(&window.global::<RecentAlbumsState>().get_albums());
 }
 
 /// Playlist counterpart of [`set_album_row_pinned`]: flip the `is-pinned`
@@ -1855,6 +1863,77 @@ fn set_artist_row_pinned(window: &AppWindow, artist_id: &str, pinned: bool) {
     }
 }
 
+/// Flip the nested album's `is-favorite` on any Pinned carousel row (Home / For
+/// You) matching `album_id`. The album lives inside a `PinnedItem`, so neither
+/// the `[AlbumCardItem]` nor the `[DiscoverSection]` sweep reaches it.
+fn set_pinned_album_favorite(window: &AppWindow, album_id: &str, favorite: bool) {
+    let pm = window.global::<PinnedState>().get_items();
+    for i in 0..pm.row_count() {
+        if let Some(mut it) = pm.row_data(i) {
+            if it.kind == "album" && it.album.id == album_id && it.album.is_favorite != favorite {
+                it.album.is_favorite = favorite;
+                pm.set_row_data(i, it);
+            }
+        }
+    }
+}
+
+/// Flip the nested artist's `following` on any Pinned carousel row matching
+/// `artist_id`. Twin of [`set_pinned_album_favorite`] for the follow chip.
+/// `pub(crate)` so `search::mark_artist_followed` can reach the Pinned model.
+pub(crate) fn set_pinned_artist_following(window: &AppWindow, artist_id: &str, following: bool) {
+    let pm = window.global::<PinnedState>().get_items();
+    for i in 0..pm.row_count() {
+        if let Some(mut it) = pm.row_data(i) {
+            if it.kind == "artist" && it.artist.id == artist_id && it.artist.following != following {
+                it.artist.following = following;
+                pm.set_row_data(i, it);
+            }
+        }
+    }
+}
+
+/// Flip `is-following` on every visible PLAYLIST card matching `playlist_id`
+/// (Home rail, Qobuz Playlists browse, Search, Favorites, label/artist
+/// landings, Pinned carousel) so a follow/unfollow from ANY card overlay or
+/// menu updates the others live. Playlist twin of [`set_artist_row_pinned`].
+fn set_playlist_row_following(window: &AppWindow, playlist_id: &str, following: bool) {
+    let flip = |model: &slint::ModelRc<SearchPlaylistItem>| {
+        for i in 0..model.row_count() {
+            if let Some(mut item) = model.row_data(i) {
+                if item.id == playlist_id && item.is_following != following {
+                    item.is_following = following;
+                    model.set_row_data(i, item);
+                }
+            }
+        }
+    };
+    flip(&window.global::<HomeState>().get_playlists());
+    flip(&window.global::<SearchState>().get_playlists());
+    let browse = window.global::<PlaylistBrowseState>();
+    flip(&browse.get_playlists());
+    flip(&browse.get_visible());
+    let favs = window.global::<FavoritesState>();
+    flip(&favs.get_playlists_favorites());
+    flip(&favs.get_playlists_following());
+    flip(&favs.get_playlists_visible());
+    flip(&window.global::<LabelState>().get_playlists());
+    flip(&window.global::<ArtistState>().get_playlists());
+    // Pinned mixed carousel — nested SearchPlaylistItem.
+    let pm = window.global::<PinnedState>().get_items();
+    for i in 0..pm.row_count() {
+        if let Some(mut it) = pm.row_data(i) {
+            if it.kind == "playlist"
+                && it.playlist.id == playlist_id
+                && it.playlist.is_following != following
+            {
+                it.playlist.is_following = following;
+                pm.set_row_data(i, it);
+            }
+        }
+    }
+}
+
 /// Feed Capa B (intelligent-search ranking) from a RESULTS-PAGE click, but only
 /// when the results page is the active view. `on_open_album` / `on_open_artist`
 /// / `on_media_action` are global handlers shared by every view (album detail,
@@ -1883,6 +1962,154 @@ fn record_search_interaction(
         return;
     }
     crate::search_service::record(&query, kind, id, action);
+}
+
+/// Copy a Qobuz playlist (by id) into the user's own playlists: fetch the
+/// source, create a new owned playlist, add every track, carry the cover over
+/// and mark the SOURCE id copied. Shared by the playlist header AND the card
+/// menus (Discover / Search / Favorites / Library All). `is_open` = this id is
+/// the currently-open detail, so its PlaylistState.is-copied flips too.
+fn playlist_copy_by_id(
+    runtime: Arc<AppRuntime<SlintAdapter>>,
+    weak: slint::Weak<AppWindow>,
+    handle: tokio::runtime::Handle,
+    pid: u64,
+    is_open: bool,
+) {
+    handle.spawn(async move {
+        let source = match runtime.core().get_playlist(pid).await {
+            Ok(p) => p,
+            Err(e) => {
+                log::error!("[qbz-slint] copy playlist {pid}: get source failed: {e}");
+                crate::toast::error_weak(&weak, qbz_i18n::t("Failed to copy playlist"));
+                return;
+            }
+        };
+        let track_ids: Vec<u64> = source
+            .tracks
+            .as_ref()
+            .map(|t| t.items.iter().map(|track| track.id).collect())
+            .unwrap_or_default();
+        if track_ids.is_empty() {
+            crate::toast::error_weak(&weak, qbz_i18n::t("Playlist has no tracks to copy"));
+            return;
+        }
+        let attribution = format!(
+            "\n\n---\nOriginally curated by {} on Qobuz",
+            source.owner.name
+        );
+        let new_description = match source.description {
+            Some(ref d) if !d.is_empty() => Some(format!("{d}{attribution}")),
+            _ => Some(attribution.trim_start().to_string()),
+        };
+        let new_playlist = match runtime
+            .core()
+            .create_playlist(&source.name, new_description.as_deref(), false)
+            .await
+        {
+            Ok(p) => p,
+            Err(e) => {
+                log::error!("[qbz-slint] copy playlist {pid}: create failed: {e}");
+                crate::toast::error_weak(&weak, qbz_i18n::t("Failed to copy playlist"));
+                return;
+            }
+        };
+        if let Err(e) = runtime
+            .core()
+            .add_tracks_to_playlist(new_playlist.id, &track_ids)
+            .await
+        {
+            log::error!("[qbz-slint] copy playlist {pid}: add tracks failed: {e}");
+        }
+        if let Some(img) = source.images.as_ref().and_then(|i| i.first()).cloned() {
+            let new_id = new_playlist.id;
+            let _ = tokio::task::spawn_blocking(move || {
+                crate::library_db::with_db(|db| {
+                    db.update_playlist_artwork(new_id, Some(img.as_str()))
+                });
+            })
+            .await;
+        }
+        let _ = tokio::task::spawn_blocking(move || {
+            crate::library_db::with_db(|db| db.mark_playlist_copied(pid));
+        })
+        .await;
+        let _ = weak.upgrade_in_event_loop(move |w| {
+            if is_open {
+                w.global::<PlaylistState>().set_is_copied(true);
+            }
+            crate::toast::success(&w, qbz_i18n::t("Copied to your library"));
+        });
+        crate::playback::refresh_sidebar(true);
+    });
+}
+
+/// Follow / unfollow a Qobuz playlist (by id). `is_open` = this id is the
+/// currently-open detail (only then do we flip PlaylistState optimistically +
+/// revert on error). Shared by the header follow toggle and the card overlay.
+fn playlist_set_follow_by_id(
+    runtime: Arc<AppRuntime<SlintAdapter>>,
+    weak: slint::Weak<AppWindow>,
+    handle: tokio::runtime::Handle,
+    pid: u64,
+    follow: bool,
+    is_open: bool,
+) {
+    if is_open {
+        let weak_opt = weak.clone();
+        let _ = weak_opt.upgrade_in_event_loop(move |w| {
+            w.global::<PlaylistState>().set_is_following(follow);
+        });
+    }
+    handle.spawn(async move {
+        let res = if follow {
+            runtime.core().subscribe_playlist(pid).await
+        } else {
+            runtime.core().unsubscribe_playlist(pid).await
+        };
+        if let Err(e) = res {
+            log::error!("[qbz-slint] playlist {pid} follow={follow} failed: {e}");
+            if is_open {
+                let _ = weak.upgrade_in_event_loop(move |w| {
+                    w.global::<PlaylistState>().set_is_following(!follow);
+                });
+            }
+        } else {
+            // Live-flip the follow chip on every visible playlist card.
+            let ids = pid.to_string();
+            let _ = weak.upgrade_in_event_loop(move |w| {
+                set_playlist_row_following(&w, &ids, follow);
+            });
+            crate::playback::refresh_sidebar(true);
+        }
+    });
+}
+
+/// Toggle the INTERNAL library-favorite flag of a playlist (by id), reading
+/// the authoritative current state from the DB so a card (which can't know it)
+/// flips the right way. `is_open` mirrors the open detail's PlaylistState.
+fn playlist_toggle_favorite_by_id(
+    handle: tokio::runtime::Handle,
+    weak: slint::Weak<AppWindow>,
+    pid: u64,
+    is_open: bool,
+) {
+    handle.spawn_blocking(move || {
+        let currently = crate::library_db::with_db(|db| db.get_favorite_playlist_ids())
+            .unwrap_or_default()
+            .contains(&pid);
+        let new_fav = !currently;
+        let ok = crate::library_db::with_db(|db| db.set_playlist_favorite(pid, new_fav));
+        if ok.is_none() {
+            log::error!("[qbz-slint] toggle playlist {pid} favorite failed");
+            return;
+        }
+        if is_open {
+            let _ = weak.upgrade_in_event_loop(move |w| {
+                w.global::<PlaylistState>().set_is_favorite(new_fav);
+            });
+        }
+    });
 }
 
 /// Toggle a track favorite by its REAL Qobuz id: offline guard (read-only
@@ -3731,8 +3958,10 @@ fn navigate_library_all(
             let st = w.global::<LibraryAllState>();
             st.set_loading(true);
             st.set_load_error("".into());
-            // The genre popup edits the favorites context on this surface too.
-            genre_filter::set_context("favorites");
+            // The mixed feed has its OWN genre-filter context (independent of
+            // the favorites albums/tracks filter) so the toolbar badge reflects
+            // this surface's selection on entry.
+            genre_filter::set_context("library-all");
             genre_filter::apply_state(&w);
         });
         match library_all::load_library_all(&runtime).await {
@@ -12464,158 +12693,83 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
                 ("playlist", "favorite") => {
-                    // Favorite/unfavorite the open playlist. This is an INTERNAL
-                    // qbz library flag (Qobuz /favorite/create does NOT accept
-                    // playlist_ids), mirroring the Favorites-card toggle and
-                    // Tauri's v2_playlist_set_favorite. Surfaced in
-                    // Favorites>Playlists + Library>Playlists.
+                    // Internal qbz library flag (Qobuz /favorite/create rejects
+                    // playlist_ids). id-scoped: a CARD toggles ITS playlist, not
+                    // the open one; the DB read picks the direction. `is_open`
+                    // keeps the detail's optimistic heart in sync.
                     if let Some(w) = weak.upgrade() {
-                        let pid = w.global::<PlaylistState>().get_id().to_string();
-                        if local_playlist::is_local_id(&pid) {
+                        if local_playlist::is_local_id(&id) {
                             return;
                         }
-                        let Ok(pid_u64) = pid.parse::<u64>() else {
+                        let Ok(pid) = id.parse::<u64>() else {
                             return;
                         };
-                        let was_fav = w.global::<PlaylistState>().get_is_favorite();
-                        let new_fav = !was_fav;
-                        w.global::<PlaylistState>().set_is_favorite(new_fav);
-                        let weak2 = weak.clone();
-                        handle.spawn_blocking(move || {
-                            // with_db flattens the inner Result to Option<()>
-                            // (None = no db OR the write failed) -> revert the
-                            // optimistic heart on failure.
-                            let ok = crate::library_db::with_db(|db| {
-                                db.set_playlist_favorite(pid_u64, new_fav)
-                            });
-                            if ok.is_none() {
-                                log::error!("[qbz-slint] toggle playlist favorite failed");
-                                let _ = weak2.upgrade_in_event_loop(move |w| {
-                                    w.global::<PlaylistState>().set_is_favorite(was_fav);
-                                });
-                            }
-                        });
+                        let is_open = w.global::<PlaylistState>().get_id().to_string() == id;
+                        playlist_toggle_favorite_by_id(handle.clone(), weak.clone(), pid, is_open);
                     }
                 }
                 ("playlist", "copy") => {
                     // Copy a Qobuz playlist into the user's own playlists
-                    // (create + add every track). INTERNAL — mirrors Tauri's
-                    // (mis-named) v2_subscribe_playlist. The copy is owned, so it
-                    // shows up in Library>Playlists via get_user_playlists.
+                    // (create + add every track). id-scoped so a card copies ITS
+                    // playlist; the detail passes its own id, so behavior is
+                    // unchanged there (is_open flips PlaylistState.is-copied).
                     if let Some(w) = weak.upgrade() {
-                        let pid = w.global::<PlaylistState>().get_id().to_string();
-                        if local_playlist::is_local_id(&pid) {
+                        if local_playlist::is_local_id(&id) {
                             return;
                         }
-                        let Ok(pid_u64) = pid.parse::<u64>() else {
+                        let Ok(pid) = id.parse::<u64>() else {
                             return;
                         };
-                        let runtime = runtime.clone();
-                        let weak2 = weak.clone();
-                        handle.spawn(async move {
-                            let source = match runtime.core().get_playlist(pid_u64).await {
-                                Ok(p) => p,
-                                Err(e) => {
-                                    log::error!("[qbz-slint] copy playlist: get source failed: {e}");
-                                    crate::toast::error_weak(&weak2, qbz_i18n::t("Failed to copy playlist"));
-                                    return;
-                                }
-                            };
-                            let track_ids: Vec<u64> = source
-                                .tracks
-                                .as_ref()
-                                .map(|t| t.items.iter().map(|track| track.id).collect())
-                                .unwrap_or_default();
-                            if track_ids.is_empty() {
-                                crate::toast::error_weak(&weak2, qbz_i18n::t("Playlist has no tracks to copy"));
-                                return;
-                            }
-                            let attribution = format!(
-                                "\n\n---\nOriginally curated by {} on Qobuz",
-                                source.owner.name
-                            );
-                            let new_description = match source.description {
-                                Some(ref d) if !d.is_empty() => Some(format!("{d}{attribution}")),
-                                _ => Some(attribution.trim_start().to_string()),
-                            };
-                            let new_playlist = match runtime
-                                .core()
-                                .create_playlist(&source.name, new_description.as_deref(), false)
-                                .await
-                            {
-                                Ok(p) => p,
-                                Err(e) => {
-                                    log::error!("[qbz-slint] copy playlist: create failed: {e}");
-                                    crate::toast::error_weak(&weak2, qbz_i18n::t("Failed to copy playlist"));
-                                    return;
-                                }
-                            };
-                            if let Err(e) = runtime
-                                .core()
-                                .add_tracks_to_playlist(new_playlist.id, &track_ids)
-                                .await
-                            {
-                                log::error!("[qbz-slint] copy playlist: add tracks failed: {e}");
-                            }
-                            // Best-effort: carry over the source artwork.
-                            if let Some(img) =
-                                source.images.as_ref().and_then(|i| i.first()).cloned()
-                            {
-                                let new_id = new_playlist.id;
-                                let _ = tokio::task::spawn_blocking(move || {
-                                    crate::library_db::with_db(|db| {
-                                        db.update_playlist_artwork(new_id, Some(img.as_str()))
-                                    });
-                                })
-                                .await;
-                            }
-                            // Persist the SOURCE playlist id as "copied" so its
-                            // detail view hides the Copy button on later opens
-                            // (mirrors Tauri's user-scoped `qbz_copied_playlists`).
-                            let _ = tokio::task::spawn_blocking(move || {
-                                crate::library_db::with_db(|db| db.mark_playlist_copied(pid_u64));
-                            })
-                            .await;
-                            let _ = weak2.upgrade_in_event_loop(move |w| {
-                                w.global::<PlaylistState>().set_is_copied(true);
-                                crate::toast::success(&w, qbz_i18n::t("Copied to your library"));
-                            });
-                            crate::playback::refresh_sidebar(true);
-                        });
+                        let is_open = w.global::<PlaylistState>().get_id().to_string() == id;
+                        playlist_copy_by_id(runtime.clone(), weak.clone(), handle.clone(), pid, is_open);
                     }
                 }
                 ("playlist", "follow") => {
-                    // Follow/unfollow on Qobuz (subscribe). Appears in the user's
-                    // Qobuz account across clients and in Library>Playlists via
-                    // get_user_playlists (as a non-owned subscribed playlist).
+                    // Follow on Qobuz (subscribe). The DETAIL button emits
+                    // "follow" as a toggle (id == open → flip current state); a
+                    // CARD carries its follow-state and emits follow/unfollow
+                    // explicitly, so a card "follow" always subscribes.
                     if let Some(w) = weak.upgrade() {
-                        let pid = w.global::<PlaylistState>().get_id().to_string();
-                        if local_playlist::is_local_id(&pid) {
+                        if local_playlist::is_local_id(&id) {
                             return;
                         }
-                        let Ok(pid_u64) = pid.parse::<u64>() else {
+                        let Ok(pid) = id.parse::<u64>() else {
                             return;
                         };
-                        let was_following = w.global::<PlaylistState>().get_is_following();
-                        let make = !was_following;
-                        w.global::<PlaylistState>().set_is_following(make);
-                        let runtime = runtime.clone();
-                        let weak2 = weak.clone();
-                        handle.spawn(async move {
-                            let res = if make {
-                                runtime.core().subscribe_playlist(pid_u64).await
-                            } else {
-                                runtime.core().unsubscribe_playlist(pid_u64).await
-                            };
-                            if let Err(e) = res {
-                                log::error!("[qbz-slint] toggle playlist follow failed: {e}");
-                                let _ = weak2.upgrade_in_event_loop(move |w| {
-                                    w.global::<PlaylistState>().set_is_following(was_following);
-                                });
-                            } else {
-                                crate::playback::refresh_sidebar(true);
-                            }
-                        });
+                        let is_open = w.global::<PlaylistState>().get_id().to_string() == id;
+                        let follow = if is_open {
+                            !w.global::<PlaylistState>().get_is_following()
+                        } else {
+                            true
+                        };
+                        playlist_set_follow_by_id(
+                            runtime.clone(),
+                            weak.clone(),
+                            handle.clone(),
+                            pid,
+                            follow,
+                            is_open,
+                        );
+                    }
+                }
+                ("playlist", "unfollow") => {
+                    // Card-only: unfollow (unsubscribe) the given playlist.
+                    if let Some(w) = weak.upgrade() {
+                        if local_playlist::is_local_id(&id) {
+                            return;
+                        }
+                        let Ok(pid) = id.parse::<u64>() else {
+                            return;
+                        };
+                        let is_open = w.global::<PlaylistState>().get_id().to_string() == id;
+                        playlist_set_follow_by_id(
+                            runtime.clone(),
+                            weak.clone(),
+                            handle.clone(),
+                            pid,
+                            false,
+                            is_open,
+                        );
                     }
                 }
                 ("playlist", "select-toggle") => {
@@ -16490,6 +16644,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     return;
                 };
                 genre_filter::apply_state(&w);
+                // Library "All": client-side genre filter over the mixed feed.
+                if genre_filter::current_context() == "library-all" {
+                    let runtime_f = runtime.clone();
+                    let weak_f = weak.clone();
+                    let image_cache_f = image_cache.clone();
+                    let id_f = id.to_string();
+                    handle.spawn(async move {
+                        if !was_selected {
+                            if let Ok(gid) = id_f.parse::<u64>() {
+                                genre_filter::load_descendants(&runtime_f, gid).await;
+                            }
+                        }
+                        let _ = weak_f.upgrade_in_event_loop(move |w| {
+                            genre_filter::apply_state(&w);
+                            library_all::derive(&w);
+                            let jobs = library_all::artwork_jobs(&w);
+                            let plex = crate::plex_settings::get();
+                            artwork::spawn_search_loads(
+                                jobs,
+                                plex.base_url,
+                                plex.token,
+                                w.as_weak(),
+                                image_cache_f.clone(),
+                            );
+                        });
+                    });
+                    return;
+                }
                 // Favorites: client-side genre filter — re-derive the active
                 // favorites tab instead of re-fetching the discover index.
                 if genre_filter::current_context() == "favorites" {
@@ -16619,6 +16801,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     return;
                 };
                 genre_filter::apply_state(&w);
+                if genre_filter::current_context() == "library-all" {
+                    library_all::derive(&w);
+                    let jobs = library_all::artwork_jobs(&w);
+                    let plex = crate::plex_settings::get();
+                    artwork::spawn_search_loads(
+                        jobs,
+                        plex.base_url,
+                        plex.token,
+                        w.as_weak(),
+                        image_cache.clone(),
+                    );
+                    return;
+                }
                 if genre_filter::current_context() == "favorites" {
                     if w.global::<FavoritesState>().get_active_tab().as_str() == "albums" {
                         favorites::derive_albums(&w);
@@ -20873,22 +21068,72 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 match action.as_str() {
                     "share" => share::copy_to_clipboard(share::qobuz_playlist_url(&id)),
                     "favorite" => {
-                        // Library sub-tab: un-favorite in place (remove the
-                        // local favorite + drop the row). Following sub-tab:
-                        // add to the local Library (per user decision).
-                        let library = w
+                        let Ok(pid) = id.parse::<u64>() else {
+                            return;
+                        };
+                        let in_playlists_tab = w
                             .global::<FavoritesState>()
-                            .get_playlists_sub_tab()
+                            .get_active_tab()
                             .to_string()
-                            != "following";
-                        if let Ok(pid) = id.parse::<u64>() {
+                            == "playlists";
+                        if in_playlists_tab {
+                            // Favorites › Playlists: Library sub-tab un-favorites
+                            // in place (drop the row); Following sub-tab adds to
+                            // the local Library (per user decision).
+                            let library = w
+                                .global::<FavoritesState>()
+                                .get_playlists_sub_tab()
+                                .to_string()
+                                != "following";
                             let fav = !library;
                             handle.spawn_blocking(move || {
                                 crate::library_db::with_db(|db| db.set_playlist_favorite(pid, fav));
                             });
+                            if library {
+                                favorites::remove_playlist_row(&w, &id);
+                            }
+                        } else {
+                            // Library "All" (mixed feed): authoritative toggle by
+                            // the DB state — a foreign card can't know it, and the
+                            // owned-but-unhearted case must ADD, not remove.
+                            playlist_toggle_favorite_by_id(handle.clone(), weak.clone(), pid, false);
                         }
-                        if library {
-                            favorites::remove_playlist_row(&w, &id);
+                    }
+                    "follow" => {
+                        if let Ok(pid) = id.parse::<u64>() {
+                            playlist_set_follow_by_id(
+                                runtime.clone(),
+                                weak.clone(),
+                                handle.clone(),
+                                pid,
+                                true,
+                                false,
+                            );
+                        }
+                    }
+                    "unfollow" => {
+                        if let Ok(pid) = id.parse::<u64>() {
+                            playlist_set_follow_by_id(
+                                runtime.clone(),
+                                weak.clone(),
+                                handle.clone(),
+                                pid,
+                                false,
+                                false,
+                            );
+                            // In the Favorites › Playlists Following sub-tab,
+                            // unfollowing removes the row (mirrors un-favorite).
+                            let fs = w.global::<FavoritesState>();
+                            if fs.get_active_tab().to_string() == "playlists"
+                                && fs.get_playlists_sub_tab().to_string() == "following"
+                            {
+                                favorites::remove_playlist_row(&w, &id);
+                            }
+                        }
+                    }
+                    "copy" => {
+                        if let Ok(pid) = id.parse::<u64>() {
+                            playlist_copy_by_id(runtime.clone(), weak.clone(), handle.clone(), pid, false);
                         }
                     }
                     act => {
@@ -20979,8 +21224,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let image_cache = image_cache.clone();
         window.global::<LibraryAllActions>().on_set_sort(move |key| {
             if let Some(w) = weak.upgrade() {
-                w.global::<LibraryAllState>().set_sort_by(key);
-                library_all::derive(&w);
+                // Re-selecting the active field toggles asc/desc (PlaylistView
+                // pattern); a new field resets to its natural direction.
+                library_all::set_sort(&w, key.as_str());
                 let jobs = library_all::artwork_jobs(&w);
                 let plex = crate::plex_settings::get();
                 artwork::spawn_search_loads(jobs, plex.base_url, plex.token, weak.clone(), image_cache.clone());

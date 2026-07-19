@@ -177,6 +177,10 @@ component SidepanelArtistRow inherits Rectangle {
 // Genre-filter trigger for the favorites toolbars — opens the shared
 // popup in the "favorites" context. Accent fill + "N genres" when active.
 component FavGenreButton inherits Rectangle {
+    // Which shared genre-filter context this button edits ("favorites" for the
+    // favorites tabs, "library-all" for the mixed Library feed). The popup is
+    // shared; set-context switches whose selection it shows.
+    in property <string> context: "favorites";
     property <bool> active: GenreFilterState.selected-count > 0;
     width: genre-row.preferred-width;
     height: 30px;
@@ -212,8 +216,51 @@ component FavGenreButton inherits Rectangle {
     ta := TouchArea {
         mouse-cursor: pointer;
         clicked => {
-            GenreFilterActions.set-context("favorites");
+            GenreFilterActions.set-context(root.context);
             GenreFilterState.open = !GenreFilterState.open;
+        }
+    }
+}
+
+// One row of the Library "All" sort menu — mirrors PlaylistView's SortOption:
+// the active field shows its direction chevron (asc/desc) and re-selecting it
+// toggles direction.
+component LibrarySortOption inherits Rectangle {
+    in property <string> label;
+    in property <bool> active: false;
+    in property <bool> asc: true;
+    callback chosen();
+    height: 30px;
+    border-radius: 5px;
+    background: lso-ta.has-hover ? Theme.surface-hover : transparent;
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 8px;
+        spacing: 6px;
+        Text {
+            text: root.label;
+            color: root.active ? Theme.text-primary : Theme.text-secondary;
+            font-size: Typography.legal;
+            font-weight: root.active ? Typography.semibold : Typography.regular;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+        }
+        VerticalLayout {
+            alignment: center;
+            if root.active: QbzIcon {
+                source: root.asc
+                    ? @image-url("../assets/icons/chevron-up.svg")
+                    : @image-url("../assets/icons/chevron-down.svg");
+                width: 13px;
+                height: 13px;
+                tint: Theme.accent;
+            }
+        }
+    }
+    lso-ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.chosen();
         }
     }
 }
@@ -650,13 +697,15 @@ export component FavoritesView inherits Rectangle {
                         }
                     }
                 }
-                // Source switches — Purchases / Favorites / Following.
+                // Source switches — Purchases / Favorites / Following. Tooltips
+                // spell out each cryptic icon (owner request).
                 VerticalLayout {
                     alignment: center;
                     ToggleButton {
                         icon: @image-url("../assets/icons/shopping-bag.svg");
                         active: LibraryAllState.show-purchases;
                         sm: true;
+                        tooltip: @tr("Show purchases");
                         clicked => { LibraryAllActions.toggle-source("purchases"); }
                     }
                 }
@@ -666,6 +715,7 @@ export component FavoritesView inherits Rectangle {
                         icon: @image-url("../assets/icons/heart.svg");
                         active: LibraryAllState.show-favorites;
                         sm: true;
+                        tooltip: @tr("Show favorites");
                         clicked => { LibraryAllActions.toggle-source("favorites"); }
                     }
                 }
@@ -675,6 +725,7 @@ export component FavoritesView inherits Rectangle {
                         icon: @image-url("../assets/icons/user-plus.svg");
                         active: LibraryAllState.show-following;
                         sm: true;
+                        tooltip: @tr("Show followed artists & playlists");
                         clicked => { LibraryAllActions.toggle-source("following"); }
                     }
                 }
@@ -685,8 +736,14 @@ export component FavoritesView inherits Rectangle {
                         icon: @image-url("../assets/icons/hard-drive.svg");
                         active: LibraryAllState.show-local;
                         sm: true;
+                        tooltip: @tr("Show local files & Plex");
                         clicked => { LibraryAllActions.toggle-source("local"); }
                     }
+                }
+                // Filter by genre (shared popup, own "library-all" context).
+                VerticalLayout {
+                    alignment: center;
+                    FavGenreButton { context: "library-all"; }
                 }
                 // Grid / list view toggle.
                 VerticalLayout {
@@ -696,22 +753,70 @@ export component FavoritesView inherits Rectangle {
                         set-view(v) => { LibraryAllActions.set-view(v); }
                     }
                 }
+                // Sort — PlaylistView-style menu: pick a field, re-pick to
+                // flip direction (chevron shows asc/desc on the active row).
                 VerticalLayout {
                     alignment: center;
-                    QbzSelect {
-                        menu-width: 150px;
-                        options: [
-                            @tr("Date added"),
-                            @tr("Title"),
-                            @tr("Artist"),
-                        ];
-                        sm: true;
-                        current-index: LibraryAllState.sort-by == "date" ? 0
-                            : LibraryAllState.sort-by == "title" ? 1
-                            : 2;
-                        selected(i) => {
-                            LibraryAllActions.set-sort(
-                                i == 0 ? "date" : i == 1 ? "title" : "artist");
+                    all-sort-anchor := Rectangle {
+                        property <string> sort-label:
+                            LibraryAllState.sort-by == "title" ? @tr("Title")
+                            : LibraryAllState.sort-by == "artist" ? @tr("Artist")
+                            : @tr("Date added");
+                        width: all-sort-row.preferred-width;
+                        height: 30px;
+                        border-radius: 6px;
+                        background: all-sort-ta.has-hover ? Theme.surface-hover : Theme.surface-elevated;
+                        all-sort-row := HorizontalLayout {
+                            padding-left: 10px;
+                            padding-right: 10px;
+                            spacing: 6px;
+                            Text {
+                                text: @tr("Sort") + ": " + all-sort-anchor.sort-label;
+                                color: Theme.text-secondary;
+                                font-size: 12px;
+                                vertical-alignment: center;
+                            }
+                            VerticalLayout {
+                                alignment: center;
+                                QbzIcon {
+                                    source: LibraryAllState.sort-asc
+                                        ? @image-url("../assets/icons/chevron-up.svg")
+                                        : @image-url("../assets/icons/chevron-down.svg");
+                                    width: 12px;
+                                    height: 12px;
+                                    tint: Theme.text-secondary;
+                                }
+                            }
+                        }
+                        all-sort-ta := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { all-sort-menu.show(); }
+                        }
+                        all-sort-menu := PopupWindow {
+                            x: all-sort-anchor.width - 172px;
+                            y: all-sort-anchor.height + 4px;
+                            width: 172px;
+                            height: 110px;
+                            ContextMenu {
+                                LibrarySortOption {
+                                    label: @tr("Date added");
+                                    active: LibraryAllState.sort-by == "date";
+                                    asc: LibraryAllState.sort-asc;
+                                    chosen => { LibraryAllActions.set-sort("date"); }
+                                }
+                                LibrarySortOption {
+                                    label: @tr("Title");
+                                    active: LibraryAllState.sort-by == "title";
+                                    asc: LibraryAllState.sort-asc;
+                                    chosen => { LibraryAllActions.set-sort("title"); }
+                                }
+                                LibrarySortOption {
+                                    label: @tr("Artist");
+                                    active: LibraryAllState.sort-by == "artist";
+                                    asc: LibraryAllState.sort-asc;
+                                    chosen => { LibraryAllActions.set-sort("artist"); }
+                                }
+                            }
                         }
                     }
                 }
@@ -914,6 +1019,9 @@ export component FavoritesView inherits Rectangle {
                                     cover-count: 1,
                                     url1: item.image-url,
                                     cover1: item.image,
+                                    is-owned: item.playlist-owned,
+                                    is-following: item.playlist-following,
+                                    is-copied: item.playlist-copied,
                                 };
                                 body-opens: true;
                                 media-action(kind, id, action) => {

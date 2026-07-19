@@ -899,6 +899,10 @@ fn playlist_to_item(p: &PlaylistSlim) -> SearchPlaylistItem {
         cover4: slint::Image::default(),
         category: "".into(),
         dominant_color: slint::Color::from_argb_u8(0, 0, 0, 0),
+        // Artist-page playlists are foreign Qobuz playlists → follow + copy.
+        is_owned: false,
+        is_following: false,
+        is_copied: false,
     }
 }
 
@@ -1082,6 +1086,8 @@ pub fn set_release_card_favorite(window: &AppWindow, album_id: &str, favorite: b
             flip(&section.albums);
         }
     }
+    // "In library" grid (the catalog/library header toggle).
+    flip(&state.get_library_albums());
     let mut last = state.get_last_release();
     if last.id == album_id && last.is_favorite != favorite {
         last.is_favorite = favorite;
@@ -1118,6 +1124,8 @@ pub fn set_release_card_pinned(window: &AppWindow, album_id: &str, pinned: bool)
             flip(&section.albums);
         }
     }
+    // "In library" grid (the catalog/library header toggle).
+    flip(&state.get_library_albums());
     let mut last = state.get_last_release();
     if last.id == album_id && last.is_pinned != pinned {
         last.is_pinned = pinned;

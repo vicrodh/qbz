@@ -4,7 +4,7 @@
 // button: highlighted when active, surface-elevated on hover.
 
 import { Theme } from "../foundation/semantic-colors.slint";
-import { ShellState, AppearanceState } from "../state.slint";
+import { ShellState, AppearanceState, TooltipState } from "../state.slint";
 import { QbzIcon } from "QbzIcon.slint";
 
 export component ToggleButton inherits Rectangle {
@@ -12,6 +12,8 @@ export component ToggleButton inherits Rectangle {
     in property <bool> active: false;
     // Bootstrap-style small variant. Default is the standard size.
     in property <bool> sm: false;
+    // Optional hover tooltip (empty = none), using the global TooltipOverlay.
+    in property <string> tooltip;
     callback clicked();
 
     width: root.sm ? 30px : 34px;
@@ -40,6 +42,16 @@ export component ToggleButton inherits Rectangle {
         mouse-cursor: pointer;
         clicked => {
             root.clicked();
+        }
+        changed has-hover => {
+            if (self.has-hover && root.tooltip != "") {
+                TooltipState.text = root.tooltip;
+                TooltipState.anchor-x = root.absolute-position.x + root.width / 2;
+                TooltipState.anchor-y = root.absolute-position.y;
+                TooltipState.show = true;
+            } else if (!self.has-hover) {
+                TooltipState.show = false;
+            }
         }
     }
 
