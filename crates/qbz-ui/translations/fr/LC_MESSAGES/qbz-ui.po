@@ -4619,3 +4619,44 @@ msgstr "Du catalogue"
 
 msgid "In library"
 msgstr "Dans la bibliothèque"
+
+# Issue #637: header action-button tooltips + 403 back-off toast
+msgid "Add to favorites"
+msgstr "Ajouter aux favoris"
+
+msgid "Remove from favorites"
+msgstr "Retirer des favoris"
+
+msgid "Start radio"
+msgstr "Démarrer la radio"
+
+msgid "Booklet"
+msgstr "Livret"
+
+msgid "Add to Mixtape"
+msgstr "Ajouter à la Mixtape"
+
+msgid "Album info"
+msgstr "Infos de l'album"
+
+msgid "More options"
+msgstr "Plus d'options"
+
+msgid "Follow artist"
+msgstr "Suivre l'artiste"
+
+msgid "Unfollow"
+msgstr "Ne plus suivre"
+
+msgid "Artist network"
+msgstr "Réseau de l'artiste"
+
+msgid "Upload to Qobuz"
+msgstr "Envoyer vers Qobuz"
+
+msgid "Select tracks"
+msgstr "Sélectionner des pistes"
+
+msgid "Qobuz is temporarily refusing requests — backing off. Try again shortly."
+msgstr "Qobuz refuse temporairement les requêtes — pause en cours. Réessayez dans un instant."
+

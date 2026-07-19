@@ -415,6 +415,9 @@ export component ArtistPageView inherits Rectangle {
                         CircleAction {
                             icon: @image-url("../assets/icons/heart.svg");
                             on-surface: root.hdr-on-surface;
+                            tooltip: ArtistState.is-following
+                                ? @tr("Unfollow")
+                                : @tr("Follow artist");
                             active: ArtistState.is-following;
                             clicked => {
                                 root.media-action("artist", ArtistState.id, "follow");
@@ -429,6 +432,7 @@ export component ArtistPageView inherits Rectangle {
                             CircleAction {
                                 icon: @image-url("../assets/icons/radio.svg");
                                 on-surface: root.hdr-on-surface;
+                                tooltip: @tr("Start radio");
                                 clicked => {
                                     radio-popup.show();
                                 }
@@ -462,6 +466,7 @@ export component ArtistPageView inherits Rectangle {
                         CircleAction {
                             icon: @image-url("../assets/icons/element-connect.svg");
                             on-surface: root.hdr-on-surface;
+                            tooltip: @tr("Artist network");
                             active: NetworkSidebarState.open;
                             clicked => {
                                 NetworkSidebarState.open = !NetworkSidebarState.open;
@@ -478,6 +483,7 @@ export component ArtistPageView inherits Rectangle {
                             CircleAction {
                                 icon: @image-url("../assets/icons/ellipsis.svg");
                                 on-surface: root.hdr-on-surface;
+                                tooltip: @tr("More options");
                                 clicked => {
                                     artist-overflow-menu.show();
                                 }

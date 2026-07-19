@@ -4292,6 +4292,19 @@ impl Player {
             log::debug!("[PREFETCH] Track {track_id} already being fetched");
             return Ok(());
         }
+        // Back off a track whose last prefetch failed recently (e.g. the account
+        // is being 403'd post-outage) instead of re-hammering it on every queue
+        // tick — that no-backoff loop is what escalated into an edge/IP block in
+        // issue #637. The client-side 403 breaker is the primary guard; this
+        // just keeps us from even spinning up the task/log spam.
+        const PREFETCH_FAIL_COOLDOWN: Duration = Duration::from_secs(20);
+        if self
+            .audio_cache
+            .recently_failed(track_id, PREFETCH_FAIL_COOLDOWN)
+        {
+            log::debug!("[PREFETCH] Track {track_id} recently failed — backing off");
+            return Ok(());
+        }
 
         self.audio_cache.mark_fetching(track_id);
         log::info!("[PREFETCH] Prefetching track {track_id} at {quality:?}");
@@ -4319,11 +4332,13 @@ impl Player {
                 let len = data.len();
                 self.audio_cache.insert(track_id, data);
                 self.audio_cache.unmark_fetching(track_id);
+                self.audio_cache.clear_failed(track_id);
                 log::info!("[PREFETCH] Complete for track {track_id} ({len} bytes)");
                 Ok(())
             }
             Err(e) => {
                 self.audio_cache.unmark_fetching(track_id);
+                self.audio_cache.mark_failed(track_id);
                 log::warn!("[PREFETCH] Failed for track {track_id}: {e}");
                 Err(e)
             }

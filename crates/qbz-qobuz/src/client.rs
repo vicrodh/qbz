@@ -12,10 +12,30 @@ use super::auth::{
 use super::bundle::{self, BundleTokens};
 use super::endpoints::{self, paths};
 use super::error::{ApiError, Result};
+use super::forbidden_breaker::ForbiddenBreaker;
 use super::lyrics::{QobuzLyricsDocument, QobuzLyricsUrls};
 use qbz_models::*;
 
 const USER_AGENT: &str = "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0";
+
+/// Read a short, log-safe preview of a response body — for diagnosing an
+/// unexpected non-2xx (e.g. distinguishing an edge/WAF HTML 403 from the API's
+/// JSON error envelope, issue #637). Bounded so a large/HTML body can't bloat
+/// the log; prefixed with " : " so it reads well appended to an error message.
+async fn body_preview(response: reqwest::Response) -> String {
+    match response.text().await {
+        Ok(body) => {
+            let trimmed = body.trim();
+            if trimmed.is_empty() {
+                " : <empty body>".to_string()
+            } else {
+                let preview: String = trimmed.chars().take(200).collect();
+                format!(" : {preview}")
+            }
+        }
+        Err(_) => String::new(),
+    }
+}
 
 /// CMAF session state (session/start + infos for key derivation)
 struct CmafSession {
@@ -32,6 +52,10 @@ pub struct QobuzClient {
     validated_secret: Arc<RwLock<Option<String>>>,
     locale: Arc<RwLock<String>>,
     cmaf_session: Arc<RwLock<Option<CmafSession>>>,
+    /// Backs off the hot streaming/favorites paths after repeated 403s so a
+    /// post-outage account hiccup can't be escalated into a per-IP edge block
+    /// by the no-backoff prefetch scheduler (issue #637).
+    forbidden_breaker: Arc<ForbiddenBreaker>,
 }
 
 impl Clone for QobuzClient {
@@ -43,6 +67,7 @@ impl Clone for QobuzClient {
             validated_secret: Arc::clone(&self.validated_secret),
             locale: Arc::clone(&self.locale),
             cmaf_session: Arc::clone(&self.cmaf_session),
+            forbidden_breaker: Arc::clone(&self.forbidden_breaker),
         }
     }
 }
@@ -66,7 +91,45 @@ impl QobuzClient {
             validated_secret: Arc::new(RwLock::new(None)),
             locale: Arc::new(RwLock::new("en".to_string())),
             cmaf_session: Arc::new(RwLock::new(None)),
+            forbidden_breaker: Arc::new(ForbiddenBreaker::new()),
         })
+    }
+
+    // === 403 circuit breaker (issue #637) ===
+
+    /// Short-circuit an authenticated request when the 403 breaker is open.
+    /// Returns `Err(ForbiddenCircuitOpen)` — no network is touched — so a
+    /// post-outage 403 storm cannot get the user's IP edge-blocked. Callers put
+    /// this at the top of the hot streaming/favorites paths.
+    fn forbidden_guard(&self) -> Result<()> {
+        // Test hook: `QBZ_FORCE_403=1` forces the breaker open so the whole 403
+        // back-off path (no-network short-circuit + abort-fallback + the audible
+        // "backing off" toast) can be smoke-tested on a HEALTHY account, which
+        // otherwise can't reproduce the incident. Off by default; issue #637.
+        if std::env::var_os("QBZ_FORCE_403").is_some() {
+            return Err(ApiError::ForbiddenCircuitOpen(30));
+        }
+        if let Some(remaining) = self.forbidden_breaker.blocked_for() {
+            return Err(ApiError::ForbiddenCircuitOpen(remaining.as_secs()));
+        }
+        Ok(())
+    }
+
+    /// Feed an authenticated response's status to the breaker: a 403 counts
+    /// toward opening it; any success resets it. Other statuses are neutral
+    /// (they have their own handling and must not open the breaker).
+    fn note_forbidden_status(&self, status: StatusCode) {
+        if status == StatusCode::FORBIDDEN {
+            if let Some(cooldown) = self.forbidden_breaker.record_forbidden() {
+                log::warn!(
+                    "[403-breaker] Repeated 403s from Qobuz — backing off for {}s (no network) \
+                     to avoid an edge/IP block. See issue #637.",
+                    cooldown.as_secs()
+                );
+            }
+        } else if status.is_success() {
+            self.forbidden_breaker.record_success();
+        }
     }
 
     /// Initialize client by extracting bundle tokens.
@@ -2149,6 +2212,8 @@ impl QobuzClient {
 
     /// Get stream URL for a track (requires auth + signature)
     pub async fn get_stream_url(&self, track_id: u64, quality: Quality) -> Result<StreamUrl> {
+        // Back off before the network if the 403 breaker is open (issue #637).
+        self.forbidden_guard()?;
         log::info!(
             "Getting stream URL for track {} with quality {:?}",
             track_id,
@@ -2176,8 +2241,11 @@ impl QobuzClient {
             .send()
             .await?;
 
-        log::info!("Stream URL response status: {}", response.status());
-        match response.status() {
+        let status = response.status();
+        log::info!("Stream URL response status: {}", status);
+        // Feed the breaker: a 403 counts toward opening it; a 200 resets it.
+        self.note_forbidden_status(status);
+        match status {
             StatusCode::OK => {
                 let json: Value = response.json().await?;
                 log::debug!(
@@ -2216,6 +2284,14 @@ impl QobuzClient {
                 })
             }
             StatusCode::BAD_REQUEST => Err(ApiError::InvalidAppSecret),
+            StatusCode::UNAUTHORIZED => Err(ApiError::AuthenticationError(
+                "stream URL 401 — user auth token invalid or expired".to_string(),
+            )),
+            StatusCode::FORBIDDEN => {
+                let preview = body_preview(response).await;
+                log::warn!("Stream URL 403 for track {}{}", track_id, preview);
+                Err(ApiError::Forbidden(preview))
+            }
             status => Err(ApiError::ApiResponse(format!(
                 "Unexpected status: {}",
                 status
@@ -2257,6 +2333,16 @@ impl QobuzClient {
                     log::error!("Invalid app secret");
                     return Err(ApiError::InvalidAppSecret);
                 }
+                // A 403 (or an open breaker, or a 401) is NOT a per-quality
+                // restriction — every quality would 403 the same way. Abort the
+                // whole fallback loop immediately instead of firing 5 more
+                // requests per track and feeding the storm (issue #637).
+                Err(e @ (ApiError::Forbidden(_)
+                | ApiError::ForbiddenCircuitOpen(_)
+                | ApiError::AuthenticationError(_))) => {
+                    log::warn!("Stream URL aborting quality fallback: {}", e);
+                    return Err(e);
+                }
                 Err(ApiError::TrackUnavailable(_)) => {
                     // Track is completely unavailable on Qobuz
                     track_unavailable = true;
@@ -2281,6 +2367,8 @@ impl QobuzClient {
 
     /// Get user favorites (requires auth + signature)
     pub async fn get_favorites(&self, fav_type: &str, limit: u32, offset: u32) -> Result<Value> {
+        // Back off before the network if the 403 breaker is open (issue #637).
+        self.forbidden_guard()?;
         let url = endpoints::build_url(paths::FAVORITE_GET_USER_FAVORITES);
         let timestamp = get_timestamp();
         let secret = self.secret().await?;
@@ -2299,11 +2387,24 @@ impl QobuzClient {
             ])
             .send()
             .await?;
-        log::debug!(
-            "[API] get_favorites({}) status={}",
-            fav_type,
-            http_response.status()
-        );
+        let status = http_response.status();
+        log::debug!("[API] get_favorites({}) status={}", fav_type, status);
+        // Feed the breaker AND check status BEFORE decoding: a 403's body is not
+        // our JSON envelope (it's an edge/WAF HTML/empty body), so a bare
+        // `.json()` surfaced it as a misleading "error decoding response body"
+        // instead of the real 403 (issue #637).
+        self.note_forbidden_status(status);
+        if !status.is_success() {
+            let preview = body_preview(http_response).await;
+            if status == StatusCode::FORBIDDEN {
+                log::warn!("get_favorites({}) 403{}", fav_type, preview);
+                return Err(ApiError::Forbidden(preview));
+            }
+            return Err(ApiError::ApiResponse(format!(
+                "get_favorites failed with status {}{}",
+                status, preview
+            )));
+        }
         let response: Value = http_response.json().await?;
 
         Ok(response)
@@ -2682,7 +2783,10 @@ impl QobuzClient {
             }
         }
 
-        // We're the one task that actually starts a session.
+        // We're the one task that actually starts a session. Back off before
+        // the network if the 403 breaker is open (issue #637) — a cached
+        // session above is still served; only the network POST is gated.
+        self.forbidden_guard()?;
         log::info!("[CMAF] Starting new session");
         let timestamp = get_timestamp();
         let sig = sign_session_start(timestamp);
@@ -2701,7 +2805,14 @@ impl QobuzClient {
             .await?;
 
         let status = response.status();
+        // Feed the breaker: a 403 here counts toward opening it; success resets.
+        self.note_forbidden_status(status);
         if !status.is_success() {
+            if status == StatusCode::FORBIDDEN {
+                let preview = body_preview(response).await;
+                log::warn!("[CMAF] session/start 403{}", preview);
+                return Err(ApiError::Forbidden(preview));
+            }
             return Err(ApiError::ApiResponse(format!(
                 "session/start failed with status {}",
                 status
@@ -2739,6 +2850,9 @@ impl QobuzClient {
     ) -> Result<TrackFileUrl> {
         let format_id = quality.id();
         let url = endpoints::build_url(paths::FILE_URL);
+
+        // Back off before the network if the 403 breaker is open (issue #637).
+        self.forbidden_guard()?;
 
         // Retry transient failures (5xx / 429 / network blips) with backoff so
         // a momentary hiccup on the next track's file/url is not turned into a
@@ -2787,9 +2901,20 @@ impl QobuzClient {
                         format_id,
                         status
                     );
+                    // Feed the breaker: 403 counts toward opening it; 2xx resets.
+                    self.note_forbidden_status(status);
 
                     if !status.is_success() {
                         let code = status.as_u16();
+                        if status == reqwest::StatusCode::FORBIDDEN {
+                            let preview = body_preview(response).await;
+                            log::warn!(
+                                "[CMAF] file/url 403 for track {}{}",
+                                track_id,
+                                preview
+                            );
+                            return Err(ApiError::Forbidden(preview));
+                        }
                         return Err(if code == 404 {
                             ApiError::TrackUnavailable(track_id)
                         } else if status == reqwest::StatusCode::TOO_MANY_REQUESTS {

@@ -397,3 +397,59 @@ msgstr "From catalog"
 
 msgid "In library"
 msgstr "In library"
+
+# Issue #637: header action-button tooltips + 403 back-off toast
+msgid "Play"
+msgstr "Play"
+
+msgid "Shuffle"
+msgstr "Shuffle"
+
+msgid "Edit metadata"
+msgstr "Edit metadata"
+
+msgid "Add to favorites"
+msgstr "Add to favorites"
+
+msgid "Remove from favorites"
+msgstr "Remove from favorites"
+
+msgid "Start radio"
+msgstr "Start radio"
+
+msgid "Booklet"
+msgstr "Booklet"
+
+msgid "Add to Mixtape"
+msgstr "Add to Mixtape"
+
+msgid "Album info"
+msgstr "Album info"
+
+msgid "More options"
+msgstr "More options"
+
+msgid "Follow artist"
+msgstr "Follow artist"
+
+msgid "Unfollow"
+msgstr "Unfollow"
+
+msgid "Artist network"
+msgstr "Artist network"
+
+msgid "Make available offline"
+msgstr "Make available offline"
+
+msgid "Upload to Qobuz"
+msgstr "Upload to Qobuz"
+
+msgid "Edit playlist"
+msgstr "Edit playlist"
+
+msgid "Select tracks"
+msgstr "Select tracks"
+
+msgid "Qobuz is temporarily refusing requests — backing off. Try again shortly."
+msgstr "Qobuz is temporarily refusing requests — backing off. Try again shortly."
+

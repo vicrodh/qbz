@@ -276,6 +276,18 @@ fn is_terminal_unavailable(e: &str) -> bool {
         || e.contains("No valid quality available") // ApiError::NoQualityAvailable
 }
 
+/// True when a play error is a Qobuz 403 / the client-side 403 back-off (issue
+/// #637). This is NOT the track's fault (every track 403s the same way), so it
+/// must NOT count as an "unavailable" skip — skipping good tracks helps
+/// nothing and, pre-fix, burned through 5 of them showing a misleading "no
+/// longer available". Instead we stop cleanly and tell the user. Matches the
+/// `ApiError::Forbidden` / `ApiError::ForbiddenCircuitOpen` Display texts that
+/// survive the `Result<(), String>` flattening.
+fn is_forbidden_backoff(e: &str) -> bool {
+    e.contains("Access forbidden by Qobuz") // ApiError::Forbidden
+        || e.contains("backing off after repeated 403s") // ApiError::ForbiddenCircuitOpen
+}
+
 /// Offline playability verdict for one queue track (offline-MODE slice 3d).
 #[derive(PartialEq)]
 enum OfflinePlayability {
@@ -656,7 +668,24 @@ async fn play_audible(runtime: &Runtime, weak: &slint::Weak<AppWindow>, track_id
             // bounded, issue #467). Without this the queue cursor parks on the
             // dead track and playback stops. Terminal errors only: transient
             // failures were already retried by the client and should not skip.
-            if still_current && is_terminal_unavailable(&e) {
+            if still_current && is_forbidden_backoff(&e) {
+                // Qobuz is 403'ing (or the client breaker is backing off).
+                // Don't skip — it's not the track. Stop cleanly and surface it.
+                log::warn!(
+                    "[qbz-slint] playback: Qobuz 403 / backing off — not skipping (account or edge issue, see #637)"
+                );
+                crate::toast::show_weak(
+                    weak,
+                    qbz_i18n::t(
+                        "Qobuz is temporarily refusing requests — backing off. Try again shortly.",
+                    ),
+                    crate::ToastKind::Error,
+                );
+                set_viz_paused(runtime, true);
+                let _ = weak.upgrade_in_event_loop(|w| {
+                    w.global::<NowPlayingState>().set_playing(false);
+                });
+            } else if still_current && is_terminal_unavailable(&e) {
                 auto_skip_unavailable(runtime, weak, track_id).await;
             }
         }

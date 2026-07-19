@@ -643,6 +643,7 @@ export component PlaylistView inherits Rectangle {
                         CircleAction {
                             icon: @image-url("../assets/icons/play-fill.svg");
                             primary: true;
+                            tooltip: @tr("Play");
                             // Playlists have no header gradient — these sit on
                             // the plain page background, so use the theme-aware
                             // variant (reads on light themes).
@@ -658,6 +659,7 @@ export component PlaylistView inherits Rectangle {
                             CircleAction {
                                 icon: @image-url("../assets/icons/shuffle.svg");
                                 on-surface: true;
+                                tooltip: @tr("Shuffle");
                                 enabled: PlaylistState.tracks.length > 0;
                                 clicked => {
                                     root.shuffle();
@@ -673,6 +675,9 @@ export component PlaylistView inherits Rectangle {
                                 icon: @image-url("../assets/icons/heart.svg");
                                 active: PlaylistState.is-favorite;
                                 on-surface: true;
+                                tooltip: PlaylistState.is-favorite
+                                    ? @tr("Remove from favorites")
+                                    : @tr("Add to favorites");
                                 clicked => {
                                     root.toggle-favorite();
                                 }
@@ -742,6 +747,7 @@ export component PlaylistView inherits Rectangle {
                             CircleAction {
                                 icon: @image-url("../assets/icons/cloud-download.svg");
                                 on-surface: true;
+                                tooltip: @tr("Make available offline");
                                 enabled: PlaylistState.tracks.length > 0;
                                 clicked => {
                                     root.media-action("playlist", PlaylistState.id, "cache");
@@ -758,6 +764,7 @@ export component PlaylistView inherits Rectangle {
                             CircleAction {
                                 icon: @image-url("../assets/icons/cloud-upload.svg");
                                 on-surface: true;
+                                tooltip: @tr("Upload to Qobuz");
                                 enabled: PlaylistState.tracks.length > 0;
                                 clicked => {
                                     root.show-upload-confirm = true;
@@ -771,6 +778,7 @@ export component PlaylistView inherits Rectangle {
                             CircleAction {
                                 icon: @image-url("../assets/icons/pen-line.svg");
                                 on-surface: true;
+                                tooltip: @tr("Edit playlist");
                                 clicked => {
                                     root.edit();
                                 }
@@ -787,6 +795,7 @@ export component PlaylistView inherits Rectangle {
                                 icon: @image-url("../assets/icons/square-check-big.svg");
                                 active: PlaylistState.multi-select-mode;
                                 on-surface: true;
+                                tooltip: @tr("Select tracks");
                                 clicked => {
                                     root.media-action("playlist", "", "select-toggle");
                                 }

@@ -31,6 +31,20 @@ pub enum ApiError {
     #[error("Track {0} is no longer available on Qobuz")]
     TrackUnavailable(u64),
 
+    /// Qobuz answered 403 Forbidden on an authenticated request. The account is
+    /// authenticated but not currently allowed to perform the action (entitlement
+    /// not restored after an outage, geo/concurrency limit, or an edge/WAF block).
+    /// The string is a short body preview for diagnostics. Terminal, never a
+    /// per-quality restriction — abort the fallback loop instead of retrying.
+    #[error("Access forbidden by Qobuz (HTTP 403){0}")]
+    Forbidden(String),
+
+    /// The 403 circuit breaker is open after repeated forbidden responses; the
+    /// request was short-circuited WITHOUT touching the network so we don't get
+    /// the IP edge-blocked. Clears itself after a cooldown. See [`crate::forbidden_breaker`].
+    #[error("Temporarily backing off after repeated 403s ({0}s remaining)")]
+    ForbiddenCircuitOpen(u64),
+
     #[error("Offline mode is active - Qobuz services are disabled")]
     OfflineMode,
 

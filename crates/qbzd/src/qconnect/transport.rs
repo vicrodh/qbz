@@ -546,19 +546,22 @@ async fn fetch_qconnect_transport_credentials(
         .map_err(|err| format!("qws/createToken HTTP request failed: {err}"))?;
 
     let status = response.status();
-    let payload: Value = response
-        .json()
+    // Read the raw body and check status BEFORE decoding: a 403's body is an
+    // edge/WAF HTML or empty page, not our JSON envelope, so a bare `.json()`
+    // surfaced it as a misleading "response decode failed" instead of the real
+    // status (issue #637).
+    let body = response
+        .text()
         .await
-        .map_err(|err| format!("qws/createToken response decode failed: {err}"))?;
+        .map_err(|err| format!("qws/createToken response read failed: {err}"))?;
 
     if !status.is_success() {
-        let preview = serde_json::to_string(&payload)
-            .unwrap_or_else(|_| "<unserializable>".to_string())
-            .chars()
-            .take(300)
-            .collect::<String>();
+        let preview = body.trim().chars().take(300).collect::<String>();
         return Err(format!("qws/createToken status {status}: {preview}"));
     }
+
+    let payload: Value = serde_json::from_str(&body)
+        .map_err(|err| format!("qws/createToken response decode failed: {err}"))?;
 
     let jwt_qws_payload = payload
         .get("jwt_qws")

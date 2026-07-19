@@ -508,6 +508,7 @@ export component AlbumPageView inherits Rectangle {
                             icon: @image-url("../assets/icons/play-fill.svg");
                             primary: true;
                             on-surface: root.hdr-on-surface;
+                            tooltip: @tr("Play");
                             // Spin only while THIS album's first track is fetching.
                             loading: NowPlayingState.loading
                                 && NowPlayingState.album-id == AlbumState.id;
@@ -520,6 +521,7 @@ export component AlbumPageView inherits Rectangle {
                             CircleAction {
                                 icon: @image-url("../assets/icons/shuffle.svg");
                                 on-surface: root.hdr-on-surface;
+                                tooltip: @tr("Shuffle");
                                 clicked => {
                                     root.media-action("album", AlbumState.id, "shuffle");
                                 }
@@ -532,6 +534,7 @@ export component AlbumPageView inherits Rectangle {
                             CircleAction {
                                 icon: @image-url("../assets/icons/pencil.svg");
                                 on-surface: root.hdr-on-surface;
+                                tooltip: @tr("Edit metadata");
                                 clicked => {
                                     root.media-action("album", AlbumState.id, "edit");
                                 }
@@ -548,6 +551,9 @@ export component AlbumPageView inherits Rectangle {
                                     ? @image-url("../assets/icons/heart-filled.svg")
                                     : @image-url("../assets/icons/heart.svg");
                                 on-surface: root.hdr-on-surface;
+                                tooltip: AlbumState.is-favorite
+                                    ? @tr("Remove from favorites")
+                                    : @tr("Add to favorites");
                                 active: AlbumState.is-favorite;
                                 loading: AlbumState.favorite-loading;
                                 clicked => {
@@ -560,6 +566,7 @@ export component AlbumPageView inherits Rectangle {
                             CircleAction {
                                 icon: @image-url("../assets/icons/radio.svg");
                                 on-surface: root.hdr-on-surface;
+                                tooltip: @tr("Start radio");
                                 clicked => {
                                     root.media-action("album", AlbumState.id, "radio");
                                 }
@@ -570,6 +577,7 @@ export component AlbumPageView inherits Rectangle {
                             CircleAction {
                                 icon: @image-url("../assets/icons/book-open.svg");
                                 on-surface: root.hdr-on-surface;
+                                tooltip: @tr("Booklet");
                                 clicked => {
                                     root.media-action("album", AlbumState.id, "booklet");
                                 }
@@ -580,6 +588,7 @@ export component AlbumPageView inherits Rectangle {
                             CircleAction {
                                 icon: @image-url("../assets/icons/cassette-tape.svg");
                                 on-surface: root.hdr-on-surface;
+                                tooltip: @tr("Add to Mixtape");
                                 clicked => {
                                     root.media-action("album", AlbumState.id, "add-to-mixtape");
                                 }
@@ -593,6 +602,7 @@ export component AlbumPageView inherits Rectangle {
                             CircleAction {
                                 icon: @image-url("../assets/icons/info.svg");
                                 on-surface: root.hdr-on-surface;
+                                tooltip: @tr("Album info");
                                 clicked => {
                                     root.media-action("album", AlbumState.id, "info");
                                 }
@@ -606,6 +616,7 @@ export component AlbumPageView inherits Rectangle {
                                 CircleAction {
                                     icon: @image-url("../assets/icons/ellipsis.svg");
                                     on-surface: root.hdr-on-surface;
+                                    tooltip: @tr("More options");
                                     clicked => {
                                         album-menu.show();
                                     }

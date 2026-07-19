@@ -36,6 +36,7 @@ pub mod client;
 pub mod cmaf;
 pub mod endpoints;
 pub mod error;
+pub mod forbidden_breaker;
 pub mod link_resolver;
 pub mod lyrics;
 pub mod offline_gate;
