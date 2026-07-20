@@ -665,6 +665,17 @@ impl<B: GraphicsBackend> FemtoVGRenderer<B> {
         // store — drop it first (its own Rc keeps that canvas alive for the
         // delete_image in Texture::drop).
         self.persistent_scene.borrow_mut().take();
+        // Every cached texture (cached layers, images) also belongs to the OLD
+        // canvas's image store: after a surface re-creation (Wayland hide/show,
+        // miniplayer cycle) their image ids are dangling on the new canvas —
+        // a cache-rendering-hint layer then blits a missing image and the whole
+        // subtree goes invisible while layout/hit-testing keeps working. Clear
+        // both caches so layers re-render and images re-upload on the new
+        // canvas (one-time cost per re-creation).
+        let _ = self.graphics_backend.with_graphics_api(|_| {
+            self.graphics_cache.clear_all();
+            self.texture_cache.borrow_mut().clear();
+        });
         // #617 stage 4: new canvas/context — the partial caches are stale.
         if let Some(state) = self.partial_rendering_state.as_ref() {
             state.clear_cache();
