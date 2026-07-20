@@ -481,6 +481,9 @@ export component AppShell inherits Rectangle {
                     open-artist(id) => {
                         root.open-artist(id);
                     }
+                    media-action(kind, id, action) => {
+                        root.media-action(kind, id, action);
+                    }
                 }
                 if NavState.view == ContentView.favorites && !OfflineState.offline: FavoritesView {
                     open-album(id) => {

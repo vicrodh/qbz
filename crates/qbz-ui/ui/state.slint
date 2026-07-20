@@ -3862,22 +3862,14 @@ export global ArtistReleasesActions {
     callback retry();
 }
 
-// One artist in the scene-discovery grid (artists from the same
-// place as the source artist).
-export struct LocationArtistItem {
-    qobuz-id: string,
-    name: string,
-    genres-line: string,
-    image-url: string,
-    image: image,
-}
-
 // ArtistsByLocationView state — opened from the Origin section's
-// location link. Populated by `crate::location_view`.
+// location link. Populated by `crate::location_view`. Artists ride the
+// shared SlimItem model (subtitle = genres line) so the grid uses the
+// app-wide ArtistGridCard (follow / play / pin / context menu).
 export global LocationViewState {
     in property <string> scene-label;
     in property <string> genre-summary;
-    in property <[LocationArtistItem]> artists: [];
+    in property <[SlimItem]> artists: [];
     in property <int> total: 0;
     in property <bool> loading: false;
     in property <bool> load-more-loading: false;

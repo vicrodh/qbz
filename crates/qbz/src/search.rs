@@ -1528,6 +1528,13 @@ pub fn mark_artist_followed(window: &AppWindow, artist_id: &str, following: bool
     // pin twin (`set_artist_row_pinned`) but historically missed here.
     set_slim_following(&window.global::<HomeState>().get_top_artists(), artist_id, following);
     set_slim_following(&window.global::<LabelState>().get_artists(), artist_id, following);
+    // Scene-discovery grid (ArtistsByLocationView) — SlimItem rows since the
+    // ArtistGridCard migration.
+    set_slim_following(
+        &window.global::<crate::LocationViewState>().get_artists(),
+        artist_id,
+        following,
+    );
     // Pinned mixed carousel (Home / For You) — nested artist SlimItem.
     crate::set_pinned_artist_following(window, artist_id, following);
 }

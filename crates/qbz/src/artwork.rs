@@ -1367,7 +1367,7 @@ fn apply_artwork(
         ArtworkTarget::LocationArtist { index } => {
             let model = window.global::<crate::LocationViewState>().get_artists();
             if let Some(mut item) = model.row_data(index) {
-                item.image = image;
+                item.artwork = image;
                 model.set_row_data(index, item);
             }
         }
