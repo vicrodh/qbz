@@ -101,7 +101,7 @@ fn normalize_hostport(h: &str) -> String {
 
 /// §1.5 token discovery: `QBZD_TOKEN` (remote or local), else — only when
 /// targeting the local daemon — the local `qbzd.toml` `[server] token`.
-fn resolve_token(target: &Target, roots: &ProfileRoots) -> Option<String> {
+pub(crate) fn resolve_token(target: &Target, roots: &ProfileRoots) -> Option<String> {
     if let Ok(t) = std::env::var("QBZD_TOKEN") {
         if !t.is_empty() {
             return Some(t);

@@ -26,6 +26,7 @@ pub mod radio;
 pub mod reco;
 pub mod search;
 pub mod settings;
+pub mod sse;
 pub mod status;
 
 use std::io::Cursor;
@@ -33,13 +34,15 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use tiny_http::{Header, Request, Response};
+use tiny_http::{Header, Method, Request, Response};
+use tokio::sync::broadcast;
 
 use crate::adapter::DaemonAdapter;
 use crate::paths::ProfileRoots;
 use crate::state::DaemonShared;
 use qbz_app::shell::AppRuntime;
 use qbz_audio::settings::AudioSettingsStore;
+use qbz_models::CoreEvent;
 
 /// The counted P0 route table (02 §3.2) — 17, FINAL, this test now guards the
 /// budget forever. A route exists only iff a shipped client calls it (§3.1.4).
@@ -101,6 +104,7 @@ pub const P1_ROUTES: &[(&str, &str)] = &[
     ("POST", "/api/playlist/delete"),
     ("POST", "/api/playlist/tracks/add"),
     ("POST", "/api/playlist/tracks/remove"),
+    ("GET", "/api/events"),
 ];
 
 /// A socket bound at boot step 5, not yet serving. Wraps the tiny_http server
@@ -118,6 +122,9 @@ pub struct BoundServer {
 pub struct ApiState {
     pub runtime: Arc<AppRuntime<DaemonAdapter>>,
     pub shared: Arc<Mutex<DaemonShared>>,
+    /// The CoreEvent bus (DaemonAdapter sender). `/api/events` subscribes a
+    /// receiver per SSE connection; no other route touches it.
+    pub bus: broadcast::Sender<CoreEvent>,
     pub roots: ProfileRoots,
     pub token: Option<String>,
     /// The bound address, echoed verbatim by `/api/info`.
@@ -249,6 +256,32 @@ pub fn serve(server: BoundServer, state: ApiState) -> ApiHandle {
         .name("qbzd-api".into())
         .spawn(move || {
             for mut req in srv.incoming_requests() {
+                // `/api/events` is a long-lived SSE stream: it would block this
+                // single serving thread forever. Move it onto its OWN thread
+                // (Request is Send) so the control plane keeps answering. The
+                // origin/token gate is applied first, identically to `route`.
+                let is_events = *req.method() == Method::Get
+                    && req.url().split('?').next() == Some("/api/events");
+                if is_events {
+                    let has_origin = req.headers().iter().any(|h| h.field.equiv("Origin"));
+                    let auth = req
+                        .headers()
+                        .iter()
+                        .find(|h| h.field.equiv("Authorization"))
+                        .map(|h| h.value.as_str().to_owned());
+                    if let Some(reject) =
+                        access_gate(has_origin, "GET", "/api/events", auth.as_deref(), state.token.as_deref())
+                    {
+                        let _ = req.respond(reject.response());
+                        continue;
+                    }
+                    let rx = state.bus.subscribe();
+                    std::thread::Builder::new()
+                        .name("qbzd-sse".into())
+                        .spawn(move || sse::stream(req, rx))
+                        .ok();
+                    continue;
+                }
                 let resp = route(&state, &mut req);
                 let _ = req.respond(resp);
             }
@@ -539,7 +572,8 @@ mod tests {
         // §3.1.4 HARD RULE, applied to the content-verb door). Row 19:
         // GET /api/search — caller: `qbzd search`. Count is pinned so a route
         // with no caller cannot creep in; P1 must never overlap P0.
-        assert_eq!(P1_ROUTES.len(), 25);
+        assert_eq!(P1_ROUTES.len(), 26);
+        assert!(P1_ROUTES.contains(&("GET", "/api/events"))); // caller: `qbzd watch`
         assert!(P1_ROUTES.contains(&("GET", "/api/discover")));
         assert!(P1_ROUTES.contains(&("GET", "/api/lyrics")));
         assert!(P1_ROUTES.contains(&("POST", "/api/reco/playlist")));

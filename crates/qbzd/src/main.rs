@@ -47,6 +47,8 @@ enum Cmd {
     Ping   { #[arg(long)] json: bool },
     /// One-line now-playing
     Now    { #[arg(long)] json: bool },
+    /// Stream live daemon events (SSE); default = newline-delimited JSON
+    Watch  { #[arg(long)] raw: bool },
     /// Search Qobuz — top hits with ids (--ids pipes into `queue add -`)
     Search {
         query: String,
@@ -338,6 +340,10 @@ async fn main() {
         Cmd::Now { json } => {
             let roots = paths::ProfileRoots::resolve(None, None);
             cli::transport::now(cli.host, json, &roots).await
+        }
+        Cmd::Watch { raw } => {
+            let roots = paths::ProfileRoots::resolve(None, None);
+            cli::watch::watch(cli.host, raw, &roots).await
         }
         Cmd::Search { query, kind, limit, offset, ids, json } => {
             let roots = paths::ProfileRoots::resolve(None, None);
