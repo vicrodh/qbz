@@ -380,6 +380,34 @@ pub fn apply(window: &AppWindow, data: SidebarData) {
     rebuild(window);
 }
 
+/// Optimistically patch a playlist's displayed NAME after a successful
+/// rename (Qobuz numeric id or "local:<uuid>"), then re-render from the
+/// patched cache. The edit-playlist handler still triggers a full
+/// `load_sidebar_playlists` afterwards to reconcile — this patch exists
+/// because the reload alone does not reliably show the new name right away
+/// (Qobuz playlist/list read-after-write lag): the row must reflect the
+/// edit the moment the modal closes.
+pub fn rename_entry(window: &AppWindow, id: &str, name: &str) {
+    if let Ok(mut cache) = CACHE.lock() {
+        if let Ok(numeric) = id.parse::<u64>() {
+            if let Some(p) = cache.playlists.iter_mut().find(|p| p.id == numeric) {
+                p.name = name.to_string();
+            }
+        }
+        if let Some(p) = cache.local_playlists.iter_mut().find(|p| p.id == id) {
+            p.name = name.to_string();
+        }
+    }
+    // Keep the session name/desc cache in sync too — the edit modal and the
+    // offline name synthesis both prefill from it.
+    if let (Ok(numeric), Ok(mut nd)) = (id.parse::<u64>(), NAME_DESC.lock()) {
+        if let Some(entry) = nd.get_mut(&numeric) {
+            entry.0 = name.to_string();
+        }
+    }
+    rebuild(window);
+}
+
 /// Build a playlist `SidebarEntry` (with its cover URLs for the
 /// micro-collage). The decoded `cover*` images stay default here and are
 /// filled asynchronously by the artwork pipeline (see `artwork_jobs`).

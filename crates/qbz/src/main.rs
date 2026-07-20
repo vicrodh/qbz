@@ -19697,6 +19697,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let w2 = weak.clone();
                         let h2 = handle.clone();
                         let _ = weak.upgrade_in_event_loop(move |w| {
+                            // Optimistic sidebar patch FIRST (the reload
+                            // alone can show the pre-rename name — see
+                            // sidebar::rename_entry), then reconcile.
+                            sidebar::rename_entry(&w, &id, &nm);
                             let ps = w.global::<PlaylistState>();
                             // Only refresh the open detail header if this IS
                             // the open playlist.
@@ -19729,6 +19733,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             let w2 = weak.clone();
                             let h2 = handle.clone();
                             let _ = weak.upgrade_in_event_loop(move |w| {
+                                // Optimistic sidebar patch FIRST — Qobuz's
+                                // playlist/list can lag read-after-write, so
+                                // the reload alone may show the old name (see
+                                // sidebar::rename_entry).
+                                sidebar::rename_entry(&w, &id, &nm);
                                 w.global::<PlaylistState>().set_name(nm.into());
                                 w.global::<PlaylistState>().set_description(ds.into());
                                 w.global::<EditPlaylistState>().set_open(false);
