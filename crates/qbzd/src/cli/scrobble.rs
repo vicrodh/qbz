@@ -2,16 +2,20 @@
 // Connect Last.fm / ListenBrainz and manage scrobbling, using the SAME
 // methodology as `qbzd login`: Last.fm prints an authorize URL and exchanges
 // the token after the user approves; ListenBrainz takes a pasted user token
-// (like `login --token`). Credentials land in the daemon-root scrobbler store
-// (crate::scrobbler); a running daemon is nudged to reload.
+// (like `login --token`).
 //
-// These are LOCAL, daemon-down-capable operations (they write the store) — the
-// same shape as `login`/`settings set`.
+// Credentials land in the CANONICAL scrobbler store
+// (`qbz_app::settings::scrobblers::ScrobblerSettingsStore`, SQLite at the daemon
+// data root) — the SAME store the desktop uses and the one the settings bundle
+// export/import already carries. A running daemon is nudged to reload so the
+// scrobble-on-play driver picks up the new credentials. These are LOCAL,
+// daemon-down-capable operations, like `login`/`settings set`.
 use std::io::{BufRead, Write};
+
+use qbz_app::settings::scrobblers::ScrobblerSettingsStore;
 
 use crate::cli::client::ApiClient;
 use crate::paths::ProfileRoots;
-use crate::scrobbler::{LastFmCreds, LbCreds, ScrobblerConfig};
 
 /// `qbzd scrobble login lastfm` — the Last.fm web-auth flow (print URL →
 /// user approves → exchange for a session key), mirroring `qbzd login`.
@@ -40,9 +44,17 @@ pub async fn login_lastfm(host: Option<String>, roots: &ProfileRoots) -> i32 {
             return 1;
         }
     };
-    let mut cfg = ScrobblerConfig::load_at(&roots.config);
-    cfg.lastfm = Some(LastFmCreds { session_key: session.key, username: session.name.clone(), enabled: true });
-    if let Err(e) = cfg.save_at(&roots.config) {
+    qbz_log::register_secret(session.key.clone());
+
+    let store = match open_store(roots) {
+        Ok(s) => s,
+        Err(code) => return code,
+    };
+    if let Err(e) = store
+        .set_lastfm_session(&session.key, &session.name)
+        .and_then(|_| store.set_lastfm_enabled(true))
+        .and_then(|_| store.set_enabled(true))
+    {
         eprintln!("error: {e}");
         return 1;
     }
@@ -63,9 +75,17 @@ pub async fn login_listenbrainz(host: Option<String>, token: String, roots: &Pro
             return 1;
         }
     };
-    let mut cfg = ScrobblerConfig::load_at(&roots.config);
-    cfg.listenbrainz = Some(LbCreds { token, username: info.user_name.clone(), enabled: true });
-    if let Err(e) = cfg.save_at(&roots.config) {
+    qbz_log::register_secret(token.clone());
+
+    let store = match open_store(roots) {
+        Ok(s) => s,
+        Err(code) => return code,
+    };
+    if let Err(e) = store
+        .set_listenbrainz_token(&token, &info.user_name)
+        .and_then(|_| store.set_listenbrainz_enabled(true))
+        .and_then(|_| store.set_enabled(true))
+    {
         eprintln!("error: {e}");
         return 1;
     }
@@ -76,33 +96,60 @@ pub async fn login_listenbrainz(host: Option<String>, token: String, roots: &Pro
 
 /// `qbzd scrobble status` — per-provider connection + enabled state.
 pub fn status(roots: &ProfileRoots) -> i32 {
-    let cfg = ScrobblerConfig::load_at(&roots.config);
-    println!("last.fm       : {}", provider_line(cfg.lastfm.as_ref().map(|l| (l.enabled, l.username.as_str()))));
-    println!("listenbrainz  : {}", provider_line(cfg.listenbrainz.as_ref().map(|l| (l.enabled, l.username.as_str()))));
+    let store = match open_store(roots) {
+        Ok(s) => s,
+        Err(code) => return code,
+    };
+    let s = match store.get_settings() {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return 1;
+        }
+    };
+    println!(
+        "last.fm       : {}",
+        provider_line(s.lastfm_is_authed(), s.lastfm_active(), &s.lastfm_username)
+    );
+    println!(
+        "listenbrainz  : {}",
+        provider_line(s.listenbrainz_is_authed(), s.listenbrainz_active(), &s.listenbrainz_username)
+    );
     0
 }
 
-/// `qbzd scrobble disable <lastfm|listenbrainz>` — keep the credentials but
-/// stop scrobbling. `enable` re-enables.
+/// `qbzd scrobble enable|disable <lastfm|listenbrainz>` — keep the credentials
+/// but start/stop scrobbling to that provider.
 pub async fn set_enabled(host: Option<String>, provider: String, enabled: bool, roots: &ProfileRoots) -> i32 {
-    let mut cfg = ScrobblerConfig::load_at(&roots.config);
-    let ok = match provider.as_str() {
-        "lastfm" => cfg.lastfm.as_mut().map(|l| l.enabled = enabled).is_some(),
-        "listenbrainz" => cfg.listenbrainz.as_mut().map(|l| l.enabled = enabled).is_some(),
+    let store = match open_store(roots) {
+        Ok(s) => s,
+        Err(code) => return code,
+    };
+    let s = match store.get_settings() {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return 1;
+        }
+    };
+    let result = match provider.as_str() {
+        "lastfm" if !s.lastfm_is_authed() => return not_connected(&provider),
+        "listenbrainz" if !s.listenbrainz_is_authed() => return not_connected(&provider),
+        "lastfm" => store.set_lastfm_enabled(enabled),
+        "listenbrainz" => store.set_listenbrainz_enabled(enabled),
         other => {
             eprintln!("error: unknown provider '{other}'");
             eprintln!("  → lastfm | listenbrainz");
             return 2;
         }
     };
-    if !ok {
-        eprintln!("error: {provider} is not connected");
-        eprintln!("  → connect it first: qbzd scrobble login {provider}");
-        return 1;
-    }
-    if let Err(e) = cfg.save_at(&roots.config) {
+    if let Err(e) = result {
         eprintln!("error: {e}");
         return 1;
+    }
+    // Enabling a provider also lifts the master toggle (off = nothing scrobbles).
+    if enabled {
+        let _ = store.set_enabled(true);
     }
     nudge_reload(host).await;
     println!("{provider} scrobbling {}", if enabled { "enabled" } else { "disabled" });
@@ -111,16 +158,30 @@ pub async fn set_enabled(host: Option<String>, provider: String, enabled: bool, 
 
 // ============================ internals ============================
 
-fn provider_line(v: Option<(bool, &str)>) -> String {
-    match v {
-        Some((true, name)) => format!("on as {name}"),
-        Some((false, name)) => format!("off (connected as {name})"),
-        None => "not connected".to_string(),
+fn open_store(roots: &ProfileRoots) -> Result<ScrobblerSettingsStore, i32> {
+    ScrobblerSettingsStore::new_at(&roots.data).map_err(|e| {
+        eprintln!("error: cannot open the scrobbler store: {e}");
+        1
+    })
+}
+
+fn not_connected(provider: &str) -> i32 {
+    eprintln!("error: {provider} is not connected");
+    eprintln!("  → connect it first: qbzd scrobble login {provider}");
+    1
+}
+
+fn provider_line(authed: bool, active: bool, name: &str) -> String {
+    match (authed, active) {
+        (false, _) => "not connected".to_string(),
+        (true, true) => format!("on as {name}"),
+        (true, false) => format!("off (connected as {name})"),
     }
 }
 
-/// Best-effort: tell a running daemon to reload (so scrobbler creds take effect
-/// live). Silent if the daemon is down — the store write is what matters.
+/// Best-effort: tell a running daemon to reload so the scrobble-on-play driver
+/// picks up new credentials. Silent if the daemon is down — the store write is
+/// what matters.
 async fn nudge_reload(host: Option<String>) {
     let roots = crate::paths::ProfileRoots::resolve(None, None);
     let client = ApiClient::new(host, &roots);
