@@ -1702,6 +1702,29 @@ static TRACK_MAX_BITS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU
 static REQUESTED_QUALITY_ID: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 static REQUESTED_CAUSE: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
 
+/// F25 hydration cache (#638 fix 1c): catalog max fetched at play time for
+/// tracks queued WITHOUT catalog params (`track_item_to_queue` leaves both
+/// fields None on every search-surface play). `HYDRATED_TRACK_ID` keys the
+/// two values: a `refresh_now_playing_meta` re-run for the same track
+/// (resume/seek re-entry) reuses them instead of re-fetching, and a
+/// different track ignores them. Rate in Hz, 0 = unknown (same conventions
+/// as TRACK_MAX_*).
+static HYDRATED_TRACK_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static HYDRATED_RATE_HZ: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+static HYDRATED_BITS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+/// The hydrated catalog params for `track_id`, if the F25 hydration already
+/// ran for it — `(bit_depth, sample_rate)` in the `QueueTrack` conventions
+/// (rate as f64, Hz here; None = unknown / hydrated for another track).
+fn hydrated_catalog_quality(track_id: u64) -> (Option<u32>, Option<f64>) {
+    if HYDRATED_TRACK_ID.load(std::sync::atomic::Ordering::Relaxed) != track_id {
+        return (None, None);
+    }
+    let bits = HYDRATED_BITS.load(std::sync::atomic::Ordering::Relaxed);
+    let rate = HYDRATED_RATE_HZ.load(std::sync::atomic::Ordering::Relaxed);
+    ((bits > 0).then_some(bits), (rate > 0).then(|| rate as f64))
+}
+
 /// The #590 downgrade arithmetic, extracted so the cast publish
 /// (`cast_service`) reuses it instead of forking it (#638 fix 1). PRESERVED
 /// EXACTLY: the 0.9 rate guard avoids flagging 44.1-vs-48 kHz family
@@ -1920,25 +1943,41 @@ pub(crate) async fn refresh_now_playing_meta(runtime: &Runtime, weak: &slint::We
     // reused from the shared formatter so it matches the track-row badges.
     // bit_depth == 1 marks DSD (1-bit stream, sample_rate = DSD bit rate) —
     // the generic detail would read "1-bit / 2.8224 kHz".
-    let quality_tier = match track.bit_depth {
+    //
+    // F25 (#638 fix 1c): search-queued tracks carry NO catalog params
+    // (`track_item_to_queue` leaves both fields None), which used to render
+    // the formatter DEFAULTS — "16-bit / 44.1 kHz" under a HI-RES tier — and
+    // zeroed TRACK_MAX_* so the downgrade arrow could never fire there.
+    // Adopt the async hydration's cached values when it already ran for this
+    // track; until it lands the detail stays EMPTY (never a guess).
+    let (bit_depth, sample_rate) = if track.bit_depth.is_none() && track.sample_rate.is_none() {
+        hydrated_catalog_quality(track.id)
+    } else {
+        (track.bit_depth, track.sample_rate)
+    };
+    let quality_tier = match bit_depth {
         Some(1) => "hires",
         Some(d) if d >= 24 => "hires",
         Some(_) => "cd",
         None if track.hires => "hires",
         None => "",
     };
-    let quality_detail = if quality_tier.is_empty() {
+    let quality_detail = if quality_tier.is_empty()
+        || (bit_depth.is_none() && sample_rate.is_none())
+    {
+        // Empty tier, or a known tier with unknown params (pre-hydration
+        // search play): an empty detail beats the guessed one (F25).
         String::new()
-    } else if track.bit_depth == Some(1) {
-        crate::quality::dsd_multiple_label(track.sample_rate)
+    } else if bit_depth == Some(1) {
+        crate::quality::dsd_multiple_label(sample_rate)
     } else {
-        crate::quality::detail(track.bit_depth, track.sample_rate)
+        crate::quality::detail(bit_depth, sample_rate)
     };
     // Cache the catalog max for the poll loop's downgrade detection (#590
     // follow-up). Rate normalized to Hz exactly like the sample-rate-hz push
-    // below (`track.sample_rate` is Hz when >= 1000, else kHz); 0 = unknown.
+    // below (`sample_rate` is Hz when >= 1000, else kHz); 0 = unknown.
     TRACK_MAX_RATE_HZ.store(
-        track.sample_rate.map_or(0, |sr| {
+        sample_rate.map_or(0, |sr| {
             if sr >= 1000.0 {
                 sr as u32
             } else {
@@ -1948,7 +1987,7 @@ pub(crate) async fn refresh_now_playing_meta(runtime: &Runtime, weak: &slint::We
         std::sync::atomic::Ordering::Relaxed,
     );
     TRACK_MAX_BITS.store(
-        track.bit_depth.unwrap_or(0),
+        bit_depth.unwrap_or(0),
         std::sync::atomic::Ordering::Relaxed,
     );
 
@@ -1975,6 +2014,82 @@ pub(crate) async fn refresh_now_playing_meta(runtime: &Runtime, weak: &slint::We
     } else {
         REQUESTED_QUALITY_ID.store(0, std::sync::atomic::Ordering::Relaxed);
         REQUESTED_CAUSE.store(QualityLimit::None as i32, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    // F25 hydration (#638 fix 1c): a search-queued Qobuz track has no catalog
+    // quality fields, so TRACK_MAX_* seeded 0 above and the downgrade arrow
+    // could never fire. Fetch the catalog track once per track id (one API
+    // call, only for governed tracks with missing fields) and re-seed the
+    // maxima + badge — but only if the track is STILL current when the
+    // response lands (a slow response must never stamp the next track with
+    // the previous track's catalog max).
+    if governed
+        && track.bit_depth.is_none()
+        && track.sample_rate.is_none()
+        && HYDRATED_TRACK_ID.load(std::sync::atomic::Ordering::Relaxed) != track_id_num
+    {
+        let runtime = runtime.clone();
+        let weak = weak.clone();
+        tokio::spawn(async move {
+            let fetched = match runtime.core().get_track(track_id_num).await {
+                Ok(t) => t,
+                Err(e) => {
+                    log::debug!(
+                        "[qbz-slint] quality hydration: get_track {track_id_num} failed: {e}"
+                    );
+                    return;
+                }
+            };
+            if runtime.core().current_track().await.map(|t| t.id) != Some(track_id_num) {
+                return;
+            }
+            let bits = fetched.maximum_bit_depth;
+            let rate = fetched.maximum_sampling_rate;
+            if bits.is_none() && rate.is_none() {
+                return; // Nothing learned; leave the empty detail in place.
+            }
+            // Same Hz normalization as the meta seed (Qobuz reports kHz).
+            let rate_hz = rate.map_or(0, |sr| {
+                if sr >= 1000.0 {
+                    sr as u32
+                } else {
+                    (sr * 1000.0) as u32
+                }
+            });
+            // Values BEFORE the id, so a reader keyed on the id never sees
+            // another track's params.
+            HYDRATED_RATE_HZ.store(rate_hz, std::sync::atomic::Ordering::Relaxed);
+            HYDRATED_BITS.store(bits.unwrap_or(0), std::sync::atomic::Ordering::Relaxed);
+            HYDRATED_TRACK_ID.store(track_id_num, std::sync::atomic::Ordering::Relaxed);
+            TRACK_MAX_RATE_HZ.store(rate_hz, std::sync::atomic::Ordering::Relaxed);
+            TRACK_MAX_BITS.store(bits.unwrap_or(0), std::sync::atomic::Ordering::Relaxed);
+            // Re-push the badge seed values the meta pass left empty. No DSD
+            // arm: Qobuz catalog maxima are PCM (16/24-bit), never 1-bit.
+            let quality_tier = match bits {
+                Some(d) if d >= 24 => "hires",
+                Some(_) => "cd",
+                None if fetched.hires => "hires",
+                None => "",
+            };
+            let quality_detail = if quality_tier.is_empty() {
+                String::new()
+            } else {
+                crate::quality::detail(bits, rate)
+            };
+            let bits_push = bits.unwrap_or(0) as i32;
+            let rate_hz_push = rate_hz as i32;
+            let _ = weak.upgrade_in_event_loop(move |w| {
+                let np = w.global::<NowPlayingState>();
+                np.set_quality_tier(quality_tier.into());
+                np.set_quality_detail(quality_detail.into());
+                np.set_sample_rate_hz(rate_hz_push);
+                np.set_bit_depth(bits_push);
+            });
+            // The maxima changed while the poll snapshot may be frozen
+            // (paused): force the next tick to re-run the downgrade compare
+            // (same mechanism the Plex quality patch uses).
+            FORCE_UI_REPUSH.store(true, std::sync::atomic::Ordering::Relaxed);
+        });
     }
 
     // Mirror the now-playing metadata into the system tray tooltip (Linux).
@@ -2132,16 +2247,17 @@ pub(crate) async fn refresh_now_playing_meta(runtime: &Runtime, weak: &slint::We
         np.set_source(source.into());
         np.set_quality_tier(quality_tier.into());
         np.set_quality_detail(quality_detail.into());
-        // Numeric stream params for the Spectral Ribbon overlay. `track.sample_rate`
-        // is Hz when >= 1000, else kHz — normalize to Hz.
-        np.set_sample_rate_hz(track.sample_rate.map_or(0, |sr| {
+        // Numeric stream params for the Spectral Ribbon overlay. `sample_rate`
+        // (the merged catalog/hydrated value) is Hz when >= 1000, else kHz —
+        // normalize to Hz.
+        np.set_sample_rate_hz(sample_rate.map_or(0, |sr| {
             if sr >= 1000.0 {
                 sr as i32
             } else {
                 (sr * 1000.0) as i32
             }
         }));
-        np.set_bit_depth(track.bit_depth.unwrap_or(0) as i32);
+        np.set_bit_depth(bit_depth.unwrap_or(0) as i32);
         // Reset the EFFECTIVE (delivered) quality on every track change — the
         // poll loop re-derives it from the engine's PlaybackEvent once the new
         // stream opens (the old track's downgrade state must not linger).
