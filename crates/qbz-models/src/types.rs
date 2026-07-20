@@ -78,12 +78,41 @@ impl Quality {
             Quality::Mp3 => None,
         }
     }
+
+    /// The lower of two tiers. Implementable as plain `min` because the
+    /// derived `Ord` on `Quality` is tier-correct: the Qobuz format-id
+    /// discriminants (5 Mp3 < 6 Lossless < 7 HiRes < 27 UltraHiRes) ascend
+    /// with tier. Used to clamp a requested tier against a cap (#638).
+    pub fn min_tier(a: Quality, b: Quality) -> Quality {
+        a.min(b)
+    }
 }
 
 impl Default for Quality {
     fn default() -> Self {
         Quality::Lossless
     }
+}
+
+/// Why a delivered stream is (or may be) below the track's catalog maximum.
+/// Shared by the local badge, the local device cap, and the cast surfaces
+/// (#638 fixes 1-4). Mirrored to Slint as a plain `int` property carrying the
+/// same discriminant — no string enum crosses the FFI.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum QualityLimit {
+    /// No constraint identified (or no downgrade).
+    #[default]
+    None = 0,
+    /// The user's streaming-quality preference capped the request.
+    Preference = 1,
+    /// The local output device's cap lowered the request (fix 3).
+    /// NEVER applicable while casting — the local DAC is not in a cast's
+    /// signal path (precedence rule, owner decision 2026-07-20).
+    LocalDeviceCap = 2,
+    /// The manual per-renderer cap lowered the request (fix 4). Cast only.
+    RendererCap = 3,
+    /// Qobuz did not offer a higher tier for this track.
+    CatalogAvailability = 4,
 }
 
 // ============ User Session ============
@@ -176,6 +205,37 @@ impl StreamQualityInfo {
     /// Coarse tier label like "FLAC 24-bit/>96kHz" (from the format id).
     pub fn tier_label(&self) -> &'static str {
         self.quality().map(|q| q.label()).unwrap_or("Unknown")
+    }
+}
+
+/// Measured stream parameters read from the head of an audio buffer
+/// (FLAC STREAMINFO). `sample_rate` is in Hz.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AudioParams {
+    pub sample_rate: u32,
+    pub bits_per_sample: u32,
+    pub channels: u16,
+}
+
+/// Parse a FLAC STREAMINFO block from the head of a stream. Returns `None`
+/// for non-FLAC or short buffers — never guesses defaults (callers that need
+/// a fallback keep their own). Bit math hoisted verbatim from the proven
+/// QConnect remote-stream probe (`qbz::remote_stream`), shared so the cast
+/// path can measure the bytes it actually serves (#638 fix 1).
+pub fn probe_streaminfo(bytes: &[u8]) -> Option<AudioParams> {
+    if bytes.len() >= 26 && bytes.starts_with(b"fLaC") {
+        let sample_rate = ((bytes[18] as u32) << 12)
+            | ((bytes[19] as u32) << 4)
+            | ((bytes[20] as u32) >> 4);
+        let channels = ((bytes[20] >> 1) & 0x07) + 1;
+        let bit_depth = ((bytes[20] & 0x01) << 4) | ((bytes[21] >> 4) & 0x0F);
+        Some(AudioParams {
+            sample_rate,
+            bits_per_sample: (bit_depth + 1) as u32,
+            channels: channels as u16,
+        })
+    } else {
+        None
     }
 }
 
