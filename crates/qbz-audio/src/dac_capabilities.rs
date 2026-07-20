@@ -17,6 +17,13 @@ pub struct DacCapabilities {
     pub channels: Option<u32>,
     pub description: Option<String>,
     pub error: Option<String>,
+    /// True when `sample_rates` came from real detection (`/proc/asound` /
+    /// ALSA), false when it is the `FALLBACK_RATES` common set. Consumers that
+    /// derive a quality cap from the ceiling (#638 fix 3) must disclose the
+    /// fallback case — the cap still applies, but is not guaranteed to match
+    /// the hardware. `serde(default)` keeps old serialized payloads readable.
+    #[serde(default)]
+    pub detected: bool,
 }
 
 /// The common rate set used when real detection fails (continuous-range DACs,
@@ -37,9 +44,11 @@ fn assemble(
     detected_rates: Option<Vec<u32>>,
     description: Option<String>,
 ) -> DacCapabilities {
-    let sample_rates = detected_rates
-        .filter(|r| !r.is_empty())
-        .unwrap_or_else(|| FALLBACK_RATES.to_vec());
+    // Computed BEFORE the fallback collapses into `sample_rates`, so the DTO
+    // can tell a real ceiling from the assumed common set (#638 F26).
+    let rates = detected_rates.filter(|r| !r.is_empty());
+    let detected = rates.is_some();
+    let sample_rates = rates.unwrap_or_else(|| FALLBACK_RATES.to_vec());
     DacCapabilities {
         node_name: node_name.to_string(),
         sample_rates,
@@ -47,6 +56,7 @@ fn assemble(
         channels: Some(2),
         description,
         error: None,
+        detected,
     }
 }
 
@@ -87,14 +97,17 @@ mod tests {
         assert_eq!(caps.description.as_deref(), Some("My DAC"));
         assert_eq!(caps.channels, Some(2));
         assert!(caps.error.is_none());
+        assert!(caps.detected);
     }
 
     #[test]
     fn falls_back_when_detection_empty_or_missing() {
         let none = assemble("x", None, None);
         assert_eq!(none.sample_rates, FALLBACK_RATES.to_vec());
+        assert!(!none.detected);
         let empty = assemble("x", Some(vec![]), None);
         assert_eq!(empty.sample_rates, FALLBACK_RATES.to_vec());
+        assert!(!empty.detected);
     }
 
     #[test]

@@ -27,9 +27,11 @@ pub struct AudioSettings {
     pub stream_buffer_seconds: u8,
     /// When true, skip L1+L2 cache writes (streaming-only mode). Offline cache still works.
     pub streaming_only: bool,
-    /// When true, limit streaming quality to device's max supported sample rate.
-    /// This ensures bit-perfect playback by avoiding tracks that exceed device capabilities.
-    /// Default: true (recommended for bit-perfect setups)
+    /// When true, cap the REQUESTED streaming quality tier at the local output
+    /// device's detected ceiling (#638 fix 3; consumed by the desktop's
+    /// request-time resolution, never by the audio backends). Applies to local
+    /// playback only — never to casting, where the local DAC is not in the
+    /// signal path. Default: false (opt-in).
     pub limit_quality_to_device: bool,
     /// Cached max sample rate of the selected device (set when device is selected)
     /// Used when limit_quality_to_device is true
@@ -108,7 +110,7 @@ impl Default for AudioSettings {
             stream_first_track: true, // On by default (opt-out)
             stream_buffer_seconds: 2, // 2 seconds initial buffer
             streaming_only: false, // Disabled by default (cache tracks for instant replay)
-            limit_quality_to_device: false, // Disabled in 1.1.9 — detection logic unreliable (#45)
+            limit_quality_to_device: false, // Opt-in. Off since 1.1.9 (#45); wired to the read-only probe in #638 fix 3
             device_max_sample_rate: None, // Set when device is selected
             device_sample_rate_limits: HashMap::new(), // Per-device limits (empty = no limit)
             normalization_enabled: false, // Off by default — preserves bit-perfect pipeline
@@ -249,6 +251,35 @@ impl AudioSettingsStore {
             params![default_backend_json],
         )
         .map_err(|e| format!("Failed to seed audio settings row: {}", e))?;
+
+        // One-time backfill (#638 Phase C / F10): installs that first ran a
+        // pre-#45 build had `limit_quality_to_device` backfilled to 1 by the
+        // original DEFAULT-1 migration and still read `true` today. That was
+        // inert while nothing consumed the flag; now that the local device cap
+        // (fix 3) consumes it, those installs would silently gain a cap nobody
+        // asked for on upgrade — a silently-appearing cap is the exact bug
+        // class this work removes. Reset the flag to the modern default ONCE,
+        // gated on `user_version`, so a user who deliberately re-enables it
+        // afterwards is never clobbered again. The stamp is only written after
+        // a successful UPDATE so a failed backfill retries on the next open.
+        let user_version: i64 = conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap_or(0);
+        if user_version < 1 {
+            match conn.execute(
+                "UPDATE audio_settings SET limit_quality_to_device = 0 WHERE id = 1",
+                [],
+            ) {
+                Ok(_) => {
+                    if let Err(e) = conn.pragma_update(None, "user_version", 1) {
+                        log::warn!("audio settings: user_version stamp failed: {e}");
+                    }
+                }
+                Err(e) => {
+                    log::warn!("audio settings: limit_quality_to_device backfill failed: {e}")
+                }
+            }
+        }
 
         Ok(Self { conn })
     }
