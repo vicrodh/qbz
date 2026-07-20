@@ -6,10 +6,10 @@
 //! Slint global.
 //!
 //! Audio changes are persisted and then applied to the live `Player`:
-//! routing-critical changes (backend, output device, max sample rate,
-//! exclusive mode, DAC passthrough, ALSA plugin) trigger a device
-//! re-init; the rest only reload the settings struct. Playback-preference
-//! changes (autoplay, show-context, persist, resume) just persist.
+//! routing-critical changes (backend, output device, exclusive mode,
+//! DAC passthrough, ALSA plugin) trigger a device re-init; the rest only
+//! reload the settings struct. Playback-preference changes (autoplay,
+//! show-context, persist, resume) just persist.
 //!
 //! Neither domain store is exposed by `AppRuntime`, so this module opens
 //! them directly at the shared global path — the same path
@@ -32,25 +32,11 @@ use crate::adapter::SlintAdapter;
 use crate::ui_prefs::{self, STREAMING_QUALITIES};
 use crate::{AppWindow, NowPlayingState, SettingsExportState, SettingsState};
 
-/// Maximum-sample-rate dropdown options. Index 0 is "No limit" (`None`).
-/// Backs `device_max_sample_rate`.
-// Labels in these tables are `mark`ed so the extractor registers the English
-// literals; they are translated once with `t(l)` where the snapshot is built.
-const MAX_SAMPLE_RATES: &[(&str, Option<u32>)] = &[
-    (qbz_i18n::mark("No limit"), None),
-    (qbz_i18n::mark("44.1 kHz"), Some(44_100)),
-    (qbz_i18n::mark("48 kHz"), Some(48_000)),
-    (qbz_i18n::mark("88.2 kHz"), Some(88_200)),
-    (qbz_i18n::mark("96 kHz"), Some(96_000)),
-    (qbz_i18n::mark("176.4 kHz"), Some(176_400)),
-    (qbz_i18n::mark("192 kHz"), Some(192_000)),
-    (qbz_i18n::mark("352.8 kHz"), Some(352_800)),
-    (qbz_i18n::mark("384 kHz"), Some(384_000)),
-];
-
 /// ALSA-plugin dropdown options.
 /// DSD delivery modes (DSD plan Phases 2-3). Value strings are the
 /// AudioSettings.dsd_mode contract ("convert" | "dop" | "native").
+// Labels in these tables are `mark`ed so the extractor registers the English
+// literals; they are translated once with `t(l)` where the snapshot is built.
 const DSD_MODES: &[(&str, &str)] = &[
     (qbz_i18n::mark("Convert to PCM (works everywhere)"), "convert"),
     (qbz_i18n::mark("DoP — DSD over PCM (bit-perfect)"), "dop"),
@@ -147,8 +133,6 @@ pub struct SettingsSnapshot {
     // Audio — dropdowns.
     streaming_qualities: Vec<String>,
     streaming_quality_index: i32,
-    sample_rates: Vec<String>,
-    sample_rate_index: i32,
     backends: Vec<String>,
     backend_index: i32,
     devices: Vec<String>,
@@ -502,10 +486,6 @@ fn build_snapshot(
         Some(id) => device_list.ids.iter().position(|d| d == id).unwrap_or(0),
     };
 
-    let sample_rate_index = MAX_SAMPLE_RATES
-        .iter()
-        .position(|(_, r)| *r == audio.device_max_sample_rate)
-        .unwrap_or(0);
     let alsa_plugin = audio.alsa_plugin.unwrap_or(AlsaPlugin::Hw);
     let alsa_plugin_index = ALSA_PLUGINS
         .iter()
@@ -554,8 +534,6 @@ fn build_snapshot(
             .map(|q| q.label.to_string())
             .collect(),
         streaming_quality_index: ui_prefs::streaming_quality_index(streaming_quality_key) as i32,
-        sample_rates: MAX_SAMPLE_RATES.iter().map(|(l, _)| qbz_i18n::t(l)).collect(),
-        sample_rate_index: sample_rate_index as i32,
         // Index 0 is "Auto" (a resolve-and-set action, #470); the concrete
         // backends follow. backend_type is always persisted concrete, so the
         // current selection is its position shifted by 1 past the Auto entry —
@@ -644,8 +622,6 @@ pub fn apply_snapshot(window: &AppWindow, snap: SettingsSnapshot) {
     // Audio — dropdowns.
     st.set_streaming_qualities(string_model(snap.streaming_qualities));
     st.set_streaming_quality_index(snap.streaming_quality_index);
-    st.set_sample_rates(string_model(snap.sample_rates));
-    st.set_sample_rate_index(snap.sample_rate_index);
     st.set_backends(string_model(snap.backends));
     st.set_backend_index(snap.backend_index);
     st.set_devices(string_model(snap.devices));
@@ -1197,14 +1173,6 @@ pub async fn handle_select(
                 runtime.core().player().clear_audio_cache();
             }
         }
-        "sample-rate" => {
-            let rate = MAX_SAMPLE_RATES.get(index).map(|(_, r)| *r).unwrap_or(None);
-            if let Err(e) = with_audio(&ctx.audio, |s| s.set_device_max_sample_rate(rate)) {
-                log::error!("[qbz-slint] persist max sample rate failed: {e}");
-                return;
-            }
-            apply_audio(&ctx, &runtime, Apply::Reinit);
-        }
         "backend" => {
             // Dropdown index 0 is "Auto" — a resolve-and-set action (#470), not a
             // persisted mode. Pick the best available backend (PipeWire if present,
@@ -1518,13 +1486,6 @@ pub fn export_settings(weak: slint::Weak<AppWindow>, handle: tokio::runtime::Han
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn max_sample_rate_table_starts_with_no_limit() {
-        assert_eq!(MAX_SAMPLE_RATES[0].1, None);
-        assert_eq!(MAX_SAMPLE_RATES.last().unwrap().1, Some(384_000));
-        assert_eq!(MAX_SAMPLE_RATES.len(), 9);
-    }
 
     #[test]
     fn alsa_plugin_table_first_is_hw() {

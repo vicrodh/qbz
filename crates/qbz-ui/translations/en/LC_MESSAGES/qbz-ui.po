@@ -510,3 +510,12 @@ msgstr "cached copy — cap not applied"
 
 msgid "Limited by your output device's limit"
 msgstr "Limited by your output device's limit"
+
+msgid "Cap the requested streaming quality at your output device's limit. Applies to local playback only, never to casting."
+msgstr "Cap the requested streaming quality at your output device's limit. Applies to local playback only, never to casting."
+
+msgid "Your device's exact limits could not be read on this system, so a common set is assumed. The cap still applies, but may not match your hardware exactly."
+msgstr "Your device's exact limits could not be read on this system, so a common set is assumed. The cap still applies, but may not match your hardware exactly."
+
+msgid "Detected device limit"
+msgstr "Detected device limit"

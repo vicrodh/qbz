@@ -4719,3 +4719,12 @@ msgstr "Скопировано!"
 
 msgid "Limited by your output device's limit"
 msgstr "Ограничено пределом вашего устройства вывода"
+
+msgid "Cap the requested streaming quality at your output device's limit. Applies to local playback only, never to casting."
+msgstr "Ограничивает запрашиваемое качество стриминга пределом вашего устройства вывода. Применяется только к локальному воспроизведению, никогда — к трансляции."
+
+msgid "Your device's exact limits could not be read on this system, so a common set is assumed. The cap still applies, but may not match your hardware exactly."
+msgstr "Не удалось прочитать точные пределы вашего устройства в этой системе, поэтому используется типовой набор. Ограничение всё равно применяется, но может не совпадать точно с вашим оборудованием."
+
+msgid "Detected device limit"
+msgstr "Обнаруженный предел устройства"

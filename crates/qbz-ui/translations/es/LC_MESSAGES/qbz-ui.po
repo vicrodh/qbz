@@ -4735,3 +4735,12 @@ msgstr "¡Copiado!"
 
 msgid "Limited by your output device's limit"
 msgstr "Limitado por el límite de tu dispositivo de salida"
+
+msgid "Cap the requested streaming quality at your output device's limit. Applies to local playback only, never to casting."
+msgstr "Limita la calidad de streaming solicitada al límite de tu dispositivo de salida. Aplica solo a la reproducción local, nunca a la transmisión."
+
+msgid "Your device's exact limits could not be read on this system, so a common set is assumed. The cap still applies, but may not match your hardware exactly."
+msgstr "No se pudieron leer los límites exactos de tu dispositivo en este sistema, así que se asume un conjunto común. El límite aplica de todos modos, pero puede no coincidir exactamente con tu hardware."
+
+msgid "Detected device limit"
+msgstr "Límite detectado del dispositivo"

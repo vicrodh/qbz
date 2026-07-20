@@ -4693,3 +4693,12 @@ msgstr "コピーしました！"
 
 msgid "Limited by your output device's limit"
 msgstr "出力デバイスの上限により制限されています"
+
+msgid "Cap the requested streaming quality at your output device's limit. Applies to local playback only, never to casting."
+msgstr "リクエストするストリーミング音質を出力デバイスの上限に制限します。ローカル再生のみに適用され、キャストには適用されません。"
+
+msgid "Your device's exact limits could not be read on this system, so a common set is assumed. The cap still applies, but may not match your hardware exactly."
+msgstr "このシステムではデバイスの正確な上限を読み取れなかったため、一般的なセットを想定しています。制限は引き続き適用されますが、実際のハードウェアと完全には一致しない場合があります。"
+
+msgid "Detected device limit"
+msgstr "検出されたデバイスの上限"

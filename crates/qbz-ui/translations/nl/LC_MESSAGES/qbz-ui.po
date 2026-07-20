@@ -4717,3 +4717,12 @@ msgstr "Gekopieerd!"
 
 msgid "Limited by your output device's limit"
 msgstr "Beperkt door de limiet van je uitvoerapparaat"
+
+msgid "Cap the requested streaming quality at your output device's limit. Applies to local playback only, never to casting."
+msgstr "Begrens de aangevraagde streamingkwaliteit op de limiet van je uitvoerapparaat. Geldt alleen voor lokale weergave, nooit voor casten."
+
+msgid "Your device's exact limits could not be read on this system, so a common set is assumed. The cap still applies, but may not match your hardware exactly."
+msgstr "De exacte limieten van je apparaat konden op dit systeem niet worden uitgelezen, dus wordt een gangbare set aangenomen. De limiet geldt nog steeds, maar komt mogelijk niet exact overeen met je hardware."
+
+msgid "Detected device limit"
+msgstr "Gedetecteerde apparaatlimiet"

@@ -54,7 +54,7 @@ export component AudioSettings inherits VerticalLayout {
     }
     SettingRow {
         label: @tr("Limit quality to device");
-        description: @tr("Cap streaming quality at the output device's maximum sample rate.");
+        description: @tr("Cap the requested streaming quality at your output device's limit. Applies to local playback only, never to casting.");
         QbzToggle {
             checked: SettingsState.limit-quality-to-device;
             toggled(v) => {
@@ -63,18 +63,29 @@ export component AudioSettings inherits VerticalLayout {
             }
         }
     }
-    if SettingsState.limit-quality-to-device: SettingRow {
-        label: @tr("Maximum sample rate");
-        description: @tr("The highest sample rate streamed tracks may use.");
-        QbzSelect {
-            menu-width: 170px;
-            options: SettingsState.sample-rates;
-            current-index: SettingsState.sample-rate-index;
-            selected(i) => {
-                SettingsState.sample-rate-index = i;
-                root.settings-select("sample-rate", i);
-            }
+    // Read-only detected line — deliberately NOT a control (#638 fix 3): a Hz
+    // dropdown was the documented root-cause trap (it promised rates the app
+    // cannot request; Qobuz sells four tiers), and with real detection there
+    // is nothing left to pick. The value is Rust-composed from the probe
+    // ("192 kHz · Hi-Res+"); empty while nothing is cached yet.
+    if SettingsState.limit-quality-to-device && SettingsState.device-cap-summary != "": SettingRow {
+        label: @tr("Detected device limit");
+        Text {
+            text: SettingsState.device-cap-summary;
+            color: Theme.text-primary;
+            font-size: Typography.body;
+            font-weight: Typography.medium;
+            vertical-alignment: center;
         }
+    }
+    // Fallback disclosure (#638 Decision B): plain informative copy — no
+    // warning icon, no error styling. The cap still applies on the assumed
+    // common set; it just is not measured truth for this hardware.
+    if SettingsState.limit-quality-to-device && SettingsState.device-cap-summary != "" && !SettingsState.device-cap-detected: Text {
+        text: @tr("Your device's exact limits could not be read on this system, so a common set is assumed. The cap still applies, but may not match your hardware exactly.");
+        color: Theme.text-muted;
+        font-size: 12px;
+        wrap: word-wrap;
     }
 
     Rectangle { height: 12px; }
