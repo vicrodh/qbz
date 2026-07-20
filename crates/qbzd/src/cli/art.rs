@@ -1,34 +1,73 @@
 // crates/qbzd/src/cli/art.rs — the `qbzd art` verb (02 §2.3). Current-track
-// cover art. Reads the artwork_url already carried on the now-playing track
-// (GET /api/now-playing, stamped from the Qobuz image CDN — an unauthenticated
-// URL), so it needs no dedicated route in this slice: bare `art` prints the
-// URL (pipe into a viewer), `--save PATH` downloads it (notification icons).
-// A daemon-served GET /api/artwork/current (302) is deferred until a client
-// that can only speak to the daemon needs it.
-use crate::cli::client::ApiClient;
+// cover art, resolved through the daemon's own GET /api/artwork/current (302 to
+// the Qobuz CDN link stamped on the queue track). This is the shipped caller
+// that anchors that route (§3.1.4): a redirect-none request reads the 302
+// `Location` (bare `art` prints it, pipe into a viewer), and `--save PATH`
+// follows it to download the image (notification icons). No Qobuz session is
+// needed — the art URL is unauthenticated and already on the queue track.
+use std::time::Duration;
+
+use crate::cli::client::{resolve_host, resolve_token, CliError};
 use crate::paths::ProfileRoots;
 
-/// `qbzd art [--save PATH]`. Exit 0 · 3 · 4 · 6 (nothing playing / no art).
+/// `qbzd art [--save PATH]`. Exit 0 · 3 · 6 (nothing playing / no art).
 pub async fn art(host: Option<String>, save: Option<String>, roots: &ProfileRoots) -> i32 {
-    let client = ApiClient::new(host, roots);
-    let np = match client.get("/api/now-playing").await {
-        Ok(v) => v,
+    let target = resolve_host(host);
+    let token = resolve_token(&target, roots);
+    let base = format!("http://{}", target.addr);
+
+    // Redirect-none so we can read the 302 Location (the canonical current-art
+    // URL) instead of transparently following it to the CDN.
+    let client = match reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(2))
+        .timeout(Duration::from_secs(10))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+    {
+        Ok(c) => c,
         Err(e) => {
-            eprintln!("{e}");
-            return e.exit_code();
+            eprintln!("error: {e}");
+            return 1;
         }
     };
-    let url = np
-        .get("track")
-        .and_then(|t| t.get("artwork_url"))
-        .and_then(|x| x.as_str())
-        .filter(|u| !u.is_empty());
-    let url = match url {
+
+    let mut req = client.get(format!("{base}/api/artwork/current"));
+    if let Some(t) = &token {
+        req = req.bearer_auth(t);
+    }
+    let resp = match req.send().await {
+        Ok(r) => r,
+        Err(e) => {
+            let err = if e.is_connect() || e.is_timeout() {
+                CliError::Unreachable(target.addr.clone())
+            } else {
+                CliError::Runtime(format!("request failed: {e}"))
+            };
+            eprintln!("{err}");
+            return err.exit_code();
+        }
+    };
+
+    let status = resp.status().as_u16();
+    if status == 404 {
+        eprintln!("error: no artwork for the current track");
+        eprintln!("  → is something playing?  qbzd now");
+        return 6;
+    }
+    if status != 302 {
+        let body = resp.text().await.unwrap_or_default();
+        eprintln!("error: daemon returned {status}: {}", body.trim());
+        return 1;
+    }
+    let url = match resp
+        .headers()
+        .get(reqwest::header::LOCATION)
+        .and_then(|v| v.to_str().ok())
+    {
         Some(u) => u.to_string(),
         None => {
-            eprintln!("error: no artwork for the current track");
-            eprintln!("  → is something playing?  qbzd now");
-            return 6;
+            eprintln!("error: daemon redirected without a Location");
+            return 1;
         }
     };
 

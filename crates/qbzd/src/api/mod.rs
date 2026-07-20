@@ -25,6 +25,7 @@ pub mod queue;
 pub mod radio;
 pub mod reco;
 pub mod search;
+pub mod artwork;
 pub mod settings;
 pub mod sse;
 pub mod status;
@@ -105,6 +106,7 @@ pub const P1_ROUTES: &[(&str, &str)] = &[
     ("POST", "/api/playlist/tracks/add"),
     ("POST", "/api/playlist/tracks/remove"),
     ("GET", "/api/events"),
+    ("GET", "/api/artwork/current"),
 ];
 
 /// A socket bound at boot step 5, not yet serving. Wraps the tiny_http server
@@ -354,6 +356,7 @@ fn route(state: &ApiState, req: &mut Request) -> Response<Cursor<Vec<u8>>> {
         ("GET", "/api/suggest") => browse::suggest(state, &query),
         ("GET", "/api/discover") => discover::discover(state, &query),
         ("GET", "/api/lyrics") => lyrics::lyrics(state, &query),
+        ("GET", "/api/artwork/current") => artwork::current(state),
         ("POST", "/api/radio") => {
             let body = read_json_body(req);
             radio::radio(state, &body)
@@ -572,8 +575,9 @@ mod tests {
         // §3.1.4 HARD RULE, applied to the content-verb door). Row 19:
         // GET /api/search — caller: `qbzd search`. Count is pinned so a route
         // with no caller cannot creep in; P1 must never overlap P0.
-        assert_eq!(P1_ROUTES.len(), 26);
+        assert_eq!(P1_ROUTES.len(), 27);
         assert!(P1_ROUTES.contains(&("GET", "/api/events"))); // caller: `qbzd watch`
+        assert!(P1_ROUTES.contains(&("GET", "/api/artwork/current"))); // caller: `qbzd art`
         assert!(P1_ROUTES.contains(&("GET", "/api/discover")));
         assert!(P1_ROUTES.contains(&("GET", "/api/lyrics")));
         assert!(P1_ROUTES.contains(&("POST", "/api/reco/playlist")));
