@@ -4715,6 +4715,18 @@ msgstr "Kopiëren"
 msgid "Copied!"
 msgstr "Gekopieerd!"
 
+msgid "Limited by your streaming quality setting"
+msgstr "Beperkt door je instelling voor streamingkwaliteit"
+
+msgid "Qobuz has no higher quality for this track"
+msgstr "Qobuz biedt geen hogere kwaliteit voor dit nummer"
+
+msgid "offline copy — cap not applied"
+msgstr "offline kopie — limiet niet toegepast"
+
+msgid "cached copy — cap not applied"
+msgstr "gecachte kopie — limiet niet toegepast"
+
 msgid "Limited by your output device's limit"
 msgstr "Beperkt door de limiet van je uitvoerapparaat"
 

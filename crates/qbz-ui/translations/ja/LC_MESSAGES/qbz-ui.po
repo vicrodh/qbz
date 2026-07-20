@@ -4691,6 +4691,18 @@ msgstr "コピー"
 msgid "Copied!"
 msgstr "コピーしました！"
 
+msgid "Limited by your streaming quality setting"
+msgstr "ストリーミング音質の設定により制限されています"
+
+msgid "Qobuz has no higher quality for this track"
+msgstr "このトラックにはこれ以上高い音質は提供されていません"
+
+msgid "offline copy — cap not applied"
+msgstr "オフラインコピー — 上限は適用されません"
+
+msgid "cached copy — cap not applied"
+msgstr "キャッシュされたコピー — 上限は適用されません"
+
 msgid "Limited by your output device's limit"
 msgstr "出力デバイスの上限により制限されています"
 

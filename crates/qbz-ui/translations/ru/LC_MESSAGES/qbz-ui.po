@@ -4717,6 +4717,18 @@ msgstr "Копировать"
 msgid "Copied!"
 msgstr "Скопировано!"
 
+msgid "Limited by your streaming quality setting"
+msgstr "Ограничено вашей настройкой качества потока"
+
+msgid "Qobuz has no higher quality for this track"
+msgstr "Qobuz не предлагает более высокого качества для этого трека"
+
+msgid "offline copy — cap not applied"
+msgstr "офлайн-копия — ограничение не применяется"
+
+msgid "cached copy — cap not applied"
+msgstr "копия из кэша — ограничение не применяется"
+
 msgid "Limited by your output device's limit"
 msgstr "Ограничено пределом вашего устройства вывода"
 
