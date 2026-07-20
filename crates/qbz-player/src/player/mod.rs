@@ -4352,6 +4352,14 @@ impl Player {
         self.audio_cache.contains(track_id)
     }
 
+    /// Drop every cached audio byte (L1 memory + L2 disk). Called when the
+    /// streaming-quality preference changes so the new tier takes effect on the
+    /// next play/cast instead of on the next cache miss — the cache is keyed by
+    /// track id alone and carries no quality dimension.
+    pub fn clear_audio_cache(&self) {
+        self.audio_cache.clear();
+    }
+
     /// Fetch a track's audio bytes for a gapless handoff: L1 memory →
     /// L2 disk → CMAF `download_full` (legacy full download as fallback).
     /// Does not start playback — the caller passes the bytes to

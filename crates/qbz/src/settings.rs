@@ -1138,8 +1138,22 @@ pub async fn handle_select(
                 return;
             };
             let mut prefs = ui_prefs::load();
-            prefs.streaming_quality = quality.key.to_string();
-            ui_prefs::save(&prefs);
+            if prefs.streaming_quality != quality.key {
+                prefs.streaming_quality = quality.key.to_string();
+                ui_prefs::save(&prefs);
+                // The L1/L2 audio cache is keyed by track id alone (no quality
+                // dimension), so bytes fetched at the old tier would keep
+                // serving plays and casts until they aged out. Clear it so the
+                // new tier applies from the next fetch — fire-and-forget even
+                // mid-playback: an armed gapless handoff may drop (one possible
+                // audible gap on this explicit, rare action), which beats
+                // intermittently serving the old tier. Logged so a reported
+                // gap is attributable.
+                log::info!(
+                    "[qbz-slint] streaming quality changed -> clearing audio cache (L1+L2)"
+                );
+                runtime.core().player().clear_audio_cache();
+            }
         }
         "sample-rate" => {
             let rate = MAX_SAMPLE_RATES.get(index).map(|(_, r)| *r).unwrap_or(None);
