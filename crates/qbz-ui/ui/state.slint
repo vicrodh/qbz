@@ -5915,6 +5915,7 @@ export struct WhatsNewBlock {
     level: int,
     text: string,
     id: string,
+    url: string,
 }
 
 // One table-of-contents entry (level-0 section headings only).
@@ -5937,4 +5938,6 @@ export global WhatsNewActions {
     // Open the modal AND kick off the GitHub release fetch (Rust).
     callback open();
     callback close();
+    // Open an external URL from a standalone release-notes link (Rust: open::that).
+    callback open-url(string);
 }

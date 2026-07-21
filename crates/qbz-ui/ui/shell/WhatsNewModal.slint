@@ -177,7 +177,8 @@ export component WhatsNewModal inherits Rectangle {
                                     font-size: block.level >= 2 ? 11px : 12px;
                                 }
 
-                                Text {
+                                // Section / bullet / paragraph text (kinds 0-2).
+                                if block.kind != 3: Text {
                                     text: block.text;
                                     horizontal-stretch: 1;
                                     wrap: word-wrap;
@@ -194,6 +195,26 @@ export component WhatsNewModal inherits Rectangle {
                                     font-weight: block.kind == 0
                                         ? Typography.bold
                                         : Typography.regular;
+                                }
+
+                                // Whole-line link (kind 3) — a clickable accent link.
+                                if block.kind == 3: Rectangle {
+                                    horizontal-stretch: 1;
+                                    height: link-text.preferred-height;
+                                    link-text := Text {
+                                        text: block.text;
+                                        width: 100%;
+                                        wrap: word-wrap;
+                                        color: link-ta.has-hover ? Theme.accent-hover : Theme.accent;
+                                        font-size: 13px;
+                                        font-weight: Typography.medium;
+                                    }
+                                    link-ta := TouchArea {
+                                        mouse-cursor: pointer;
+                                        clicked => {
+                                            WhatsNewActions.open-url(block.url);
+                                        }
+                                    }
                                 }
                             }
 

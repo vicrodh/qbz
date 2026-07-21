@@ -24,6 +24,8 @@ const GITHUB_RELEASES_URL: &str = "https://api.github.com/repos/vicrodh/qbz/rele
 const KIND_SECTION: i32 = 0;
 const KIND_BULLET: i32 = 1;
 const KIND_PARAGRAPH: i32 = 2;
+/// A whole-line markdown link `[text](url)` — rendered as a clickable link.
+const KIND_LINK: i32 = 3;
 
 /// GitHub release JSON (only the fields the modal needs).
 #[derive(Debug, Clone, Deserialize)]
@@ -56,6 +58,14 @@ pub fn install(window: &AppWindow, handle: tokio::runtime::Handle) {
             }
         });
     }
+
+    // open_url() — open a standalone release-notes link in the browser.
+    window.global::<WhatsNewActions>().on_open_url(|url| {
+        let url = url.to_string();
+        if let Err(e) = open::that(&url) {
+            log::warn!("[qbz-slint] whats-new open-url failed for {url}: {e}");
+        }
+    });
 
     // open() — show, mark loading, then fetch + render on a worker thread.
     {
@@ -184,10 +194,60 @@ fn format_release_date(iso: &str) -> String {
 
 // ==================== Markdown → blocks + TOC ====================
 
-/// Strip inline `**bold**` / `` `code` `` markers, keeping the inner text. Slint
-/// renders plain text per block, so the markers are simply removed.
+/// Strip inline `**bold**` / `` `code` `` markers and reduce inline markdown
+/// links `[text](url)` to just their `text` (a single Slint Text block can't
+/// carry clickable inline spans — a WHOLE-line link becomes a `KIND_LINK` block
+/// instead, see `parse_standalone_link`). Keeps the inner text otherwise.
 fn strip_inline(text: &str) -> String {
-    text.replace("**", "").replace('`', "")
+    strip_markdown_links(text).replace("**", "").replace('`', "")
+}
+
+/// If `s[start..]` begins with a markdown link `[label](url)`, return
+/// `(label, url, byte-index just past the ')')`. The `[](` `)` delimiters are
+/// ASCII, so all returned slices sit on char boundaries. No nested brackets.
+fn parse_link_at(s: &str, start: usize) -> Option<(&str, &str, usize)> {
+    let rest = &s[start..];
+    if !rest.starts_with('[') {
+        return None;
+    }
+    let close_br = rest.find(']')?;
+    if rest.as_bytes().get(close_br + 1) != Some(&b'(') {
+        return None;
+    }
+    let open_paren = close_br + 1;
+    let close_paren = open_paren + rest[open_paren..].find(')')?;
+    let label = &rest[1..close_br];
+    let url = &rest[open_paren + 1..close_paren];
+    if url.is_empty() {
+        return None;
+    }
+    Some((label, url, start + close_paren + 1))
+}
+
+/// Replace every inline `[text](url)` in a string with just its `text`.
+fn strip_markdown_links(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut i = 0;
+    while i < text.len() {
+        if text.as_bytes()[i] == b'[' {
+            if let Some((label, _url, end)) = parse_link_at(text, i) {
+                out.push_str(label);
+                i = end;
+                continue;
+            }
+        }
+        let ch = text[i..].chars().next().unwrap();
+        out.push(ch);
+        i += ch.len_utf8();
+    }
+    out
+}
+
+/// If the whole trimmed line is exactly one markdown link, return `(text, url)`.
+fn parse_standalone_link(s: &str) -> Option<(&str, &str)> {
+    let t = s.trim();
+    let (label, url, end) = parse_link_at(t, 0)?;
+    (end == t.len()).then_some((label, url))
 }
 
 /// Slugify a heading label into a TOC anchor id (port of the Tauri `slugify`).
@@ -257,7 +317,19 @@ fn push_heading(
         level,
         text: strip_inline(clean).into(),
         id: id.into(),
+        url: "".into(),
     });
+}
+
+/// A clickable whole-line link block.
+fn link_block(label: &str, url: &str) -> WhatsNewBlock {
+    WhatsNewBlock {
+        kind: KIND_LINK,
+        level: 0,
+        text: strip_inline(label).into(),
+        id: "".into(),
+        url: url.into(),
+    }
 }
 
 /// Render the release-notes markdown into a flat block model + a TOC of the
@@ -304,12 +376,25 @@ pub fn render_markdown(markdown: &str) -> (Vec<WhatsNewBlock>, Vec<WhatsNewTocEn
                 continue;
             }
 
+            // A bullet that is nothing but a link renders as a clickable link.
+            if let Some((label, url)) = parse_standalone_link(content) {
+                blocks.push(link_block(label, url));
+                continue;
+            }
+
             blocks.push(WhatsNewBlock {
                 kind: KIND_BULLET,
                 level,
                 text: strip_inline(content).into(),
                 id: "".into(),
+                url: "".into(),
             });
+            continue;
+        }
+
+        // A paragraph that is nothing but a link renders as a clickable link.
+        if let Some((label, url)) = parse_standalone_link(trimmed) {
+            blocks.push(link_block(label, url));
             continue;
         }
 
@@ -319,6 +404,7 @@ pub fn render_markdown(markdown: &str) -> (Vec<WhatsNewBlock>, Vec<WhatsNewTocEn
             level: 0,
             text: strip_inline(trimmed).into(),
             id: "".into(),
+            url: "".into(),
         });
     }
 
