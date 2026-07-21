@@ -5863,7 +5863,7 @@ checksum = "b5a041e753da8b807c9255f28de81879c78c876392ff2469cde94799b2896b9d"
 
 [[package]]
 name = "qbz"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "arboard",
  "async-trait",
@@ -5926,7 +5926,7 @@ dependencies = [
 
 [[package]]
 name = "qbz-app"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "base64",
  "chrono",
@@ -5950,7 +5950,7 @@ dependencies = [
 
 [[package]]
 name = "qbz-audio"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "alsa",
  "alsa-sys",
@@ -6007,7 +6007,7 @@ dependencies = [
 
 [[package]]
 name = "qbz-cmaf"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "aes",
  "base64",
@@ -6022,7 +6022,7 @@ dependencies = [
 
 [[package]]
 name = "qbz-core"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6043,7 +6043,7 @@ dependencies = [
 
 [[package]]
 name = "qbz-credentials"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "aes-gcm",
  "ashpd 0.13.11",
@@ -6061,7 +6061,7 @@ dependencies = [
 
 [[package]]
 name = "qbz-dac-wizard"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "qbz-audio",
  "qbz-i18n",
@@ -6072,7 +6072,7 @@ dependencies = [
 
 [[package]]
 name = "qbz-dsd"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "id3",
  "log",
@@ -6081,7 +6081,7 @@ dependencies = [
 
 [[package]]
 name = "qbz-external-reco"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "async-trait",
  "futures-util",
@@ -6135,7 +6135,7 @@ dependencies = [
 
 [[package]]
 name = "qbz-log"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "chrono",
  "dirs 5.0.1",
@@ -6164,7 +6164,7 @@ dependencies = [
 
 [[package]]
 name = "qbz-media-controls"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "ashpd 0.13.11",
  "async-channel",
@@ -6200,7 +6200,7 @@ dependencies = [
 
 [[package]]
 name = "qbz-models"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "async-trait",
  "chrono",
@@ -6214,7 +6214,7 @@ dependencies = [
 
 [[package]]
 name = "qbz-music-link"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "async-trait",
  "log",
@@ -6229,7 +6229,7 @@ dependencies = [
 
 [[package]]
 name = "qbz-offline-cache"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "dirs 6.0.0",
  "futures-util",
@@ -6250,7 +6250,7 @@ dependencies = [
 
 [[package]]
 name = "qbz-player"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "async-trait",
  "futures-util",
@@ -6288,7 +6288,7 @@ dependencies = [
 
 [[package]]
 name = "qbz-plex"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "dirs 6.0.0",
  "open",
@@ -6299,7 +6299,7 @@ dependencies = [
 
 [[package]]
 name = "qbz-qobuz"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "anyhow",
  "base64",
@@ -6321,7 +6321,7 @@ dependencies = [
 
 [[package]]
 name = "qbz-radio"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "dirs 5.0.1",
  "log",
@@ -6332,7 +6332,7 @@ dependencies = [
 
 [[package]]
 name = "qbz-reco"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "log",
  "qbz-integrations",
@@ -6346,7 +6346,7 @@ dependencies = [
 
 [[package]]
 name = "qbz-secrets"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "aes-gcm",
  "base64",
@@ -6363,7 +6363,7 @@ dependencies = [
 
 [[package]]
 name = "qbz-slint-common"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "qbz-ui",
  "slint",
@@ -6371,7 +6371,7 @@ dependencies = [
 
 [[package]]
 name = "qbz-text-utils"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "chrono",
  "qbz-i18n",
@@ -6379,7 +6379,7 @@ dependencies = [
 
 [[package]]
 name = "qbz-theme"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "image",
  "serde",
@@ -6388,7 +6388,7 @@ dependencies = [
 
 [[package]]
 name = "qbz-ui"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "slint",
  "slint-build",
@@ -6396,7 +6396,7 @@ dependencies = [
 
 [[package]]
 name = "qbzd"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "async-trait",
  "clap",
@@ -6437,7 +6437,7 @@ dependencies = [
 
 [[package]]
 name = "qconnect-app"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "async-trait",
  "log",
@@ -6456,7 +6456,7 @@ dependencies = [
 
 [[package]]
 name = "qconnect-core"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "qbz-models",
  "serde",
@@ -6465,7 +6465,7 @@ dependencies = [
 
 [[package]]
 name = "qconnect-protocol"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "log",
  "prost",
@@ -6478,7 +6478,7 @@ dependencies = [
 
 [[package]]
 name = "qconnect-transport-ws"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "async-trait",
  "futures-util",

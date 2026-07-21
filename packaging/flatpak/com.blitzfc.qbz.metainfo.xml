@@ -69,6 +69,18 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="2.0.2" date="2026-07-20">
+      <description>
+        <p>QBZ 2.0.2 is a big maintenance release: a brand-new headless daemon you can drive entirely from the terminal, a touch-first Kiosk mode, an app-wide dynamic album-art background, and a wave of audio, casting and rendering work — all on the 2.0 rebuild.</p>
+        <ul>
+          <li>Headless daemon (qbzd): a slint-free binary that plays music, scrobbles, exposes MPRIS and a full CLI/HTTP control plane, and configures itself over SSH — from a Raspberry Pi or a server</li>
+          <li>Kiosk mode: an opt-in touch-first interface (QBZ_PROFILE=kiosk) for touchscreens and small displays, with a live Kiosk↔Desktop toggle</li>
+          <li>Dynamic background: an app-wide album-art backdrop with ambient shaders and translucent chrome, plus a per-GPU selector</li>
+          <li>Truthful casting and quality: badges that report the delivered quality and name any downgrade, per-renderer quality caps, and honored streaming-quality when casting (#638)</li>
+          <li>Audio, rendering and library: ALSA-exclusive and DAC fixes, femtovg partial rendering, a mixed Library "All" feed, Catppuccin themes, and hardened credential storage</li>
+        </ul>
+      </description>
+    </release>
     <release version="2.0.1" date="2026-07-08">
       <description>
         <p>QBZ 2.0.1 is the first maintenance release on top of the 2.0 native rebuild: lighter scrolling, self-recovery from bad states, and more faithful text rendering across languages, plus a few features that missed the 2.0 cutoff.</p>
