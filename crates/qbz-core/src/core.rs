@@ -990,6 +990,19 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
         client.get_track(track_id).await.map_err(CoreError::Api)
     }
 
+    /// Get a track's lyrics document (synced/unsynced), or `None` if the track
+    /// has none. Thin wrapper over `QobuzClient::get_lyrics` so headless callers
+    /// (qbzd) avoid the `client()` escape hatch.
+    pub async fn get_lyrics(
+        &self,
+        track_id: u64,
+    ) -> Result<Option<qbz_qobuz::lyrics::QobuzLyricsDocument>, CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+
+        client.get_lyrics(track_id).await.map_err(CoreError::Api)
+    }
+
     /// Get artist by ID
     pub async fn get_artist(&self, artist_id: u64) -> Result<Artist, CoreError> {
         let client = self.client.read().await;

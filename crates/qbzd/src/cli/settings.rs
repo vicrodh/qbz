@@ -87,6 +87,7 @@ const KEY_TABLE: &[(&str, ApplyClass)] = &[
     ("playback.persist_session", ApplyClass::None),
     ("playback.resume_playback_position", ApplyClass::None),
     ("playback.show_context_icon", ApplyClass::None),
+    ("playback.mpris", ApplyClass::None),
     // --- qconnect (daemon-root qconnect_settings.db KV, T9) ----------------
     ("qconnect.device_name", ApplyClass::None),
     ("qconnect.startup_mode", ApplyClass::None),
@@ -325,6 +326,7 @@ fn read_all(roots: &ProfileRoots) -> Result<Vec<(&'static str, String)>, String>
             "playback.persist_session" => render_bool(playback.persist_session),
             "playback.resume_playback_position" => render_bool(playback.resume_playback_position),
             "playback.show_context_icon" => render_bool(playback.show_context_icon),
+            "playback.mpris" => render_bool(prefs.mpris_enabled),
             "qconnect.device_name" => render_opt_string(&qconnect_kv::load_device_name_at(&db)),
             "qconnect.startup_mode" => qconnect_kv::load_startup_mode_at(&db).as_str().to_string(),
             "qconnect.volume_mode" => {
@@ -503,6 +505,12 @@ pub(crate) fn write_one(roots: &ProfileRoots, key: &str, raw: &str) -> Result<Ap
             let v = parse_streaming_quality(raw).map_err(SetError::Usage)?;
             let mut prefs = daemon_prefs::load_at(&roots.data);
             prefs.streaming_quality = v;
+            daemon_prefs::save_at(&prefs, &roots.data).map_err(SetError::Io)?;
+        }
+        "playback.mpris" => {
+            let v = parse_bool(raw).map_err(SetError::Usage)?;
+            let mut prefs = daemon_prefs::load_at(&roots.data);
+            prefs.mpris_enabled = v;
             daemon_prefs::save_at(&prefs, &roots.data).map_err(SetError::Io)?;
         }
         "playback.autoplay" => {

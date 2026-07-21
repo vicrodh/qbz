@@ -14,9 +14,20 @@
 // The two-call split — `bind` at boot step 5 (stateless, so the foreign-occupant
 // diagnosis runs BEFORE the stores/runtime exist), `serve` at boot step 11 — is
 // what keeps the 01-architecture.md §8.1 boot order honest.
+pub mod browse;
+pub mod discover;
+pub mod fav;
+pub mod lyrics;
+pub mod play;
 pub mod playback;
+pub mod playlist;
 pub mod queue;
+pub mod radio;
+pub mod reco;
+pub mod search;
+pub mod artwork;
 pub mod settings;
+pub mod sse;
 pub mod status;
 
 use std::io::Cursor;
@@ -24,13 +35,15 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use tiny_http::{Header, Request, Response};
+use tiny_http::{Header, Method, Request, Response};
+use tokio::sync::broadcast;
 
 use crate::adapter::DaemonAdapter;
 use crate::paths::ProfileRoots;
 use crate::state::DaemonShared;
 use qbz_app::shell::AppRuntime;
 use qbz_audio::settings::AudioSettingsStore;
+use qbz_models::CoreEvent;
 
 /// The counted P0 route table (02 §3.2) — 17, FINAL, this test now guards the
 /// budget forever. A route exists only iff a shipped client calls it (§3.1.4).
@@ -59,6 +72,43 @@ pub const P0_ROUTES: &[(&str, &str)] = &[
     ("POST", "/api/settings/reload"),
 ];
 
+/// The P1 route table (02 §3.4) — the content-verb surface. SAME HARD RULE as
+/// P0 (§3.1.4): a route exists only iff a shipped CLI/TUI client calls it, and
+/// this table grows one row per verb+route pair in the SAME change as the verb.
+/// Row 19 (this change): `GET /api/search` — caller: `qbzd search`. The
+/// `p1_route_table_grows_only_with_a_shipped_caller` test pins the count and
+/// forbids overlap with P0, so the 68-routes failure shape cannot creep in
+/// through the P1 door either.
+pub const P1_ROUTES: &[(&str, &str)] = &[
+    ("GET", "/api/search"),
+    ("POST", "/api/play"),
+    ("GET", "/api/album"),
+    ("GET", "/api/artist"),
+    ("GET", "/api/similar"),
+    ("GET", "/api/suggest"),
+    ("GET", "/api/discover"),
+    ("GET", "/api/lyrics"),
+    ("POST", "/api/radio"),
+    ("POST", "/api/reco/playlist"),
+    ("POST", "/api/playback/shuffle"),
+    ("POST", "/api/playback/repeat"),
+    ("POST", "/api/queue/move"),
+    ("POST", "/api/queue/jump"),
+    ("POST", "/api/queue/stop-after"),
+    ("GET", "/api/favorites"),
+    ("POST", "/api/favorites/add"),
+    ("POST", "/api/favorites/remove"),
+    ("GET", "/api/playlists"),
+    ("GET", "/api/playlist"),
+    ("POST", "/api/playlist/create"),
+    ("POST", "/api/playlist/update"),
+    ("POST", "/api/playlist/delete"),
+    ("POST", "/api/playlist/tracks/add"),
+    ("POST", "/api/playlist/tracks/remove"),
+    ("GET", "/api/events"),
+    ("GET", "/api/artwork/current"),
+];
+
 /// A socket bound at boot step 5, not yet serving. Wraps the tiny_http server
 /// in an `Arc` so the serving thread and the shutdown handle can both hold it
 /// (`unblock` from the handle terminates the thread's `incoming_requests`).
@@ -74,6 +124,9 @@ pub struct BoundServer {
 pub struct ApiState {
     pub runtime: Arc<AppRuntime<DaemonAdapter>>,
     pub shared: Arc<Mutex<DaemonShared>>,
+    /// The CoreEvent bus (DaemonAdapter sender). `/api/events` subscribes a
+    /// receiver per SSE connection; no other route touches it.
+    pub bus: broadcast::Sender<CoreEvent>,
     pub roots: ProfileRoots,
     pub token: Option<String>,
     /// The bound address, echoed verbatim by `/api/info`.
@@ -193,13 +246,44 @@ pub fn probe_is_qbzd(addr: SocketAddr) -> bool {
 pub fn serve(server: BoundServer, state: ApiState) -> ApiHandle {
     // The counted P0 surface — logged at boot so an operator sees exactly how
     // many routes this build exposes (and it anchors the const to production).
-    log::info!("control plane serving {} P0 route(s)", P0_ROUTES.len());
+    log::info!(
+        "control plane serving {} route(s) ({} P0 + {} P1)",
+        P0_ROUTES.len() + P1_ROUTES.len(),
+        P0_ROUTES.len(),
+        P1_ROUTES.len()
+    );
     let srv = server.server;
     let srv_handle = srv.clone();
     let thread = std::thread::Builder::new()
         .name("qbzd-api".into())
         .spawn(move || {
             for mut req in srv.incoming_requests() {
+                // `/api/events` is a long-lived SSE stream: it would block this
+                // single serving thread forever. Move it onto its OWN thread
+                // (Request is Send) so the control plane keeps answering. The
+                // origin/token gate is applied first, identically to `route`.
+                let is_events = *req.method() == Method::Get
+                    && req.url().split('?').next() == Some("/api/events");
+                if is_events {
+                    let has_origin = req.headers().iter().any(|h| h.field.equiv("Origin"));
+                    let auth = req
+                        .headers()
+                        .iter()
+                        .find(|h| h.field.equiv("Authorization"))
+                        .map(|h| h.value.as_str().to_owned());
+                    if let Some(reject) =
+                        access_gate(has_origin, "GET", "/api/events", auth.as_deref(), state.token.as_deref())
+                    {
+                        let _ = req.respond(reject.response());
+                        continue;
+                    }
+                    let rx = state.bus.subscribe();
+                    std::thread::Builder::new()
+                        .name("qbzd-sse".into())
+                        .spawn(move || sse::stream(req, rx))
+                        .ok();
+                    continue;
+                }
                 let resp = route(&state, &mut req);
                 let _ = req.respond(resp);
             }
@@ -253,6 +337,65 @@ fn route(state: &ApiState, req: &mut Request) -> Response<Cursor<Vec<u8>>> {
             let body = read_json_body(req);
             playback::volume(state, &body)
         }
+        ("POST", "/api/playback/shuffle") => {
+            let body = read_json_body(req);
+            playback::shuffle(state, &body)
+        }
+        ("POST", "/api/playback/repeat") => {
+            let body = read_json_body(req);
+            playback::repeat(state, &body)
+        }
+        ("GET", "/api/search") => search::search(state, &query),
+        ("POST", "/api/play") => {
+            let body = read_json_body(req);
+            play::play(state, &body)
+        }
+        ("GET", "/api/album") => browse::album(state, &query),
+        ("GET", "/api/artist") => browse::artist(state, &query),
+        ("GET", "/api/similar") => browse::similar(state, &query),
+        ("GET", "/api/suggest") => browse::suggest(state, &query),
+        ("GET", "/api/discover") => discover::discover(state, &query),
+        ("GET", "/api/lyrics") => lyrics::lyrics(state, &query),
+        ("GET", "/api/artwork/current") => artwork::current(state),
+        ("POST", "/api/radio") => {
+            let body = read_json_body(req);
+            radio::radio(state, &body)
+        }
+        ("POST", "/api/reco/playlist") => {
+            let body = read_json_body(req);
+            reco::playlist(state, &body)
+        }
+        ("GET", "/api/favorites") => fav::list(state, &query),
+        ("POST", "/api/favorites/add") => {
+            let body = read_json_body(req);
+            fav::add(state, &body)
+        }
+        ("POST", "/api/favorites/remove") => {
+            let body = read_json_body(req);
+            fav::remove(state, &body)
+        }
+        ("GET", "/api/playlists") => playlist::list(state),
+        ("GET", "/api/playlist") => playlist::show(state, &query),
+        ("POST", "/api/playlist/create") => {
+            let body = read_json_body(req);
+            playlist::create(state, &body)
+        }
+        ("POST", "/api/playlist/update") => {
+            let body = read_json_body(req);
+            playlist::update(state, &body)
+        }
+        ("POST", "/api/playlist/delete") => {
+            let body = read_json_body(req);
+            playlist::delete(state, &body)
+        }
+        ("POST", "/api/playlist/tracks/add") => {
+            let body = read_json_body(req);
+            playlist::tracks_add(state, &body)
+        }
+        ("POST", "/api/playlist/tracks/remove") => {
+            let body = read_json_body(req);
+            playlist::tracks_remove(state, &body)
+        }
         ("GET", "/api/queue") => queue::list(state, &query),
         ("POST", "/api/queue/add") => {
             let body = read_json_body(req);
@@ -265,6 +408,18 @@ fn route(state: &ApiState, req: &mut Request) -> Response<Cursor<Vec<u8>>> {
         ("POST", "/api/queue/clear") => {
             let body = read_json_body(req);
             queue::clear(state, &body)
+        }
+        ("POST", "/api/queue/move") => {
+            let body = read_json_body(req);
+            queue::reorder(state, &body)
+        }
+        ("POST", "/api/queue/jump") => {
+            let body = read_json_body(req);
+            queue::jump(state, &body)
+        }
+        ("POST", "/api/queue/stop-after") => {
+            let body = read_json_body(req);
+            queue::stop_after(state, &body)
         }
         ("POST", "/api/settings/reload") => settings::reload(state),
         _ => err_json(404, "not_found", "unknown route", "see qbzd --help"),
@@ -412,6 +567,45 @@ mod tests {
         assert!(P0_ROUTES.contains(&("POST", "/api/queue/remove")));
         assert!(P0_ROUTES.contains(&("POST", "/api/queue/clear")));
         assert!(P0_ROUTES.contains(&("POST", "/api/settings/reload")));
+    }
+
+    #[test]
+    fn p1_route_table_grows_only_with_a_shipped_caller() {
+        // 02-cli-and-api.md §3.4 — each P1 route lands with its CLI verb (the
+        // §3.1.4 HARD RULE, applied to the content-verb door). Row 19:
+        // GET /api/search — caller: `qbzd search`. Count is pinned so a route
+        // with no caller cannot creep in; P1 must never overlap P0.
+        assert_eq!(P1_ROUTES.len(), 27);
+        assert!(P1_ROUTES.contains(&("GET", "/api/events"))); // caller: `qbzd watch`
+        assert!(P1_ROUTES.contains(&("GET", "/api/artwork/current"))); // caller: `qbzd art`
+        assert!(P1_ROUTES.contains(&("GET", "/api/discover")));
+        assert!(P1_ROUTES.contains(&("GET", "/api/lyrics")));
+        assert!(P1_ROUTES.contains(&("POST", "/api/reco/playlist")));
+        assert!(P1_ROUTES.contains(&("GET", "/api/favorites")));
+        assert!(P1_ROUTES.contains(&("POST", "/api/favorites/add")));
+        assert!(P1_ROUTES.contains(&("POST", "/api/favorites/remove")));
+        assert!(P1_ROUTES.contains(&("GET", "/api/playlists")));
+        assert!(P1_ROUTES.contains(&("GET", "/api/playlist")));
+        assert!(P1_ROUTES.contains(&("POST", "/api/playlist/create")));
+        assert!(P1_ROUTES.contains(&("POST", "/api/playlist/update")));
+        assert!(P1_ROUTES.contains(&("POST", "/api/playlist/delete")));
+        assert!(P1_ROUTES.contains(&("POST", "/api/playlist/tracks/add")));
+        assert!(P1_ROUTES.contains(&("POST", "/api/playlist/tracks/remove")));
+        assert!(P1_ROUTES.contains(&("GET", "/api/search")));
+        assert!(P1_ROUTES.contains(&("POST", "/api/play")));
+        assert!(P1_ROUTES.contains(&("GET", "/api/album")));
+        assert!(P1_ROUTES.contains(&("GET", "/api/artist")));
+        assert!(P1_ROUTES.contains(&("GET", "/api/similar")));
+        assert!(P1_ROUTES.contains(&("GET", "/api/suggest")));
+        assert!(P1_ROUTES.contains(&("POST", "/api/radio")));
+        assert!(P1_ROUTES.contains(&("POST", "/api/playback/shuffle")));
+        assert!(P1_ROUTES.contains(&("POST", "/api/playback/repeat")));
+        assert!(P1_ROUTES.contains(&("POST", "/api/queue/move")));
+        assert!(P1_ROUTES.contains(&("POST", "/api/queue/jump")));
+        assert!(P1_ROUTES.contains(&("POST", "/api/queue/stop-after")));
+        for r in P1_ROUTES {
+            assert!(!P0_ROUTES.contains(r), "{r:?} is duplicated across P0 and P1");
+        }
     }
 
     #[test]

@@ -1,6 +1,7 @@
 // crates/qbzd/src/tui/app.rs — the setup-TUI state machine.
 //
-// Owns the six screens (D7 hard cap: `const SCREENS: [Screen; 6]`), the route,
+// Owns the eight screens (the D7 six-screen cap was lifted for FB4's Wizard and
+// the CONSOLE ext's Scrobbler, both owner-sanctioned), the route,
 // the dirty-save model (§4), the App-level overlays (help / result panel /
 // dirty-leave modal), and the worker plumbing (§5.5: NO I/O on keystrokes — disk
 // and HTTP happen only at screen entry, `r`, save, and the immediate actions, on
@@ -32,6 +33,7 @@ use super::screens::bundle::{BundleState, PendingImport};
 use super::screens::network::{self as network_screen, NetworkState};
 use super::screens::playback::PlaybackState;
 use super::screens::qconnect::QConnectState;
+use super::screens::scrobbler::ScrobblerState;
 use super::screens::wizard::WizardState;
 use super::strings as s;
 use super::theme;
@@ -56,12 +58,14 @@ pub enum Screen {
     Network,
     Bundle,
     Wizard,
+    Scrobbler,
 }
 
-/// Seven sections. The original D7 six-screen cap was broken deliberately for
-/// FB4's HiFi Wizard (owner-sanctioned); a further screen still needs an owner
-/// decision, not a PR.
-pub const SCREENS: [Screen; 7] = [
+/// Eight sections. The original D7 six-screen cap was broken deliberately for
+/// FB4's HiFi Wizard, and again for the CONSOLE ext's Scrobbler (Last.fm /
+/// ListenBrainz auth) — both owner-sanctioned. Scrobbler is appended LAST so no
+/// existing section index (or number-key jump) shifts.
+pub const SCREENS: [Screen; 8] = [
     Screen::Account,
     Screen::Audio,
     Screen::Playback,
@@ -69,6 +73,7 @@ pub const SCREENS: [Screen; 7] = [
     Screen::Network,
     Screen::Bundle,
     Screen::Wizard,
+    Screen::Scrobbler,
 ];
 
 // Sidebar width is now responsive (FB5): `widgets::sidebar_width(term_width)` —
@@ -118,6 +123,7 @@ fn section_title(screen: Screen) -> &'static str {
         Screen::Network => s::NETWORK_TITLE,
         Screen::Bundle => s::BUNDLE_TITLE,
         Screen::Wizard => s::WIZARD_TITLE,
+        Screen::Scrobbler => s::SCROBBLER_TITLE,
     }
 }
 
@@ -167,10 +173,10 @@ enum NavIntent {
 /// is open in the content (it owns every key); `uses_horizontal` = the focused
 /// content field consumes ←/→ (Audio's Buffer slider), so ← must NOT drop focus.
 fn classify_key(focus: Focus, code: KeyCode, editing: bool, uses_horizontal: bool) -> NavIntent {
-    // Number keys 1-7 jump from ANY focus — but only when no field editor is
+    // Number keys 1-8 jump from ANY focus — but only when no field editor is
     // capturing input (a port/token/name field must receive its digits).
     if !editing {
-        if let KeyCode::Char(c @ '1'..='7') = code {
+        if let KeyCode::Char(c @ '1'..='8') = code {
             return NavIntent::JumpSection(c as usize - '1' as usize);
         }
     }
@@ -229,6 +235,12 @@ pub enum ScreenAction {
     WizardTestPoll,
     /// Esc mid-wizard — open the confirm-abandon modal.
     WizardAbandon,
+    // ---- Scrobbler (CONSOLE ext) ----
+    /// Suspend the alt-screen and run the Last.fm connect flow on the plain
+    /// terminal (same methodology as the browser login).
+    ScrobbleConnectLastfm,
+    /// Suspend the alt-screen and run the ListenBrainz token connect flow.
+    ScrobbleConnectListenbrainz,
 }
 
 /// Read-only context passed to every screen's `draw` (the live status body for
@@ -243,6 +255,10 @@ pub enum LoopCmd {
     /// Suspend the alt-screen and run the T5 browser-login engine on the plain
     /// terminal, then resume (see the task report for this deliberate divergence).
     BrowserLogin,
+    /// Suspend the alt-screen and run the Last.fm scrobbler connect flow.
+    ScrobbleLastfm,
+    /// Suspend the alt-screen and run the ListenBrainz scrobbler connect flow.
+    ScrobbleListenbrainz,
 }
 
 // ============================ worker messages ============================
@@ -275,6 +291,7 @@ enum Active {
     Network(NetworkState),
     Bundle(BundleState),
     Wizard(WizardState),
+    Scrobbler(ScrobblerState),
 }
 
 enum Overlay {
@@ -429,8 +446,8 @@ impl App {
                 let playback = PlaybackPreferencesStore::new_at(&self.roots.data)
                     .and_then(|s| s.get_preferences())
                     .unwrap_or_default();
-                let quality = daemon_prefs::load_at(&self.roots.data).streaming_quality;
-                Active::Playback(PlaybackState::new(&quality, &audio, &playback))
+                let dp = daemon_prefs::load_at(&self.roots.data);
+                Active::Playback(PlaybackState::new(&dp.streaming_quality, dp.mpris_enabled, &audio, &playback))
             }
             Screen::QConnect => {
                 let db = self.roots.data.join("qconnect_settings.db");
@@ -449,6 +466,7 @@ impl App {
             }
             Screen::Bundle => Active::Bundle(BundleState::new(desktop_profile_present())),
             Screen::Wizard => Active::Wizard(WizardState::new()),
+            Screen::Scrobbler => Active::Scrobbler(ScrobblerState::new(&self.roots)),
         };
     }
 
@@ -520,6 +538,7 @@ impl App {
             Active::Network(s) => s.is_editing(),
             Active::Bundle(s) => s.is_editing(),
             Active::Wizard(s) => s.is_editing(),
+            Active::Scrobbler(s) => s.is_editing(),
         }
     }
 
@@ -534,6 +553,7 @@ impl App {
             Active::Network(s) => s.editing_label(),
             Active::Bundle(s) => s.editing_label(),
             Active::Wizard(s) => s.editing_label(),
+            Active::Scrobbler(s) => s.editing_label(),
         }
     }
 
@@ -647,6 +667,7 @@ impl App {
             Active::Network(s) => s.handle_key(key),
             Active::Bundle(s) => s.handle_key(key),
             Active::Wizard(s) => s.handle_key(key),
+            Active::Scrobbler(s) => s.handle_key(key),
         }
     }
 
@@ -715,6 +736,8 @@ impl App {
                 self.overlay = Overlay::ConfirmAbandon;
                 LoopCmd::None
             }
+            ScreenAction::ScrobbleConnectLastfm => LoopCmd::ScrobbleLastfm,
+            ScreenAction::ScrobbleConnectListenbrainz => LoopCmd::ScrobbleListenbrainz,
         }
     }
 
@@ -1103,6 +1126,14 @@ impl App {
         &self.roots
     }
 
+    /// Reload the Scrobbler screen's settings snapshot after a connect flow ran
+    /// on the suspended plain terminal (the CLI auth wrote the store directly).
+    pub fn refresh_scrobbler(&mut self) {
+        if matches!(self.active_section, Screen::Scrobbler) {
+            self.active = Active::Scrobbler(ScrobblerState::new(&self.roots));
+        }
+    }
+
     // -------------------------- render --------------------------
 
     pub fn draw(&self, f: &mut Frame) {
@@ -1161,6 +1192,7 @@ impl App {
             Active::Network(sc) => sc.draw(f, inner, &ctx),
             Active::Bundle(sc) => sc.draw(f, inner, &ctx),
             Active::Wizard(sc) => sc.draw(f, inner, &ctx),
+            Active::Scrobbler(sc) => sc.draw(f, inner, &ctx),
         }
 
         self.draw_footer(f, rows[3]);
@@ -1309,6 +1341,7 @@ impl App {
                     }
                 }
                 Active::Wizard(sc) => sc.help_text(),
+                Active::Scrobbler(_) => s::HELP_SCROBBLER,
                 _ => {
                     if self.active_is_dirty() {
                         s::HELP_CONTENT_DIRTY
@@ -1747,6 +1780,7 @@ mod tests {
             Screen::Audio => Active::Audio(AudioState::new(&AudioSettings::default())),
             Screen::Playback => Active::Playback(PlaybackState::new(
                 "hires_plus",
+                true,
                 &AudioSettings::default(),
                 &qbz_app::settings::playback::PlaybackPreferences::default(),
             )),
@@ -1754,6 +1788,11 @@ mod tests {
             Screen::Network => Active::Network(NetworkState::new(&QbzdConfig::default(), Vec::new())),
             Screen::Bundle => Active::Bundle(BundleState::new(false)),
             Screen::Wizard => Active::Wizard(WizardState::new()),
+            Screen::Scrobbler => Active::Scrobbler(ScrobblerState::new(&ProfileRoots {
+                config: PathBuf::from("/nonexistent"),
+                data: PathBuf::from("/nonexistent"),
+                cache: PathBuf::from("/nonexistent"),
+            })),
         };
         App {
             roots: ProfileRoots {

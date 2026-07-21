@@ -17,6 +17,9 @@ qbz-core = { path = "../qbz-core" }
 qbz-player = { path = "../qbz-player" }
 qbz-audio = { path = "../qbz-audio" }          # PROTECTED — read-only consumer
 qbz-qobuz = { path = "../qbz-qobuz" }
+qbz-reco = { path = "../qbz-reco" }             # playlist recommendations (ArtistVectorStore); already in-tree via qbz-core
+qbz-integrations = { path = "../qbz-integrations" } # Last.fm / ListenBrainz scrobbling; already in-tree via qbz-core
+qbz-media-controls = { path = "../qbz-media-controls" } # MPRIS/media-key control (CONSOLE ext); mpris-server on Linux
 qbz-credentials = { path = "../qbz-credentials" }
 qbz-log = { path = "../qbz-log" }
 qconnect-core = { path = "../qconnect-core" }

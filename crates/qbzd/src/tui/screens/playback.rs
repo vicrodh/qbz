@@ -42,6 +42,7 @@ pub struct StagedPlayback {
     pub gapless: bool,             // audio.gapless_enabled
     pub restore_session: bool,     // playback.persist_session
     pub resume_position: bool,     // playback.resume_playback_position
+    pub mpris: bool,               // playback.mpris (applies on restart)
     /// Read-only, from the audio store — drives the Gapless disabled reason.
     pub streaming_only: bool,
 }
@@ -57,6 +58,7 @@ pub enum PField {
     Gapless,
     Restore,
     Resume,
+    Mpris,
 }
 
 /// `(shown, enabled, reason)` per §3.3.
@@ -84,7 +86,7 @@ pub fn row_state(field: PField, p: &StagedPlayback) -> (bool, bool, Option<&'sta
 
 pub fn visible_fields(p: &StagedPlayback) -> Vec<PField> {
     use PField::*;
-    [Quality, Limit, MaxRate, AllowFallback, RetryFail, Continue, Gapless, Restore, Resume]
+    [Quality, Limit, MaxRate, AllowFallback, RetryFail, Continue, Gapless, Restore, Resume, Mpris]
         .into_iter()
         .filter(|f| row_state(*f, p).0)
         .collect()
@@ -104,7 +106,7 @@ pub struct PlaybackState {
 }
 
 impl PlaybackState {
-    pub fn new(quality: &str, audio: &AudioSettings, prefs: &PlaybackPreferences) -> Self {
+    pub fn new(quality: &str, mpris: bool, audio: &AudioSettings, prefs: &PlaybackPreferences) -> Self {
         let staged = StagedPlayback {
             quality: quality.to_string(),
             limit_to_device: audio.limit_quality_to_device,
@@ -115,6 +117,7 @@ impl PlaybackState {
             gapless: audio.gapless_enabled,
             restore_session: prefs.persist_session,
             resume_position: prefs.resume_playback_position,
+            mpris,
             streaming_only: audio.streaming_only,
         };
         Self {
@@ -183,6 +186,9 @@ impl PlaybackState {
         }
         if a.resume_position != b.resume_position {
             out.push(("playback.resume_playback_position".to_string(), a.resume_position.to_string()));
+        }
+        if a.mpris != b.mpris {
+            out.push(("playback.mpris".to_string(), a.mpris.to_string()));
         }
         out
     }
@@ -272,6 +278,7 @@ impl PlaybackState {
             PField::Gapless => self.staged.gapless ^= true,
             PField::Restore => self.staged.restore_session ^= true,
             PField::Resume => self.staged.resume_position ^= true,
+            PField::Mpris => self.staged.mpris ^= true,
         }
     }
 
@@ -354,6 +361,12 @@ impl PlaybackState {
             widgets::push_section(&mut secs, &mut anchor, s::PLAYBACK_GROUP_SESSION, active(session), sess_lines, sess_a);
         }
 
+        let controls: &[PField] = &[Mpris];
+        let (ctl_lines, ctl_a) = self.group_block(&fields, controls, focused_field, ctrl_col, width);
+        if !ctl_lines.is_empty() {
+            widgets::push_section(&mut secs, &mut anchor, s::PLAYBACK_GROUP_CONTROLS, active(controls), ctl_lines, ctl_a);
+        }
+
         widgets::sections_scroll(f, area, &secs, anchor);
 
         match &self.editor {
@@ -401,7 +414,7 @@ impl PlaybackState {
             focused,
             enabled,
             reason,
-            description: None,
+            description: field_description(field),
         };
         widgets::field_block(&f, ctrl_col, width)
     }
@@ -419,7 +432,17 @@ impl PlaybackState {
             PField::Gapless => (s::P_GAPLESS, on_off(a.gapless), "[toggle]"),
             PField::Restore => (s::P_RESTORE, on_off(a.restore_session), "[toggle]"),
             PField::Resume => (s::P_RESUME_POS, on_off(a.resume_position), "[toggle]"),
+            PField::Mpris => (s::P_MPRIS, on_off(a.mpris), "[toggle]"),
         }
+    }
+}
+
+/// Static one-line help wrapped under a field's label. Only Mpris carries one
+/// (it needs a restart to apply, unlike the live-ish other toggles).
+fn field_description(field: PField) -> Option<&'static str> {
+    match field {
+        PField::Mpris => Some(s::P_MPRIS_DESC),
+        _ => None,
     }
 }
 
@@ -473,6 +496,7 @@ mod tests {
     fn base() -> StagedPlayback {
         PlaybackState::new(
             "hires_plus",
+            true,
             &AudioSettings::default(),
             &PlaybackPreferences::default(),
         )
@@ -481,7 +505,7 @@ mod tests {
 
     #[test]
     fn ask_renders_note_and_is_never_written() {
-        let mut st = PlaybackState::new("hires_plus", &AudioSettings::default(), &PlaybackPreferences::default());
+        let mut st = PlaybackState::new("hires_plus", true, &AudioSettings::default(), &PlaybackPreferences::default());
         // AudioSettings::default() seeds fallback_behavior = "ask".
         assert_eq!(st.staged.fallback_behavior, "ask");
         assert_eq!(retry_label("ask"), s::RETRY_ASK);

@@ -12,12 +12,17 @@ pub struct DaemonPrefs {
     pub streaming_quality: String,
     /// Restored at boot; NEVER imported (04 §3 — power-amp hazard).
     pub volume: f32,
+    /// Whether the daemon publishes MPRIS system media controls at boot
+    /// (CONSOLE ext). Default ON; the `QBZD_MPRIS` env var overrides it when
+    /// set. Toggling this needs a daemon restart (the service spawns at boot).
+    pub mpris_enabled: bool,
 }
 impl Default for DaemonPrefs {
     fn default() -> Self {
         Self {
             streaming_quality: "hires_plus".into(),
             volume: 0.5,
+            mpris_enabled: true,
         }
     }
 }
@@ -30,7 +35,7 @@ pub fn load_at(data_root: &Path) -> DaemonPrefs {
                 // forward-compatible: unknown fields ignored WITH a warning (01 §10.3)
                 if let Some(obj) = v.as_object() {
                     for k in obj.keys() {
-                        if k != "streaming_quality" && k != "volume" {
+                        if k != "streaming_quality" && k != "volume" && k != "mpris_enabled" {
                             log::warn!("[daemon_prefs] unknown field ignored: {k}");
                         }
                     }

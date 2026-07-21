@@ -220,6 +220,80 @@ pub fn clear(state: &ApiState, body: &Value) -> Response<Cursor<Vec<u8>>> {
     json(200, serde_json::json!({"total_tracks": total_tracks}))
 }
 
+/// `POST /api/queue/move` (CONSOLE). Body `{"from": N, "to": N}` (0-based).
+/// GUI drag-reorder (core `move_track`). 404 when either index is out of range.
+pub fn reorder(state: &ApiState, body: &Value) -> Response<Cursor<Vec<u8>>> {
+    let from = match body.get("from").and_then(|v| v.as_u64()) {
+        Some(n) => n as usize,
+        None => return err_json(400, "bad_request", "move requires 'from' and 'to'", "body: {\"from\": 7, \"to\": 2}"),
+    };
+    let to = match body.get("to").and_then(|v| v.as_u64()) {
+        Some(n) => n as usize,
+        None => return err_json(400, "bad_request", "move requires 'from' and 'to'", "body: {\"from\": 7, \"to\": 2}"),
+    };
+    if state.rt.block_on(state.runtime.core().move_track(from, to)) {
+        json(200, serde_json::json!({"from": from, "to": to}))
+    } else {
+        err_json(404, "not_found", "queue index out of range", "check: qbzd queue list")
+    }
+}
+
+/// `POST /api/queue/jump` (CONSOLE). Body `{"index": N}` (0-based). A
+/// click-to-play-row: moves the cursor (`play_index`) AND starts audio through
+/// the shipped ritual — never a bare cursor move (control-surface §2.2).
+/// Auth-gated (needs a session to resolve the stream).
+pub fn jump(state: &ApiState, body: &Value) -> Response<Cursor<Vec<u8>>> {
+    if let Some(resp) = auth_gate(state) {
+        return resp;
+    }
+    let index = match body.get("index").and_then(|v| v.as_u64()) {
+        Some(n) => n as usize,
+        None => return err_json(400, "bad_request", "jump requires an 'index'", "body: {\"index\": 2}"),
+    };
+    let track = match state.rt.block_on(state.runtime.core().play_index(index)) {
+        Some(t) => t,
+        None => return err_json(404, "not_found", &format!("queue index {index} is out of range"), "check: qbzd queue list"),
+    };
+    let quality = super::playback::resolve_quality(state);
+    if let Err(e) = state.rt.block_on(state.runtime.core().play_track_resolved(track.id, quality, None, None, 0)) {
+        return err_json(503, "audio_unavailable", &e, "check: qbzd status");
+    }
+    state
+        .rt
+        .block_on(qbz_app::playback_driver::save_session_now(state.runtime.as_ref()));
+    json(
+        200,
+        serde_json::json!({"playing": index, "track": {"id": track.id, "title": track.title, "artist": track.artist}}),
+    )
+}
+
+/// `POST /api/queue/stop-after` (CONSOLE). Body `{"track_id": N}` |
+/// `{"current": true}` | `{"off": true}`. Sets/clears the stop-after gate
+/// (core `set_stop_after`/`clear_stop_after`).
+pub fn stop_after(state: &ApiState, body: &Value) -> Response<Cursor<Vec<u8>>> {
+    if body.get("off").and_then(|v| v.as_bool()).unwrap_or(false) {
+        state.rt.block_on(state.runtime.core().clear_stop_after());
+        return json(200, serde_json::json!({"stop_after_track_id": Value::Null}));
+    }
+    let track_id = if body.get("current").and_then(|v| v.as_bool()).unwrap_or(false) {
+        match state.rt.block_on(state.runtime.core().get_queue_state()).current_track {
+            Some(t) => t.id,
+            None => return err_json(404, "not_found", "nothing is playing", "queue a track first"),
+        }
+    } else if let Some(id) = body.get("track_id").and_then(|v| v.as_u64()) {
+        id
+    } else {
+        return err_json(
+            400,
+            "bad_request",
+            "stop-after requires track_id, current, or off",
+            "body: {\"current\": true} | {\"track_id\": N} | {\"off\": true}",
+        );
+    };
+    state.rt.block_on(state.runtime.core().set_stop_after(track_id));
+    json(200, serde_json::json!({"stop_after_track_id": track_id}))
+}
+
 // ============================ internals ============================
 
 /// 409 `needs_auth` — only `add` gates (§3.3.14's Errors column; `list`/
@@ -383,7 +457,7 @@ fn repeat_str(mode: RepeatMode) -> String {
 /// `context_id` are left `None`: those are "playing from" provenance fields
 /// with no equivalent in a bare `qbzd queue add <TRACK_ID>` call (no album/
 /// playlist/artist container in play).
-fn track_to_queue_track(track: &Track) -> QueueTrack {
+pub(crate) fn track_to_queue_track(track: &Track) -> QueueTrack {
     let artwork_url = track.album.as_ref().and_then(|a| a.image.best().cloned());
     let artist = track
         .performer
