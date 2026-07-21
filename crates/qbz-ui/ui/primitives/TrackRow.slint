@@ -110,8 +110,12 @@ export component TrackRow inherits Rectangle {
 
     height: 50px;
     border-radius: 8px;
+    // Hover uses the polarity-baked alpha ramp so the hover state is visible on
+    // light themes too (the old #ffffff16 was invisible white-on-white there;
+    // near-identical on dark). Zebra kept as-is to avoid a visible dark-theme
+    // stripe shift — it is not part of the #638 play-button legibility fix.
     background: root.row-hovered
-        ? #ffffff16
+        ? Theme.alpha-8
         : (Math.mod(root.index, 2) == 1 ? #ffffff07 : transparent);
 
     // Background TouchArea — also the drag source. Pressing the row

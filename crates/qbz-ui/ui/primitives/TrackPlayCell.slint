@@ -186,15 +186,32 @@ export component TrackPlayCell inherits Rectangle {
                 ? ShellState.coarse-tick-ms * 1.0
                 : animation-tick() / 1ms) * 0.36) * 1deg;
         }
-        if root.show-overlay && !root.show-bars && !root.is-loading: QbzIcon {
-            source: (root.is-playing && root.row-hovered)
-                ? @image-url("../assets/icons/pause.svg")
-                : @image-url("../assets/icons/play-fill.svg");
-            width: 16px;
-            height: 16px;
+        // Circular backing so the play/pause glyph is legible on EVERY theme
+        // (the old bare #ffffff glyph vanished on light themes — white-on-white,
+        // no scrim like the artwork variant has). Fill/border/shadow use the
+        // polarity-baked alpha ramp (black-alpha on light, white-alpha on dark)
+        // and the glyph uses text-primary = the theme's max-contrast color. #638.
+        if root.show-overlay && !root.show-bars && !root.is-loading: Rectangle {
+            width: 24px;
+            height: 24px;
+            border-radius: 12px;
             x: Math.round((parent.width - self.width) / 2 / 1px) * 1px;
             y: Math.round((parent.height - self.height) / 2 / 1px) * 1px;
-            tint: #ffffff;
+            background: Theme.alpha-10;
+            border-width: 1px;
+            border-color: Theme.alpha-15;
+            drop-shadow-blur: 6px;
+            drop-shadow-color: Theme.card-shadow;
+            QbzIcon {
+                source: (root.is-playing && root.row-hovered)
+                    ? @image-url("../assets/icons/pause.svg")
+                    : @image-url("../assets/icons/play-fill.svg");
+                width: 16px;
+                height: 16px;
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                tint: Theme.text-primary;
+            }
         }
     }
 
