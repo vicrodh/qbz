@@ -663,13 +663,17 @@ async fn play_audible(runtime: &Runtime, weak: &slint::Weak<AppWindow>, track_id
                     return;
                 }
                 Some("plex") => {
-                    // The string rating_key rides in `source_item_id_hint`;
-                    // fall back to the numeric id (= rating_key for the common
-                    // numeric-key case) if the hint is absent.
-                    let rating_key = qt
-                        .source_item_id_hint
-                        .clone()
-                        .unwrap_or_else(|| track_id.to_string());
+                    // The string rating_key rides in `source_item_id_hint` on
+                    // the LocalLibrary path. The MyQBZ collections path stamps
+                    // the per-item ALBUM key there instead (`plex:<hash>`, for
+                    // shuffle boundary detection) — that is NOT a track rating
+                    // key, so ignore any `plex:`-prefixed hint and fall back to
+                    // the numeric queue id (= rating_key for the common
+                    // numeric-key case).
+                    let rating_key = match qt.source_item_id_hint.as_deref() {
+                        Some(hint) if !hint.starts_with("plex:") => hint.to_string(),
+                        _ => track_id.to_string(),
+                    };
                     play_plex_audible(runtime, weak, track_id, rating_key, qt.duration_secs)
                         .await;
                     return;
