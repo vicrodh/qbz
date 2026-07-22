@@ -5959,6 +5959,148 @@ mod metadata_grouping_tests {
         let tracks = db.get_album_tracks_metadata(key).unwrap();
         assert_eq!(tracks.len(), 3);
     }
+
+    /// Like `insert_track_for_test`, but with control over
+    /// `album_group_title` (the scan-time snapshot — folder name when the
+    /// tag was missing) and `year`, for the #447/#507 regressions.
+    #[allow(clippy::too_many_arguments)]
+    fn insert_full_track_for_test(
+        db: &LibraryDatabase,
+        file_path: &str,
+        album: &str,
+        album_artist: Option<&str>,
+        artist: &str,
+        album_group_key: &str,
+        album_group_title: &str,
+        year: Option<u32>,
+    ) {
+        let mut t = LocalTrack::default();
+        t.file_path = file_path.to_string();
+        t.title = format!("Track at {}", file_path);
+        t.album = album.to_string();
+        t.album_artist = album_artist.map(String::from);
+        t.artist = artist.to_string();
+        t.album_group_key = album_group_key.to_string();
+        t.album_group_title = album_group_title.to_string();
+        t.year = year;
+        db.insert_track(&t).unwrap();
+    }
+
+    #[test]
+    fn metadata_group_respects_album_artist_over_mixed_track_artists() {
+        // #507 core: every track carries the same Album Artist tag while the
+        // per-track artists differ -> the album shows the album artist, NOT
+        // "Various Artists".
+        let (_tmp, db) = fresh_db();
+        insert_full_track_for_test(
+            &db,
+            "/m/mix/t1.flac",
+            "Mix Album",
+            Some("Curated Artist"),
+            "Artist A",
+            "/m/mix",
+            "mix",
+            Some(2025),
+        );
+        insert_full_track_for_test(
+            &db,
+            "/m/mix/t2.flac",
+            "Mix Album",
+            Some("Curated Artist"),
+            "Artist B",
+            "/m/mix",
+            "mix",
+            Some(2025),
+        );
+
+        let albums = db
+            .get_albums_metadata_grouped(false, true, false, crate::album_grouping::AlbumGroupMode::Metadata)
+            .unwrap();
+        let mix = albums
+            .iter()
+            .find(|a| a.title == "Mix Album")
+            .expect("Mix Album group");
+        assert_eq!(mix.artist, "Curated Artist");
+    }
+
+    #[test]
+    fn metadata_group_title_prefers_album_tag_over_folder_snapshot() {
+        // #447 title: the live album tag differs from the scan-time
+        // album_group_title snapshot (folder name) -> the tag wins.
+        let (_tmp, db) = fresh_db();
+        insert_full_track_for_test(
+            &db,
+            "/m/Alle Songs/t1.flac",
+            "ALBUM.",
+            Some("The Artist"),
+            "The Artist",
+            "/m/Alle Songs",
+            "Alle Songs",
+            Some(2025),
+        );
+
+        let albums = db
+            .get_albums_metadata_grouped(false, true, false, crate::album_grouping::AlbumGroupMode::Metadata)
+            .unwrap();
+        let a = albums
+            .iter()
+            .find(|a| a.title == "ALBUM.")
+            .expect("album tag title");
+        assert_eq!(a.title, "ALBUM.");
+    }
+
+    #[test]
+    fn metadata_group_year_is_per_album_not_per_folder() {
+        // #447 year: two tagged albums sharing one folder must split into
+        // two metadata groups, each with its OWN year — a folder-level
+        // group would MIN() them together and show the oldest year for both.
+        let (_tmp, db) = fresh_db();
+        insert_full_track_for_test(
+            &db,
+            "/m/Alle Songs/old.flac",
+            "Old Album",
+            Some("X"),
+            "X",
+            "/m/Alle Songs",
+            "Alle Songs",
+            Some(2004),
+        );
+        insert_full_track_for_test(
+            &db,
+            "/m/Alle Songs/new1.flac",
+            "New Album",
+            Some("X"),
+            "X",
+            "/m/Alle Songs",
+            "Alle Songs",
+            Some(2025),
+        );
+        insert_full_track_for_test(
+            &db,
+            "/m/Alle Songs/new2.flac",
+            "New Album",
+            Some("X"),
+            "X",
+            "/m/Alle Songs",
+            "Alle Songs",
+            Some(2025),
+        );
+
+        let albums = db
+            .get_albums_metadata_grouped(false, true, false, crate::album_grouping::AlbumGroupMode::Metadata)
+            .unwrap();
+        let old = albums
+            .iter()
+            .find(|a| a.title == "Old Album")
+            .expect("Old Album group");
+        let new = albums
+            .iter()
+            .find(|a| a.title == "New Album")
+            .expect("New Album group");
+        assert_eq!(old.year, Some(2004));
+        assert_eq!(new.year, Some(2025));
+        assert_eq!(new.track_count, 2);
+    }
 }
 
 #[cfg(test)]

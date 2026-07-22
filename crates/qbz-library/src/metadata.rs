@@ -21,6 +21,81 @@ impl MetadataExtractor {
             .map(|s| s.to_string())
     }
 
+    /// Iterate the file's tags with the primary tag FIRST, then the rest in
+    /// file order. Backs the per-key cross-tag fallback below: old,
+    /// repeatedly-retagged collections routinely hold the album /
+    /// album-artist / date only in a SECONDARY tag (ID3v1/APE/Vorbis) while
+    /// the file-type's primary tag lacks them — reading just the primary tag
+    /// dropped them (#447 folder-name albums, #507 ignored Album Artist).
+    fn tags_primary_first<'a>(
+        tagged_file: &'a lofty::file::TaggedFile,
+    ) -> impl Iterator<Item = &'a lofty::tag::Tag> + 'a {
+        let primary = tagged_file.primary_tag();
+        primary.into_iter().chain(
+            tagged_file
+                .tags()
+                .iter()
+                .filter(move |t| primary.map_or(true, |p| !std::ptr::eq(*t, p))),
+        )
+    }
+
+    /// First non-empty string for `key` across all of the file's tags
+    /// (primary first). When several tags disagree, the primary tag wins —
+    /// deterministic, and matches what other players show.
+    fn string_across_tags(
+        tagged_file: &lofty::file::TaggedFile,
+        key: &ItemKey,
+    ) -> Option<String> {
+        Self::string_from_tags(Self::tags_primary_first(tagged_file), key)
+    }
+
+    /// Pure core of [`Self::string_across_tags`]: first non-empty, trimmed
+    /// value for `key` yielded by the tag iterator (already in priority
+    /// order). The empty check lives INSIDE the find_map so a blank value in
+    /// one tag does not shadow a real value in a later tag.
+    fn string_from_tags<'a>(
+        mut tags: impl Iterator<Item = &'a lofty::tag::Tag>,
+        key: &ItemKey,
+    ) -> Option<String> {
+        tags.find_map(|t| {
+            t.get_string(key.clone())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+        })
+    }
+
+    /// First track number across all tags (primary first).
+    fn track_across_tags(tagged_file: &lofty::file::TaggedFile) -> Option<u32> {
+        Self::track_from_tags(Self::tags_primary_first(tagged_file))
+    }
+
+    /// Pure core of [`Self::track_across_tags`].
+    fn track_from_tags<'a>(mut tags: impl Iterator<Item = &'a lofty::tag::Tag>) -> Option<u32> {
+        tags.find_map(|t| t.track())
+    }
+
+    /// First disc number across all tags (primary first).
+    fn disk_across_tags(tagged_file: &lofty::file::TaggedFile) -> Option<u32> {
+        Self::disk_from_tags(Self::tags_primary_first(tagged_file))
+    }
+
+    /// Pure core of [`Self::disk_across_tags`].
+    fn disk_from_tags<'a>(mut tags: impl Iterator<Item = &'a lofty::tag::Tag>) -> Option<u32> {
+        tags.find_map(|t| t.disk())
+    }
+
+    /// First parseable date's year across all tags (primary first);
+    /// `Tag::date()` already falls back RecordingDate -> Year within a tag.
+    fn year_across_tags(tagged_file: &lofty::file::TaggedFile) -> Option<u32> {
+        Self::year_from_tags(Self::tags_primary_first(tagged_file))
+    }
+
+    /// Pure core of [`Self::year_across_tags`].
+    fn year_from_tags<'a>(mut tags: impl Iterator<Item = &'a lofty::tag::Tag>) -> Option<u32> {
+        tags.find_map(|t| t.date()).map(|ts| ts.year as u32)
+    }
+
     fn strip_year_suffix(name: &str) -> String {
         let trimmed = name.trim();
         for (open, close) in [("(", ")"), ("[", "]")] {
@@ -472,8 +547,26 @@ impl MetadataExtractor {
         let inferred_disc = Self::infer_disc_number(file_path);
 
         // Build track
-        let track = if let Some(tag) = tag {
-            let album_title = Self::normalize_field(tag.album().as_deref())
+        let track = if tag.is_some() {
+            // Per-key fallback across ALL of the file's tags (primary first):
+            // old, repeatedly-retagged collections routinely carry the album /
+            // album-artist / date only in a secondary tag (ID3v1/APE/Vorbis)
+            // while the primary tag lacks them. Reading just the primary tag
+            // dropped them — the album column then got the folder-derived
+            // backfill and masqueraded as metadata (folder-name albums,
+            // folder-level grouping, MIN(year) across mixed folders = #447),
+            // and album_artist landed NULL (Various Artists everywhere = #507).
+            let album_tag = Self::string_across_tags(&tagged_file, &ItemKey::AlbumTitle);
+            if album_tag.is_none() {
+                // Diagnostic (#447): the folder backfill fires for this file —
+                // the signal when a user reports folder-name albums on
+                // "tagged" files.
+                log::debug!(
+                    "[library] no album tag in any tag of {}; using folder-derived name",
+                    file_path.display()
+                );
+            }
+            let album_title = album_tag
                 .or_else(|| fallback_album.clone())
                 .unwrap_or_else(|| "Unknown Album".to_string());
             let (album_group_key, album_group_title) =
@@ -482,27 +575,23 @@ impl MetadataExtractor {
             LocalTrack {
                 id: 0,
                 file_path: file_path.to_string_lossy().to_string(),
-                title: tag.title().map(|s| s.to_string()).unwrap_or(filename),
-                artist: Self::normalize_field(tag.artist().as_deref())
+                title: Self::string_across_tags(&tagged_file, &ItemKey::TrackTitle)
+                    .unwrap_or(filename),
+                artist: Self::string_across_tags(&tagged_file, &ItemKey::TrackArtist)
                     .or_else(|| fallback_artist.clone())
                     .unwrap_or_else(|| "Unknown Artist".to_string()),
                 album: album_title,
-                album_artist: tag.get_string(ItemKey::AlbumArtist).map(|s| s.to_string()),
+                album_artist: Self::string_across_tags(&tagged_file, &ItemKey::AlbumArtist),
                 album_group_key,
                 album_group_title,
-                track_number: tag
-                    .track()
-                    .map(|t| t as u32)
+                track_number: Self::track_across_tags(&tagged_file)
                     .or_else(|| Self::infer_track_number_from_filename(file_path)),
-                disc_number: tag
-                    .disk()
-                    .and_then(|d| if d > 0 { Some(d as u32) } else { None })
+                disc_number: Self::disk_across_tags(&tagged_file)
+                    .and_then(|d| if d > 0 { Some(d) } else { None })
                     .or(inferred_disc),
-                year: tag.date().map(|ts| ts.year as u32),
-                genre: tag.genre().map(|s| s.to_string()),
-                catalog_number: tag
-                    .get_string(ItemKey::CatalogNumber)
-                    .map(|s| s.to_string()),
+                year: Self::year_across_tags(&tagged_file),
+                genre: Self::string_across_tags(&tagged_file, &ItemKey::Genre),
+                catalog_number: Self::string_across_tags(&tagged_file, &ItemKey::CatalogNumber),
                 duration_secs,
                 format,
                 bit_depth,
@@ -1125,5 +1214,108 @@ mod tests {
         let path = Path::new("/music/Various Artists/Now 75 - CD1/01 - Track.flac");
         let root = MetadataExtractor::album_root_dir(path).unwrap();
         assert_eq!(root, Path::new("/music/Various Artists/Now 75 - CD1"));
+    }
+
+    // ---- Cross-tag fallback (#447/#507) ----------------------------------
+    //
+    // Old, repeatedly-retagged collections routinely carry the album /
+    // album-artist / date only in a SECONDARY tag (ID3v1/APE/Vorbis) while
+    // the file-type's primary tag lacks them. These tests build in-memory
+    // tags (no audio files needed) and exercise the pure fallback cores
+    // used by `extract`.
+
+    #[test]
+    fn cross_tag_album_read_falls_back_to_secondary_tag() {
+        // #447: the primary tag (ID3v2) has no album; it lives only in ID3v1.
+        let mut primary = lofty::tag::Tag::new(lofty::tag::TagType::Id3v2);
+        primary.insert_text(ItemKey::TrackTitle, "Song".to_string());
+        let mut secondary = lofty::tag::Tag::new(lofty::tag::TagType::Id3v1);
+        secondary.insert_text(ItemKey::AlbumTitle, "ALBUM.".to_string());
+
+        let tags = [&primary, &secondary];
+        assert_eq!(
+            MetadataExtractor::string_from_tags(tags.iter().copied(), &ItemKey::AlbumTitle)
+                .as_deref(),
+            Some("ALBUM.")
+        );
+    }
+
+    #[test]
+    fn cross_tag_album_artist_read_falls_back_to_secondary_tag() {
+        // #507: the album artist exists only in the APE tag.
+        let primary = lofty::tag::Tag::new(lofty::tag::TagType::Id3v2);
+        let mut secondary = lofty::tag::Tag::new(lofty::tag::TagType::Ape);
+        secondary.insert_text(ItemKey::AlbumArtist, "Curated Artist".to_string());
+
+        let tags = [&primary, &secondary];
+        assert_eq!(
+            MetadataExtractor::string_from_tags(tags.iter().copied(), &ItemKey::AlbumArtist)
+                .as_deref(),
+            Some("Curated Artist")
+        );
+    }
+
+    #[test]
+    fn cross_tag_read_prefers_first_tag_on_conflict() {
+        // The primary tag comes first in the iterator, so its value wins —
+        // deterministic conflict policy (matches other players).
+        let mut primary = lofty::tag::Tag::new(lofty::tag::TagType::Id3v2);
+        primary.insert_text(ItemKey::AlbumTitle, "Primary Album".to_string());
+        let mut secondary = lofty::tag::Tag::new(lofty::tag::TagType::Ape);
+        secondary.insert_text(ItemKey::AlbumTitle, "Other Album".to_string());
+
+        let tags = [&primary, &secondary];
+        assert_eq!(
+            MetadataExtractor::string_from_tags(tags.iter().copied(), &ItemKey::AlbumTitle)
+                .as_deref(),
+            Some("Primary Album")
+        );
+    }
+
+    #[test]
+    fn cross_tag_read_skips_empty_values() {
+        let mut primary = lofty::tag::Tag::new(lofty::tag::TagType::Id3v2);
+        primary.insert_text(ItemKey::AlbumTitle, "   ".to_string());
+        let mut secondary = lofty::tag::Tag::new(lofty::tag::TagType::Ape);
+        secondary.insert_text(ItemKey::AlbumTitle, "Real Album".to_string());
+
+        let tags = [&primary, &secondary];
+        assert_eq!(
+            MetadataExtractor::string_from_tags(tags.iter().copied(), &ItemKey::AlbumTitle)
+                .as_deref(),
+            Some("Real Album")
+        );
+    }
+
+    #[test]
+    fn cross_tag_year_read_falls_back_to_secondary_tag() {
+        // #447 year: the date exists only in the secondary tag.
+        let primary = lofty::tag::Tag::new(lofty::tag::TagType::Id3v2);
+        let mut secondary = lofty::tag::Tag::new(lofty::tag::TagType::Ape);
+        secondary.insert_text(ItemKey::RecordingDate, "2025".to_string());
+
+        let tags = [&primary, &secondary];
+        assert_eq!(
+            MetadataExtractor::year_from_tags(tags.iter().copied()),
+            Some(2025)
+        );
+    }
+
+    #[test]
+    fn cross_tag_track_and_disc_read_fall_back_to_secondary_tag() {
+        let primary = lofty::tag::Tag::new(lofty::tag::TagType::Id3v2);
+        let mut secondary = lofty::tag::Tag::new(lofty::tag::TagType::Ape);
+        secondary.insert_text(ItemKey::TrackNumber, "7".to_string());
+        secondary.insert_text(ItemKey::DiscNumber, "2".to_string());
+
+        let tags = [&primary, &secondary];
+        assert_eq!(
+            MetadataExtractor::track_from_tags(tags.iter().copied()),
+            Some(7)
+        );
+        assert_eq!(
+            MetadataExtractor::disk_from_tags(tags.iter().copied()),
+            Some(2)
+        );
     }
 }
