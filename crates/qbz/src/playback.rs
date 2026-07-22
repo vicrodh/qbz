@@ -2540,6 +2540,26 @@ async fn record_recent(runtime: &Runtime) {
     } else {
         track_label
     };
+    // Per-album play count — feeds the "Most Played Albums" rail (top-20
+    // COUNT(*) GROUP BY album_id). Per-track-start, like the artist store
+    // below; no-op when album_id is empty. Same album identity `recently`
+    // uses, so the two rails agree.
+    {
+        let artist_id_str = track.artist_id.map(|id| id.to_string()).unwrap_or_default();
+        qbz_app::settings::album_play_history::record_album_play(
+            qbz_app::settings::album_play_history::AlbumPlayMeta {
+                album_id: &album_id,
+                title: &track.album,
+                artist: &track.artist,
+                artist_id: &artist_id_str,
+                artwork_url: &artwork,
+                quality_tier: &quality_tier,
+                quality_label: &quality_label,
+                year: meta.release_date.get(0..4).unwrap_or(""),
+                source: track.source.as_deref().unwrap_or("qobuz"),
+            },
+        );
+    }
     crate::recently::record(crate::recently::RecentTrack {
         id: track.id.to_string(),
         title: track.title.clone(),

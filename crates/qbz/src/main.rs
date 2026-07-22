@@ -853,6 +853,12 @@ async fn reload_home(
                     url: card.artwork_url.clone(),
                 })
             }));
+            jobs.extend(data.most_played_albums.iter().enumerate().filter_map(|(idx, card)| {
+                (!card.artwork_url.is_empty()).then(|| artwork::ArtworkJob {
+                    target: artwork::ArtworkTarget::HomeMostPlayedAlbum { idx },
+                    url: card.artwork_url.clone(),
+                })
+            }));
             jobs.extend(data.release_watch.iter().enumerate().filter_map(|(idx, card)| {
                 (!card.artwork_url.is_empty()).then(|| artwork::ArtworkJob {
                     target: artwork::ArtworkTarget::HomeReleaseWatchAlbum { idx },
@@ -3007,6 +3013,7 @@ fn scope_for(entry: &nav::NavEntry) -> String {
         nav::NavEntry::DiscoverBrowse { .. } => "discover-browse".into(),
         nav::NavEntry::PlaylistBrowse => "playlist-browse".into(),
         nav::NavEntry::RecentAlbums => "recent-albums".into(),
+        nav::NavEntry::MostPlayedAlbums => "most-played-albums".into(),
         nav::NavEntry::Mix { .. } => "mix".into(),
         nav::NavEntry::Playlist(_) => "playlist".into(),
         nav::NavEntry::PlaylistManager => "playlist-manager".into(),
@@ -3202,6 +3209,9 @@ fn apply_entry(
         }
         nav::NavEntry::RecentAlbums => {
             navigate_recent_albums(weak.clone(), handle, image_cache.clone());
+        }
+        nav::NavEntry::MostPlayedAlbums => {
+            navigate_most_played_albums(weak.clone(), handle, image_cache.clone());
         }
         nav::NavEntry::Mix { kind } => {
             navigate_mix(runtime.clone(), weak.clone(), handle, image_cache.clone(), kind);
@@ -3704,6 +3714,125 @@ fn navigate_recent_albums(
             );
         }
     });
+}
+
+/// Full ranked list for the Most Played Albums View-all, cached so the search
+/// box re-filters without re-querying SQLite (mirrors the Qobuz-playlists
+/// filter). Written by the navigation, read by the filter.
+static MOST_PLAYED_ROWS: std::sync::Mutex<
+    Vec<qbz_app::settings::album_play_history::AlbumPlayRow>,
+> = std::sync::Mutex::new(Vec::new());
+
+/// Map a ranked row to a grid card, carrying its play count (drawn only here;
+/// `plays` is 0 on every other AlbumCardItem).
+fn most_played_item(row: &qbz_app::settings::album_play_history::AlbumPlayRow) -> AlbumCardItem {
+    let mut item = home::card_to_item(crate::home::CardData {
+        id: row.album_id.clone(),
+        title: row.title.clone(),
+        artist: row.artist.clone(),
+        artist_id: row.artist_id.clone(),
+        year: row.year.clone(),
+        quality_tier: row.quality_tier.clone(),
+        quality_label: row.quality_label.clone(),
+        artwork_url: row.artwork_url.clone(),
+        source: row.source.clone(),
+        ..Default::default()
+    });
+    item.plays = row.plays as i32;
+    item
+}
+
+/// Push ranked rows onto the Most Played Albums page + fire their artwork
+/// (Qobuz plain loader vs Plex/local source-aware funnel, like the recent
+/// page). Shared by the initial load and the search filter.
+fn apply_most_played_page(
+    weak: &slint::Weak<AppWindow>,
+    image_cache: artwork::ImageCache,
+    rows: Vec<qbz_app::settings::album_play_history::AlbumPlayRow>,
+) {
+    let mut jobs: Vec<artwork::ArtworkJob> = Vec::new();
+    let mut plex_jobs: Vec<artwork::ArtworkJob> = Vec::new();
+    for (idx, row) in rows.iter().enumerate() {
+        if row.artwork_url.is_empty() {
+            continue;
+        }
+        let job = artwork::ArtworkJob {
+            target: artwork::ArtworkTarget::MostPlayedAlbumsPage { idx },
+            url: row.artwork_url.clone(),
+        };
+        if row.source == "plex" || row.source == "local" {
+            plex_jobs.push(job);
+        } else {
+            jobs.push(job);
+        }
+    }
+    let weak_for_plex = weak.clone();
+    let image_cache_plex = image_cache.clone();
+    let _ = weak.clone().upgrade_in_event_loop(move |w| {
+        let items: Vec<AlbumCardItem> = rows.iter().map(most_played_item).collect();
+        let s = w.global::<MostPlayedAlbumsState>();
+        s.set_albums(slint::ModelRc::new(slint::VecModel::from(items)));
+        s.set_loading(false);
+    });
+    artwork::spawn_loads(jobs, weak.clone(), image_cache);
+    if !plex_jobs.is_empty() {
+        let plex = crate::plex_settings::get();
+        artwork::spawn_local_or_plex_loads(
+            plex_jobs,
+            plex.base_url,
+            plex.token,
+            weak_for_plex,
+            image_cache_plex,
+        );
+    }
+}
+
+/// Open the full "Most Played Albums" page: load the ranked list, cache it,
+/// render it. Local SQLite read, so no runtime + no error branch.
+fn navigate_most_played_albums(
+    weak: slint::Weak<AppWindow>,
+    handle: &tokio::runtime::Handle,
+    image_cache: artwork::ImageCache,
+) {
+    handle.spawn(async move {
+        let _ = weak.upgrade_in_event_loop(|w| {
+            let s = w.global::<MostPlayedAlbumsState>();
+            s.set_loading(true);
+            s.set_search("".into());
+            s.set_albums(slint::ModelRc::new(slint::VecModel::from(
+                Vec::<AlbumCardItem>::new(),
+            )));
+            w.global::<NavState>()
+                .set_view(ContentView::MostPlayedAlbums);
+        });
+        let rows = qbz_app::settings::album_play_history::all_albums();
+        *MOST_PLAYED_ROWS.lock().unwrap() = rows.clone();
+        apply_most_played_page(&weak, image_cache, rows);
+    });
+}
+
+/// Re-filter the cached Most Played list by title/artist and re-render.
+fn filter_most_played(
+    weak: slint::Weak<AppWindow>,
+    image_cache: artwork::ImageCache,
+    query: String,
+) {
+    let q = query.trim().to_lowercase();
+    let rows: Vec<_> = MOST_PLAYED_ROWS
+        .lock()
+        .map(|guard| {
+            guard
+                .iter()
+                .filter(|r| {
+                    q.is_empty()
+                        || r.title.to_lowercase().contains(&q)
+                        || r.artist.to_lowercase().contains(&q)
+                })
+                .cloned()
+                .collect()
+        })
+        .unwrap_or_default();
+    apply_most_played_page(&weak, image_cache, rows);
 }
 
 /// Set when a play lands in the recently-played store while the Home view is
@@ -16714,6 +16843,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if let Some(w) = weak.upgrade() {
                     update_nav_flags(&w);
                 }
+            });
+    }
+    {
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        let image_cache = image_cache.clone();
+        window
+            .global::<HomeActions>()
+            .on_open_most_played_albums(move || {
+                nav::record(nav::NavEntry::MostPlayedAlbums);
+                navigate_most_played_albums(weak.clone(), &handle, image_cache.clone());
+                if let Some(w) = weak.upgrade() {
+                    update_nav_flags(&w);
+                }
+            });
+    }
+    {
+        let weak = window.as_weak();
+        let image_cache = image_cache.clone();
+        window
+            .global::<MostPlayedAlbumsActions>()
+            .on_filter(move |q| {
+                filter_most_played(weak.clone(), image_cache.clone(), q.to_string());
             });
     }
 

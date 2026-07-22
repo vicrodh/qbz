@@ -10,6 +10,7 @@ pub mod local_favorites;
 pub mod pinned_items;
 pub mod playback;
 pub mod plex;
+pub mod album_play_history;
 pub mod reco_store;
 pub mod remote_control;
 pub mod scrobblers;

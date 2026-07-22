@@ -1,0 +1,198 @@
+// Most Played Albums — the full-page listing opened from the rail's "View
+// all". Renders the local play-count store (album_play_history), ranked by
+// plays desc, as a flat grid. Each card shows its play count (AlbumCardItem
+// carries `plays`, non-zero only here). Structure mirrors RecentAlbumsView
+// (fixed header + AlbumCollectionView in a Flickable + the shared
+// ListScrollbar); the search box is the one addition.
+
+import { Theme } from "../foundation/semantic-colors.slint";
+import { Typography } from "../foundation/typography.slint";
+import { MostPlayedAlbumsState, MostPlayedAlbumsActions, NavState, ShellState } from "../state.slint";
+import { AlbumCollectionView } from "AlbumCollectionView.slint";
+import { LoadingSpinner } from "../primitives/LoadingSpinner.slint";
+import { ListScrollbar } from "../primitives/ListScrollbar.slint";
+import { NavButtons } from "../shell/NavButtons.slint";
+import { QbzIcon } from "../primitives/QbzIcon.slint";
+
+export component MostPlayedAlbumsView inherits Rectangle {
+    callback open-album(string);
+    callback open-artist(string);
+    callback media-action(string, string, string);
+
+    property <length> album-w: 200px;
+    property <length> album-h: 286px;
+    property <length> gap: 24px;
+
+    background: Theme.surface-main;
+
+    VerticalLayout {
+        spacing: 0px;
+
+        // --- Fixed header: NavButtons + title (left), search (right) -------
+        Rectangle {
+            height: 56px;
+            background: Theme.surface-main;
+
+            HorizontalLayout {
+                x: 32px;
+                y: 25px - self.height / 2;
+                width: self.preferred-width;
+                height: self.preferred-height;
+                spacing: 16px;
+                VerticalLayout {
+                    alignment: center;
+                    NavButtons { }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    Text {
+                        text: @tr("Most Played Albums");
+                        color: Theme.text-primary;
+                        font-size: Typography.section;
+                        font-weight: Typography.bold;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+
+            // Search box, anchored right (filters the grid by title/artist).
+            search-box := Rectangle {
+                x: parent.width - self.width - 32px;
+                y: 25px - self.height / 2;
+                width: 240px;
+                height: 34px;
+                border-radius: 6px;
+                border-width: 1px;
+                border-color: Theme.border-subtle;
+                background: Theme.surface-elevated;
+                HorizontalLayout {
+                    padding-left: 10px;
+                    padding-right: 10px;
+                    spacing: 8px;
+                    VerticalLayout {
+                        alignment: center;
+                        QbzIcon {
+                            source: @image-url("../assets/icons/search.svg");
+                            width: 14px;
+                            height: 14px;
+                            tint: Theme.text-muted;
+                        }
+                    }
+                    Rectangle {
+                        horizontal-stretch: 1;
+                        input := TextInput {
+                            width: 100%;
+                            height: 100%;
+                            color: Theme.text-primary;
+                            font-size: Typography.body;
+                            vertical-alignment: center;
+                            single-line: true;
+                            text <=> MostPlayedAlbumsState.search;
+                            // Client filter runs in Rust (re-set model + re-fire
+                            // artwork for the matches, like the playlists filter).
+                            changed text => { MostPlayedAlbumsActions.filter(self.text); }
+                        }
+                        Text {
+                            visible: input.text == "";
+                            text: @tr("Search…");
+                            color: Theme.text-muted;
+                            font-size: Typography.body;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- Scrolling grid ----------------------------------------------
+        flick := Flickable {
+            vertical-stretch: 1;
+            viewport-width: self.width;
+            viewport-height: page.preferred-height;
+            property <string> sr-armed: NavState.restore-scope;
+            function sr-restore() {
+                if (NavState.restore-scope == "most-played-albums" && self.viewport-height > self.height) {
+                    self.viewport-y = NavState.scroll-restore;
+                    NavState.restore-scope = "";
+                }
+            }
+            init => { self.sr-restore(); }
+            changed sr-armed => { self.sr-restore(); }
+            changed viewport-height => { self.sr-restore(); }
+            changed viewport-y => { NavState.report-scroll(self.viewport-y); }
+
+            page := VerticalLayout {
+                width: parent.width;
+                padding-left: 32px;
+                padding-right: 32px;
+                padding-top: 8px;
+                padding-bottom: 100px;
+                spacing: 0px;
+                alignment: start;
+
+                if MostPlayedAlbumsState.loading: HorizontalLayout {
+                    alignment: center;
+                    VerticalLayout {
+                        alignment: center;
+                        spacing: 12px;
+                        HorizontalLayout {
+                            alignment: center;
+                            LoadingSpinner { size: 36px; }
+                        }
+                        Text {
+                            text: @tr("Loading…");
+                            color: Theme.text-muted;
+                            font-size: 14px;
+                            horizontal-alignment: center;
+                        }
+                    }
+                }
+
+                if !MostPlayedAlbumsState.loading
+                    && MostPlayedAlbumsState.albums.length == 0: HorizontalLayout {
+                    alignment: center;
+                    Text {
+                        text: @tr("Albums you play will appear here.");
+                        color: Theme.text-muted;
+                        font-size: 14px;
+                    }
+                }
+
+                if !MostPlayedAlbumsState.loading: AlbumCollectionView {
+                    albums: MostPlayedAlbumsState.albums;
+                    view-mode: "grid";
+                    is-grouped: false;
+                    show-source: false;
+                    card-width: root.album-w;
+                    card-height: root.album-h;
+                    card-gap: root.gap;
+                    windowed: true;
+                    visible-top: -flick.viewport-y;
+                    visible-height: flick.height;
+                    content-offset: 8px;
+                    open-album(id) => { root.open-album(id); }
+                    open-artist(id) => { root.open-artist(id); }
+                    media-action(kind, id, action) => {
+                        root.media-action(kind, id, action);
+                    }
+                }
+            }
+        }
+    }
+
+    ListScrollbar {
+        x: parent.width - self.width - 4px;
+        y: 56px;
+        width: 14px;
+        height: parent.height - 56px;
+        viewport-height: flick.viewport-height;
+        visible-height: flick.height;
+        viewport-y <=> flick.viewport-y;
+        auto-hide: true;
+        hover-active: ShellState.pointer-in-window
+            && ShellState.pointer-x >= flick.absolute-position.x
+            && ShellState.pointer-x <= flick.absolute-position.x + flick.width
+            && ShellState.pointer-y >= flick.absolute-position.y
+            && ShellState.pointer-y <= flick.absolute-position.y + flick.height;
+    }
+}

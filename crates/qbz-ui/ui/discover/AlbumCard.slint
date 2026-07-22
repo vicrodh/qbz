@@ -497,6 +497,15 @@ export component AlbumCard inherits Rectangle {
                         overflow: elide;
                     }
                 }
+                // Play count — shown ONLY in the Most Played Albums View-all
+                // (plays is 0 everywhere else, so nothing draws here).
+                if root.album.plays > 0: Text {
+                    text: @tr("{} plays", root.album.plays);
+                    color: Theme.text-muted;
+                    font-size: Typography.legal;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
             }
 
             // Icon-only quality badge with an exact-quality hover tooltip.

@@ -4785,3 +4785,10 @@ msgstr "+ ещё {} исполнителей"
 
 msgid "Show less"
 msgstr "Показать меньше"
+# Most Played Albums rail title
+msgid "Most Played Albums"
+msgstr "Самые прослушиваемые альбомы"
+
+# Most Played Albums View-all — per-card play count
+msgid "{} plays"
+msgstr "{} воспроизведений"

@@ -152,9 +152,8 @@ pub fn render_kind(id: DiscoverySectionId) -> &'static str {
         TopArtists | ArtistsToFollow => "artistCarousel",
         ArtistSpotlight => "spotlight",
         Pinned => "pinnedCarousel",
-        ReleaseWatch | FavoriteAlbums | SimilarAlbums | RediscoverLibrary | EssentialsByGenre => {
-            "albumCarousel"
-        }
+        ReleaseWatch | FavoriteAlbums | MostPlayedAlbums | SimilarAlbums | RediscoverLibrary
+        | EssentialsByGenre => "albumCarousel",
     }
 }
 
@@ -191,6 +190,7 @@ pub fn label_for(id: DiscoverySectionId) -> &'static str {
         ArtistsToFollow => qbz_i18n::mark("Artists to Follow"), // discovery.artistsToFollow
         ArtistSpotlight => qbz_i18n::mark("Artist Spotlight"), // discovery.artistSpotlight
         Pinned => qbz_i18n::mark("Pinned"), // Slint-era section, no Tauri key
+        MostPlayedAlbums => qbz_i18n::mark("Most Played Albums"), // local: most-played rail
     }
 }
 

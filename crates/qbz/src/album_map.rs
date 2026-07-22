@@ -204,6 +204,7 @@ pub fn classify_release_type(track_count: Option<u32>) -> &'static str {
 /// (single-source Qobuz context — hide the column with `show-source: false`).
 pub fn to_item(card: AlbumCard) -> AlbumCardItem {
     AlbumCardItem {
+        plays: 0,
         // Favorite heart state. Local/Plex albums read the local-favorites
         // store (their composite keys never match a Qobuz favorite id);
         // Qobuz albums read the login-seeded fav cache so every card surface

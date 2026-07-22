@@ -70,10 +70,16 @@ pub enum ArtworkTarget {
     /// model has its own lifecycle, separate from the rail's (same split as
     /// HomeFavoriteAlbum vs ForYouFavoriteAlbum).
     RecentAlbumsPage { idx: usize },
+    /// A card in `MostPlayedAlbumsState.albums[idx]` — the "Most Played Albums"
+    /// View-all page.
+    MostPlayedAlbumsPage { idx: usize },
     /// A card in `HomeState.favorite-albums.albums[idx]` — the Home tab's
     /// "Library Albums" rail (#566). Separate from `ForYouFavoriteAlbum`:
     /// the two rails share the data pipeline but not the model lifecycle.
     HomeFavoriteAlbum { idx: usize },
+    /// A card in `HomeState.most-played-albums.albums[idx]` — the Home tab's
+    /// "Most Played Albums" rail (local play-count ranking).
+    HomeMostPlayedAlbum { idx: usize },
     /// A card in `HomeState.release-watch.albums[idx]` — the Home tab's
     /// "Release Watch" rail (#566; ForYouReleaseWatch's Home twin).
     HomeReleaseWatchAlbum { idx: usize },
@@ -245,6 +251,8 @@ pub enum ArtworkTarget {
     ExtRecoWeeklyJams { index: usize },
     /// A card in ForYouState.favorite-albums.albums[index].
     ForYouFavoriteAlbum { index: usize },
+    /// A card in ForYouState.most-played-albums.albums[index].
+    ForYouMostPlayedAlbum { index: usize },
     /// The Spotlight artist portrait.
     ForYouSpotlightArtist,
     /// A card in ForYouState.spotlight-albums[index].
@@ -996,6 +1004,14 @@ fn apply_artwork(
             item.artwork = image;
             albums.set_row_data(idx, item);
         }
+        ArtworkTarget::MostPlayedAlbumsPage { idx } => {
+            let albums = window.global::<crate::MostPlayedAlbumsState>().get_albums();
+            let Some(mut item) = albums.row_data(idx) else {
+                return;
+            };
+            item.artwork = image;
+            albums.set_row_data(idx, item);
+        }
         ArtworkTarget::RecentAlbumsPage { idx } => {
             let albums = window.global::<crate::RecentAlbumsState>().get_albums();
             let Some(mut item) = albums.row_data(idx) else {
@@ -1006,6 +1022,14 @@ fn apply_artwork(
         }
         ArtworkTarget::HomeFavoriteAlbum { idx } => {
             let section = home.get_favorite_albums();
+            let Some(mut item) = section.albums.row_data(idx) else {
+                return;
+            };
+            item.artwork = image;
+            section.albums.set_row_data(idx, item);
+        }
+        ArtworkTarget::HomeMostPlayedAlbum { idx } => {
+            let section = home.get_most_played_albums();
             let Some(mut item) = section.albums.row_data(idx) else {
                 return;
             };
@@ -1662,6 +1686,13 @@ fn apply_artwork(
         }
         ArtworkTarget::ForYouFavoriteAlbum { index } => {
             let model = window.global::<crate::ForYouState>().get_favorite_albums().albums;
+            if let Some(mut item) = model.row_data(index) {
+                item.artwork = image;
+                model.set_row_data(index, item);
+            }
+        }
+        ArtworkTarget::ForYouMostPlayedAlbum { index } => {
+            let model = window.global::<crate::ForYouState>().get_most_played_albums().albums;
             if let Some(mut item) = model.row_data(index) {
                 item.artwork = image;
                 model.set_row_data(index, item);

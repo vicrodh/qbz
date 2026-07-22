@@ -52,6 +52,10 @@ pub struct HomeData {
     /// fourth ported Tauri-Home section, is static navigation tiles — no
     /// data field needed.)
     pub top_artists: Vec<crate::foryou::ArtistSlim>,
+    /// "Most Played Albums" rail — top albums by local play count
+    /// (`album_play_history`). Local, so built inline (no fetch). Feeds
+    /// `HomeState.most-played-albums`; self-hides while empty.
+    pub most_played_albums: Vec<crate::foryou::AlbumCard>,
 }
 
 thread_local! {
@@ -325,6 +329,7 @@ where
         favorite_albums,
         release_watch,
         top_artists,
+        most_played_albums: crate::foryou::most_played_album_cards(),
     })
 }
 
@@ -668,6 +673,7 @@ pub fn apply_recent_rails(window: &AppWindow, recent: Vec<SlimData>, albums: Vec
 /// Convert one `CardData` into the Slint `AlbumCardItem`.
 pub(crate) fn card_to_item(card: CardData) -> AlbumCardItem {
     AlbumCardItem {
+        plays: 0,
         // Favorite heart state from the login-seeded cache (kept live by
         // main::set_album_row_favorite when a favorite toggles anywhere).
         is_favorite: crate::fav_cache::is_album_favorite(&card.id),
@@ -798,6 +804,7 @@ const HOME_RENDERABLE: &[DiscoverySectionId] = &[
     DiscoverySectionId::ReleaseWatch,
     DiscoverySectionId::TopArtists,
     DiscoverySectionId::Pinned,
+    DiscoverySectionId::MostPlayedAlbums,
 ];
 
 /// Build one tab's ordered ENABLED descriptor list from `prefs` + the cached
@@ -1116,6 +1123,10 @@ pub fn apply_home(window: &AppWindow, data: HomeData) {
     state.set_release_watch(crate::foryou::section(
         &qbz_i18n::t("Release Watch"),
         &data.release_watch,
+    ));
+    state.set_most_played_albums(crate::foryou::section(
+        &qbz_i18n::t("Most Played Albums"),
+        &data.most_played_albums,
     ));
     state.set_top_artists(ModelRc::new(VecModel::from(crate::foryou::artist_items(
         &data.top_artists,

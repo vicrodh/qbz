@@ -498,6 +498,23 @@ export component HomeView inherits Rectangle {
                         }
                     }
 
+                    // Most Played Albums — album carousel ranked by local play
+                    // count. Self-hides while empty (default-off section).
+                    if desc.id == "mostPlayedAlbums"
+                        && HomeState.most-played-albums.albums.length > 0: Carousel {
+                        section: HomeState.most-played-albums;
+                        show-view-all: true;
+                        view-all-clicked => {
+                            HomeActions.open-most-played-albums();
+                        }
+                        album-clicked(id) => {
+                            root.album-clicked(id);
+                        }
+                        media-action(kind, id, action) => {
+                            root.media-action(kind, id, action);
+                        }
+                    }
+
                     // Qobuz Mixes (#566) — static navigation tiles, ALWAYS
                     // rendered when enabled (no data gate; 1:1 with the For
                     // You arm and Tauri Home).

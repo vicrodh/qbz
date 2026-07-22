@@ -59,6 +59,7 @@ import { HomeView } from "../discover/HomeView.slint";
 import { DiscoverBrowseView } from "../discover/DiscoverBrowseView.slint";
 import { PlaylistBrowseView } from "../discover/PlaylistBrowseView.slint";
 import { RecentAlbumsView } from "../discover/RecentAlbumsView.slint";
+import { MostPlayedAlbumsView } from "../discover/MostPlayedAlbumsView.slint";
 import { AlbumPageView } from "../album/AlbumPageView.slint";
 import { LocalAlbumView } from "../album/LocalAlbumView.slint";
 import { ArtistPageView } from "../artist/ArtistPageView.slint";
@@ -386,6 +387,17 @@ export component AppShell inherits Rectangle {
                 // so it mounts offline too (like local-album below); opening a
                 // Qobuz card from it offline hits the album view's own gate.
                 if NavState.view == ContentView.recent-albums: RecentAlbumsView {
+                    open-album(id) => {
+                        root.open-album(id);
+                    }
+                    open-artist(id) => {
+                        root.open-artist(id);
+                    }
+                    media-action(kind, id, action) => {
+                        root.media-action(kind, id, action);
+                    }
+                }
+                if NavState.view == ContentView.most-played-albums: MostPlayedAlbumsView {
                     open-album(id) => {
                         root.open-album(id);
                     }

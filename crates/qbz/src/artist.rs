@@ -674,6 +674,7 @@ pub(crate) fn card_to_item(card: CardData) -> AlbumCardItem {
     // so re-route year through that field instead of changing the
     // shared card primitive.
     AlbumCardItem {
+        plays: 0,
         // Favorite heart state from the login-seeded cache (kept live by
         // main::set_album_row_favorite when a favorite toggles anywhere).
         is_favorite: crate::fav_cache::is_album_favorite(&card.id),

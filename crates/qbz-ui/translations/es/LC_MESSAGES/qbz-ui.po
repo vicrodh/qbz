@@ -4801,3 +4801,10 @@ msgstr "+{} artistas más"
 
 msgid "Show less"
 msgstr "Ver menos"
+# Most Played Albums rail title
+msgid "Most Played Albums"
+msgstr "Álbumes más escuchados"
+
+# Most Played Albums View-all — per-card play count
+msgid "{} plays"
+msgstr "{} reproducciones"

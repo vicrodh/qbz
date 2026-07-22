@@ -59,6 +59,9 @@ pub enum NavEntry {
     /// reached from the Home / Editor's Picks rail. Tag / search / view-mode
     /// are session state in PlaylistBrowseState, so no payload.
     PlaylistBrowse,
+    /// MostPlayedAlbumsView — the full "Most Played Albums" listing, ranked by
+    /// local play count (album_play_history), reloaded on every navigation.
+    MostPlayedAlbums,
     /// A Qobuz mix detail page ("daily" | "weekly" | "fav" | "top").
     Mix {
         kind: String,

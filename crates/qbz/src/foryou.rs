@@ -492,6 +492,25 @@ where
     build_favorite_albums(&fav_albums)
 }
 
+/// Cards for the "Most Played Albums" rail — top 20 albums by local play
+/// count (`album_play_history`). Local (no network); the SAME set feeds Home
+/// and For You. Ranked rows map 1:1 onto `AlbumCard`.
+pub(crate) fn most_played_album_cards() -> Vec<AlbumCard> {
+    qbz_app::settings::album_play_history::top_albums(20)
+        .into_iter()
+        .map(|r| AlbumCard {
+            id: r.album_id,
+            title: r.title,
+            artist: r.artist,
+            artist_id: r.artist_id,
+            year: r.year,
+            quality_tier: r.quality_tier,
+            quality_label: r.quality_label,
+            artwork_url: r.artwork_url,
+        })
+        .collect()
+}
+
 /// Radio Stations — album-seeded tiles from recent + favorite albums,
 /// deduped, capped at 12.
 fn build_radio(
@@ -543,6 +562,7 @@ fn album_items(cards: &[AlbumCard]) -> Vec<AlbumCardItem> {
     cards
         .iter()
         .map(|c| AlbumCardItem {
+            plays: 0,
             // Favorite heart state from the login-seeded cache (kept live by
             // main::set_album_row_favorite when a favorite toggles anywhere).
             is_favorite: crate::fav_cache::is_album_favorite(&c.id),
@@ -764,6 +784,16 @@ fn apply_favorite_albums(weak: &slint::Weak<AppWindow>, cache: &ImageCache, card
     crate::artwork::spawn_loads(jobs, weak.clone(), cache.clone());
 }
 
+fn apply_most_played_albums(weak: &slint::Weak<AppWindow>, cache: &ImageCache, cards: Vec<AlbumCard>) {
+    let jobs = album_jobs(&cards, |i| ArtworkTarget::ForYouMostPlayedAlbum { index: i });
+    let w = weak.clone();
+    let _ = w.upgrade_in_event_loop(move |w| {
+        w.global::<ForYouState>()
+            .set_most_played_albums(section(&qbz_i18n::t("Most Played Albums"), &cards));
+    });
+    crate::artwork::spawn_loads(jobs, weak.clone(), cache.clone());
+}
+
 fn apply_more_from_library(
     weak: &slint::Weak<AppWindow>,
     cache: &ImageCache,
@@ -941,6 +971,9 @@ pub fn spawn_for_you<A>(
                 let scored_fav = crate::reco::scored_favorite_album_ids(80);
                 let fav_albums = order_by_score(fav_albums, scored_fav.as_deref());
                 apply_favorite_albums(&weak, &cache, build_favorite_albums(&fav_albums));
+                // Most Played Albums — local play-count rail (no fetch); rides
+                // this branch since it shares the cache + weak already cloned.
+                apply_most_played_albums(&weak, &cache, most_played_album_cards());
                 // reco: backfill genres for the resolved favorite albums so the
                 // engine's top-genres has data (plays alone carry no genre).
                 let genre_entries: Vec<(String, u64, String)> = fav_albums
