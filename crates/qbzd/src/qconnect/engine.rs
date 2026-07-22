@@ -97,6 +97,28 @@ impl DaemonRendererEngine {
     fn core(&self) -> &Arc<QbzCore<DaemonAdapter>> {
         self.runtime.core()
     }
+
+    /// Last-resort load for tracks the raw-URL path cannot fetch (the CDN
+    /// header flood defeats every reqwest attempt — see
+    /// `remote_stream::is_header_flood_error`): the CMAF path is unaffected by
+    /// the h1 header cap. `play_track_resolved` does NOT move the queue cursor
+    /// (nothing on the QConnect path does — the shared driver's cursor sync
+    /// only fires on a playing->playing track edge), so sync it explicitly or
+    /// `qbzd status` / the local now-playing truth keep showing the PREVIOUS
+    /// track while the recovered one plays.
+    async fn play_via_cmaf(
+        &self,
+        track_id: u64,
+        quality: Quality,
+        start_position_secs: u64,
+    ) -> Result<(), String> {
+        self.core()
+            .play_track_resolved(track_id, quality, None, None, start_position_secs)
+            .await
+            .map_err(|err| format!("CMAF fallback for remote track {track_id}: {err}"))?;
+        self.core().sync_current_to_id(track_id).await;
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -198,7 +220,7 @@ impl QconnectRendererEngine for DaemonRendererEngine {
             .map_err(|err| format!("resolve stream url for remote track {track_id}: {err}"))?;
 
         let player = self.core().player();
-        match super::remote_stream::stream_remote_track_into_player(
+        let stream_result = super::remote_stream::stream_remote_track_into_player(
             &player,
             track_id,
             duration_secs,
@@ -206,22 +228,46 @@ impl QconnectRendererEngine for DaemonRendererEngine {
             &stream_url.url,
             "QConnect",
         )
-        .await
-        {
-            Ok(()) => Ok(()),
-            Err(stream_err) => {
-                log::warn!(
-                    "[QConnect] Streaming handoff unavailable for track {}: {}. Falling back to full download.",
-                    track_id,
-                    stream_err
-                );
-                let audio_data = download_remote_audio(&stream_url.url).await?;
+        .await;
+
+        let Err(stream_err) = stream_result else {
+            return Ok(());
+        };
+
+        // Akamai small-object header flood: SMALL raw-url objects come back
+        // with ~106 headers, over hyper's hard-coded 100-header h1 cap, so
+        // EVERY reqwest fetch of this URL fails — the full download would die
+        // the same death. Skip it and go straight to the CMAF last resort.
+        if super::remote_stream::is_header_flood_error(&stream_err) {
+            log::warn!(
+                "[QConnect] Raw-URL streaming hit the CDN header flood for track {track_id}: {stream_err}. Skipping full download; last resort: CMAF."
+            );
+            return self
+                .play_via_cmaf(track_id, quality, start_position_secs)
+                .await;
+        }
+
+        log::warn!(
+            "[QConnect] Streaming handoff unavailable for track {}: {}. Falling back to full download.",
+            track_id,
+            stream_err
+        );
+        match download_remote_audio(&stream_url.url).await {
+            Ok(audio_data) => {
                 self.core()
                     .player()
                     .play_data(audio_data, track_id)
                     .map_err(|err| format!("play remote track {track_id}: {err}"))?;
                 Ok(())
             }
+            Err(download_err) if super::remote_stream::is_header_flood_error(&download_err) => {
+                log::warn!(
+                    "[QConnect] Full download hit the CDN header flood for track {track_id}: {download_err}. Last resort: CMAF."
+                );
+                self.play_via_cmaf(track_id, quality, start_position_secs)
+                    .await
+            }
+            Err(download_err) => Err(download_err),
         }
     }
 
@@ -241,7 +287,12 @@ async fn download_remote_audio(url: &str) -> Result<Vec<u8>, String> {
         .header("User-Agent", "Mozilla/5.0")
         .send()
         .await
-        .map_err(|err| format!("download remote audio request failed: {err}"))?;
+        .map_err(|err| {
+            format!(
+                "download remote audio request failed: {}",
+                super::remote_stream::describe_reqwest_error(&err)
+            )
+        })?;
 
     if !response.status().is_success() {
         return Err(format!(
@@ -250,10 +301,12 @@ async fn download_remote_audio(url: &str) -> Result<Vec<u8>, String> {
         ));
     }
 
-    let bytes = response
-        .bytes()
-        .await
-        .map_err(|err| format!("read remote audio bytes failed: {err}"))?;
+    let bytes = response.bytes().await.map_err(|err| {
+        format!(
+            "read remote audio bytes failed: {}",
+            super::remote_stream::describe_reqwest_error(&err)
+        )
+    })?;
     Ok(bytes.to_vec())
 }
 

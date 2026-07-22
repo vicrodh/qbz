@@ -106,7 +106,7 @@ pub async fn probe_remote_stream_info(url: &str) -> Result<RemoteStreamInfo, Str
         .header("User-Agent", "Mozilla/5.0")
         .send()
         .await
-        .map_err(|err| format!("probe HEAD request failed: {err}"))?;
+        .map_err(|err| format!("probe HEAD request failed: {}", describe_reqwest_error(&err)))?;
 
     if !head_response.status().is_success() {
         return Err(format!(
@@ -129,7 +129,7 @@ pub async fn probe_remote_stream_info(url: &str) -> Result<RemoteStreamInfo, Str
         .header("Range", "bytes=0-65535")
         .send()
         .await
-        .map_err(|err| format!("probe range request failed: {err}"))?;
+        .map_err(|err| format!("probe range request failed: {}", describe_reqwest_error(&err)))?;
 
     if !range_response.status().is_success() {
         return Err(format!(
@@ -141,7 +141,7 @@ pub async fn probe_remote_stream_info(url: &str) -> Result<RemoteStreamInfo, Str
     let initial_bytes = range_response
         .bytes()
         .await
-        .map_err(|err| format!("read probe bytes failed: {err}"))?;
+        .map_err(|err| format!("read probe bytes failed: {}", describe_reqwest_error(&err)))?;
 
     let elapsed = start_time.elapsed();
     let speed_mbps = if elapsed.as_secs_f64() > 0.0 {
@@ -214,7 +214,12 @@ pub async fn download_and_stream_remote_track(
         .header("User-Agent", "Mozilla/5.0")
         .send()
         .await
-        .map_err(|err| format!("start remote streaming request failed: {err}"))?;
+        .map_err(|err| {
+            format!(
+                "start remote streaming request failed: {}",
+                describe_reqwest_error(&err)
+            )
+        })?;
 
     if !response.status().is_success() {
         return Err(format!(
@@ -229,7 +234,8 @@ pub async fn download_and_stream_remote_track(
     let mut last_log_time = Instant::now();
 
     while let Some(chunk_result) = stream.next().await {
-        let chunk = chunk_result.map_err(|err| format!("remote streaming chunk failed: {err}"))?;
+        let chunk = chunk_result
+            .map_err(|err| format!("remote streaming chunk failed: {}", describe_reqwest_error(&err)))?;
         bytes_received += chunk.len() as u64;
 
         if let Err(err) = writer.push_chunk(&chunk) {
@@ -283,4 +289,30 @@ pub async fn download_and_stream_remote_track(
     );
 
     Ok(())
+}
+
+/// reqwest's `Display` hides the source chain — which is exactly where the
+/// diagnosis lives (Akamai's >100-header small-object flood surfaces as hyper's
+/// "message head is too large" two levels down). Walk `source()` and join the
+/// chain so logs AND signature matching see the real cause.
+pub fn describe_reqwest_error(err: &reqwest::Error) -> String {
+    use std::error::Error as _;
+    let mut out = err.to_string();
+    let mut source = err.source();
+    while let Some(cause) = source {
+        out.push_str(": ");
+        out.push_str(&cause.to_string());
+        source = cause.source();
+    }
+    out
+}
+
+/// True when an error message (already chain-expanded by
+/// [`describe_reqwest_error`]) shows hyper's hard-coded h1 100-header cap.
+/// Akamai answers SMALL raw-url objects with ~106 headers (the `X-AK-GRN` /
+/// `X-AK-FWD-ERROR: ERR_POC_FWD_OBJ_TOO_SMALL` flood), so EVERY reqwest fetch
+/// of such an URL fails this way — streaming probe and full download alike.
+pub fn is_header_flood_error(message: &str) -> bool {
+    let haystack = message.to_ascii_lowercase();
+    haystack.contains("message head is too large") || haystack.contains("too many headers")
 }
