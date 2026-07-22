@@ -324,20 +324,42 @@ fn get_portal_secret() -> Option<Vec<u8>> {
         .clone()
 }
 
-/// Derive encryption key from XDG portal secret + machine ID + installation salt.
-/// Portal secret adds DE-agnostic, Flatpak-safe entropy when available.
+/// Whether the XDG portal secret takes part in key derivation.
+///
+/// The portal secret is reachable only through a session bus, so it makes the
+/// derived key SESSION-DEPENDENT. That is fine for the desktop app (it always
+/// runs inside a session) and it is Flatpak-safe entropy there, but it is wrong
+/// for the daemon: `qbzd login` runs in the user's graphical session while
+/// `qbzd run` is started by init (systemd system unit, OpenRC, runit) with no
+/// session bus, so the daemon derives a DIFFERENT key and cannot read the token
+/// it was just given — surfacing as a permanent "not logged in".
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PortalKey {
+    /// Desktop profile: mix the portal secret in when the session offers one.
+    Session,
+    /// Daemon profile: never — the key must be readable from a headless
+    /// service, which is exactly where a portal-derived key is unavailable.
+    Never,
+}
+
 /// Derive the encryption key with the machine-id fallback and installation salt
 /// resolved under `root`. The KDF (machine-id + installation salt + optional
-/// portal secret) is unchanged — only where the salt / machine-id-fallback
-/// files live is parameterized.
-fn derive_key_at(root: &Path) -> Result<[u8; 32], String> {
+/// portal secret) is unchanged; `portal` selects whether the portal secret is
+/// mixed in at all (see `PortalKey`).
+fn derive_key_at(root: &Path, portal: PortalKey) -> Result<[u8; 32], String> {
     let machine_id = get_machine_id_at(root)?;
     let installation_salt = load_or_create_installation_salt_at(root)?;
 
     #[cfg(target_os = "linux")]
-    let portal_secret = get_portal_secret();
+    let portal_secret = match portal {
+        PortalKey::Session => get_portal_secret(),
+        PortalKey::Never => None,
+    };
     #[cfg(not(target_os = "linux"))]
-    let portal_secret: Option<Vec<u8>> = None;
+    let portal_secret: Option<Vec<u8>> = {
+        let _ = portal; // no portal off Linux — the policy is moot there.
+        None
+    };
 
     let mut hasher = Sha256::new();
     hasher.update(&installation_salt);
@@ -356,12 +378,16 @@ fn derive_key_at(root: &Path) -> Result<[u8; 32], String> {
 /// Encrypt credentials using AES-256-GCM (desktop root).
 fn encrypt_credentials(credentials: &QobuzCredentials) -> Result<String, String> {
     let root = config_qbz_root().ok_or("Could not determine config directory")?;
-    encrypt_credentials_at(&root, credentials)
+    encrypt_credentials_at(&root, PortalKey::Session, credentials)
 }
 
 /// Encrypt credentials using AES-256-GCM, deriving the key under `root`.
-fn encrypt_credentials_at(root: &Path, credentials: &QobuzCredentials) -> Result<String, String> {
-    let key = derive_key_at(root)?;
+fn encrypt_credentials_at(
+    root: &Path,
+    portal: PortalKey,
+    credentials: &QobuzCredentials,
+) -> Result<String, String> {
+    let key = derive_key_at(root, portal)?;
     let cipher =
         Aes256Gcm::new_from_slice(&key).map_err(|e| format!("Failed to create cipher: {}", e))?;
 
@@ -391,11 +417,15 @@ fn encrypt_credentials_at(root: &Path, credentials: &QobuzCredentials) -> Result
 /// Decrypt credentials using AES-256-GCM (desktop root).
 fn decrypt_credentials(encrypted_json: &str) -> Result<QobuzCredentials, String> {
     let root = config_qbz_root().ok_or("Could not determine config directory")?;
-    decrypt_credentials_at(&root, encrypted_json)
+    decrypt_credentials_at(&root, PortalKey::Session, encrypted_json)
 }
 
 /// Decrypt credentials using AES-256-GCM, deriving the key under `root`.
-fn decrypt_credentials_at(root: &Path, encrypted_json: &str) -> Result<QobuzCredentials, String> {
+fn decrypt_credentials_at(
+    root: &Path,
+    portal: PortalKey,
+    encrypted_json: &str,
+) -> Result<QobuzCredentials, String> {
     let encrypted: EncryptedCredentials = serde_json::from_str(encrypted_json)
         .map_err(|e| format!("Failed to parse encrypted data: {}", e))?;
 
@@ -406,7 +436,7 @@ fn decrypt_credentials_at(root: &Path, encrypted_json: &str) -> Result<QobuzCred
         ));
     }
 
-    let key = derive_key_at(root)?;
+    let key = derive_key_at(root, portal)?;
     let cipher =
         Aes256Gcm::new_from_slice(&key).map_err(|e| format!("Failed to create cipher: {}", e))?;
 
@@ -832,23 +862,28 @@ const OAUTH_TOKEN_KEY: &str = "qobuz-oauth-token";
 // keyring accelerator (desktop only) is layered on top by the fixed-path
 // `save/load/clear_oauth_token` wrappers below. The daemon `_at` fns skip the
 // keyring entirely (01 §6.3: file-first is authoritative; the keyring stays a
-// desktop-only accelerator).
+// desktop-only accelerator) and derive their key with `PortalKey::Never` for
+// the very same reason: an init-started service reaches neither the Secret
+// Service nor the XDG portal, so anything session-scoped is unreadable there.
 
 /// Encrypt `token` and write it to `<root>/.qbz-oauth-token` (0600). Returns the
 /// encrypted blob so the caller can also mirror it into the keyring if desired.
-fn write_oauth_token_file(root: &Path, token: &str) -> Result<String, String> {
+fn write_oauth_token_file(root: &Path, portal: PortalKey, token: &str) -> Result<String, String> {
     let placeholder = QobuzCredentials {
         email: token.to_string(),
         password: String::new(),
     };
-    let encrypted = encrypt_credentials_at(root, &placeholder)?;
+    let encrypted = encrypt_credentials_at(root, portal, &placeholder)?;
     write_private_file(&oauth_token_path_at(root), &encrypted)?;
     Ok(encrypted)
 }
 
 /// Read and decrypt the OAuth token from `<root>/.qbz-oauth-token`, or `None`
 /// when the file is absent/empty/undecryptable.
-fn read_oauth_token_file(root: &Path) -> Result<Option<String>, String> {
+///
+/// On the daemon profile a failed decrypt is retried once with the session key
+/// and, on success, rewritten portal-free — see the migration note inline.
+fn read_oauth_token_file(root: &Path, portal: PortalKey) -> Result<Option<String>, String> {
     let path = oauth_token_path_at(root);
     if !path.exists() {
         return Ok(None);
@@ -861,16 +896,48 @@ fn read_oauth_token_file(root: &Path) -> Result<Option<String>, String> {
         return Ok(None);
     }
 
-    match decrypt_credentials_at(root, &content) {
+    match decrypt_credentials_at(root, portal, &content) {
         Ok(placeholder) => {
             log::debug!("[Credentials] OAuth token loaded from encrypted file");
             Ok(Some(placeholder.email))
         }
         Err(e) => {
+            // Daemon profile, one-shot migration: a token written while the
+            // daemon still mixed the portal secret in decrypts with the session
+            // key, but ONLY from a process that can reach the portal (a systemd
+            // USER unit, say). Accept it once and rewrite it portal-free so
+            // every later headless start can read it too. When no portal is
+            // reachable both keys are identical, so this retry simply fails
+            // again and we fall through to the warning.
+            if portal == PortalKey::Never {
+                if let Ok(placeholder) = decrypt_credentials_at(root, PortalKey::Session, &content) {
+                    log::info!(
+                        "[Credentials] Migrating the OAuth token to a session-independent key"
+                    );
+                    if let Err(e) =
+                        write_oauth_token_file(root, PortalKey::Never, &placeholder.email)
+                    {
+                        log::warn!("[Credentials] Could not rewrite the migrated token: {}", e);
+                    }
+                    return Ok(Some(placeholder.email));
+                }
+            }
             log::warn!("[Credentials] Failed to decrypt OAuth token file: {}", e);
             Ok(None)
         }
     }
+}
+
+/// True when `<root>/.qbz-oauth-token` exists and is non-empty.
+///
+/// Lets a caller tell "no saved token" apart from "saved token this process
+/// cannot decrypt" — `load_oauth_token_at` reports both as `None` so that a
+/// broken file can never abort boot.
+pub fn oauth_token_file_present_at(root: &Path) -> bool {
+    let path = oauth_token_path_at(root);
+    fs::read_to_string(&path)
+        .map(|c| !c.trim().is_empty())
+        .unwrap_or(false)
 }
 
 /// Remove `<root>/.qbz-oauth-token` if present.
@@ -888,7 +955,7 @@ fn remove_oauth_token_file(root: &Path) -> Result<(), String> {
 /// File is authoritative; no keyring write-through (01 §6.3 — the keyring
 /// accelerator stays desktop-only, so a daemon runs with no Secret Service).
 pub fn save_oauth_token_at(root: &Path, token: &str) -> Result<(), String> {
-    write_oauth_token_file(root, token)?;
+    write_oauth_token_file(root, PortalKey::Never, token)?;
     log::info!("[Credentials] OAuth token saved to encrypted file (daemon root)");
     Ok(())
 }
@@ -896,7 +963,7 @@ pub fn save_oauth_token_at(root: &Path, token: &str) -> Result<(), String> {
 /// Load a previously saved OAuth `user_auth_token` from under `root`, or `None`.
 /// File-only (no keyring), the authoritative daemon path.
 pub fn load_oauth_token_at(root: &Path) -> Result<Option<String>, String> {
-    read_oauth_token_file(root)
+    read_oauth_token_file(root, PortalKey::Never)
 }
 
 /// Delete the stored OAuth token under `root` (daemon path, file-only).
@@ -916,7 +983,7 @@ pub fn clear_oauth_token_at(root: &Path) -> Result<(), String> {
 /// for users with a broken Secret Service collection (issue #329).
 pub fn save_oauth_token(token: &str) -> Result<(), String> {
     let root = config_qbz_root().ok_or("Could not determine config directory")?;
-    let encrypted = write_oauth_token_file(&root, token)?;
+    let encrypted = write_oauth_token_file(&root, PortalKey::Session, token)?;
     log::info!("[Credentials] OAuth token saved to encrypted file");
 
     if keyring_set(OAUTH_TOKEN_KEY, &encrypted) {
@@ -957,7 +1024,7 @@ pub fn load_oauth_token() -> Result<Option<String>, String> {
 /// use this to read the authoritative copy directly.
 pub fn load_oauth_token_from_file() -> Result<Option<String>, String> {
     match config_qbz_root() {
-        Some(root) => read_oauth_token_file(&root),
+        Some(root) => read_oauth_token_file(&root, PortalKey::Session),
         None => Ok(None),
     }
 }
@@ -990,6 +1057,60 @@ mod tests {
         // isolation: nothing may touch the fixed ~/.config/qbz path — the salt and
         // token files must exist under the given root
         assert!(dir.path().join(".qbz-cred-salt").exists());
+    }
+
+    /// The daemon key must not depend on anything a session provides: whatever
+    /// `save_oauth_token_at` wrote has to come back out under the `Never`
+    /// policy, which is the only policy an init-started daemon can derive.
+    #[test]
+    fn daemon_token_key_is_session_independent() {
+        let dir = tempfile::tempdir().unwrap();
+        let with_portal = derive_key_at(dir.path(), PortalKey::Session).unwrap();
+        let without_portal = derive_key_at(dir.path(), PortalKey::Never).unwrap();
+
+        // No portal is reachable from a test process, so the two keys coincide
+        // here; the assertion that matters is that `Never` is stable and that
+        // the daemon round-trip below rides on it.
+        assert_eq!(with_portal.len(), 32);
+        assert_eq!(
+            derive_key_at(dir.path(), PortalKey::Never).unwrap(),
+            without_portal,
+            "the portal-free key must be reproducible across calls"
+        );
+
+        save_oauth_token_at(dir.path(), "tok_headless").unwrap();
+        let raw = fs::read_to_string(dir.path().join(OAUTH_TOKEN_FILE_NAME)).unwrap();
+        assert_eq!(
+            decrypt_credentials_at(dir.path(), PortalKey::Never, &raw)
+                .unwrap()
+                .email,
+            "tok_headless",
+            "a token saved by the daemon must decrypt with the portal-free key"
+        );
+    }
+
+    /// `load_oauth_token_at` reports "absent" and "undecryptable" alike as
+    /// `None`, so the daemon needs this to tell a first run apart from a token
+    /// it cannot read (the difference between "log in" and "log in AGAIN").
+    #[test]
+    fn oauth_token_file_presence_is_reported_separately() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(!oauth_token_file_present_at(dir.path()));
+
+        write_private_file(&oauth_token_path_at(dir.path()), "   ").unwrap();
+        assert!(
+            !oauth_token_file_present_at(dir.path()),
+            "a blank file is not a saved token"
+        );
+
+        save_oauth_token_at(dir.path(), "tok_present").unwrap();
+        assert!(oauth_token_file_present_at(dir.path()));
+
+        // Garbage that cannot decrypt still counts as present — that is exactly
+        // the case the daemon must surface instead of "no token saved".
+        write_private_file(&oauth_token_path_at(dir.path()), "not-even-json").unwrap();
+        assert!(oauth_token_file_present_at(dir.path()));
+        assert_eq!(load_oauth_token_at(dir.path()).unwrap(), None);
     }
 
     /// Returns true if the config directory is writable (required for encryption salt).

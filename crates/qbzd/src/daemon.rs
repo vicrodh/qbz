@@ -301,6 +301,14 @@ async fn boot(roots: &ProfileRoots, cfg: &QbzdConfig, warn_count: usize) -> Resu
     let auth_retry = match qbz_credentials::load_oauth_token_at(&roots.config)? {
         None => {
             set_needs_auth(&shared, None);
+            // `None` covers both "no token saved" and "token saved but this
+            // process cannot decrypt it" — the decrypt failure is swallowed by
+            // design so a broken file can never abort boot. Tell them apart
+            // here, or `status` reports "not logged in / last error: none" and
+            // the real cause stays buried in the log.
+            if qbz_credentials::oauth_token_file_present_at(&roots.config) {
+                latch_undecryptable_token(&shared);
+            }
             None
         }
         Some(token) => {
@@ -518,6 +526,24 @@ fn set_logged_in(shared: &Arc<Mutex<DaemonShared>>, session: &UserSession) {
         "Logged in (user {}, subscription '{}')",
         session.user_id,
         session.subscription_label
+    );
+}
+
+/// Latch the "saved token is present but undecryptable" case. Reachable when a
+/// token was written under a key this process cannot derive — e.g. a login that
+/// ran in a graphical session against a build that still mixed the XDG portal
+/// secret in, now read by an init-started daemon with no session bus. The
+/// credential store migrates that token itself where it can (a daemon that CAN
+/// reach the portal rewrites it portal-free); when it cannot, the only exit is a
+/// fresh login, so say exactly that instead of a bare "not logged in".
+pub(crate) fn latch_undecryptable_token(shared: &Arc<Mutex<DaemonShared>>) {
+    if let Ok(mut s) = shared.lock() {
+        s.last_errors.auth = Some(
+            "the saved token could not be decrypted by this daemon — run 'qbzd login' to re-authenticate".into(),
+        );
+    }
+    log::warn!(
+        "saved token present but undecryptable — run 'qbzd login' to re-authenticate"
     );
 }
 
