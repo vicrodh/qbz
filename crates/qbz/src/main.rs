@@ -8430,6 +8430,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .global::<AppearanceState>()
         .set_is_macos(cfg!(target_os = "macos"));
 
+    // macOS: extra NPB-Small bottom clearance so the CJK/descender-heavy meta
+    // line clears the window's bottom bezel (owner ask 2026-07-21; the
+    // original 2px proved invisible, 2026-07-22). Rust-side so tuning is a
+    // ~2-minute qbz-bin rebuild instead of a ~2 h qbz-ui one on the 8 GB Mac;
+    // QBZ_NPB_SMALL_EXTRA (logical px) overrides for live experiments.
+    #[cfg(target_os = "macos")]
+    window.global::<ShellState>().set_npb_small_extra(
+        std::env::var("QBZ_NPB_SMALL_EXTRA")
+            .ok()
+            .and_then(|v| v.parse::<f32>().ok())
+            .unwrap_or(6.0),
+    );
+
     let app_runtime = Arc::new(AppRuntime::with_visualizer(SlintAdapter::new(window.as_weak())));
 
     // ImmersiveView audio visualizers: spawn the frontend-agnostic FFT producer

@@ -126,9 +126,10 @@ export component PlayerBarSmall inherits Rectangle {
 
     // One bar, header-height tall: a 3px top seekbar strip + the controls row
     // that fills the rest (no band bump — the large album art defines the height).
-    // macOS: +2px (ShellState.npb-small-height) so the meta line never clips at
-    // the window's bottom edge; the song card below keeps its 39px top-anchored
-    // geometry, so the extra height lands as bottom clearance.
+    // macOS: taller by ShellState.npb-small-extra (Rust-set, default 6px) so
+    // the meta line never clips at the window's bottom edge/bezel; the song
+    // card below keeps its 39px top-anchored geometry, so the extra height
+    // lands as bottom clearance.
     height: ShellState.npb-small-height;
     background: ShellState.app-background-active
         ? Theme.surface-card.with-alpha(AppearanceState.app-background-surface-alpha)
@@ -229,11 +230,11 @@ export component PlayerBarSmall inherits Rectangle {
                     // The wrapper takes the row's vertical stretch; the card
                     // itself is pinned to the pre-2.0.2 39px top-anchored
                     // geometry (Layout.header-height − 3px seekbar) so macOS's
-                    // +2px bar (ShellState.npb-small-height) lands BELOW the
-                    // card: the art keeps its exact top-relative position and
-                    // the meta line gains 2px of bottom clearance (owner ask
-                    // 2026-07-21). Linux: wrapper height == card height →
-                    // pixel-identical to before.
+                    // taller bar (ShellState.npb-small-extra, Rust-set) lands
+                    // BELOW the card: the art keeps its exact top-relative
+                    // position and the meta line gains the extra as bottom
+                    // clearance (owner ask 2026-07-21). Linux: wrapper height
+                    // == card height → pixel-identical to before.
                     Rectangle {
                         horizontal-stretch: 1;
                         SongCard {

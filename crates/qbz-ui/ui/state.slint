@@ -4031,14 +4031,20 @@ export global ShellState {
     // "new"|"classic"|"small"|"large"); set on startup from the store and on the
     // player bar's "Now Playing view" menu select.
     in-out property <int> npb-mode: 0;
-    // Small-mode (2) bar height. macOS-only +2px (owner ask 2026-07-21): the
+    // Small-mode (2) bar extra bottom clearance (owner ask 2026-07-21): the
     // compact bar's CJK/descender-heavy meta line clipped at the window's
-    // bottom edge. The bar is bottom-anchored, so it grows UPWARD;
-    // PlayerBarSmall pins the song card to its old top-anchored geometry so
-    // the art keeps its position and the 2px land as bottom clearance.
+    // bottom edge/bezel on macOS. The bar is bottom-anchored, so it grows
+    // UPWARD; PlayerBarSmall pins the song card to its old top-anchored
+    // geometry so the art keeps its position and the extra lands as bottom
+    // clearance. The AMOUNT is set from Rust at startup (main.rs, macOS-only
+    // — 0 elsewhere; QBZ_NPB_SMALL_EXTRA env override for tuning) because a
+    // .slint literal costs a ~2 h qbz-ui rebuild on the 8 GB Mac per
+    // iteration, a Rust-side constant ~2 min. 2px proved invisible
+    // (2026-07-22).
+    in-out property <length> npb-small-extra: 0px;
     // (42px == Layout.header-height; literal kept so state.slint needs no
     // foundation import — same precedent as large-dock-width below.)
-    out property <length> npb-small-height: 42px + (AppearanceState.is-macos ? 2px : 0px);
+    out property <length> npb-small-height: 42px + root.npb-small-extra;
     // Large NPB (mode 3) is only valid while the sidebar is OPEN (state 0): the
     // cover + spectrum dock lives at the bottom of the open sidebar. Views read
     // this to mount the dock and to drive the FFT visualizer tap.
