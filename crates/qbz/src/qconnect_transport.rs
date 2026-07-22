@@ -232,9 +232,16 @@ pub fn build_set_position_player_state_request(
     }
 }
 
-/// Build the device-info payload with the default friendly name.
+/// Build the device-info payload with the EFFECTIVE friendly name: the persisted
+/// custom device name when one is set, else the default. The persisted name must
+/// win here (not only at the controller-bootstrap call site that threads it
+/// explicitly): with a custom name set, announcing the DEFAULT name from the
+/// renderer join / local identity gives ONE device_uuid TWO friendly names, and
+/// when the server's ADD_RENDERER omits the uuid the name-fingerprint self-match
+/// fails -> `local_renderer_id = None` -> every renderer report is dropped by the
+/// `is_local_renderer_active` gate (mute renderer, frozen controller seekbar).
 pub fn default_qconnect_device_info() -> QconnectDeviceInfoPayload {
-    default_qconnect_device_info_with_name(None)
+    default_qconnect_device_info_with_name(load_persisted_device_name().as_deref())
 }
 
 /// Build the device-info payload, overriding the friendly name when a custom
