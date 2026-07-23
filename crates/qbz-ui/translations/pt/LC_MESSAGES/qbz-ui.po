@@ -4778,3 +4778,23 @@ msgstr "Álbuns mais tocados"
 # Most Played Albums View-all — per-card play count
 msgid "{} plays"
 msgstr "{} reproduções"
+
+# Discover Recommendations — reco-scoped dismissals (Not interested management)
+
+msgid "Dismissed artists only leave your Recommendations — they still appear in search and everywhere else."
+msgstr "Artistas dispensados só saem das suas Recomendações — continuam aparecendo na busca e em todo o resto."
+
+msgid "No dismissed artists"
+msgstr "Nenhum artista dispensado"
+
+msgid "To stop seeing an artist in Recommendations, open its card menu and choose Not interested."
+msgstr "Para deixar de ver um artista em Recomendações, abra o menu do seu cartão e escolha Não tenho interesse."
+
+msgid "{} won't appear in Recommendations anymore"
+msgstr "{} não aparecerá mais em Recomendações"
+
+msgid "Artist dismissed from Recommendations"
+msgstr "Artista dispensado das Recomendações"
+
+msgid "{} restored to Recommendations"
+msgstr "{} restaurado em Recomendações"

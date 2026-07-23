@@ -4766,3 +4766,23 @@ msgstr "最も再生したアルバム"
 # Most Played Albums View-all — per-card play count
 msgid "{} plays"
 msgstr "{} 回再生"
+
+# Discover Recommendations — reco-scoped dismissals (Not interested management)
+
+msgid "Dismissed artists only leave your Recommendations — they still appear in search and everywhere else."
+msgstr "除外したアーティストは「おすすめ」からのみ消えます — 検索やその他の場所には引き続き表示されます。"
+
+msgid "No dismissed artists"
+msgstr "除外したアーティストはいません"
+
+msgid "To stop seeing an artist in Recommendations, open its card menu and choose Not interested."
+msgstr "おすすめにアーティストを表示しないようにするには、そのカードのメニューを開いて「興味なし」を選んでください。"
+
+msgid "{} won't appear in Recommendations anymore"
+msgstr "{} はおすすめに表示されなくなります"
+
+msgid "Artist dismissed from Recommendations"
+msgstr "アーティストをおすすめから除外しました"
+
+msgid "{} restored to Recommendations"
+msgstr "{} をおすすめに復元しました"

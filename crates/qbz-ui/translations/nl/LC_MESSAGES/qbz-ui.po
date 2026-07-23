@@ -4790,3 +4790,23 @@ msgstr "Meest afgespeelde albums"
 # Most Played Albums View-all — per-card play count
 msgid "{} plays"
 msgstr "{} keer afgespeeld"
+
+# Discover Recommendations — reco-scoped dismissals (Not interested management)
+
+msgid "Dismissed artists only leave your Recommendations — they still appear in search and everywhere else."
+msgstr "Afgewezen artiesten verdwijnen alleen uit je Aanbevelingen — ze blijven zichtbaar in zoekresultaten en overal elders."
+
+msgid "No dismissed artists"
+msgstr "Geen afgewezen artiesten"
+
+msgid "To stop seeing an artist in Recommendations, open its card menu and choose Not interested."
+msgstr "Om een artiest niet meer in Aanbevelingen te zien, open je het kaartmenu en kies je Niet geïnteresseerd."
+
+msgid "{} won't appear in Recommendations anymore"
+msgstr "{} verschijnt niet meer in Aanbevelingen"
+
+msgid "Artist dismissed from Recommendations"
+msgstr "Artiest afgewezen voor Aanbevelingen"
+
+msgid "{} restored to Recommendations"
+msgstr "{} hersteld in Aanbevelingen"
