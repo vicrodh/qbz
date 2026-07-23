@@ -4962,6 +4962,23 @@ fn reseed_i18n_labels(window: &AppWindow) {
         t("Lite"),
         t("Off"),
     ])));
+    // Lyrics translation-language options (v10): the Auto label is @tr'd,
+    // the language names are native literals — the same convention as
+    // `languages` above.
+    window.global::<LyricsState>().set_translation_language_options(ModelRc::new(
+        VecModel::from(vec![
+            t("Auto (account language)"),
+            "English".into(),
+            "Español".into(),
+            "Français".into(),
+            "Deutsch".into(),
+            "Italiano".into(),
+            "Português".into(),
+            "Nederlands".into(),
+            "日本語".into(),
+            "Русский".into(),
+        ]),
+    ));
     // Cast picker: per-renderer cap options (#638 fix 4) — option 0 embeds
     // the live global streaming-quality label, so this also re-reads
     // ui_prefs (the Settings streaming-quality arm re-pushes on change).
@@ -14128,6 +14145,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let weak = window.as_weak();
         window.global::<LyricsState>().on_copy_lyrics(move || {
             lyrics::copy_current_lyrics(&weak);
+        });
+    }
+    {
+        // Translation toggle (Qobuz v10, sidebar floating button). OFF is
+        // pure UI (no network); ON resolves the target language and refetches
+        // the current track's lyrics with it — any gap toasts and reverts
+        // inside lyrics::enable_translation / translation_unavailable.
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window.global::<LyricsState>().on_toggle_translation(move || {
+            if lyrics::translation_enabled() {
+                lyrics::disable_translation(&weak);
+                return;
+            }
+            let runtime = runtime.clone();
+            let weak = weak.clone();
+            handle.spawn(async move {
+                let state = runtime.core().get_queue_state().await;
+                match state.current_track {
+                    Some(track) => lyrics::enable_translation(weak, &track),
+                    None => lyrics::translation_unavailable(&weak),
+                }
+            });
         });
     }
     {

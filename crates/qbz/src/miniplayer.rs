@@ -607,6 +607,9 @@ fn mirror_lyrics_gated(main: &AppWindow, mini: &MiniPlayerWindow) {
     d.set_active_index(s.get_active_index());
     d.set_line_progress(s.get_line_progress());
     d.set_fill_anim_ms(s.get_fill_anim_ms());
+    // Translation toggle (v10): the mini surface has no button of its own —
+    // it follows the sidebar's bilingual state through the shared model.
+    d.set_show_translation(s.get_show_translation());
     refresh_mini_segments(&d);
 
     // Gate the lines-model copy on (status, line-count) so we don't thrash the
