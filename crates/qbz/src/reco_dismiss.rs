@@ -126,8 +126,9 @@ pub fn dismiss(artist_id: u64, name: &str, image_url: &str) {
         return;
     }
     let mut store = load_store();
-    match store.artists.iter_mut().find(|a| a.artist_id == artist_id) {
-        Some(existing) => {
+    match store.artists.iter().position(|a| a.artist_id == artist_id) {
+        Some(idx) => {
+            let existing = &mut store.artists[idx];
             if existing.name.is_empty() && !name.is_empty() {
                 existing.name = name.to_string();
             }
