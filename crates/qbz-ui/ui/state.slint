@@ -4555,6 +4555,25 @@ export global LyricsState {
     // between line changes). Default false (smooth karaoke). Kiosk / weak-GPU
     // tiers force it on via ShellState.reduce-motion regardless of this pref.
     in-out property <bool> lite-fill: false;
+    // Translation language (Qobuz v10, persisted like the other prefs):
+    // 0 Auto (account language) · 1..9 = en es fr de it pt nl ja ru. Option
+    // labels: the Auto entry is @tr'd, the language names are native
+    // literals — the same convention as AppearanceState.languages. The @tr
+    // DEFAULT is not reactive, so `reseed_i18n_labels` re-pushes the array
+    // on language change.
+    in-out property <int> translation-language-index: 0;
+    in-out property <[string]> translation-language-options: [
+        @tr("Auto (account language)"),
+        "English",
+        "Español",
+        "Français",
+        "Deutsch",
+        "Italiano",
+        "Português",
+        "Nederlands",
+        "日本語",
+        "Русский",
+    ];
     // Active (karaoke fill) color. `use-custom-color: false` = follow the theme
     // accent (Tauri activeColor: ''). The palette swatches set both (deviation
     // D6: swatches instead of a native color input — Slint has none).

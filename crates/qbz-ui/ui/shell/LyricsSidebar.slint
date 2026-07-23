@@ -176,9 +176,10 @@ export component LyricsSidebar inherits Rectangle {
                         x: 32px + 8px + 28px - 260px;
                         y: 32px + 8px;
                         width: 260px;
-                        // padding 28 + rows (22+30+30+44+22+30+34 = 212) +
-                        // spacing 12 x 6 = 72.
-                        height: 312px;
+                        // padding 28 + rows (22+30+30+30+44+22+22+30+34 =
+                        // 264, incl. lite-fill + translation language) +
+                        // spacing 12 x 8 = 96.
+                        height: 388px;
                         close-policy: PopupClosePolicy.close-on-click-outside;
                         LyricsControlsPanel { }
                     }

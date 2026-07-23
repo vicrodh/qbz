@@ -8,7 +8,9 @@
 // so Tauri's segmented S/M/L/XL and Off/Soft/Strong rows become selects).
 //
 // Row order is Tauri's exactly: Auto-follow / Font / Size / Active color /
-// Uppercase / Dimming / footer (Copy lyrics + Reset).
+// Uppercase / Dimming / footer (Copy lyrics + Reset) — plus two Slint-side
+// additions in order: Translation language (v10, after Size) and Lite fill
+// (perf, after Uppercase).
 //
 // Deviations (spec §6): D6 — active color is a fixed swatch palette (Slint
 // has no native color-picker input); the "Theme" reset link shows only while
@@ -127,6 +129,25 @@ export component LyricsControlsPanel inherits Rectangle {
                 current-index: LyricsState.size-index;
                 selected(i) => {
                     LyricsState.size-index = i;
+                    LyricsState.prefs-changed();
+                }
+            }
+        }
+
+        // Translation language (Qobuz v10) — Auto (account language) + the
+        // 9 approved ISO 639-1 targets; options reseeded from Rust on
+        // language change (the array carries one @tr'd label).
+        HorizontalLayout {
+            height: 30px;
+            spacing: 8px;
+            RowLabel { text: @tr("Translation language"); }
+            QbzSelect {
+                sm: true;
+                menu-width: 178px;
+                options: LyricsState.translation-language-options;
+                current-index: LyricsState.translation-language-index;
+                selected(i) => {
+                    LyricsState.translation-language-index = i;
                     LyricsState.prefs-changed();
                 }
             }

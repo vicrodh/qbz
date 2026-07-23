@@ -56,6 +56,10 @@ pub struct LyricsPrefs {
     /// karaoke sweep, so the lyrics surface stops driving continuous repaints.
     #[serde(default)]
     pub lite_fill: bool,
+    /// Translation target (Qobuz v10): "auto" (account language, UI-locale
+    /// fallback) or an explicit ISO 639-1 code from [`TRANSLATION_LANGS`].
+    #[serde(default = "d_translation_lang")]
+    pub translation_language: String,
 }
 
 fn d_true() -> bool {
@@ -70,6 +74,9 @@ fn d_size() -> String {
 fn d_dimming() -> String {
     "strong".to_string()
 }
+fn d_translation_lang() -> String {
+    "auto".to_string()
+}
 
 impl Default for LyricsPrefs {
     /// Tauri defaults (`lyricsDisplayStore.ts:37-44`).
@@ -82,6 +89,7 @@ impl Default for LyricsPrefs {
             active_color: String::new(),
             uppercase: false,
             lite_fill: false,
+            translation_language: d_translation_lang(),
         }
     }
 }
@@ -89,6 +97,11 @@ impl Default for LyricsPrefs {
 const FONTS: [&str; 5] = ["system", "line-seed-jp", "montserrat", "noto-sans", "source-sans-3"];
 const SIZES: [&str; 4] = ["small", "medium", "large", "xl"];
 const DIMMINGS: [&str; 3] = ["off", "soft", "strong"];
+/// Translation targets (owner-approved list, spec §Decisions.2): "auto" +
+/// the observed `translation_langs` ∪ app UI locales. Order matches the
+/// flyout's `translation-language-options` (Auto, en es fr de it pt nl ja ru).
+const TRANSLATION_LANGS: [&str; 10] =
+    ["auto", "en", "es", "fr", "de", "it", "pt", "nl", "ja", "ru"];
 
 /// `#RRGGBB` (or empty = theme) — the Tauri validator
 /// (`lyricsDisplayStore.ts:46-52`).
@@ -114,6 +127,9 @@ impl LyricsPrefs {
         }
         if !valid_color(&self.active_color) {
             self.active_color.clear();
+        }
+        if !TRANSLATION_LANGS.contains(&self.translation_language.as_str()) {
+            self.translation_language = d_translation_lang();
         }
         self
     }
@@ -188,6 +204,13 @@ fn dimming_index(dimming: &str) -> i32 {
     DIMMINGS.iter().position(|d| *d == dimming).unwrap_or(2) as i32
 }
 
+fn translation_lang_index(lang: &str) -> i32 {
+    TRANSLATION_LANGS
+        .iter()
+        .position(|l| *l == lang)
+        .unwrap_or(0) as i32
+}
+
 fn parse_color(hex: &str) -> Option<slint::Color> {
     if hex.len() != 7 || !hex.starts_with('#') {
         return None;
@@ -218,6 +241,7 @@ pub fn apply_to_ui(window: &AppWindow, prefs: &LyricsPrefs) {
         None => state.set_use_custom_color(false),
     }
     state.set_lite_fill(prefs.lite_fill);
+    state.set_translation_language_index(translation_lang_index(&prefs.translation_language));
 }
 
 /// Read the in-out props back into a pref set and persist — the
@@ -248,6 +272,11 @@ pub fn persist_from_ui(window: &AppWindow) {
         },
         uppercase: state.get_uppercase(),
         lite_fill: state.get_lite_fill(),
+        translation_language: TRANSLATION_LANGS
+            .get(state.get_translation_language_index().max(0) as usize)
+            .copied()
+            .unwrap_or("auto")
+            .to_string(),
     };
     save(&prefs);
 }
@@ -273,6 +302,7 @@ mod tests {
         assert_eq!(p.dimming, "strong");
         assert_eq!(p.active_color, "");
         assert!(!p.uppercase);
+        assert_eq!(p.translation_language, "auto");
     }
 
     #[test]
@@ -291,6 +321,7 @@ mod tests {
             active_color: "purple".into(),
             uppercase: true,
             lite_fill: false,
+            translation_language: "klingon".into(),
         }
         .sanitized();
         assert!(!p.auto_follow); // bools pass through
@@ -299,6 +330,8 @@ mod tests {
         assert_eq!(p.font_size, "medium");
         assert_eq!(p.dimming, "strong");
         assert_eq!(p.active_color, "");
+        // Unknown translation language falls back to Auto.
+        assert_eq!(p.translation_language, "auto");
     }
 
     #[test]
@@ -311,12 +344,14 @@ mod tests {
             active_color: "#8b5cf6".into(),
             uppercase: false,
             lite_fill: true,
+            translation_language: "it".into(),
         }
         .sanitized();
         assert_eq!(p.font, "line-seed-jp");
         assert_eq!(p.font_size, "xl");
         assert_eq!(p.dimming, "off");
         assert_eq!(p.active_color, "#8b5cf6");
+        assert_eq!(p.translation_language, "it");
     }
 
     #[test]
@@ -340,10 +375,14 @@ mod tests {
         for (i, d) in DIMMINGS.iter().enumerate() {
             assert_eq!(dimming_index(d), i as i32);
         }
+        for (i, l) in TRANSLATION_LANGS.iter().enumerate() {
+            assert_eq!(translation_lang_index(l), i as i32);
+        }
         // Unknowns fall back to the defaults' indices.
         assert_eq!(font_index("nope"), 0);
         assert_eq!(size_index("nope"), 1);
         assert_eq!(dimming_index("nope"), 2);
+        assert_eq!(translation_lang_index("nope"), 0);
     }
 
     #[test]
