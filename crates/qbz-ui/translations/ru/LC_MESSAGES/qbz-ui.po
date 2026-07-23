@@ -4699,6 +4699,12 @@ msgstr "Эксклюзивный доступ к ЦАП (bit-perfect)"
 msgid "Recommended for exclusive mode: lets QBZ ask PipeWire to hand over the DAC cleanly (D-Bus device reservation)."
 msgstr "Рекомендуется для эксклюзивного режима: позволяет QBZ попросить PipeWire корректно освободить ЦАП (резервирование устройства через D-Bus)."
 
+msgid "ALSA direct / exclusive DAC access"
+msgstr "ALSA напрямую / эксклюзивный доступ к ЦАП"
+
+msgid "Exclusive mode silently falls back to PipeWire without this grant: the sandbox cannot see the sound hardware (/dev/snd), so even with ALSA + hw + Exclusive selected other apps still mix through the DAC. Grants direct device access; restart QBZ afterwards."
+msgstr "Без этого разрешения эксклюзивный режим незаметно переключается на PipeWire: песочница не видит звуковое оборудование (/dev/snd), поэтому даже при выбранном ALSA + hw + Exclusive другие приложения продолжают микшировать через ЦАП. Даёт прямой доступ к устройству; после этого перезапустите QBZ."
+
 msgid "Music on NAS or external drives"
 msgstr "Музыка на NAS или внешних дисках"
 

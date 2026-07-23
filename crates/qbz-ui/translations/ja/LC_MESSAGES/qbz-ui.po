@@ -4673,6 +4673,12 @@ msgstr "DAC 排他アクセス（ビットパーフェクト）"
 msgid "Recommended for exclusive mode: lets QBZ ask PipeWire to hand over the DAC cleanly (D-Bus device reservation)."
 msgstr "排他モードに推奨：PipeWire に DAC のクリーンな引き渡しを要求できます（D-Bus デバイス予約）。"
 
+msgid "ALSA direct / exclusive DAC access"
+msgstr "ALSA 直接 / DAC 排他アクセス"
+
+msgid "Exclusive mode silently falls back to PipeWire without this grant: the sandbox cannot see the sound hardware (/dev/snd), so even with ALSA + hw + Exclusive selected other apps still mix through the DAC. Grants direct device access; restart QBZ afterwards."
+msgstr "この権限がないと、排他モードは通知なく PipeWire にフォールバックします。サンドボックスからサウンドハードウェア（/dev/snd）が見えないため、ALSA + hw + Exclusive を選択していても他のアプリが DAC 経由で音をミックスし続けます。デバイスへの直接アクセスを許可します。実行後に QBZ を再起動してください。"
+
 msgid "Music on NAS or external drives"
 msgstr "NAS や外部ドライブの音楽"
 

@@ -1,9 +1,9 @@
 //! Share-link helpers — Qobuz track URL + Song.link (Odesli) resolution
 //! + clipboard copy. Used by the track context menu's Share actions.
 
-/// Canonical Qobuz track URL (the same form Tauri feeds to Song.link).
+/// Canonical Qobuz track URL — the `open.qobuz.com` share form (#514).
 pub fn qobuz_track_url(track_id: &str) -> String {
-    format!("https://www.qobuz.com/track/{track_id}")
+    format!("https://open.qobuz.com/track/{track_id}")
 }
 
 /// Qobuz web-player playlist URL (matches Tauri's share-playlist link).
@@ -11,11 +11,11 @@ pub fn qobuz_playlist_url(playlist_id: &str) -> String {
     format!("https://play.qobuz.com/playlist/{playlist_id}")
 }
 
-/// Qobuz web-player album URL (matches Tauri's `shareAlbumQobuzLink`,
-/// `https://play.qobuz.com/album/{id}`). Also the source URL fed to
-/// Song.link for the album-level "Album.link".
+/// Qobuz album URL — the `open.qobuz.com` form (#514; Tauri's
+/// `shareAlbumQobuzLink` used `https://play.qobuz.com/album/{id}`). Also
+/// the source URL fed to Song.link for the album-level "Album.link".
 pub fn qobuz_album_url(album_id: &str) -> String {
-    format!("https://play.qobuz.com/album/{album_id}")
+    format!("https://open.qobuz.com/album/{album_id}")
 }
 
 /// Qobuz web-player artist URL (header Share action).

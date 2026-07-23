@@ -4715,6 +4715,12 @@ msgstr "Acceso exclusivo al DAC (bit-perfect)"
 msgid "Recommended for exclusive mode: lets QBZ ask PipeWire to hand over the DAC cleanly (D-Bus device reservation)."
 msgstr "Recomendado para el modo exclusivo: permite que QBZ le pida a PipeWire que entregue el DAC limpiamente (reserva de dispositivo por D-Bus)."
 
+msgid "ALSA direct / exclusive DAC access"
+msgstr "Acceso ALSA directo / exclusivo al DAC"
+
+msgid "Exclusive mode silently falls back to PipeWire without this grant: the sandbox cannot see the sound hardware (/dev/snd), so even with ALSA + hw + Exclusive selected other apps still mix through the DAC. Grants direct device access; restart QBZ afterwards."
+msgstr "Sin este permiso, el modo exclusivo recurre silenciosamente a PipeWire: el sandbox no puede ver el hardware de sonido (/dev/snd), así que incluso con ALSA + hw + Exclusivo seleccionado otras aplicaciones siguen mezclando a través del DAC. Da acceso directo al dispositivo; reinicia QBZ después."
+
 msgid "Music on NAS or external drives"
 msgstr "Música en NAS o discos externos"
 
