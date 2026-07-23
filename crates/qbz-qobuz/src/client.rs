@@ -13,7 +13,7 @@ use super::bundle::{self, BundleTokens};
 use super::endpoints::{self, paths};
 use super::error::{ApiError, Result};
 use super::forbidden_breaker::ForbiddenBreaker;
-use super::lyrics::{QobuzLyricsDocument, QobuzLyricsUrls};
+use super::lyrics::{QobuzLyricsContent, QobuzLyricsDocument, QobuzLyricsUrls};
 use qbz_models::*;
 
 const USER_AGENT: &str = "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0";
@@ -1397,14 +1397,27 @@ impl QobuzClient {
     /// client, so this is the only way diagnostic tooling (e.g.
     /// `examples/lyrics_probe.rs`) can observe the exact wire shape; the
     /// typed [`Self::get_lyrics_url`] builds on it.
-    pub async fn get_lyrics_url_raw(&self, track_id: u64) -> Result<(u16, String)> {
+    ///
+    /// `language` (ISO 639-1, API v10) requests a translation; it is appended
+    /// to the signed param list ONLY when `Some` (`sign_request` sorts the
+    /// kv pairs alphabetically, so signing needs no change). Pass `None` for
+    /// the original-only fetch.
+    pub async fn get_lyrics_url_raw(
+        &self,
+        track_id: u64,
+        language: Option<&str>,
+    ) -> Result<(u16, String)> {
         let url = endpoints::build_url(paths::TRACK_LYRICS_URL);
         // Signing method name per the concatenation convention ("trackget" at
         // get_track, "trackgetFileUrl" in auth.rs): path with slashes removed,
         // case preserved -> "tracklyricsUrl". Verified against the live API
         // 2026-06-10 (HTTP 200 with a valid envelope).
+        let mut params = vec![("track_id", track_id.to_string())];
+        if let Some(language) = language {
+            params.push(("language", language.to_string()));
+        }
         let response = self
-            .signed_get_auth(&url, "tracklyricsUrl", &[("track_id", track_id.to_string())])
+            .signed_get_auth(&url, "tracklyricsUrl", &params)
             .await?;
         let status = response.status().as_u16();
         let body = response.text().await?;
@@ -1418,8 +1431,12 @@ impl QobuzClient {
     /// `Err` is reserved for transport/auth/offline failures — the lyrics
     /// orchestrator degrades those to a miss as well (spec §1.1); nothing in
     /// this path is ever a user-facing error.
-    pub async fn get_lyrics_url(&self, track_id: u64) -> Result<Option<QobuzLyricsUrls>> {
-        let (status, body) = self.get_lyrics_url_raw(track_id).await?;
+    pub async fn get_lyrics_url(
+        &self,
+        track_id: u64,
+        language: Option<&str>,
+    ) -> Result<Option<QobuzLyricsUrls>> {
+        let (status, body) = self.get_lyrics_url_raw(track_id, language).await?;
         if status != 200 {
             // Live-observed miss: HTTP 404 with body
             // {"status":"error","code":404,"message":"No lyrics found"}
@@ -1460,12 +1477,23 @@ impl QobuzClient {
     /// 200 on a bare GET). `Ok(None)` = typed miss, same contract as
     /// [`Self::get_lyrics_url`]; a document without `original` content also
     /// counts as a miss.
-    pub async fn get_lyrics(&self, track_id: u64) -> Result<Option<QobuzLyricsDocument>> {
-        let urls = match self.get_lyrics_url(track_id).await? {
+    ///
+    /// `language` (ISO 639-1, API v10) requests a translation; `None` fetches
+    /// original-only (the default flow). When a translation was requested but
+    /// the document does not EMBED a `translation` block, the envelope's
+    /// `translation_requested.lyrics_url` is fetched as a fallback and its
+    /// content becomes the translation (fail soft: any gap in that fallback
+    /// just leaves the document original-only).
+    pub async fn get_lyrics(
+        &self,
+        track_id: u64,
+        language: Option<&str>,
+    ) -> Result<Option<QobuzLyricsDocument>> {
+        let urls = match self.get_lyrics_url(track_id, language).await? {
             Some(urls) => urls,
             None => return Ok(None),
         };
-        let lyrics_url = match urls.lyrics_url {
+        let lyrics_url = match urls.lyrics_url.clone() {
             Some(url) => url,
             None => return Ok(None),
         };
@@ -1482,7 +1510,14 @@ impl QobuzClient {
         }
         let body = response.text().await?;
         match serde_json::from_str::<QobuzLyricsDocument>(&body) {
-            Ok(doc) if doc.original.is_some() => Ok(Some(doc)),
+            Ok(mut doc) if doc.original.is_some() => {
+                if language.is_some() && doc.translation.is_none() {
+                    doc.translation = self
+                        .fetch_translation_fallback(track_id, &urls)
+                        .await;
+                }
+                Ok(Some(doc))
+            }
             Ok(_) => {
                 log::debug!(
                     "[API] get_lyrics({}) document without original content -> no lyrics",
@@ -1497,6 +1532,45 @@ impl QobuzClient {
                     e
                 );
                 Ok(None)
+            }
+        }
+    }
+
+    /// Fallback translation source (spec §B.3): when the main document did
+    /// not embed a `translation` block, fetch the document the envelope's
+    /// `translation_requested.lyrics_url` points at (same bare CDN GET) and
+    /// take its content as the translation. Every failure mode degrades to
+    /// `None` — translation is best-effort, never an error.
+    async fn fetch_translation_fallback(
+        &self,
+        track_id: u64,
+        urls: &QobuzLyricsUrls,
+    ) -> Option<QobuzLyricsContent> {
+        let translation_url = urls
+            .translation_requested
+            .as_ref()
+            .and_then(|t| t.lyrics_url.as_deref())?;
+        let response = self.http().ok()?.get(translation_url).send().await.ok()?;
+        if !response.status().is_success() {
+            log::debug!(
+                "[API] get_lyrics({}) translation doc status={} -> original only",
+                track_id,
+                response.status()
+            );
+            return None;
+        }
+        let body = response.text().await.ok()?;
+        match serde_json::from_str::<QobuzLyricsDocument>(&body) {
+            // The translation document carries its content under `original`
+            // (same wrapper shape as the main document).
+            Ok(doc) => doc.original,
+            Err(e) => {
+                log::debug!(
+                    "[API] get_lyrics({}) unparsable translation doc ({}) -> original only",
+                    track_id,
+                    e
+                );
+                None
             }
         }
     }

@@ -6,8 +6,12 @@
 //! `qbz-nix-docs/qobuz-api/` before freezing the serde structs.
 //!
 //! Usage:
-//!   cargo run -p qbz-qobuz --example lyrics_probe            # default track ids
-//!   cargo run -p qbz-qobuz --example lyrics_probe 123 456    # explicit ids
+//!   cargo run -p qbz-qobuz --example lyrics_probe                     # default track ids
+//!   cargo run -p qbz-qobuz --example lyrics_probe 123 456             # explicit ids
+//!   cargo run -p qbz-qobuz --example lyrics_probe --lang=es 123       # + translation target
+//!
+//! `--lang=<iso639-1>` exercises the v10 `language` query param (translation
+//! request); omitted = original-only fetch.
 //!
 //! Strictly read-only: login + GETs, no mutations.
 
@@ -41,15 +45,23 @@ const DEFAULT_TRACK_IDS: &[u64] = &[266725027, 29006863, 34];
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _ = log::set_logger(&LOGGER).map(|_| log::set_max_level(log::LevelFilter::Debug));
 
-    let args: Vec<u64> = std::env::args()
-        .skip(1)
-        .filter_map(|a| a.parse().ok())
-        .collect();
-    let track_ids: Vec<u64> = if args.is_empty() {
+    let mut language: Option<String> = None;
+    let mut ids: Vec<u64> = Vec::new();
+    for arg in std::env::args().skip(1) {
+        if let Some(lang) = arg.strip_prefix("--lang=") {
+            language = Some(lang.to_string());
+        } else if let Ok(id) = arg.parse() {
+            ids.push(id);
+        }
+    }
+    let track_ids: Vec<u64> = if ids.is_empty() {
         DEFAULT_TRACK_IDS.to_vec()
     } else {
-        args
+        ids
     };
+    if let Some(lang) = &language {
+        eprintln!("[probe] translation target language: {}", lang);
+    }
 
     let client = QobuzClient::new()?;
     let warm = client.init().await?;
@@ -135,7 +147,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         // Step 1 raw: signed GET /track/lyricsUrl
-        let (status, body) = match client.get_lyrics_url_raw(track_id).await {
+        let (status, body) = match client.get_lyrics_url_raw(track_id, language.as_deref()).await {
             Ok(pair) => pair,
             Err(e) => {
                 println!("[lyricsUrl] transport error: {}", e);
@@ -146,7 +158,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("[lyricsUrl] raw body:\n{}", body);
 
         // Typed step 1
-        let urls = match client.get_lyrics_url(track_id).await {
+        let urls = match client.get_lyrics_url(track_id, language.as_deref()).await {
             Ok(Some(urls)) => urls,
             Ok(None) => {
                 println!("[lyricsUrl] typed result: MISS (no lyrics)");
@@ -179,7 +191,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         // Typed full chain
-        match client.get_lyrics(track_id).await {
+        match client.get_lyrics(track_id, language.as_deref()).await {
             Ok(Some(doc)) => {
                 let content = doc.original.as_ref().expect("get_lyrics guarantees original");
                 println!(
@@ -189,6 +201,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     doc.translation_langs,
                     doc.writers
                 );
+                match doc.translation.as_ref() {
+                    Some(translation) => println!(
+                        "[get_lyrics] embedded translation: {} with {} lines (lang: {:?})",
+                        if translation.is_synced() { "SYNCED" } else { "PLAIN" },
+                        translation.line_count(),
+                        translation.lang()
+                    ),
+                    None => println!("[get_lyrics] no embedded translation"),
+                }
             }
             Ok(None) => println!("[get_lyrics] typed result: MISS"),
             Err(e) => println!("[get_lyrics] typed error: {}", e),
