@@ -40,6 +40,7 @@ mod glibc_compat;
 mod log_viewer;
 mod sleep_timer;
 pub use qbz_text_utils::{dates, strip_html};
+mod deep_link;
 mod discover_browse;
 mod discord_rpc;
 mod discover_prefs;
@@ -352,6 +353,17 @@ async fn enter_shell(
 ) {
     let tray = init_shell_for_user(&runtime, &weak, session.user_id);
 
+    // Deep links (argv capture / warm D-Bus OpenUrl) may now drain: the
+    // session is active and the AppWindow exists. Bound here at the top; the
+    // pending URL itself is dispatched at the very END of this function so
+    // the startup-page/view restore below can't re-root over the deep link.
+    deep_link::bind_shell_ctx(
+        runtime.clone(),
+        weak.clone(),
+        tokio::runtime::Handle::current(),
+        image_cache.clone(),
+    );
+
     let _ = weak.upgrade_in_event_loop(move |w| {
         let state = w.global::<SessionState>();
         state.set_user_name(session.display_name.into());
@@ -660,6 +672,14 @@ async fn enter_shell(
     let _ = weak.upgrade_in_event_loop(move |w| {
         favorites::apply_counts(&w, counts);
     });
+
+    // XDG deep link: drain a pending Qobuz URL LAST — after the startup-page
+    // / view-restore block above, so the restore can't re-root over the deep
+    // link (the navigation lands on top of whatever was restored). Session
+    // active, AppWindow alive: no readiness sleep needed. Nothing pending =>
+    // no-op. (Offline entries never reach here — enter_shell_offline keeps
+    // the URL pending; navigation needs the API.)
+    deep_link::drain_pending();
 }
 
 /// Offline session entry — "Start offline" on the login screen (spec §4.1).
@@ -8073,6 +8093,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             std::env::var("SLINT_SCALE_FACTOR").unwrap_or_default()
         );
     }
+
+    // XDG deep link (Exec=qbz %u): capture a Qobuz link from argv BEFORE the
+    // single-instance guard below — a second launch must read its own argv
+    // before deciding to raise the primary and exit (the guard forwards the
+    // stashed URL over D-Bus; as primary it drains at the end of enter_shell).
+    deep_link::capture_argv();
     // Artwork decode targets grow with the preset so covers stay sharp at
     // Large/XL (and shrink RAM at Small). Set before any artwork job runs.
     crate::artwork::set_ui_scale_factor(ui_scale_factor);
@@ -10566,6 +10592,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         window.on_logout(move || {
             // Drop any Discord "now listening" activity on logout.
             discord_rpc::clear(&handle);
+            // Back at the login screen a pending deep link must wait for the
+            // next enter_shell, not fire into the torn-down session.
+            deep_link::clear_shell_ctx();
             // Clear the per-user purchases cache + download-status store so the
             // next account never sees the previous user's purchased items or
             // in-flight download statuses (cross-account data leak).
