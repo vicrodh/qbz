@@ -5,8 +5,12 @@
 //
 // Flatpak rows: exclusive-DAC D-Bus reservation (the user-side fix for
 // discussion #641 — the Flathub manifest can't carry the wildcard own-name,
-// so the user grants it locally via `flatpak override`) and filesystem
-// access for NAS/external music libraries. Discord's IPC override stays in
+// so the user grants it locally via `flatpak override`), direct sound-device
+// access (the user-side fix for #652 — without /dev/snd inside the sandbox
+// an ALSA "exclusive" output can't open hw:X,0 and silently falls back to
+// PipeWire; the owner decided against a manifest change to avoid Flathub
+// reviewer friction) and filesystem access for NAS/external music
+// libraries. Discord's IPC override stays in
 // Integrations (already there). Snap rows: the audio interface connections
 // from the Tauri section (snap name is `qbz-player`).
 //
@@ -135,6 +139,15 @@ export component SandboxSettings inherits VerticalLayout {
         }
         CommandBlock {
             command: "flatpak override --user --own-name=org.freedesktop.ReserveDevice1.* com.blitzfc.qbz";
+        }
+        Rectangle { height: 8px; }
+
+        RowTitle { text: @tr("ALSA direct / exclusive DAC access"); }
+        RowNote {
+            text: @tr("Exclusive mode silently falls back to PipeWire without this grant: the sandbox cannot see the sound hardware (/dev/snd), so even with ALSA + hw + Exclusive selected other apps still mix through the DAC. Grants direct device access; restart QBZ afterwards.");
+        }
+        CommandBlock {
+            command: "flatpak override --user --device=all com.blitzfc.qbz";
         }
         Rectangle { height: 8px; }
 
