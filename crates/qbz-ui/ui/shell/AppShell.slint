@@ -235,8 +235,16 @@ export component AppShell inherits Rectangle {
         background: #000000.with-alpha(AppearanceState.app-background-dim);
     }
 
-    // Bottom layer: catches the mouse back / forward buttons for history
-    // navigation. Declared first so the real UI sits on top of it.
+    // Bottom layer: catches the mouse back / forward buttons AND two-finger
+    // horizontal touchpad swipes for history navigation (#653). Declared
+    // first so the real UI sits on top of it: a scroll event only reaches
+    // this layer when nothing above consumed it — a horizontal carousel
+    // Flickable accepts horizontal deltas (carousel keeps scrolling, no
+    // navigation fires), while a vertical-only page scroller REJECTS
+    // horizontal-only deltas (orthogonal direction, see Flickable's
+    // is_allowed_scroll_direction) and they fall through to here. The
+    // handler always returns EventResult.reject, so no scroll routing
+    // changes anywhere in the shell.
     TouchArea {
         pointer-event(e) => {
             if (e.kind == PointerEventKind.down) {
@@ -247,6 +255,60 @@ export component AppShell inherits Rectangle {
                     NavState.request-forward();
                 }
             }
+        }
+
+        // Swipe gesture accumulation: one navigation per gesture. Deltas
+        // arrive as pointer scroll events (Wayland/X11 touchpad). Slint's
+        // PointerScrollEvent carries no phase, so the gesture boundary is
+        // approximated: idle timeout (swipe-idle) + direction flips reset
+        // the accumulator, and `swipe-fired` suppresses re-triggers until
+        // the gesture goes idle.
+        property <length> swipe-accum: 0px;
+        property <bool> swipe-fired: false;
+        swipe-idle := Timer {
+            interval: 300ms;
+            triggered => {
+                swipe-accum = 0px;
+                swipe-fired = false;
+                swipe-idle.stop();
+            }
+        }
+        scroll-event(e) => {
+            // Only clearly horizontal-dominant deltas count toward the
+            // gesture; vertical scroll jitter is ignored.
+            if (e.delta-x != 0 && Math.abs(e.delta-x) > Math.abs(e.delta-y)) {
+                // A direction flip starts a fresh gesture.
+                if (swipe-accum != 0 && (swipe-accum > 0) != (e.delta-x > 0)) {
+                    swipe-accum = e.delta-x;
+                    swipe-fired = false;
+                } else {
+                    swipe-accum += e.delta-x;
+                }
+                swipe-idle.restart();
+                // 70 logical px total — high enough that resting fingers or
+                // small trackpad noise never trip it, low enough that a
+                // deliberate swipe crosses it in one motion.
+                if (!swipe-fired && Math.abs(swipe-accum) >= 70px) {
+                    // DIRECTION (macOS/GNOME natural-scrolling convention):
+                    // fingers RIGHT = back, fingers LEFT = forward. With
+                    // libinput natural scrolling ON (GNOME default) fingers
+                    // right yields NEGATIVE delta-x, hence the signs below.
+                    // Under non-natural scrolling the mapping feels inverted
+                    // — accepted trade-off (distro scroll-direction setting
+                    // is not visible to the app).
+                    if (swipe-accum < 0 && NavState.can-back) {
+                        NavState.request-back();
+                    }
+                    if (swipe-accum > 0 && NavState.can-forward) {
+                        NavState.request-forward();
+                    }
+                    swipe-fired = true;
+                    swipe-accum = 0px;
+                }
+            }
+            // Never consume the event: views above/below keep their exact
+            // pre-gesture scroll behavior.
+            return EventResult.reject;
         }
     }
 
