@@ -39,8 +39,9 @@
 //! [`enable_translation`] and flips `show-translation` only when a
 //! translation actually arrived — any gap toasts and reverts (fail soft,
 //! never an error state). Toggling OFF ([`disable_translation`]) is pure
-//! UI. While ON, track-change requests ride the resolved target so the
-//! translation follows across tracks.
+//! UI. The toggle is PER-TRACK (owner decision 2026-07-23): it applies
+//! only to the song it was enabled on — every track change resets it and
+//! fetches original-only.
 
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -287,8 +288,8 @@ pub fn clear_cache(handle: &tokio::runtime::Handle, weak: slint::Weak<AppWindow>
 
 /// Whether the translation toggle is currently ON (Rust-side source of truth
 /// behind `LyricsState.show-translation`). main.rs reads it to route the
-/// toggle callback; the fetch path reads [`active_translation_language`] to
-/// keep requesting the target across track changes.
+/// toggle callback. Per-track (owner 2026-07-23): reset on every track
+/// change in [`on_track_changed`].
 pub fn translation_enabled() -> bool {
     TRANSLATION.lock().map(|t| t.enabled).unwrap_or(false)
 }
@@ -298,15 +299,6 @@ fn reset_translation_session() {
         t.enabled = false;
         t.language = None;
     }
-}
-
-/// The target the toggle was enabled with, while ON — the track-change fetch
-/// rides it so the translation follows across tracks (spec §B).
-fn active_translation_language() -> Option<String> {
-    TRANSLATION
-        .lock()
-        .ok()
-        .and_then(|t| t.enabled.then(|| t.language.clone()).flatten())
 }
 
 /// Account language (ISO 639-1) from the shared client's session — the
@@ -538,6 +530,11 @@ pub fn on_track_changed(weak: slint::Weak<AppWindow>, track: &QueueTrack) {
         return;
     };
 
+    // Per-track translation toggle (owner 2026-07-23): a new track always
+    // starts original-only — any translation the user enabled was for the
+    // PREVIOUS song only.
+    reset_translation_session();
+
     let source = source_kind(track);
     // F4 contract, explicit: the RAW title goes to the engine (fallback
     // providers match on the unversioned title; Qobuz looks up by id). The
@@ -557,10 +554,11 @@ pub fn on_track_changed(weak: slint::Weak<AppWindow>, track: &QueueTrack) {
         // Offline as data, not lookup (spec §2.2.4): the engine verdict is
         // read here and travels with the request.
         offline: crate::offline_mode::engine().is_offline(),
-        // Default flow fetches original-only (spec §B.1). While the
-        // translation toggle is ON the request rides the resolved target so
-        // the translation follows across tracks.
-        language: active_translation_language(),
+        // Default flow always fetches original-only (spec §B.1): the
+        // translation toggle is per-track (owner 2026-07-23) and was reset
+        // above; enabling it refetches WITH a language via
+        // [`enable_translation`].
+        language: None,
     };
     let key = request_identity(
         request.track_id,
@@ -602,8 +600,10 @@ pub fn on_track_changed(weak: slint::Weak<AppWindow>, track: &QueueTrack) {
             state.set_provider_label("".into());
             state.set_error("".into());
             // Hide the toggle while loading — the availability of the NEXT
-            // track's doc is unknown until its commit.
+            // track's doc is unknown until its commit. The toggle itself is
+            // per-track: it always starts OFF for a new track.
             state.set_translation_available(false);
+            state.set_show_translation(false);
         });
     }
 
