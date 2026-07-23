@@ -15,7 +15,7 @@ rust_cast = "0.21"
 rustls = { version = "0.23", features = ["aws_lc_rs"] }
 
 # mDNS discovery
-mdns-sd = "0.11"
+mdns-sd = "0.20"
 
 # Local HTTP server for media streaming
 tiny_http = "0.12"
