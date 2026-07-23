@@ -70,6 +70,9 @@ import "../../../../static/fonts/SourceSans3-VariableFont_wght.ttf";
 component LyricsLineRow inherits VerticalLayout {
     in property <int> index;
     in property <string> line-text;
+    // Translation of this line (Qobuz v10); empty when the doc has none.
+    // Rendered under the original line while LyricsState.show-translation.
+    in property <string> translation-text;
     in property <length> size-inactive;
     in property <length> size-active;
     // 0 = off, 1 = soft, 2 = strong (Tauri default) — pref-driven (S5).
@@ -85,6 +88,10 @@ component LyricsLineRow inherits VerticalLayout {
     // case) still reports: `changed is-active` never fires for it because the
     // eager init already saw it active.
     in property <int> recenter-epoch;
+
+    // Gap between the original line and its translation (no effect while
+    // the translation is hidden — a single child has no spacing).
+    spacing: 3px;
 
     // Tauri renders uppercase via CSS text-transform; Slint transforms the
     // string (display only — the engine still matches on the raw text).
@@ -255,6 +262,26 @@ component LyricsLineRow inherits VerticalLayout {
             }
         }
     }
+
+    // Translation (Qobuz v10): static text UNDER the original line — smaller
+    // (~72%, mobile reference) and dimmer. The karaoke fill above stays keyed
+    // on the ORIGINAL timings/text; this follows its line statically and
+    // joins the same dimming ladder (never uppercased — it's a translation,
+    // not the lyric). No-op while the toggle is off or the doc has none.
+    if LyricsState.show-translation && root.translation-text != "": Text {
+        text: root.translation-text;
+        wrap: word-wrap;
+        opacity: root.line-opacity();
+        color: root.is-past ? Theme.text-muted : Theme.text-secondary.with-alpha(0.7);
+        font-family: root.font-name;
+        font-size: (root.is-active ? root.size-active : root.size-inactive) * 0.72;
+        font-weight: Typography.regular;
+        letter-spacing: 0.2px;
+        animate opacity {
+            duration: 220ms;
+            easing: ease-out;
+        }
+    }
 }
 
 export component LyricsLinesView inherits Rectangle {
@@ -386,6 +413,7 @@ export component LyricsLinesView inherits Rectangle {
             for line[idx] in LyricsState.lines: LyricsLineRow {
                 index: idx;
                 line-text: line.text;
+                translation-text: line.translation-text;
                 size-inactive: root.size-inactive;
                 size-active: root.size-active;
                 dimming-mode: root.dimming-mode;

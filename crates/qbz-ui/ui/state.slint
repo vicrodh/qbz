@@ -4454,6 +4454,11 @@ export struct LyricsLineItem {
     time-ms: int,
     end-ms: int,
     has-words: bool,
+    // Translation of this line (Qobuz v10), aligned 1:1 with `text` by the
+    // Rust glue; empty when the doc has no translation (or it wasn't
+    // requested). Rendered under the original line only while
+    // `LyricsState.show-translation` is on.
+    translation-text: string,
 }
 
 // One VISUAL line of the ACTIVE logical line, for the per-visual-line karaoke
@@ -4488,6 +4493,18 @@ export global LyricsState {
     // Playing-track meta for the header ("{title} - {artist}").
     in property <string> track-title;
     in property <string> track-artist;
+
+    // ---- Translation (Qobuz API v10) ---------------------------------------
+    // The current doc advertises at least one translation language
+    // (`translation_langs` non-empty) — gates the sidebar's floating toggle.
+    // False on every other state, so the sidebar renders exactly as before.
+    in property <bool> translation-available: false;
+    // User intent: render the translation under each original line. Driven by
+    // Rust (`toggle-translation`): ON refetches with the target language and
+    // flips this only when the translation actually arrived; OFF is pure UI.
+    in-out property <bool> show-translation: false;
+    // Sidebar floating-button action (wired in main.rs).
+    callback toggle-translation();
     // Surfaced backend error text (status == 4) — dynamic content, not chrome.
     in property <string> error;
     // Active line index; -1 = none. The S4 sync engine drives it.
