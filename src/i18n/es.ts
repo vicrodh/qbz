@@ -34,7 +34,7 @@ export const es = {
       'Control limitado de dispositivos y clocks.',
       'Comportamiento inconsistente entre entornos de escritorio.',
     ],
-    note: 'QBZ no reemplaza Qobuz. Reemplaza la dependencia del reproductor web en Linux.',
+    note: 'QBZ no reemplaza Qobuz. Reemplaza la dependencia del reproductor web en Linux, y a propósito no tiene ecualizador ni DSP integrado, para que el bit-perfect siga siendo bit-perfect (usa EasyEffects sobre PipeWire o JACK si quieres procesar el audio).',
   },
   goals: {
     title: 'Objetivos de diseño',

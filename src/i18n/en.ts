@@ -34,7 +34,7 @@ export const en = {
       'Limited control over output devices and clocks.',
       'Inconsistent behavior across desktop environments.',
     ],
-    note: 'QBZ does not replace Qobuz. It replaces reliance on the web player on Linux.',
+    note: 'QBZ does not replace Qobuz. It replaces reliance on the web player on Linux, and it deliberately has no built-in equalizer or DSP so bit-perfect stays bit-perfect (use EasyEffects on PipeWire or JACK if you want processing).',
   },
   goals: {
     title: 'Design goals',
