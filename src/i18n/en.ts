@@ -28,7 +28,7 @@ export const en = {
   },
   why: {
     title: 'Why QBZ exists',
-    lead: 'Qobuz does not ship a native Linux app. The web player relies on browser audio stacks that resample, lock output rates, and limit device control. QBZ replaces the web player on Linux with a native pipeline and direct output handling.',
+    lead: 'QBZ is the player we wish a streaming company would give its users, built to fill the gap of an official Qobuz client on Linux. It is not a web wrapper and never a download tool. It is a native player, made because we believe music belongs to the artists, and Qobuz is the fairest option with the best quality. Its web player relies on browser audio stacks that resample, lock output rates, and limit device control, so QBZ replaces it on Linux with a native pipeline and direct output handling.',
     bullets: [
       'Browsers cap output rates and force resampling.',
       'Limited control over output devices and clocks.',
