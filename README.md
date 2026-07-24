@@ -33,7 +33,13 @@ No API keys needed. No telemetry. No tracking. Just music.
 
 ## Why QBZ
 
-Browsers cap audio output at 48 kHz and resample everything through WebAudio. QBZ uses a native playback pipeline with direct device control so your DAC receives the original resolution — up to 24-bit / 192 kHz — with no forced resampling.
+QBZ exists as the player we wish a streaming company would give its users. It exists to fill the gap of an official client on Linux, because we don't like being second class citizens.
+
+But it is just as important to understand what QBZ is not, and never will be. It is not a web wrapper; I did not just package the web player and "Linuxify" it. It is not a download tool, and it never will be. I built QBZ and not TDL, SPTFY or DZR because I believe music belongs to the artists, and Qobuz is, so far, the fairest option and the one with the best quality. That is why QBZ exists.
+
+You can download songs to listen to them offline, but they carry the same locks as the official client and the same usage window once your membership expires.
+
+On the technical side: browsers cap audio output at 48 kHz and resample everything through WebAudio. QBZ uses a native playback pipeline with direct device control, so your DAC receives the original resolution, up to 24-bit / 192 kHz, with no forced resampling.
 
 ## Installation
 
