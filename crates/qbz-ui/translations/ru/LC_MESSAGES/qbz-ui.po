@@ -4827,3 +4827,9 @@ msgstr "Исполнитель отклонён из Рекомендаций"
 
 msgid "{} restored to Recommendations"
 msgstr "{} возвращён в Рекомендации"
+
+msgid "Show local files & Plex"
+msgstr "Показать локальные файлы и Plex"
+
+msgid "IN LIBRARY"
+msgstr "В БИБЛИОТЕКЕ"

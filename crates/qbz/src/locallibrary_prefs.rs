@@ -24,6 +24,11 @@ struct Prefs {
     // no ephemeral session is active.
     #[serde(default)]
     ephemeral_folder: Option<String>,
+    // Scanned-folder paths included in the Qobuz Library "Show local"
+    // combination (Albums/Tracks/Artists tabs). Empty = all folders (no
+    // restriction). Plex content is unaffected — it is never in a scan folder.
+    #[serde(default)]
+    merge_folders: Vec<String>,
 }
 
 impl Default for Prefs {
@@ -33,6 +38,7 @@ impl Default for Prefs {
             tracks_sort: d_default(),
             albums_id_mode: d_folder(),
             ephemeral_folder: None,
+            merge_folders: Vec::new(),
         }
     }
 }
@@ -98,6 +104,36 @@ pub fn save(window: &AppWindow) {
 /// The persisted ephemeral-folder path, if any (rehydrated on startup).
 pub fn ephemeral_path() -> Option<String> {
     read().ephemeral_folder.filter(|s| !s.is_empty())
+}
+
+/// Scanned-folder paths included in the Library "Show local" combination.
+/// Empty = all folders (no restriction).
+pub fn merge_folders() -> Vec<String> {
+    read()
+        .merge_folders
+        .into_iter()
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
+/// True when `path` is in the merge set.
+pub fn is_merge_folder(path: &str) -> bool {
+    read().merge_folders.iter().any(|p| p == path)
+}
+
+/// Toggle one folder path in the merge set (read-modify-write). Returns the new
+/// membership (true = now included).
+pub fn toggle_merge_folder(path: &str) -> bool {
+    let mut p = read();
+    if let Some(i) = p.merge_folders.iter().position(|x| x == path) {
+        p.merge_folders.remove(i);
+        write(&p);
+        false
+    } else {
+        p.merge_folders.push(path.to_string());
+        write(&p);
+        true
+    }
 }
 
 /// Persist (or clear) the ephemeral-folder path (read-modify-write).

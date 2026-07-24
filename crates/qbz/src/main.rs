@@ -17767,6 +17767,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             });
     }
     {
+        // Toggle a scanned folder in/out of the Qobuz Library "Show local" merge
+        // set, then invalidate the cached local sets so the affected tabs reload
+        // with the new folder restriction.
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        let image_cache = image_cache.clone();
+        window
+            .global::<LibraryManageActions>()
+            .on_toggle_folder_in_combination(move |id| {
+                if let Some(w) = weak.upgrade() {
+                    if local_library_settings::toggle_in_combination(&w, id) {
+                        favorites::invalidate_local(
+                            weak.clone(),
+                            handle.clone(),
+                            image_cache.clone(),
+                        );
+                    }
+                }
+            });
+    }
+    {
         let weak = window.as_weak();
         let handle = tokio_rt.handle().clone();
         window
@@ -22022,6 +22043,130 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             });
     }
     {
+        // "Show local files & Plex" toggle for a Library tab. Flips the tab's
+        // *-show-local flag; on the first enable it lazy-loads the whole local
+        // + Plex set, otherwise the tab just re-derives (interleaving the
+        // already-loaded locals with the Qobuz set, or dropping them when off).
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        let image_cache = image_cache.clone();
+        window
+            .global::<FavoritesActions>()
+            .on_toggle_local(move |tab| {
+                let Some(w) = weak.upgrade() else {
+                    return;
+                };
+                let st = w.global::<FavoritesState>();
+                match tab.as_str() {
+                    "albums" => {
+                        let on = !st.get_albums_show_local();
+                        st.set_albums_show_local(on);
+                        if on && !favorites::albums_local_loaded(&w) {
+                            favorites::load_local_albums(weak.clone(), handle.clone());
+                        } else {
+                            favorites::derive_albums(&w);
+                        }
+                    }
+                    "tracks" => {
+                        let on = !st.get_tracks_show_local();
+                        st.set_tracks_show_local(on);
+                        if on && !favorites::tracks_local_loaded(&w) {
+                            favorites::load_local_tracks(
+                                weak.clone(),
+                                handle.clone(),
+                                image_cache.clone(),
+                            );
+                        } else {
+                            favorites::derive_tracks(&w);
+                            if on {
+                                favorites::dispatch_fav_local_tracks(&w, image_cache.clone());
+                            }
+                        }
+                    }
+                    "artists" => {
+                        let on = !st.get_artists_show_local();
+                        st.set_artists_show_local(on);
+                        if on && !favorites::artists_local_loaded(&w) {
+                            favorites::load_local_artists(weak.clone(), handle.clone());
+                        } else {
+                            favorites::derive_artists(&w);
+                        }
+                    }
+                    _ => {}
+                }
+                // Keep the tab badge count in step (the async loaders also refresh
+                // once their local set lands; this covers the off / already-loaded
+                // paths immediately).
+                favorites::refresh_local_total(&w, tab.as_str());
+            });
+    }
+    {
+        // A local/Plex track row (Tracks tab "Show local") was acted on: resolve
+        // its id to the cached LocalTrack and route to local playback / enqueue /
+        // local-favorite — never the Qobuz catalog (ids can collide numerically).
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window
+            .global::<FavoritesActions>()
+            .on_local_track_action(move |id, action| {
+                if weak.upgrade().is_none() {
+                    return;
+                }
+                let Some(track) = favorites::local_track_by_id(&id) else {
+                    return;
+                };
+                match action.as_str() {
+                    "queue" => {
+                        playback::enqueue_local_tracks(
+                            runtime.clone(),
+                            handle.clone(),
+                            vec![track],
+                            false,
+                        );
+                    }
+                    "play-next" => {
+                        playback::enqueue_local_tracks(
+                            runtime.clone(),
+                            handle.clone(),
+                            vec![track],
+                            true,
+                        );
+                    }
+                    "favorite" => {
+                        let is_plex = matches!(track.source.as_deref(), Some("plex"));
+                        let key = if is_plex {
+                            format!("plex:{}", track.file_path)
+                        } else {
+                            track.file_path.clone()
+                        };
+                        let item = crate::local_favorites::LocalFavItem {
+                            kind: "track".into(),
+                            id: key,
+                            title: track.title.clone(),
+                            subtitle: track.album.clone(),
+                            artwork_url: track.artwork_path.clone().unwrap_or_default(),
+                            artist: track.artist.clone(),
+                            source: if is_plex { "plex".into() } else { "local".into() },
+                            favorited_at: 0,
+                        };
+                        let _ = crate::local_favorites::toggle(&item);
+                    }
+                    _ => {
+                        // "play" and any other action -> play just this track.
+                        playback::play_local_tracks(
+                            runtime.clone(),
+                            weak.clone(),
+                            handle.clone(),
+                            vec![track],
+                            0,
+                            false,
+                        );
+                    }
+                }
+            });
+    }
+    {
         // Play a random album from the visible favorites set.
         let weak = window.as_weak();
         window
@@ -22082,6 +22227,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let Some(w) = weak.upgrade() else {
                     return;
                 };
+                // Local/Plex albums surfaced by the Albums tab's "Show local"
+                // toggle are NOT Qobuz favorites: the heart toggles the local
+                // favorite store and the row stays (it belongs to the library
+                // set, not the Qobuz favorites list). Never hit the Qobuz
+                // unfavorite API or fade the row for a local metadata key.
+                if is_local_album_key(&id) {
+                    crate::local_library::toggle_album_favorite(&w, &id);
+                    return;
+                }
                 favorites::mark_album_removing(&w, &id);
                 // Keep the favorite-album cache in sync so the album-header
                 // heart reflects an unfavorite done from the Favorites view.

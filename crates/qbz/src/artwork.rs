@@ -184,6 +184,11 @@ pub enum ArtworkTarget {
     LocationArtist { index: usize },
     /// A row in FavoritesState.tracks[index].
     FavoriteTrack { index: usize },
+    /// A Favorites track cover addressed BY ID — used when the Tracks tab shows
+    /// the whole local/Plex set merged with Qobuz favorites, where the combined
+    /// `tracks-visible` model is a fresh clone set with no stable index into the
+    /// Qobuz-only `tracks` model. Routed by url shape (local/Plex-aware).
+    FavoriteTrackById { id: String },
     /// A Favorites album cover, addressed BY ID (windowed dispatch over
     /// `albums-visible` — id-keyed delivery is immune to derive re-sorts
     /// between dispatch and apply). `gen` is the favorites-albums generation
@@ -321,6 +326,7 @@ impl ArtworkTarget {
         scaled_decode(match self {
             ArtworkTarget::SearchTrack { .. }
             | ArtworkTarget::FavoriteTrack { .. }
+            | ArtworkTarget::FavoriteTrackById { .. }
             | ArtworkTarget::MixTrack { .. }
             | ArtworkTarget::PlaylistTrack { .. }
             | ArtworkTarget::SuggestionTrackCover { .. }
@@ -1423,6 +1429,9 @@ fn apply_artwork(
                 // Also reach the rendered (possibly sorted/grouped) model.
                 crate::favorites::set_track_artwork(window, &id, image);
             }
+        }
+        ArtworkTarget::FavoriteTrackById { id } => {
+            crate::favorites::set_track_artwork(window, &id, image);
         }
         ArtworkTarget::FavoriteAlbumById { id, gen } => {
             // The job is done either way — free its in-flight slot so the

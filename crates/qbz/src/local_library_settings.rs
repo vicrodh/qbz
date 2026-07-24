@@ -94,6 +94,7 @@ fn to_item(f: &FolderData) -> LibraryFolderItem {
         last_scan_label: last_scan_label(f.last_scan).into(),
         accessible: f.accessible,
         selected: f.selected,
+        in_combination: crate::locallibrary_prefs::is_merge_folder(&f.path),
     }
 }
 
@@ -116,6 +117,25 @@ fn derive(window: &AppWindow) {
     drop(guard);
     s.set_folders(ModelRc::new(VecModel::from(items)));
     s.set_selected_count(selected);
+}
+
+/// Toggle a scanned folder's membership in the Qobuz Library "Show local" merge
+/// set (by folder id), persist it, then re-derive the list so the row reflects
+/// the new state. Returns true when the folder was found and toggled.
+pub fn toggle_in_combination(window: &AppWindow, id: i32) -> bool {
+    let path = {
+        let guard = folders_lock();
+        guard
+            .iter()
+            .find(|f| f.id as i32 == id)
+            .map(|f| f.path.clone())
+    };
+    let Some(path) = path else {
+        return false;
+    };
+    crate::locallibrary_prefs::toggle_merge_folder(&path);
+    derive(window);
+    true
 }
 
 /// (Re)load the folder list. Pure read of the core `get_folders_with_metadata`

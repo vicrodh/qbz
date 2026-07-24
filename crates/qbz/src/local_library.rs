@@ -154,6 +154,61 @@ pub fn map_local_album(a: qbz_library::LocalAlbum) -> crate::album_map::AlbumCar
     }
 }
 
+/// True when `path` sits inside one of the merge-included folders (exact or a
+/// subpath), or when no folder restriction is set (empty = all folders).
+fn in_merge_folders(path: &str, folders: &[String]) -> bool {
+    folders.is_empty()
+        || folders
+            .iter()
+            .any(|f| path == f || path.starts_with(&format!("{f}/")))
+}
+
+/// The local + Plex album set, honoring the Library merge-folder restriction.
+/// When folders are selected, local albums outside them are dropped; Plex
+/// albums always pass (Plex is never in a scan folder). Blocking DB read.
+fn filtered_local_albums(
+    group_mode: qbz_library::album_grouping::AlbumGroupMode,
+) -> Vec<qbz_library::LocalAlbum> {
+    let plex_path = plex_cache_db_path();
+    let exclude_network = exclude_network_folders_now();
+    let folders = crate::locallibrary_prefs::merge_folders();
+    let mut albums = crate::library_db::with_db(|db| {
+        db.get_albums_metadata_page(
+            0,
+            ALBUMS_FULL_LOAD_LIMIT,
+            None,
+            "artist",
+            "asc",
+            false,
+            exclude_network,
+            plex_path.as_deref(),
+            group_mode,
+        )
+        .map(|p| p.albums)
+    })
+    .unwrap_or_default();
+    if !folders.is_empty() {
+        albums.retain(|a| a.source == "plex" || in_merge_folders(&a.directory_path, &folders));
+    }
+    albums
+}
+
+/// The ENTIRE local + Plex album set as Send-safe `AlbumCard`s, for the Qobuz
+/// Library Albums tab "Show local" toggle. Blocking DB read — call from
+/// `spawn_blocking`; the `AlbumCard -> AlbumCardItem` conversion must run on the
+/// UI thread (AlbumCardItem is not Send). Excludes `qobuz_download` albums (they
+/// are already surfaced through the Qobuz favorites). Plex albums are unioned in
+/// by `get_albums_metadata_page` when the cache path is present. Honors the
+/// Library merge-folder restriction (Settings > Local Library).
+pub fn all_album_cards_blocking(
+    group_mode: qbz_library::album_grouping::AlbumGroupMode,
+) -> Vec<crate::album_map::AlbumCard> {
+    filtered_local_albums(group_mode)
+        .into_iter()
+        .map(map_local_album)
+        .collect()
+}
+
 /// Format a local album's quality. `sample_rate_hz` is Hz (44100.0); the
 /// detail is the bare "24-bit / 96 kHz" (QualityBadgeFull) and the label is
 /// the grid badge tooltip "Hi-Res: 24-bit / 96 kHz".
@@ -1005,6 +1060,96 @@ fn fmt_duration(secs: u64) -> String {
 /// Map one local track row to the rendered `TrackItem` (UI thread — holds a
 /// non-Send `slint::Image`). Local tracks aren't Qobuz-linkable, so the
 /// artist/album link ids are empty (the row renders them as plain text).
+/// Upper bound on local files merged into the Qobuz Library Tracks tab's
+/// "Show local" view. The flat local set can reach ~16K rows; the merged
+/// favorites model loads eagerly (not paged), so we cap it. Plex is a bounded
+/// cache (<=5000) and is merged in full on top.
+pub const LOCAL_TRACKS_MERGE_CAP: u64 = 3000;
+
+/// The local + Plex track set (bounded by `LOCAL_TRACKS_MERGE_CAP`) as Send
+/// `LocalTrack`s, for the Qobuz Library Tracks tab "Show local" toggle. Blocking
+/// DB read — call from `spawn_blocking`; the `LocalTrack -> TrackItem` map runs
+/// on the UI thread (TrackItem is not Send). Excludes `qobuz_download` rows
+/// (already surfaced through the Qobuz favorites). Plex rows (when enabled) are
+/// prepended, mapped to the LocalTrack shape (source=plex, file_path=rating_key).
+pub fn all_tracks_blocking() -> Vec<qbz_library::LocalTrack> {
+    let exclude_network = exclude_network_folders_now();
+    let plex = crate::plex_settings::get().enabled;
+    let folders = crate::locallibrary_prefs::merge_folders();
+    let mut rows = crate::library_db::with_db(|db| {
+        db.search_with_filter_page(
+            "",
+            0,
+            LOCAL_TRACKS_MERGE_CAP,
+            false,
+            exclude_network,
+            "default",
+        )
+    })
+    .unwrap_or_default();
+    if !folders.is_empty() {
+        rows.retain(|t| in_merge_folders(&t.file_path, &folders));
+    }
+    if plex {
+        if let Ok(plex_rows) = qbz_plex::plex_cache_search_tracks(String::new(), None) {
+            let mut merged: Vec<qbz_library::LocalTrack> =
+                plex_rows.into_iter().map(map_plex_cached_to_local_track).collect();
+            merged.append(&mut rows);
+            rows = merged;
+        }
+    }
+    rows
+}
+
+/// `LocalTrack -> TrackItem` for the merged favorites Tracks view (UI thread).
+pub fn local_track_to_item(t: qbz_library::LocalTrack) -> TrackItem {
+    map_local_track(t)
+}
+
+/// Distinct local + Plex artist display names (deduped by normalized name), for
+/// the Qobuz Library Artists tab "Show local" toggle. Blocking DB read — call
+/// from `spawn_blocking`. The name doubles as the artist "id" so `open-artist`
+/// routes it (non-numeric) to the LocalLibrary Artists view.
+pub fn all_artist_names_blocking() -> Vec<String> {
+    let plex = crate::plex_settings::get().enabled;
+    let folders = crate::locallibrary_prefs::merge_folders();
+    let mut seen = std::collections::HashSet::new();
+    let mut out: Vec<String> = Vec::new();
+    if folders.is_empty() {
+        let locals = crate::library_db::with_db(|db| db.get_artists()).unwrap_or_default();
+        for a in locals {
+            let n = normalize_artist(&a.name);
+            if !n.is_empty() && seen.insert(n) {
+                out.push(a.name);
+            }
+        }
+    } else {
+        // Restricted: the local artists are the distinct album artists whose
+        // albums fall inside the selected folders (per-track artist enumeration
+        // has no folder filter; the album artist is the practical proxy).
+        for a in filtered_local_albums(qbz_library::album_grouping::AlbumGroupMode::Folder) {
+            if a.source == "plex" {
+                continue;
+            }
+            let n = normalize_artist(&a.artist);
+            if !n.is_empty() && seen.insert(n) {
+                out.push(a.artist);
+            }
+        }
+    }
+    if plex {
+        if let Ok(plex_artists) = qbz_plex::plex_cache_get_artists() {
+            for pa in plex_artists {
+                let n = normalize_artist(&pa.name);
+                if !n.is_empty() && seen.insert(n) {
+                    out.push(pa.name);
+                }
+            }
+        }
+    }
+    out
+}
+
 fn map_local_track(t: qbz_library::LocalTrack) -> TrackItem {
     // One shared classifier (crate::quality::badge) — same source the album
     // card + header use, so all surfaces agree; an un-hydrated lossless track
