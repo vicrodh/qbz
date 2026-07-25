@@ -4690,6 +4690,122 @@ fn snapshot_detail_open(w: &AppWindow) -> bool {
             || playlist::is_mixed())
 }
 
+/// How a universal track arm must treat the id it was handed.
+enum ActedTrack {
+    /// A LOCAL/Plex row resolved from the view cache that rendered it.
+    LocalRow(Box<qbz_library::LocalTrack>),
+    /// The CURRENTLY PLAYING local/Plex track, resolved from the core queue —
+    /// the only place a Plex rating key survives once the rendering view is
+    /// gone (now-playing bar actions, restored session queues).
+    Playing,
+    /// A Qobuz catalog id: the existing catalog paths.
+    Qobuz,
+}
+
+/// Type the track an action targets. The two surfaces that act on a row they
+/// did not render both stamp its source for us: the unified context menu
+/// (`TrackMenuState`, written by the opening row) and the now-playing bar
+/// (`NowPlayingState`). Without that stamp a local row id — a small library
+/// row id, or a synthetic Plex id — reads as a Qobuz catalog id and the
+/// catalog paths resolve a DIFFERENT track (wrong-track hazard, spec §3.2).
+/// The stamp is only trusted for the id it was written with.
+fn acted_track(w: &AppWindow, id: &str) -> ActedTrack {
+    let menu = w.global::<TrackMenuState>();
+    let np = w.global::<NowPlayingState>();
+    let typed_local = |source: slint::SharedString| matches!(source.as_str(), "local" | "plex");
+    if menu.get_track_id() == id && typed_local(menu.get_source()) {
+        // A rendered row: its own view cache holds the full LocalTrack.
+        if let Some(track) = favorites::local_track_by_id(id)
+            .or_else(|| local_library::local_track_by_id(id))
+        {
+            return ActedTrack::LocalRow(Box::new(track));
+        }
+        // Not in a cache but it IS the playing track (e.g. the queue sidebar
+        // outlived the view that loaded it) — the queue can still type it.
+        if np.get_track_id() == id {
+            return ActedTrack::Playing;
+        }
+        log::warn!("[qbz-slint] local track {id} not in any view cache — refused");
+        return ActedTrack::Qobuz;
+    }
+    if np.get_track_id() == id && typed_local(np.get_source()) {
+        return ActedTrack::Playing;
+    }
+    ActedTrack::Qobuz
+}
+
+/// Open the playlist picker for the CURRENTLY PLAYING local/Plex track. The
+/// core queue holds its source-typed `QueueTrack`, so the ref is built the
+/// same way `local_picker_ref` builds a row's (Plex = rating key, carried in
+/// `source_item_id_hint`). Ephemeral tracks have no library row — refused.
+fn open_picker_for_playing_local(
+    runtime: Arc<AppRuntime<SlintAdapter>>,
+    weak: slint::Weak<AppWindow>,
+    handle: tokio::runtime::Handle,
+) {
+    handle.spawn(async move {
+        let state = runtime.core().get_queue_state_full().await;
+        let Some(track) = state.current_track else {
+            return;
+        };
+        let track_ref = match track.source.as_deref() {
+            Some("plex") => track.source_item_id_hint.clone().map(|key| format!("plex:{key}")),
+            Some("local") => Some(track.id.to_string()),
+            _ => None,
+        };
+        let Some(track_ref) = track_ref else {
+            crate::toast::error_weak(&weak, "Couldn't resolve this track");
+            return;
+        };
+        let playlists = playlist_picker::load(&runtime).await;
+        let _ = weak.upgrade_in_event_loop(move |w| {
+            playlist_picker::open_multi(&w, &[track_ref], true);
+            playlist_picker::apply(&w, playlists);
+        });
+    });
+}
+
+/// Queue / play-next the CURRENTLY PLAYING local/Plex track (now-playing bar
+/// actions): its source-typed `QueueTrack` is already in the core queue, so it
+/// is re-enqueued directly instead of being re-resolved from an id.
+fn enqueue_playing_local(
+    runtime: Arc<AppRuntime<SlintAdapter>>,
+    weak: slint::Weak<AppWindow>,
+    handle: tokio::runtime::Handle,
+    play_next: bool,
+) {
+    let handle2 = handle.clone();
+    handle.spawn(async move {
+        let state = runtime.core().get_queue_state_full().await;
+        let Some(track) = state.current_track else {
+            return;
+        };
+        if !matches!(track.source.as_deref(), Some("local") | Some("plex")) {
+            return;
+        }
+        playback::enqueue_queue_tracks(runtime, weak, handle2, vec![track], play_next);
+    });
+}
+
+/// Open the playlist picker for a resolved local/Plex row (local-mode ref) and
+/// load the user's playlists into it.
+fn open_picker_for_local_row(
+    w: &AppWindow,
+    runtime: Arc<AppRuntime<SlintAdapter>>,
+    weak: slint::Weak<AppWindow>,
+    handle: &tokio::runtime::Handle,
+    track: &qbz_library::LocalTrack,
+) {
+    playlist_picker::open_multi(w, &[local_picker_ref(track)], true);
+    let runtime = runtime.clone();
+    handle.spawn(async move {
+        let playlists = playlist_picker::load(&runtime).await;
+        let _ = weak.upgrade_in_event_loop(move |w| {
+            playlist_picker::apply(&w, playlists);
+        });
+    });
+}
+
 /// Type a LocalLibrary row for the drag payload: Plex rows carry their
 /// rating key (their row id is synthetic — never resolvable in
 /// `local_tracks`), everything else its real library row id.
@@ -11599,6 +11715,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // routes here — album, playlist, favorites, label, mix,
                     // artist, search.
                     if let Some(w) = weak.upgrade() {
+                        // A source-typed local row on a view whose tracklist
+                        // context is not Qobuz-resolvable (the LocalLibrary
+                        // surfaces reach this arm through the shell context
+                        // menu): play the local track itself rather than let
+                        // the catalog fallback resolve a different track. The
+                        // Favorites tab is excluded — its merged queue path
+                        // handles local rows WITH play-from-here.
+                        if w.global::<NavState>().get_view() != ContentView::Favorites {
+                            if let ActedTrack::LocalRow(track) = acted_track(&w, &id) {
+                                playback::play_local_tracks(
+                                    runtime.clone(),
+                                    weak.clone(),
+                                    handle.clone(),
+                                    vec![*track],
+                                    0,
+                                    false,
+                                );
+                                return;
+                            }
+                        }
                         playback::play_track_in_context(
                             &w,
                             runtime.clone(),
@@ -11640,6 +11776,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     return;
                                 }
                             }
+                        }
+                        // Every other source-typed local row: the merged
+                        // Library Tracks tab, the LocalLibrary surfaces (both
+                        // dispatch their context menu through this arm), and
+                        // the now-playing bar.
+                        match acted_track(&w, &id) {
+                            ActedTrack::LocalRow(track) => {
+                                playback::enqueue_local_tracks(
+                                    runtime.clone(),
+                                    handle.clone(),
+                                    vec![*track],
+                                    false,
+                                );
+                                return;
+                            }
+                            ActedTrack::Playing => {
+                                enqueue_playing_local(
+                                    runtime.clone(),
+                                    weak.clone(),
+                                    handle.clone(),
+                                    false,
+                                );
+                                return;
+                            }
+                            ActedTrack::Qobuz => {}
                         }
                     }
                     // Qobuz rows (incl. offline copies with real catalog
@@ -11986,6 +12147,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 }
                             }
                         }
+                        match acted_track(&w, &id) {
+                            ActedTrack::LocalRow(track) => {
+                                playback::enqueue_local_tracks(
+                                    runtime.clone(),
+                                    handle.clone(),
+                                    vec![*track],
+                                    true,
+                                );
+                                return;
+                            }
+                            ActedTrack::Playing => {
+                                enqueue_playing_local(
+                                    runtime.clone(),
+                                    weak.clone(),
+                                    handle.clone(),
+                                    true,
+                                );
+                                return;
+                            }
+                            ActedTrack::Qobuz => {}
+                        }
                     }
                     if let Ok(track_id) = id.parse::<u64>() {
                         playback::play_track_next(
@@ -12156,6 +12338,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     } else {
                         None
                     };
+                    if local_ref.is_none() {
+                        // Source-typed rows outside a playlist detail: the
+                        // merged Library Tracks tab, the LocalLibrary
+                        // surfaces, and the now-playing bar's "+".
+                        match acted_track(&w, &id) {
+                            ActedTrack::LocalRow(track) => {
+                                open_picker_for_local_row(
+                                    &w,
+                                    runtime.clone(),
+                                    weak.clone(),
+                                    &handle,
+                                    &track,
+                                );
+                                return;
+                            }
+                            ActedTrack::Playing => {
+                                open_picker_for_playing_local(
+                                    runtime.clone(),
+                                    weak.clone(),
+                                    handle.clone(),
+                                );
+                                return;
+                            }
+                            ActedTrack::Qobuz => {}
+                        }
+                    }
                     if let Some(track_ref) = local_ref {
                         playlist_picker::open_multi(&w, &[track_ref], true);
                     } else if id
@@ -22183,7 +22391,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 weak.clone(),
                                 handle.clone(),
                                 id.as_str(),
-                                true,
+                                Some(true),
                             )
                         });
                         if !queued {

@@ -3328,18 +3328,21 @@ fn merged_rows(
     out
 }
 
-/// The merged queue anchored on a clicked row. `None` = the click could not be
-/// anchored; the caller falls back to a single-track play.
+/// The merged queue anchored on a clicked row. `clicked_local` types the
+/// clicked row when the caller knows its source (`None` = anchor on the id
+/// alone — the context menu / row click paths, where the first row carrying
+/// the id wins). `None` return = the click could not be anchored; the caller
+/// falls back to a single-track play.
 fn merged_queue_from_rows(
     model: &ModelRc<TrackItem>,
     clicked_id: &str,
-    clicked_local: bool,
+    clicked_local: Option<bool>,
     resolve_local: impl Fn(&str) -> Option<QueueTrack>,
 ) -> Option<(Vec<QueueTrack>, usize)> {
     let rows = merged_rows(model, resolve_local);
-    let start = rows
-        .iter()
-        .position(|(_, is_local, id)| *is_local == clicked_local && id == clicked_id)?;
+    let start = rows.iter().position(|(_, is_local, id)| {
+        id == clicked_id && clicked_local.is_none_or(|want| want == *is_local)
+    })?;
     Some((rows.into_iter().map(|(t, _, _)| t).collect(), start))
 }
 
@@ -3355,7 +3358,7 @@ pub fn play_merged_fav_track(
     weak: slint::Weak<AppWindow>,
     handle: tokio::runtime::Handle,
     clicked_id: &str,
-    clicked_local: bool,
+    clicked_local: Option<bool>,
 ) -> bool {
     let state = window.global::<FavoritesState>();
     if !state.get_tracks_show_local() {
@@ -3607,7 +3610,7 @@ pub fn play_track_in_context(
                 weak.clone(),
                 handle.clone(),
                 clicked_id,
-                false,
+                None,
             ) {
                 return;
             }
@@ -4778,13 +4781,13 @@ mod tests {
             row("44", "plex"),
         ]);
         let (queue, start) =
-            merged_queue_from_rows(&m, "22", true, stub_local).expect("local click anchors");
+            merged_queue_from_rows(&m, "22", Some(true), stub_local).expect("local click anchors");
         assert_eq!(queue.len(), 4);
         assert_eq!(start, 1);
         assert!(queue[1].is_local);
         assert!(!queue[2].is_local);
         let (queue, start) =
-            merged_queue_from_rows(&m, "33", false, stub_local).expect("qobuz click anchors");
+            merged_queue_from_rows(&m, "33", Some(false), stub_local).expect("qobuz click anchors");
         assert_eq!(queue.len(), 4);
         assert_eq!(start, 2);
     }
@@ -4793,10 +4796,24 @@ mod tests {
     fn merged_queue_anchors_on_the_clicked_row_source() {
         // Local ids are local-DB ids and can collide numerically with Qobuz ids.
         let m = model(vec![row("7", "qobuz"), row("7", "local")]);
-        let (_, start) = merged_queue_from_rows(&m, "7", true, stub_local).expect("anchored");
+        let (_, start) = merged_queue_from_rows(&m, "7", Some(true), stub_local).expect("anchored");
         assert_eq!(start, 1);
-        let (_, start) = merged_queue_from_rows(&m, "7", false, stub_local).expect("anchored");
+        let (_, start) = merged_queue_from_rows(&m, "7", Some(false), stub_local).expect("anchored");
         assert_eq!(start, 0);
+        // Untyped click (context menu / row click): first row with the id.
+        let (_, start) = merged_queue_from_rows(&m, "7", None, stub_local).expect("anchored");
+        assert_eq!(start, 0);
+    }
+
+    #[test]
+    fn merged_queue_untyped_click_anchors_on_a_local_row() {
+        // The unified context menu dispatches without typing the row: a local
+        // row's id must still anchor the merged queue (it used to fall through
+        // to the Qobuz catalog path).
+        let m = model(vec![row("11", "qobuz"), row("22", "local")]);
+        let (queue, start) = merged_queue_from_rows(&m, "22", None, stub_local).expect("anchored");
+        assert_eq!(start, 1);
+        assert!(queue[1].is_local);
     }
 
     #[test]
@@ -4823,9 +4840,9 @@ mod tests {
     #[test]
     fn merged_queue_none_when_clicked_row_not_visible() {
         let m = model(vec![row("11", "qobuz"), row("22", "local")]);
-        assert!(merged_queue_from_rows(&m, "99", true, stub_local).is_none());
+        assert!(merged_queue_from_rows(&m, "99", Some(true), stub_local).is_none());
         // A local row whose cached LocalTrack is gone drops out of the queue.
-        assert!(merged_queue_from_rows(&m, "22", true, |_| None).is_none());
+        assert!(merged_queue_from_rows(&m, "22", Some(true), |_| None).is_none());
     }
 }
 
