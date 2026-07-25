@@ -4,7 +4,7 @@
 //! This module bypasses rodio/CPAL completely for direct hardware access.
 
 #[cfg(target_os = "linux")]
-use alsa::pcm::{Access, Format, HwParams, PCM};
+use alsa::pcm::{Access, Format, Frames, HwParams, PCM};
 #[cfg(target_os = "linux")]
 use alsa::{Direction, ValueOr};
 #[cfg(target_os = "linux")]
@@ -213,13 +213,13 @@ impl AlsaDirectStream {
             // Set buffer size (larger buffer for high-res audio)
             let buffer_size = if sample_rate >= 192000 {
                 // 500ms buffer for 192kHz+ (like MPD config)
-                (sample_rate / 2) as i64
+                (sample_rate / 2) as Frames
             } else if sample_rate >= 96000 {
                 // 250ms buffer for 96kHz
-                (sample_rate / 4) as i64
+                (sample_rate / 4) as Frames
             } else {
                 // 125ms buffer for lower rates
-                (sample_rate / 8) as i64
+                (sample_rate / 8) as Frames
             };
 
             hwp.set_buffer_size_near(buffer_size)
@@ -300,11 +300,11 @@ impl AlsaDirectStream {
             hwp.set_rate(carrier_rate, ValueOr::Nearest)
                 .map_err(|e| format!("Failed to set DoP carrier rate {}: {}", carrier_rate, e))?;
             let buffer_size = if carrier_rate >= 192000 {
-                (carrier_rate / 2) as i64
+                (carrier_rate / 2) as Frames
             } else if carrier_rate >= 96000 {
-                (carrier_rate / 4) as i64
+                (carrier_rate / 4) as Frames
             } else {
-                (carrier_rate / 8) as i64
+                (carrier_rate / 8) as Frames
             };
             hwp.set_buffer_size_near(buffer_size)
                 .map_err(|e| format!("Failed to set buffer size: {}", e))?;
@@ -388,7 +388,7 @@ impl AlsaDirectStream {
                 .map_err(|e| format!("Failed to set channels: {}", e))?;
             hwp.set_rate(rate, ValueOr::Nearest)
                 .map_err(|e| format!("Failed to set native DSD rate {}: {}", rate, e))?;
-            let buffer_size = (rate / 4) as i64; // 250 ms
+            let buffer_size = (rate / 4) as Frames; // 250 ms
             hwp.set_buffer_size_near(buffer_size)
                 .map_err(|e| format!("Failed to set buffer size: {}", e))?;
             hwp.set_period_size_near(buffer_size / 10, ValueOr::Nearest)
