@@ -669,8 +669,14 @@ async fn enter_shell(
     // Seed the favorites tab counts so the badges are ready before the
     // user opens each tab (they otherwise only count on first visit).
     let counts = favorites::load_counts(&runtime).await;
+    let warm_handle = tokio::runtime::Handle::current();
+    let warm_cache = image_cache.clone();
     let _ = weak.upgrade_in_event_loop(move |w| {
         favorites::apply_counts(&w, counts);
+        // Then fold in the persisted-on "Show local" sets: correct the badges
+        // (Qobuz + local) and populate any restored tab's grid, since
+        // apply_counts above just reset the totals to Qobuz-only.
+        favorites::warm_local_startup(w.as_weak(), warm_handle, warm_cache);
     });
 
     // XDG deep link: drain a pending Qobuz URL LAST — after the startup-page
@@ -4209,6 +4215,7 @@ fn navigate_favorites(
     tab_id: &str,
 ) {
     let tab_id = tab_id.to_string();
+    let handle_for_local = handle.clone();
     handle.spawn(async move {
         let tab_id_for_ui = tab_id.clone();
         let _ = weak.upgrade_in_event_loop(move |w| {
@@ -4234,11 +4241,22 @@ fn navigate_favorites(
                 // the all-at-once `jobs` dispatch.
                 let is_albums = matches!(&data, favorites::FavData::Albums { .. });
                 let image_cache_for_ui = image_cache.clone();
+                let image_cache_for_local = image_cache.clone();
                 let _ = weak.upgrade_in_event_loop(move |w| {
                     if is_albums {
                         favorites::begin_albums_artwork(image_cache_for_ui);
                     }
                     favorites::apply_favorites(&w, data);
+                    // Restart case: a persisted "Show local" flag is on but the
+                    // tab's local cache starts empty — kick off its lazy load
+                    // now that the Qobuz set is applied (it derives + recounts
+                    // when it lands).
+                    favorites::ensure_local_loaded(
+                        w.as_weak(),
+                        handle_for_local,
+                        image_cache_for_local,
+                        tab,
+                    );
                 });
                 artwork::spawn_loads(jobs, weak.clone(), image_cache.clone());
             }
@@ -22098,6 +22116,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // once their local set lands; this covers the off / already-loaded
                 // paths immediately).
                 favorites::refresh_local_total(&w, tab.as_str());
+                // Persist the per-tab flag so the choice survives a restart.
+                favorites_prefs::save(&w);
             });
     }
     {
@@ -22153,15 +22173,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let _ = crate::local_favorites::toggle(&item);
                     }
                     _ => {
-                        // "play" and any other action -> play just this track.
-                        playback::play_local_tracks(
-                            runtime.clone(),
-                            weak.clone(),
-                            handle.clone(),
-                            vec![track],
-                            0,
-                            false,
-                        );
+                        // "play" and any other action -> queue the whole visible
+                        // merged list from this row (play-from-here across the
+                        // Qobuz + local rows); lone track if it can't be anchored.
+                        let queued = weak.upgrade().is_some_and(|w| {
+                            playback::play_merged_fav_track(
+                                &w,
+                                runtime.clone(),
+                                weak.clone(),
+                                handle.clone(),
+                                id.as_str(),
+                                true,
+                            )
+                        });
+                        if !queued {
+                            playback::play_local_tracks(
+                                runtime.clone(),
+                                weak.clone(),
+                                handle.clone(),
+                                vec![track],
+                                0,
+                                false,
+                            );
+                        }
                     }
                 }
             });
@@ -22330,13 +22364,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         window
             .global::<FavoritesActions>()
             .on_play_all_tracks(move || {
-                playback::play_tracks(
-                    runtime.clone(),
-                    weak.clone(),
-                    handle.clone(),
-                    favorites::play_tracks(),
-                    0,
-                );
+                // "Show local" on -> the queue is the visible merged list
+                // (Qobuz + local/Plex); off -> Qobuz favorites only.
+                let merged = weak.upgrade().is_some_and(|w| {
+                    playback::play_merged_fav_tracks_all(
+                        &w,
+                        runtime.clone(),
+                        weak.clone(),
+                        handle.clone(),
+                        false,
+                    )
+                });
+                if !merged {
+                    playback::play_tracks(
+                        runtime.clone(),
+                        weak.clone(),
+                        handle.clone(),
+                        favorites::play_tracks(),
+                        0,
+                    );
+                }
             });
     }
     {
@@ -22347,13 +22394,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         window
             .global::<FavoritesActions>()
             .on_shuffle_tracks(move || {
-                playback::play_tracks(
-                    runtime.clone(),
-                    weak.clone(),
-                    handle.clone(),
-                    favorites::shuffled_tracks(),
-                    0,
-                );
+                let merged = weak.upgrade().is_some_and(|w| {
+                    playback::play_merged_fav_tracks_all(
+                        &w,
+                        runtime.clone(),
+                        weak.clone(),
+                        handle.clone(),
+                        true,
+                    )
+                });
+                if !merged {
+                    playback::play_tracks(
+                        runtime.clone(),
+                        weak.clone(),
+                        handle.clone(),
+                        favorites::shuffled_tracks(),
+                        0,
+                    );
+                }
             });
     }
     {

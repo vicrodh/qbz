@@ -26,6 +26,13 @@ struct Prefs {
     artists_group: bool,
     #[serde(default = "d_grid")]
     artists_view: String,
+    // Per-tab "Show local files & Plex" toggle state (Qobuz Library combination).
+    #[serde(default)]
+    albums_show_local: bool,
+    #[serde(default)]
+    tracks_show_local: bool,
+    #[serde(default)]
+    artists_show_local: bool,
 }
 
 impl Default for Prefs {
@@ -38,6 +45,9 @@ impl Default for Prefs {
             playlists_view: d_grid(),
             artists_group: false,
             artists_view: d_grid(),
+            albums_show_local: false,
+            tracks_show_local: false,
+            artists_show_local: false,
         }
     }
 }
@@ -77,6 +87,9 @@ pub fn load(window: &AppWindow) {
     st.set_playlists_view_mode(p.playlists_view.into());
     st.set_artists_group_enabled(p.artists_group);
     st.set_artists_view_mode(p.artists_view.into());
+    st.set_albums_show_local(p.albums_show_local);
+    st.set_tracks_show_local(p.tracks_show_local);
+    st.set_artists_show_local(p.artists_show_local);
 }
 
 /// Persist the current toolbar choices read from `FavoritesState`.
@@ -93,6 +106,9 @@ pub fn save(window: &AppWindow) {
         playlists_view: st.get_playlists_view_mode().into(),
         artists_group: st.get_artists_group_enabled(),
         artists_view: st.get_artists_view_mode().into(),
+        albums_show_local: st.get_albums_show_local(),
+        tracks_show_local: st.get_tracks_show_local(),
+        artists_show_local: st.get_artists_show_local(),
     };
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);

@@ -163,6 +163,33 @@ fn in_merge_folders(path: &str, folders: &[String]) -> bool {
             .any(|f| path == f || path.starts_with(&format!("{f}/")))
 }
 
+/// True when an album belongs to the merge-folder selection. Folder-grouped
+/// rows carry a real `directory_path`. Metadata-grouped rows (Albums id-mode
+/// "metadata") have an EMPTY `directory_path` — they can span folders — and
+/// instead list their contributing album-root folders in `source_folders`
+/// (comma-separated `album_group_key`s, each a filesystem folder path). An
+/// album passes when any of those roots is inside a merge folder. Empty folder
+/// set = no restriction (all pass).
+fn album_in_merge_folders(
+    directory_path: &str,
+    source_folders: Option<&str>,
+    folders: &[String],
+) -> bool {
+    if folders.is_empty() {
+        return true;
+    }
+    if !directory_path.is_empty() {
+        return in_merge_folders(directory_path, folders);
+    }
+    match source_folders {
+        Some(sf) => sf
+            .split(',')
+            .filter(|s| !s.is_empty())
+            .any(|f| in_merge_folders(f, folders)),
+        None => false,
+    }
+}
+
 /// The local + Plex album set, honoring the Library merge-folder restriction.
 /// When folders are selected, local albums outside them are dropped; Plex
 /// albums always pass (Plex is never in a scan folder). Blocking DB read.
@@ -188,7 +215,10 @@ fn filtered_local_albums(
     })
     .unwrap_or_default();
     if !folders.is_empty() {
-        albums.retain(|a| a.source == "plex" || in_merge_folders(&a.directory_path, &folders));
+        albums.retain(|a| {
+            a.source == "plex"
+                || album_in_merge_folders(&a.directory_path, a.source_folders.as_deref(), &folders)
+        });
     }
     albums
 }
@@ -805,6 +835,15 @@ pub fn current_group_mode(window: &AppWindow) -> qbz_library::album_grouping::Al
     )
 }
 
+/// Album-identity mode read straight from the persisted pref, independent of
+/// whether the LocalLibrary view has hydrated `LocalLibraryState` yet. The
+/// Qobuz Library "Show local" album merge lives in the Favorites view and can
+/// run before LocalLibrary is ever opened, so it must NOT read the (still
+/// Slint-default "folder") state — it reads the pref file directly.
+pub fn group_mode_from_prefs() -> qbz_library::album_grouping::AlbumGroupMode {
+    qbz_library::album_grouping::AlbumGroupMode::from_pref(&crate::locallibrary_prefs::albums_id_mode())
+}
+
 /// Full-load the metadata-grouped albums off the UI thread (mapping + cover
 /// fallback resolution all happen on the blocking thread), store the raw cache
 /// + the mapped card set, then derive + spawn covers on the UI thread.
@@ -1124,16 +1163,15 @@ pub fn all_artist_names_blocking() -> Vec<String> {
             }
         }
     } else {
-        // Restricted: the local artists are the distinct album artists whose
-        // albums fall inside the selected folders (per-track artist enumeration
-        // has no folder filter; the album artist is the practical proxy).
-        for a in filtered_local_albums(qbz_library::album_grouping::AlbumGroupMode::Folder) {
-            if a.source == "plex" {
-                continue;
-            }
-            let n = normalize_artist(&a.artist);
+        // Restricted to the selected merge folders: enumerate the distinct
+        // per-track artists of tracks under those folders (NOT album-level
+        // artists, which collapse a multi-artist folder to "Various Artists").
+        let names = crate::library_db::with_db(|db| db.get_artists_under_folders(&folders))
+            .unwrap_or_default();
+        for name in names {
+            let n = normalize_artist(&name);
             if !n.is_empty() && seen.insert(n) {
-                out.push(a.artist);
+                out.push(name);
             }
         }
     }
@@ -4352,5 +4390,41 @@ mod tests {
         }
         assert_eq!(LibTab::from_route("favorites-albums"), None);
         assert_eq!(LibTab::from_tab_id("bogus"), None);
+    }
+
+    #[test]
+    fn album_folder_scope_empty_selection_passes_all() {
+        assert!(album_in_merge_folders("", None, &[]));
+        assert!(album_in_merge_folders("/music/x", Some("/music/x"), &[]));
+    }
+
+    #[test]
+    fn album_folder_scope_matches_directory_path() {
+        let folders = vec!["/music/Mixes".to_string()];
+        assert!(album_in_merge_folders("/music/Mixes", None, &folders));
+        assert!(album_in_merge_folders("/music/Mixes/Album A", None, &folders));
+        assert!(!album_in_merge_folders("/music/Other", None, &folders));
+    }
+
+    #[test]
+    fn album_folder_scope_uses_source_folders_when_directory_empty() {
+        // Metadata-grouped rows carry an empty directory_path; the album's
+        // contributing folders live in source_folders (the regression: these
+        // rows were silently dropped, emptying Albums & Artists).
+        let folders = vec!["/music/Alle Songs".to_string()];
+        assert!(album_in_merge_folders("", Some("/music/Alle Songs"), &folders));
+        assert!(album_in_merge_folders(
+            "",
+            Some("/music/Alle Songs/Sub,/music/Other"),
+            &folders
+        ));
+        assert!(!album_in_merge_folders("", Some("/music/Other"), &folders));
+    }
+
+    #[test]
+    fn album_folder_scope_drops_row_with_no_folder_info() {
+        let folders = vec!["/music/Mixes".to_string()];
+        assert!(!album_in_merge_folders("", None, &folders));
+        assert!(!album_in_merge_folders("", Some(""), &folders));
     }
 }

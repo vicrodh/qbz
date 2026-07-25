@@ -570,6 +570,12 @@ pub fn apply_favorites(window: &AppWindow, data: FavData) {
             state.set_tracks_search("".into());
             // Apply the (persisted) group mode to the freshly loaded set.
             derive_tracks(window);
+            // Re-entry: if "Show local" is still on, the derive above already
+            // merged the cached locals into the grid — fold them into the tab
+            // badge too so the count doesn't revert to Qobuz-only.
+            if state.get_tracks_show_local() {
+                refresh_local_total(window, "tracks");
+            }
         }
         FavData::Albums { items, total } => {
             // Everything in the Albums tab is a favorite -> filled heart.
@@ -595,6 +601,9 @@ pub fn apply_favorites(window: &AppWindow, data: FavData) {
             state.set_albums_search("".into());
             // Apply the (persisted) sort + group to the freshly loaded set.
             derive_albums(window);
+            if state.get_albums_show_local() {
+                refresh_local_total(window, "albums");
+            }
         }
         FavData::Artists { items, total } => {
             let cards: Vec<FavoriteArtistItem> = items
@@ -614,6 +623,9 @@ pub fn apply_favorites(window: &AppWindow, data: FavData) {
             state.set_artists_total(total as i32);
             state.set_artists_search("".into());
             derive_artists(window);
+            if state.get_artists_show_local() {
+                refresh_local_total(window, "artists");
+            }
         }
         FavData::Playlists { favorites, following } => {
             let fav_items: Vec<SearchPlaylistItem> =
@@ -1434,8 +1446,7 @@ pub fn albums_local_loaded(window: &AppWindow) -> bool {
 /// artwork). The `AlbumCard -> AlbumCardItem` map runs on the UI thread because
 /// `AlbumCardItem` is not Send.
 pub fn load_local_albums(weak: slint::Weak<AppWindow>, handle: tokio::runtime::Handle) {
-    let Some(w0) = weak.upgrade() else { return };
-    let group_mode = crate::local_library::current_group_mode(&w0);
+    let group_mode = crate::local_library::group_mode_from_prefs();
     handle.spawn(async move {
         let cards = tokio::task::spawn_blocking(move || {
             crate::local_library::all_album_cards_blocking(group_mode)
@@ -1523,6 +1534,166 @@ pub fn refresh_local_total(window: &AppWindow, tab: &str) {
             st.set_artists_total(base + extra);
         }
         _ => {}
+    }
+}
+
+/// On tab (re-)entry, if the tab's persisted "Show local" flag is on but its
+/// local set was never loaded this session (e.g. right after a restart, where
+/// the flag is restored from `favorites_prefs` but the cache starts empty),
+/// lazy-load it — mirroring the toggle handler's first-enable path. The
+/// already-loaded case needs nothing here: `apply_favorites` re-derives and
+/// re-counts against the surviving cache.
+pub fn ensure_local_loaded(
+    weak: slint::Weak<AppWindow>,
+    handle: tokio::runtime::Handle,
+    image_cache: ImageCache,
+    tab: FavTab,
+) {
+    let Some(w) = weak.upgrade() else {
+        return;
+    };
+    let st = w.global::<FavoritesState>();
+    match tab {
+        FavTab::Albums if st.get_albums_show_local() && !albums_local_loaded(&w) => {
+            load_local_albums(weak, handle);
+        }
+        FavTab::Tracks if st.get_tracks_show_local() && !tracks_local_loaded(&w) => {
+            load_local_tracks(weak, handle, image_cache);
+        }
+        FavTab::Artists if st.get_artists_show_local() && !artists_local_loaded(&w) => {
+            load_local_artists(weak, handle);
+        }
+        _ => {}
+    }
+}
+
+/// Warm every enabled tab's local set on startup, AFTER the Qobuz counts are
+/// seeded (`apply_counts`). Without this the badges show Qobuz-only until a tab
+/// is opened, and a restored (active) tab renders no locals until re-entered —
+/// `apply_counts` runs after the restore-navigate and resets `*_total`, and the
+/// non-active tabs never navigate at all. For each enabled tab we load the
+/// local cache off-thread, fold its count into the (just-seeded Qobuz) badge,
+/// and — for the tab actually on screen — re-derive so its grid shows the
+/// merged set immediately. Idempotent: skips a tab whose cache already landed
+/// (e.g. the restore-navigate's `ensure_local_loaded` beat us to it).
+pub fn warm_local_startup(
+    weak: slint::Weak<AppWindow>,
+    handle: tokio::runtime::Handle,
+    image_cache: ImageCache,
+) {
+    let Some(w) = weak.upgrade() else {
+        return;
+    };
+    let st = w.global::<FavoritesState>();
+    let active = st.get_active_tab().to_string();
+
+    // A restored (active) tab may have already loaded its locals via the
+    // restore-navigate's `ensure_local_loaded` BEFORE `apply_counts` reset its
+    // badge to Qobuz-only. Its Qobuz model is loaded, so recompute the merged
+    // total now (the not-yet-loaded tabs are handled by the load blocks below).
+    for (loaded, show, tab) in [
+        (albums_local_loaded(&w), st.get_albums_show_local(), "albums"),
+        (tracks_local_loaded(&w), st.get_tracks_show_local(), "tracks"),
+        (artists_local_loaded(&w), st.get_artists_show_local(), "artists"),
+    ] {
+        if show && loaded {
+            refresh_local_total(&w, tab);
+        }
+    }
+
+    if st.get_albums_show_local() && !albums_local_loaded(&w) {
+        let base = st.get_albums_total();
+        let weak = weak.clone();
+        let group_mode = crate::local_library::group_mode_from_prefs();
+        handle.spawn(async move {
+            let cards = tokio::task::spawn_blocking(move || {
+                crate::local_library::all_album_cards_blocking(group_mode)
+            })
+            .await
+            .unwrap_or_default();
+            let _ = weak.upgrade_in_event_loop(move |w| {
+                if albums_local_loaded(&w) {
+                    return;
+                }
+                let items: Vec<AlbumCardItem> =
+                    cards.into_iter().map(crate::album_map::to_item).collect();
+                let n = items.len() as i32;
+                let st = w.global::<FavoritesState>();
+                st.set_albums_local(ModelRc::new(VecModel::from(items)));
+                st.set_albums_total(base + n);
+                // Derive regardless of which tab is on screen — a hidden tab's
+                // `*-visible` is simply not rendered, and this makes the grid
+                // correct no matter how the restore/apply ordering shook out.
+                derive_albums(&w);
+            });
+        });
+    }
+
+    if st.get_tracks_show_local() && !tracks_local_loaded(&w) {
+        let base = st.get_tracks_total();
+        let is_active = active == "tracks";
+        let weak = weak.clone();
+        let image_cache = image_cache.clone();
+        handle.spawn(async move {
+            let rows = tokio::task::spawn_blocking(crate::local_library::all_tracks_blocking)
+                .await
+                .unwrap_or_default();
+            let _ = weak.upgrade_in_event_loop(move |w| {
+                if tracks_local_loaded(&w) {
+                    return;
+                }
+                let items: Vec<TrackItem> = rows
+                    .iter()
+                    .cloned()
+                    .map(crate::local_library::local_track_to_item)
+                    .collect();
+                if let Ok(mut cache) = fav_local_tracks().lock() {
+                    *cache = rows;
+                }
+                let n = items.len() as i32;
+                let st = w.global::<FavoritesState>();
+                st.set_tracks_local(ModelRc::new(VecModel::from(items)));
+                st.set_tracks_total(base + n);
+                derive_tracks(&w);
+                // Covers only for the tab actually on screen — a hidden tab
+                // would waste artwork fetches it never shows.
+                if is_active {
+                    dispatch_fav_local_tracks(&w, image_cache);
+                }
+            });
+        });
+    }
+
+    if st.get_artists_show_local() && !artists_local_loaded(&w) {
+        let base = st.get_artists_total();
+        let weak = weak.clone();
+        handle.spawn(async move {
+            let names =
+                tokio::task::spawn_blocking(crate::local_library::all_artist_names_blocking)
+                    .await
+                    .unwrap_or_default();
+            let _ = weak.upgrade_in_event_loop(move |w| {
+                if artists_local_loaded(&w) {
+                    return;
+                }
+                let items: Vec<FavoriteArtistItem> = names
+                    .into_iter()
+                    .map(|name| FavoriteArtistItem {
+                        is_pinned: false,
+                        id: name.clone().into(),
+                        name: name.into(),
+                        image_url: "".into(),
+                        image: slint::Image::default(),
+                        source: "local".into(),
+                    })
+                    .collect();
+                let n = items.len() as i32;
+                let st = w.global::<FavoritesState>();
+                st.set_artists_local(ModelRc::new(VecModel::from(items)));
+                st.set_artists_total(base + n);
+                derive_artists(&w);
+            });
+        });
     }
 }
 

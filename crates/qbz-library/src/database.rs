@@ -2588,6 +2588,52 @@ impl LibraryDatabase {
         Ok(artists)
     }
 
+    /// Distinct local artist display names (`COALESCE(album_artist, artist)`,
+    /// same identity as [`Self::get_artists`]) whose tracks live under any of
+    /// `folders`. The folder-scoped counterpart used by the Qobuz Library "Show
+    /// local" Artists merge when a merge-folder restriction is active — unlike
+    /// the album-level artist (which collapses a multi-artist folder to "Various
+    /// Artists"), this enumerates the real per-track artists. Excludes qobuz
+    /// downloads. Empty `folders` yields nothing (caller uses `get_artists`).
+    pub fn get_artists_under_folders(
+        &self,
+        folders: &[String],
+    ) -> Result<Vec<String>, LibraryError> {
+        if folders.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut clauses = Vec::new();
+        let mut binds: Vec<String> = Vec::new();
+        for f in folders {
+            clauses.push("file_path LIKE ?");
+            binds.push(format!("{}/%", f.trim_end_matches('/')));
+        }
+        let folder_filter = clauses.join(" OR ");
+        let query = format!(
+            r#"
+            SELECT DISTINCT COALESCE(album_artist, artist) AS name
+            FROM local_tracks
+            WHERE (source IS NULL OR source != 'qobuz_download')
+              AND ({folder_filter})
+            ORDER BY name
+        "#
+        );
+        let mut stmt = self
+            .conn
+            .prepare(&query)
+            .map_err(|e| LibraryError::Database(e.to_string()))?;
+        let rows = stmt
+            .query_map(rusqlite::params_from_iter(binds.iter()), |row| {
+                row.get::<_, String>(0)
+            })
+            .map_err(|e| LibraryError::Database(e.to_string()))?;
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r.map_err(|e| LibraryError::Database(e.to_string()))?);
+        }
+        Ok(out)
+    }
+
     /// Get album groups without artwork (for Discogs fetching)
     pub fn get_albums_without_artwork(
         &self,

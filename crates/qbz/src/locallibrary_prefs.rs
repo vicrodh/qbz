@@ -106,6 +106,14 @@ pub fn ephemeral_path() -> Option<String> {
     read().ephemeral_folder.filter(|s| !s.is_empty())
 }
 
+/// The persisted album-identity mode ("folder" | "metadata"). Source of truth
+/// for consumers that run before the LocalLibrary view hydrates its Slint
+/// state — e.g. the Qobuz Library "Show local" album merge, which can fire
+/// before that view is ever opened.
+pub fn albums_id_mode() -> String {
+    read().albums_id_mode
+}
+
 /// Scanned-folder paths included in the Library "Show local" combination.
 /// Empty = all folders (no restriction).
 pub fn merge_folders() -> Vec<String> {

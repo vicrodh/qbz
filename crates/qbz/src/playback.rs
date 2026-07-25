@@ -3298,6 +3298,133 @@ fn track_item_to_queue(it: &TrackItem) -> Option<QueueTrack> {
     })
 }
 
+/// Build the Library Tracks tab's MERGED play queue (Qobuz favorites + the
+/// "Show local" local/Plex rows) from its visible model, in visible order.
+/// Local rows resolve through `resolve_local` against the cached `LocalTrack`
+/// set; the row's own `source` decides which side it belongs to (same
+/// predicate the FavoritesView click routing uses). Each entry carries
+/// `(track, is_local, id)` so a caller can anchor on a clicked row — local ids
+/// are local-DB ids that can collide numerically with Qobuz ids, so an anchor
+/// must match the source too, not just the id.
+fn merged_rows(
+    model: &ModelRc<TrackItem>,
+    resolve_local: impl Fn(&str) -> Option<QueueTrack>,
+) -> Vec<(QueueTrack, bool, String)> {
+    let mut out: Vec<(QueueTrack, bool, String)> = Vec::with_capacity(model.row_count());
+    for i in 0..model.row_count() {
+        let Some(it) = model.row_data(i) else {
+            continue;
+        };
+        let is_local = matches!(it.source.as_str(), "local" | "plex");
+        let track = if is_local {
+            resolve_local(it.id.as_str())
+        } else {
+            track_item_to_queue(&it)
+        };
+        if let Some(track) = track {
+            out.push((track, is_local, it.id.to_string()));
+        }
+    }
+    out
+}
+
+/// The merged queue anchored on a clicked row. `None` = the click could not be
+/// anchored; the caller falls back to a single-track play.
+fn merged_queue_from_rows(
+    model: &ModelRc<TrackItem>,
+    clicked_id: &str,
+    clicked_local: bool,
+    resolve_local: impl Fn(&str) -> Option<QueueTrack>,
+) -> Option<(Vec<QueueTrack>, usize)> {
+    let rows = merged_rows(model, resolve_local);
+    let start = rows
+        .iter()
+        .position(|(_, is_local, id)| *is_local == clicked_local && id == clicked_id)?;
+    Some((rows.into_iter().map(|(t, _, _)| t).collect(), start))
+}
+
+/// Per-row play for the Library Tracks tab while "Show local" is on: the queue
+/// becomes the whole visible merged list starting at the clicked row, so a
+/// local row plays on into the Qobuz rows that follow it and vice versa (the
+/// core resolves each `QueueTrack` by source). Returns false when the merged
+/// view is off or the click can't be anchored, so the caller keeps its
+/// single-source path.
+pub fn play_merged_fav_track(
+    window: &AppWindow,
+    runtime: Runtime,
+    weak: slint::Weak<AppWindow>,
+    handle: tokio::runtime::Handle,
+    clicked_id: &str,
+    clicked_local: bool,
+) -> bool {
+    let state = window.global::<FavoritesState>();
+    if !state.get_tracks_show_local() {
+        return false;
+    }
+    let Some((queue, start)) =
+        merged_queue_from_rows(&state.get_tracks_visible(), clicked_id, clicked_local, |id| {
+            crate::favorites::local_track_by_id(id)
+                .as_ref()
+                .map(local_queue_track)
+        })
+    else {
+        return false;
+    };
+    if queue.is_empty() {
+        return false;
+    }
+    play_queue(runtime, weak, handle, queue, start);
+    true
+}
+
+/// Hero Play / Shuffle for the Library Tracks tab while "Show local" is on:
+/// the queue is the Qobuz favorite tracks PLUS the merged local/Plex set,
+/// shuffled in place for Shuffle. Scope is the full tab set (not the filtered
+/// `tracks-visible` rows), which is what the Qobuz-only path it replaces does.
+/// Returns false when the merged view is off or nothing resolves, so the
+/// caller keeps that Qobuz-only path.
+pub fn play_merged_fav_tracks_all(
+    window: &AppWindow,
+    runtime: Runtime,
+    weak: slint::Weak<AppWindow>,
+    handle: tokio::runtime::Handle,
+    shuffle: bool,
+) -> bool {
+    let state = window.global::<FavoritesState>();
+    if !state.get_tracks_show_local() {
+        return false;
+    }
+    let resolve = |id: &str| {
+        crate::favorites::local_track_by_id(id)
+            .as_ref()
+            .map(local_queue_track)
+    };
+    let mut queue: Vec<QueueTrack> = merged_rows(&state.get_tracks(), resolve)
+        .into_iter()
+        .chain(merged_rows(&state.get_tracks_local(), resolve))
+        .map(|(t, _, _)| t)
+        .collect();
+    if queue.is_empty() {
+        return false;
+    }
+    if shuffle {
+        let mut seed = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos() as u64)
+            .unwrap_or(1)
+            | 1;
+        for i in (1..queue.len()).rev() {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            let j = (seed % (i as u64 + 1)) as usize;
+            queue.swap(i, j);
+        }
+    }
+    play_queue(runtime, weak, handle, queue, 0);
+    true
+}
+
 /// The ids of a view's VISIBLE `TrackItem` model rows, in order.
 fn model_ids(model: &ModelRc<TrackItem>) -> Vec<String> {
     (0..model.row_count())
@@ -3471,6 +3598,19 @@ pub fn play_track_in_context(
             }
         }
         ContentView::Favorites => {
+            // "Show local" merges local/Plex rows into the Tracks list; those
+            // rows have no `Track` in the Qobuz cache, so the merged queue is
+            // built straight from the visible rows instead.
+            if play_merged_fav_track(
+                window,
+                runtime.clone(),
+                weak.clone(),
+                handle.clone(),
+                clicked_id,
+                false,
+            ) {
+                return;
+            }
             if let Some((tracks, idx)) = order_by_visible(
                 &window.global::<FavoritesState>().get_tracks_visible(),
                 crate::favorites::play_tracks(),
@@ -4611,6 +4751,82 @@ mod tests {
         assert_eq!(fmt_remaining(250, 200), "-0:00");
     }
 
+    fn row(id: &str, source: &str) -> TrackItem {
+        TrackItem {
+            id: id.into(),
+            title: format!("t{id}").into(),
+            duration: "3:00".into(),
+            source: source.into(),
+            ..Default::default()
+        }
+    }
+
+    fn model(rows: Vec<TrackItem>) -> ModelRc<TrackItem> {
+        ModelRc::new(slint::VecModel::from(rows))
+    }
+
+    fn stub_local(id: &str) -> Option<QueueTrack> {
+        track_item_to_queue(&row(id, "local"))
+    }
+
+    #[test]
+    fn merged_queue_spans_qobuz_and_local_rows() {
+        let m = model(vec![
+            row("11", "qobuz"),
+            row("22", "local"),
+            row("33", "qobuz"),
+            row("44", "plex"),
+        ]);
+        let (queue, start) =
+            merged_queue_from_rows(&m, "22", true, stub_local).expect("local click anchors");
+        assert_eq!(queue.len(), 4);
+        assert_eq!(start, 1);
+        assert!(queue[1].is_local);
+        assert!(!queue[2].is_local);
+        let (queue, start) =
+            merged_queue_from_rows(&m, "33", false, stub_local).expect("qobuz click anchors");
+        assert_eq!(queue.len(), 4);
+        assert_eq!(start, 2);
+    }
+
+    #[test]
+    fn merged_queue_anchors_on_the_clicked_row_source() {
+        // Local ids are local-DB ids and can collide numerically with Qobuz ids.
+        let m = model(vec![row("7", "qobuz"), row("7", "local")]);
+        let (_, start) = merged_queue_from_rows(&m, "7", true, stub_local).expect("anchored");
+        assert_eq!(start, 1);
+        let (_, start) = merged_queue_from_rows(&m, "7", false, stub_local).expect("anchored");
+        assert_eq!(start, 0);
+    }
+
+    #[test]
+    fn merged_rows_keep_visible_order_and_drop_unresolvable_locals() {
+        let m = model(vec![
+            row("11", "qobuz"),
+            row("22", "local"),
+            row("33", "qobuz"),
+        ]);
+        let all = merged_rows(&m, stub_local);
+        assert_eq!(
+            all.iter().map(|(t, _, _)| t.id).collect::<Vec<_>>(),
+            vec![11, 22, 33]
+        );
+        assert_eq!(all[1].1, true);
+        // A local row with no cached LocalTrack is not playable -> dropped.
+        let resolved = merged_rows(&m, |_| None);
+        assert_eq!(
+            resolved.iter().map(|(t, _, _)| t.id).collect::<Vec<_>>(),
+            vec![11, 33]
+        );
+    }
+
+    #[test]
+    fn merged_queue_none_when_clicked_row_not_visible() {
+        let m = model(vec![row("11", "qobuz"), row("22", "local")]);
+        assert!(merged_queue_from_rows(&m, "99", true, stub_local).is_none());
+        // A local row whose cached LocalTrack is gone drops out of the queue.
+        assert!(merged_queue_from_rows(&m, "22", true, |_| None).is_none());
+    }
 }
 
 /// Start the playback poll loop. Runs for the app lifetime: every ~450ms
