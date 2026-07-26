@@ -9,7 +9,7 @@ description = "Casting support for QBZ - Chromecast, DLNA"
 rust_cast = "0.21"
 
 # mDNS discovery
-mdns-sd = "0.11"
+mdns-sd = "0.20"
 
 # Local HTTP server for media streaming
 tiny_http = "0.12"
