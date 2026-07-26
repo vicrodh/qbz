@@ -9,7 +9,7 @@ description = "CMAF segment parsing and crypto for Qobuz streaming"
 aes = "0.8"
 cbc = "0.1"
 ctr = "0.9"
-hkdf = "0.12"
+hkdf = "0.13"
 sha2 = "0.10"
 base64 = { workspace = true }
 md-5 = { workspace = true }

@@ -10,7 +10,7 @@ description = "Device-bound secret wrapping for QBZ (offline cache keys, tokens)
 aes-gcm = "0.10"
 
 # KDF for the fallback path when OS keyring isn't available
-hkdf = "0.12"
+hkdf = "0.13"
 sha2 = "0.10"
 
 # RNG for nonces + install UUID generation
