@@ -86,7 +86,7 @@ component IconBtn inherits Rectangle {
 }
 
 // Shared column geometry for the folder table (header + rows MUST match).
-// checkbox 20 · folder (stretch) · last-scan 120 · status 84 · actions 76.
+// checkbox 20 · folder (stretch) · last-scan 120 · status 84 · in-library 84 · actions 76.
 component FolderTableHeader inherits Rectangle {
     height: 26px;
     HorizontalLayout {
@@ -118,6 +118,14 @@ component FolderTableHeader inherits Rectangle {
             letter-spacing: 0.5px;
             vertical-alignment: center;
         }
+        Text {
+            text: @tr("IN LIBRARY");
+            width: 84px;
+            color: Theme.text-muted;
+            font-size: Typography.legal;
+            letter-spacing: 0.5px;
+            vertical-alignment: center;
+        }
         Rectangle { width: 76px; }
     }
 }
@@ -131,7 +139,9 @@ component FolderRow inherits Rectangle {
     in property <bool> accessible;
     in property <bool> selected;
     in property <bool> scanning;
+    in property <bool> in-combination;
     callback toggle();
+    callback toggle-combination();
     callback sync();
     callback remove();
     height: 40px;
@@ -216,6 +226,16 @@ component FolderRow inherits Rectangle {
                 font-size: Typography.legal;
                 font-weight: Typography.medium;
                 overflow: elide;
+            }
+        }
+        // IN LIBRARY: include this folder in the Qobuz Library "Show local"
+        // merge (Albums/Tracks/Artists). No folder checked = all folders.
+        VerticalLayout {
+            width: 84px;
+            alignment: center;
+            QbzCheckbox {
+                checked: root.in-combination;
+                toggled => { root.toggle-combination(); }
             }
         }
         // ACTIONS: per-folder sync + delete (recycled IconBtns).
@@ -329,7 +349,9 @@ export component LocalLibrarySettings inherits VerticalLayout {
                         accessible: f.accessible;
                         selected: f.selected;
                         scanning: LibraryScanState.scanning;
+                        in-combination: f.in-combination;
                         toggle => { LibraryManageActions.toggle-folder-select(f.id); }
+                        toggle-combination => { LibraryManageActions.toggle-folder-in-combination(f.id); }
                         sync => { LibraryManageActions.scan-folder(f.id); }
                         remove => { LibraryManageActions.remove-folder(f.id); }
                     }

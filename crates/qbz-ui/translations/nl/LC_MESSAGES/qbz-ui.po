@@ -4825,3 +4825,9 @@ msgstr "Artiest afgewezen voor Aanbevelingen"
 
 msgid "{} restored to Recommendations"
 msgstr "{} hersteld in Aanbevelingen"
+
+msgid "Show local files & Plex"
+msgstr "Lokale bestanden en Plex tonen"
+
+msgid "IN LIBRARY"
+msgstr "IN BIBLIOTHEEK"

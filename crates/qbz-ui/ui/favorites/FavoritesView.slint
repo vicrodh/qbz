@@ -496,6 +496,16 @@ export component FavoritesView inherits Rectangle {
                 }
                 VerticalLayout {
                     alignment: center;
+                    ToggleButton {
+                        icon: @image-url("../assets/icons/hard-drive.svg");
+                        active: FavoritesState.tracks-show-local;
+                        sm: true;
+                        tooltip: @tr("Show local files & Plex");
+                        clicked => { FavoritesActions.toggle-local("tracks"); }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
                     FavGenreButton { }
                 }
                 VerticalLayout {
@@ -535,6 +545,16 @@ export component FavoritesView inherits Rectangle {
                         edited(q) => {
                             FavoritesActions.albums-search(q);
                         }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    ToggleButton {
+                        icon: @image-url("../assets/icons/hard-drive.svg");
+                        active: FavoritesState.albums-show-local;
+                        sm: true;
+                        tooltip: @tr("Show local files & Plex");
+                        clicked => { FavoritesActions.toggle-local("albums"); }
                     }
                 }
                 VerticalLayout {
@@ -646,6 +666,16 @@ export component FavoritesView inherits Rectangle {
                         edited(q) => {
                             FavoritesActions.search-artists(q);
                         }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    ToggleButton {
+                        icon: @image-url("../assets/icons/hard-drive.svg");
+                        active: FavoritesState.artists-show-local;
+                        sm: true;
+                        tooltip: @tr("Show local files & Plex");
+                        clicked => { FavoritesActions.toggle-local("artists"); }
                     }
                 }
                 // Group (A-Z) — grid mode only (Tauri hides it in sidepanel).
@@ -1485,6 +1515,10 @@ export component FavoritesView inherits Rectangle {
                                         FavoritesActions.open-album(id);
                                     } else if (kind == "artist" && action == "open") {
                                         FavoritesActions.open-artist(id);
+                                    } else if (track.source == "local" || track.source == "plex") {
+                                        // Local/Plex rows (from "Show local") resolve
+                                        // against the cached LocalTrack set, not Qobuz.
+                                        FavoritesActions.local-track-action(id, action);
                                     } else if (action == "favorite") {
                                         FavoritesActions.unfavorite-track(id);
                                     } else {
@@ -1571,7 +1605,7 @@ export component FavoritesView inherits Rectangle {
                                 grouped: FavoritesState.albums-grouped;
                                 view-mode: FavoritesState.albums-view-mode;
                                 is-grouped: FavoritesState.albums-group-mode != "off";
-                                show-source: false;
+                                show-source: FavoritesState.albums-show-local;
                                 // Viewport windowing (Phase 1): only cards near the
                                 // visible band mount + get artwork dispatched. The
                                 // offset is the page's padding-top (16px); the grid's

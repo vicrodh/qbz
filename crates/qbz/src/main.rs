@@ -669,8 +669,14 @@ async fn enter_shell(
     // Seed the favorites tab counts so the badges are ready before the
     // user opens each tab (they otherwise only count on first visit).
     let counts = favorites::load_counts(&runtime).await;
+    let warm_handle = tokio::runtime::Handle::current();
+    let warm_cache = image_cache.clone();
     let _ = weak.upgrade_in_event_loop(move |w| {
         favorites::apply_counts(&w, counts);
+        // Then fold in the persisted-on "Show local" sets: correct the badges
+        // (Qobuz + local) and populate any restored tab's grid, since
+        // apply_counts above just reset the totals to Qobuz-only.
+        favorites::warm_local_startup(w.as_weak(), warm_handle, warm_cache);
     });
 
     // XDG deep link: drain a pending Qobuz URL LAST — after the startup-page
@@ -4209,6 +4215,7 @@ fn navigate_favorites(
     tab_id: &str,
 ) {
     let tab_id = tab_id.to_string();
+    let handle_for_local = handle.clone();
     handle.spawn(async move {
         let tab_id_for_ui = tab_id.clone();
         let _ = weak.upgrade_in_event_loop(move |w| {
@@ -4234,11 +4241,22 @@ fn navigate_favorites(
                 // the all-at-once `jobs` dispatch.
                 let is_albums = matches!(&data, favorites::FavData::Albums { .. });
                 let image_cache_for_ui = image_cache.clone();
+                let image_cache_for_local = image_cache.clone();
                 let _ = weak.upgrade_in_event_loop(move |w| {
                     if is_albums {
                         favorites::begin_albums_artwork(image_cache_for_ui);
                     }
                     favorites::apply_favorites(&w, data);
+                    // Restart case: a persisted "Show local" flag is on but the
+                    // tab's local cache starts empty — kick off its lazy load
+                    // now that the Qobuz set is applied (it derives + recounts
+                    // when it lands).
+                    favorites::ensure_local_loaded(
+                        w.as_weak(),
+                        handle_for_local,
+                        image_cache_for_local,
+                        tab,
+                    );
                 });
                 artwork::spawn_loads(jobs, weak.clone(), image_cache.clone());
             }
@@ -4670,6 +4688,122 @@ fn snapshot_detail_open(w: &AppWindow) -> bool {
         && (w.global::<PlaylistState>().get_is_local()
             || w.global::<PlaylistState>().get_offline_subset()
             || playlist::is_mixed())
+}
+
+/// How a universal track arm must treat the id it was handed.
+enum ActedTrack {
+    /// A LOCAL/Plex row resolved from the view cache that rendered it.
+    LocalRow(Box<qbz_library::LocalTrack>),
+    /// The CURRENTLY PLAYING local/Plex track, resolved from the core queue —
+    /// the only place a Plex rating key survives once the rendering view is
+    /// gone (now-playing bar actions, restored session queues).
+    Playing,
+    /// A Qobuz catalog id: the existing catalog paths.
+    Qobuz,
+}
+
+/// Type the track an action targets. The two surfaces that act on a row they
+/// did not render both stamp its source for us: the unified context menu
+/// (`TrackMenuState`, written by the opening row) and the now-playing bar
+/// (`NowPlayingState`). Without that stamp a local row id — a small library
+/// row id, or a synthetic Plex id — reads as a Qobuz catalog id and the
+/// catalog paths resolve a DIFFERENT track (wrong-track hazard, spec §3.2).
+/// The stamp is only trusted for the id it was written with.
+fn acted_track(w: &AppWindow, id: &str) -> ActedTrack {
+    let menu = w.global::<TrackMenuState>();
+    let np = w.global::<NowPlayingState>();
+    let typed_local = |source: slint::SharedString| matches!(source.as_str(), "local" | "plex");
+    if menu.get_track_id() == id && typed_local(menu.get_source()) {
+        // A rendered row: its own view cache holds the full LocalTrack.
+        if let Some(track) = favorites::local_track_by_id(id)
+            .or_else(|| local_library::local_track_by_id(id))
+        {
+            return ActedTrack::LocalRow(Box::new(track));
+        }
+        // Not in a cache but it IS the playing track (e.g. the queue sidebar
+        // outlived the view that loaded it) — the queue can still type it.
+        if np.get_track_id() == id {
+            return ActedTrack::Playing;
+        }
+        log::warn!("[qbz-slint] local track {id} not in any view cache — refused");
+        return ActedTrack::Qobuz;
+    }
+    if np.get_track_id() == id && typed_local(np.get_source()) {
+        return ActedTrack::Playing;
+    }
+    ActedTrack::Qobuz
+}
+
+/// Open the playlist picker for the CURRENTLY PLAYING local/Plex track. The
+/// core queue holds its source-typed `QueueTrack`, so the ref is built the
+/// same way `local_picker_ref` builds a row's (Plex = rating key, carried in
+/// `source_item_id_hint`). Ephemeral tracks have no library row — refused.
+fn open_picker_for_playing_local(
+    runtime: Arc<AppRuntime<SlintAdapter>>,
+    weak: slint::Weak<AppWindow>,
+    handle: tokio::runtime::Handle,
+) {
+    handle.spawn(async move {
+        let state = runtime.core().get_queue_state_full().await;
+        let Some(track) = state.current_track else {
+            return;
+        };
+        let track_ref = match track.source.as_deref() {
+            Some("plex") => track.source_item_id_hint.clone().map(|key| format!("plex:{key}")),
+            Some("local") => Some(track.id.to_string()),
+            _ => None,
+        };
+        let Some(track_ref) = track_ref else {
+            crate::toast::error_weak(&weak, "Couldn't resolve this track");
+            return;
+        };
+        let playlists = playlist_picker::load(&runtime).await;
+        let _ = weak.upgrade_in_event_loop(move |w| {
+            playlist_picker::open_multi(&w, &[track_ref], true);
+            playlist_picker::apply(&w, playlists);
+        });
+    });
+}
+
+/// Queue / play-next the CURRENTLY PLAYING local/Plex track (now-playing bar
+/// actions): its source-typed `QueueTrack` is already in the core queue, so it
+/// is re-enqueued directly instead of being re-resolved from an id.
+fn enqueue_playing_local(
+    runtime: Arc<AppRuntime<SlintAdapter>>,
+    weak: slint::Weak<AppWindow>,
+    handle: tokio::runtime::Handle,
+    play_next: bool,
+) {
+    let handle2 = handle.clone();
+    handle.spawn(async move {
+        let state = runtime.core().get_queue_state_full().await;
+        let Some(track) = state.current_track else {
+            return;
+        };
+        if !matches!(track.source.as_deref(), Some("local") | Some("plex")) {
+            return;
+        }
+        playback::enqueue_queue_tracks(runtime, weak, handle2, vec![track], play_next);
+    });
+}
+
+/// Open the playlist picker for a resolved local/Plex row (local-mode ref) and
+/// load the user's playlists into it.
+fn open_picker_for_local_row(
+    w: &AppWindow,
+    runtime: Arc<AppRuntime<SlintAdapter>>,
+    weak: slint::Weak<AppWindow>,
+    handle: &tokio::runtime::Handle,
+    track: &qbz_library::LocalTrack,
+) {
+    playlist_picker::open_multi(w, &[local_picker_ref(track)], true);
+    let runtime = runtime.clone();
+    handle.spawn(async move {
+        let playlists = playlist_picker::load(&runtime).await;
+        let _ = weak.upgrade_in_event_loop(move |w| {
+            playlist_picker::apply(&w, playlists);
+        });
+    });
 }
 
 /// Type a LocalLibrary row for the drag payload: Plex rows carry their
@@ -11572,6 +11706,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // routes here — album, playlist, favorites, label, mix,
                     // artist, search.
                     if let Some(w) = weak.upgrade() {
+                        // A source-typed local row on a view whose tracklist
+                        // context is not Qobuz-resolvable (the LocalLibrary
+                        // surfaces reach this arm through the shell context
+                        // menu): play the local track itself rather than let
+                        // the catalog fallback resolve a different track. The
+                        // Favorites tab is excluded — its merged queue path
+                        // handles local rows WITH play-from-here.
+                        if w.global::<NavState>().get_view() != ContentView::Favorites {
+                            if let ActedTrack::LocalRow(track) = acted_track(&w, &id) {
+                                playback::play_local_tracks(
+                                    runtime.clone(),
+                                    weak.clone(),
+                                    handle.clone(),
+                                    vec![*track],
+                                    0,
+                                    false,
+                                );
+                                return;
+                            }
+                        }
                         playback::play_track_in_context(
                             &w,
                             runtime.clone(),
@@ -11613,6 +11767,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     return;
                                 }
                             }
+                        }
+                        // Every other source-typed local row: the merged
+                        // Library Tracks tab, the LocalLibrary surfaces (both
+                        // dispatch their context menu through this arm), and
+                        // the now-playing bar.
+                        match acted_track(&w, &id) {
+                            ActedTrack::LocalRow(track) => {
+                                playback::enqueue_local_tracks(
+                                    runtime.clone(),
+                                    handle.clone(),
+                                    vec![*track],
+                                    false,
+                                );
+                                return;
+                            }
+                            ActedTrack::Playing => {
+                                enqueue_playing_local(
+                                    runtime.clone(),
+                                    weak.clone(),
+                                    handle.clone(),
+                                    false,
+                                );
+                                return;
+                            }
+                            ActedTrack::Qobuz => {}
                         }
                     }
                     // Qobuz rows (incl. offline copies with real catalog
@@ -11959,6 +12138,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 }
                             }
                         }
+                        match acted_track(&w, &id) {
+                            ActedTrack::LocalRow(track) => {
+                                playback::enqueue_local_tracks(
+                                    runtime.clone(),
+                                    handle.clone(),
+                                    vec![*track],
+                                    true,
+                                );
+                                return;
+                            }
+                            ActedTrack::Playing => {
+                                enqueue_playing_local(
+                                    runtime.clone(),
+                                    weak.clone(),
+                                    handle.clone(),
+                                    true,
+                                );
+                                return;
+                            }
+                            ActedTrack::Qobuz => {}
+                        }
                     }
                     if let Ok(track_id) = id.parse::<u64>() {
                         playback::play_track_next(
@@ -12129,6 +12329,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     } else {
                         None
                     };
+                    if local_ref.is_none() {
+                        // Source-typed rows outside a playlist detail: the
+                        // merged Library Tracks tab, the LocalLibrary
+                        // surfaces, and the now-playing bar's "+".
+                        match acted_track(&w, &id) {
+                            ActedTrack::LocalRow(track) => {
+                                open_picker_for_local_row(
+                                    &w,
+                                    runtime.clone(),
+                                    weak.clone(),
+                                    &handle,
+                                    &track,
+                                );
+                                return;
+                            }
+                            ActedTrack::Playing => {
+                                open_picker_for_playing_local(
+                                    runtime.clone(),
+                                    weak.clone(),
+                                    handle.clone(),
+                                );
+                                return;
+                            }
+                            ActedTrack::Qobuz => {}
+                        }
+                    }
                     if let Some(track_ref) = local_ref {
                         playlist_picker::open_multi(&w, &[track_ref], true);
                     } else if id
@@ -17758,6 +17984,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             });
     }
     {
+        // Toggle a scanned folder in/out of the Qobuz Library "Show local" merge
+        // set, then invalidate the cached local sets so the affected tabs reload
+        // with the new folder restriction.
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        let image_cache = image_cache.clone();
+        window
+            .global::<LibraryManageActions>()
+            .on_toggle_folder_in_combination(move |id| {
+                if let Some(w) = weak.upgrade() {
+                    if local_library_settings::toggle_in_combination(&w, id) {
+                        favorites::invalidate_local(
+                            weak.clone(),
+                            handle.clone(),
+                            image_cache.clone(),
+                        );
+                    }
+                }
+            });
+    }
+    {
         let weak = window.as_weak();
         let handle = tokio_rt.handle().clone();
         window
@@ -22013,6 +22260,146 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             });
     }
     {
+        // "Show local files & Plex" toggle for a Library tab. Flips the tab's
+        // *-show-local flag; on the first enable it lazy-loads the whole local
+        // + Plex set, otherwise the tab just re-derives (interleaving the
+        // already-loaded locals with the Qobuz set, or dropping them when off).
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        let image_cache = image_cache.clone();
+        window
+            .global::<FavoritesActions>()
+            .on_toggle_local(move |tab| {
+                let Some(w) = weak.upgrade() else {
+                    return;
+                };
+                let st = w.global::<FavoritesState>();
+                match tab.as_str() {
+                    "albums" => {
+                        let on = !st.get_albums_show_local();
+                        st.set_albums_show_local(on);
+                        if on && !favorites::albums_local_loaded(&w) {
+                            favorites::load_local_albums(weak.clone(), handle.clone());
+                        } else {
+                            favorites::derive_albums(&w);
+                        }
+                    }
+                    "tracks" => {
+                        let on = !st.get_tracks_show_local();
+                        st.set_tracks_show_local(on);
+                        if on && !favorites::tracks_local_loaded(&w) {
+                            favorites::load_local_tracks(
+                                weak.clone(),
+                                handle.clone(),
+                                image_cache.clone(),
+                            );
+                        } else {
+                            favorites::derive_tracks(&w);
+                            if on {
+                                favorites::dispatch_fav_local_tracks(&w, image_cache.clone());
+                            }
+                        }
+                    }
+                    "artists" => {
+                        let on = !st.get_artists_show_local();
+                        st.set_artists_show_local(on);
+                        if on && !favorites::artists_local_loaded(&w) {
+                            favorites::load_local_artists(weak.clone(), handle.clone());
+                        } else {
+                            favorites::derive_artists(&w);
+                        }
+                    }
+                    _ => {}
+                }
+                // Keep the tab badge count in step (the async loaders also refresh
+                // once their local set lands; this covers the off / already-loaded
+                // paths immediately).
+                favorites::refresh_local_total(&w, tab.as_str());
+                // Persist the per-tab flag so the choice survives a restart.
+                favorites_prefs::save(&w);
+            });
+    }
+    {
+        // A local/Plex track row (Tracks tab "Show local") was acted on: resolve
+        // its id to the cached LocalTrack and route to local playback / enqueue /
+        // local-favorite — never the Qobuz catalog (ids can collide numerically).
+        let runtime = app_runtime.clone();
+        let weak = window.as_weak();
+        let handle = tokio_rt.handle().clone();
+        window
+            .global::<FavoritesActions>()
+            .on_local_track_action(move |id, action| {
+                if weak.upgrade().is_none() {
+                    return;
+                }
+                let Some(track) = favorites::local_track_by_id(&id) else {
+                    return;
+                };
+                match action.as_str() {
+                    "queue" => {
+                        playback::enqueue_local_tracks(
+                            runtime.clone(),
+                            handle.clone(),
+                            vec![track],
+                            false,
+                        );
+                    }
+                    "play-next" => {
+                        playback::enqueue_local_tracks(
+                            runtime.clone(),
+                            handle.clone(),
+                            vec![track],
+                            true,
+                        );
+                    }
+                    "favorite" => {
+                        let is_plex = matches!(track.source.as_deref(), Some("plex"));
+                        let key = if is_plex {
+                            format!("plex:{}", track.file_path)
+                        } else {
+                            track.file_path.clone()
+                        };
+                        let item = crate::local_favorites::LocalFavItem {
+                            kind: "track".into(),
+                            id: key,
+                            title: track.title.clone(),
+                            subtitle: track.album.clone(),
+                            artwork_url: track.artwork_path.clone().unwrap_or_default(),
+                            artist: track.artist.clone(),
+                            source: if is_plex { "plex".into() } else { "local".into() },
+                            favorited_at: 0,
+                        };
+                        let _ = crate::local_favorites::toggle(&item);
+                    }
+                    _ => {
+                        // "play" and any other action -> queue the whole visible
+                        // merged list from this row (play-from-here across the
+                        // Qobuz + local rows); lone track if it can't be anchored.
+                        let queued = weak.upgrade().is_some_and(|w| {
+                            playback::play_merged_fav_track(
+                                &w,
+                                runtime.clone(),
+                                weak.clone(),
+                                handle.clone(),
+                                id.as_str(),
+                                Some(true),
+                            )
+                        });
+                        if !queued {
+                            playback::play_local_tracks(
+                                runtime.clone(),
+                                weak.clone(),
+                                handle.clone(),
+                                vec![track],
+                                0,
+                                false,
+                            );
+                        }
+                    }
+                }
+            });
+    }
+    {
         // Play a random album from the visible favorites set.
         let weak = window.as_weak();
         window
@@ -22073,6 +22460,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let Some(w) = weak.upgrade() else {
                     return;
                 };
+                // Local/Plex albums surfaced by the Albums tab's "Show local"
+                // toggle are NOT Qobuz favorites: the heart toggles the local
+                // favorite store and the row stays (it belongs to the library
+                // set, not the Qobuz favorites list). Never hit the Qobuz
+                // unfavorite API or fade the row for a local metadata key.
+                if is_local_album_key(&id) {
+                    crate::local_library::toggle_album_favorite(&w, &id);
+                    return;
+                }
                 favorites::mark_album_removing(&w, &id);
                 // Keep the favorite-album cache in sync so the album-header
                 // heart reflects an unfavorite done from the Favorites view.
@@ -22167,13 +22563,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         window
             .global::<FavoritesActions>()
             .on_play_all_tracks(move || {
-                playback::play_tracks(
-                    runtime.clone(),
-                    weak.clone(),
-                    handle.clone(),
-                    favorites::play_tracks(),
-                    0,
-                );
+                // "Show local" on -> the queue is the visible merged list
+                // (Qobuz + local/Plex); off -> Qobuz favorites only.
+                let merged = weak.upgrade().is_some_and(|w| {
+                    playback::play_merged_fav_tracks_all(
+                        &w,
+                        runtime.clone(),
+                        weak.clone(),
+                        handle.clone(),
+                        false,
+                    )
+                });
+                if !merged {
+                    playback::play_tracks(
+                        runtime.clone(),
+                        weak.clone(),
+                        handle.clone(),
+                        favorites::play_tracks(),
+                        0,
+                    );
+                }
             });
     }
     {
@@ -22184,13 +22593,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         window
             .global::<FavoritesActions>()
             .on_shuffle_tracks(move || {
-                playback::play_tracks(
-                    runtime.clone(),
-                    weak.clone(),
-                    handle.clone(),
-                    favorites::shuffled_tracks(),
-                    0,
-                );
+                let merged = weak.upgrade().is_some_and(|w| {
+                    playback::play_merged_fav_tracks_all(
+                        &w,
+                        runtime.clone(),
+                        weak.clone(),
+                        handle.clone(),
+                        true,
+                    )
+                });
+                if !merged {
+                    playback::play_tracks(
+                        runtime.clone(),
+                        weak.clone(),
+                        handle.clone(),
+                        favorites::shuffled_tracks(),
+                        0,
+                    );
+                }
             });
     }
     {

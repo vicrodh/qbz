@@ -570,6 +570,12 @@ pub fn apply_favorites(window: &AppWindow, data: FavData) {
             state.set_tracks_search("".into());
             // Apply the (persisted) group mode to the freshly loaded set.
             derive_tracks(window);
+            // Re-entry: if "Show local" is still on, the derive above already
+            // merged the cached locals into the grid — fold them into the tab
+            // badge too so the count doesn't revert to Qobuz-only.
+            if state.get_tracks_show_local() {
+                refresh_local_total(window, "tracks");
+            }
         }
         FavData::Albums { items, total } => {
             // Everything in the Albums tab is a favorite -> filled heart.
@@ -595,6 +601,9 @@ pub fn apply_favorites(window: &AppWindow, data: FavData) {
             state.set_albums_search("".into());
             // Apply the (persisted) sort + group to the freshly loaded set.
             derive_albums(window);
+            if state.get_albums_show_local() {
+                refresh_local_total(window, "albums");
+            }
         }
         FavData::Artists { items, total } => {
             let cards: Vec<FavoriteArtistItem> = items
@@ -605,6 +614,7 @@ pub fn apply_favorites(window: &AppWindow, data: FavData) {
                     name: a.name.into(),
                     image_url: a.image_url.into(),
                     image: slint::Image::default(),
+                    source: "qobuz".into(),
                 })
                 .collect();
             let model = ModelRc::new(VecModel::from(cards));
@@ -613,6 +623,9 @@ pub fn apply_favorites(window: &AppWindow, data: FavData) {
             state.set_artists_total(total as i32);
             state.set_artists_search("".into());
             derive_artists(window);
+            if state.get_artists_show_local() {
+                refresh_local_total(window, "artists");
+            }
         }
         FavData::Playlists { favorites, following } => {
             let fav_items: Vec<SearchPlaylistItem> =
@@ -665,14 +678,24 @@ pub fn derive_tracks(window: &AppWindow) {
     let group = state.get_tracks_group_mode().to_string();
     let genre_names = crate::genre_filter::selected_names("favorites");
     let all = state.get_tracks();
+    // The whole local + Plex track set (bounded), merged in when "Show local"
+    // is on. Clones — track artwork is delivered by id (FavoriteTrackById), so
+    // covers still land on the visible rows despite not sharing `tracks`.
+    let locals = state.get_tracks_local();
+    let has_locals = state.get_tracks_show_local() && locals.row_count() > 0;
     state.set_tracks_alpha(ModelRc::new(VecModel::from(Vec::<AlphaJump>::new())));
-    // Fast path: no search + no grouping + no genre filter -> share model.
-    if query.is_empty() && group == "off" && genre_names.is_empty() {
+    // Fast path: no search, no grouping, no genre, no locals -> share model.
+    if !has_locals && query.is_empty() && group == "off" && genre_names.is_empty() {
         state.set_tracks_visible(all);
         return;
     }
-    let mut filtered: Vec<TrackItem> = (0..all.row_count())
-        .filter_map(|i| all.row_data(i))
+    let mut source_rows: Vec<TrackItem> =
+        (0..all.row_count()).filter_map(|i| all.row_data(i)).collect();
+    if has_locals {
+        source_rows.extend((0..locals.row_count()).filter_map(|i| locals.row_data(i)));
+    }
+    let mut filtered: Vec<TrackItem> = source_rows
+        .into_iter()
         .filter(|t| {
             (query.is_empty()
                 || t.title.to_lowercase().contains(query)
@@ -715,6 +738,91 @@ pub fn derive_tracks(window: &AppWindow) {
         state.set_tracks_alpha(ModelRc::new(VecModel::from(jumps)));
     }
     state.set_tracks_visible(ModelRc::new(VecModel::from(filtered)));
+}
+
+/// Cache of the `LocalTrack`s merged into the Tracks tab's "Show local" view,
+/// kept so play/queue/favorite can resolve a row id back to its full track
+/// (file path, source) — the rendered `TrackItem` only carries display fields.
+fn fav_local_tracks() -> &'static std::sync::Mutex<Vec<qbz_library::LocalTrack>> {
+    static S: std::sync::OnceLock<std::sync::Mutex<Vec<qbz_library::LocalTrack>>> =
+        std::sync::OnceLock::new();
+    S.get_or_init(|| std::sync::Mutex::new(Vec::new()))
+}
+
+/// True once the local track set has been loaded into `tracks-local`.
+pub fn tracks_local_loaded(window: &AppWindow) -> bool {
+    window.global::<FavoritesState>().get_tracks_local().row_count() > 0
+}
+
+/// The cached `LocalTrack` for a merged-view local row id (play/queue/favorite).
+pub fn local_track_by_id(id: &str) -> Option<qbz_library::LocalTrack> {
+    let guard = fav_local_tracks().lock().ok()?;
+    guard.iter().find(|t| t.id.to_string() == id).cloned()
+}
+
+/// Lazy-load the bounded local + Plex track set into `tracks-local` the first
+/// time the Tracks tab's "Show local" toggle is enabled, cache the raw tracks
+/// for playback, then re-derive and dispatch source-aware cover art. The
+/// `LocalTrack -> TrackItem` map runs on the UI thread (TrackItem is not Send).
+pub fn load_local_tracks(
+    weak: slint::Weak<AppWindow>,
+    handle: tokio::runtime::Handle,
+    image_cache: ImageCache,
+) {
+    handle.spawn(async move {
+        let rows = tokio::task::spawn_blocking(crate::local_library::all_tracks_blocking)
+            .await
+            .unwrap_or_default();
+        let _ = weak.upgrade_in_event_loop(move |w| {
+            let items: Vec<TrackItem> = rows
+                .iter()
+                .cloned()
+                .map(crate::local_library::local_track_to_item)
+                .collect();
+            if let Ok(mut cache) = fav_local_tracks().lock() {
+                *cache = rows;
+            }
+            w.global::<FavoritesState>()
+                .set_tracks_local(ModelRc::new(VecModel::from(items)));
+            derive_tracks(&w);
+            refresh_local_total(&w, "tracks");
+            dispatch_fav_local_tracks(&w, image_cache);
+        });
+    });
+}
+
+/// Source-aware cover dispatch over the current `tracks-visible` set (used when
+/// the Tracks tab shows local/Plex rows). Each job is routed by url shape via
+/// `spawn_search_loads` (http -> Qobuz CDN, `/library/` -> Plex, else local
+/// file) and delivered by id (`FavoriteTrackById`). Rows that already have a
+/// cover (Qobuz favorites dispatched at load) are skipped.
+pub fn dispatch_fav_local_tracks(window: &AppWindow, image_cache: ImageCache) {
+    let plex = crate::plex_settings::get();
+    let visible = window.global::<FavoritesState>().get_tracks_visible();
+    let mut jobs = Vec::new();
+    for i in 0..visible.row_count() {
+        let Some(item) = visible.row_data(i) else {
+            continue;
+        };
+        if item.artwork.size().width > 0 || item.artwork_url.is_empty() {
+            continue;
+        }
+        jobs.push(ArtworkJob {
+            url: item.artwork_url.to_string(),
+            target: ArtworkTarget::FavoriteTrackById {
+                id: item.id.to_string(),
+            },
+        });
+    }
+    if !jobs.is_empty() {
+        crate::artwork::spawn_search_loads(
+            jobs,
+            plex.base_url,
+            plex.token,
+            window.as_weak(),
+            image_cache,
+        );
+    }
 }
 
 /// Re-derive the rendered Labels grid (`labels-visible`) from the full
@@ -777,19 +885,35 @@ pub fn derive_artists(window: &AppWindow) {
     let group = state.get_artists_group_enabled()
         || state.get_artists_view_mode().as_str() == "sidepanel";
     let all = state.get_artists();
+    // The whole local + Plex artist set, merged in when "Show local" is on.
+    let locals = state.get_artists_local();
+    let has_locals = state.get_artists_show_local() && locals.row_count() > 0;
 
-    // Flat (search-filtered) model. Share `all` when no query so artwork
-    // keeps updating in place; a query forks a filtered clone.
+    // Working set: Qobuz favorites, plus the whole local/Plex set when the
+    // toggle is on. Clones when locals are included (artist portraits are
+    // resolved separately; local artists carry none).
+    let source_rows: Vec<FavoriteArtistItem> = {
+        let mut v: Vec<FavoriteArtistItem> =
+            (0..all.row_count()).filter_map(|i| all.row_data(i)).collect();
+        if has_locals {
+            v.extend((0..locals.row_count()).filter_map(|i| locals.row_data(i)));
+        }
+        v
+    };
+
+    // Flat (search-filtered) model. Share `all` when no query AND no locals so
+    // artwork keeps updating in place; otherwise fork a filtered clone.
     let filtered: Vec<FavoriteArtistItem> = if query.is_empty() {
-        (0..all.row_count()).filter_map(|i| all.row_data(i)).collect()
+        source_rows.clone()
     } else {
-        (0..all.row_count())
-            .filter_map(|i| all.row_data(i))
+        source_rows
+            .iter()
             .filter(|a| a.name.to_lowercase().contains(query))
+            .cloned()
             .collect()
     };
     state.set_artists_shown(filtered.len() as i32);
-    if query.is_empty() {
+    if query.is_empty() && !has_locals {
         state.set_artists_visible(all);
     } else {
         state.set_artists_visible(ModelRc::new(VecModel::from(filtered.clone())));
@@ -837,6 +961,42 @@ pub fn derive_artists(window: &AppWindow) {
         .collect();
     state.set_artists_alpha(ModelRc::new(VecModel::from(alpha)));
     state.set_artists_grouped(ModelRc::new(VecModel::from(sections)));
+}
+
+/// True once the local artist set has been loaded into `artists-local`.
+pub fn artists_local_loaded(window: &AppWindow) -> bool {
+    window.global::<FavoritesState>().get_artists_local().row_count() > 0
+}
+
+/// Lazy-load the distinct local + Plex artist names into `artists-local` the
+/// first time the Artists tab's "Show local" toggle is enabled, then re-derive.
+/// Local artists have no Qobuz id or portrait: the display name doubles as the
+/// `id` (so `open-artist` routes to the LocalLibrary Artists view) and the
+/// portrait is left blank.
+pub fn load_local_artists(weak: slint::Weak<AppWindow>, handle: tokio::runtime::Handle) {
+    handle.spawn(async move {
+        let names =
+            tokio::task::spawn_blocking(crate::local_library::all_artist_names_blocking)
+                .await
+                .unwrap_or_default();
+        let _ = weak.upgrade_in_event_loop(move |w| {
+            let items: Vec<FavoriteArtistItem> = names
+                .into_iter()
+                .map(|name| FavoriteArtistItem {
+                    is_pinned: false,
+                    id: name.clone().into(),
+                    name: name.into(),
+                    image_url: "".into(),
+                    image: slint::Image::default(),
+                    source: "local".into(),
+                })
+                .collect();
+            w.global::<FavoritesState>()
+                .set_artists_local(ModelRc::new(VecModel::from(items)));
+            derive_artists(&w);
+            refresh_local_total(&w, "artists");
+        });
+    });
 }
 
 /// Apply the selected artist's albums to the sidepanel right column. Reuses
@@ -951,6 +1111,29 @@ pub fn album_artwork_job_done(id: &str) {
     fav_albums_inflight().lock().unwrap().remove(id);
 }
 
+/// Spawn album artwork jobs, routing by the Albums tab's "Show local" state.
+/// With locals shown the visible set mixes Qobuz CDN URLs, local file paths and
+/// Plex thumb paths, so each job is routed by URL shape via `spawn_search_loads`
+/// (Plex-credentialed, delivered by id like the Qobuz path). Pure-Qobuz keeps
+/// the plain CDN loader.
+fn dispatch_album_jobs(window: &AppWindow, jobs: Vec<ArtworkJob>, image_cache: ImageCache) {
+    if jobs.is_empty() {
+        return;
+    }
+    if window.global::<FavoritesState>().get_albums_show_local() {
+        let plex = crate::plex_settings::get();
+        crate::artwork::spawn_search_loads(
+            jobs,
+            plex.base_url,
+            plex.token,
+            window.as_weak(),
+            image_cache,
+        );
+    } else {
+        crate::artwork::spawn_loads(jobs, window.as_weak(), image_cache);
+    }
+}
+
 /// Reset the windowed-albums artwork pipeline for a fresh Albums-tab load:
 /// bump the generation (orphans every in-flight job — dropped on apply),
 /// free their dedupe slots and stash the image-cache handle the dispatchers
@@ -1047,9 +1230,7 @@ pub fn dispatch_fav_albums_window(window: &AppWindow) {
             set_album_artwork(window, item.id.as_str(), slint::Image::default());
         }
     }
-    if !jobs.is_empty() {
-        crate::artwork::spawn_loads(jobs, window.as_weak(), image_cache);
-    }
+    dispatch_album_jobs(window, jobs, image_cache);
 }
 
 /// Flat LIST-view artwork: same `albums-visible` model as the grid, but the
@@ -1079,9 +1260,7 @@ fn dispatch_fav_albums_all_visible(window: &AppWindow) {
             }
         }
     }
-    if !jobs.is_empty() {
-        crate::artwork::spawn_loads(jobs, window.as_weak(), image_cache);
-    }
+    dispatch_album_jobs(window, jobs, image_cache);
 }
 
 /// The Albums grid/list view-mode toggled. Switching TO the list needs a full
@@ -1126,9 +1305,7 @@ fn dispatch_fav_albums_all_grouped(window: &AppWindow) {
             }
         }
     }
-    if !jobs.is_empty() {
-        crate::artwork::spawn_loads(jobs, window.as_weak(), image_cache);
-    }
+    dispatch_album_jobs(window, jobs, image_cache);
 }
 
 /// Re-derive the rendered Albums list (`albums-visible`) from the full
@@ -1143,11 +1320,18 @@ pub fn derive_albums(window: &AppWindow) {
     let group = state.get_albums_group_mode().to_string();
     let genre_names = crate::genre_filter::selected_names("favorites");
     let all = state.get_albums();
+    // The whole local + Plex album set, merged in when "Show local" is on.
+    // Clones (not the shared model) — album artwork is delivered by id, so
+    // covers still land on the visible rows despite not sharing `albums`.
+    let locals = state.get_albums_local();
+    let has_locals = state.get_albums_show_local() && locals.row_count() > 0;
     state.set_albums_alpha(ModelRc::new(VecModel::from(Vec::<AlphaJump>::new())));
     let empty_sections = || ModelRc::new(VecModel::from(Vec::<DiscoverSection>::new()));
 
-    // Fast path: no filter, default order, no grouping, no genre -> share.
-    if query.is_empty() && sort == "default" && group == "off" && genre_names.is_empty() {
+    // Fast path: no filter, default order, no grouping, no genre, no locals ->
+    // share the full model. Skipped whenever locals are shown (the union is a
+    // fresh clone set, never the shared `albums` model).
+    if !has_locals && query.is_empty() && sort == "default" && group == "off" && genre_names.is_empty() {
         let n = all.row_count() as i32;
         state.set_albums_visible(all);
         state.set_albums_grouped(empty_sections());
@@ -1166,8 +1350,15 @@ pub fn derive_albums(window: &AppWindow) {
         return;
     }
 
-    let mut filtered: Vec<AlbumCardItem> = (0..all.row_count())
-        .filter_map(|i| all.row_data(i))
+    // Working set: Qobuz favorites, plus the whole local/Plex set when the
+    // toggle is on, so locals interleave with Qobuz under the same sort/group.
+    let mut source_rows: Vec<AlbumCardItem> =
+        (0..all.row_count()).filter_map(|i| all.row_data(i)).collect();
+    if has_locals {
+        source_rows.extend((0..locals.row_count()).filter_map(|i| locals.row_data(i)));
+    }
+    let mut filtered: Vec<AlbumCardItem> = source_rows
+        .into_iter()
         .filter(|a| {
             (query.is_empty()
                 || a.title.to_lowercase().contains(query)
@@ -1241,6 +1432,269 @@ pub fn derive_albums(window: &AppWindow) {
     state.set_albums_grouped(ModelRc::new(VecModel::from(sections)));
     state.set_albums_visible(ModelRc::new(VecModel::from(Vec::<AlbumCardItem>::new())));
     dispatch_fav_albums_all_grouped(window);
+}
+
+/// True once the local album set has been loaded into `albums-local`, so the
+/// "Show local" toggle only pays the DB read on its first enable.
+pub fn albums_local_loaded(window: &AppWindow) -> bool {
+    window.global::<FavoritesState>().get_albums_local().row_count() > 0
+}
+
+/// Lazy-load the whole local + Plex album set into `albums-local` the first time
+/// the Albums tab's "Show local" toggle is enabled, then re-derive (which
+/// interleaves the locals with the Qobuz favorites and dispatches source-aware
+/// artwork). The `AlbumCard -> AlbumCardItem` map runs on the UI thread because
+/// `AlbumCardItem` is not Send.
+pub fn load_local_albums(weak: slint::Weak<AppWindow>, handle: tokio::runtime::Handle) {
+    let group_mode = crate::local_library::group_mode_from_prefs();
+    handle.spawn(async move {
+        let cards = tokio::task::spawn_blocking(move || {
+            crate::local_library::all_album_cards_blocking(group_mode)
+        })
+        .await
+        .unwrap_or_default();
+        let _ = weak.upgrade_in_event_loop(move |w| {
+            let items: Vec<AlbumCardItem> =
+                cards.into_iter().map(crate::album_map::to_item).collect();
+            w.global::<FavoritesState>()
+                .set_albums_local(ModelRc::new(VecModel::from(items)));
+            derive_albums(&w);
+            refresh_local_total(&w, "albums");
+        });
+    });
+}
+
+/// The Library merge-folder selection changed — drop the cached local sets so
+/// the next "Show local" enable reloads with the new filter, and immediately
+/// reload any tab that is currently showing locals (or re-derive + recount the
+/// others so cleared local rows disappear at once).
+pub fn invalidate_local(
+    weak: slint::Weak<AppWindow>,
+    handle: tokio::runtime::Handle,
+    image_cache: ImageCache,
+) {
+    let Some(w) = weak.upgrade() else {
+        return;
+    };
+    let st = w.global::<FavoritesState>();
+    st.set_albums_local(ModelRc::new(VecModel::from(Vec::<AlbumCardItem>::new())));
+    st.set_tracks_local(ModelRc::new(VecModel::from(Vec::<TrackItem>::new())));
+    st.set_artists_local(ModelRc::new(VecModel::from(Vec::<FavoriteArtistItem>::new())));
+    if st.get_albums_show_local() {
+        load_local_albums(weak.clone(), handle.clone());
+    } else {
+        derive_albums(&w);
+        refresh_local_total(&w, "albums");
+    }
+    if st.get_tracks_show_local() {
+        load_local_tracks(weak.clone(), handle.clone(), image_cache.clone());
+    } else {
+        derive_tracks(&w);
+        refresh_local_total(&w, "tracks");
+    }
+    if st.get_artists_show_local() {
+        load_local_artists(weak.clone(), handle.clone());
+    } else {
+        derive_artists(&w);
+        refresh_local_total(&w, "artists");
+    }
+}
+
+/// Recompute a Library tab's badge total = Qobuz favorites + the local/Plex set
+/// when that tab's "Show local" toggle is on. Keeps the SegmentedTabBar count in
+/// step with the merged view (called on toggle + after a lazy local load).
+pub fn refresh_local_total(window: &AppWindow, tab: &str) {
+    let st = window.global::<FavoritesState>();
+    match tab {
+        "albums" => {
+            let base = st.get_albums().row_count() as i32;
+            let extra = if st.get_albums_show_local() {
+                st.get_albums_local().row_count() as i32
+            } else {
+                0
+            };
+            st.set_albums_total(base + extra);
+        }
+        "tracks" => {
+            let base = st.get_tracks().row_count() as i32;
+            let extra = if st.get_tracks_show_local() {
+                st.get_tracks_local().row_count() as i32
+            } else {
+                0
+            };
+            st.set_tracks_total(base + extra);
+        }
+        "artists" => {
+            let base = st.get_artists().row_count() as i32;
+            let extra = if st.get_artists_show_local() {
+                st.get_artists_local().row_count() as i32
+            } else {
+                0
+            };
+            st.set_artists_total(base + extra);
+        }
+        _ => {}
+    }
+}
+
+/// On tab (re-)entry, if the tab's persisted "Show local" flag is on but its
+/// local set was never loaded this session (e.g. right after a restart, where
+/// the flag is restored from `favorites_prefs` but the cache starts empty),
+/// lazy-load it — mirroring the toggle handler's first-enable path. The
+/// already-loaded case needs nothing here: `apply_favorites` re-derives and
+/// re-counts against the surviving cache.
+pub fn ensure_local_loaded(
+    weak: slint::Weak<AppWindow>,
+    handle: tokio::runtime::Handle,
+    image_cache: ImageCache,
+    tab: FavTab,
+) {
+    let Some(w) = weak.upgrade() else {
+        return;
+    };
+    let st = w.global::<FavoritesState>();
+    match tab {
+        FavTab::Albums if st.get_albums_show_local() && !albums_local_loaded(&w) => {
+            load_local_albums(weak, handle);
+        }
+        FavTab::Tracks if st.get_tracks_show_local() && !tracks_local_loaded(&w) => {
+            load_local_tracks(weak, handle, image_cache);
+        }
+        FavTab::Artists if st.get_artists_show_local() && !artists_local_loaded(&w) => {
+            load_local_artists(weak, handle);
+        }
+        _ => {}
+    }
+}
+
+/// Warm every enabled tab's local set on startup, AFTER the Qobuz counts are
+/// seeded (`apply_counts`). Without this the badges show Qobuz-only until a tab
+/// is opened, and a restored (active) tab renders no locals until re-entered —
+/// `apply_counts` runs after the restore-navigate and resets `*_total`, and the
+/// non-active tabs never navigate at all. For each enabled tab we load the
+/// local cache off-thread, fold its count into the (just-seeded Qobuz) badge,
+/// and — for the tab actually on screen — re-derive so its grid shows the
+/// merged set immediately. Idempotent: skips a tab whose cache already landed
+/// (e.g. the restore-navigate's `ensure_local_loaded` beat us to it).
+pub fn warm_local_startup(
+    weak: slint::Weak<AppWindow>,
+    handle: tokio::runtime::Handle,
+    image_cache: ImageCache,
+) {
+    let Some(w) = weak.upgrade() else {
+        return;
+    };
+    let st = w.global::<FavoritesState>();
+    let active = st.get_active_tab().to_string();
+
+    // A restored (active) tab may have already loaded its locals via the
+    // restore-navigate's `ensure_local_loaded` BEFORE `apply_counts` reset its
+    // badge to Qobuz-only. Its Qobuz model is loaded, so recompute the merged
+    // total now (the not-yet-loaded tabs are handled by the load blocks below).
+    for (loaded, show, tab) in [
+        (albums_local_loaded(&w), st.get_albums_show_local(), "albums"),
+        (tracks_local_loaded(&w), st.get_tracks_show_local(), "tracks"),
+        (artists_local_loaded(&w), st.get_artists_show_local(), "artists"),
+    ] {
+        if show && loaded {
+            refresh_local_total(&w, tab);
+        }
+    }
+
+    if st.get_albums_show_local() && !albums_local_loaded(&w) {
+        let base = st.get_albums_total();
+        let weak = weak.clone();
+        let group_mode = crate::local_library::group_mode_from_prefs();
+        handle.spawn(async move {
+            let cards = tokio::task::spawn_blocking(move || {
+                crate::local_library::all_album_cards_blocking(group_mode)
+            })
+            .await
+            .unwrap_or_default();
+            let _ = weak.upgrade_in_event_loop(move |w| {
+                if albums_local_loaded(&w) {
+                    return;
+                }
+                let items: Vec<AlbumCardItem> =
+                    cards.into_iter().map(crate::album_map::to_item).collect();
+                let n = items.len() as i32;
+                let st = w.global::<FavoritesState>();
+                st.set_albums_local(ModelRc::new(VecModel::from(items)));
+                st.set_albums_total(base + n);
+                // Derive regardless of which tab is on screen — a hidden tab's
+                // `*-visible` is simply not rendered, and this makes the grid
+                // correct no matter how the restore/apply ordering shook out.
+                derive_albums(&w);
+            });
+        });
+    }
+
+    if st.get_tracks_show_local() && !tracks_local_loaded(&w) {
+        let base = st.get_tracks_total();
+        let is_active = active == "tracks";
+        let weak = weak.clone();
+        let image_cache = image_cache.clone();
+        handle.spawn(async move {
+            let rows = tokio::task::spawn_blocking(crate::local_library::all_tracks_blocking)
+                .await
+                .unwrap_or_default();
+            let _ = weak.upgrade_in_event_loop(move |w| {
+                if tracks_local_loaded(&w) {
+                    return;
+                }
+                let items: Vec<TrackItem> = rows
+                    .iter()
+                    .cloned()
+                    .map(crate::local_library::local_track_to_item)
+                    .collect();
+                if let Ok(mut cache) = fav_local_tracks().lock() {
+                    *cache = rows;
+                }
+                let n = items.len() as i32;
+                let st = w.global::<FavoritesState>();
+                st.set_tracks_local(ModelRc::new(VecModel::from(items)));
+                st.set_tracks_total(base + n);
+                derive_tracks(&w);
+                // Covers only for the tab actually on screen — a hidden tab
+                // would waste artwork fetches it never shows.
+                if is_active {
+                    dispatch_fav_local_tracks(&w, image_cache);
+                }
+            });
+        });
+    }
+
+    if st.get_artists_show_local() && !artists_local_loaded(&w) {
+        let base = st.get_artists_total();
+        let weak = weak.clone();
+        handle.spawn(async move {
+            let names =
+                tokio::task::spawn_blocking(crate::local_library::all_artist_names_blocking)
+                    .await
+                    .unwrap_or_default();
+            let _ = weak.upgrade_in_event_loop(move |w| {
+                if artists_local_loaded(&w) {
+                    return;
+                }
+                let items: Vec<FavoriteArtistItem> = names
+                    .into_iter()
+                    .map(|name| FavoriteArtistItem {
+                        is_pinned: false,
+                        id: name.clone().into(),
+                        name: name.into(),
+                        image_url: "".into(),
+                        image: slint::Image::default(),
+                        source: "local".into(),
+                    })
+                    .collect();
+                let n = items.len() as i32;
+                let st = w.global::<FavoritesState>();
+                st.set_artists_local(ModelRc::new(VecModel::from(items)));
+                st.set_artists_total(base + n);
+                derive_artists(&w);
+            });
+        });
+    }
 }
 
 /// First-letter bucket key for alpha grouping (# for non-alphabetic).

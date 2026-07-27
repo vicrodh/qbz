@@ -609,3 +609,9 @@ msgstr "Artist dismissed from Recommendations"
 
 msgid "{} restored to Recommendations"
 msgstr "{} restored to Recommendations"
+
+msgid "Show local files & Plex"
+msgstr "Show local files & Plex"
+
+msgid "IN LIBRARY"
+msgstr "IN LIBRARY"

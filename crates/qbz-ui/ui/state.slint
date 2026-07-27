@@ -1564,6 +1564,7 @@ export struct LibraryFolderItem {
     last-scan-label: string,      // "Never" / localized date (Rust-computed)
     accessible: bool,             // from the accessibility check; true until resolved
     selected: bool,               // UI multi-select state
+    in-combination: bool,         // included in the Qobuz Library "Show local" merge
 }
 
 // The folder list + maintenance + danger-zone state (Settings > Local Library).
@@ -1621,6 +1622,9 @@ export global LibraryManageActions {
     callback cleanup-missing();
     callback clear-library();                    // two-step confirm
     callback set-filter(string /* query */);
+    // Toggle whether a scanned folder is included in the Qobuz Library
+    // "Show local" merge (Albums/Tracks/Artists). Persisted; empty set = all.
+    callback toggle-folder-in-combination(int /* id */);
 }
 
 // ============================ Plex connection =============================
@@ -5030,6 +5034,10 @@ export struct FavoriteArtistItem {
     // Pin badge state — kept live by main::set_artist_row_pinned when a pin
     // toggles anywhere (mirrors SlimItem.is-pinned).
     is-pinned: bool,
+    // "qobuz" | "local" | "plex" — local/Plex artists (surfaced by the Artists
+    // tab's "Show local") carry the artist NAME as `id` so open-artist routes
+    // them to the LocalLibrary Artists view instead of a Qobuz lookup.
+    source: string,
 }
 
 // An A-Z section of favorite artists (grid grouped mode + sidepanel left
@@ -5068,6 +5076,10 @@ export global FavoritesState {
     in property <[AlphaJump]> tracks-alpha: []; // A-Z jumps (name grouping)
     in-out property <bool> tracks-multi-select: false;
     in property <int> tracks-selected-count: 0;
+    // Local files + Plex tracks, loaded on first "Show local" toggle. Merged
+    // with `tracks` in derive_tracks when `tracks-show-local` is on.
+    in property <[TrackItem]> tracks-local: [];
+    in-out property <bool> tracks-show-local: false;
     in property <[AlbumCardItem]> albums: [];
     in property <[AlbumCardItem]> albums-visible: []; // after search + sort (flat render)
     in property <[DiscoverSection]> albums-grouped: []; // group-by sections
@@ -5077,7 +5089,15 @@ export global FavoritesState {
     in-out property <string> albums-group-mode: "off"; // off|alpha|artist
     in property <[AlphaJump]> albums-alpha: []; // A-Z jumps (alpha grouping)
     in property <int> albums-shown: 0; // count after filter (grouped or flat)
+    // Local files + Plex albums, loaded on first "Show local" toggle. Merged
+    // with `albums` in derive_albums when `albums-show-local` is on.
+    in property <[AlbumCardItem]> albums-local: [];
+    in-out property <bool> albums-show-local: false;
     in property <[FavoriteArtistItem]> artists: [];
+    // Local + Plex artists, loaded on first "Show local" toggle. Merged with
+    // `artists` in derive_artists when `artists-show-local` is on.
+    in property <[FavoriteArtistItem]> artists-local: [];
+    in-out property <bool> artists-show-local: false;
     // Playlists has two internal sub-tabs (mirror Tauri favoritePlaylists /
     // followingPlaylists), both rendered with the rich SearchPlaylistItem
     // (4-cover collage). `playlists-visible` is the current sub-tab after the
@@ -5150,6 +5170,15 @@ export global FavoritesActions {
     callback albums-set-sort(string /* sort key */);
     callback albums-set-group(string /* off | alpha | artist */);
     callback albums-shuffle();
+    // Toggle "Show local files & Plex" for a Library tab (albums | tracks |
+    // artists). Rust flips the tab's *-show-local flag, lazy-loads the local
+    // set on first enable, then re-derives + re-dispatches artwork.
+    callback toggle-local(string /* albums | tracks | artists */);
+    // A local/Plex track row (surfaced by the Tracks tab's "Show local") was
+    // acted on. Routed separately from `track-action` because local playback /
+    // favoriting resolves the row id against the cached LocalTrack set, not the
+    // Qobuz catalog. action = play | queue | favorite.
+    callback local-track-action(string /* track id */, string /* action */);
     // Windowed grid: the visible row band changed (item indices into
     // albums-visible, prefetch margin included) — dispatch artwork for it.
     callback albums-window-changed(int /* first */, int /* last */);

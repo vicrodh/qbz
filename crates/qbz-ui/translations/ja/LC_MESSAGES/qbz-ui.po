@@ -4801,3 +4801,9 @@ msgstr "アーティストをおすすめから除外しました"
 
 msgid "{} restored to Recommendations"
 msgstr "{} をおすすめに復元しました"
+
+msgid "Show local files & Plex"
+msgstr "ローカルファイルと Plex を表示"
+
+msgid "IN LIBRARY"
+msgstr "ライブラリに含める"

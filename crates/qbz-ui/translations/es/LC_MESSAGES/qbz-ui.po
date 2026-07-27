@@ -4843,3 +4843,9 @@ msgstr "Artista descartado de Recomendaciones"
 
 msgid "{} restored to Recommendations"
 msgstr "{} restaurado en Recomendaciones"
+
+msgid "Show local files & Plex"
+msgstr "Mostrar archivos locales y Plex"
+
+msgid "IN LIBRARY"
+msgstr "EN BIBLIOTECA"
