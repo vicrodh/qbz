@@ -7,8 +7,7 @@
 
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
-import { DiscoverSection, ShellState, AppearanceState } from "../state.slint";
-import { AlbumCard } from "AlbumCard.slint";
+import { DiscoverSection, ShellState, AppearanceState, TooltipState } from "../state.slint";import { AlbumCard } from "AlbumCard.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 import { QbzSelect } from "../primitives/QbzSelect.slint";
 
@@ -82,6 +81,8 @@ export component Carousel inherits VerticalLayout {
     in property <[string]> sort-options: [];
     in property <int> sort-index: 0;
     callback sort-changed(int);
+    in property <bool> filterable: false;
+    in property <bool> filter-active: false;
     callback album-clicked(string);
     callback media-action(string, string, string);
     callback view-all-clicked();
@@ -183,12 +184,44 @@ export component Carousel inherits VerticalLayout {
 
     // --- Header: title + page controls -----------------------------------
     HorizontalLayout {
+        spacing: 8px;
         Text {
             text: root.section.title;
             color: Theme.text-primary;
             font-size: Typography.section;
             font-weight: Typography.semibold;
             vertical-alignment: center;
+        }
+
+        if root.filterable && root.filter-active : Rectangle {
+            width: 14px;
+            height: 14px;
+            y: (parent.height - self.height) / 2;
+
+            QbzIcon {
+                source: @image-url("../assets/icons/list-filter.svg");
+                width: 14px;
+                height: 14px;
+                tint: Theme.accent;
+            }
+
+            ta := TouchArea {
+                mouse-cursor: default;
+                changed has-hover => {
+                    if (self.has-hover) {
+                        TooltipState.text = @tr("Filtered by selected genre(s)");
+                        TooltipState.anchor-x = self.absolute-position.x + self.width / 2;
+                        TooltipState.anchor-y = self.absolute-position.y;
+                        TooltipState.show = true;
+                    } else {
+                        TooltipState.show = false;
+                    }
+                }
+            }
+        }
+
+        // Spacer to push controls to the right
+        Rectangle {
             horizontal-stretch: 1;
         }
         HorizontalLayout {

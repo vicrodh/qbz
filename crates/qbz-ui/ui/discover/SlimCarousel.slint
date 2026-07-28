@@ -8,8 +8,7 @@
 
 import { Theme } from "../foundation/semantic-colors.slint";
 import { Typography } from "../foundation/typography.slint";
-import { SlimItem, ShellState, AppearanceState } from "../state.slint";
-import { SlimCard } from "SlimCard.slint";
+import { SlimItem, ShellState, AppearanceState, TooltipState } from "../state.slint";import { SlimCard } from "SlimCard.slint";
 import { QbzIcon } from "../primitives/QbzIcon.slint";
 
 component NavButton inherits Rectangle {
@@ -86,6 +85,8 @@ export component SlimCarousel inherits VerticalLayout {
     // Shown regardless of page count, unlike the chevrons.
     in property <bool> show-refresh: false;
     callback refresh-clicked();
+    in property <bool> filterable: false;
+    in property <bool> filter-active: false;
 
     property <int> columns: 4;
     property <int> rows: 3;
@@ -102,14 +103,47 @@ export component SlimCarousel inherits VerticalLayout {
 
     // --- Header: title + (conditional) page controls ---------------------
     HorizontalLayout {
+        spacing: 8px;
         Text {
             text: root.title;
             color: Theme.text-primary;
             font-size: 18px;
             font-weight: Typography.semibold;
             vertical-alignment: center;
+        }
+
+        if root.filterable && root.filter-active : Rectangle {
+            width: 14px;
+            height: 14px;
+            y: (parent.height - self.height) / 2;
+
+            QbzIcon {
+                source: @image-url("../assets/icons/list-filter.svg");
+                width: 14px;
+                height: 14px;
+                tint: Theme.accent;
+            }
+
+            ta := TouchArea {
+                mouse-cursor: default;
+                changed has-hover => {
+                    if (self.has-hover) {
+                        TooltipState.text = @tr("Filtered by selected genre(s)");
+                        TooltipState.anchor-x = self.absolute-position.x + self.width / 2;
+                        TooltipState.anchor-y = self.absolute-position.y;
+                        TooltipState.show = true;
+                    } else {
+                        TooltipState.show = false;
+                    }
+                }
+            }
+        }
+
+        // Spacer to push controls to the right
+        Rectangle {
             horizontal-stretch: 1;
         }
+
         // Title-adjacent list actions (P7): add the whole backing list to the
         // queue / create a playlist from it. Icon buttons (ADR-008, no pills).
         if root.show-list-actions: HorizontalLayout {

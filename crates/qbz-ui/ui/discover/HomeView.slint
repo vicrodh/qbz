@@ -335,6 +335,8 @@ export component HomeView inherits Rectangle {
                         || (desc.id == "mostStreamed" && desc.kind == "albumCarousel"): Carousel {
                         section: desc.section;
                         show-view-all: desc.section.endpoint != "";
+                        filterable: true;
+                        filter-active: GenreFilterState.selected-count > 0;
                         album-clicked(id) => {
                             root.album-clicked(id);
                         }
@@ -365,13 +367,48 @@ export component HomeView inherits Rectangle {
                                 font-size: 18px;
                                 font-weight: Typography.semibold;
                                 vertical-alignment: center;
+                            }
+
+                            if GenreFilterState.selected-count > 0 || HomeState.playlist-tag-count > 0 : Rectangle {
+                                width: 14px;
+                                height: 14px;
+                                y: (parent.height - self.height) / 2;
+
+                                QbzIcon {
+                                    source: @image-url("../assets/icons/list-filter.svg");
+                                    width: 14px;
+                                    height: 14px;
+                                    tint: Theme.accent;
+                                }
+
+                                ta := TouchArea {
+                                    mouse-cursor: default;
+                                    changed has-hover => {
+                                        if (self.has-hover) {
+                                            TooltipState.text = GenreFilterState.selected-count > 0 && HomeState.playlist-tag-count > 0
+                                                ? @tr("Filtered by genre and category")
+                                                : (HomeState.playlist-tag-count > 0 ? @tr("Filtered by selected categories") : @tr("Filtered by selected genre(s)"));
+                                            TooltipState.anchor-x = self.absolute-position.x + self.width / 2;
+                                            TooltipState.anchor-y = self.absolute-position.y;
+                                            TooltipState.show = true;
+                                        } else {
+                                            TooltipState.show = false;
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Spacer to push the category dropdown to the right
+                            Rectangle {
                                 horizontal-stretch: 1;
                             }
+
                             if HomeState.playlist-tags.length > 0: VerticalLayout {
                                 alignment: center;
                                 PlaylistTagFilter { }
                             }
                         }
+
 
                         if HomeState.playlists.length > 0: PlaylistCarousel {
                             // Title shown on the header row above, not here.
@@ -456,12 +493,9 @@ export component HomeView inherits Rectangle {
                         && HomeState.popular.length > 0: SlimCarousel {
                         title: @tr("Popular albums");
                         items: HomeState.popular;
-                        // "View all" -> the mostStreamed DiscoverBrowse page
-                        // (Tauri parity: the Home slim grid's see-all landed
-                        // on the Most Streamed full listing). The slimGrid
-                        // descriptor carries no section payload, so the
-                        // endpoint + localized title are supplied here.
                         show-view-all: true;
+                        filterable: true;
+                        filter-active: GenreFilterState.selected-count > 0;
                         view-all-clicked => {
                             root.discover-view-all("/discover/mostStreamed", @tr("Most Streamed"));
                         }
