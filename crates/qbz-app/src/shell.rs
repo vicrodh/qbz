@@ -318,6 +318,7 @@ mod tests {
     }
 
     fn test_runtime() -> AppRuntime<NoOpAdapter> {
+        crate::ensure_crypto_provider();
         AppRuntime::with_audio_settings(NoOpAdapter, None, AudioSettings::default(), None)
     }
 

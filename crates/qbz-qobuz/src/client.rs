@@ -3105,6 +3105,7 @@ mod tests {
     /// drop guard reopens the gate even if the test panics.
     #[tokio::test]
     async fn offline_gate_fails_fast_with_typed_error() {
+        qbz_app::ensure_crypto_provider();
         let _lock = crate::offline_gate::test_lock()
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -3138,6 +3139,7 @@ mod tests {
     /// and without touching the network.
     #[tokio::test]
     async fn offline_gate_exempts_login_methods() {
+        qbz_app::ensure_crypto_provider();
         let _lock = crate::offline_gate::test_lock()
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());

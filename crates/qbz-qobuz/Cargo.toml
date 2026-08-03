@@ -44,3 +44,6 @@ anyhow = { workspace = true }
 # Used only by examples/lyrics_probe.rs (read-only live probe of the lyrics
 # endpoint): loads the saved OAuth token / credentials for login.
 qbz-credentials = { path = "../qbz-credentials" }
+ 
+# Used only by client.rs tests (rustls crypto provider selection).
+qbz-app = { path = "../qbz-app" }
