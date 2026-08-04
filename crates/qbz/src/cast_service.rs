@@ -79,6 +79,12 @@ const CAST_VOLUME_ECHO_GUARD: std::time::Duration = std::time::Duration::from_se
 /// so a steady renderer doesn't jitter the bar by fractions of a percent.
 const CAST_VOLUME_EPSILON: f32 = 0.02;
 
+/// Floor between renderer volume writes. The slider emits a change per step
+/// while dragging, far faster than a renderer can absorb them, so the worker
+/// spaces its writes out — every tick that lands inside the gap collapses into
+/// the next single write instead of extending a queue.
+const CAST_VOLUME_WRITE_INTERVAL: std::time::Duration = std::time::Duration::from_millis(100);
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum CastProtocol {
     Chromecast,
@@ -177,6 +183,11 @@ struct CastInner {
     volume_set_at: Option<std::time::Instant>,
     // Poll ticks since the last renderer-volume refresh.
     volume_poll_tick: u32,
+    // Drag target handed to the volume worker (0..1), and the worker itself.
+    // Dropping the sender ends the worker; the handle is kept so disconnect can
+    // cut a write that is already in flight.
+    volume_tx: Option<tokio::sync::watch::Sender<f32>>,
+    volume_task: Option<tokio::task::JoinHandle<()>>,
     // QConnect coexistence: remember whether QConnect was on before casting.
     qconnect_was_on_before_cast: bool,
     // Position-poll task; aborted on disconnect.
@@ -323,6 +334,10 @@ impl SlintCastService {
             CastProtocol::Dlna => self.connect_dlna(&device_id).await?,
         };
 
+        // Before `protocol` goes live, so no slider move can arrive with nowhere
+        // to land.
+        self.start_volume_worker().await;
+
         {
             let mut inner = self.inner.lock().await;
             inner.protocol = Some(proto);
@@ -435,6 +450,7 @@ impl SlintCastService {
         // Stop the renderer first (disconnect alone leaves it playing).
         let _ = self.stop_renderer().await;
 
+        let volume_task;
         let (poll, was_on) = {
             let mut inner = self.inner.lock().await;
             if let Some(h) = inner.chromecast.take() {
@@ -461,9 +477,14 @@ impl SlintCastService {
             inner.cast_volume = None;
             inner.volume_set_at = None;
             inner.volume_poll_tick = 0;
+            inner.volume_tx = None;
+            volume_task = inner.volume_task.take();
             (inner.poll_task.take(), inner.qconnect_was_on_before_cast)
         };
         if let Some(task) = poll {
+            task.abort();
+        }
+        if let Some(task) = volume_task {
             task.abort();
         }
         if was_on {
@@ -817,34 +838,29 @@ impl SlintCastService {
         Ok(true)
     }
 
+    /// Route a slider move to the renderer.
+    ///
+    /// This does NOT talk to the device: it hands the target to the volume
+    /// worker and returns. The slider emits a change per step, and a renderer
+    /// write is orders of magnitude slower than the drag produces them — writing
+    /// inline queued them up, so a slow drag to max left the volume crawling
+    /// upward long after the user let go, with no way to stop it. The worker
+    /// keeps exactly one write in flight and always writes the newest value.
     pub async fn set_volume_if_cast(&self, volume: f32) -> Result<bool, String> {
-        let proto = {
-            let inner = self.inner.lock().await;
-            match inner.protocol {
-                Some(p) => p,
-                None => return Ok(false),
-            }
-        };
         let v = volume.clamp(0.0, 1.0);
-        match proto {
-            CastProtocol::Chromecast => {
-                let inner = self.inner.lock().await;
-                if let Some(h) = inner.chromecast.as_ref() {
-                    h.set_volume(v).map_err(|e| e.to_string())?;
-                }
-            }
-            CastProtocol::Dlna => {
-                let mut inner = self.inner.lock().await;
-                if let Some(c) = inner.dlna.as_mut() {
-                    c.set_volume(v).await.map_err(|e| e.to_string())?;
-                }
-            }
-        }
-        // Remember what the renderer was just told, and when: the periodic
-        // refresh compares against this instead of pushing every reading, and
-        // stays out of the way while the drag settles.
         {
             let mut inner = self.inner.lock().await;
+            if inner.protocol.is_none() {
+                return Ok(false);
+            }
+            if let Some(tx) = inner.volume_tx.as_ref() {
+                // Latest-wins: a send while a write is in flight replaces the
+                // pending target rather than queueing behind it.
+                let _ = tx.send(v);
+            }
+            // Remember what the renderer is being told, and when: the periodic
+            // refresh compares against this instead of pushing every reading,
+            // and stays out of the way while the drag settles.
             inner.cast_volume = Some(v);
             inner.volume_set_at = Some(std::time::Instant::now());
             inner.volume_poll_tick = 0;
@@ -853,6 +869,58 @@ impl SlintCastService {
         // moves the slider) is skipped while casting.
         self.push_volume(v);
         Ok(true)
+    }
+
+    /// Start the volume worker for this connection, replacing any prior one.
+    async fn start_volume_worker(self: &Arc<Self>) {
+        // The seed is never transmitted — `changed()` only wakes on sends made
+        // after the receiver exists — so its value is irrelevant.
+        let (tx, rx) = tokio::sync::watch::channel(0.0_f32);
+        let svc = self.clone();
+        let task = tokio::spawn(async move { svc.run_volume_worker(rx).await });
+        let mut inner = self.inner.lock().await;
+        inner.volume_tx = Some(tx);
+        if let Some(old) = inner.volume_task.replace(task) {
+            old.abort();
+        }
+    }
+
+    async fn run_volume_worker(self: Arc<Self>, rx: tokio::sync::watch::Receiver<f32>) {
+        let svc = self.clone();
+        coalesce_volume_writes(rx, CAST_VOLUME_WRITE_INTERVAL, move |target| {
+            let svc = svc.clone();
+            async move {
+                if let Err(e) = svc.write_volume_to_renderer(target).await {
+                    log::warn!("[Cast] set_volume: {e}");
+                }
+            }
+        })
+        .await;
+    }
+
+    async fn write_volume_to_renderer(&self, volume: f32) -> Result<(), String> {
+        let proto = {
+            let inner = self.inner.lock().await;
+            match inner.protocol {
+                Some(p) => p,
+                None => return Ok(()),
+            }
+        };
+        match proto {
+            CastProtocol::Chromecast => {
+                let inner = self.inner.lock().await;
+                if let Some(h) = inner.chromecast.as_ref() {
+                    h.set_volume(volume).map_err(|e| e.to_string())?;
+                }
+            }
+            CastProtocol::Dlna => {
+                let mut inner = self.inner.lock().await;
+                if let Some(c) = inner.dlna.as_mut() {
+                    c.set_volume(volume).await.map_err(|e| e.to_string())?;
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Read the connected renderer's REAL volume and mirror it onto the bar.
@@ -1318,6 +1386,10 @@ impl SlintCastService {
         if let Some(task) = inner.poll_task.take() {
             task.abort();
         }
+        inner.volume_tx = None;
+        if let Some(task) = inner.volume_task.take() {
+            task.abort();
+        }
         if let Some(h) = inner.chromecast.take() {
             let _ = h.disconnect();
         }
@@ -1753,5 +1825,94 @@ fn trim_khz(khz: f64) -> String {
         format!("{}", khz as i64)
     } else {
         format!("{:.1}", khz)
+    }
+}
+
+/// Apply volume targets to `write`, newest-first, one at a time.
+///
+/// The slider emits a change per step while dragging, far faster than a
+/// renderer can absorb writes. Writing each one queued them up, so a slow drag
+/// to max left the volume still crawling upward after the user let go, with no
+/// way to stop it. Here `changed()` resolves immediately when values arrived
+/// during the previous write and `borrow_and_update` reads only the LATEST, so
+/// a burst collapses into one write; `interval` spaces writes out so the burst
+/// has a window to collapse in. The value the user released on is always the
+/// last one written. Returns when the sender is dropped (disconnect).
+async fn coalesce_volume_writes<F, Fut>(
+    mut rx: tokio::sync::watch::Receiver<f32>,
+    interval: std::time::Duration,
+    mut write: F,
+) where
+    F: FnMut(f32) -> Fut,
+    Fut: std::future::Future<Output = ()>,
+{
+    while rx.changed().await.is_ok() {
+        let target = *rx.borrow_and_update();
+        write(target).await;
+        tokio::time::sleep(interval).await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::coalesce_volume_writes;
+    use std::sync::{Arc, Mutex};
+    use std::time::Duration;
+
+    /// A slow drag must not outlive the drag: the renderer sees a handful of
+    /// writes instead of one per slider step, and the value the user let go on
+    /// is the one it ends at.
+    #[tokio::test]
+    async fn volume_writes_coalesce_to_the_newest_target() {
+        const TICKS: usize = 40;
+        let (tx, rx) = tokio::sync::watch::channel(0.0_f32);
+        let writes: Arc<Mutex<Vec<f32>>> = Arc::new(Mutex::new(Vec::new()));
+
+        let sink = writes.clone();
+        let worker = tokio::spawn(coalesce_volume_writes(
+            rx,
+            Duration::from_millis(10),
+            move |v| {
+                let sink = sink.clone();
+                // Stand in for a renderer round trip — slower than the drag
+                // produces ticks, which is the whole problem.
+                async move {
+                    tokio::time::sleep(Duration::from_millis(20)).await;
+                    sink.lock().expect("writes").push(v);
+                }
+            },
+        ));
+
+        for i in 1..=TICKS {
+            tx.send(i as f32 / TICKS as f32).expect("worker alive");
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+
+        // Wait for the trailing write, bounded generously so a loaded CI box
+        // doesn't fail on timing (slower = fewer writes, never more).
+        for _ in 0..100 {
+            if writes.lock().expect("writes").last() == Some(&1.0) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        drop(tx);
+        worker.await.expect("worker exits when the sender drops");
+
+        let writes = writes.lock().expect("writes");
+        assert!(
+            writes.len() < TICKS / 2,
+            "expected coalescing, got {} writes for {TICKS} ticks",
+            writes.len()
+        );
+        assert_eq!(
+            writes.last().copied(),
+            Some(1.0),
+            "the released value must be the one that sticks"
+        );
+        assert!(
+            writes.iter().all(|v| (0.0..=1.0).contains(v)),
+            "no write may overshoot the drag: {writes:?}"
+        );
     }
 }
