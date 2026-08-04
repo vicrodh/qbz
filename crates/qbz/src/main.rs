@@ -13971,11 +13971,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             prefs.nav_header_compact = enabled;
             crate::ui_prefs::save(&prefs);
         });
-        window.global::<NowPlayingState>().on_persist_volume(|fraction| {
-            let mut prefs = crate::ui_prefs::load();
-            prefs.volume = fraction.clamp(0.0, 1.0);
-            crate::ui_prefs::save(&prefs);
-        });
+        let weak = window.as_weak();
+        window
+            .global::<NowPlayingState>()
+            .on_persist_volume(move |fraction| {
+                // While casting the slider shows the RENDERER's volume, not
+                // ours — persisting it would hand the speaker's level to the
+                // local player on the next launch. The cast service owns the
+                // renderer's volume; nothing to store on our side.
+                if let Some(w) = weak.upgrade() {
+                    if w.global::<NowPlayingState>().get_cast_active() {
+                        return;
+                    }
+                }
+                let mut prefs = crate::ui_prefs::load();
+                prefs.volume = fraction.clamp(0.0, 1.0);
+                crate::ui_prefs::save(&prefs);
+            });
         // Remember the last SAFE top-level view for "where you left off".
         let weak = window.as_weak();
         shell.on_persist_view(move || {

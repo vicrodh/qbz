@@ -39,3 +39,7 @@ getrandom = "0.4"
 
 # Async runtime (for DLNA)
 tokio = { version = "1", features = ["rt", "sync"] }
+
+[dev-dependencies]
+# The DLNA volume test drives a real SOAP round trip against a fake renderer.
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }

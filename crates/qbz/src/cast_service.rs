@@ -63,6 +63,22 @@ const CAST_POSITION_SIGNAL_MIN_SECS: f64 = 1.0;
 /// renderer that under-reports position or trims trailing silence).
 const CAST_PREMATURE_STOP_POLLS_MAX: u32 = 4;
 
+/// How many position polls between renderer-volume refreshes. The volume is
+/// authoritative on the DEVICE (its own remote/app can move it), so the slider
+/// re-reads it periodically — but far less often than the position, since it is
+/// an extra round trip to the renderer and volume rarely changes behind our back.
+const CAST_VOLUME_REFRESH_POLLS: u32 = 5;
+
+/// Ignore a refreshed volume within this window after a local drag: the renderer
+/// may not have applied the new value yet, and pushing its pre-drag reading back
+/// onto the bar would fight the user's own slider.
+const CAST_VOLUME_ECHO_GUARD: std::time::Duration = std::time::Duration::from_secs(3);
+
+/// Minimum change before a refreshed renderer volume moves the slider. Absorbs
+/// the rounding of the 0..1 fraction into the device's integer scale (and back)
+/// so a steady renderer doesn't jitter the bar by fractions of a percent.
+const CAST_VOLUME_EPSILON: f32 = 0.02;
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum CastProtocol {
     Chromecast,
@@ -153,6 +169,14 @@ struct CastInner {
     cast_max_position: f64,
     // Consecutive STOPPED polls the guard called premature (anti-wedge latch).
     cast_premature_stop_polls: u32,
+    // Renderer volume mirror (0..1). `cast_volume` is the last value we read
+    // from or sent to the renderer — the refresh only touches the slider when
+    // the device drifts away from it. `volume_set_at` stamps the last local
+    // drag so an in-flight read can't snap the slider back mid-drag.
+    cast_volume: Option<f32>,
+    volume_set_at: Option<std::time::Instant>,
+    // Poll ticks since the last renderer-volume refresh.
+    volume_poll_tick: u32,
     // QConnect coexistence: remember whether QConnect was on before casting.
     qconnect_was_on_before_cast: bool,
     // Position-poll task; aborted on disconnect.
@@ -318,6 +342,11 @@ impl SlintCastService {
         }
         self.push_connection_state().await;
         self.push_device_cap_row().await;
+        // Adopt the renderer's OWN volume before the user can touch the slider.
+        // Skipping this leaves the bar showing the local volume, so the first
+        // drag jumps the renderer to that value — dragging down from a local
+        // 100% to 70% turns a speaker sitting at 20% UP, hard.
+        self.refresh_renderer_volume(true).await;
         self.start_position_poll();
 
         // Re-cast the current track at its position, passing the REAL source
@@ -427,6 +456,11 @@ impl SlintCastService {
             inner.current_track_id = None;
             inner.is_playing = false;
             inner.track_end_detected = false;
+            // The bar goes back to showing the LOCAL volume (the local poll
+            // re-owns it within a tick), so the renderer's mirror is stale.
+            inner.cast_volume = None;
+            inner.volume_set_at = None;
+            inner.volume_poll_tick = 0;
             (inner.poll_task.take(), inner.qconnect_was_on_before_cast)
         };
         if let Some(task) = poll {
@@ -806,15 +840,113 @@ impl SlintCastService {
                 }
             }
         }
+        // Remember what the renderer was just told, and when: the periodic
+        // refresh compares against this instead of pushing every reading, and
+        // stays out of the way while the drag settles.
+        {
+            let mut inner = self.inner.lock().await;
+            inner.cast_volume = Some(v);
+            inner.volume_set_at = Some(std::time::Instant::now());
+            inner.volume_poll_tick = 0;
+        }
         // Reflect the drag on the bar: the local set_volume (which normally
-        // moves the slider) is skipped while casting, and the cast poll doesn't
-        // push volume, so update NowPlayingState.volume here.
+        // moves the slider) is skipped while casting.
+        self.push_volume(v);
+        Ok(true)
+    }
+
+    /// Read the connected renderer's REAL volume and mirror it onto the bar.
+    ///
+    /// The renderer owns its volume — its own remote or app can move it, and it
+    /// has its own idea of what "full" means (see `VolumeRange` in qbz-cast).
+    /// Whenever the bar shows something else, the next drag is a jump rather
+    /// than an adjustment.
+    ///
+    /// `adopt` (connect) takes the reading unconditionally. The periodic refresh
+    /// passes `false`: it defers to a recent local drag and ignores changes too
+    /// small to be anything but scale rounding. Best-effort throughout — a
+    /// renderer with no volume control, or one that faults, leaves the bar as is.
+    async fn refresh_renderer_volume(&self, adopt: bool) {
+        let (proto, last_known, set_at) = {
+            let inner = self.inner.lock().await;
+            match inner.protocol {
+                Some(p) => (p, inner.cast_volume, inner.volume_set_at),
+                None => return,
+            }
+        };
+        if !adopt {
+            if let Some(at) = set_at {
+                if at.elapsed() < CAST_VOLUME_ECHO_GUARD {
+                    return;
+                }
+            }
+        }
+
+        let reading = match proto {
+            CastProtocol::Chromecast => {
+                let status = {
+                    let inner = self.inner.lock().await;
+                    inner.chromecast.as_ref().map(|h| h.get_status())
+                };
+                match status {
+                    Some(Ok(s)) => s.volume_level,
+                    Some(Err(e)) => {
+                        log::debug!("[Cast] volume read failed: {e}");
+                        None
+                    }
+                    None => None,
+                }
+            }
+            CastProtocol::Dlna => {
+                let inner = self.inner.lock().await;
+                let Some(conn) = inner.dlna.as_ref() else {
+                    return;
+                };
+                match conn.get_volume().await {
+                    Ok(v) => Some(v),
+                    Err(e) => {
+                        log::debug!("[Cast] volume read failed: {e}");
+                        None
+                    }
+                }
+            }
+        };
+        let Some(volume) = reading.map(|v| v.clamp(0.0, 1.0)) else {
+            return;
+        };
+
+        let changed = last_known.is_none_or(|last| (volume - last).abs() >= CAST_VOLUME_EPSILON);
+        if !adopt && !changed {
+            return;
+        }
+        {
+            let mut inner = self.inner.lock().await;
+            // Lost the connection while the read was in flight.
+            if inner.protocol != Some(proto) {
+                return;
+            }
+            // A drag landed WHILE the read was in flight, so this reading is
+            // already stale — the user's value is the newer intent, and the
+            // renderer has it. Re-checked here (not only up front) because the
+            // read is a full round trip to the device.
+            if inner
+                .volume_set_at
+                .is_some_and(|at| at.elapsed() < CAST_VOLUME_ECHO_GUARD)
+            {
+                return;
+            }
+            inner.cast_volume = Some(volume);
+        }
+        log::info!("[Cast] renderer volume is {:.0}%", volume * 100.0);
+        self.push_volume(volume);
+    }
+
+    fn push_volume(&self, volume: f32) {
         let weak = self.window.clone();
         let _ = weak.upgrade_in_event_loop(move |w| {
             use slint::ComponentHandle;
-            w.global::<NowPlayingState>().set_volume(v);
+            w.global::<NowPlayingState>().set_volume(volume);
         });
-        Ok(true)
     }
 
     // No transport "stop" button in the bar today; kept for parity + a future
@@ -963,6 +1095,22 @@ impl SlintCastService {
                 None => return,
             }
         };
+
+        // Re-read the renderer's volume on a slower cadence than the position:
+        // the device owns it, so a change made on the device itself (its remote,
+        // its own app) has to reach the bar or the next drag jumps.
+        let refresh_volume = {
+            let mut inner = self.inner.lock().await;
+            inner.volume_poll_tick = inner.volume_poll_tick.saturating_add(1);
+            let due = inner.volume_poll_tick >= CAST_VOLUME_REFRESH_POLLS;
+            if due {
+                inner.volume_poll_tick = 0;
+            }
+            due
+        };
+        if refresh_volume {
+            self.refresh_renderer_volume(false).await;
+        }
 
         // Read position/state from the active renderer.
         let (position, duration, state, playing) = match proto {
@@ -1192,6 +1340,9 @@ impl SlintCastService {
         inner.connected_cap_key = None;
         inner.current_track_id = None;
         inner.is_playing = false;
+        inner.cast_volume = None;
+        inner.volume_set_at = None;
+        inner.volume_poll_tick = 0;
     }
 
     // ---- State push to the UI ----------------------------------------------
