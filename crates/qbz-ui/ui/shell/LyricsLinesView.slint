@@ -195,16 +195,25 @@ component LyricsLineRow inherits VerticalLayout {
         letter-spacing: 0.2px;
     }
 
-    // ACTIVE row: per-VISUAL-line karaoke highlight. The engine measured the
-    // active line's word-wrap (`lyrics_measure` / `lyrics_sync`) against this
-    // view's content-width + font + size and pushed one LyricsSegment per
-    // visual row, each carrying `start-weight` (cumulative width fraction
-    // before it) and `width-weight` (its share of the line). We render one
-    // dim-base + clipped-bright-overlay row PER segment with `wrap: no-wrap`
-    // (segments are already single visual lines, Tauri's `white-space:nowrap`),
-    // and re-map the single global `line-progress` to a per-segment local
-    // fraction so row 1 fills to 100% BEFORE row 2 starts — instead of the old
-    // single full-height clip rect that lit every wrapped row at once.
+    // ACTIVE row: per-VISUAL-line karaoke highlight. The engine measures the
+    // active line's word-wrap against THIS window's real active renderer
+    // (`lyrics_sync::slint_fits_one_line`, via the always-mounted probe on
+    // AppWindow — app.slint / state.slint) and pushes one LyricsSegment per
+    // INTENDED visual row, each carrying `start-weight` (cumulative width
+    // fraction before it) and `width-weight` (its share of the line).
+    //
+    // A segment is *supposed* to always be exactly one visual row (that's
+    // the whole point of the probe), but we still don't blindly trust that:
+    // `wrap: word-wrap` stays on as a fallback for when a segment's own Text
+    // ends up 2 rows tall anyway (DPI/scale-factor drift between the probe's
+    // measurement pass and the real paint pass, a stale probe read on the
+    // very first frame, etc.). Earlier this fallback capped the highlight to
+    // row 1 and left row 2 permanently dark — safe, but visually wrong (no
+    // sweep). Below instead renders 1 OR 2 independently-clipped fill bands
+    // per segment (capped at 2 — a segment overflowing further would mean
+    // the probe was wrong by more than a full row, which shouldn't happen),
+    // so the highlight sweeps every row a segment actually produced, however
+    // many that turns out to be.
     if root.is-active: VerticalLayout {
         for seg[i] in LyricsState.active-segments: HorizontalLayout {
             // Left-align each visual line; the segment's own width drives the
@@ -212,7 +221,8 @@ component LyricsLineRow inherits VerticalLayout {
             alignment: start;
             segbase := Text {
                 text: seg.text;
-                wrap: no-wrap;
+                wrap: word-wrap;
+                width: min(self.preferred-width, LyricsState.content-width);
                 // Active line is fully bright (opacity 1.0, dimming ladder
                 // returns 1.0 for the active row) — keep parity with the old
                 // base which animated opacity; active stays solid.
@@ -222,27 +232,78 @@ component LyricsLineRow inherits VerticalLayout {
                 font-weight: Typography.bold;
                 letter-spacing: 0.2px;
 
-                // Bright (sung) overlay, clipped to this segment's LOCAL fill.
-                // local = clamp((line-progress - start-weight) / width-weight, 0, 1)
+                // Zero-footprint reference giving this font/size's TRUE
+                // single-row height, independent of segbase's own height
+                // (which grows if the fallback above ever kicks in).
+                row-height-ref := Text {
+                    text: "Hg";
+                    wrap: no-wrap;
+                    font-family: root.font-name;
+                    font-size: root.size-active;
+                    font-weight: Typography.bold;
+                    letter-spacing: 0.2px;
+                    visible: false;
+                }
+
+                // ---- Shared fill math (both rows read these) ----
+                // Lite fill (pref) or reduce-motion (kiosk / weak GPU): the
+                // active line is fully lit and STATIC — no per-frame clip
+                // animation.
+                property <bool> cheap: ShellState.reduce-motion || LyricsState.lite-fill;
+                property <length> row-h: row-height-ref.preferred-height;
+                // True only when THIS segment's own Text actually rendered 2
+                // rows (the fallback path) — normally false.
+                property <bool> two-rows: self.height > self.row-h + 0.5px;
+                // The segment's own 0-1 local fill fraction, re-mapped from
+                // the single global line-progress via this segment's
+                // start/width weight.
+                property <float> seg-fill: seg.width-weight > 0
+                    ? Math.clamp((LyricsState.line-progress - seg.start-weight) / seg.width-weight, 0.0, 1.0)
+                    : 0.0;
+                // Estimated TIME share row 0 accounts for, when two-rows:
+                // this segment's natural (unwrapped) width vs how much of it
+                // content-width can hold. word-wrap packs row 0 close to
+                // full before breaking, so row 0 typically holds MOST of the
+                // segment's content — NOT half of it. (An earlier version
+                // assumed an equal 50/50 time split between the two rows,
+                // which was simple and always reached full width correctly,
+                // but was wrong on exactly this point: row 0 usually holds
+                // much more than half the line, so it was reported "done" at
+                // just the 50% line-progress mark — way ahead of the real
+                // singer. This ratio is still an estimate (Slint doesn't
+                // expose the real wrap point), but "row 0 gets its width
+                // share of the total" is a much closer approximation of
+                // reality than "row 0 gets half the time" ever was.)
+                property <float> row0-share: self.two-rows
+                    ? Math.clamp(min(LyricsState.content-width, self.preferred-width) / self.preferred-width, 0.05, 0.95)
+                    : 1.0;
+                property <float> row0-local: self.two-rows
+                    ? Math.clamp(self.seg-fill / self.row0-share, 0.0, 1.0)
+                    : self.seg-fill;
+                property <float> row1-local: self.two-rows
+                    ? Math.clamp((self.seg-fill - self.row0-share) / (1.0 - self.row0-share), 0.0, 1.0)
+                    : 0.0;
+
+                // Bright (sung) overlay, ROW 0. Always present. When
+                // `two-rows` is false this is the segment's only row (the
+                // normal case) and behaves exactly as before: local fill
+                // sweeps the full segment width. When `two-rows` is true,
+                // this band fills through row0-local's [0,1] first; row 1
+                // below then fills through its own [0,1] via row1-local.
                 Rectangle {
-                    // Lite fill (pref) or reduce-motion (kiosk / weak GPU): the
-                    // active line is fully lit and STATIC — no per-frame clip
-                    // animation, so the surface stops repainting the whole window
-                    // ~60x/s just to sweep the karaoke fill.
-                    property <bool> cheap: ShellState.reduce-motion || LyricsState.lite-fill;
                     x: 0;
                     y: 0;
-                    width: self.cheap
-                        ? segbase.width
-                        : segbase.width * Math.clamp(
-                            seg.width-weight > 0
-                                ? (LyricsState.line-progress - seg.start-weight) / seg.width-weight
-                                : 0,
-                            0.0, 1.0);
-                    height: segbase.height;
+                    // segbase.width is a generous ceiling (this row's real
+                    // glyphs never exceed it) — `clip: true` means overfilling
+                    // past the last glyph just shows blank space, harmless.
+                    // row0-local reaches exactly 1.0 at completion by
+                    // construction, so this always reaches exactly
+                    // segbase.width — no boundary estimate involved anymore.
+                    width: segbase.cheap ? segbase.width : segbase.row0-local * segbase.width;
+                    height: segbase.row-h;
                     clip: true;
                     animate width {
-                        duration: self.cheap ? 0ms : LyricsState.fill-anim-ms * 1ms;
+                        duration: segbase.cheap ? 0ms : LyricsState.fill-anim-ms * 1ms;
                         easing: linear;
                     }
                     Text {
@@ -251,7 +312,40 @@ component LyricsLineRow inherits VerticalLayout {
                         width: segbase.width;
                         height: segbase.height;
                         text: seg.text;
-                        wrap: no-wrap;
+                        wrap: word-wrap;
+                        color: root.active-color;
+                        font-family: root.font-name;
+                        font-size: root.size-active;
+                        font-weight: Typography.bold;
+                        letter-spacing: 0.2px;
+                    }
+                }
+
+                // Bright (sung) overlay, ROW 1 — only exists while `two-rows`
+                // is true (the fallback path). Positioned one row down; its
+                // own copy of the overlay text is shifted UP by one row so
+                // the SAME wrap points land inside this clip window, showing
+                // exactly row 1's slice of the glyphs (mirrors row 0's Text
+                // exactly, so they always agree on where the wrap fell).
+                if segbase.two-rows: Rectangle {
+                    x: 0;
+                    y: segbase.row-h;
+                    // Same reasoning as row 0's width above: generous ceiling,
+                    // row1-local reaches exactly 1.0 at completion.
+                    width: segbase.cheap ? segbase.width : segbase.row1-local * segbase.width;
+                    height: segbase.row-h;
+                    clip: true;
+                    animate width {
+                        duration: segbase.cheap ? 0ms : LyricsState.fill-anim-ms * 1ms;
+                        easing: linear;
+                    }
+                    Text {
+                        x: 0;
+                        y: -segbase.row-h;
+                        width: segbase.width;
+                        height: segbase.height;
+                        text: seg.text;
+                        wrap: word-wrap;
                         color: root.active-color;
                         font-family: root.font-name;
                         font-size: root.size-active;
@@ -327,6 +421,20 @@ export component LyricsLinesView inherits Rectangle {
     changed watched-active => {
         if (root.watched-active < 0) {
             root.last-centered-index = -1;
+            // Snap back to the top immediately (issue: track change left the
+            // previous track's scroll offset on screen). Rust sets
+            // active-index to -1 synchronously in on_track_changed, BEFORE
+            // the new doc even starts loading, so this fires right away on
+            // every track change — no need to wait for a real active line
+            // (which may be seconds away behind an intro, or may never come
+            // at all for unsynced/plain lyrics, where center-active() never
+            // runs). Direct writes here, same idiom as center-active(): kill
+            // any in-flight smooth animation so it can't fight this jump,
+            // then set both the animated target and the Flickable itself so
+            // there's nothing left to animate FROM on the next real center.
+            root.smooth-scroll = false;
+            root.scroll-target = 0px;
+            flick.viewport-y = 0px;
         }
     }
 

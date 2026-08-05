@@ -513,7 +513,7 @@ pub fn mirror_lyrics_scalars(main: &AppWindow) {
     d.set_active_index(s.get_active_index());
     d.set_line_progress(s.get_line_progress());
     d.set_fill_anim_ms(s.get_fill_anim_ms());
-    refresh_mini_segments(&d);
+    refresh_mini_segments(main, &d);
 }
 
 /// Recompute the mini's per-visual-line karaoke segmentation against ITS OWN
@@ -521,8 +521,13 @@ pub fn mirror_lyrics_scalars(main: &AppWindow) {
 /// sidebar). The mini renders with FIXED render prefs — Inter / 15px / no
 /// uppercase (`MiniLyricsSurface.slint` binds none of the display prefs) — so
 /// it passes those rather than the persisted sidebar prefs. Cache-guarded.
-fn refresh_mini_segments(d: &LyricsState) {
+/// Takes `main` (not the mini window) for the wrap-fit probe: the probe
+/// elements only exist on `AppWindow` (app.slint) — a pure measurement
+/// utility, so it's fine to answer for text that ends up on a DIFFERENT
+/// window's LyricsState (`d`) than the one hosting the probe.
+fn refresh_mini_segments(main: &AppWindow, d: &LyricsState) {
     crate::lyrics_sync::refresh_active_segments(
+        main,
         d,
         d.get_active_index(),
         crate::lyrics_sync::RenderPrefs {
@@ -610,7 +615,7 @@ fn mirror_lyrics_gated(main: &AppWindow, mini: &MiniPlayerWindow) {
     // Translation toggle (v10): the mini surface has no button of its own —
     // it follows the sidebar's bilingual state through the shared model.
     d.set_show_translation(s.get_show_translation());
-    refresh_mini_segments(&d);
+    refresh_mini_segments(&main, &d);
 
     // Gate the lines-model copy on (status, line-count) so we don't thrash the
     // lyrics view (which would reset its scroll) every tick.

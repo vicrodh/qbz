@@ -53,7 +53,7 @@ use qbz_app::shell::AppRuntime;
 
 use crate::adapter::SlintAdapter;
 use crate::lyrics_measure;
-use crate::{AppWindow, ImmersiveState, LyricsSegment, LyricsState, ShellState};
+use crate::{AppWindow, ImmersiveState, LyricsSegment, LyricsState, LyricsWrapProbe, ShellState};
 
 type Runtime = Arc<AppRuntime<SlintAdapter>>;
 
@@ -214,7 +214,7 @@ fn lyrics_surface_open(window: &AppWindow) -> bool {
     let imm = window.global::<ImmersiveState>();
     imm.get_open()
         && ((imm.get_view_mode() == 0 && imm.get_mode() == 4)
-            || (imm.get_view_mode() == 1 && imm.get_split_panel() == 0))
+        || (imm.get_view_mode() == 1 && imm.get_split_panel() == 0))
 }
 
 fn compute_and_push(window: &AppWindow, runtime: &Runtime, require_playing: bool) -> bool {
@@ -234,6 +234,7 @@ fn compute_and_push(window: &AppWindow, runtime: &Runtime, require_playing: bool
         // font/size pref change WHILE PAUSED re-flows the wrapped highlight
         // (cache-guarded — a no-op when nothing relevant changed).
         refresh_active_segments(
+            window,
             &lyrics,
             lyrics.get_active_index(),
             main_render_prefs(&lyrics),
@@ -279,7 +280,7 @@ fn compute_and_push(window: &AppWindow, runtime: &Runtime, require_playing: bool
 
     // Per-visual-line karaoke segmentation: recompute (cache-guarded) when the
     // active line, content-width, font, size tier, or uppercase pref changes.
-    refresh_active_segments(&lyrics, index, main_render_prefs(&lyrics), SegSurface::Main);
+    refresh_active_segments(window, &lyrics, index, main_render_prefs(&lyrics), SegSurface::Main);
 
     // REQ-1 fan-out: mirror the karaoke scalars to the miniplayer (30Hz; no-op
     // when the mini is closed) so the mini lyrics highlight stays smooth.
@@ -322,6 +323,51 @@ fn size_active_px(size_index: i32) -> f32 {
     }
 }
 
+/// `font-index` -> font-family STRING, matching `LyricsSidebar.slint`'s
+/// `font-name:` binding exactly ("" = window default). The probe (below)
+/// must use the identical family name or it isn't measuring the same font
+/// the real active line renders with.
+fn font_family_name(font_index: i32) -> &'static str {
+    match font_index {
+        1 => "LINE Seed JP",
+        2 => "Montserrat",
+        3 => "Noto Sans",
+        4 => "Source Sans 3",
+        _ => "",
+    }
+}
+
+/// THE fix for issue #664's follow-on (wrapped-line karaoke highlight taking
+/// the whole block height): ask the ACTUAL Slint window whether `candidate`
+/// renders on ONE visual row at `max_width_px`, instead of guessing with an
+/// independent swash re-measurement that can disagree with whatever backend
+/// is really active (Skia on macOS, femtovg on Linux/Windows, ...).
+///
+/// Synchronous and side-effect-free from the caller's point of view: this
+/// writes `LyricsWrapProbe`'s driving inputs (a hidden, always-mounted probe
+/// `Text` on `AppWindow` — see state.slint / app.slint) and reads back
+/// `AppWindow.lyrics-wrap-probe-fits`, a root-level property whose binding is
+/// pull-evaluated fresh on every read — so the answer always reflects what
+/// was JUST set, never a stale prior candidate. Must run on the UI thread
+/// (same requirement as every other Slint property access here); every
+/// caller already holds a live `&AppWindow`.
+fn slint_fits_one_line(
+    window: &AppWindow,
+    candidate: &str,
+    max_width_px: f32,
+    font_index: i32,
+    size_px: f32,
+) -> bool {
+    let probe = window.global::<LyricsWrapProbe>();
+    probe.set_text(SharedString::from(candidate));
+    probe.set_max_width(max_width_px);
+    probe.set_font_name(SharedString::from(font_family_name(font_index)));
+    probe.set_font_size(size_px);
+    probe.set_font_weight(700);
+    probe.set_letter_spacing(0.2);
+    window.get_lyrics_wrap_probe_fits()
+}
+
 /// The font + size tier + uppercase the active line is RENDERED with — the
 /// segmentation must measure against these so segment widths match the draw.
 /// The main sidebar drives them from the persisted prefs on `LyricsState`; the
@@ -340,12 +386,18 @@ pub(crate) struct RenderPrefs {
 /// When there is no active line, clears the model. `surface` selects the
 /// per-window cache cell (main window vs miniplayer).
 pub(crate) fn refresh_active_segments(
+    window: &AppWindow,
     lyrics: &LyricsState,
     index: i32,
     prefs: RenderPrefs,
     surface: SegSurface,
 ) {
-    let content_width = lyrics.get_content_width();
+    // Tiny rounding cushion only (NOT a cross-renderer fudge factor anymore —
+    // the wrap decision itself now comes straight from the real Slint
+    // renderer via `slint_fits_one_line`, see below). This just absorbs
+    // float/subpixel rounding right at the exact boundary width.
+    const MEASURE_ROUNDING_CUSHION_PX: f32 = 1.0;
+    let content_width = (lyrics.get_content_width() - MEASURE_ROUNDING_CUSHION_PX).max(0.0);
     let font_index = prefs.font_index;
     let size_index = prefs.size_index;
     let uppercase = prefs.uppercase;
@@ -399,16 +451,40 @@ pub(crate) fn refresh_active_segments(
     let text = if uppercase { raw.to_uppercase() } else { raw };
 
     let size_px = size_active_px(size_index);
-    let segments = lyrics_measure::wrap_segments(&text, font_index, size_px, content_width);
+    let segments = lyrics_measure::wrap_segments(&text, font_index, size_px, content_width, |candidate| {
+        slint_fits_one_line(window, candidate, content_width, font_index, size_px)
+    });
 
-    // Convert measured widths into cumulative start-weight + per-segment
-    // width-weight (Tauri's getSegmentProgress partition) so the row can
-    // re-map the single global `line-progress` to a per-segment local fill.
-    let total: f32 = segments.iter().map(|seg| seg.width_px).sum();
+    // Convert into cumulative start-weight + per-segment width-weight so the
+    // row can re-map the single global `line-progress` to a per-segment local
+    // fill. Weighted by CHARACTER COUNT, not pixel width — matching exactly
+    // how `qbz_lyrics::sync::line_fill_fraction` paces `line-progress` itself
+    // for word-synced (wsync) docs: word chars + 1 separator char per word,
+    // except the line's very last word (see crates/qbz-lyrics/src/sync.rs).
+    // `line-progress`'s [0,1] domain is built in THAT space. Remapping it
+    // here with a DIFFERENT measurement (pixel width, as this used to do)
+    // put the two systems out of step wherever a segment boundary landed at
+    // a point where character count and pixel width disagree (a run of
+    // narrow letters vs one wide word, etc.) — invisible for single-segment
+    // lines (nothing to remap against), but increasingly audible as
+    // multi-segment lines became reliably correct once the true-fix probe
+    // landed (issue #664 follow-on): the fill visibly finished well ahead of
+    // the singer on any line that actually wrapped. Matching the SAME space
+    // line-progress was built in removes the mismatch outright rather than
+    // trading one approximation for another.
+    let weights: Vec<f32> = segments
+        .iter()
+        .enumerate()
+        .map(|(i, seg)| {
+            let chars = seg.text.chars().count() as f32;
+            if i + 1 < segments.len() { chars + 1.0 } else { chars }
+        })
+        .collect();
+    let total: f32 = weights.iter().sum();
     let mut cumulative = 0.0_f32;
     let mut out: Vec<LyricsSegment> = Vec::with_capacity(segments.len());
-    for seg in &segments {
-        let width_weight = if total > 0.0 { seg.width_px / total } else { 0.0 };
+    for (seg, weight) in segments.iter().zip(weights.iter()) {
+        let width_weight = if total > 0.0 { weight / total } else { 0.0 };
         out.push(LyricsSegment {
             text: SharedString::from(seg.text.as_str()),
             start_weight: cumulative,

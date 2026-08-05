@@ -4613,6 +4613,29 @@ export global LyricsState {
     callback cache-clear();
 }
 
+// Driving inputs for the always-mounted lyrics-wrap measurement probe
+// (`AppWindow`'s hidden probe elements, app.slint). This is the TRUE fix for
+// issue #664's follow-on bug: instead of guessing word-wrap points with an
+// independent swash reimplementation (lyrics_measure.rs) that can drift from
+// whatever backend Slint is ACTUALLY rendering with (Skia on macOS, femtovg
+// on Linux/Windows), Rust asks Slint itself — via a real `wrap: word-wrap`
+// Text fed through THIS SAME window's active renderer — whether a candidate
+// line fits in one visual row. A `global` can't reference a visual item
+// directly (no component-tree access), so the probe Text lives on AppWindow
+// and reads these; AppWindow then exposes the yes/no answer back as its own
+// root-level `lyrics-wrap-probe-fits` property, which Slint's Rust codegen
+// generates a plain getter for — a normal pull-evaluated read, so Rust gets a
+// synchronously-correct answer for the CURRENT text/max-width on every call,
+// no polling or staleness window.
+export global LyricsWrapProbe {
+    in property <string> text: "";
+    in property <length> max-width: 0px;
+    in property <string> font-name: "";
+    in property <length> font-size: 15px;
+    in property <int> font-weight: 700;
+    in property <length> letter-spacing: 0.2px;
+}
+
 // One row in the QConnect device picker (a session renderer). Populated by the
 // event sink from `session.renderers`.
 export struct QconnectDevice {

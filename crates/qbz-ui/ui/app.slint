@@ -19,7 +19,7 @@ import { LoginScreen } from "login/LoginScreen.slint";
 import { AppShell } from "shell/AppShell.slint";
 import { KioskShell } from "shell/KioskShell.slint";
 import { Toast } from "primitives/Toast.slint";
-import { ShellState, MiniPlayerState, NowPlayingState, AppearanceState, UiScale, WindowControlActions } from "state.slint";
+import { ShellState, MiniPlayerState, NowPlayingState, AppearanceState, UiScale, WindowControlActions, LyricsWrapProbe } from "state.slint";
 import { MiniShell } from "miniplayer/MiniShell.slint";
 
 // Re-export the theming globals so the Rust layer can push palettes (Theme.c /
@@ -31,7 +31,7 @@ export { ThemeState } from "foundation/theme-state.slint";
 export { Typography } from "foundation/typography.slint";
 
 // Re-export the state globals so the Rust layer can populate them.
-export { HomeState, HomeActions, RecentAlbumsState, MostPlayedAlbumsState, MostPlayedAlbumsActions, DiscoverState, DiscoverActions, SectionDescriptor, ConfigRow, DiscoverBrowseState, DiscoverBrowseActions, PlaylistBrowseState, PlaylistBrowseActions, ForYouState, PinnedItem, PinnedState, PinnedActions, ExternalRecoState, ExternalRecoActions, MixState, GenreFilterState, GenreFilterActions, AlbumState, ArtistState, NavState, ShellState, SessionState, SettingsState, AlbumActions, ArtistActions, ArtworkActions, NowPlayingState, QueueState, LyricsState, LyricsLineItem, SearchState, SearchActions, NetworkSidebarState, NetworkSidebarActions, MusicianState, MusicianActions, LabelState, LabelActions, AwardState, AwardActions, AwardEntry, ArtistReleasesState, ArtistReleasesActions, LocationViewState, LocationViewActions, FavoritesState, FavoritesActions, LibraryFeedItem, LibraryAllState, LibraryAllActions, PlaylistPickerState, PlaylistPickerActions, DuplicateConfirmState, DuplicateConfirmActions, PlaylistState, PlaylistActions, SidebarState, SidebarActions, SidebarFolderPopupState, CreatePlaylistState, CreatePlaylistActions, EditPlaylistState, EditPlaylistActions, CreateFolderState, CreateFolderActions, SettingsExportState, SettingsExportActions, SandboxState, MyQbzCreateState, MyQbzCreateActions, DragState, DragActions, PlaylistManagerState, PlaylistManagerActions, OfflineManagerState, OfflineManagerActions, BlacklistState, BlacklistActions, BlacklistedArtistItem, MyQbzState, MyQbzActions, MixtapeCardItem, MyQbzAddState, MyQbzAddActions, MyQbzAddRow, MyQbzDetailState, MyQbzDetailActions, MixtapeDetailItem, MyQbzEditState, MyQbzEditActions, MyQbzMixState, MyQbzMixActions, DiscoBuilderState, DiscoBuilderActions, DiscoGroup, DiscoCandidate, LocalLibraryState, LocalLibraryActions, LibraryFoldersState, LibFolderEditState, LibraryManageActions, LibraryScanState, LibAlbumFilterState, LocalAlbumState, LocalAlbumActions, TagEditorState, TagEditorActions, FolderEditState, FolderEditActions, ToastState, TextUtil, QconnectDevState, QconnectDevice, CastState, CastDevice, CastActions, AppearanceState, MyQbzBrandingState, EphemeralPlayChoiceState, EphemeralPlayChoiceActions, PlexSettingsState, PlexAuthActions, PlexSectionItem, ScrobbleState, ScrobbleActions, DiscordState, OfflineState, LoginState, OfflineModeActions, OfflineFavoritesState, OfflineFavoritesActions, ImportLogEntry, PlaylistImportState, PlaylistImportActions, DacWizardState, DacWizardActions, DacCandidateRow, RemediationRow, DacConfigRow, InfoCreditRow, InfoCreditPair, AlbumCreditPerformer, AlbumCreditTrack, TrackInfoState, TrackInfoActions, AlbumInfoState, AlbumInfoActions, BookletState, BookletActions, SuggestionsState, SuggestionsActions, SuggestionCard, PlaylistSuggestionsState, PlaylistSuggestionsActions, PlaylistSuggestionRow, VisualizerState, ImmersiveState, ImmersiveSearchActions, ImmersiveActions, MiniPlayerState, WindowControlActions, PurchasesState, PurchasesActions, PurchaseAlbumItem, PurchaseTrackItem, PurchaseAlbumGroup, PurchaseTrackGroup, PurchaseFormatItem, PurchaseDetailState, PurchaseDetailActions, PurchaseDetailTrack, KeybindingRow, KeybindingCategoryGroup, KeybindingsState, KeybindingsActions, KeyboardShortcutsState, LinkResolverState, LinkResolverActions, UiFocusState, UiScale, SleepTimerState, SleepTimerActions, LogRow, LogViewerState, DiagRow, DiagnosticsState, ReportIssueState, ReportIssueActions, AboutState, AboutActions, AboutContributorRow, AboutContributorGroup, WhatsNewState, WhatsNewActions, WhatsNewBlock, WhatsNewTocEntry } from "state.slint";
+export { HomeState, HomeActions, RecentAlbumsState, MostPlayedAlbumsState, MostPlayedAlbumsActions, DiscoverState, DiscoverActions, SectionDescriptor, ConfigRow, DiscoverBrowseState, DiscoverBrowseActions, PlaylistBrowseState, PlaylistBrowseActions, ForYouState, PinnedItem, PinnedState, PinnedActions, ExternalRecoState, ExternalRecoActions, MixState, GenreFilterState, GenreFilterActions, AlbumState, ArtistState, NavState, ShellState, SessionState, SettingsState, AlbumActions, ArtistActions, ArtworkActions, NowPlayingState, QueueState, LyricsState, LyricsLineItem, LyricsWrapProbe, SearchState, SearchActions, NetworkSidebarState, NetworkSidebarActions, MusicianState, MusicianActions, LabelState, LabelActions, AwardState, AwardActions, AwardEntry, ArtistReleasesState, ArtistReleasesActions, LocationViewState, LocationViewActions, FavoritesState, FavoritesActions, LibraryFeedItem, LibraryAllState, LibraryAllActions, PlaylistPickerState, PlaylistPickerActions, DuplicateConfirmState, DuplicateConfirmActions, PlaylistState, PlaylistActions, SidebarState, SidebarActions, SidebarFolderPopupState, CreatePlaylistState, CreatePlaylistActions, EditPlaylistState, EditPlaylistActions, CreateFolderState, CreateFolderActions, SettingsExportState, SettingsExportActions, SandboxState, MyQbzCreateState, MyQbzCreateActions, DragState, DragActions, PlaylistManagerState, PlaylistManagerActions, OfflineManagerState, OfflineManagerActions, BlacklistState, BlacklistActions, BlacklistedArtistItem, MyQbzState, MyQbzActions, MixtapeCardItem, MyQbzAddState, MyQbzAddActions, MyQbzAddRow, MyQbzDetailState, MyQbzDetailActions, MixtapeDetailItem, MyQbzEditState, MyQbzEditActions, MyQbzMixState, MyQbzMixActions, DiscoBuilderState, DiscoBuilderActions, DiscoGroup, DiscoCandidate, LocalLibraryState, LocalLibraryActions, LibraryFoldersState, LibFolderEditState, LibraryManageActions, LibraryScanState, LibAlbumFilterState, LocalAlbumState, LocalAlbumActions, TagEditorState, TagEditorActions, FolderEditState, FolderEditActions, ToastState, TextUtil, QconnectDevState, QconnectDevice, CastState, CastDevice, CastActions, AppearanceState, MyQbzBrandingState, EphemeralPlayChoiceState, EphemeralPlayChoiceActions, PlexSettingsState, PlexAuthActions, PlexSectionItem, ScrobbleState, ScrobbleActions, DiscordState, OfflineState, LoginState, OfflineModeActions, OfflineFavoritesState, OfflineFavoritesActions, ImportLogEntry, PlaylistImportState, PlaylistImportActions, DacWizardState, DacWizardActions, DacCandidateRow, RemediationRow, DacConfigRow, InfoCreditRow, InfoCreditPair, AlbumCreditPerformer, AlbumCreditTrack, TrackInfoState, TrackInfoActions, AlbumInfoState, AlbumInfoActions, BookletState, BookletActions, SuggestionsState, SuggestionsActions, SuggestionCard, PlaylistSuggestionsState, PlaylistSuggestionsActions, PlaylistSuggestionRow, VisualizerState, ImmersiveState, ImmersiveSearchActions, ImmersiveActions, MiniPlayerState, WindowControlActions, PurchasesState, PurchasesActions, PurchaseAlbumItem, PurchaseTrackItem, PurchaseAlbumGroup, PurchaseTrackGroup, PurchaseFormatItem, PurchaseDetailState, PurchaseDetailActions, PurchaseDetailTrack, KeybindingRow, KeybindingCategoryGroup, KeybindingsState, KeybindingsActions, KeyboardShortcutsState, LinkResolverState, LinkResolverActions, UiFocusState, UiScale, SleepTimerState, SleepTimerActions, LogRow, LogViewerState, DiagRow, DiagnosticsState, ReportIssueState, ReportIssueActions, AboutState, AboutActions, AboutContributorRow, AboutContributorGroup, WhatsNewState, WhatsNewActions, WhatsNewBlock, WhatsNewTocEntry } from "state.slint";
 
 // Which top-level screen is shown. The app starts on `splash` while it
 // restores a saved session, then resolves to `shell` or `login`.
@@ -102,6 +102,18 @@ export component AppWindow inherits Window {
     changed pal-is-system => { root.sync-native-palette(); }
 
     in-out property <AppScreen> screen: AppScreen.splash;
+
+    // Lyrics-wrap measurement probe (true fix, issue #664 follow-on): does
+    // `LyricsWrapProbe.text` fit on ONE visual row at `LyricsWrapProbe.max-width`,
+    // as rendered by THIS window's actual active renderer? Root-level property
+    // (not on a global — globals can't reference visual items), so the Rust
+    // codegen exposes a plain `get_lyrics_wrap_probe_fits()` getter that
+    // pull-evaluates this expression fresh on every call: set the global's
+    // inputs, then read this, and the answer is always for what was just set,
+    // no staleness window. See the probe elements + LyricsWrapProbe (state.slint)
+    // for the full rationale.
+    out property <bool> lyrics-wrap-probe-fits:
+        lyrics-wrap-probe.preferred-height <= lyrics-wrap-probe-row-ref.preferred-height + 0.5px;
 
     // Forwarded to the Rust layer.
     callback sign-in-via-browser();
@@ -249,6 +261,42 @@ export component AppWindow inherits Window {
         }
         recovery-login => {
             root.recovery-login();
+        }
+    }
+
+    // Lyrics-wrap measurement probe elements (see `lyrics-wrap-probe-fits`
+    // above). Always mounted regardless of which screen/panel is showing —
+    // unlike LyricsLinesView, which only exists while a lyrics surface is
+    // open, `refresh_active_segments` (lyrics_sync.rs) needs an answer any
+    // time the sync engine ticks. Zero footprint: wrapped in a 0x0 clipped
+    // Rectangle, same trick as `row-height-ref` in LyricsLinesView.slint.
+    Rectangle {
+        width: 0px;
+        height: 0px;
+        clip: true;
+        // The candidate line, laid out exactly like the real active-line
+        // segments (LyricsLinesView.slint: wrap: word-wrap, same font props,
+        // width capped to the candidate budget) — so its preferred-height
+        // tells us in row-counts whether it fit.
+        lyrics-wrap-probe := Text {
+            text: LyricsWrapProbe.text;
+            width: LyricsWrapProbe.max-width;
+            wrap: word-wrap;
+            font-family: LyricsWrapProbe.font-name;
+            font-size: LyricsWrapProbe.font-size;
+            font-weight: LyricsWrapProbe.font-weight;
+            letter-spacing: LyricsWrapProbe.letter-spacing;
+        }
+        // Unconstrained (no-wrap, no width), so its preferred-height is
+        // unambiguously ONE row for these font props — the same
+        // row-height-ref trick LyricsLinesView.slint already uses.
+        lyrics-wrap-probe-row-ref := Text {
+            text: "Hg";
+            wrap: no-wrap;
+            font-family: LyricsWrapProbe.font-name;
+            font-size: LyricsWrapProbe.font-size;
+            font-weight: LyricsWrapProbe.font-weight;
+            letter-spacing: LyricsWrapProbe.letter-spacing;
         }
     }
 

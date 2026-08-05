@@ -16,13 +16,31 @@
 //!
 //! # How it measures
 //!
-//! femtovg (the Linux/Windows renderer) shapes glyphs with `swash`, so a swash
-//! advance pass at the same font + ppem + weight axis + letter-spacing matches
-//! what is actually rendered. The four bundled variable lyric fonts plus the
-//! Inter "System"/default bold are embedded here via `include_bytes!` (the
-//! same TTFs `LyricsLinesView.slint` registers via `import`) and parsed once
-//! into process-global `swash::FontRef`s (held as owned byte buffers in a
-//! `OnceLock`).
+//! **The wrap DECISION** (does candidate line L fit in `max_width_px`?) is
+//! answered by the ACTUAL Slint window via [`crate::lyrics_sync::slint_fits_one_line`] —
+//! a hidden, always-mounted `wrap: word-wrap` `Text` on `AppWindow`
+//! (`LyricsWrapProbe` in state.slint / the probe elements in app.slint) laid
+//! out with the exact same font/size/weight/letter-spacing/width as the real
+//! segments. This is a genuine measurement by whatever backend is actually
+//! active (Skia on macOS, femtovg on Linux/Windows, ...), so the wrap points
+//! this module computes are — by construction — the same ones Slint itself
+//! would choose. (Earlier revisions of this module re-implemented the
+//! measurement independently with `swash`, calibrated for femtovg; that
+//! silently drifted from Skia's shaping on macOS — issue #664 — which is why
+//! this indirection exists at all.)
+//!
+//! **Per-segment pixel widths** (`Segment::width_px`, used only to
+//! proportion the single global karaoke-fill fraction across visual rows by
+//! width share) are still measured with `swash` below — those don't need to
+//! match the real renderer pixel-for-pixel, only be self-consistent with each
+//! other, and a probe round-trip per segment would be needless overhead for a
+//! number that's discarded as soon as it's turned into a ratio.
+//!
+//! swash advance pass at the same font + ppem + weight axis + letter-spacing.
+//! The four bundled variable lyric fonts plus the Inter "System"/default bold
+//! are embedded here via `include_bytes!` (the same TTFs `LyricsLinesView.slint`
+//! registers via `import`) and parsed once into process-global `swash::FontRef`s
+//! (held as owned byte buffers in a `OnceLock`).
 //!
 //! The active lyric line is rendered BOLD; for the variable fonts we set the
 //! `wght` variation axis to 700 so the advances match the bold raster. (Inter
@@ -39,10 +57,12 @@
 //!
 //! Greedy word wrap, matching `wrap: word-wrap`: split the text on ASCII/Unicode
 //! whitespace into words; keep appending words (with their separating space) to
-//! the current visual line while they fit `max_width_px`; otherwise start a new
-//! visual line. A single word longer than the budget is broken per grapheme
-//! cluster (CJK / no-space runs also break per character this way). Each
-//! emitted segment carries its measured pixel width.
+//! the current visual line while the LIVE PROBE reports they still fit;
+//! otherwise start a new visual line. A single word the probe reports doesn't
+//! fit alone is broken per grapheme cluster (CJK / no-space runs also break
+//! per character this way; each candidate piece is checked against the probe
+//! too). Each emitted segment carries its `swash`-measured pixel width (for
+//! fill-fraction weighting only — see above).
 
 use std::sync::OnceLock;
 
@@ -147,32 +167,32 @@ fn measure_width(ctx: &mut ShapeContext, font: &LoadedFont, text: &str, size_px:
 }
 
 /// Split a single over-long word into per-grapheme-cluster pieces that each fit
-/// `max_width_px` (CJK and other no-space runs land here too). Appends the
-/// resulting segments to `out`.
+/// on one visual row per `fits` (CJK and other no-space runs land here too).
+/// Appends the resulting segments (with their `swash`-measured width, for
+/// fill-fraction weighting) to `out`.
 fn break_long_word(
     ctx: &mut ShapeContext,
     font: &LoadedFont,
     word: &str,
     size_px: f32,
-    max_width_px: f32,
+    fits: &mut impl FnMut(&str) -> bool,
     out: &mut Vec<Segment>,
 ) {
     let mut current = String::new();
-    let mut current_w = 0.0_f32;
     // Break per Unicode scalar (good enough for CJK; avoids pulling in a
     // grapheme-segmentation dependency — lyric runs are short).
     for ch in word.chars() {
-        let piece: String = ch.to_string();
-        let piece_w = measure_width(ctx, font, &piece, size_px);
-        if !current.is_empty() && current_w + piece_w > max_width_px {
-            out.push(Segment { text: std::mem::take(&mut current), width_px: current_w });
-            current_w = 0.0;
+        let mut candidate = current.clone();
+        candidate.push(ch);
+        if !current.is_empty() && !fits(&candidate) {
+            let width_px = measure_width(ctx, font, &current, size_px);
+            out.push(Segment { text: std::mem::take(&mut current), width_px });
         }
         current.push(ch);
-        current_w += piece_w;
     }
     if !current.is_empty() {
-        out.push(Segment { text: current, width_px: current_w });
+        let width_px = measure_width(ctx, font, &current, size_px);
+        out.push(Segment { text: current, width_px });
     }
 }
 
@@ -180,13 +200,25 @@ fn break_long_word(
 /// inside `max_width_px`, at the given `font_index` + `size_px` (bold weight,
 /// 0.2px letter spacing — matching the active lyric line render).
 ///
+/// `fits(candidate)` is the wrap oracle: true iff `candidate` renders on ONE
+/// visual row at `max_width_px` in the CALLER's actual active Slint renderer
+/// (see `crate::lyrics_sync::slint_fits_one_line` — the real fix for issue
+/// #664's follow-on: this used to be answered by an independent swash
+/// re-measurement here, which could disagree with the real renderer).
+///
 /// Returns one [`Segment`] per visual line, each with the segment text and its
-/// rendered pixel width. An empty / whitespace-only input yields a single empty
-/// segment so the caller always has at least one row to render.
-pub fn wrap_segments(text: &str, font_index: i32, size_px: f32, max_width_px: f32) -> Vec<Segment> {
+/// `swash`-measured pixel width (fill-fraction weighting only). An empty /
+/// whitespace-only input yields a single empty segment so the caller always
+/// has at least one row to render.
+pub fn wrap_segments(
+    text: &str,
+    font_index: i32,
+    size_px: f32,
+    max_width_px: f32,
+    mut fits: impl FnMut(&str) -> bool,
+) -> Vec<Segment> {
     let font = loaded_font(font_index);
     let mut ctx = ShapeContext::new();
-    let budget = max_width_px.max(1.0);
 
     // Tokenize into words, preserving nothing of the original whitespace except
     // that each inter-word gap becomes a single space when re-joined.
@@ -195,58 +227,50 @@ pub fn wrap_segments(text: &str, font_index: i32, size_px: f32, max_width_px: f3
         return vec![Segment { text: String::new(), width_px: 0.0 }];
     }
 
-    let space_w = measure_width(&mut ctx, font, " ", size_px);
-
     let mut out: Vec<Segment> = Vec::new();
     let mut line = String::new();
-    let mut line_w = 0.0_f32;
 
     for word in words {
-        let word_w = measure_width(&mut ctx, font, word, size_px);
-
         if line.is_empty() {
             // First word on a fresh line.
-            if word_w > budget {
+            if !fits(word) {
                 // Word alone overflows — hard-break it into pieces.
-                break_long_word(&mut ctx, font, word, size_px, budget, &mut out);
+                break_long_word(&mut ctx, font, word, size_px, &mut fits, &mut out);
                 // The tail piece (if any) becomes the start of the current line
                 // so following words can still pack onto it.
                 if let Some(last) = out.pop() {
                     line = last.text;
-                    line_w = last.width_px;
                 }
             } else {
                 line.push_str(word);
-                line_w = word_w;
             }
             continue;
         }
 
         // Subsequent word: does it fit with a leading space?
-        let added = space_w + word_w;
-        if line_w + added <= budget {
-            line.push(' ');
-            line.push_str(word);
-            line_w += added;
+        let mut candidate = line.clone();
+        candidate.push(' ');
+        candidate.push_str(word);
+        if fits(&candidate) {
+            line = candidate;
         } else {
             // Flush the current line and start anew with this word.
-            out.push(Segment { text: std::mem::take(&mut line), width_px: line_w });
-            line_w = 0.0;
-            if word_w > budget {
-                break_long_word(&mut ctx, font, word, size_px, budget, &mut out);
+            let width_px = measure_width(&mut ctx, font, &line, size_px);
+            out.push(Segment { text: std::mem::take(&mut line), width_px });
+            if !fits(word) {
+                break_long_word(&mut ctx, font, word, size_px, &mut fits, &mut out);
                 if let Some(last) = out.pop() {
                     line = last.text;
-                    line_w = last.width_px;
                 }
             } else {
                 line.push_str(word);
-                line_w = word_w;
             }
         }
     }
 
     if !line.is_empty() || out.is_empty() {
-        out.push(Segment { text: line, width_px: line_w });
+        let width_px = measure_width(&mut ctx, font, &line, size_px);
+        out.push(Segment { text: line, width_px });
     }
     out
 }
@@ -255,9 +279,22 @@ pub fn wrap_segments(text: &str, font_index: i32, size_px: f32, max_width_px: f3
 mod tests {
     use super::*;
 
+    /// Test-only stand-in for the live Slint probe (`slint_fits_one_line`):
+    /// no window exists in a unit test, so fall back to the same swash
+    /// measurement `wrap_segments` used before the probe existed. This is
+    /// exactly the drift-prone approximation issue #664 was about — fine
+    /// here since these tests only check the ALGORITHM's shape (does it
+    /// wrap, does it hard-break, ...), not real-renderer pixel accuracy.
+    fn swash_oracle(font_index: i32, size_px: f32, max_width_px: f32) -> impl FnMut(&str) -> bool {
+        let font = loaded_font(font_index);
+        let mut ctx = ShapeContext::new();
+        let budget = max_width_px.max(1.0);
+        move |candidate: &str| measure_width(&mut ctx, font, candidate, size_px) <= budget
+    }
+
     #[test]
     fn single_short_line_one_segment() {
-        let segs = wrap_segments("hello world", 0, 15.0, 10_000.0);
+        let segs = wrap_segments("hello world", 0, 15.0, 10_000.0, swash_oracle(0, 15.0, 10_000.0));
         assert_eq!(segs.len(), 1);
         assert_eq!(segs[0].text, "hello world");
         assert!(segs[0].width_px > 0.0);
@@ -265,7 +302,7 @@ mod tests {
 
     #[test]
     fn empty_input_yields_one_empty_segment() {
-        let segs = wrap_segments("   ", 0, 15.0, 100.0);
+        let segs = wrap_segments("   ", 0, 15.0, 100.0, swash_oracle(0, 15.0, 100.0));
         assert_eq!(segs.len(), 1);
         assert_eq!(segs[0].text, "");
         assert_eq!(segs[0].width_px, 0.0);
@@ -274,7 +311,13 @@ mod tests {
     #[test]
     fn narrow_budget_wraps_to_multiple_segments() {
         // A budget too small for the whole phrase must split it.
-        let segs = wrap_segments("alpha beta gamma delta", 0, 15.0, 40.0);
+        let segs = wrap_segments(
+            "alpha beta gamma delta",
+            0,
+            15.0,
+            40.0,
+            swash_oracle(0, 15.0, 40.0),
+        );
         assert!(segs.len() >= 2, "expected a wrap, got {} segs", segs.len());
         // Every emitted segment must be non-empty (no dangling blank rows).
         for seg in &segs {
@@ -285,7 +328,13 @@ mod tests {
     #[test]
     fn over_long_word_is_hard_broken() {
         // One unbreakable token wider than the budget breaks per character.
-        let segs = wrap_segments("aaaaaaaaaaaaaaaaaaaa", 0, 15.0, 20.0);
+        let segs = wrap_segments(
+            "aaaaaaaaaaaaaaaaaaaa",
+            0,
+            15.0,
+            20.0,
+            swash_oracle(0, 15.0, 20.0),
+        );
         assert!(segs.len() >= 2, "expected hard break, got {}", segs.len());
     }
 }
