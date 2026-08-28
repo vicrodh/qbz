@@ -17,8 +17,11 @@ KEYWORDS="~amd64 ~arm64"
 IUSE="pipewire pulseaudio"
 RESTRICT="mirror network-sandbox"
 
-# v2.0+ (Slint/winit binary): no webkit/gtk/appindicator/node.
+# v2.1+ Qt frontend: no webkit/gtk/appindicator/node.
 RDEPEND="
+	>=dev-qt/qtbase-6.8:6[dbus,gui,network,opengl,wayland,X]
+	>=dev-qt/qtdeclarative-6.8:6
+	>=dev-qt/qtsvg-6.8:6
 	media-libs/alsa-lib
 	media-libs/fontconfig
 	media-libs/freetype
@@ -38,8 +41,11 @@ RDEPEND="
 	)
 "
 
+DEPEND="${RDEPEND}"
+
 BDEPEND="
 	dev-lang/rust
+	dev-build/cmake
 	llvm-core/clang
 	dev-lang/nasm
 	virtual/pkgconfig
@@ -52,10 +58,10 @@ PDEPEND="
 S="${WORKDIR}/qbz-${MY_PV}"
 
 src_compile() {
-	# Symbols stripped by the workspace [profile.release]. The qbz_ui rustc
-	# peaks ~30 GB RAM — single job keeps the footprint at its measured MIN.
-	CARGO_BUILD_JOBS=1 cargo build --release \
-		--manifest-path crates/Cargo.toml -p qbz || die "cargo build failed"
+	# Symbols are stripped by the workspace release profile. The live Qt graph
+	# has no Slint memory wall, so let Cargo use the builder's available cores.
+	cargo build --release --manifest-path crates/Cargo.toml \
+		-p qbz-qt || die "cargo build failed"
 }
 
 src_install() {

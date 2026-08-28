@@ -22,11 +22,12 @@ KEYWORDS="~amd64 ~arm64"
 # already stripped at build time; keep Portage's stripper off it.
 RESTRICT="mirror strip"
 
-# v2.0+ (Slint/winit binary): no webkit/gtk/appindicator — the measured
-# runtime link set plus the wayland/x11/GL/dbus stack dlopen'd by winit/wgpu.
+# v2.1+ Qt binary: no webkit/gtk/appindicator. qtsvg provides the imageformats
+# plugin used by the shipped SVG icon set.
 RDEPEND="
 	>=dev-qt/qtbase-6.8:6[dbus,gui,network,opengl,wayland,X]
 	>=dev-qt/qtdeclarative-6.8:6
+	>=dev-qt/qtsvg-6.8:6
 	media-libs/alsa-lib
 	media-libs/fontconfig
 	media-libs/freetype
