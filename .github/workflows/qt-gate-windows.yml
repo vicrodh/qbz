@@ -95,6 +95,16 @@ jobs:
         with:
           arch: x64
 
+      # Git for Windows also ships a POSIX `link.exe`; force rustc to use the
+      # MSVC linker selected above instead of trusting PATH ordering.
+      - name: Pin MSVC linker
+        shell: pwsh
+        run: |
+          $linker = Join-Path $env:VCToolsInstallDir "bin\Hostx64\x64\link.exe"
+          if (-not (Test-Path $linker)) { throw "MSVC linker not found at $linker" }
+          "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=$linker" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Cargo linker: $linker"
+
       # aws-lc-sys (via rustls) ASSEMBLES on Windows x86_64. Its shipped
       # prebuilt objects are used only when nasm is ABSENT, and without either
       # the build fails hard with "Missing dependency: nasm" -- after the whole
@@ -124,9 +134,12 @@ jobs:
           set -euo pipefail
           lint="$QT_ROOT_DIR/bin/qmllint.exe"
           [ -x "$lint" ] || { echo "::error::qmllint not found at $lint"; exit 1; }
+          native_qmldir="scripts/qml-audits/qbz-native-types/qmldir"
+          python scripts/qml-audits/qml_native_types_audit.py
           fail=0
           while IFS= read -r f; do
-            out=$("$lint" -I "$QT_ROOT_DIR/qml" -I crates/qbz-qt/qml "$f" 2>&1 || true)
+            out=$("$lint" -I "$QT_ROOT_DIR/qml" -I crates/qbz-qt/qml \
+              -i "$native_qmldir" "$f" 2>&1 || true)
             # Only the two findings that are real defects rather than style:
             # an unresolved TYPE, and a property that does not exist. The
             # bridges have no .qmltypes here, so their members are reported as

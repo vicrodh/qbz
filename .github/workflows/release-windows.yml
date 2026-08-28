@@ -51,7 +51,9 @@ env:
 
 jobs:
   build-windows:
-    runs-on: windows-latest
+    # Qt's archive below is the MSVC 2022 build. `windows-latest` currently
+    # resolves to a VS 18 image, so pin the matching toolchain deliberately.
+    runs-on: windows-2022
     timeout-minutes: 150
     # No continue-on-error: a red release leg must look red. Pre-flight
     # without publishing = dispatch with an empty tag.
@@ -136,6 +138,17 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
+
+      # Git for Windows also ships a POSIX `link.exe`. If it wins executable
+      # lookup, rustc sends MSVC flags to /usr/bin/link and dies immediately.
+      # Give Cargo the absolute MSVC linker selected by the dev environment.
+      - name: Pin MSVC linker
+        shell: pwsh
+        run: |
+          $linker = Join-Path $env:VCToolsInstallDir "bin\Hostx64\x64\link.exe"
+          if (-not (Test-Path $linker)) { throw "MSVC linker not found at $linker" }
+          "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=$linker" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Cargo linker: $linker"
 
       # Decision D1: only needed while rustls still pulls aws-lc-sys. Delete
       # this step once the ring flip (W8) lands.
