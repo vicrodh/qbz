@@ -26,8 +26,8 @@
 # not exist compiles perfectly and fails at RUNTIME, and because the failing
 # component hangs off AppShell the whole shell fails to instantiate -- the app
 # opens to a GREY SCREEN. That happened during the port and reached the owner.
-# `qmllint` finds it in seconds, and it is the one gate here that the Linux job
-# does not yet have; adding it there is a Linux change and belongs to Linux.
+# `qmllint` finds it in seconds. The shared qmllint_gate.sh now gives Linux and
+# Windows the same native-type metadata and import checks.
 name: qt-gate-windows
 
 on:
