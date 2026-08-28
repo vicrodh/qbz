@@ -24,6 +24,11 @@ on:
         description: "Optional release tag to build (e.g. v2.1.0). Empty = build HEAD with the Cargo.toml version, no Release publish."
         required: false
         type: string
+      authoring_only:
+        description: "Validate MSI authoring with a synthetic payload (no Rust/Qt build)"
+        required: false
+        default: false
+        type: boolean
   push:
     # Disposable pre-main validation branch. This commit never lands in
     # pre-release; a branch push builds/packages but cannot publish because
@@ -50,7 +55,76 @@ env:
   HAVE_CERT: ${{ secrets.WINDOWS_CERT_PFX != '' }}
 
 jobs:
+  # Fast schema + install-layout gate for packaging/windows/qbz.wxs. The real
+  # release job remains authoritative for the deployed Qt payload and app
+  # launch; this gate prevents a WiX edit from spending a 30-minute cold Rust
+  # build merely to discover invalid installer authoring.
+  msi-authoring:
+    if: ${{ inputs.authoring_only }}
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install WiX 5.0.2 (pre-OSMF)
+        shell: pwsh
+        run: dotnet tool install --global wix --version 5.0.2
+
+      - name: Stage synthetic deployed tree
+        shell: pwsh
+        run: |
+          $root = "dist/qbz"
+          $dirs = @(
+            "$root/platforms",
+            "$root/qml/QtQuick/Controls/Basic",
+            "$root/imageformats",
+            "$root/licenses"
+          )
+          New-Item -ItemType Directory -Force -Path $dirs | Out-Null
+          Copy-Item "$env:WINDIR/System32/where.exe" "$root/qbz.exe"
+          Copy-Item LICENSE "$root/LICENSE.txt"
+          Set-Content "$root/platforms/qwindows.dll" "synthetic"
+          Set-Content "$root/qml/QtQuick/Controls/Basic/qmldir" "synthetic"
+          Set-Content "$root/imageformats/qsvg.dll" "synthetic"
+          Set-Content "$root/licenses/Qt.txt" "synthetic"
+
+      - name: Build synthetic MSI
+        shell: bash
+        run: |
+          set -euo pipefail
+          wix build packaging/windows/qbz.wxs \
+            -d SourceDir="$(pwd -W)/dist/qbz" \
+            -d ProductVersion="0.0.0" \
+            -d FullVersion="0.0.0-authoring" \
+            -d IconPath="$(pwd -W)/packaging/icons/icon.ico" \
+            -arch x64 \
+            -o dist/QBZ_authoring_x64.msi
+
+      - name: Install, verify layout, and uninstall synthetic MSI
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $msi = (Resolve-Path "dist/QBZ_authoring_x64.msi").Path
+          $install = Start-Process msiexec.exe -ArgumentList "/i `"$msi`" /qn /norestart" -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "synthetic MSI install failed: $($install.ExitCode)" }
+          $root = "$env:LOCALAPPDATA\Programs\QBZ"
+          foreach ($f in "qbz.exe", "platforms\qwindows.dll", "qml\QtQuick\Controls\Basic\qmldir", "imageformats\qsvg.dll", "LICENSE.txt") {
+            if (-not (Test-Path "$root\$f")) { throw "installed layout is missing $f" }
+          }
+          if (-not (Test-Path "HKCU:\Software\Classes\qobuzapp")) { throw "qobuzapp protocol key missing" }
+          if (-not (Test-Path "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\QBZ.lnk")) { throw "Start-menu shortcut missing" }
+          $uninstall = Start-Process msiexec.exe -ArgumentList "/x `"$msi`" /qn /norestart" -Wait -PassThru
+          if ($uninstall.ExitCode -ne 0) { throw "synthetic MSI uninstall failed: $($uninstall.ExitCode)" }
+          if (Test-Path "HKCU:\Software\Classes\qobuzapp") { throw "qobuzapp protocol key survived uninstall" }
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: qbz-msi-authoring
+          path: dist/QBZ_authoring_x64.msi
+          if-no-files-found: error
+
   build-windows:
+    if: ${{ !inputs.authoring_only }}
     # Qt's archive below is the MSVC 2022 build. `windows-latest` currently
     # resolves to a VS 18 image, so pin the matching toolchain deliberately.
     runs-on: windows-2022
