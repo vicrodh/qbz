@@ -4,17 +4,18 @@
   Destination in the repo: packaging/windows/qbz.wxs plus
   packaging/icons/icon.ico.
 
-  Build (see 01-release-windows.yml). NOTE the version pin: an unpinned
-  An unpinned global `dotnet tool install` installs 7.0.0, not 5.x.
-  Install wix globally at version 7.0.0, then run:
+  Build (see release-windows.yml). NOTE the version pin: WiX 6+ binary
+  releases require accepting the OSMF EULA, so CI deliberately stays on the
+  last compatible pre-OSMF toolchain. Install wix globally at version 5.0.2,
+  then run:
     wix build packaging/windows/qbz.wxs -arch x64 \
       -d SourceDir=<abs Windows path to the windeployqt dir> \
       -d ProductVersion=x.y.z -d FullVersion=x.y.z-rc.1 \
       -d IconPath=<abs Windows path to icon.ico> -o QBZ_<ver>_x64.msi
 
-  This authoring is valid on WiX v5, v6 and v7 (same XML namespace, and
+  This authoring is valid on WiX v5 (the v4 XML namespace is expected, and
   <Files> exists since v5). Do not reach for Package/@Id (v6+) or
-  Scope="perMachineOrUser" (v7+) if the pin may move back.
+  Scope="perMachineOrUser" (v7+).
 
   Contract:
     * per-user (no UAC) into %LOCALAPPDATA%\Programs\QBZ
