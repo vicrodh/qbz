@@ -202,7 +202,18 @@ jobs:
         run: |
           set -euo pipefail
           APP="dist/QBZ.app"
-          "$QT_ROOT_DIR/bin/macdeployqt" "$APP" -qmldir=crates/qbz-qt/qml -verbose=1 2>&1 | tee macdeploy.log | grep -E 'ERROR' || true
+          # Preserve the deployer's exit status. The old `... | grep ERROR ||
+          # true` made every macdeployqt failure look successful because the
+          # final `true` swallowed the whole pipeline's status.
+          set +e
+          "$QT_ROOT_DIR/bin/macdeployqt" "$APP" -qmldir=crates/qbz-qt/qml -verbose=1 2>&1 | tee macdeploy.log
+          deploy_status=${PIPESTATUS[0]}
+          set -e
+          grep -E 'ERROR' macdeploy.log || true
+          if (( deploy_status != 0 )); then
+            echo "::error::macdeployqt failed with exit code $deploy_status"
+            exit "$deploy_status"
+          fi
           rm -rf "$APP/Contents/PlugIns/sqldrivers"
           test -f "$APP/Contents/PlugIns/platforms/libqcocoa.dylib"
           test -d "$APP/Contents/Resources/qml/QtQuick/Effects"
