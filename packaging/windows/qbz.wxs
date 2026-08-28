@@ -69,12 +69,13 @@
     <Property Id="ARPHELPLINK" Value="https://github.com/vicrodh/qbz/issues" />
     <Property Id="ARPNOMODIFY" Value="1" />
 
-    <!-- PerUserProgramFilesFolder IS %LOCALAPPDATA%\Programs — it resolves to
-         parent LocalAppDataFolder with name "Programs" (WixStandardLibrary.cs /
-         WindowsInstallerStandard.cs), and is WiX's own default per-user
-         install parent (AddDefaultSymbolsCommand.WixStandardPerUserInstallFolderParent). -->
-    <StandardDirectory Id="PerUserProgramFilesFolder">
-      <Directory Id="INSTALLFOLDER" Name="QBZ" />
+    <!-- WiX 5 does not expose PerUserProgramFilesFolder as a legal
+         StandardDirectory id. Author its documented filesystem equivalent
+         explicitly: %LOCALAPPDATA%\Programs\QBZ. -->
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="LocalProgramsFolder" Name="Programs">
+        <Directory Id="INSTALLFOLDER" Name="QBZ" />
+      </Directory>
     </StandardDirectory>
     <StandardDirectory Id="ProgramMenuFolder" />
 
@@ -110,7 +111,11 @@
     </ComponentGroup>
 
     <!-- Authored components DO get an HKCU keypath, since that part is free. -->
-    <Component Id="MainExe" Directory="INSTALLFOLDER">
+    <!-- The fixed component GUID is required because this component contains
+         both a file and a registry keypath; WiX cannot derive `Guid="*"` for
+         that combination. Never change it after the first published MSI. -->
+    <Component Id="MainExe" Directory="INSTALLFOLDER"
+               Guid="D4C16DBE-8A42-46DC-9685-B08F93B058B0">
       <File Id="QbzExe" Source="$(var.SourceDir)\qbz.exe" />
       <RegistryValue Root="HKCU" Key="Software\blitzfc\QBZ" Name="InstallDir"
                      Type="string" Value="[INSTALLFOLDER]" KeyPath="yes" />
