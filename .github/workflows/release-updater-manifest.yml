@@ -48,7 +48,12 @@ jobs:
           TAG: ${{ steps.version.outputs.tag }}
         run: |
           # Wait up to 20 minutes for .sig files from all platforms
-          REQUIRED_SIGS=("aarch64.app.tar.gz.sig" "x64.app.tar.gz.sig" "AppImage.sig")
+          REQUIRED_SIGS=(
+            "aarch64.app.tar.gz.sig"
+            "x64.app.tar.gz.sig"
+            "amd64.AppImage.sig"
+            "aarch64.AppImage.sig"
+          )
           MAX_ATTEMPTS=40
           SLEEP_SECONDS=30
 
@@ -69,8 +74,8 @@ jobs:
             fi
 
             if [ "$attempt" -eq "$MAX_ATTEMPTS" ]; then
-              echo "Warning: Not all .sig files found after $MAX_ATTEMPTS attempts. Generating manifest with available assets."
-              break
+              echo "::error::Not all updater signatures appeared after $MAX_ATTEMPTS attempts; refusing to replace latest.json with a partial manifest."
+              exit 1
             fi
 
             echo "Attempt $attempt/$MAX_ATTEMPTS: waiting for all .sig files..."
@@ -158,6 +163,13 @@ jobs:
               '. + {"linux-aarch64": {"signature": $sig, "url": $url}}')
           fi
 
+          PLATFORM_COUNT=$(echo "$PLATFORMS" | jq 'length')
+          if [ "$PLATFORM_COUNT" -ne 4 ]; then
+            echo "::error::Expected four updater platforms, generated $PLATFORM_COUNT."
+            echo "$PLATFORMS" | jq .
+            exit 1
+          fi
+
           # Assemble final latest.json
           jq -n \
             --arg version "$VERSION" \
@@ -175,7 +187,4 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.version.outputs.tag }}
         run: |
-          # Delete existing latest.json if present (from a previous run)
-          gh release delete-asset "$TAG" latest.json --repo "${{ github.repository }}" --yes 2>/dev/null || true
-          # Upload the new one
-          gh release upload "$TAG" latest.json --repo "${{ github.repository }}"
+          gh release upload "$TAG" latest.json --repo "${{ github.repository }}" --clobber
