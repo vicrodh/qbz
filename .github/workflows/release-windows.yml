@@ -25,6 +25,11 @@ on:
         required: false
         type: string
   push:
+    # Disposable pre-main validation branch. This commit never lands in
+    # pre-release; a branch push builds/packages but cannot publish because
+    # the publish step is tag-only.
+    branches:
+      - "chore/internal/windows-workflow-preflight"
     tags:
       - "v*"
 

@@ -38,6 +38,11 @@ on:
         required: false
         type: string
   push:
+    # Disposable pre-main validation branch. This commit never lands in
+    # pre-release; it exists only to make GitHub exercise this new workflow
+    # before workflow_dispatch becomes available from the default branch.
+    branches:
+      - "chore/internal/windows-workflow-preflight"
     tags:
       - "v*"
 
