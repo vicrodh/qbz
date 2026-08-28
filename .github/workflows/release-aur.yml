@@ -28,10 +28,12 @@ jobs:
   update-aur:
     runs-on: ubuntu-latest
     # Only run on manual dispatch, or successful stable tag releases (no -rc)
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && startsWith(github.event.workflow_run.head_branch, 'v') && !contains(github.event.workflow_run.head_branch, '-rc')) }}
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && startsWith(github.event.workflow_run.head_branch, 'v') && !contains(github.event.workflow_run.head_branch, '-')) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
 
       - name: Determine version
         id: version
@@ -50,6 +52,10 @@ jobs:
             VERSION="${REF#v}"
           else
             VERSION="$DISPATCH_VERSION"
+          fi
+          if [[ ! "$VERSION" =~ ^[0-9]+(\.[0-9]+){2}([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid release version: $VERSION"
+            exit 1
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Detected version: $VERSION"
@@ -131,12 +137,20 @@ jobs:
 
       - name: Determine pkgrel
         id: pkgrel
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_PKGREL: ${{ inputs.pkgrel }}
         run: |
-          if [[ "${{ github.event_name }}" == "release" ]]; then
-            echo "pkgrel=1" >> "$GITHUB_OUTPUT"
+          if [[ "$EVENT_NAME" == "workflow_run" ]]; then
+            PKGREL=1
           else
-            echo "pkgrel=${{ inputs.pkgrel || '1' }}" >> "$GITHUB_OUTPUT"
+            PKGREL="${DISPATCH_PKGREL:-1}"
           fi
+          if [[ ! "$PKGREL" =~ ^[1-9][0-9]*$ ]]; then
+            echo "Invalid pkgrel: $PKGREL"
+            exit 1
+          fi
+          echo "pkgrel=$PKGREL" >> "$GITHUB_OUTPUT"
 
       - name: Update PKGBUILD
         env:

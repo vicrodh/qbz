@@ -6,10 +6,9 @@ pkgdesc="Native Qobuz client for Linux with bit-perfect hi-res audio, DAC passth
 arch=('x86_64' 'aarch64')
 url="https://github.com/vicrodh/qbz"
 license=('MIT')
-# v2.0+ (Slint/winit binary): no webkit/gtk/appindicator — the measured
-# runtime link set is alsa/fontconfig/freetype/png/bz2/expat/zlib, plus the
-# wayland/x11/GL/dbus/xkbcommon stack dlopen'd by winit/wgpu.
-depends=('qt6-base>=6.8' 'qt6-declarative>=6.8' 'qt6-wayland' 'alsa-lib' 'fontconfig' 'freetype2' 'libpng' 'bzip2' 'expat' 'zlib'
+# v2.1+ Qt binary: no webkit/gtk/appindicator. qt6-svg is load-bearing for
+# the imageformats/qsvg plugin used by the shipped SVG icon set.
+depends=('qt6-base>=6.8' 'qt6-declarative>=6.8' 'qt6-svg>=6.8' 'qt6-wayland' 'alsa-lib' 'fontconfig' 'freetype2' 'libpng' 'bzip2' 'expat' 'zlib'
          'libxkbcommon' 'wayland' 'libglvnd' 'dbus')
 optdepends=(
     'alsa-utils: Required for bit-perfect device detection and better ALSA device names'
