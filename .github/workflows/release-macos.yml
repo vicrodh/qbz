@@ -133,7 +133,7 @@ jobs:
           workspaces: crates -> target
           shared-key: qt-macos-${{ matrix.target }}
           cache-on-failure: true
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/pre-release' }}
 
       # NEVER `-p qbz` (the frozen Slint binary shares the bin name).
       - name: Build (release)

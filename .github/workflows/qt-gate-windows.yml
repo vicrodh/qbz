@@ -116,9 +116,9 @@ jobs:
           workspaces: crates -> target
           shared-key: qt-gate-windows
           cache-on-failure: true
-          # Tag runs are the ones worth seeding the cache from; a manual
-          # dispatch of a work-in-progress ref should read it, not rewrite it.
-          save-if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+          # Tags and the trusted integration branch may seed the cache. A
+          # manual dispatch on any feature/fork ref remains read-only.
+          save-if: ${{ startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/pre-release' }}
 
       # QML is not compile-checked. A bad type name or property is a grey
       # screen at runtime, not an error here, so this runs FIRST: it is the

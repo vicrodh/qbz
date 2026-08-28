@@ -126,16 +126,16 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       # Cache key split by toolchain/profile and NEVER shared with the old
-      # `slint-*` keys. Only main writes the cache (it is what serves tag
-      # runs); nothing here runs from pre-release — that branch triggers
-      # test-crates.yml and nothing else.
+      # `slint-*` keys. Trusted manual preflights on pre-release may seed it,
+      # so release-linux -> Flatpak/Snap and ARM -> Snap do not rebuild the
+      # identical graph from zero. PR/fork refs remain read-only.
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: crates -> target
           shared-key: qt-linux-${{ inputs.arch }}
           cache-on-failure: true
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/pre-release' }}
 
       # NEVER `-p qbz`: crates/qbz (the frozen Slint binary) declares the same
       # bin name in the same target dir and would silently win the file.
