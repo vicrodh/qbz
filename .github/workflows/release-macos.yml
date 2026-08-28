@@ -64,13 +64,13 @@ jobs:
             cxxflags: ""
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
-    continue-on-error: true
     permissions:
       contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.tag || github.ref }}
           fetch-depth: 0
 
       - name: Resolve release version
@@ -102,7 +102,7 @@ jobs:
           fi
 
       - name: Assert Cargo.toml version matches tag
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') || inputs.tag != ''
         env:
           VERSION: ${{ steps.release.outputs.version }}
         run: |
