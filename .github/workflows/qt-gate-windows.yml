@@ -125,34 +125,7 @@ jobs:
       # cheapest gate and it catches the most expensive failure.
       - name: qmllint (QML type check)
         shell: bash
-        run: |
-          set -euo pipefail
-          lint="$QT_ROOT_DIR/bin/qmllint.exe"
-          [ -x "$lint" ] || { echo "::error::qmllint not found at $lint"; exit 1; }
-          native_qmldir="scripts/qml-audits/qbz-native-types/qmldir"
-          python scripts/qml-audits/qml_native_types_audit.py
-          fail=0
-          while IFS= read -r f; do
-            out=$("$lint" -I "$QT_ROOT_DIR/qml" -I crates/qbz-qt/qml \
-              -i "$native_qmldir" "$f" 2>&1 || true)
-            # Only the two findings that are real defects rather than style:
-            # an unresolved TYPE, and a property that does not exist. The
-            # bridges have no .qmltypes here, so their members are reported as
-            # missing and are filtered out by name; outer-id access inside a
-            # Repeater delegate is idiomatic in this tree (WhatsNewModal does
-            # it) and Qt only flags it for want of ComponentBehavior: Bound.
-            hits=$(printf '%s\n' "$out" \
-              | grep -E 'was not found|Could not find property' \
-              | grep -vE 'Qbz(Shell|Session|Bridge|Player|Mini|About|Local|Home|Tray)\b' || true)
-            if [ -n "$hits" ]; then
-              echo "::group::$f"
-              printf '%s\n' "$hits"
-              echo "::endgroup::"
-              fail=1
-            fi
-          done < <(find crates/qbz-qt/qml -name '*.qml')
-          [ "$fail" -eq 0 ] || { echo "::error::qmllint found unresolved types or properties"; exit 1; }
-          echo "qmllint clean"
+        run: scripts/qml-audits/qmllint_gate.sh "$QT_ROOT_DIR"
 
       # The same five the Linux gate runs, and they need Qt's own
       # plugins.qmltypes to resolve QtQuick types -- hence after the install.

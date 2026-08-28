@@ -1,6 +1,6 @@
 # CI for the crates/ workspace on the integration branch.
 #
-# Two jobs, two economies:
+# Three jobs, three economies:
 #   test      — `cargo test` on every crate that needs no Qt (scripts/cargo-test.sh:
 #               excludes the frozen Slint crates and qbz-qt). ~5 min cold.
 #   qt-gate   — the Qt frontend: the five static QML audits, `cargo test -p
@@ -142,6 +142,9 @@ jobs:
           target: desktop
           arch: linux_gcc_64
           cache: true
+
+      - name: qmllint (QML type check)
+        run: scripts/qml-audits/qmllint_gate.sh "$QT_ROOT_DIR"
 
       # The audits need Qt's own plugins.qmltypes to resolve QtQuick types —
       # hence after the Qt install, pointed at it. ~1 s, and the class of
