@@ -3586,14 +3586,20 @@ mod local_tab_order_tests {
         audio.backend_type = Some(AudioBackendType::Alsa);
         audio.output_device = Some("front:CARD=USB,DEV=0".to_string());
         audio.alsa_plugin = Some(AlsaPlugin::Hw);
-        assert!(requires_alsa_direct_unity(&audio));
+        assert_eq!(
+            requires_alsa_direct_unity(&audio),
+            cfg!(target_os = "linux")
+        );
 
         audio.alsa_hardware_volume = true;
         assert!(!requires_alsa_direct_unity(&audio));
         audio.alsa_hardware_volume = false;
 
         audio.alsa_plugin = Some(AlsaPlugin::PlugHw);
-        assert!(requires_alsa_direct_unity(&audio));
+        assert_eq!(
+            requires_alsa_direct_unity(&audio),
+            cfg!(target_os = "linux")
+        );
         audio.alsa_plugin = Some(AlsaPlugin::Pcm);
         assert!(!requires_alsa_direct_unity(&audio));
 

@@ -234,14 +234,14 @@ mod tests {
         // hw = the bit-perfect direct path: engine set_volume is a no-op.
         s.alsa_plugin = Some(AlsaPlugin::Hw);
         s.alsa_hardware_volume = false;
-        assert!(volume_locked(&s));
+        assert_eq!(volume_locked(&s), cfg!(target_os = "linux"));
         // ...unless the DAC's own mixer is driven instead.
         s.alsa_hardware_volume = true;
         assert!(!volume_locked(&s));
         // plughw still runs the AlsaDirect engine -> still inert.
         s.alsa_hardware_volume = false;
         s.alsa_plugin = Some(AlsaPlugin::PlugHw);
-        assert!(volume_locked(&s));
+        assert_eq!(volume_locked(&s), cfg!(target_os = "linux"));
         // Pcm opts out of the direct engine (CPAL/rodio) -> software volume.
         s.alsa_plugin = Some(AlsaPlugin::Pcm);
         assert!(!volume_locked(&s));

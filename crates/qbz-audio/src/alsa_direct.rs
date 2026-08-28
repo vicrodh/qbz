@@ -1211,10 +1211,16 @@ mod tests {
         audio.backend_type = Some(AudioBackendType::Alsa);
         audio.output_device = Some("front:CARD=USB,DEV=0".to_string());
         audio.alsa_plugin = Some(AlsaPlugin::Hw);
-        assert!(uses_alsa_direct_route(&audio));
+        assert_eq!(
+            uses_alsa_direct_route(&audio),
+            cfg!(target_os = "linux")
+        );
 
         audio.alsa_plugin = Some(AlsaPlugin::PlugHw);
-        assert!(uses_alsa_direct_route(&audio));
+        assert_eq!(
+            uses_alsa_direct_route(&audio),
+            cfg!(target_os = "linux")
+        );
 
         audio.alsa_plugin = Some(AlsaPlugin::Pcm);
         assert!(!uses_alsa_direct_route(&audio));
