@@ -1,7 +1,10 @@
 name: Redirect PRs to pre-release
 
 on:
-  pull_request:
+  # No contributor code is checked out or executed. pull_request_target gives
+  # this API-only workflow the write token it needs for PRs opened from forks;
+  # pull_request downgrades GITHUB_TOKEN to read-only for those PRs.
+  pull_request_target:
     branches: [main]
     types: [opened]
 
