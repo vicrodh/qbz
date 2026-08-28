@@ -16,6 +16,11 @@ on:
         description: "Version to publish (e.g. 1.2.0)"
         required: true
         type: string
+      publish:
+        description: "Push generated ebuilds and Manifests to qbz-overlay"
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: gentoo-overlay
@@ -61,8 +66,17 @@ jobs:
       - name: Clone overlay repo
         env:
           OVERLAY_PAT: ${{ secrets.APT_REPO_TOKEN }}
+          SHOULD_PUBLISH: ${{ github.event_name == 'workflow_run' || inputs.publish }}
         run: |
-          git clone "https://x-access-token:${OVERLAY_PAT}@github.com/vicrodh/qbz-overlay.git" /tmp/qbz-overlay
+          if [[ "$SHOULD_PUBLISH" == "true" ]]; then
+            if [[ -z "$OVERLAY_PAT" ]]; then
+              echo "::error::APT_REPO_TOKEN is required when publishing"
+              exit 1
+            fi
+            git clone "https://x-access-token:${OVERLAY_PAT}@github.com/vicrodh/qbz-overlay.git" /tmp/qbz-overlay
+          else
+            git clone https://github.com/vicrodh/qbz-overlay.git /tmp/qbz-overlay
+          fi
           cd /tmp/qbz-overlay
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
@@ -177,6 +191,7 @@ jobs:
           cat Manifest
 
       - name: Commit and push
+        if: github.event_name == 'workflow_run' || inputs.publish
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
@@ -188,3 +203,15 @@ jobs:
           fi
           git commit -m "Update to v${VERSION}"
           git push
+
+      - name: Upload dry-run overlay metadata
+        if: github.event_name == 'workflow_dispatch' && !inputs.publish
+        uses: actions/upload-artifact@v7
+        with:
+          name: gentoo-overlay-dry-run
+          path: |
+            /tmp/qbz-overlay/media-sound/qbz-bin/*.ebuild
+            /tmp/qbz-overlay/media-sound/qbz-bin/Manifest
+            /tmp/qbz-overlay/media-sound/qbz/*.ebuild
+            /tmp/qbz-overlay/media-sound/qbz/Manifest
+          if-no-files-found: error

@@ -16,6 +16,11 @@ on:
         required: false
         default: "1"
         type: string
+      publish:
+        description: "Push the generated PKGBUILD/.SRCINFO to AUR"
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: aur-publish
@@ -117,9 +122,14 @@ jobs:
           echo "aarch64 Checksum: $SHA256_AARCH64"
 
       - name: Setup SSH for AUR
+        if: github.event_name == 'workflow_run' || inputs.publish
         env:
           AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
         run: |
+          if [[ -z "$AUR_SSH_PRIVATE_KEY" ]]; then
+            echo "::error::AUR_SSH_PRIVATE_KEY is required when publishing"
+            exit 1
+          fi
           mkdir -p ~/.ssh
           echo "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/aur
           chmod 600 ~/.ssh/aur
@@ -129,8 +139,14 @@ jobs:
           ssh-keyscan -t ed25519 aur.archlinux.org >> ~/.ssh/known_hosts
 
       - name: Clone AUR repo
+        env:
+          SHOULD_PUBLISH: ${{ github.event_name == 'workflow_run' || inputs.publish }}
         run: |
-          git clone ssh://aur@aur.archlinux.org/qbz-bin.git /tmp/aur-qbz-bin
+          if [[ "$SHOULD_PUBLISH" == "true" ]]; then
+            git clone ssh://aur@aur.archlinux.org/qbz-bin.git /tmp/aur-qbz-bin
+          else
+            git clone https://aur.archlinux.org/qbz-bin.git /tmp/aur-qbz-bin
+          fi
           cd /tmp/aur-qbz-bin
           # Ensure we are on master (recover from detached HEAD if remote branch was corrupted)
           git checkout master 2>/dev/null || git checkout -b master
@@ -188,6 +204,7 @@ jobs:
           cat .SRCINFO
 
       - name: Commit and push to AUR
+        if: github.event_name == 'workflow_run' || inputs.publish
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
@@ -197,3 +214,13 @@ jobs:
           git add PKGBUILD .SRCINFO
           git commit -m "Update to v${VERSION}"
           git push
+
+      - name: Upload dry-run package metadata
+        if: github.event_name == 'workflow_dispatch' && !inputs.publish
+        uses: actions/upload-artifact@v7
+        with:
+          name: aur-qbz-bin-dry-run
+          path: |
+            /tmp/aur-qbz-bin/PKGBUILD
+            /tmp/aur-qbz-bin/.SRCINFO
+          if-no-files-found: error
