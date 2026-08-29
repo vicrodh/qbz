@@ -58,7 +58,8 @@ reqwest = { workspace = true }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 urlencoding = "2"
 open = "5"
-arboard = "3"
+# wayland-data-control: native Wayland clipboard (vicrodh/qbz#684)
+arboard = { version = "3", features = ["wayland-data-control"] }
 # async-std (rfd's name for the async-io/ashpd backend), NOT tokio: zbus 5's
 # "tokio" feature unifies graph-wide and breaks accesskit/atspi/ksni threads
 # (see the ashpd comment in qbz-credentials/Cargo.toml).
