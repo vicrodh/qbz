@@ -249,8 +249,8 @@ export const en = {
       tarball: 'tar -xzf qbz.tar.gz && ./qbz',
     },
     glibcNote: {
-      deb: 'Requires glibc 2.39+ (Ubuntu 24.04+, Debian 13+, Mint 22+). Older distros? Use Flatpak, Snap, or AppImage.',
-      rpm: 'Requires glibc 2.39+ (Fedora 40+, openSUSE Tumbleweed). Older distros? Use Flatpak, Snap, or AppImage.',
+      deb: 'x86_64: glibc 2.35+ (Ubuntu 22.04+, Debian 12+, Mint 21+). arm64 desktop: glibc 2.39+ (Ubuntu 24.04+, Debian 13+) — on Raspberry Pi OS bookworm use qbzd (2.35+). Older distros? Flatpak, Snap, or AppImage.',
+      rpm: 'x86_64: glibc 2.35+ (Fedora 36+, openSUSE Leap 15.6+/Tumbleweed). arm64 desktop: glibc 2.39+ (Fedora 40+); qbzd stays at 2.35+. Older distros? Flatpak, Snap, or AppImage.',
     },
     aptRepo: {
       label: 'APT Repository (recommended)',
