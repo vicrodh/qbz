@@ -7,7 +7,7 @@ description = "Device-bound secret wrapping for QBZ (offline cache keys, tokens)
 
 [dependencies]
 # AES-256-GCM for the at-rest wrap/unwrap
-aes-gcm = "0.10"
+aes-gcm = "0.11"
 
 # KDF for the fallback path when OS keyring isn't available
 hkdf = "0.12"
