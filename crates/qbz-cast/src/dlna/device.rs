@@ -1,6 +1,7 @@
 //! DLNA device connection and playback via AVTransport SOAP
 
 use rupnp::http::Uri;
+use rupnp::scpd::{StateVariableKind, SCPD};
 use rupnp::{Device, Service};
 use serde::{Deserialize, Serialize};
 
@@ -35,6 +36,59 @@ pub struct DlnaStatus {
     pub current_uri: Option<String>,
 }
 
+/// A renderer's native volume scale, read from the RenderingControl SCPD
+/// (`allowedValueRange` of the `Volume` state variable).
+///
+/// 0..100 is the common case but NOT a given — plenty of renderers declare
+/// 0..31, 0..255 or a non-zero minimum. Both directions convert through the
+/// declared range so a percentage is never mistaken for a device value (on a
+/// 0..255 renderer that capped every request at ~39% of real max).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct VolumeRange {
+    min: i64,
+    max: i64,
+}
+
+impl Default for VolumeRange {
+    fn default() -> Self {
+        Self { min: 0, max: 100 }
+    }
+}
+
+impl VolumeRange {
+    /// Device value → 0.0..=1.0.
+    fn to_fraction(self, value: i64) -> f32 {
+        if self.max <= self.min {
+            return 0.0;
+        }
+        let span = (self.max - self.min) as f32;
+        ((value.clamp(self.min, self.max) - self.min) as f32 / span).clamp(0.0, 1.0)
+    }
+
+    /// 0.0..=1.0 → device value.
+    fn to_device_value(self, fraction: f32) -> i64 {
+        let span = (self.max - self.min) as f32;
+        let value = self.min as f32 + fraction.clamp(0.0, 1.0) * span;
+        (value.round() as i64).clamp(self.min, self.max)
+    }
+}
+
+/// Pull the `Volume` range out of a RenderingControl SCPD. `None` when the
+/// device declares no usable range — the caller then keeps the 0..100 default.
+fn volume_range_from_scpd(scpd: &SCPD) -> Option<VolumeRange> {
+    let variable = scpd
+        .state_variables()
+        .iter()
+        .find(|v| v.name() == "Volume")?;
+    let StateVariableKind::Range(range) = variable.kind() else {
+        return None;
+    };
+    let min = range.minimum().trim().parse::<i64>().ok()?;
+    let max = range.maximum().trim().parse::<i64>().ok()?;
+    // A degenerate/inverted range would make every conversion nonsense.
+    (max > min).then_some(VolumeRange { min, max })
+}
+
 /// DLNA connection with AVTransport and RenderingControl support
 pub struct DlnaConnection {
     device: DiscoveredDlnaDevice,
@@ -42,6 +96,9 @@ pub struct DlnaConnection {
     device_url: Uri,
     av_transport_service: Option<Service>,
     rendering_control_service: Option<Service>,
+    // The renderer's native volume scale, resolved once at connect. Both
+    // get_volume and set_volume convert through it.
+    volume_range: VolumeRange,
     // Current media URI
     current_uri: Option<String>,
     // Last SetAVTransportURI payload (URI + DIDL). Kept so `play()` can
@@ -83,6 +140,13 @@ impl DlnaConnection {
             rendering_control_service.is_some()
         );
 
+        // Resolve the renderer's volume scale once, up front: every later
+        // GetVolume/SetVolume converts through it.
+        let volume_range = match rendering_control_service.as_ref() {
+            Some(rc) => Self::fetch_volume_range(rc, &device_url).await,
+            None => VolumeRange::default(),
+        };
+
         // Clear any residual transport state the renderer kept from a previous
         // session/app run. Without this, a renderer left mid-playback re-requests
         // its orphaned CurrentURI against our fresh media server (new path token
@@ -107,6 +171,7 @@ impl DlnaConnection {
             device_url,
             av_transport_service,
             rendering_control_service,
+            volume_range,
             current_uri: None,
             last_set_uri_payload: None,
             uri_freshly_set: false,
@@ -447,6 +512,38 @@ impl DlnaConnection {
         Ok(())
     }
 
+    /// Read the renderer's declared `Volume` range from the RenderingControl
+    /// SCPD, falling back to 0..100 when the device is unreachable, slow, or
+    /// declares no range. Best-effort by design: a wrong-but-plausible scale
+    /// only matters for the conversion factor, and 0..100 is what the previous
+    /// hard-coded behavior assumed anyway.
+    async fn fetch_volume_range(rc_service: &Service, device_url: &Uri) -> VolumeRange {
+        let scpd = match tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            rc_service.scpd(device_url),
+        )
+        .await
+        {
+            Ok(Ok(scpd)) => scpd,
+            Ok(Err(e)) => {
+                log::warn!("DLNA: RenderingControl SCPD fetch failed ({e}); assuming volume 0-100");
+                return VolumeRange::default();
+            }
+            Err(_) => {
+                log::warn!("DLNA: RenderingControl SCPD fetch timed out; assuming volume 0-100");
+                return VolumeRange::default();
+            }
+        };
+        // NOTE: `SCPD` holds `Rc`s, so it must not be alive across an `.await`
+        // or `connect`'s future stops being `Send`. Extract and drop it here.
+        let range = volume_range_from_scpd(&scpd).unwrap_or_else(|| {
+            log::info!("DLNA: RenderingControl declares no Volume range; assuming 0-100");
+            VolumeRange::default()
+        });
+        log::info!("DLNA: volume range {}..={}", range.min, range.max);
+        range
+    }
+
     /// Set volume (0.0 - 1.0)
     pub async fn set_volume(&mut self, volume: f32) -> Result<(), DlnaError> {
         if !self.connected {
@@ -457,8 +554,7 @@ impl DlnaConnection {
             DlnaError::Playback("Device has no RenderingControl service".to_string())
         })?;
 
-        // DLNA volume is typically 0-100
-        let dlna_volume = ((volume.clamp(0.0, 1.0) * 100.0) as u32).min(100);
+        let dlna_volume = self.volume_range.to_device_value(volume);
 
         let payload = format!(
             "<InstanceID>0</InstanceID><Channel>Master</Channel><DesiredVolume>{}</DesiredVolume>",
@@ -469,6 +565,49 @@ impl DlnaConnection {
 
         log::info!("DLNA: Set volume to {}", dlna_volume);
         Ok(())
+    }
+
+    /// Query the renderer's current volume as a 0.0..=1.0 fraction
+    /// (RenderingControl `GetVolume`, Master channel).
+    ///
+    /// This is what keeps the app's slider honest: without it the bar keeps
+    /// showing the LOCAL volume after connecting, and the first drag slams the
+    /// renderer to wherever that slider happened to sit — a speaker at 20%
+    /// jumping to 90% because the bar said 90%.
+    pub async fn get_volume(&self) -> Result<f32, DlnaError> {
+        if !self.connected {
+            return Err(DlnaError::NotConnected);
+        }
+
+        let rc_service = self.rendering_control_service.as_ref().ok_or_else(|| {
+            DlnaError::Playback("Device has no RenderingControl service".to_string())
+        })?;
+
+        let response = Self::run_action(
+            rc_service,
+            &self.device_url,
+            "GetVolume",
+            "<InstanceID>0</InstanceID><Channel>Master</Channel>",
+            5,
+        )
+        .await?;
+
+        let raw = response.get("CurrentVolume").ok_or_else(|| {
+            DlnaError::Playback("GetVolume response has no CurrentVolume".to_string())
+        })?;
+        let value = parse_volume_value(raw).ok_or_else(|| {
+            DlnaError::Playback(format!("GetVolume returned unparseable volume {raw:?}"))
+        })?;
+
+        let fraction = self.volume_range.to_fraction(value);
+        log::debug!(
+            "DLNA: GetVolume {} (range {}..={}) -> {:.3}",
+            value,
+            self.volume_range.min,
+            self.volume_range.max,
+            fraction
+        );
+        Ok(fraction)
     }
 
     /// Set mute on/off (RenderingControl SetMute, Master channel). Companion to
@@ -582,6 +721,20 @@ impl DlnaConnection {
             transport_state,
         })
     }
+}
+
+/// Parse a `CurrentVolume` value. The spec says `ui2`, but a few renderers
+/// answer with a decimal ("50.0"), so fall back to a float parse + round
+/// rather than dropping the reading and leaving the slider stale.
+fn parse_volume_value(raw: &str) -> Option<i64> {
+    let raw = raw.trim();
+    if let Ok(v) = raw.parse::<i64>() {
+        return Some(v);
+    }
+    raw.parse::<f64>()
+        .ok()
+        .filter(|v| v.is_finite())
+        .map(|v| v.round() as i64)
 }
 
 /// Parse time string "HH:MM:SS" or "H:MM:SS" to seconds
@@ -711,7 +864,61 @@ fn redact_media_uri(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{redact_media_uri, service_type_matches};
+    use super::{parse_volume_value, redact_media_uri, service_type_matches, VolumeRange};
+
+    #[test]
+    fn percent_range_round_trips() {
+        let r = VolumeRange::default();
+        assert_eq!(r.to_device_value(0.0), 0);
+        assert_eq!(r.to_device_value(1.0), 100);
+        assert_eq!(r.to_device_value(0.42), 42);
+        assert_eq!(r.to_fraction(0), 0.0);
+        assert_eq!(r.to_fraction(100), 1.0);
+        assert!((r.to_fraction(42) - 0.42).abs() < 1e-6);
+    }
+
+    #[test]
+    fn non_percent_range_scales_both_ways() {
+        // A 0..255 renderer: the old hard-coded percent math capped every
+        // request at 100/255 (~39% of real max) and would have read 255 back
+        // as "255%".
+        let r = VolumeRange { min: 0, max: 255 };
+        assert_eq!(r.to_device_value(1.0), 255);
+        assert_eq!(r.to_device_value(0.5), 128);
+        assert_eq!(r.to_fraction(255), 1.0);
+        assert!((r.to_fraction(128) - 0.502).abs() < 1e-3);
+    }
+
+    #[test]
+    fn offset_minimum_maps_endpoints() {
+        // `Volume` is unsigned in practice, but the range is the device's to
+        // declare — the conversion must key off min/max, not assume 0.
+        let r = VolumeRange { min: 10, max: 50 };
+        assert_eq!(r.to_device_value(0.0), 10);
+        assert_eq!(r.to_device_value(1.0), 50);
+        assert_eq!(r.to_device_value(0.5), 30);
+        assert_eq!(r.to_fraction(10), 0.0);
+        assert_eq!(r.to_fraction(50), 1.0);
+        assert!((r.to_fraction(30) - 0.5).abs() < 1e-6);
+    }
+
+    #[test]
+    fn out_of_range_values_clamp() {
+        let r = VolumeRange { min: 0, max: 31 };
+        assert_eq!(r.to_device_value(-1.0), 0);
+        assert_eq!(r.to_device_value(2.0), 31);
+        assert_eq!(r.to_fraction(-5), 0.0);
+        assert_eq!(r.to_fraction(99), 1.0);
+    }
+
+    #[test]
+    fn parses_volume_values() {
+        assert_eq!(parse_volume_value("42"), Some(42));
+        assert_eq!(parse_volume_value(" 42\n"), Some(42));
+        assert_eq!(parse_volume_value("50.0"), Some(50));
+        assert_eq!(parse_volume_value("NOT_IMPLEMENTED"), None);
+        assert_eq!(parse_volume_value(""), None);
+    }
 
     #[test]
     fn redacts_path_token() {
