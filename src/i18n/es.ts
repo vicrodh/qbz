@@ -35,6 +35,7 @@ export const es = {
     title: 'Un solo reproductor para todo lo que escuchas.',
     lead: 'Tu suscripción de Qobuz, los FLAC de tu NAS, el servidor Plex o Jellyfin del clóset, el CD que acabas de comprar. Una cola, una interfaz, una sola ruta de audio. Nada es un plug-in y nada es de segunda.',
     label: 'Una cola, todas las fuentes',
+    captureAlt: 'Una playlist de QBZ que mezcla pistas de Qobuz y locales',
     items: ['Qobuz', 'Archivos locales', 'Plex', 'Jellyfin', 'Subsonic / Navidrome', 'CD y SACD'],
   },
   signal: {
@@ -219,7 +220,7 @@ export const es = {
   screens: {
     eyebrow: 'En pantalla',
     title: 'La interfaz, en reposo.',
-    lead: 'Capturas de QBZ en un escritorio Linux. Los cuadros marcados como pendientes se reemplazarán con capturas de la interfaz 2.1.',
+    lead: 'Capturas de QBZ en un escritorio Linux.',
     items: [
       { key: 'home', title: 'Inicio', text: 'Novedades, selecciones del editor y Para ti, con filtros de género que te siguen por toda la app.' },
       { key: 'immersive', title: 'Espectro inmersivo', text: 'Uno de los modos a pantalla completa. Portada, lectura de formato y el espectro dibujado desde la salida real.' },

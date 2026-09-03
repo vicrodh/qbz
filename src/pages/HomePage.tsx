@@ -98,7 +98,7 @@ export function HomePage() {
               </div>
             </div>
           </div>
-          <Capture base="qbz-locallibrary-artists" alt={t('library.captures.artists')} />
+          <Capture base="qbz-playlist-view" alt={t('sources.captureAlt')} />
         </div>
       </section>
 
@@ -165,7 +165,7 @@ export function HomePage() {
               ))}
             </div>
           </div>
-          <Capture alt={t('library.captures.explorer')} pending={t('library.captures.explorer')} />
+          <Capture base="qbz-locallibrary-artists" alt={t('library.captures.artists')} />
         </div>
       </section>
 
@@ -259,7 +259,7 @@ export function HomePage() {
             <p className="band__lead">{t('screens.lead')}</p>
           </div>
           <div className="screens">
-            {screens.map((screen) => {
+            {screens.filter((screen) => SCREEN_CAPTURES[screen.key]).map((screen) => {
               const capture = SCREEN_CAPTURES[screen.key]
               return (
                 <figure className="screen" key={screen.key}>

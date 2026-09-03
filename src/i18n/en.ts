@@ -35,6 +35,7 @@ export const en = {
     title: 'One player for everything you listen to.',
     lead: 'Your Qobuz subscription, the FLACs on your NAS, the Plex or Jellyfin server in the closet, the CD you just bought. One queue, one interface, one audio pipeline. Nothing is a plug-in and nothing is second class.',
     label: 'One queue, every source',
+    captureAlt: 'A QBZ playlist mixing Qobuz and local tracks',
     items: ['Qobuz', 'Local files', 'Plex', 'Jellyfin', 'Subsonic / Navidrome', 'CD and SACD'],
   },
   signal: {
@@ -219,7 +220,7 @@ export const en = {
   screens: {
     eyebrow: 'On screen',
     title: 'The interface, at rest.',
-    lead: 'Captures from QBZ on a Linux desktop. Frames marked as pending will be replaced with captures from the 2.1 interface.',
+    lead: 'Captures from QBZ on a Linux desktop.',
     items: [
       { key: 'home', title: 'Home', text: 'New releases, editor picks and For You, with genre filters that follow you across the app.' },
       { key: 'immersive', title: 'Immersive spectrum', text: 'One of the full-screen modes. Album art, a readout, and the spectrum drawn from the actual output.' },
