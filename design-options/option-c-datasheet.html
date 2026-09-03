@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QBZ — Option C · Datasheet (mockup)</title>
+<style>
+/* Option C — "Datasheet". Utilitarian, single column, the MusicBee school:
+   plain white, black text, one link colour, tables instead of cards,
+   captures inline at reading width. Fast to read, zero decoration. */
+@font-face { font-family: "Archivo"; font-weight: 100 900; font-stretch: 62% 125%; src: url("../public/fonts/archivo-normal-100-900-latin.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Mono"; font-weight: 400; src: url("../public/fonts/plexmono-normal-400-latin.woff2") format("woff2"); }
+:root{--ink:#111;--ink-2:#444;--ink-3:#777;--rule:#d9d9d9;--link:#2c519a;--amber:#b8791c;--sans:"Archivo",Arial,sans-serif;--mono:"IBM Plex Mono",ui-monospace,Menlo,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:#fff;color:var(--ink);font-family:var(--sans);font-size:1rem;line-height:1.55}
+a{color:var(--link)}
+img{max-width:100%;display:block}
+h1,h2,h3{margin:0;line-height:1.15;letter-spacing:-0.01em}
+p{margin:0}
+.wrap{width:min(100% - 40px,900px);margin:0 auto}
+header.top{border-bottom:2px solid var(--ink);padding:18px 0;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+header.top img{width:34px;height:34px}
+header.top .t{font-weight:700;font-size:1.25rem;font-variation-settings:"wdth" 118;letter-spacing:.04em}
+header.top nav{margin-left:auto;display:flex;gap:18px;font-size:.92rem}
+header.top nav a{color:var(--ink-2);text-decoration:none}
+.hero{padding:40px 0 28px;display:grid;grid-template-columns:1.1fr .9fr;gap:36px;align-items:start}
+.hero h1{font-size:clamp(1.9rem,3.6vw,2.6rem);font-weight:650}
+.hero .lead{margin-top:14px;color:var(--ink-2)}
+.hero .meta{margin-top:16px;font-family:var(--mono);font-size:.78rem;color:var(--ink-3);display:flex;gap:16px;flex-wrap:wrap}
+.btns{margin-top:18px;display:flex;gap:10px;flex-wrap:wrap}
+.btn{display:inline-block;padding:9px 16px;border:1px solid var(--ink);color:var(--ink);text-decoration:none;font-weight:600;font-size:.92rem}
+.btn.p{background:var(--ink);color:#fff}
+.shot{border:1px solid var(--rule)}
+.shot figcaption{font-family:var(--mono);font-size:.72rem;color:var(--ink-3);padding:6px 8px;border-top:1px solid var(--rule)}
+.readline{font-family:var(--mono);font-size:.8rem;color:var(--amber);padding:8px;border-top:1px solid var(--rule);background:#111}
+@media (max-width:800px){.hero{grid-template-columns:1fr}}
+h2{font-size:1.35rem;margin:44px 0 12px;padding-top:14px;border-top:2px solid var(--ink)}
+h2 small{font-family:var(--mono);font-weight:400;font-size:.7rem;color:var(--ink-3);letter-spacing:.12em;text-transform:uppercase;margin-left:12px}
+table{width:100%;border-collapse:collapse;font-size:.95rem}
+th,td{text-align:left;vertical-align:top;padding:9px 10px 9px 0;border-bottom:1px solid var(--rule)}
+th{font-family:var(--mono);font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);font-weight:500;width:28%}
+td code{font-family:var(--mono);font-size:.82rem;background:#f3f3f3;padding:1px 5px}
+.ok{color:#1d7a3f;font-family:var(--mono)}
+.no{color:#a33;font-family:var(--mono)}
+ul.plain{margin:0;padding-left:1.2em;color:var(--ink-2)}
+ul.plain li{margin:4px 0}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:28px}
+@media (max-width:700px){.two{grid-template-columns:1fr}}
+.pyr{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;margin-top:14px}
+.pyr .lx{grid-column:1/-1}
+.pl{border:1px solid var(--ink);padding:16px}
+.pl h3{font-size:1.1rem;display:flex;align-items:center;gap:10px}
+.pl h3 img{width:22px;height:22px}
+.pl .tier{font-family:var(--mono);font-size:.7rem;color:var(--ink-3);letter-spacing:.1em;text-transform:uppercase;margin:2px 0 10px}
+.pl pre{margin:8px 0 0;background:#111;color:#eee;padding:10px 12px;font-family:var(--mono);font-size:.8rem;overflow-x:auto}
+.pl pre b{color:var(--amber);font-weight:400}
+.disc{border-left:3px solid var(--amber);padding-left:10px;color:var(--ink-2);font-size:.9rem;margin-bottom:8px}
+@media (max-width:700px){.pyr{grid-template-columns:1fr}}
+footer{margin-top:56px;border-top:2px solid var(--ink);padding:18px 0 40px;font-size:.85rem;color:var(--ink-3)}
+.mock{position:fixed;left:12px;bottom:12px;z-index:9;font-family:var(--mono);font-size:.66rem;letter-spacing:.12em;text-transform:uppercase;background:#111;color:#fff;padding:6px 10px}
+</style>
+</head>
+<body>
+<span class="mock">Option C · mockup · datasheet</span>
+<div class="wrap">
+<header class="top"><img src="../public/assets/brand/logo-64.webp" alt=""/><span class="t">QBZ</span><nav><a href="#spec">Specifications</a><a href="#dl">Download</a><a href="#">Changelog</a><a href="#">Wiki</a><a href="#">GitHub</a></nav></header>
+
+<section class="hero">
+  <div>
+    <h1>QBZ is a native hi‑fi music player for Linux, macOS and Windows.</h1>
+    <p class="lead">Free and open source (MIT). A Rust engine with a Qt interface plays your Qobuz subscription, your own files and your Plex, Jellyfin or Navidrome server through one bit-perfect pipeline. No browser, no resampling, no telemetry.</p>
+    <div class="meta"><span>v2.1.0</span><span>Linux · macOS · Windows (as-is)</span><span>8 languages</span></div>
+    <div class="btns"><a class="btn p" href="#dl">Download for Linux</a><a class="btn" href="#dl">macOS / Windows</a><a class="btn" href="#">GitHub</a></div>
+  </div>
+  <figure class="shot" style="margin:0">
+    <img src="../public/assets/screenshots/qbz-home-sm.webp" alt="QBZ home view"/>
+    <div class="readline">▶ So What — Miles Davis · FLAC · 24/192.0 kHz · ALSA hw:1,0 · BIT-PERFECT</div>
+    <figcaption>Home · QBZ 2.1 on KDE Plasma</figcaption>
+  </figure>
+</section>
+
+<h2>What it does<small>in one screen</small></h2>
+<div class="two">
+  <ul class="plain">
+    <li><strong>Bit-perfect output.</strong> Per-track sample-rate switching from 44.1 to 192 kHz. ALSA Direct, Core Audio Direct and WASAPI exclusive take the device for QBZ alone.</li>
+    <li><strong>DSD as DSD.</strong> DSF/DFF over DoP or native on ALSA. SACD ISO and discs play their stereo program.</li>
+    <li><strong>One queue, every source.</strong> Qobuz, local library, Plex, Jellyfin, Subsonic/Navidrome, audio CD.</li>
+    <li><strong>Local library, first-class.</strong> Catalog that scales to hundreds of thousands of tracks, Library Explorer, tag editor with MusicBrainz and Discogs, CUE, CD ripping to FLAC.</li>
+  </ul>
+  <ul class="plain">
+    <li><strong>Qobuz Connect</strong> renderer and controller with LAN pairing. <strong>Chromecast and DLNA</strong> casting.</li>
+    <li><strong>Desktop.</strong> MPRIS, tray, notifications, Vim keymap, 30+ themes, auto-theme from your desktop.</li>
+    <li><strong>Import playlists</strong> from Spotify, Apple Music, Tidal, Deezer, files, ListenBrainz and Last.fm.</li>
+    <li><strong>Headless.</strong> qbzd turns a Raspberry Pi into a Qobuz Connect endpoint. glibc 2.35+.</li>
+    <li><strong>Never:</strong> an EQ, a DSP, a download tool, a web wrapper.</li>
+  </ul>
+</div>
+
+<h2 id="spec">Specifications</h2>
+<table>
+  <tr><th>Platforms</th><td>Linux x86_64 and arm64 · macOS Apple Silicon and Intel · Windows x64 (as-is)</td></tr>
+  <tr><th>Backends</th><td>ALSA (Direct <code>hw:</code>), PipeWire, PulseAudio, JACK · CoreAudio (Direct) · WASAPI (exclusive)</td></tr>
+  <tr><th>Sample rates</th><td>44.1 to 192 kHz PCM, per-track switching · DSD64 / DSD128 via DoP or native on ALSA</td></tr>
+  <tr><th>Formats</th><td>FLAC, ALAC, WavPack, Ogg Vorbis, Opus, MP3, AAC, DSF, DFF, CD-DA, SACD ISO</td></tr>
+  <tr><th>Sources</th><td>Qobuz, local files, Plex, Jellyfin, Subsonic and Navidrome, optical discs</td></tr>
+  <tr><th>Web player, for comparison</th><td>Everything <span class="no">resampled to 48 kHz</span>; Hi-Res and DSD <span class="no">not delivered</span>. QBZ: <span class="ok">native at every rate</span>.</td></tr>
+  <tr><th>Interface</th><td>Qt 6 / QML on a Rust core (cxx-qt). Single process, no webview.</td></tr>
+  <tr><th>Privacy</th><td>No telemetry, no tracking. Listening history stays on disk unless you enable a scrobbler.</td></tr>
+  <tr><th>License</th><td>MIT</td></tr>
+</table>
+
+<h2 id="dl">Download<small>pulled from GitHub Releases</small></h2>
+<div class="pyr">
+  <div class="pl lx">
+    <h3><img src="../public/assets/icons/Tux.svg" alt=""/>Linux</h3><div class="tier">Primary platform · x86_64 and arm64</div>
+    <table>
+      <tr><th>Arch</th><td><code>yay -S qbz-bin</code></td></tr>
+      <tr><th>Debian / Ubuntu</th><td>APT repository (recommended) or <code>QBZ_2.1.0_amd64.deb</code> · glibc 2.35+</td></tr>
+      <tr><th>Fedora / openSUSE</th><td><code>sudo dnf install ./QBZ-2.1.0-1.x86_64.rpm</code></td></tr>
+      <tr><th>Flatpak · Snap</th><td><code>flatpak install flathub com.blitzfc.qbz</code> · <code>sudo snap install qbz-player</code></td></tr>
+      <tr><th>AppImage · Tarball</th><td><code>QBZ_2.1.0_amd64.AppImage</code> · <code>qbz_2.1.0_amd64.tar.gz</code></td></tr>
+      <tr><th>NixOS · Gentoo</th><td>flake <code>github:vicrodh/qbz</code> · overlay <code>media-sound/qbz-bin</code></td></tr>
+      <tr><th>qbzd (headless)</th><td><code>qbzd-2.1.0-linux-arm64.tar.gz</code> · glibc 2.35+</td></tr>
+    </table>
+  </div>
+  <div class="pl">
+    <h3><img src="../public/icons/apple.svg" alt=""/>macOS</h3><div class="tier">Supported · signed builds</div>
+    <p class="disc">Recommended: independently signed and notarized builds by @afonsojramos. Not produced or endorsed by the upstream project.</p>
+    <pre><b>$ </b>brew install --cask afonsojramos/qbz/qbz</pre>
+  </div>
+  <div class="pl">
+    <h3><svg width="22" height="22" viewBox="0 0 24 24" fill="#444"><path d="M3 5.5l7.5-1v7H3v-6zm8.5-1.2L21 3v8.5h-9.5v-7.2zM3 12.5h7.5v7L3 18.5v-6zm8.5 0H21V21l-9.5-1.3v-7.2z"/></svg>Windows</h3><div class="tier">As-is · maintainer wanted</div>
+    <p class="disc"><strong>Windows is not currently a supported QBZ platform. The build is provided as-is.</strong></p>
+    <p style="font-size:.92rem;color:var(--ink-2)"><a href="#">QBZ_2.1.0_x64.msi</a> · WASAPI exclusive, media keys, MSI installer.</p>
+  </div>
+</div>
+
+<footer>QBZ · MIT · Made in Mexico. This application uses the Qobuz API but is not certified by, affiliated with, or endorsed by Qobuz. Qobuz is a trademark of Xandrie SA.</footer>
+</div>
+</body>
+</html>

@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QBZ — Option B · Silver faceplate (mockup)</title>
+<style>
+/* Option B — "Silver faceplate". A light direction: brushed-aluminium front
+   panel, black "display" windows for captures, amber readout inside them,
+   condensed uppercase nameplate type. Same logo cobalt as the only accent. */
+@font-face { font-family: "Archivo"; font-weight: 100 900; font-stretch: 62% 125%; src: url("../public/fonts/archivo-normal-100-900-latin.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Mono"; font-weight: 400; src: url("../public/fonts/plexmono-normal-400-latin.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Mono"; font-weight: 500; src: url("../public/fonts/plexmono-normal-500-latin.woff2") format("woff2"); }
+:root{
+  --face:#e6e7e9; --face-2:#dcdde0; --groove:#c4c6cb; --groove-2:#aeb1b8;
+  --ink:#141518; --ink-2:#4b4e56; --ink-3:#7a7e88;
+  --display:#0a0b0d; --amber:#e0a43c; --amber-dim:#8a6524;
+  --cobalt:#3968be; --cobalt-deep:#2c519a;
+  --sans:"Archivo","Helvetica Neue",Arial,sans-serif; --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  --max:1180px; --gutter:clamp(16px,4vw,40px);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--face);color:var(--ink);font-family:var(--sans);font-size:1.0625rem;line-height:1.6;-webkit-font-smoothing:antialiased}
+img{max-width:100%;display:block}
+a{color:inherit;text-decoration:none}
+h1,h2,h3{margin:0;line-height:1.05;letter-spacing:-0.01em}
+p{margin:0}
+ul{margin:0;padding:0;list-style:none}
+.container{width:min(100% - 2*var(--gutter),var(--max));margin:0 auto}
+.eyebrow{font-family:var(--mono);font-size:.7rem;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3)}
+.nameplate{font-variation-settings:"wdth" 78;font-weight:700;text-transform:uppercase;letter-spacing:.02em}
+.btn{display:inline-flex;align-items:center;gap:10px;padding:12px 22px;border-radius:4px;border:1px solid var(--groove-2);font-weight:600;font-size:.95rem;background:#fff}
+.btn-primary{background:var(--cobalt);border-color:var(--cobalt);color:#fff}
+.btn-primary:hover{background:var(--cobalt-deep)}
+/* nav */
+.nav{border-bottom:1px solid var(--groove);background:var(--face)}
+.nav .container{height:64px;display:flex;align-items:center;gap:26px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.06em;font-variation-settings:"wdth" 118}
+.brand img{width:30px;height:30px}
+.nav a.l{color:var(--ink-2);font-size:.93rem;font-weight:500}
+.nav .r{margin-left:auto;display:flex;gap:10px;align-items:center}
+/* hero */
+.hero{padding:clamp(48px,7vw,96px) 0 0;text-align:center}
+.hero h1{font-size:clamp(2.6rem,7vw,6.2rem);max-width:16ch;margin:14px auto 0}
+.hero .lead{max-width:62ch;margin:22px auto 0;color:var(--ink-2);font-size:clamp(1.05rem,1.5vw,1.25rem)}
+.hero .cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:28px}
+/* the display window */
+.display{margin-top:clamp(36px,5vw,64px);background:var(--display);border-radius:14px;padding:14px;box-shadow:inset 0 0 0 1px #2a2c31,0 1px 0 #fff}
+.display img{border-radius:6px;width:100%;aspect-ratio:16/9;object-fit:cover}
+.readout{display:grid;grid-template-columns:1fr auto;gap:12px 24px;align-items:center;padding:14px 8px 4px;font-family:var(--mono);color:var(--amber);font-size:.86rem}
+.readout .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.readout .t i{font-style:normal;color:var(--amber-dim)}
+.readout .f{display:flex;gap:22px;white-space:nowrap}
+.readout .f span{display:inline-flex;flex-direction:column;align-items:flex-end;line-height:1.15}
+.readout .f small{font-size:.58rem;letter-spacing:.14em;color:var(--amber-dim);text-transform:uppercase}
+@media (max-width:760px){.readout{grid-template-columns:1fr}.readout .f{justify-content:space-between;gap:10px}}
+/* rail */
+.rail{margin-top:clamp(40px,6vw,72px);border-top:1px solid var(--groove);border-bottom:1px solid var(--groove);background:var(--face-2)}
+.rail .container{display:flex;flex-wrap:wrap;gap:0 0;align-items:center;min-height:58px}
+.rail .lab{font-family:var(--mono);font-size:.66rem;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin-right:22px}
+.rail li{padding:8px 18px;border-left:1px solid var(--groove);font-weight:500;font-size:.92rem;color:var(--ink-2)}
+/* sections */
+.section{padding:clamp(56px,8vw,104px) 0;border-top:1px solid var(--groove)}
+.section h2{font-size:clamp(1.8rem,3.4vw,2.7rem);margin:12px 0 10px}
+.section .sub{color:var(--ink-2);max-width:66ch;font-size:1.08rem}
+/* switches: three feature "controls" */
+.controls{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--groove);border:1px solid var(--groove);border-radius:12px;overflow:hidden;margin-top:40px}
+.control{background:var(--face);padding:28px}
+.control .k{font-family:var(--mono);font-size:.66rem;letter-spacing:.14em;text-transform:uppercase;color:var(--cobalt);margin-bottom:10px}
+.control h3{font-size:1.2rem;margin-bottom:8px}
+.control p{color:var(--ink-2);font-size:.96rem}
+@media (max-width:860px){.controls{grid-template-columns:1fr}}
+/* pyramid */
+.pyr{display:grid;grid-template-columns:repeat(12,1fr);gap:22px;margin-top:40px}
+.plat{background:#fff;border:1px solid var(--groove);border-radius:12px;overflow:hidden}
+.plat.lx{grid-column:1/-1;border-color:var(--groove-2)}
+.plat.mac{grid-column:2/7}.plat.win{grid-column:7/12}
+.plat header{display:grid;grid-template-columns:auto 1fr auto;gap:16px;align-items:center;padding:20px 24px;border-bottom:1px solid var(--groove)}
+.plat header img{width:36px;height:36px}
+.plat h3{font-size:1.35rem;font-variation-settings:"wdth" 112}
+.plat .tier{font-family:var(--mono);font-size:.66rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)}
+.plat.lx .tier{color:var(--cobalt)}
+.plat .rel{font-family:var(--mono);font-size:.72rem;color:var(--ink-3);text-align:right}
+.plat .body{padding:20px 24px 24px;display:grid;gap:14px}
+.tabs{display:flex;flex-wrap:wrap;gap:4px;padding:0 24px;border-bottom:1px solid var(--groove)}
+.tabs span{padding:10px 12px 12px;font-size:.88rem;font-weight:500;color:var(--ink-2);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs span.on{color:var(--ink);border-bottom-color:var(--cobalt)}
+.term{display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px;background:var(--display);color:#ecebe6;border-radius:6px;padding:10px 14px;font-family:var(--mono);font-size:.8rem}
+.term b{color:var(--amber);font-weight:400;margin-right:10px}
+.note{color:var(--ink-2);font-size:.92rem}
+.disc{border-left:2px solid var(--amber);padding:4px 0 4px 14px;color:var(--ink-2);font-size:.9rem}
+.disc strong{color:var(--ink)}
+@media (max-width:900px){.plat.mac,.plat.win{grid-column:1/-1}}
+footer{border-top:1px solid var(--groove);padding:40px 0;color:var(--ink-3);font-size:.85rem}
+footer .container{display:flex;flex-wrap:wrap;gap:24px;justify-content:space-between}
+.mock{position:fixed;left:12px;bottom:12px;z-index:9;font-family:var(--mono);font-size:.66rem;letter-spacing:.12em;text-transform:uppercase;background:var(--ink);color:#fff;padding:6px 10px;border-radius:4px}
+</style>
+</head>
+<body>
+<span class="mock">Option B · mockup · silver faceplate</span>
+<nav class="nav"><div class="container">
+  <a class="brand" href="#"><img src="../public/assets/brand/logo-64.webp" alt=""/>QBZ</a>
+  <a class="l" href="#">Features</a><a class="l" href="#dl">Download</a><a class="l" href="#">Changelog</a><a class="l" href="#">GitHub</a>
+  <div class="r"><a class="btn" href="#" style="padding:8px 12px;font-size:.8rem;font-family:var(--mono);letter-spacing:.08em">EN · ES</a><a class="btn btn-primary" href="#dl" style="padding:8px 16px;font-size:.88rem">Download</a></div>
+</div></nav>
+
+<section class="hero"><div class="container">
+  <span class="eyebrow">Free and open source · MIT · Linux first</span>
+  <h1 class="nameplate">A native hi‑fi music player for Linux</h1>
+  <p class="lead">QBZ plays your Qobuz subscription, your own files and your Plex, Jellyfin or Navidrome server through one bit-perfect pipeline. A Rust engine, a Qt interface, and no browser anywhere in between.</p>
+  <div class="cta"><a class="btn btn-primary" href="#dl"><img src="../public/assets/icons/Tux.svg" alt="" width="18" height="18"/>Download for Linux</a><a class="btn" href="#dl">macOS and Windows</a><a class="btn" href="#">Source on GitHub</a></div>
+  <div class="display">
+    <img src="../public/assets/screenshots/qbz-home.webp" alt="QBZ home view"/>
+    <div class="readout">
+      <div class="t">▶ So What <i>— Miles Davis</i></div>
+      <div class="f"><span><small>Source</small>Qobuz</span><span><small>Format</small>FLAC</span><span><small>Rate</small>24 bit / 192.0 kHz</span><span><small>Output</small>ALSA hw:1,0</span><span><small>State</small>● BIT-PERFECT</span></div>
+    </div>
+  </div>
+</div>
+<div class="rail"><ul class="container"><li class="lab" style="border:0;padding:0">One queue, every source</li><li style="border:0;padding-left:0">Qobuz</li><li>Local files</li><li>Plex</li><li>Jellyfin</li><li>Subsonic / Navidrome</li><li>CD and SACD</li></ul></div>
+</section>
+
+<section class="section"><div class="container">
+  <span class="eyebrow">Signal path</span>
+  <h2>What comes in is what goes out.</h2>
+  <p class="sub">Every source is decoded by the same engine and handed to your DAC at its native resolution. Nothing in the middle changes the samples.</p>
+  <div class="controls">
+    <div class="control"><div class="k">Input</div><h3>Sources</h3><p>Qobuz up to 24 bit / 192 kHz. Local FLAC, ALAC, WavPack, Vorbis, Opus, MP3, AAC, DSF/DFF. Plex, Jellyfin, Subsonic. Audio CD and SACD.</p></div>
+    <div class="control"><div class="k">Engine</div><h3>One Rust process</h3><p>Symphonia decoders, per-track sample-rate switching, gapless with prefetch and a two-level cache. No EQ, no DSP, by design.</p></div>
+    <div class="control"><div class="k">Output</div><h3>Straight to hardware</h3><p>ALSA Direct, PipeWire, PulseAudio, JACK. CoreAudio Direct on macOS, WASAPI exclusive on Windows. DSD over DoP or native. Chromecast, DLNA, Qobuz Connect.</p></div>
+  </div>
+</div></section>
+
+<section class="section" id="dl"><div class="container">
+  <span class="eyebrow">Downloads</span>
+  <h2>Get QBZ</h2>
+  <p class="sub">Builds are pulled live from GitHub Releases. Linux is the primary platform; macOS is supported; Windows is offered as-is.</p>
+  <div class="pyr">
+    <article class="plat lx">
+      <header><img src="../public/assets/icons/Tux.svg" alt=""/><div><h3>Linux</h3><div class="tier">Primary platform</div></div><div class="rel">Release v2.1.0<br/>Sep 2026</div></header>
+      <div class="tabs"><span class="on">Arch</span><span>Debian / Ubuntu</span><span>Fedora / openSUSE</span><span>Flatpak</span><span>Snap</span><span>AppImage</span><span>NixOS</span><span>Gentoo</span><span>Tarball</span><span>qbzd</span><span>Source</span></div>
+      <div class="body"><p class="note">x86_64 and arm64. Pick your distro; every option installs the same binary.</p><div class="term"><code><b>$</b>git clone https://aur.archlinux.org/qbz-bin.git &amp;&amp; cd qbz-bin &amp;&amp; makepkg -si</code><span>⧉</span></div></div>
+    </article>
+    <article class="plat mac">
+      <header><img src="../public/icons/apple.svg" alt=""/><div><h3>macOS</h3><div class="tier">Supported · signed builds</div></div><div class="rel">Signed v2.1.0</div></header>
+      <div class="body"><p class="disc">Recommended: the independently signed and notarized builds by @afonsojramos. Not produced or endorsed by the upstream project.</p><div class="term"><code><b>$</b>brew install --cask afonsojramos/qbz/qbz</code><span>⧉</span></div></div>
+    </article>
+    <article class="plat win">
+      <header><svg width="36" height="36" viewBox="0 0 24 24" fill="#4b4e56"><path d="M3 5.5l7.5-1v7H3v-6zm8.5-1.2L21 3v8.5h-9.5v-7.2zM3 12.5h7.5v7L3 18.5v-6zm8.5 0H21V21l-9.5-1.3v-7.2z"/></svg><div><h3>Windows</h3><div class="tier">As-is · maintainer wanted</div></div><div></div></header>
+      <div class="body"><p class="disc"><strong>Windows is not currently a supported QBZ platform. The build is provided as-is.</strong></p><p class="note">Native playback, WASAPI exclusive mode, media keys, MSI installer. Needs a maintainer.</p><a class="btn" href="#" style="justify-self:start">QBZ_2.1.0_x64.msi</a></div>
+    </article>
+  </div>
+</div></section>
+
+<footer><div class="container"><span>QBZ · MIT · Made in Mexico</span><span>Qobuz is a trademark of Xandrie SA. QBZ is not affiliated with Qobuz.</span></div></footer>
+</body>
+</html>
