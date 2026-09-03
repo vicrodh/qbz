@@ -1196,6 +1196,24 @@ picture.shot img {
   border-top: 0;
 }
 
+/* Larry keeps his corner of the Gentoo panel */
+.platform__actions--larry {
+  align-items: flex-end;
+}
+
+.larry {
+  margin-left: auto;
+  width: 120px;
+  height: auto;
+  opacity: 0.85;
+}
+
+@media (max-width: 720px) {
+  .larry {
+    width: 84px;
+  }
+}
+
 .download-item__header,
 .download-item__info {
   display: flex;

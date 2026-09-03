@@ -157,15 +157,15 @@ function EmptyState({ loading, error, text }: { loading: boolean; error: boolean
 type LinuxFormat = 'arch' | 'debian' | 'fedora' | 'flatpak' | 'snap' | 'appimage' | 'nixos' | 'gentoo' | 'tarball' | 'qbzd' | 'source'
 
 const LINUX_FORMATS: { id: LinuxFormat; icon: string }[] = [
+  { id: 'tarball', icon: '/icons/tarball.svg' },
   { id: 'gentoo', icon: '/icons/gentoo.svg' },
+  { id: 'appimage', icon: '/icons/appimage.svg' },
+  { id: 'flatpak', icon: '/icons/flatpak.svg' },
+  { id: 'snap', icon: '/icons/snapcraft.svg' },
   { id: 'arch', icon: '/icons/arch.svg' },
   { id: 'debian', icon: '/icons/debian.svg' },
   { id: 'fedora', icon: '/icons/redhat.svg' },
-  { id: 'flatpak', icon: '/icons/flatpak.svg' },
-  { id: 'snap', icon: '/icons/snapcraft.svg' },
-  { id: 'appimage', icon: '/icons/appimage.svg' },
   { id: 'nixos', icon: '/icons/nixos.svg' },
-  { id: 'tarball', icon: '/icons/tarball.svg' },
   { id: 'qbzd', icon: '/icons/terminal.svg' },
   { id: 'source', icon: '/icons/rust.svg' },
 ]
@@ -355,8 +355,9 @@ function LinuxPanel({ format, items, loading, error }: { format: LinuxFormat; it
           <p className="platform__sub">{t('downloads.gentoo.binTitle')}</p>
           <Cmd cmd="emerge media-sound/qbz-bin" prompt="#" />
           <Details title={t('downloads.gentoo.srcTitle')}><DepsCmd cmd="emerge media-sound/qbz" prompt="#" /></Details>
-          <div className="platform__actions">
+          <div className="platform__actions platform__actions--larry">
             <a className="btn btn-ghost btn-sm" href={GENTOO_OVERLAY_URL} target="_blank" rel="noreferrer">{t('downloads.gentoo.viewOverlay')}</a>
+            <img className="larry" src="/assets/images/Larry-the-cow-full.svg" alt="Larry the cow, the Gentoo mascot" width={120} height={120} loading="lazy" />
           </div>
         </div>
       )
@@ -469,7 +470,7 @@ function PlatformHead({ id, logo, name, tier, meta }: { id: string; logo: React.
 
 function LinuxCard({ items, release, error }: { items: DownloadItem[]; release: ReleaseData | null; error: boolean }) {
   const { t } = useTranslation()
-  const [format, setFormat] = useState<LinuxFormat>('gentoo')
+  const [format, setFormat] = useState<LinuxFormat>('tarball')
   const options: DropdownOption[] = LINUX_FORMATS.map((f) => ({ id: f.id, label: t(`downloads.formats.${f.id}`), icon: f.icon }))
 
   return (
