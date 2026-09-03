@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState, useCallback, type KeyboardEvent } from 'react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useApp } from '../lib/appContext'
 import { formatBytes, formatDate } from '../lib/format'
+import { Dropdown, type DropdownOption } from './Dropdown'
 
-/* ── Copy button ──────────────────────────────────────────── */
+/* ── Copy button + command line ───────────────────────────── */
 
 function CopyButton({ text }: { text: string }) {
   const { t } = useTranslation()
@@ -43,14 +44,18 @@ function Cmd({ cmd, prompt = '$', block = false }: { cmd: string; prompt?: strin
   )
 }
 
-/* ── Release data ─────────────────────────────────────────── */
-
-type ReleaseAsset = {
-  name: string
-  browser_download_url: string
-  size: number
+function Details({ title, children, open }: { title: string; children: React.ReactNode; open?: boolean }) {
+  return (
+    <details className="deps-details" open={open}>
+      <summary className="deps-summary">{title}</summary>
+      {children}
+    </details>
+  )
 }
 
+/* ── Release data ─────────────────────────────────────────── */
+
+type ReleaseAsset = { name: string; browser_download_url: string; size: number }
 type ReleaseData = {
   tag_name: string
   published_at: string
@@ -60,15 +65,8 @@ type ReleaseData = {
   draft: boolean
 }
 
-type AssetType = 'appimage' | 'flatpak' | 'deb' | 'rpm' | 'tarball' | 'qbzd' | 'dmg' | 'msi' | 'unknown'
-
-type DownloadItem = {
-  type: AssetType
-  fileName: string
-  url: string
-  size: number
-  arch: string | null
-}
+type AssetType = 'appimage' | 'flatpak' | 'deb' | 'rpm' | 'tarball' | 'qbzd' | 'qbzd-deb' | 'qbzd-rpm' | 'dmg' | 'msi' | 'unknown'
+type DownloadItem = { type: AssetType; fileName: string; url: string; size: number; arch: string | null }
 
 const RELEASES_URL = 'https://api.github.com/repos/vicrodh/qbz/releases'
 const RELEASES_PAGE = 'https://github.com/vicrodh/qbz/releases'
@@ -86,9 +84,13 @@ const WINDOWS_ADOPT_URL = 'https://github.com/vicrodh/qbz/discussions'
 
 const getType = (name: string): AssetType => {
   const lower = name.toLowerCase()
-  if (lower.endsWith('.sig') || lower === 'latest.json') return 'unknown'
-  if (lower.includes('.app.tar.gz')) return 'unknown'
-  if (lower.startsWith('qbzd-')) return lower.endsWith('.tar.gz') ? 'qbzd' : 'unknown'
+  if (lower.endsWith('.sig') || lower === 'latest.json' || lower.includes('.app.tar.gz')) return 'unknown'
+  if (lower.startsWith('qbzd')) {
+    if (lower.endsWith('.tar.gz') || lower.endsWith('.tar.xz')) return 'qbzd'
+    if (lower.endsWith('.deb')) return 'qbzd-deb'
+    if (lower.endsWith('.rpm')) return 'qbzd-rpm'
+    return 'unknown'
+  }
   if (lower.endsWith('.appimage')) return 'appimage'
   if (lower.endsWith('.flatpak')) return 'flatpak'
   if (lower.endsWith('.deb')) return 'deb'
@@ -123,44 +125,6 @@ const mapAssets = (assets: ReleaseAsset[]): DownloadItem[] =>
 
 const stripArchive = (fileName: string) => fileName.replace(/\.tar\.(gz|xz)$/, '').replace(/\.tgz$/, '')
 
-/* ── Linux tabs ───────────────────────────────────────────── */
-
-type TabId = 'arch' | 'debian' | 'fedora' | 'flatpak' | 'snap' | 'appimage' | 'nixos' | 'gentoo' | 'tarball' | 'qbzd' | 'source'
-
-const TABS: { id: TabId; label: string; icon: string | null }[] = [
-  { id: 'arch', label: 'Arch', icon: '/icons/arch.svg' },
-  { id: 'debian', label: 'Debian / Ubuntu', icon: '/icons/debian.svg' },
-  { id: 'fedora', label: 'Fedora / openSUSE', icon: '/icons/redhat.svg' },
-  { id: 'flatpak', label: 'Flatpak', icon: '/icons/flatpak.svg' },
-  { id: 'snap', label: 'Snap', icon: '/icons/snapcraft.svg' },
-  { id: 'appimage', label: 'AppImage', icon: null },
-  { id: 'nixos', label: 'NixOS', icon: '/icons/nixos.svg' },
-  { id: 'gentoo', label: 'Gentoo', icon: '/icons/gentoo.svg' },
-  { id: 'tarball', label: 'Tarball', icon: '/icons/tarball.svg' },
-  { id: 'qbzd', label: 'qbzd', icon: null },
-  { id: 'source', label: 'Source', icon: '/icons/rust.svg' },
-]
-
-function TabIcon({ id, src }: { id: TabId; src: string | null }) {
-  if (src) {
-    return <img className="download-tab__icon" src={src} alt="" width={16} height={16} loading="lazy" />
-  }
-  if (id === 'qbzd') {
-    return (
-      <svg className="download-tab__icon download-tab__icon--inline" width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <rect x="3" y="5" width="18" height="14" rx="2" />
-        <path d="M7 10l3 2-3 2M12 14h5" />
-      </svg>
-    )
-  }
-  return (
-    <svg className="download-tab__icon download-tab__icon--inline" width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="4" y="4" width="16" height="16" rx="3" />
-      <path d="M12 9v6M9 12l3 3 3-3" />
-    </svg>
-  )
-}
-
 const ARCH_TITLES: Record<string, string> = {
   x86_64: 'Intel and AMD, 64-bit',
   arm64: 'ARM 64-bit (Apple Silicon, Raspberry Pi, Snapdragon)',
@@ -175,37 +139,35 @@ function FileLine({ item }: { item: DownloadItem }) {
   )
 }
 
-function DownloadLink({ item, label }: { item: DownloadItem; label: string }) {
+function DownloadLink({ item, label, primary = false }: { item: DownloadItem; label: string; primary?: boolean }) {
   return (
     <div className="platform__actions">
-      <a className="btn btn-ghost btn-sm" href={item.url}>{label}</a>
+      <a className={`btn btn-sm ${primary ? 'btn-primary' : 'btn-ghost'}`} href={item.url}>{label}</a>
     </div>
   )
 }
 
-/* ── Linux tab panels ─────────────────────────────────────── */
-
-function ArchPanel() {
+function EmptyState({ loading, error, text }: { loading: boolean; error: boolean; text: string }) {
   const { t } = useTranslation()
-  return (
-    <div className="download-list">
-      <div className="download-item">
-        <div className="download-item__header">
-          <h4 className="download-item__label">AUR · qbz-bin</h4>
-        </div>
-        <Cmd cmd="git clone https://aur.archlinux.org/qbz-bin.git && cd qbz-bin && makepkg -si" />
-        <details className="deps-details">
-          <summary className="deps-summary">{t('downloads.aur.helperTitle')}</summary>
-          <div className="terminal terminal--deps"><code><span className="terminal__prompt">$</span><span className="terminal__cmd">yay -S qbz-bin</span></code><CopyButton text="yay -S qbz-bin" /></div>
-          <div className="terminal terminal--deps"><code><span className="terminal__prompt">$</span><span className="terminal__cmd">paru -S qbz-bin</span></code><CopyButton text="paru -S qbz-bin" /></div>
-        </details>
-        <div className="platform__actions">
-          <a className="btn btn-ghost btn-sm" href={AUR_PACKAGE_URL} target="_blank" rel="noreferrer">{t('downloads.viewOn', { store: 'AUR' })}</a>
-        </div>
-      </div>
-    </div>
-  )
+  return <p className="download-state">{loading ? t('downloads.loading') : error ? t('downloads.error') : text}</p>
 }
+
+/* ── Linux formats ────────────────────────────────────────── */
+
+type LinuxFormat = 'arch' | 'debian' | 'fedora' | 'flatpak' | 'snap' | 'appimage' | 'nixos' | 'gentoo' | 'tarball' | 'source'
+
+const LINUX_FORMATS: { id: LinuxFormat; icon: string }[] = [
+  { id: 'arch', icon: '/icons/arch.svg' },
+  { id: 'debian', icon: '/icons/debian.svg' },
+  { id: 'fedora', icon: '/icons/redhat.svg' },
+  { id: 'flatpak', icon: '/icons/flatpak.svg' },
+  { id: 'snap', icon: '/icons/snapcraft.svg' },
+  { id: 'appimage', icon: '/icons/appimage.svg' },
+  { id: 'nixos', icon: '/icons/nixos.svg' },
+  { id: 'gentoo', icon: '/icons/gentoo.svg' },
+  { id: 'tarball', icon: '/icons/tarball.svg' },
+  { id: 'source', icon: '/icons/rust.svg' },
+]
 
 const APT_KEYRING_CMD = 'curl -fsSL https://vicrodh.github.io/qbz-apt/qbz-archive-keyring.gpg | gpg --dearmor | sudo tee /usr/share/keyrings/qbz-archive-keyring.gpg > /dev/null'
 const APT_SOURCES_CMD = `cat <<EOF | sudo tee /etc/apt/sources.list.d/qbz.sources
@@ -219,163 +181,12 @@ EOF`
 const APT_INSTALL_CMD = 'sudo apt update && sudo apt install qbz'
 const DEB_DEPS_CMD = 'sudo apt install -y libasound2 libfontconfig1 libfreetype6 libxkbcommon0 libwayland-client0 libegl1 libgl1'
 const RPM_DEPS_CMD = 'sudo dnf install -y alsa-lib fontconfig freetype libxkbcommon wayland mesa-libEGL mesa-libGL'
-
-function DebianPanel({ items }: { items: DownloadItem[] }) {
-  const { t } = useTranslation()
-  return (
-    <div className="download-list">
-      <div className="download-item">
-        <div className="download-item__header">
-          <h4 className="download-item__label">{t('downloads.aptRepo.label')}</h4>
-        </div>
-        <p className="download-item__text">{t('downloads.aptRepo.description')}</p>
-        <Cmd cmd={APT_KEYRING_CMD} />
-        <Cmd cmd={APT_SOURCES_CMD} block />
-        <Cmd cmd={APT_INSTALL_CMD} />
-        <p className="glibc-note">{t('downloads.aptRepo.updateNote')}</p>
-      </div>
-      {items.map((item) => (
-        <div className="download-item" key={item.fileName}>
-          <div className="download-item__header">
-            <h4 className="download-item__label">.deb</h4>
-            <FileLine item={item} />
-          </div>
-          <Cmd cmd={`wget ${item.url}`} />
-          <Cmd cmd={`sudo apt install ./${item.fileName}`} />
-          <p className="glibc-note">{t('downloads.glibcNote.deb')}</p>
-          <details className="deps-details">
-            <summary className="deps-summary">{t('downloads.depsSummary')}</summary>
-            <div className="terminal terminal--deps"><code><span className="terminal__prompt">#</span><span className="terminal__cmd">{DEB_DEPS_CMD}</span></code><CopyButton text={DEB_DEPS_CMD} /></div>
-          </details>
-          <DownloadLink item={item} label={t('downloads.download')} />
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function FedoraPanel({ items }: { items: DownloadItem[] }) {
-  const { t } = useTranslation()
-  return (
-    <div className="download-list">
-      {items.map((item) => (
-        <div className="download-item" key={item.fileName}>
-          <div className="download-item__header">
-            <h4 className="download-item__label">.rpm</h4>
-            <FileLine item={item} />
-          </div>
-          <Cmd cmd={`wget ${item.url}`} />
-          <Cmd cmd={`sudo dnf install ./${item.fileName}`} />
-          <p className="glibc-note">{t('downloads.glibcNote.rpm')}</p>
-          <details className="deps-details">
-            <summary className="deps-summary">{t('downloads.depsSummary')}</summary>
-            <div className="terminal terminal--deps"><code><span className="terminal__prompt">#</span><span className="terminal__cmd">{RPM_DEPS_CMD}</span></code><CopyButton text={RPM_DEPS_CMD} /></div>
-          </details>
-          <DownloadLink item={item} label={t('downloads.download')} />
-        </div>
-      ))}
-    </div>
-  )
-}
-
 const FLATPAK_RESERVE_CMD = 'flatpak override --user --own-name=org.freedesktop.ReserveDevice1.* com.blitzfc.qbz'
 const FLATPAK_FS_CMDS = [
   'flatpak override --user --filesystem=/path/to/your/music com.blitzfc.qbz',
   'flatpak override --user --filesystem=/mnt/nas com.blitzfc.qbz',
 ]
-
-function FlatpakPanel({ items }: { items: DownloadItem[] }) {
-  const { t } = useTranslation()
-  return (
-    <div className="download-list">
-      <div className="download-item">
-        <div className="download-item__header">
-          <h4 className="download-item__label">Flathub</h4>
-        </div>
-        <Cmd cmd="flatpak install flathub com.blitzfc.qbz" />
-        <details className="deps-details">
-          <summary className="deps-summary">{t('downloads.flatpak.bitperfectTitle')}</summary>
-          <p>{t('downloads.flatpak.bitperfectNote')}</p>
-          <div className="terminal terminal--deps"><code><span className="terminal__prompt">$</span><span className="terminal__cmd">{FLATPAK_RESERVE_CMD}</span></code><CopyButton text={FLATPAK_RESERVE_CMD} /></div>
-        </details>
-        <details className="deps-details">
-          <summary className="deps-summary">{t('downloads.flatpak.libraryTitle')}</summary>
-          {FLATPAK_FS_CMDS.map((cmd) => (
-            <div className="terminal terminal--deps" key={cmd}><code><span className="terminal__prompt">$</span><span className="terminal__cmd">{cmd}</span></code><CopyButton text={cmd} /></div>
-          ))}
-        </details>
-        <div className="platform__actions">
-          <a className="btn btn-ghost btn-sm" href={FLATHUB_URL} target="_blank" rel="noreferrer">{t('downloads.viewOn', { store: 'Flathub' })}</a>
-        </div>
-      </div>
-      {items.map((item) => (
-        <div className="download-item" key={item.fileName}>
-          <div className="download-item__header">
-            <h4 className="download-item__label">GitHub Release · .flatpak</h4>
-            <FileLine item={item} />
-          </div>
-          <Cmd cmd={`wget ${item.url}`} />
-          <Cmd cmd={`flatpak install --user ./${item.fileName}`} />
-          <DownloadLink item={item} label={t('downloads.download')} />
-        </div>
-      ))}
-    </div>
-  )
-}
-
-const SNAP_PLUGS = [
-  'sudo snap connect qbz-player:alsa',
-  'sudo snap connect qbz-player:pulseaudio',
-  'sudo snap connect qbz-player:pipewire',
-]
-
-function SnapPanel() {
-  const { t } = useTranslation()
-  return (
-    <div className="download-list">
-      <div className="download-item">
-        <div className="download-item__header">
-          <h4 className="download-item__label">Snap Store · qbz-player</h4>
-        </div>
-        <Cmd cmd="sudo snap install qbz-player" />
-        <details className="deps-details" open>
-          <summary className="deps-summary">{t('downloads.snap.plugsTitle')}</summary>
-          {SNAP_PLUGS.map((cmd) => (
-            <div className="terminal terminal--deps" key={cmd}><code><span className="terminal__prompt">$</span><span className="terminal__cmd">{cmd}</span></code><CopyButton text={cmd} /></div>
-          ))}
-        </details>
-        <details className="deps-details">
-          <summary className="deps-summary">{t('downloads.snap.mediaTitle')}</summary>
-          <p>{t('downloads.snap.mediaNote')}</p>
-          <div className="terminal terminal--deps"><code><span className="terminal__prompt">$</span><span className="terminal__cmd">sudo snap connect qbz-player:removable-media</span></code><CopyButton text="sudo snap connect qbz-player:removable-media" /></div>
-        </details>
-        <div className="platform__actions">
-          <a className="btn btn-ghost btn-sm" href={SNAP_STORE_URL} target="_blank" rel="noreferrer">{t('downloads.viewOn', { store: 'Snap Store' })}</a>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function AppImagePanel({ items }: { items: DownloadItem[] }) {
-  const { t } = useTranslation()
-  return (
-    <div className="download-list">
-      {items.map((item) => (
-        <div className="download-item" key={item.fileName}>
-          <div className="download-item__header">
-            <h4 className="download-item__label">AppImage</h4>
-            <FileLine item={item} />
-          </div>
-          <Cmd cmd={`wget ${item.url}`} />
-          <Cmd cmd={`chmod +x ${item.fileName} && ./${item.fileName}`} />
-          <DownloadLink item={item} label={t('downloads.download')} />
-        </div>
-      ))}
-    </div>
-  )
-}
-
+const SNAP_PLUGS = ['sudo snap connect qbz-player:alsa', 'sudo snap connect qbz-player:pulseaudio', 'sudo snap connect qbz-player:pipewire']
 const NIXOS_FLAKE_INPUT = 'inputs.qbz.url = "github:vicrodh/qbz";'
 const NIXOS_SYSTEM_PKG = `{pkgs, inputs, ...}:
 {
@@ -389,120 +200,7 @@ const NIXOS_HOME_PKG = `{pkgs, inputs, ...}:
     inputs.qbz.packages.\${pkgs.system}.default
   ];
 }`
-
-function NixOSPanel() {
-  const { t } = useTranslation()
-  return (
-    <div className="download-list">
-      <div className="download-item">
-        <div className="download-item__header">
-          <h4 className="download-item__label">{t('downloads.nixos.label')}</h4>
-        </div>
-        <p className="download-item__text">{t('downloads.nixos.lead')}</p>
-        <Cmd cmd={NIXOS_FLAKE_INPUT} prompt="" />
-        <p className="platform__sub">{t('downloads.nixos.system')}</p>
-        <Cmd cmd={NIXOS_SYSTEM_PKG} prompt="" block />
-        <p className="platform__sub">{t('downloads.nixos.home')}</p>
-        <Cmd cmd={NIXOS_HOME_PKG} prompt="" block />
-        <p className="glibc-note">
-          {t('downloads.nixos.nixpkgs')} <code>qbz</code> · <a href="https://search.nixos.org/packages?query=qbz" target="_blank" rel="noreferrer">search.nixos.org</a>
-        </p>
-      </div>
-    </div>
-  )
-}
-
-const GENTOO_OVERLAY_CMDS = [
-  'eselect repository add qbz-overlay git https://github.com/vicrodh/qbz-overlay.git',
-  'emerge --sync qbz-overlay',
-]
-
-function GentooPanel() {
-  const { t } = useTranslation()
-  return (
-    <div className="download-list">
-      <div className="download-item">
-        <div className="download-item__header">
-          <h4 className="download-item__label">{t('downloads.gentoo.label')}</h4>
-        </div>
-        <p className="download-item__text">{t('downloads.gentoo.lead')}</p>
-        {GENTOO_OVERLAY_CMDS.map((cmd) => <Cmd key={cmd} cmd={cmd} prompt="#" />)}
-        <p className="platform__sub">{t('downloads.gentoo.binTitle')}</p>
-        <Cmd cmd="emerge media-sound/qbz-bin" prompt="#" />
-        <details className="deps-details">
-          <summary className="deps-summary">{t('downloads.gentoo.srcTitle')}</summary>
-          <div className="terminal terminal--deps"><code><span className="terminal__prompt">#</span><span className="terminal__cmd">emerge media-sound/qbz</span></code><CopyButton text="emerge media-sound/qbz" /></div>
-        </details>
-        <div className="platform__actions">
-          <a className="btn btn-ghost btn-sm" href={GENTOO_OVERLAY_URL} target="_blank" rel="noreferrer">{t('downloads.gentoo.viewOverlay')}</a>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function TarballPanel({ items }: { items: DownloadItem[] }) {
-  const { t } = useTranslation()
-  return (
-    <div className="download-list">
-      {items.map((item) => {
-        const dir = stripArchive(item.fileName)
-        const desktopCmds = [
-          `sudo cp ${dir}/qbz /usr/local/bin/`,
-          `cp ${dir}/qbz.desktop ~/.local/share/applications/`,
-          `cp -r ${dir}/icons/* ~/.local/share/icons/`,
-          'gtk-update-icon-cache ~/.local/share/icons/hicolor/',
-        ]
-        return (
-          <div className="download-item" key={item.fileName}>
-            <div className="download-item__header">
-              <h4 className="download-item__label">Tarball</h4>
-              <FileLine item={item} />
-            </div>
-            <Cmd cmd={`wget ${item.url}`} />
-            <Cmd cmd={`tar -xzf ${item.fileName} && ./${dir}/qbz`} />
-            <details className="deps-details">
-              <summary className="deps-summary">{t('downloads.tarball.desktopTitle')}</summary>
-              {desktopCmds.map((cmd) => (
-                <div className="terminal terminal--deps" key={cmd}><code><span className="terminal__prompt">$</span><span className="terminal__cmd">{cmd}</span></code><CopyButton text={cmd} /></div>
-              ))}
-            </details>
-            <DownloadLink item={item} label={t('downloads.download')} />
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-function QbzdPanel({ items }: { items: DownloadItem[] }) {
-  const { t } = useTranslation()
-  return (
-    <div className="download-list">
-      <div className="download-item">
-        <div className="download-item__header">
-          <h4 className="download-item__label">{t('downloads.linux.qbzdTitle')}</h4>
-        </div>
-        <p className="download-item__text">{t('downloads.linux.qbzdNote')}</p>
-        <div className="platform__actions">
-          <a className="btn btn-ghost btn-sm" href={QBZD_MANUAL_URL} target="_blank" rel="noreferrer">{t('daemon.cta')}</a>
-        </div>
-      </div>
-      {items.map((item) => (
-        <div className="download-item" key={item.fileName}>
-          <div className="download-item__header">
-            <h4 className="download-item__label">qbzd</h4>
-            <FileLine item={item} />
-          </div>
-          <Cmd cmd={`wget ${item.url}`} />
-          <Cmd cmd={`tar -xzf ${item.fileName}`} />
-          <DownloadLink item={item} label={t('downloads.download')} />
-        </div>
-      ))}
-    </div>
-  )
-}
-
+const GENTOO_OVERLAY_CMDS = ['eselect repository add qbz-overlay git https://github.com/vicrodh/qbz-overlay.git', 'emerge --sync qbz-overlay']
 const BUILD_DEPS_DEBIAN = 'sudo apt install build-essential pkg-config cmake clang libclang-dev nasm qt6-base-dev qt6-base-private-dev qt6-declarative-dev qt6-declarative-private-dev qt6-shadertools-dev libasound2-dev libjack-jackd2-dev libdbus-1-dev libssl-dev'
 const BUILD_DEPS_MACOS = 'xcode-select --install && brew install qt'
 const BUILD_RUSTUP = "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
@@ -510,39 +208,202 @@ const BUILD_CLONE = 'git clone https://github.com/vicrodh/qbz.git && cd qbz'
 const BUILD_CARGO = 'cargo build --release --manifest-path crates/Cargo.toml -p qbz-qt'
 const BUILD_RUN = './crates/target/release/qbz'
 
-function SourcePanel() {
-  const { t } = useTranslation()
+function DepsCmd({ cmd, prompt = '$' }: { cmd: string; prompt?: string }) {
   return (
-    <div className="download-list">
-      <div className="download-item">
-        <div className="download-item__header">
-          <h4 className="download-item__label">{t('downloads.buildTitle')}</h4>
-        </div>
-        <p className="download-item__text">{t('downloads.buildBody')}</p>
-        <p className="platform__sub">{t('downloads.buildInstructions.prereqTitle')}</p>
-        <p className="download-item__text">{t('downloads.buildInstructions.prereqNote')}</p>
-        <details className="deps-details">
-          <summary className="deps-summary">Debian / Ubuntu</summary>
-          <div className="terminal terminal--deps"><code><span className="terminal__prompt">$</span><span className="terminal__cmd">{BUILD_DEPS_DEBIAN}</span></code><CopyButton text={BUILD_DEPS_DEBIAN} /></div>
-        </details>
-        <details className="deps-details">
-          <summary className="deps-summary">macOS</summary>
-          <div className="terminal terminal--deps"><code><span className="terminal__prompt">$</span><span className="terminal__cmd">{BUILD_DEPS_MACOS}</span></code><CopyButton text={BUILD_DEPS_MACOS} /></div>
-        </details>
-        <details className="deps-details">
-          <summary className="deps-summary">Rust</summary>
-          <div className="terminal terminal--deps"><code><span className="terminal__prompt">$</span><span className="terminal__cmd">{BUILD_RUSTUP}</span></code><CopyButton text={BUILD_RUSTUP} /></div>
-        </details>
-        <p className="platform__sub">{t('downloads.buildInstructions.cloneTitle')}</p>
-        <Cmd cmd={BUILD_CLONE} />
-        <Cmd cmd={BUILD_CARGO} />
-        <Cmd cmd={BUILD_RUN} />
-        <p className="glibc-note">{t('downloads.buildInstructions.buildNote')}</p>
-        <p className="platform__sub">{t('downloads.buildInstructions.proxyTitle')}</p>
-        <p className="download-item__text">{t('downloads.buildInstructions.proxyNote')}</p>
-      </div>
+    <div className="terminal terminal--deps">
+      <code><span className="terminal__prompt">{prompt}</span><span className="terminal__cmd">{cmd}</span></code>
+      <CopyButton text={cmd} />
     </div>
   )
+}
+
+function LinuxPanel({ format, items, loading, error }: { format: LinuxFormat; items: DownloadItem[]; loading: boolean; error: boolean }) {
+  const { t } = useTranslation()
+  const byType = (type: AssetType) => items.filter((item) => item.type === type)
+  const empty = (list: DownloadItem[]) => (list.length === 0 ? <EmptyState loading={loading} error={error} text={t('downloads.noPackages')} /> : null)
+
+  switch (format) {
+    case 'arch':
+      return (
+        <div className="download-item">
+          <Cmd cmd="git clone https://aur.archlinux.org/qbz-bin.git && cd qbz-bin && makepkg -si" />
+          <Details title={t('downloads.aur.helperTitle')}>
+            <DepsCmd cmd="yay -S qbz-bin" />
+            <DepsCmd cmd="paru -S qbz-bin" />
+          </Details>
+          <div className="platform__actions">
+            <a className="btn btn-ghost btn-sm" href={AUR_PACKAGE_URL} target="_blank" rel="noreferrer">{t('downloads.viewOn', { store: 'AUR' })}</a>
+          </div>
+        </div>
+      )
+    case 'debian':
+      return (
+        <div className="download-list">
+          <div className="download-item">
+            <h4 className="download-item__label">{t('downloads.aptRepo.label')}</h4>
+            <p className="download-item__text">{t('downloads.aptRepo.description')}</p>
+            <Cmd cmd={APT_KEYRING_CMD} />
+            <Cmd cmd={APT_SOURCES_CMD} block />
+            <Cmd cmd={APT_INSTALL_CMD} />
+            <p className="glibc-note">{t('downloads.aptRepo.updateNote')}</p>
+          </div>
+          {byType('deb').map((item) => (
+            <div className="download-item" key={item.fileName}>
+              <div className="download-item__header"><h4 className="download-item__label">.deb</h4><FileLine item={item} /></div>
+              <Cmd cmd={`wget ${item.url}`} />
+              <Cmd cmd={`sudo apt install ./${item.fileName}`} />
+              <p className="glibc-note">{t('downloads.glibcNote.deb')}</p>
+              <Details title={t('downloads.depsSummary')}><DepsCmd cmd={DEB_DEPS_CMD} prompt="#" /></Details>
+              <DownloadLink item={item} label={t('downloads.download')} />
+            </div>
+          ))}
+        </div>
+      )
+    case 'fedora':
+      return (
+        <div className="download-list">
+          {empty(byType('rpm'))}
+          {byType('rpm').map((item) => (
+            <div className="download-item" key={item.fileName}>
+              <div className="download-item__header"><h4 className="download-item__label">.rpm</h4><FileLine item={item} /></div>
+              <Cmd cmd={`wget ${item.url}`} />
+              <Cmd cmd={`sudo dnf install ./${item.fileName}`} />
+              <p className="glibc-note">{t('downloads.glibcNote.rpm')}</p>
+              <Details title={t('downloads.depsSummary')}><DepsCmd cmd={RPM_DEPS_CMD} prompt="#" /></Details>
+              <DownloadLink item={item} label={t('downloads.download')} />
+            </div>
+          ))}
+        </div>
+      )
+    case 'flatpak':
+      return (
+        <div className="download-list">
+          <div className="download-item">
+            <h4 className="download-item__label">Flathub</h4>
+            <Cmd cmd="flatpak install flathub com.blitzfc.qbz" />
+            <Details title={t('downloads.flatpak.bitperfectTitle')}>
+              <p>{t('downloads.flatpak.bitperfectNote')}</p>
+              <DepsCmd cmd={FLATPAK_RESERVE_CMD} />
+            </Details>
+            <Details title={t('downloads.flatpak.libraryTitle')}>
+              {FLATPAK_FS_CMDS.map((cmd) => <DepsCmd key={cmd} cmd={cmd} />)}
+            </Details>
+            <div className="platform__actions">
+              <a className="btn btn-ghost btn-sm" href={FLATHUB_URL} target="_blank" rel="noreferrer">{t('downloads.viewOn', { store: 'Flathub' })}</a>
+            </div>
+          </div>
+          {byType('flatpak').map((item) => (
+            <div className="download-item" key={item.fileName}>
+              <div className="download-item__header"><h4 className="download-item__label">GitHub Release · .flatpak</h4><FileLine item={item} /></div>
+              <Cmd cmd={`wget ${item.url}`} />
+              <Cmd cmd={`flatpak install --user ./${item.fileName}`} />
+              <DownloadLink item={item} label={t('downloads.download')} />
+            </div>
+          ))}
+        </div>
+      )
+    case 'snap':
+      return (
+        <div className="download-item">
+          <Cmd cmd="sudo snap install qbz-player" />
+          <Details title={t('downloads.snap.plugsTitle')} open>
+            {SNAP_PLUGS.map((cmd) => <DepsCmd key={cmd} cmd={cmd} />)}
+          </Details>
+          <Details title={t('downloads.snap.mediaTitle')}>
+            <p>{t('downloads.snap.mediaNote')}</p>
+            <DepsCmd cmd="sudo snap connect qbz-player:removable-media" />
+          </Details>
+          <div className="platform__actions">
+            <a className="btn btn-ghost btn-sm" href={SNAP_STORE_URL} target="_blank" rel="noreferrer">{t('downloads.viewOn', { store: 'Snap Store' })}</a>
+          </div>
+        </div>
+      )
+    case 'appimage':
+      return (
+        <div className="download-list">
+          {empty(byType('appimage'))}
+          {byType('appimage').map((item) => (
+            <div className="download-item" key={item.fileName}>
+              <div className="download-item__header"><h4 className="download-item__label">AppImage</h4><FileLine item={item} /></div>
+              <Cmd cmd={`wget ${item.url}`} />
+              <Cmd cmd={`chmod +x ${item.fileName} && ./${item.fileName}`} />
+              <DownloadLink item={item} label={t('downloads.download')} />
+            </div>
+          ))}
+        </div>
+      )
+    case 'nixos':
+      return (
+        <div className="download-item">
+          <p className="download-item__text">{t('downloads.nixos.lead')}</p>
+          <Cmd cmd={NIXOS_FLAKE_INPUT} prompt="" />
+          <p className="platform__sub">{t('downloads.nixos.system')}</p>
+          <Cmd cmd={NIXOS_SYSTEM_PKG} prompt="" block />
+          <p className="platform__sub">{t('downloads.nixos.home')}</p>
+          <Cmd cmd={NIXOS_HOME_PKG} prompt="" block />
+          <p className="glibc-note">
+            {t('downloads.nixos.nixpkgs')} <code>qbz</code> · <a href="https://search.nixos.org/packages?query=qbz" target="_blank" rel="noreferrer">search.nixos.org</a>
+          </p>
+        </div>
+      )
+    case 'gentoo':
+      return (
+        <div className="download-item">
+          <p className="download-item__text">{t('downloads.gentoo.lead')}</p>
+          {GENTOO_OVERLAY_CMDS.map((cmd) => <Cmd key={cmd} cmd={cmd} prompt="#" />)}
+          <p className="platform__sub">{t('downloads.gentoo.binTitle')}</p>
+          <Cmd cmd="emerge media-sound/qbz-bin" prompt="#" />
+          <Details title={t('downloads.gentoo.srcTitle')}><DepsCmd cmd="emerge media-sound/qbz" prompt="#" /></Details>
+          <div className="platform__actions">
+            <a className="btn btn-ghost btn-sm" href={GENTOO_OVERLAY_URL} target="_blank" rel="noreferrer">{t('downloads.gentoo.viewOverlay')}</a>
+          </div>
+        </div>
+      )
+    case 'tarball':
+      return (
+        <div className="download-list">
+          {empty(byType('tarball'))}
+          {byType('tarball').map((item) => {
+            const dir = stripArchive(item.fileName)
+            const desktopCmds = [
+              `sudo cp ${dir}/qbz /usr/local/bin/`,
+              `cp ${dir}/qbz.desktop ~/.local/share/applications/`,
+              `cp -r ${dir}/icons/* ~/.local/share/icons/`,
+              'gtk-update-icon-cache ~/.local/share/icons/hicolor/',
+            ]
+            return (
+              <div className="download-item" key={item.fileName}>
+                <div className="download-item__header"><h4 className="download-item__label">Tarball</h4><FileLine item={item} /></div>
+                <Cmd cmd={`wget ${item.url}`} />
+                <Cmd cmd={`tar -xzf ${item.fileName} && ./${dir}/qbz`} />
+                <Details title={t('downloads.tarball.desktopTitle')}>
+                  {desktopCmds.map((cmd) => <DepsCmd key={cmd} cmd={cmd} />)}
+                </Details>
+                <DownloadLink item={item} label={t('downloads.download')} />
+              </div>
+            )
+          })}
+        </div>
+      )
+    case 'source':
+      return (
+        <div className="download-item">
+          <p className="download-item__text">{t('downloads.buildBody')}</p>
+          <p className="platform__sub">{t('downloads.buildInstructions.prereqTitle')}</p>
+          <p className="download-item__text">{t('downloads.buildInstructions.prereqNote')}</p>
+          <Details title="Debian / Ubuntu"><DepsCmd cmd={BUILD_DEPS_DEBIAN} /></Details>
+          <Details title="macOS"><DepsCmd cmd={BUILD_DEPS_MACOS} /></Details>
+          <Details title="Rust"><DepsCmd cmd={BUILD_RUSTUP} /></Details>
+          <p className="platform__sub">{t('downloads.buildInstructions.cloneTitle')}</p>
+          <Cmd cmd={BUILD_CLONE} />
+          <Cmd cmd={BUILD_CARGO} />
+          <Cmd cmd={BUILD_RUN} />
+          <p className="glibc-note">{t('downloads.buildInstructions.buildNote')}</p>
+          <p className="platform__sub">{t('downloads.buildInstructions.proxyTitle')}</p>
+          <p className="download-item__text">{t('downloads.buildInstructions.proxyNote')}</p>
+        </div>
+      )
+  }
 }
 
 /* ── Platform cards ───────────────────────────────────────── */
@@ -562,139 +423,163 @@ function ReleaseMeta({ release, error }: { release: ReleaseData | null; error: b
   return <span className="platform__release">{error ? t('downloads.error') : t('downloads.loading')}</span>
 }
 
+function PlatformHead({ id, logo, name, tier, meta }: { id: string; logo: React.ReactNode; name: string; tier: string; meta?: React.ReactNode }) {
+  return (
+    <header className="platform__head">
+      <span className="platform__logo">{logo}</span>
+      <div>
+        <h3 id={id} className="platform__name">{name}</h3>
+        <div className="platform__tier">{tier}</div>
+      </div>
+      {meta ?? <span />}
+    </header>
+  )
+}
+
 function LinuxCard({ items, release, error }: { items: DownloadItem[]; release: ReleaseData | null; error: boolean }) {
   const { t } = useTranslation()
-  const [activeTab, setActiveTab] = useState<TabId>('arch')
-  const loading = !release && !error
-
-  const handleTabKeyDown = useCallback((event: KeyboardEvent<HTMLButtonElement>, index: number) => {
-    let nextIndex: number | null = null
-    if (event.key === 'ArrowRight') nextIndex = (index + 1) % TABS.length
-    if (event.key === 'ArrowLeft') nextIndex = (index - 1 + TABS.length) % TABS.length
-    if (event.key === 'Home') nextIndex = 0
-    if (event.key === 'End') nextIndex = TABS.length - 1
-    if (nextIndex === null) return
-    event.preventDefault()
-    const nextTab = TABS[nextIndex]
-    setActiveTab(nextTab.id)
-    document.getElementById(`download-tab-${nextTab.id}`)?.focus()
-  }, [])
-
-  const byType = (type: AssetType) => items.filter((item) => item.type === type)
-
-  const emptyState = (list: DownloadItem[]) =>
-    list.length === 0 ? (
-      <p className="download-state">{loading ? t('downloads.loading') : error ? t('downloads.error') : t('downloads.noPackages')}</p>
-    ) : null
-
-  const renderPanel = () => {
-    switch (activeTab) {
-      case 'arch': return <ArchPanel />
-      case 'debian': return <DebianPanel items={byType('deb')} />
-      case 'fedora': return emptyState(byType('rpm')) ?? <FedoraPanel items={byType('rpm')} />
-      case 'flatpak': return <FlatpakPanel items={byType('flatpak')} />
-      case 'snap': return <SnapPanel />
-      case 'appimage': return emptyState(byType('appimage')) ?? <AppImagePanel items={byType('appimage')} />
-      case 'nixos': return <NixOSPanel />
-      case 'gentoo': return <GentooPanel />
-      case 'tarball': return emptyState(byType('tarball')) ?? <TarballPanel items={byType('tarball')} />
-      case 'qbzd': return <QbzdPanel items={byType('qbzd')} />
-      case 'source': return <SourcePanel />
-    }
-  }
+  const [format, setFormat] = useState<LinuxFormat>('arch')
+  const options: DropdownOption[] = LINUX_FORMATS.map((f) => ({ id: f.id, label: t(`downloads.formats.${f.id}`), icon: f.icon }))
 
   return (
     <article className="platform platform--linux" id="download-linux" aria-labelledby="platform-linux">
-      <header className="platform__head">
-        <span className="platform__logo"><img src="/assets/icons/Tux.svg" alt="" width={36} height={36} /></span>
-        <div>
-          <h3 id="platform-linux" className="platform__name">{t('downloads.linux.name')}</h3>
-          <div className="platform__tier">{t('downloads.linux.tier')}</div>
-        </div>
-        <ReleaseMeta release={release} error={error} />
-      </header>
-      <div className="platform__body" style={{ paddingBottom: 0 }}>
+      <PlatformHead
+        id="platform-linux"
+        logo={<img className="platform__logo--color" src="/assets/icons/Tux.svg" alt="" width={36} height={36} />}
+        name={t('downloads.linux.name')}
+        tier={t('downloads.linux.tier')}
+        meta={<ReleaseMeta release={release} error={error} />}
+      />
+      <div className="platform__body">
         <p className="platform__note">{t('downloads.linux.note')}</p>
-      </div>
-      <div className="download-tabs" role="tablist" aria-label={t('downloads.linux.name')}>
-        {TABS.map((tab, index) => (
-          <button
-            key={tab.id}
-            id={`download-tab-${tab.id}`}
-            type="button"
-            role="tab"
-            aria-controls="download-tabpanel"
-            aria-selected={activeTab === tab.id}
-            tabIndex={activeTab === tab.id ? 0 : -1}
-            className={`download-tab${activeTab === tab.id ? ' download-tab--active' : ''}`}
-            onClick={() => setActiveTab(tab.id)}
-            onKeyDown={(event) => handleTabKeyDown(event, index)}
-          >
-            <TabIcon id={tab.id} src={tab.icon} />
-            <span>{tab.label}</span>
-          </button>
-        ))}
-      </div>
-      <div id="download-tabpanel" className="download-tab-content" role="tabpanel" aria-labelledby={`download-tab-${activeTab}`}>
-        {renderPanel()}
+        <Dropdown options={options} value={format} onChange={(id) => setFormat(id as LinuxFormat)} ariaLabel={t('downloads.choose')} />
+        <LinuxPanel format={format} items={items} loading={!release && !error} error={error} />
       </div>
     </article>
   )
 }
 
-function AppleLogo() {
-  return <img src="/icons/apple.svg" alt="" width={36} height={36} />
-}
+type QbzdFormat = 'tarball' | 'deb' | 'rpm'
 
-function WindowsLogo() {
+const QBZD_FORMATS: { id: QbzdFormat; type: AssetType; icon: string }[] = [
+  { id: 'tarball', type: 'qbzd', icon: '/icons/tarball.svg' },
+  { id: 'deb', type: 'qbzd-deb', icon: '/icons/debian.svg' },
+  { id: 'rpm', type: 'qbzd-rpm', icon: '/icons/redhat.svg' },
+]
+
+function QbzdCard({ items, release, error }: { items: DownloadItem[]; release: ReleaseData | null; error: boolean }) {
+  const { t } = useTranslation()
+  const available = QBZD_FORMATS.filter((f) => items.some((item) => item.type === f.type))
+  const [format, setFormat] = useState<QbzdFormat>('tarball')
+  const current = available.find((f) => f.id === format) ?? available[0]
+  const options: DropdownOption[] = available.map((f) => ({ id: f.id, label: t(`downloads.formats.${f.id}`), icon: f.icon }))
+  const list = current ? items.filter((item) => item.type === current.type) : []
+
+  const install = (item: DownloadItem) => {
+    if (item.type === 'qbzd-deb') return `sudo apt install ./${item.fileName}`
+    if (item.type === 'qbzd-rpm') return `sudo dnf install ./${item.fileName}`
+    return `tar -xzf ${item.fileName}`
+  }
+
   return (
-    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style={{ color: 'var(--ink-2)' }}>
-      <path d="M3 5.5l7.5-1v7H3v-6zm8.5-1.2L21 3v8.5h-9.5v-7.2zM3 12.5h7.5v7L3 18.5v-6zm8.5 0H21V21l-9.5-1.3v-7.2z" />
-    </svg>
+    <article className="platform platform--qbzd" id="download-qbzd" aria-labelledby="platform-qbzd">
+      <PlatformHead
+        id="platform-qbzd"
+        logo={(
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <rect x="3" y="5" width="18" height="14" rx="2" />
+            <path d="M7 10l3 2-3 2M12 14h5" />
+          </svg>
+        )}
+        name={t('downloads.qbzd.name')}
+        tier={t('downloads.qbzd.tier')}
+        meta={release ? <span className="platform__release">{t('downloads.versionLabel')} {release.tag_name}</span> : undefined}
+      />
+      <div className="platform__body">
+        <p className="platform__note">{t('downloads.qbzd.note')}</p>
+        {options.length > 1 && (
+          <Dropdown options={options} value={current?.id ?? 'tarball'} onChange={(id) => setFormat(id as QbzdFormat)} ariaLabel={t('downloads.choose')} />
+        )}
+        {list.length === 0 && <EmptyState loading={!release && !error} error={error} text={t('downloads.qbzd.noAssets')} />}
+        <div className="download-list">
+          {list.map((item) => (
+            <div className="download-item" key={item.fileName}>
+              <FileLine item={item} />
+              <Cmd cmd={`wget ${item.url}`} />
+              <Cmd cmd={install(item)} />
+              <DownloadLink item={item} label={t('downloads.download')} />
+            </div>
+          ))}
+        </div>
+        <div className="platform__actions">
+          <a className="btn btn-ghost btn-sm" href={QBZD_MANUAL_URL} target="_blank" rel="noreferrer">{t('downloads.qbzd.manual')}</a>
+        </div>
+      </div>
+    </article>
   )
 }
 
+type MacFormat = 'homebrew' | 'signed' | 'unsigned'
+
+const MAC_FORMATS: { id: MacFormat; icon: string }[] = [
+  { id: 'homebrew', icon: '/icons/terminal.svg' },
+  { id: 'signed', icon: '/icons/dmg.svg' },
+  { id: 'unsigned', icon: '/icons/dmg.svg' },
+]
+
 function MacCard({ items, signedTag, loading, error }: { items: DownloadItem[]; signedTag: string | null; loading: boolean; error: boolean }) {
   const { t } = useTranslation()
+  const [format, setFormat] = useState<MacFormat>('homebrew')
   const dmgs = items.filter((item) => item.type === 'dmg')
+  const options: DropdownOption[] = MAC_FORMATS.map((f) => ({ id: f.id, label: t(`downloads.formats.${f.id}`), icon: f.icon }))
+
   return (
     <article className="platform platform--macos" id="download-macos" aria-labelledby="platform-macos">
-      <header className="platform__head">
-        <span className="platform__logo"><AppleLogo /></span>
-        <div>
-          <h3 id="platform-macos" className="platform__name">{t('downloads.macos.name')}</h3>
-          <div className="platform__tier">{t('downloads.macos.tier')}</div>
-        </div>
-        <span className="platform__release">{signedTag ? t('downloads.macos.signedVersion', { version: signedTag }) : t('downloads.macos.signedVersionUnknown')}</span>
-      </header>
+      <PlatformHead
+        id="platform-macos"
+        logo={<img src="/icons/apple.svg" alt="" width={36} height={36} />}
+        name={t('downloads.macos.name')}
+        tier={t('downloads.macos.tier')}
+        meta={<span className="platform__release">{signedTag ? t('downloads.macos.signedVersion', { version: signedTag }) : t('downloads.macos.signedVersionUnknown')}</span>}
+      />
       <div className="platform__body">
         <p className="platform__disclaimer">{t('downloads.macos.disclaimer')}</p>
-        <p className="platform__note">{t('downloads.macos.limitations')}</p>
-        <p className="platform__sub">{t('downloads.macos.homebrewTitle')}</p>
-        <Cmd cmd={HOMEBREW_QBZ_COMMAND} />
-        <div className="platform__actions">
-          <a className="btn btn-ghost btn-sm" href={SIGNED_MACOS_RELEASES_URL} target="_blank" rel="noreferrer">{t('downloads.macos.downloadSigned')}</a>
-          <a className="btn btn-ghost btn-sm" href={SIGNED_MACOS_PROVENANCE_URL} target="_blank" rel="noreferrer">{t('downloads.macos.reviewProvenance')}</a>
-          <a className="btn btn-ghost btn-sm" href={HOMEBREW_QBZ_URL} target="_blank" rel="noreferrer">{t('downloads.macos.viewCask')}</a>
-        </div>
-        <details className="deps-details">
-          <summary className="deps-summary">{t('downloads.macos.upstreamTitle')}</summary>
-          <p>{t('downloads.macos.upstreamNote')}</p>
-          {dmgs.map((item) => (
-            <div key={item.fileName} style={{ marginTop: 10 }}>
-              <FileLine item={item} />
-              <div className="platform__actions" style={{ marginTop: 6 }}>
-                <a className="btn btn-ghost btn-sm" href={item.url}>{t('downloads.macos.downloadUpstream')}</a>
-              </div>
+        <Dropdown options={options} value={format} onChange={(id) => setFormat(id as MacFormat)} ariaLabel={t('downloads.choose')} />
+        {format === 'homebrew' && (
+          <div className="download-item">
+            <p className="download-item__text">{t('downloads.macos.homebrewNote')}</p>
+            <Cmd cmd={HOMEBREW_QBZ_COMMAND} />
+            <div className="platform__actions">
+              <a className="btn btn-ghost btn-sm" href={HOMEBREW_QBZ_URL} target="_blank" rel="noreferrer">{t('downloads.macos.viewCask')}</a>
             </div>
-          ))}
-          {dmgs.length === 0 && (
-            <p className="download-state">{loading ? t('downloads.loading') : error ? t('downloads.error') : t('downloads.macos.noUpstreamDmg')}</p>
-          )}
-          <p style={{ marginTop: 12 }}><strong style={{ color: 'var(--ink)' }}>{t('downloads.macos.unlockTitle')}</strong></p>
-          <p>{t('downloads.macos.unlockNote')}</p>
-          <div className="terminal terminal--deps"><code><span className="terminal__prompt">$</span><span className="terminal__cmd">xattr -dr com.apple.quarantine /Applications/QBZ.app</span></code><CopyButton text="xattr -dr com.apple.quarantine /Applications/QBZ.app" /></div>
-        </details>
+          </div>
+        )}
+        {format === 'signed' && (
+          <div className="download-item">
+            <p className="download-item__text">{t('downloads.macos.signedNote')}</p>
+            <div className="platform__actions">
+              <a className="btn btn-primary btn-sm" href={SIGNED_MACOS_RELEASES_URL} target="_blank" rel="noreferrer">{t('downloads.macos.downloadSigned')}</a>
+              <a className="btn btn-ghost btn-sm" href={SIGNED_MACOS_PROVENANCE_URL} target="_blank" rel="noreferrer">{t('downloads.macos.reviewProvenance')}</a>
+            </div>
+          </div>
+        )}
+        {format === 'unsigned' && (
+          <div className="download-item">
+            <p className="download-item__text">{t('downloads.macos.upstreamNote')}</p>
+            {dmgs.map((item) => (
+              <div key={item.fileName}>
+                <FileLine item={item} />
+                <DownloadLink item={item} label={t('downloads.macos.downloadUpstream')} />
+              </div>
+            ))}
+            {dmgs.length === 0 && <EmptyState loading={loading} error={error} text={t('downloads.macos.noUpstreamDmg')} />}
+            <Details title={t('downloads.macos.unlockTitle')}>
+              <p>{t('downloads.macos.unlockNote')}</p>
+              <DepsCmd cmd="xattr -dr com.apple.quarantine /Applications/QBZ.app" />
+            </Details>
+          </div>
+        )}
+        <p className="platform__note">{t('downloads.macos.limitations')}</p>
       </div>
     </article>
   )
@@ -705,14 +590,13 @@ function WindowsCard({ items, release, loading, error }: { items: DownloadItem[]
   const msis = items.filter((item) => item.type === 'msi')
   return (
     <article className="platform platform--windows" id="download-windows" aria-labelledby="platform-windows">
-      <header className="platform__head">
-        <span className="platform__logo"><WindowsLogo /></span>
-        <div>
-          <h3 id="platform-windows" className="platform__name">{t('downloads.windows.name')}</h3>
-          <div className="platform__tier">{t('downloads.windows.tier')}</div>
-        </div>
-        <span className="platform__release">{release && msis.length > 0 ? `${t('downloads.versionLabel')} ${release.tag_name}` : ''}</span>
-      </header>
+      <PlatformHead
+        id="platform-windows"
+        logo={<img src="/icons/windows.svg" alt="" width={36} height={36} />}
+        name={t('downloads.windows.name')}
+        tier={t('downloads.windows.tier')}
+        meta={release && msis.length > 0 ? <span className="platform__release">{t('downloads.versionLabel')} {release.tag_name}</span> : undefined}
+      />
       <div className="platform__body">
         <p className="platform__disclaimer"><strong>{t('downloads.windows.disclaimer')}</strong></p>
         <p className="platform__note">{t('downloads.windows.note')}</p>
@@ -723,14 +607,12 @@ function WindowsCard({ items, release, loading, error }: { items: DownloadItem[]
             {msis.map((item) => (
               <div key={item.fileName}>
                 <FileLine item={item} />
-                <div className="platform__actions" style={{ marginTop: 8 }}>
-                  <a className="btn btn-primary btn-sm" href={item.url}>{t('downloads.download')}</a>
-                </div>
+                <DownloadLink item={item} label={t('downloads.download')} primary />
               </div>
             ))}
           </>
         ) : (
-          <p className="download-state">{loading ? t('downloads.loading') : error ? t('downloads.error') : t('downloads.windows.noMsi')}</p>
+          <EmptyState loading={loading} error={error} text={t('downloads.windows.noMsi')} />
         )}
         <div className="platform__actions">
           <a className="btn btn-ghost btn-sm" href={WINDOWS_ADOPT_URL} target="_blank" rel="noreferrer">{t('downloads.windows.adopt')}</a>
@@ -774,15 +656,15 @@ export function DownloadSection() {
   const loading = !release && !error
 
   return (
-    <section id="downloads" className="section" aria-labelledby="downloads-title">
+    <section id="downloads" className="band" aria-labelledby="downloads-title">
       <div className="container">
-        <div className="section__head">
-          <span className="eyebrow">{t('downloads.eyebrow')}</span>
-          <h2 id="downloads-title" className="section__title">{t('downloads.title')}</h2>
-          <p className="section__subtitle">{t('downloads.lead')}</p>
+        <div className="band__head">
+          <h2 id="downloads-title" className="band__title">{t('downloads.title')}</h2>
+          <p className="band__lead">{t('downloads.lead')}</p>
         </div>
         <div className="pyramid">
           <LinuxCard items={items} release={release} error={error} />
+          <QbzdCard items={items} release={release} error={error} />
           <MacCard items={items} signedTag={signedReleaseTag} loading={loading} error={error} />
           <WindowsCard items={items} release={release} loading={loading} error={error} />
         </div>
