@@ -329,6 +329,7 @@ export const es = {
       nixos: 'NixOS / Nix',
       gentoo: 'Gentoo',
       tarball: 'Tarball',
+      qbzd: 'qbzd (daemon headless)',
       source: 'Compilar desde el código',
       homebrew: 'Homebrew',
       signed: 'DMG firmado',

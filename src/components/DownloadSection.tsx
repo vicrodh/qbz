@@ -154,9 +154,10 @@ function EmptyState({ loading, error, text }: { loading: boolean; error: boolean
 
 /* ── Linux formats ────────────────────────────────────────── */
 
-type LinuxFormat = 'arch' | 'debian' | 'fedora' | 'flatpak' | 'snap' | 'appimage' | 'nixos' | 'gentoo' | 'tarball' | 'source'
+type LinuxFormat = 'arch' | 'debian' | 'fedora' | 'flatpak' | 'snap' | 'appimage' | 'nixos' | 'gentoo' | 'tarball' | 'qbzd' | 'source'
 
 const LINUX_FORMATS: { id: LinuxFormat; icon: string }[] = [
+  { id: 'gentoo', icon: '/icons/gentoo.svg' },
   { id: 'arch', icon: '/icons/arch.svg' },
   { id: 'debian', icon: '/icons/debian.svg' },
   { id: 'fedora', icon: '/icons/redhat.svg' },
@@ -164,8 +165,8 @@ const LINUX_FORMATS: { id: LinuxFormat; icon: string }[] = [
   { id: 'snap', icon: '/icons/snapcraft.svg' },
   { id: 'appimage', icon: '/icons/appimage.svg' },
   { id: 'nixos', icon: '/icons/nixos.svg' },
-  { id: 'gentoo', icon: '/icons/gentoo.svg' },
   { id: 'tarball', icon: '/icons/tarball.svg' },
+  { id: 'qbzd', icon: '/icons/terminal.svg' },
   { id: 'source', icon: '/icons/rust.svg' },
 ]
 
@@ -385,6 +386,36 @@ function LinuxPanel({ format, items, loading, error }: { format: LinuxFormat; it
           })}
         </div>
       )
+    case 'qbzd': {
+      const list = items.filter((item) => item.type === 'qbzd' || item.type === 'qbzd-deb' || item.type === 'qbzd-rpm')
+      const install = (item: DownloadItem) => {
+        if (item.type === 'qbzd-deb') return `sudo apt install ./${item.fileName}`
+        if (item.type === 'qbzd-rpm') return `sudo dnf install ./${item.fileName}`
+        return `tar -xzf ${item.fileName}`
+      }
+      return (
+        <div className="download-list">
+          <div className="download-item">
+            <p className="download-item__text">{t('downloads.qbzd.note')}</p>
+            <div className="platform__actions">
+              <a className="btn btn-ghost btn-sm" href={QBZD_MANUAL_URL} target="_blank" rel="noreferrer">{t('downloads.qbzd.manual')}</a>
+            </div>
+          </div>
+          {list.length === 0 && <EmptyState loading={loading} error={error} text={t('downloads.qbzd.noAssets')} />}
+          {list.map((item) => (
+            <div className="download-item" key={item.fileName}>
+              <div className="download-item__header">
+                <h4 className="download-item__label">{item.type === 'qbzd-deb' ? '.deb' : item.type === 'qbzd-rpm' ? '.rpm' : 'Tarball'}</h4>
+                <FileLine item={item} />
+              </div>
+              <Cmd cmd={`wget ${item.url}`} />
+              <Cmd cmd={install(item)} />
+              <DownloadLink item={item} label={t('downloads.download')} />
+            </div>
+          ))}
+        </div>
+      )
+    }
     case 'source':
       return (
         <div className="download-item">
@@ -438,7 +469,7 @@ function PlatformHead({ id, logo, name, tier, meta }: { id: string; logo: React.
 
 function LinuxCard({ items, release, error }: { items: DownloadItem[]; release: ReleaseData | null; error: boolean }) {
   const { t } = useTranslation()
-  const [format, setFormat] = useState<LinuxFormat>('arch')
+  const [format, setFormat] = useState<LinuxFormat>('gentoo')
   const options: DropdownOption[] = LINUX_FORMATS.map((f) => ({ id: f.id, label: t(`downloads.formats.${f.id}`), icon: f.icon }))
 
   return (
@@ -454,66 +485,6 @@ function LinuxCard({ items, release, error }: { items: DownloadItem[]; release: 
         <p className="platform__note">{t('downloads.linux.note')}</p>
         <Dropdown options={options} value={format} onChange={(id) => setFormat(id as LinuxFormat)} ariaLabel={t('downloads.choose')} />
         <LinuxPanel format={format} items={items} loading={!release && !error} error={error} />
-      </div>
-    </article>
-  )
-}
-
-type QbzdFormat = 'tarball' | 'deb' | 'rpm'
-
-const QBZD_FORMATS: { id: QbzdFormat; type: AssetType; icon: string }[] = [
-  { id: 'tarball', type: 'qbzd', icon: '/icons/tarball.svg' },
-  { id: 'deb', type: 'qbzd-deb', icon: '/icons/debian.svg' },
-  { id: 'rpm', type: 'qbzd-rpm', icon: '/icons/redhat.svg' },
-]
-
-function QbzdCard({ items, release, error }: { items: DownloadItem[]; release: ReleaseData | null; error: boolean }) {
-  const { t } = useTranslation()
-  const available = QBZD_FORMATS.filter((f) => items.some((item) => item.type === f.type))
-  const [format, setFormat] = useState<QbzdFormat>('tarball')
-  const current = available.find((f) => f.id === format) ?? available[0]
-  const options: DropdownOption[] = available.map((f) => ({ id: f.id, label: t(`downloads.formats.${f.id}`), icon: f.icon }))
-  const list = current ? items.filter((item) => item.type === current.type) : []
-
-  const install = (item: DownloadItem) => {
-    if (item.type === 'qbzd-deb') return `sudo apt install ./${item.fileName}`
-    if (item.type === 'qbzd-rpm') return `sudo dnf install ./${item.fileName}`
-    return `tar -xzf ${item.fileName}`
-  }
-
-  return (
-    <article className="platform platform--qbzd" id="download-qbzd" aria-labelledby="platform-qbzd">
-      <PlatformHead
-        id="platform-qbzd"
-        logo={(
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <rect x="3" y="5" width="18" height="14" rx="2" />
-            <path d="M7 10l3 2-3 2M12 14h5" />
-          </svg>
-        )}
-        name={t('downloads.qbzd.name')}
-        tier={t('downloads.qbzd.tier')}
-        meta={release ? <span className="platform__release">{t('downloads.versionLabel')} {release.tag_name}</span> : undefined}
-      />
-      <div className="platform__body">
-        <p className="platform__note">{t('downloads.qbzd.note')}</p>
-        {options.length > 1 && (
-          <Dropdown options={options} value={current?.id ?? 'tarball'} onChange={(id) => setFormat(id as QbzdFormat)} ariaLabel={t('downloads.choose')} />
-        )}
-        {list.length === 0 && <EmptyState loading={!release && !error} error={error} text={t('downloads.qbzd.noAssets')} />}
-        <div className="download-list">
-          {list.map((item) => (
-            <div className="download-item" key={item.fileName}>
-              <FileLine item={item} />
-              <Cmd cmd={`wget ${item.url}`} />
-              <Cmd cmd={install(item)} />
-              <DownloadLink item={item} label={t('downloads.download')} />
-            </div>
-          ))}
-        </div>
-        <div className="platform__actions">
-          <a className="btn btn-ghost btn-sm" href={QBZD_MANUAL_URL} target="_blank" rel="noreferrer">{t('downloads.qbzd.manual')}</a>
-        </div>
       </div>
     </article>
   )
@@ -664,7 +635,6 @@ export function DownloadSection() {
         </div>
         <div className="pyramid">
           <LinuxCard items={items} release={release} error={error} />
-          <QbzdCard items={items} release={release} error={error} />
           <MacCard items={items} signedTag={signedReleaseTag} loading={loading} error={error} />
           <WindowsCard items={items} release={release} loading={loading} error={error} />
         </div>
