@@ -4,10 +4,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0d0e11" />
   <script data-goatcounter="https://blitzfc.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
-  <title>QBZ — Native Qobuz client for Linux</title>
+  <title>QBZ — Native hi-fi music player for Linux</title>
   <meta name="description"
-    content="QBZ is a native Qobuz client for Linux focused on bit-perfect playback, DAC passthrough, and transparent audio control." />
+    content="QBZ is a free, open-source, bit-perfect music player for Linux, macOS and Windows. A native Rust engine with a Qt interface plays Qobuz, your local library and your Plex, Jellyfin or Navidrome server through one pipeline. No browser, no resampling, no telemetry." />
   <meta name="robots" content="index, follow, max-image-preview:large" />
 
   <!-- Canonical & Language Alternates -->
@@ -19,26 +20,30 @@
   <!-- Open Graph -->
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="QBZ" />
-  <meta property="og:title" content="QBZ — Native Qobuz client for Linux" />
+  <meta property="og:title" content="QBZ — Native hi-fi music player for Linux" />
   <meta property="og:description"
-    content="QBZ is a native Qobuz client for Linux focused on bit-perfect playback, DAC passthrough, and transparent audio control." />
+    content="Bit-perfect playback for Qobuz, your local library and your Plex, Jellyfin or Navidrome server. Native Rust engine, Qt interface, no browser in between. Free and open source." />
   <meta property="og:url" content="https://qbz.lol/" />
   <meta property="og:image" content="https://qbz.lol/assets/brand/og-image.png" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
   <meta property="og:locale" content="en_US" />
-  <meta property="og:locale:alternate" content="es_ES" />
+  <meta property="og:locale:alternate" content="es_MX" />
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="QBZ — Native Qobuz client for Linux" />
+  <meta name="twitter:title" content="QBZ — Native hi-fi music player for Linux" />
   <meta name="twitter:description"
-    content="QBZ is a native Qobuz client for Linux focused on bit-perfect playback, DAC passthrough, and transparent audio control." />
+    content="Bit-perfect playback for Qobuz, your local library and your media server. Native Rust engine, Qt interface, no browser in between." />
   <meta name="twitter:image" content="https://qbz.lol/assets/brand/og-image.png" />
 
-  <!-- Preload hero image for faster LCP (desktop only - on mobile image is below fold) -->
-  <link rel="preload" as="image" type="image/avif" href="/assets/screenshots/qbz-home.avif"
-    media="(min-width: 769px)" />
+  <!-- Self-hosted fonts (no third-party requests) -->
+  <link rel="preload" as="font" type="font/woff2" href="/fonts/archivo-normal-100-900-latin.woff2" crossorigin />
+  <link rel="preload" as="font" type="font/woff2" href="/fonts/plexmono-normal-400-latin.woff2" crossorigin />
+
+  <!-- Hero capture: the LCP element on every viewport -->
+  <link rel="preload" as="image" type="image/webp" href="/assets/screenshots/qbz-home.webp" media="(min-width: 901px)" />
+  <link rel="preload" as="image" type="image/webp" href="/assets/screenshots/qbz-home-sm.webp" media="(max-width: 900px)" />
 
   <!-- Favicons -->
   <link rel="icon" type="image/png" href="/assets/brand/favicon.png" />
@@ -59,7 +64,10 @@
             "url": "https://qbz.lol/assets/brand/192x192.png"
           },
           "sameAs": [
-            "https://github.com/vicrodh/qbz"
+            "https://github.com/vicrodh/qbz",
+            "https://flathub.org/apps/com.blitzfc.qbz",
+            "https://snapcraft.io/qbz-player",
+            "https://aur.archlinux.org/packages/qbz-bin"
           ]
         },
         {
@@ -74,41 +82,53 @@
           "@type": "SoftwareApplication",
           "@id": "https://qbz.lol/#software",
           "name": "QBZ",
-          "description": "Native Qobuz client for Linux with bit-perfect playback, DAC passthrough, and transparent audio control.",
+          "alternateName": "QBZ music player",
+          "description": "Free, open-source, bit-perfect hi-fi music player for Linux, macOS and Windows. Native Rust engine with a Qt interface for Qobuz, local libraries and Plex, Jellyfin or Subsonic servers.",
           "applicationCategory": "MultimediaApplication",
-          "operatingSystem": "Linux",
+          "applicationSubCategory": "Music player",
+          "operatingSystem": "Linux, macOS, Windows",
           "offers": {
             "@type": "Offer",
             "price": "0",
             "priceCurrency": "USD"
           },
           "downloadUrl": "https://github.com/vicrodh/qbz/releases",
-          "softwareVersion": "latest",
+          "installUrl": "https://qbz.lol/#downloads",
+          "softwareHelp": "https://github.com/vicrodh/qbz/wiki",
+          "releaseNotes": "https://qbz.lol/changelog/",
           "author": {"@id": "https://qbz.lol/#organization"},
           "license": "https://opensource.org/licenses/MIT",
+          "isAccessibleForFree": true,
           "featureList": [
-            "Bit-perfect audio playback",
-            "DAC passthrough support",
-            "Native FLAC, ALAC, AAC, MP3 decoding",
-            "Local music library management",
-            "Chromecast and DLNA streaming",
-            "MPRIS and media key integration",
-            "Playlist import from Spotify, Apple Music, Tidal, Deezer"
+            "Bit-perfect playback with per-track sample-rate switching (44.1 to 192 kHz)",
+            "DAC passthrough and exclusive mode (ALSA Direct, Core Audio Direct, WASAPI exclusive)",
+            "DSD playback (DSF/DFF) via DoP or native DSD",
+            "Qobuz streaming, favorites, playlists and purchases",
+            "Local music library with catalog, tag editor and CUE support",
+            "Plex, Jellyfin and Subsonic/Navidrome media servers",
+            "Audio CD and SACD playback, CD ripping to FLAC",
+            "Qobuz Connect renderer and controller",
+            "Chromecast and DLNA/UPnP casting",
+            "MPRIS media keys, Last.fm and ListenBrainz scrobbling",
+            "Playlist import from Spotify, Apple Music, Tidal, Deezer, ListenBrainz and Last.fm",
+            "Headless daemon (qbzd) for Raspberry Pi and servers",
+            "8 languages, 30+ themes, no telemetry"
           ]
         },
         {
           "@type": "WebPage",
           "@id": "https://qbz.lol/#webpage",
           "url": "https://qbz.lol/",
-          "name": "QBZ — Native Qobuz client for Linux",
-          "description": "QBZ is a native Qobuz client for Linux focused on bit-perfect playback, DAC passthrough, and transparent audio control.",
+          "name": "QBZ — Native hi-fi music player for Linux",
+          "description": "QBZ is a free, open-source, bit-perfect music player for Linux, macOS and Windows. Native Rust engine, Qt interface: Qobuz, local library and media servers through one pipeline.",
           "isPartOf": {"@id": "https://qbz.lol/#website"},
           "about": {"@id": "https://qbz.lol/#software"},
+          "primaryImageOfPage": "https://qbz.lol/assets/brand/og-image.png",
           "inLanguage": "en"
         }
       ]
     }
-    </script>
+  </script>
 </head>
 
 <body>

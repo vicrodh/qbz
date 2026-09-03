@@ -3,29 +3,32 @@ import { useTranslation } from 'react-i18next'
 import { useApp } from '../lib/appContext'
 import { buildPath } from '../lib/routes'
 
-const NAV_ITEMS = ['home', 'changelog', 'licenses'] as const
-
 export function Navigation() {
   const { t } = useTranslation()
   const { language, page, theme, setLanguage, toggleTheme } = useApp()
   const [menuOpen, setMenuOpen] = useState(false)
 
-  const links = NAV_ITEMS.map((item) => ({
-    key: item,
-    label: t(`nav.${item}`),
-    href: buildPath(language, item),
-  }))
+  const home = buildPath(language, 'home')
+
+  const links = [
+    { key: 'features', label: t('nav.features'), href: `${home}#features` },
+    { key: 'downloads', label: t('nav.downloads'), href: `${home}#downloads` },
+    { key: 'changelog', label: t('nav.changelog'), href: buildPath(language, 'changelog') },
+    { key: 'licenses', label: t('nav.licenses'), href: buildPath(language, 'licenses') },
+  ]
 
   const handleLanguage = (next: 'en' | 'es') => {
     setLanguage(next)
     setMenuOpen(false)
   }
 
+  const themeLabel = theme === 'oled' ? t('nav.themeOled') : t('nav.themeDark')
+
   return (
-    <nav className="nav">
+    <nav className="nav" aria-label="Primary">
       <div className="container nav__inner">
-        <a className="nav__brand" href={buildPath(language, 'home')}>
-          <img src="/assets/brand/logo-64.webp" alt="QBZ - Native Qobuz client for Linux" title="QBZ" width={32} height={32} />
+        <a className="nav__brand" href={home} aria-label="QBZ home">
+          <img src="/assets/brand/logo-64.webp" alt="" width={30} height={30} />
           <span>QBZ</span>
         </a>
         <div className="nav__links">
@@ -43,44 +46,32 @@ export function Navigation() {
           </a>
         </div>
         <div className="nav__actions">
-          <button
-            className="toggle-btn"
-            type="button"
-            onClick={toggleTheme}
-            aria-label={theme === 'oled' ? t('nav.themeDark') : t('nav.themeOled')}
-          >
-            {theme === 'oled' ? t('nav.themeOled') : t('nav.themeDark')}
+          <button className="toggle-btn" type="button" onClick={toggleTheme} aria-label={`Theme: ${themeLabel}`}>
+            {themeLabel}
           </button>
-          <div className="lang-switch">
-            <button
-              className={`lang-btn ${language === 'en' ? 'lang-btn--active' : ''}`}
-              type="button"
-              onClick={() => handleLanguage('en')}
-            >
+          <div className="lang-switch" role="group" aria-label="Language">
+            <button className={`lang-btn ${language === 'en' ? 'lang-btn--active' : ''}`} type="button" onClick={() => handleLanguage('en')} aria-pressed={language === 'en'}>
               EN
             </button>
-            <button
-              className={`lang-btn ${language === 'es' ? 'lang-btn--active' : ''}`}
-              type="button"
-              onClick={() => handleLanguage('es')}
-            >
+            <button className={`lang-btn ${language === 'es' ? 'lang-btn--active' : ''}`} type="button" onClick={() => handleLanguage('es')} aria-pressed={language === 'es'}>
               ES
             </button>
           </div>
-          <a className="btn btn-primary" href={`${buildPath(language, 'home')}#downloads`}>
+          <a className="btn btn-primary btn-sm" href={`${home}#downloads`}>
             {t('nav.download')}
           </a>
           <button
             className="nav__toggle"
             type="button"
-            aria-label="Toggle navigation"
+            aria-expanded={menuOpen}
+            aria-controls="mobile-menu"
             onClick={() => setMenuOpen((open) => !open)}
           >
             {menuOpen ? t('nav.close') : t('nav.menu')}
           </button>
         </div>
       </div>
-      <div className={`mobile-menu ${menuOpen ? 'mobile-menu--open' : ''}`}>
+      <div id="mobile-menu" className={`mobile-menu ${menuOpen ? 'mobile-menu--open' : ''}`}>
         <div className="container mobile-menu__inner">
           {links.map((link) => (
             <a
@@ -92,39 +83,18 @@ export function Navigation() {
               {link.label}
             </a>
           ))}
-          <a
-            className="nav-link"
-            href="https://github.com/vicrodh/qbz"
-            target="_blank"
-            rel="noreferrer"
-            onClick={() => setMenuOpen(false)}
-          >
+          <a className="nav-link" href="https://github.com/vicrodh/qbz" target="_blank" rel="noreferrer" onClick={() => setMenuOpen(false)}>
             {t('nav.github')}
-          </a>
-          <a
-            className="btn btn-primary"
-            href={`${buildPath(language, 'home')}#downloads`}
-            onClick={() => setMenuOpen(false)}
-          >
-            {t('nav.download')}
           </a>
           <div className="mobile-menu__actions">
             <button className="toggle-btn" type="button" onClick={toggleTheme}>
-              {theme === 'oled' ? t('nav.themeOled') : t('nav.themeDark')}
+              {themeLabel}
             </button>
-            <div className="lang-switch">
-              <button
-                className={`lang-btn ${language === 'en' ? 'lang-btn--active' : ''}`}
-                type="button"
-                onClick={() => handleLanguage('en')}
-              >
+            <div className="lang-switch" role="group" aria-label="Language">
+              <button className={`lang-btn ${language === 'en' ? 'lang-btn--active' : ''}`} type="button" onClick={() => handleLanguage('en')}>
                 EN
               </button>
-              <button
-                className={`lang-btn ${language === 'es' ? 'lang-btn--active' : ''}`}
-                type="button"
-                onClick={() => handleLanguage('es')}
-              >
+              <button className={`lang-btn ${language === 'es' ? 'lang-btn--active' : ''}`} type="button" onClick={() => handleLanguage('es')}>
                 ES
               </button>
             </div>
