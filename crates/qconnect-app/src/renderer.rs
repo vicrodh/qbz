@@ -713,32 +713,22 @@ pub async fn apply_renderer_command(
                     );
                     return Ok(());
                 }
-                // Becoming the active renderer (takeback). FORCE a stream of the
-                // current track instead of a plain ensure-loaded: a prior
-                // controller->renderer transition tore the local stream down via
-                // engine.stop() (audio buffer cleared, has_loaded_audio=false)
-                // while current_track_id still reports the old track, so the
-                // track-id guard in ensure_remote_track_loaded would skip the load
-                // and the next SetState's resume() would fail with "no audio data
-                // available". Resume at the handed-off position so a long
-                // track / audiobook does not restart from 0.
-                if let Some(current) = renderer_state.current_track.as_ref() {
-                    let start_position_secs = renderer_state
-                        .current_position_ms
-                        .map(|ms| ms / 1000)
-                        .unwrap_or(0);
-                    if let Err(err) = force_remote_track_stream(
-                        engine,
-                        sync_state,
-                        current.track_id,
-                        renderer_state.max_audio_quality,
-                        start_position_secs,
-                    )
-                    .await
-                    {
-                        log::warn!("[QConnect] SetActive(true) force-stream failed: {err}");
-                    }
-                }
+                // Do NOT load here. At SetActive time `renderer_state` still
+                // describes what WE last played: the cloud has not yet told us
+                // the session's current track, and while a peer held the render
+                // it may have moved on. Loading from that stale view resumed
+                // the wrong track (observed: took the render back onto our old
+                // track at the peer's position, 77s into a track the peer was
+                // not even playing).
+                //
+                // The authoritative SetState follows within a few hundred ms
+                // carrying the real track AND position, and the cold-engine
+                // branch of its PLAYING arm loads from there — which also
+                // covers the "resume() with no audio data available" case this
+                // force-stream was originally added for.
+                log::info!(
+                    "[QConnect] SetActive(true): awaiting the session's SetState before loading"
+                );
             } else {
                 // The official receiver ignores SetActive(false). Actual audio
                 // detachment belongs to ACTIVE_RENDERER_CHANGED, after session
@@ -1703,11 +1693,13 @@ mod tests {
     /// #1 (takeback) — becoming the active renderer FORCE-streams the current
     /// track even though `playback_state.track_id` still matches: the prior
     /// controller->renderer stop() cleared the audio buffer but left the stale
-    /// track id, so the plain track-id guard would skip the load and the next
-    /// SetState's resume() would fail with "no audio data available". Also
-    /// resumes at the handed-off position, not 0.
+    /// track id. The load itself now happens in the SetState that follows (its
+    /// cold-engine branch covers the "no audio data available" case), because
+    /// at SetActive time `renderer_state` still describes what WE last played:
+    /// loading from it took the render back onto our old track (…974) while the
+    /// peer was actually on another (…969), 77s into a track nobody was playing.
     #[tokio::test]
-    async fn set_active_force_streams_on_takeback_when_audio_torn_down() {
+    async fn set_active_does_not_load_from_stale_state_on_takeback() {
         let mut engine = MockEngine::new();
         engine.playback = PlaybackState {
             track_id: 7, // stale id left by stop(); audio is gone
@@ -1717,24 +1709,69 @@ mod tests {
         let sync = sync();
         let cmd = RendererCommand::SetActive { active: true };
         let renderer_state = QConnectRendererState {
-            current_track: Some(qi(7, 0)),
-            current_position_ms: Some(45_000),
+            current_track: Some(qi(410251974, 4)),
+            current_position_ms: Some(30_000),
             ..Default::default()
         };
         apply_renderer_command(&engine, &sync, &cmd, &renderer_state)
             .await
             .unwrap();
         let calls = engine.calls();
+        assert!(
+            calls.start_track_streams.is_empty(),
+            "must wait for the session's own SetState instead of guessing"
+        );
+        assert_eq!(calls.stops, 0, "and must not stop anything either");
+    }
+
+    /// The SetState that follows carries the real track and position, and that
+    /// is what loads — the takeback lands on the peer's track, not our stale
+    /// one, and at the peer's position rather than 0.
+    #[tokio::test]
+    async fn set_state_after_set_active_loads_the_peer_track() {
+        let mut engine = MockEngine::new();
+        engine.playback = PlaybackState {
+            track_id: 410251974,
+            ..Default::default()
+        };
+        engine.loaded_audio = false;
+        let sync = sync();
+        let stale = QConnectRendererState {
+            current_track: Some(qi(410251974, 4)),
+            current_position_ms: Some(30_000),
+            ..Default::default()
+        };
+        apply_renderer_command(
+            &engine,
+            &sync,
+            &RendererCommand::SetActive { active: true },
+            &stale,
+        )
+        .await
+        .unwrap();
+        // The cloud's SetState: the session is on track …969 at 1:19.
+        let set_state = RendererCommand::SetState {
+            playing_state: Some(PLAYING_STATE_PLAYING),
+            current_position_ms: Some(79_818),
+            current_track: Some(qi(410251969, 0)),
+            next_track: None,
+        };
+        // The core reducer has already folded the command in by this point.
+        let reduced = QConnectRendererState {
+            current_track: Some(qi(410251969, 0)),
+            current_position_ms: Some(79_818),
+            ..Default::default()
+        };
+        apply_renderer_command(&engine, &sync, &set_state, &reduced)
+            .await
+            .unwrap();
+        let calls = engine.calls();
         assert_eq!(
             calls.start_track_streams,
-            vec![7],
-            "takeback must force a stream even when the track id matches"
+            vec![410251969],
+            "the peer's track"
         );
-        assert_eq!(
-            calls.start_positions,
-            vec![45],
-            "takeback must resume at the handed-off position (45s), not 0"
-        );
+        assert_eq!(calls.start_positions, vec![79], "at the peer's position");
     }
 
     #[tokio::test]
