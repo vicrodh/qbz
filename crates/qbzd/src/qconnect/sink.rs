@@ -24,8 +24,7 @@ use qconnect_app::{
     active_peer_renderer_is_playing, build_session_renderer_snapshot, cache_renderer_snapshot,
     is_peer_renderer_active, remote_renderer_commands_are_fenced, should_materialize_remote_queue,
     QconnectApp, QconnectAppEvent, QconnectEventSink, QconnectRemoteSyncState,
-    QconnectRendererEngine, RendererBufferState, RendererCommand, RendererReport,
-    RendererReportType,
+    QconnectRendererEngine, RendererCommand, RendererReport, RendererReportType,
 };
 use qconnect_transport_ws::NativeWsTransport;
 use serde_json::Value;
@@ -115,7 +114,14 @@ impl DaemonEventSink {
             queue_version,
             serde_json::json!({
                 "is_active": true,
-                "buffer_state": RendererBufferState::Ok.as_i32(),
+                // No buffer state: this report announces that we are the active
+                // renderer, and it is flushed at almost exactly the moment a
+                // takeback's forced stream arms the buffer, so whichever value
+                // it sampled was a coin flip — observed announcing OK 13 ms
+                // before the report loop announced BUFFERING for the same load.
+                // Null leaves the field untouched, and the report loop stays the
+                // one place that speaks about the buffer.
+                "buffer_state": Option::<i32>::None,
                 "queue_version": {
                     "major": queue_version.major,
                     "minor": queue_version.minor
