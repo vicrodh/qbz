@@ -283,7 +283,7 @@ export const en = {
       name: 'macOS',
       tier: 'Supported · signed builds',
       experimental: 'macOS',
-      disclaimer: 'Recommended: install the independently signed and notarized builds. They are made from the upstream application without recompiling it; the signature and DMG are replaced by @afonsojramos. They are not produced or endorsed by the upstream QBZ project.',
+      disclaimer: 'Recommended: install the signed and notarized builds maintained by @afonsojramos. They use the upstream QBZ application without recompiling it; Afonso replaces its ad-hoc signature and DMG container, then notarizes the result. This community-maintained distribution is QBZ\'s recommended way to install on macOS, and the macOS version would likely not exist in its current form without his work.',
       limitations: 'PipeWire, ALSA and JACK are Linux-specific. macOS plays through CoreAudio, including a Core Audio Direct passthrough path for bit-perfect output. Casting and Qobuz Connect work on macOS as well.',
       signedVersion: 'Latest signed build: {{version}}',
       signedVersionUnknown: 'Latest signed build: see GitHub',
