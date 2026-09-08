@@ -353,9 +353,8 @@ export const es = {
       updateNote: 'Después de configurarlo, las actualizaciones son automáticas: sudo dnf upgrade qbz',
     },
     flatpak: {
-      bitperfectTitle: 'Bit-perfect dentro del sandbox',
-      bitperfectNote: 'Bit-perfect funciona en Flatpak. El sandbox necesita un permiso para que QBZ pueda pedirle a PipeWire que suelte el DAC limpiamente; sin él, otras apps siguen mezclando por el dispositivo aunque elijas modo exclusivo. QBZ lista este y los demás permisos en Ajustes → Flatpak.',
-      libraryTitle: 'Acceso a la biblioteca local (NAS, discos externos)',
+      permsTitle: 'Permisos a otorgar manualmente',
+      permsNote: 'El build de Flathub trae los permisos mínimos. Otórgalos tú mismo para salida bit-perfect, o si tu biblioteca está fuera de las carpetas por defecto. QBZ también los lista en Ajustes → Flatpak.',
     },
     snap: {
       plugsTitle: 'Requerido: conectar las interfaces de audio',

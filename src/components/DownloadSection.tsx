@@ -85,6 +85,9 @@ const WINDOWS_ADOPT_URL = 'https://github.com/vicrodh/qbz/discussions'
 const getType = (name: string): AssetType => {
   const lower = name.toLowerCase()
   if (lower.endsWith('.sig') || lower === 'latest.json' || lower.includes('.app.tar.gz')) return 'unknown'
+  // Vendored Rust deps for offline source builds (AUR/Gentoo/nixpkgs pull it
+  // automatically). Not a user download, so it must not show in the UI.
+  if (lower.includes('cargo-vendor')) return 'unknown'
   if (lower.startsWith('qbzd')) {
     if (lower.endsWith('.tar.gz') || lower.endsWith('.tar.xz')) return 'qbzd'
     if (lower.endsWith('.deb')) return 'qbzd-deb'
@@ -186,11 +189,10 @@ const RPM_REPO_CMD = 'sudo curl --fail --location --output /etc/yum.repos.d/qbz.
 const RPM_REPO_INSTALL_CMD = 'sudo dnf install qbz'
 const RPM_ZYPPER_REPO_CMD = 'sudo curl --fail --location --output /etc/zypp/repos.d/qbz.repo https://vicrodh.github.io/qbz-rpm/qbz.repo'
 const RPM_ZYPPER_INSTALL_CMD = 'sudo zypper refresh && sudo zypper install qbz'
-const FLATPAK_RESERVE_CMD = 'flatpak override --user --own-name=org.freedesktop.ReserveDevice1.* com.blitzfc.qbz'
-const FLATPAK_FS_CMDS = [
-  'flatpak override --user --filesystem=/path/to/your/music com.blitzfc.qbz',
-  'flatpak override --user --filesystem=/mnt/nas com.blitzfc.qbz',
-]
+const FLATPAK_PERMS = `# bit-perfect: let QBZ ask PipeWire to hand the DAC over cleanly
+flatpak override --user --own-name=org.freedesktop.ReserveDevice1.* com.blitzfc.qbz
+# only if your music lives outside the default folders (NAS, external drive)
+flatpak override --user --filesystem=/path/to/your/music com.blitzfc.qbz`
 const SNAP_PLUGS = ['sudo snap connect qbz-player:alsa', 'sudo snap connect qbz-player:pulseaudio', 'sudo snap connect qbz-player:pipewire']
 const NIXOS_FLAKE_INPUT = 'inputs.qbz.url = "github:vicrodh/qbz";'
 const NIXOS_SYSTEM_PKG = `{pkgs, inputs, ...}:
@@ -294,12 +296,9 @@ function LinuxPanel({ format, items, loading, error }: { format: LinuxFormat; it
           <div className="download-item">
             <h4 className="download-item__label">Flathub</h4>
             <Cmd cmd="flatpak install flathub com.blitzfc.qbz" />
-            <Details title={t('downloads.flatpak.bitperfectTitle')}>
-              <p>{t('downloads.flatpak.bitperfectNote')}</p>
-              <DepsCmd cmd={FLATPAK_RESERVE_CMD} />
-            </Details>
-            <Details title={t('downloads.flatpak.libraryTitle')}>
-              {FLATPAK_FS_CMDS.map((cmd) => <DepsCmd key={cmd} cmd={cmd} />)}
+            <Details title={t('downloads.flatpak.permsTitle')} open>
+              <p>{t('downloads.flatpak.permsNote')}</p>
+              <Cmd cmd={FLATPAK_PERMS} block prompt="" />
             </Details>
             <div className="platform__actions">
               <a className="btn btn-ghost btn-sm" href={FLATHUB_URL} target="_blank" rel="noreferrer">{t('downloads.viewOn', { store: 'Flathub' })}</a>
@@ -373,32 +372,35 @@ function LinuxPanel({ format, items, loading, error }: { format: LinuxFormat; it
           </div>
         </div>
       )
-    case 'tarball':
+    case 'tarball': {
+      const tarballs = byType('tarball')
+      if (tarballs.length === 0) return <div className="download-list">{empty(tarballs)}</div>
+      const primary = tarballs[0]
+      const dir = stripArchive(primary.fileName)
+      const desktopCmds = [
+        `sudo cp ${dir}/qbz /usr/local/bin/`,
+        `cp ${dir}/qbz.desktop ~/.local/share/applications/`,
+        `cp -r ${dir}/icons/* ~/.local/share/icons/`,
+        'gtk-update-icon-cache ~/.local/share/icons/hicolor/',
+      ]
       return (
         <div className="download-list">
-          {empty(byType('tarball'))}
-          {byType('tarball').map((item) => {
-            const dir = stripArchive(item.fileName)
-            const desktopCmds = [
-              `sudo cp ${dir}/qbz /usr/local/bin/`,
-              `cp ${dir}/qbz.desktop ~/.local/share/applications/`,
-              `cp -r ${dir}/icons/* ~/.local/share/icons/`,
-              'gtk-update-icon-cache ~/.local/share/icons/hicolor/',
-            ]
-            return (
-              <div className="download-item" key={item.fileName}>
-                <div className="download-item__header"><h4 className="download-item__label">Tarball</h4><FileLine item={item} /></div>
-                <Cmd cmd={`wget ${item.url}`} />
-                <Cmd cmd={`tar -xzf ${item.fileName} && ./${dir}/qbz`} />
-                <Details title={t('downloads.tarball.desktopTitle')}>
-                  {desktopCmds.map((cmd) => <DepsCmd key={cmd} cmd={cmd} />)}
-                </Details>
+          <div className="download-item">
+            <div className="download-item__header"><h4 className="download-item__label">Tarball</h4></div>
+            {tarballs.map((item) => (
+              <div className="download-item__header" key={item.fileName}>
+                <FileLine item={item} />
                 <DownloadLink item={item} label={t('downloads.download')} />
               </div>
-            )
-          })}
+            ))}
+            <Cmd cmd={`tar -xzf ${primary.fileName} && ./${dir}/qbz`} />
+            <Details title={t('downloads.tarball.desktopTitle')}>
+              {desktopCmds.map((cmd) => <DepsCmd key={cmd} cmd={cmd} />)}
+            </Details>
+          </div>
         </div>
       )
+    }
     case 'qbzd': {
       const list = items.filter((item) => item.type === 'qbzd' || item.type === 'qbzd-deb' || item.type === 'qbzd-rpm')
       const install = (item: DownloadItem) => {
