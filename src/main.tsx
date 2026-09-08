@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import './lib/i18n'
 import App from './App'
-import { AppProvider } from './lib/appContext'
+import { AppProvider } from './lib/AppProvider'
 import { normalizeLanguage, normalizePage } from './lib/routes'
 
 const language = normalizeLanguage(document.documentElement.dataset.lang)

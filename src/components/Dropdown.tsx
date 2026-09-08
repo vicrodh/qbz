@@ -25,6 +25,7 @@ export function Dropdown({ options, value, onChange, ariaLabel }: DropdownProps)
   const rootRef = useRef<HTMLDivElement>(null)
   const listId = useId()
   const current = options.find((o) => o.id === value) ?? options[0]
+  const selectedIndex = Math.max(0, options.findIndex((o) => o.id === value))
 
   useEffect(() => {
     if (!open) return
@@ -35,9 +36,10 @@ export function Dropdown({ options, value, onChange, ariaLabel }: DropdownProps)
     return () => document.removeEventListener('mousedown', onDoc)
   }, [open])
 
-  useEffect(() => {
-    if (open) setActive(Math.max(0, options.findIndex((o) => o.id === value)))
-  }, [open, options, value])
+  const openMenu = () => {
+    setActive(selectedIndex)
+    setOpen(true)
+  }
 
   const pick = (id: string) => {
     onChange(id)
@@ -47,7 +49,7 @@ export function Dropdown({ options, value, onChange, ariaLabel }: DropdownProps)
   const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (!open && (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Enter' || event.key === ' ')) {
       event.preventDefault()
-      setOpen(true)
+      openMenu()
       return
     }
     if (!open) return
@@ -81,7 +83,10 @@ export function Dropdown({ options, value, onChange, ariaLabel }: DropdownProps)
         aria-expanded={open}
         aria-controls={listId}
         aria-label={ariaLabel}
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => {
+          if (open) setOpen(false)
+          else openMenu()
+        }}
         onKeyDown={onKeyDown}
       >
         {current.icon && <img className="dropdown__icon" src={current.icon} alt="" width={20} height={20} />}

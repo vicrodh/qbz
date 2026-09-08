@@ -20,8 +20,8 @@ type LadderRow = { rate: string; tag: string; web: 'native' | 'resampled' | 'cap
 const SCREEN_CAPTURES: Record<string, { base: string } | undefined> = {
   home: { base: 'qbz-discover-foryou' },
   immersive: { base: 'qbz-immersive-spectrum' },
-  explorer: undefined,
-  queue: undefined,
+  explorer: { base: 'qbz-library-explorer' },
+  queue: { base: 'qbz-queue' },
   playlists: { base: 'qbz-playlist-manager' },
   artist: { base: 'qbz-artist-view' },
 }
