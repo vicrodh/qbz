@@ -4,10 +4,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0d0e11" />
   <script data-goatcounter="https://blitzfc.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
-  <title>QBZ — Cliente nativo de Qobuz para Linux</title>
+  <title>QBZ — Reproductor de música hi-fi nativo para Linux</title>
   <meta name="description"
-    content="QBZ es un cliente nativo de Qobuz para Linux enfocado en reproduccion bit-perfect, passthrough al DAC y control transparente del audio." />
+    content="QBZ es un reproductor de música bit-perfect, libre y de código abierto, para Linux, macOS y Windows. Un motor nativo en Rust con interfaz Qt reproduce Qobuz, tu biblioteca local y tu servidor Plex, Jellyfin o Navidrome por una sola ruta. Sin navegador, sin remuestreo, sin telemetría." />
   <meta name="robots" content="index, follow, max-image-preview:large" />
 
   <!-- Canonical & Language Alternates -->
@@ -19,26 +20,30 @@
   <!-- Open Graph -->
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="QBZ" />
-  <meta property="og:title" content="QBZ — Cliente nativo de Qobuz para Linux" />
+  <meta property="og:title" content="QBZ — Reproductor de música hi-fi nativo para Linux" />
   <meta property="og:description"
-    content="QBZ es un cliente nativo de Qobuz para Linux enfocado en reproduccion bit-perfect, passthrough al DAC y control transparente del audio." />
+    content="Reproducción bit-perfect para Qobuz, tu biblioteca local y tu servidor Plex, Jellyfin o Navidrome. Motor nativo en Rust, interfaz Qt y ningún navegador de por medio. Libre y de código abierto." />
   <meta property="og:url" content="https://qbz.lol/es/" />
   <meta property="og:image" content="https://qbz.lol/assets/brand/og-image.png" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
-  <meta property="og:locale" content="es_ES" />
+  <meta property="og:locale" content="es_MX" />
   <meta property="og:locale:alternate" content="en_US" />
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="QBZ — Cliente nativo de Qobuz para Linux" />
+  <meta name="twitter:title" content="QBZ — Reproductor de música hi-fi nativo para Linux" />
   <meta name="twitter:description"
-    content="QBZ es un cliente nativo de Qobuz para Linux enfocado en reproduccion bit-perfect, passthrough al DAC y control transparente del audio." />
+    content="Reproducción bit-perfect para Qobuz, tu biblioteca local y tu servidor de medios. Motor nativo en Rust, interfaz Qt, sin navegador de por medio." />
   <meta name="twitter:image" content="https://qbz.lol/assets/brand/og-image.png" />
 
-  <!-- Preload hero image for faster LCP (desktop only - on mobile image is below fold) -->
-  <link rel="preload" as="image" type="image/avif" media="(min-width: 769px)"
-    href="/assets/screenshots/qbz-home.avif" />
+  <!-- Self-hosted fonts (no third-party requests) -->
+  <link rel="preload" as="font" type="font/woff2" href="/fonts/archivo-normal-100-900-latin.woff2" crossorigin />
+  <link rel="preload" as="font" type="font/woff2" href="/fonts/plexmono-normal-400-latin.woff2" crossorigin />
+
+  <!-- Hero capture: the LCP element on every viewport -->
+  <link rel="preload" as="image" type="image/webp" href="/assets/screenshots/qbz-home.webp" media="(min-width: 901px)" />
+  <link rel="preload" as="image" type="image/webp" href="/assets/screenshots/qbz-home-sm.webp" media="(max-width: 900px)" />
 
   <!-- Favicons -->
   <link rel="icon" type="image/png" href="/assets/brand/favicon.png" />
@@ -59,41 +64,75 @@
             "url": "https://qbz.lol/assets/brand/192x192.png"
           },
           "sameAs": [
-            "https://github.com/vicrodh/qbz"
+            "https://github.com/vicrodh/qbz",
+            "https://flathub.org/apps/com.blitzfc.qbz",
+            "https://snapcraft.io/qbz-player",
+            "https://aur.archlinux.org/packages/qbz-bin"
           ]
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://qbz.lol/#website",
+          "url": "https://qbz.lol",
+          "name": "QBZ",
+          "publisher": {"@id": "https://qbz.lol/#organization"},
+          "inLanguage": ["en", "es"]
         },
         {
           "@type": "SoftwareApplication",
           "@id": "https://qbz.lol/#software",
           "name": "QBZ",
-          "description": "Cliente nativo de Qobuz para Linux con reproduccion bit-perfect, passthrough al DAC y control transparente del audio.",
+          "alternateName": "QBZ music player",
+          "description": "Reproductor de música hi-fi bit-perfect, libre y de código abierto, para Linux, macOS y Windows. Motor nativo en Rust con interfaz Qt para Qobuz, bibliotecas locales y servidores Plex, Jellyfin o Subsonic.",
           "applicationCategory": "MultimediaApplication",
-          "operatingSystem": "Linux",
+          "applicationSubCategory": "Music player",
+          "operatingSystem": "Linux, macOS, Windows",
           "offers": {
             "@type": "Offer",
             "price": "0",
             "priceCurrency": "USD"
           },
           "downloadUrl": "https://github.com/vicrodh/qbz/releases",
-          "license": "https://opensource.org/licenses/MIT"
+          "installUrl": "https://qbz.lol/es/#downloads",
+          "softwareHelp": "https://github.com/vicrodh/qbz/wiki",
+          "releaseNotes": "https://qbz.lol/es/changelog/",
+          "author": {"@id": "https://qbz.lol/#organization"},
+          "license": "https://opensource.org/licenses/MIT",
+          "isAccessibleForFree": true,
+          "featureList": [
+            "Reproducción bit-perfect con cambio de frecuencia por pista (44.1 a 192 kHz)",
+            "Passthrough al DAC y modo exclusivo (ALSA Direct, Core Audio Direct, WASAPI exclusivo)",
+            "Reproducción DSD (DSF/DFF) por DoP o DSD nativo",
+            "Streaming de Qobuz, favoritos, playlists y compras",
+            "Biblioteca local con catálogo, editor de tags y soporte CUE",
+            "Servidores Plex, Jellyfin y Subsonic/Navidrome",
+            "Reproducción de CD de audio y SACD, ripeo de CD a FLAC",
+            "Renderer y controlador de Qobuz Connect",
+            "Casting a Chromecast y DLNA/UPnP",
+            "Teclas multimedia MPRIS, scrobbling a Last.fm y ListenBrainz",
+            "Importación de playlists desde Spotify, Apple Music, Tidal, Deezer, ListenBrainz y Last.fm",
+            "Daemon headless (qbzd) para Raspberry Pi y servidores",
+            "8 idiomas, más de 30 temas, sin telemetría"
+          ]
         },
         {
           "@type": "WebPage",
           "@id": "https://qbz.lol/es/#webpage",
           "url": "https://qbz.lol/es/",
-          "name": "QBZ — Cliente nativo de Qobuz para Linux",
-          "description": "QBZ es un cliente nativo de Qobuz para Linux enfocado en reproduccion bit-perfect, passthrough al DAC y control transparente del audio.",
+          "name": "QBZ — Reproductor de música hi-fi nativo para Linux",
+          "description": "QBZ es un reproductor de música bit-perfect, libre y de código abierto, para Linux, macOS y Windows. Motor nativo en Rust, interfaz Qt: Qobuz, biblioteca local y servidores de medios por una sola ruta.",
           "isPartOf": {"@id": "https://qbz.lol/#website"},
           "about": {"@id": "https://qbz.lol/#software"},
+          "primaryImageOfPage": "https://qbz.lol/assets/brand/og-image.png",
           "inLanguage": "es"
         }
       ]
     }
-    </script>
+  </script>
   <script type="module" crossorigin src="/assets/vendor-react-Dh3zDKDA.js"></script>
   <script type="module" crossorigin src="/assets/vendor-i18n-cI2jDZAk.js"></script>
-  <script type="module" crossorigin src="/assets/main-CI92yVcC.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/main-DHuBgW0O.css">
+  <script type="module" crossorigin src="/assets/main-ePT9LLXb.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/main-CKDLg_do.css">
 </head>
 
 <body>
