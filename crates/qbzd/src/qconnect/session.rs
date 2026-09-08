@@ -23,7 +23,7 @@
 use std::sync::{Arc, Mutex as StdMutex};
 
 use qbz_app::shell::AppRuntime;
-use qconnect_app::renderer::PLAYING_STATE_STOPPED;
+use qconnect_app::renderer::{PLAYING_STATE_PLAYING, PLAYING_STATE_STOPPED};
 use qconnect_app::{
     QconnectLifecycleState, QconnectRemoteSyncState, QueueCommandType, RendererBufferState,
     RendererReport, RendererReportType, SessionLoopHost, JOIN_SESSION_REASON_RECONNECTION,
@@ -448,10 +448,25 @@ pub async fn deferred_renderer_join(
     if !authority.is_current(stamp) {
         return;
     }
+    // Report the player's REAL state, not a hardcoded stopped-at-zero. A
+    // reconnect rejoin happens while audio is live, and announcing
+    // "stopped, 0:00" made the controller show 0:00 and treat us as idle until
+    // the next report tick corrected it — the same reason the duration and
+    // queue_item_ids above are resolved instead of nulled.
+    let live = runtime.core().get_playback_state();
+    let live_is_current = live.track_id != 0 && Some(live.track_id) == current_track_id;
+    let (playing_state, position_ms) = if live_is_current && live.is_playing {
+        (
+            PLAYING_STATE_PLAYING,
+            qconnect_app::qconnect_millis_from_secs(live.position),
+        )
+    } else {
+        (PLAYING_STATE_STOPPED, 0)
+    };
     let mut state_report_payload = json!({
-        "playing_state": PLAYING_STATE_STOPPED,
+        "playing_state": playing_state,
         "buffer_state": RendererBufferState::Ok.as_i32(),
-        "current_position": 0,
+        "current_position": position_ms,
         "duration": duration_ms,
         "queue_version": {
             "major": queue_version_ref.major,
