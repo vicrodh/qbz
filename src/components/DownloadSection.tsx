@@ -182,6 +182,10 @@ EOF`
 const APT_INSTALL_CMD = 'sudo apt update && sudo apt install qbz'
 const DEB_DEPS_CMD = 'sudo apt install -y libasound2 libfontconfig1 libfreetype6 libxkbcommon0 libwayland-client0 libegl1 libgl1'
 const RPM_DEPS_CMD = 'sudo dnf install -y alsa-lib fontconfig freetype libxkbcommon wayland mesa-libEGL mesa-libGL'
+const RPM_REPO_CMD = 'sudo curl --fail --location --output /etc/yum.repos.d/qbz.repo https://vicrodh.github.io/qbz-rpm/qbz.repo'
+const RPM_REPO_INSTALL_CMD = 'sudo dnf install qbz'
+const RPM_ZYPPER_REPO_CMD = 'sudo curl --fail --location --output /etc/zypp/repos.d/qbz.repo https://vicrodh.github.io/qbz-rpm/qbz.repo'
+const RPM_ZYPPER_INSTALL_CMD = 'sudo zypper refresh && sudo zypper install qbz'
 const FLATPAK_RESERVE_CMD = 'flatpak override --user --own-name=org.freedesktop.ReserveDevice1.* com.blitzfc.qbz'
 const FLATPAK_FS_CMDS = [
   'flatpak override --user --filesystem=/path/to/your/music com.blitzfc.qbz',
@@ -263,6 +267,14 @@ function LinuxPanel({ format, items, loading, error }: { format: LinuxFormat; it
     case 'fedora':
       return (
         <div className="download-list">
+          <div className="download-item">
+            <h4 className="download-item__label">{t('downloads.rpmRepo.label')}</h4>
+            <p className="download-item__text">{t('downloads.rpmRepo.description')}</p>
+            <Cmd cmd={RPM_REPO_CMD} />
+            <Cmd cmd={RPM_REPO_INSTALL_CMD} />
+            <Details title="openSUSE (zypper)"><DepsCmd cmd={RPM_ZYPPER_REPO_CMD} /><DepsCmd cmd={RPM_ZYPPER_INSTALL_CMD} /></Details>
+            <p className="glibc-note">{t('downloads.rpmRepo.updateNote')}</p>
+          </div>
           {empty(byType('rpm'))}
           {byType('rpm').map((item) => (
             <div className="download-item" key={item.fileName}>

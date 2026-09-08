@@ -347,6 +347,11 @@ export const es = {
       description: 'Agrega el repositorio de QBZ para recibir actualizaciones automáticas con apt. Funciona en Debian, Ubuntu, Mint, Pop!_OS y derivadas.',
       updateNote: 'Después de configurarlo, las actualizaciones son automáticas: sudo apt update && sudo apt upgrade qbz',
     },
+    rpmRepo: {
+      label: 'Repositorio RPM (recomendado)',
+      description: 'Agrega el repositorio firmado de QBZ para recibir actualizaciones automáticas con dnf. En openSUSE, usa el mismo repositorio con zypper.',
+      updateNote: 'Después de configurarlo, las actualizaciones son automáticas: sudo dnf upgrade qbz',
+    },
     flatpak: {
       bitperfectTitle: 'Bit-perfect dentro del sandbox',
       bitperfectNote: 'Bit-perfect funciona en Flatpak. El sandbox necesita un permiso para que QBZ pueda pedirle a PipeWire que suelte el DAC limpiamente; sin él, otras apps siguen mezclando por el dispositivo aunque elijas modo exclusivo. QBZ lista este y los demás permisos en Ajustes → Flatpak.',
