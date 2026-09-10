@@ -521,6 +521,13 @@ pub fn is_remote() -> bool {
 /// Whether playback currently lives on another device (QConnect renderer or
 /// a Chromecast/DLNA session). The local engine reports `is_playing=false`
 /// in both cases, so an "idle" decision must ask this too.
+/// Whether a Chromecast/DLNA session owns the output right now. The volume
+/// bar mirrors the RENDERER while this holds, so anything that treats the
+/// slider as the local player's own level has to ask first.
+pub(crate) fn cast_active() -> bool {
+    with_model(|m| m.cast_active).0
+}
+
 pub(crate) fn remote_or_cast_active() -> bool {
     with_model(|m| m.is_remote || m.cast_active).0
 }

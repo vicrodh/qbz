@@ -465,6 +465,13 @@ impl qbz_player::QbzPlayer {
     }
 
     pub fn persist_volume(self: Pin<&mut Self>, fraction: f32) {
+        // While casting the slider shows the RENDERER's volume, not ours —
+        // persisting it would hand the speaker's level to the local player on
+        // the next launch. The cast service owns the renderer's volume;
+        // there is nothing to store on our side.
+        if crate::now_playing::cast_active() {
+            return;
+        }
         crate::settings_qt::save_pref("volume", serde_json::json!(fraction.clamp(0.0, 1.0)));
     }
 

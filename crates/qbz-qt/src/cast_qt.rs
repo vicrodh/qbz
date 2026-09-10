@@ -117,6 +117,19 @@ const LOST_POLL_MAX: u32 = 5;
 /// Minimum spacing between two volume commands sent to a renderer while a
 /// slider is being dragged (one SOAP / Cast round trip each).
 const VOLUME_COALESCE_MS: u64 = 120;
+/// How many position polls between renderer-volume refreshes. The volume is
+/// authoritative on the DEVICE (its own remote/app can move it), so the bar
+/// re-reads it periodically — but far less often than the position, since it
+/// is an extra round trip and volume rarely changes behind our back.
+const CAST_VOLUME_REFRESH_POLLS: u32 = 5;
+/// Ignore a refreshed volume within this window after a local drag: the
+/// renderer may not have applied the new value yet, and pushing its pre-drag
+/// reading back onto the bar would fight the user's own slider.
+const CAST_VOLUME_ECHO_GUARD: std::time::Duration = std::time::Duration::from_secs(3);
+/// Minimum change before a refreshed renderer volume moves the slider. Absorbs
+/// the rounding of the 0..1 fraction into the device's integer scale (and
+/// back) so a steady renderer does not jitter the bar by fractions of a percent.
+const CAST_VOLUME_EPSILON: f32 = 0.02;
 /// After logical detach, the complete media-lane cleanup and physical renderer
 /// teardown may not hold its async caller longer than this budget. Waiting for
 /// an earlier transition lane or the initial state detach is deliberately
@@ -346,6 +359,14 @@ struct CastInner {
     // always delivered.
     pending_volume: Option<PendingVolume>,
     volume_worker_connection: Option<CastConnectionStamp>,
+    // Renderer volume mirror (0..1). `cast_volume` is the last value read from
+    // or sent to the renderer — the refresh only touches the slider when the
+    // device drifts away from it. `volume_set_at` stamps the last local drag
+    // so a read still in flight cannot snap the slider back mid-drag.
+    cast_volume: Option<f32>,
+    volume_set_at: Option<std::time::Instant>,
+    // Position-poll ticks since the last renderer-volume refresh.
+    volume_poll_tick: u32,
     // QConnect coexistence (§11.4): exact disabled intent created by this Cast
     // lifetime. A later user enable/disable invalidates it atomically.
     qconnect_restore_token: Option<QconnectDisabledToken>,
@@ -457,6 +478,17 @@ fn invalidate_media_intent(inner: &mut CastInner) {
     inner.transport_in_flight_epoch = None;
     inner.media_intent_track_id = None;
     inner.current_track_id = None;
+}
+
+/// Whether a refreshed renderer reading should move the bar.
+///
+/// `adopt` (connect) always wins — the bar is showing the LOCAL volume at that
+/// point and anything the renderer says is better. Afterwards the change has
+/// to clear `CAST_VOLUME_EPSILON`, which is the noise floor of converting a
+/// 0..1 fraction into the device's integer scale and back: on a 0..31 renderer
+/// one step is ~3%, so a steady device would otherwise jitter the slider.
+fn volume_reading_moves_the_bar(last_known: Option<f32>, reading: f32, adopt: bool) -> bool {
+    adopt || last_known.is_none_or(|last| (reading - last).abs() >= CAST_VOLUME_EPSILON)
 }
 
 fn volume_worker_matches(inner: &CastInner, stamp: CastConnectionStamp) -> bool {
@@ -1414,6 +1446,9 @@ impl CastService {
                 invalidate_media_intent(&mut inner);
                 inner.pending_volume = None;
                 inner.volume_worker_connection = None;
+                inner.cast_volume = None;
+                inner.volume_set_at = None;
+                inner.volume_poll_tick = 0;
                 inner.connected_device_ip = Some(device_ip);
                 inner.connected_device_name = Some(device_name);
                 inner.connected_device_id = Some(device_id);
@@ -1462,6 +1497,11 @@ impl CastService {
         set_error(String::new());
         self.push_connection_state().await;
         self.push_device_cap_row().await;
+        // Adopt the renderer's OWN volume before the user can touch the
+        // slider. Skipping this leaves the bar showing the local volume, so
+        // the first drag jumps the renderer to that value — dragging down from
+        // a local 100% to 70% turns a speaker sitting at 20% UP, hard.
+        self.refresh_renderer_volume(connection_stamp, true).await;
         self.start_position_poll(connection_stamp);
         drop(transition_guard);
 
@@ -1791,6 +1831,18 @@ impl CastService {
             invalidate_media_intent(&mut inner);
             inner.pending_volume = None;
             inner.volume_worker_connection = None;
+            // Hand the slider back to the local engine. While casting the bar
+            // showed the RENDERER's level, and nothing on the local path
+            // republishes the engine's own (main.rs:912 — there is no local
+            // mirror), so leaving it would strand the renderer's level on the
+            // bar and make the next local drag jump the audio: the connect-time
+            // bug, in reverse. Only when a mirror was actually established.
+            if inner.cast_volume.is_some() {
+                crate::now_playing::set_volume(self.runtime.core().get_playback_state().volume);
+            }
+            inner.cast_volume = None;
+            inner.volume_set_at = None;
+            inner.volume_poll_tick = 0;
             let renderer = DetachedRenderer {
                 chromecast: inner.chromecast.take(),
                 dlna: inner.dlna.take(),
@@ -2590,6 +2642,12 @@ impl CastService {
                 inner.volume_worker_connection = Some(connection);
                 true
             };
+            // Remember what the renderer is being told, and when: the
+            // periodic refresh compares against this instead of pushing every
+            // reading, and stays out of the way while the drag settles.
+            inner.cast_volume = Some(v);
+            inner.volume_set_at = Some(std::time::Instant::now());
+            inner.volume_poll_tick = 0;
             // Publish under the exact connection lock: a disconnect/B commit
             // cannot interleave this A slider value into the new session.
             crate::now_playing::set_volume(v);
@@ -2863,6 +2921,119 @@ impl CastService {
 
     // ---- Position poll + ended detection ------------------------------------
 
+    /// Read the connected renderer's REAL volume and mirror it onto the bar.
+    ///
+    /// The renderer owns its volume — its own remote or app can move it, and
+    /// it has its own idea of what "full" means (see `VolumeRange` in
+    /// qbz-cast). Whenever the bar shows something else, the next drag is a
+    /// jump rather than an adjustment.
+    ///
+    /// `adopt` (connect) takes the reading unconditionally. The periodic
+    /// refresh passes `false`: it defers to a recent local drag and ignores
+    /// changes too small to be anything but scale rounding. Best-effort
+    /// throughout — a renderer with no volume control, or one that faults,
+    /// leaves the bar as it is.
+    ///
+    /// Deliberately does NOT take the media lane: the periodic caller already
+    /// holds it for the whole tick, and the connect caller runs before the
+    /// poll task exists. Acquiring it here would deadlock the former.
+    async fn refresh_renderer_volume(
+        self: &Arc<Self>,
+        connection: CastConnectionStamp,
+        adopt: bool,
+    ) {
+        let last_known = {
+            let inner = self.inner.lock().await;
+            if !connection_stamp_matches(&inner, connection) {
+                return;
+            }
+            if !adopt
+                && inner
+                    .volume_set_at
+                    .is_some_and(|at| at.elapsed() < CAST_VOLUME_ECHO_GUARD)
+            {
+                return;
+            }
+            inner.cast_volume
+        };
+
+        let reading = match connection.protocol {
+            CastProtocol::Chromecast => {
+                let handle = {
+                    let inner = self.inner.lock().await;
+                    connection_stamp_matches(&inner, connection)
+                        .then(|| inner.chromecast.clone())
+                        .flatten()
+                };
+                match handle {
+                    Some(handle) => match Self::run_chromecast_call(
+                        handle,
+                        CHROMECAST_COMMAND_BUDGET,
+                        "chromecast-volume-read",
+                        |handle| handle.get_status(),
+                    )
+                    .await
+                    {
+                        Ok(status) => status.volume_level,
+                        Err(e) => {
+                            log::debug!("[qbz-qt][Cast] volume read failed: {e}");
+                            None
+                        }
+                    },
+                    None => None,
+                }
+            }
+            CastProtocol::Dlna => {
+                let handle = {
+                    let inner = self.inner.lock().await;
+                    connection_stamp_matches(&inner, connection)
+                        .then(|| inner.dlna.clone())
+                        .flatten()
+                };
+                match handle {
+                    Some(handle) => {
+                        let conn = handle.lock().await;
+                        match conn.get_volume().await {
+                            Ok(v) => Some(v),
+                            Err(e) => {
+                                log::debug!("[qbz-qt][Cast] volume read failed: {e}");
+                                None
+                            }
+                        }
+                    }
+                    None => None,
+                }
+            }
+        };
+        let Some(volume) = reading.map(|v| v.clamp(0.0, 1.0)) else {
+            return;
+        };
+
+        if !volume_reading_moves_the_bar(last_known, volume, adopt) {
+            return;
+        }
+        {
+            let mut inner = self.inner.lock().await;
+            // Lost or replaced the connection while the read was in flight.
+            if !connection_stamp_matches(&inner, connection) {
+                return;
+            }
+            // A drag landed WHILE the read was in flight, so this reading is
+            // already stale — the user's value is the newer intent and the
+            // renderer has it. Re-checked here, not only up front, because the
+            // read is a full round trip to the device.
+            if inner
+                .volume_set_at
+                .is_some_and(|at| at.elapsed() < CAST_VOLUME_ECHO_GUARD)
+            {
+                return;
+            }
+            inner.cast_volume = Some(volume);
+            crate::now_playing::set_volume(volume);
+        }
+        log::info!("[qbz-qt][Cast] renderer volume is {:.0}%", volume * 100.0);
+    }
+
     fn start_position_poll(self: &Arc<Self>, connection: CastConnectionStamp) {
         let svc = self.clone();
         let task = tokio::spawn(async move {
@@ -2897,6 +3068,26 @@ impl CastService {
         let media_guard = Arc::clone(&self.media_command_gate).lock_owned().await;
         if !poll_snapshot_matches(&*self.inner.lock().await, poll_snapshot) {
             return;
+        }
+
+        // Re-read the renderer's volume on a slower cadence than the position:
+        // the device owns it, so a change made on the device itself (its own
+        // remote, its own app) has to reach the bar or the next drag jumps.
+        // Runs inside the tick that already holds the media lane.
+        let refresh_volume = {
+            let mut inner = self.inner.lock().await;
+            if !poll_snapshot_matches(&inner, poll_snapshot) {
+                return;
+            }
+            inner.volume_poll_tick = inner.volume_poll_tick.saturating_add(1);
+            let due = inner.volume_poll_tick >= CAST_VOLUME_REFRESH_POLLS;
+            if due {
+                inner.volume_poll_tick = 0;
+            }
+            due
+        };
+        if refresh_volume {
+            self.refresh_renderer_volume(connection, false).await;
         }
 
         // Read position/state from the active renderer.
@@ -3231,6 +3422,9 @@ impl CastService {
             invalidate_media_intent(&mut inner);
             inner.pending_volume = None;
             inner.volume_worker_connection = None;
+            inner.cast_volume = None;
+            inner.volume_set_at = None;
+            inner.volume_poll_tick = 0;
             if let Some(task) = inner.discovery_task.take() {
                 task.abort();
             }
@@ -4395,6 +4589,33 @@ mod tests {
             current_poll_snapshot(&inner, connection).unwrap().media,
             Some(media)
         );
+    }
+
+    /// Connect adopts whatever the renderer reports; afterwards only a real
+    /// move does. Without the noise floor a 0..31 renderer re-reporting the
+    /// same step would nudge the slider on every refresh.
+    #[test]
+    fn only_a_real_change_moves_the_bar_after_connect() {
+        // Adopt takes the reading even when it matches what we already have.
+        assert!(volume_reading_moves_the_bar(Some(0.5), 0.5, true));
+        assert!(volume_reading_moves_the_bar(None, 0.5, true));
+        // First reading of a session, no baseline to compare against.
+        assert!(volume_reading_moves_the_bar(None, 0.5, false));
+        // Scale rounding, not a move.
+        assert!(!volume_reading_moves_the_bar(Some(0.50), 0.51, false));
+        assert!(!volume_reading_moves_the_bar(Some(0.50), 0.49, false));
+        // Someone actually turned the dial, either way.
+        assert!(volume_reading_moves_the_bar(Some(0.50), 0.60, false));
+        assert!(volume_reading_moves_the_bar(Some(0.50), 0.40, false));
+        // Comfortably past the floor. The exact tie is deliberately not
+        // asserted: 0.5f32 + EPSILON does not round-trip to a difference of
+        // exactly EPSILON, and which side of the floor it lands on is a fact
+        // about f32, not a behaviour anyone depends on.
+        assert!(volume_reading_moves_the_bar(
+            Some(0.50),
+            0.50 + CAST_VOLUME_EPSILON * 1.5,
+            false
+        ));
     }
 
     #[test]
