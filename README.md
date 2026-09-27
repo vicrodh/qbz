@@ -1,5 +1,5 @@
 >If you want to know what happened to QBZ, keep reading, and you can also check out the [issues](https://github.com/vicrodh/qbz/issues) section. QBZ is a dead project as far as I'm concerned, and I'm not involved in any forks or spin-offs. 
->But if you want to check out my new project: [Chilpa](https://github.com/vicrodh/qbz/), I’ll be posting updates leading up to the first release in the Discussions section of that repo. 
+>But if you want to check out my new project: [Chilpa](https://github.com/vicrodh/chilpa/), I’ll be posting updates leading up to the first release in the Discussions section of that repo. 
 
 
 ## [The end of the line](https://open.qobuz.com/track/32519076)
